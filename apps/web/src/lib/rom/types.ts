@@ -400,6 +400,36 @@ export function customSections(
   ).map((section) => ({ section, config: sections[section] }))
 }
 
+/** Frame counts of the preset ROM blocks (see docs/poseasset-csv-spec.md). */
+export const BASE_FRAMES_DQS = 328
+export const BASE_FRAMES_LINEAR = 626
+export const GP_FRAMES = 104
+export const DK_FRAMES = 54
+export const PHYS_FRAMES = 43
+
+/**
+ * Absolute timeline frame of the first custom pose — the sum of the preset ROM
+ * blocks preceding the custom sequence (base ROM when JCM is preset, then
+ * GP / DK / Physics when enabled as presets). Mirrors the lastPresetFrame math
+ * in generate.ts so the editor shows the same absolute frames it generates.
+ */
+export function presetFrameCount(
+  sections: RomSections,
+  gender: Gender,
+  skinning: 'dqs' | 'linear',
+): number {
+  const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
+  const base = skinning === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR
+  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
+  const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+  const lastPresetFrame =
+    (jcmPreset ? base - 1 : -1) +
+    (genPreset && roms.gp ? GP_FRAMES : 0) +
+    (genPreset && roms.dk ? DK_FRAMES : 0) +
+    (sections.PHY.enabled && sections.PHY.mode === 'preset' ? PHYS_FRAMES : 0)
+  return Math.max(lastPresetFrame, 0) + 1
+}
+
 export interface FlatFrame {
   /** 0-based: the first custom frame is 0 (Daz timelines are 0-based). */
   frame: number

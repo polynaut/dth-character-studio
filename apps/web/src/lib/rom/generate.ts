@@ -1,4 +1,9 @@
 import {
+  BASE_FRAMES_DQS,
+  BASE_FRAMES_LINEAR,
+  DK_FRAMES,
+  GP_FRAMES,
+  PHYS_FRAMES,
   characterSkinning,
   characterSlug,
   customSections,
@@ -319,11 +324,6 @@ export function sanitizePoseName(name: string): string {
 }
 
 /** Frame counts of the pre-made ROM blocks on the timeline. */
-const BASE_FRAMES_DQS = 328
-const BASE_FRAMES_LINEAR = 626
-const GP_FRAMES = 104
-const DK_FRAMES = 54
-const PHYS_FRAMES = 43
 
 /**
  * CSV rows for the enabled custom sections, with absolute timeline frames

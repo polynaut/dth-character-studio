@@ -15,6 +15,7 @@ import {
   defaultSections,
   flattenRom,
   mirrorGroup,
+  presetFrameCount,
   sectionsFromFlatFrames,
 } from './types'
 
@@ -80,6 +81,23 @@ describe('flattenRom', () => {
     const sections = makeSections()
     sections.FBM.enabled = false
     expect(flattenRom(sections)).toEqual([])
+  })
+})
+
+describe('presetFrameCount', () => {
+  it('is the absolute frame of the first custom pose (matches the generated CSV)', () => {
+    // base only (GEN off) → custom starts at 328
+    expect(presetFrameCount(makeSections(), 'female', 'dqs')).toBe(328)
+
+    const gp = makeSections()
+    gp.GEN.enabled = true
+    expect(presetFrameCount(gp, 'female', 'dqs')).toBe(432)
+
+    const gpPhy = makeSections()
+    gpPhy.GEN.enabled = true
+    gpPhy.PHY.enabled = true
+    gpPhy.PHY.mode = 'preset'
+    expect(presetFrameCount(gpPhy, 'female', 'dqs')).toBe(475)
   })
 })
 
