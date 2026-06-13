@@ -101,9 +101,22 @@ JCM,4,BallBU60
 | 26–33 | glute right | out 26–27 → up 27–29 → in 29–31 → down 31–33 → out 33 |
 | 34–42 | stomach | left 34–35 → up 35–37 → right 37–39 → down 39–41 → left 41, hang 42 |
 
-Still unknown (video-only knowledge): the canonical PHY mapping rows — driver
-bone names per group, which frame is the named pose, and the offset
-distance / radius / per-pose XYZ offsets.
+**RESOLVED (June 13 2026)** from a PHY-filled node export — stored verbatim as
+`src/lib/rom/templates/poseasset-physics-g9.csv` and emitted as a fixed preset
+block. 5 groups / 43 poses, all `PHYGROUP,0,<suffix>,<bone>,5.0,5.0`:
+
+| `PHYGROUP` bone | suffix | poses |
+| --- | --- | --- |
+| `breast_l` / `breast_r` | 0 / 2 | 9 each (8-point circle + HangForward) |
+| `glute_l` / `glute_r` | 0 / 2 | 8 each (8-point circle, no HangForward) |
+| `stomach` | 0 | 9 (8-point circle + HangForward) |
+
+`PHY` rows are `PHY,<frame>,<name>,<x>,<y>,<z>`, XYZ being the push direction —
+an 8-point circle of radius 5 in the bone's plane (Out `±5,0,0`, Up `0,5,0`, In,
+Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. **Quirk:** in
+both glute groups the *Up* pose (value `0,5,0`) is labelled `GluteOutUp` again — a
+naming typo in the source ROM, reproduced verbatim for byte-identity (worth raising
+with mrpdean).
 
 ## Consequences for the studio model
 
@@ -113,5 +126,6 @@ distance / radius / per-pose XYZ offsets.
 - Generation method applies to JCM/FAC/EXP/GEN groups — not PHY, not
   FBM/MIS (flat). The studio currently shows the select on all groups.
 - Reference FBX applies to GEN, FBM **and MIS** (studio currently GEN/FBM only).
-- PHY needs offset/radius group fields and per-pose XYZ offsets (missing).
+- PHY offset/radius group fields and per-pose XYZ offsets are now mapped from a
+  node export (`poseasset-physics-g9.csv`) and emitted as a fixed preset block.
 - EXP is group-based in the node (studio currently treats it as flat).
