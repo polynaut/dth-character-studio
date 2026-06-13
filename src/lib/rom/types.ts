@@ -1,0 +1,505 @@
+import { z } from 'zod'
+
+/**
+ * Domain model for a DTH character and its ROM setup, following the official
+ * "Guide To Creating Custom ROMs".
+ *
+ * A ROM is the fixed sequence of the eight pose asset categories (sections).
+ * Each section is enabled or disabled, and runs in one of two modes:
+ *  - preset: covered by the pre-defined DTH ROMs/pose assets (the usual case
+ *    for RET, JCM and FAC; for GEN the Golden Palace / Dicktator ROMs) —
+ *    compiled into the bIncludeJCM/FAC/GP/DK flags of DthWorkflow.dsa
+ *  - custom: a list of GROUPS (suffix, generation method) holding ordered
+ *    poses — compiled into the extra-JSON frames of DthWorkflow.dsa and the
+ *    PoseAsset node CSV
+ * Frame numbers are never stored — they are computed from section/group/pose
+ * order at generation time, so the outputs cannot de-sync.
+ */
+
+/** The eight official pose asset categories, in canonical ROM order. */
+export const ROM_SECTIONS = ['RET', 'JCM', 'FAC', 'EXP', 'GEN', 'PHY', 'FBM', 'MISC'] as const
+export const romSectionSchema = z.enum(ROM_SECTIONS)
+export type RomSection = z.infer<typeof romSectionSchema>
+
+export const SECTION_LABELS: Record<RomSection, string> = {
+  RET: 'Retargeting',
+  JCM: 'Joint Corrective',
+  FAC: 'Face',
+  EXP: 'Expressions',
+  GEN: 'Genitalia',
+  PHY: 'Physics',
+  FBM: 'Full Body',
+  MISC: 'Miscellaneous',
+}
+
+/**
+ * Per-section capability matrix, extracted from the PoseAsset node's CSV
+ * parser (see docs/poseasset-csv-spec.md). FBM and MISC are flat lists.
+ */
+export const GROUPED_SECTIONS: ReadonlyArray<RomSection> = ['JCM', 'FAC', 'EXP', 'GEN', 'PHY']
+/** Groups whose label is a driver-bone list (the CSV `bones` column). */
+export const BONE_LABEL_SECTIONS: ReadonlyArray<RomSection> = ['JCM', 'GEN', 'PHY']
+/** Groups carrying a generation method (PHY has physics params instead). */
+export const METHOD_SECTIONS: ReadonlyArray<RomSection> = ['JCM', 'FAC', 'EXP', 'GEN']
+/** Groups carrying a Calculate From setting. */
+export const CALC_FROM_SECTIONS: ReadonlyArray<RomSection> = ['FAC', 'EXP', 'GEN', 'PHY']
+
+/** Categories whose poses carry a reference skeleton FBX (CSV `file` column). */
+export const REFERENCE_FBX_SECTIONS: ReadonlyArray<RomSection> = ['GEN', 'FBM', 'MISC']
+
+export const sectionModeSchema = z.enum(['preset', 'custom'])
+export type SectionMode = z.infer<typeof sectionModeSchema>
+
+/** Which modes each section supports (DTH only ships presets for some). */
+export const SECTION_MODES: Record<RomSection, ReadonlyArray<SectionMode>> = {
+  RET: ['preset'],
+  JCM: ['preset', 'custom'],
+  FAC: ['preset', 'custom'],
+  EXP: ['custom'],
+  GEN: ['preset', 'custom'],
+  PHY: ['preset', 'custom'],
+  FBM: ['custom'],
+  MISC: ['custom'],
+}
+
+/** One pre-defined DTH pose preset (.duf) from the DazToHue Poses folder. */
+export interface DthPoseAsset {
+  /** File name without extension, e.g. "G9 DQS JCM FAC - Base". */
+  name: string
+  /** Path relative to the Poses folder, with forward slashes. */
+  relPath: string
+  genesis: GenesisVersion | null
+  skinning: 'linear' | 'dqs' | null
+  section: RomSection | null
+  /** JCM assets only: whether the FAC poses are baked into the base ROM. */
+  includesFac: boolean
+}
+
+/** One morph dialed on one node at a given frame. */
+export const morphSchema = z.object({
+  /** Scene node the property lives on, e.g. "Genesis9". */
+  node: z.string(),
+  /** Internal property name, e.g. "body_bs_BodyTone". */
+  prop: z.string(),
+  value: z.number(),
+  /**
+   * Value the sawtooth returns to on the frames around the pose (default 0).
+   * For morphs already dialed in as part of the base shape.
+   */
+  base: z.number().optional(),
+  /** Resolve `base` from the morph's current scene value at apply time. */
+  autoBase: z.boolean().optional(),
+})
+export type Morph = z.infer<typeof morphSchema>
+
+/**
+ * One ROM pose (= one frame, computed from order). The name becomes the
+ * morph name in Unreal (letters/numbers/underscores only; `_l`/`_r` suffixes
+ * are appended automatically from the group suffix).
+ */
+export const romPoseSchema = z.object({
+  /** Stable row id for grid editing. */
+  id: z.string(),
+  name: z.string(),
+  morphs: z.array(morphSchema),
+  /**
+   * Optional reference skeleton FBX for poses that scale bones (e.g.
+   * Proportion Height). Only meaningful in GEN and FBM categories.
+   */
+  referenceFbx: z.string().default(''),
+})
+export type RomPose = z.infer<typeof romPoseSchema>
+
+/** The PoseAsset node knows no "none" — every group is Left, Centre or Right. */
+export const groupSuffixSchema = z.enum(['left', 'centre', 'right'])
+export type GroupSuffix = z.infer<typeof groupSuffixSchema>
+
+/**
+ * default: inherit the node's Global Generation Method.
+ * individual: each pose calculated in isolation.
+ * additive: first pose is the base, the rest are additives to it (EyelidsClosed pattern).
+ * cumulative: each pose adds to all previous ones in the group (AnusOpen pattern).
+ * advancedAdditive: the node's extended additive mode.
+ */
+export const generationMethodSchema = z.enum([
+  'default',
+  'individual',
+  'additive',
+  'cumulative',
+  'advancedAdditive',
+])
+export type GenerationMethod = z.infer<typeof generationMethodSchema>
+
+/** What the group's morph deltas are calculated against. */
+export const calculateFromSchema = z.enum(['default', 'restPose', 'animationFrame'])
+export type CalculateFrom = z.infer<typeof calculateFromSchema>
+
+export const romGroupSchema = z.object({
+  id: z.string(),
+  /** Driver bone(s) for JCM/GEN/PHY groups (the CSV `bones` column), e.g. "ball_l". */
+  label: z.string().default(''),
+  suffix: groupSuffixSchema.default('centre'),
+  method: generationMethodSchema.default('default'),
+  calculateFrom: calculateFromSchema.default('default'),
+  poses: z.array(romPoseSchema).default([]),
+})
+export type RomGroup = z.infer<typeof romGroupSchema>
+
+/**
+ * Art direction for a frame INSIDE a pre-made GP/DK ROM block: morph values
+ * stamped onto `startFrame + frame` after the ROM is loaded (the
+ * GP9_ArtDirection.json mechanism in DazToHue-Scripts, now per character).
+ */
+export const artDirectionFrameSchema = z.object({
+  id: z.string(),
+  rom: z.enum(['gp', 'dk']),
+  /** Relative offset from the ROM block start (see the frame map). */
+  frame: z.number(),
+  name: z.string(),
+  morphs: z.array(morphSchema).default([]),
+})
+export type ArtDirectionFrame = z.infer<typeof artDirectionFrameSchema>
+
+/**
+ * The art-directable frames of the pre-made ROMs, from the official frame
+ * maps and guides. `required` frames ship empty in the preset — without art
+ * direction the generated morph does nothing.
+ */
+export const ART_DIRECTION_CATALOG: Record<
+  'gp' | 'dk',
+  ReadonlyArray<{ frame: number; name: string; required: boolean; note?: string }>
+> = {
+  gp: [
+    { frame: 96, name: 'VaginaOpen', required: false, note: 'beyond the default pose' },
+    { frame: 97, name: 'VaginaSqueeze', required: false },
+    { frame: 98, name: 'VaginaStretch', required: false },
+    { frame: 100, name: 'AnusOpen', required: true, note: 'no keyframes in the preset ROM' },
+    { frame: 101, name: 'AnusContraction', required: true, note: 'no keyframes in the preset ROM' },
+    { frame: 103, name: 'ClitorisErect', required: false },
+  ],
+  dk: [
+    { frame: 13, name: 'ScrotumBendBackward', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 14, name: 'ScrotumBendForward', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 15, name: 'ScrotumBendLeft', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 16, name: 'ScrotumBendRight', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 17, name: 'ScrotumTwistLeft', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 18, name: 'ScrotumTwistRight', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 19, name: 'ScrotumStretch', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 20, name: 'ScrotumCompact', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 21, name: 'TesticleMoveOut_l', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 22, name: 'TesticleMoveIn_l', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 23, name: 'TesticleMoveUp_l', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 24, name: 'TesticleMoveDown_l', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 25, name: 'TesticleMoveForward_l', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 26, name: 'TesticleMoveBackward_l', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 27, name: 'TesticleMoveOut_r', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 28, name: 'TesticleMoveIn_r', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 29, name: 'TesticleMoveUp_r', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 30, name: 'TesticleMoveDown_r', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 31, name: 'TesticleMoveForward_r', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 32, name: 'TesticleMoveBackward_r', required: false, note: 'dth_dk9_* correctives' },
+    { frame: 34, name: 'ForeskinCoverStage01', required: false, note: 'required for uncircumcised setups' },
+    { frame: 35, name: 'ForeskinCoverStage02', required: false, note: 'required for uncircumcised setups' },
+    { frame: 36, name: 'ForeskinCoverStage03', required: false, note: 'required for uncircumcised setups' },
+    { frame: 37, name: 'ForeskinCoverStage04', required: false, note: 'required for uncircumcised setups' },
+    { frame: 38, name: 'ForeskinCoverStage05', required: false, note: 'required for uncircumcised setups' },
+    { frame: 40, name: 'ForeskinBendDown', required: false, note: 'uncircumcised setups only' },
+    { frame: 41, name: 'ForeskinBendUp', required: false, note: 'uncircumcised setups only' },
+    { frame: 42, name: 'ForeskinBendLeft', required: false, note: 'uncircumcised setups only' },
+    { frame: 43, name: 'ForeskinBendRight', required: false, note: 'uncircumcised setups only' },
+    { frame: 44, name: 'ForeskinTwistLeft', required: false, note: 'uncircumcised setups only' },
+    { frame: 45, name: 'ForeskinTwistRight', required: false, note: 'uncircumcised setups only' },
+    { frame: 48, name: 'PenisContraction', required: false },
+    { frame: 50, name: 'AnusOpen', required: true, note: 'no keyframes in the preset ROM' },
+    { frame: 51, name: 'AnusContraction', required: true, note: 'no keyframes in the preset ROM' },
+    { frame: 53, name: 'PenisScale', required: false },
+  ],
+}
+
+export const romSectionConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  mode: sectionModeSchema.default('custom'),
+  /**
+   * Preset mode: selected DTH pose preset file names (e.g.
+   * "GP9 - Golden Palace.duf"). Usually one entry; GEN may select several.
+   * Empty means "auto" — derived from genesis/skinning at generation time.
+   */
+  presetAssets: z.array(z.string()).default([]),
+  /** GEN preset mode: per-character art direction for the pre-made ROM frames. */
+  artDirection: z.array(artDirectionFrameSchema).default([]),
+  /** Only used in custom mode. */
+  groups: z.array(romGroupSchema).default([]),
+})
+export type RomSectionConfig = z.infer<typeof romSectionConfigSchema>
+
+export function defaultSections(): Record<RomSection, RomSectionConfig> {
+  const config = (enabled: boolean, mode: SectionMode): RomSectionConfig => ({
+    enabled,
+    mode,
+    presetAssets: [],
+    artDirection: [],
+    groups: [],
+  })
+  return {
+    RET: config(true, 'preset'),
+    JCM: config(true, 'preset'),
+    FAC: config(true, 'preset'),
+    EXP: config(false, 'custom'),
+    GEN: config(false, 'preset'),
+    PHY: config(false, 'custom'),
+    FBM: config(true, 'custom'),
+    MISC: config(false, 'custom'),
+  }
+}
+
+const sectionsSchema = z.object({
+  RET: romSectionConfigSchema,
+  JCM: romSectionConfigSchema,
+  FAC: romSectionConfigSchema,
+  EXP: romSectionConfigSchema,
+  GEN: romSectionConfigSchema,
+  PHY: romSectionConfigSchema,
+  FBM: romSectionConfigSchema,
+  MISC: romSectionConfigSchema,
+})
+export type RomSections = z.infer<typeof sectionsSchema>
+
+export const genesisVersionSchema = z.enum(['G3', 'G8', 'G8.1', 'G9'])
+export type GenesisVersion = z.infer<typeof genesisVersionSchema>
+
+/** Decides what applies for GEN: female → Golden Palace, male → Dicktator. */
+export const genderSchema = z.enum(['female', 'male'])
+export type Gender = z.infer<typeof genderSchema>
+
+/** Which gender a GEN preset asset belongs to (null = not gender-specific). */
+export function genAssetGender(assetName: string): Gender | null {
+  if (/golden ?palace|gp9/i.test(assetName)) return 'female'
+  if (/dicktator|dk9/i.test(assetName)) return 'male'
+  return null
+}
+
+/** The geograft node GEN morphs usually live on. */
+export function genDefaultNode(gender: Gender): string {
+  return gender === 'female' ? 'GoldenPalace_G9' : 'DicktatorG9'
+}
+
+/**
+ * Which pre-made genitalia ROMs the GEN preset section includes: explicit
+ * asset selection wins, otherwise the gender decides.
+ */
+export function genRomIncludes(
+  gender: Gender,
+  presetAssets: Array<string>,
+): { gp: boolean; dk: boolean } {
+  if (presetAssets.length === 0) {
+    return { gp: gender === 'female', dk: gender === 'male' }
+  }
+  return {
+    gp: presetAssets.some((a) => /golden ?palace|gp9/i.test(a)),
+    dk: presetAssets.some((a) => /dicktator|dk9/i.test(a)),
+  }
+}
+
+/**
+ * Skeleton the PoseAsset targets — together with genesis + skinning this
+ * selects the matching DTH preset (e.g. "G9 DQS UE5 JCM FAC").
+ */
+export const targetSkeletonSchema = z.enum(['UE5', 'DTH'])
+export type TargetSkeleton = z.infer<typeof targetSkeletonSchema>
+
+export const preserveMorphSchema = z.object({
+  name: z.string(),
+  keepValue: z.number(),
+})
+export type PreserveMorph = z.infer<typeof preserveMorphSchema>
+
+const rangeSchema = z.object({ start: z.number(), end: z.number() })
+
+const jcmMorphModDriveSchema = z.object({
+  morphName: z.string(),
+  range: z.object({ angle: rangeSchema, value: rangeSchema }),
+})
+
+/**
+ * Drives morphs proportionally to a bone rotation across the JCM ROM
+ * (DthWorkflow.dsa `options.jcmMorphMods`).
+ */
+export const jcmMorphModSchema = z.object({
+  boneLabel: z.string(),
+  /** Rotation axis, e.g. "XRotate". */
+  axis: z.string(),
+  positive: z.array(jcmMorphModDriveSchema).default([]),
+  negative: z.array(jcmMorphModDriveSchema).default([]),
+})
+export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
+
+export const characterSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  /** Path or URL to a recognition image; optional. */
+  image: z.string().default(''),
+  genesis: genesisVersionSchema.default('G9'),
+  gender: genderSchema.default('female'),
+  targetSkeleton: targetSkeletonSchema.default('UE5'),
+  /** G9 detail strengths set at frame 0 (DthWorkflow.dsa applies them when > 0). */
+  facsDetailStrength: z.number().default(1),
+  flexionStrength: z.number().default(1),
+  resetGPBeforeApplying: z.boolean().default(true),
+  /** Morph values restored after ROM loading (e.g. breast position). */
+  preserveMorphs: z.array(preserveMorphSchema).default([]),
+  /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
+  preserveNodeTransforms: z.array(z.object({ nodeLabel: z.string() })).default([]),
+  jcmMorphMods: z.array(jcmMorphModSchema).default([]),
+  sections: sectionsSchema.default(defaultSections()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type Character = z.infer<typeof characterSchema>
+
+/**
+ * UUID with a fallback for non-secure contexts: newId() is
+ * unavailable over plain http (e.g. the LAN dev URL), where it would make
+ * every add/mirror click die silently.
+ */
+export function newId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+/**
+ * Filesystem-safe base name used for generated files, e.g. "ElectraG9".
+ * Keeps underscores — the DTH Exporter allows letters, numbers and
+ * underscores in character names (no spaces or symbols).
+ */
+export function characterSlug(character: Pick<Character, 'name'>): string {
+  return character.name.replace(/[^A-Za-z0-9_]+/g, '') || 'Character'
+}
+
+/**
+ * Skinning is not stored — it is defined by the selected JCM preset asset
+ * (e.g. "G9 DQS JCM FAC - Base.duf"). DQS = 328 base frames, linear = 617.
+ * Without an explicit selection the DTH-recommended DQS is assumed.
+ */
+export function characterSkinning(character: Pick<Character, 'sections'>): 'linear' | 'dqs' {
+  const jcm = character.sections.JCM
+  const asset = jcm.mode === 'preset' ? jcm.presetAssets[0] : undefined
+  if (asset) return /\bDQS\b/i.test(asset) ? 'dqs' : 'linear'
+  return 'dqs'
+}
+
+/** The sections whose frames the studio generates (enabled custom sections, in ROM order). */
+export function customSections(
+  sections: RomSections,
+): Array<{ section: RomSection; config: RomSectionConfig }> {
+  return ROM_SECTIONS.filter(
+    (section) => sections[section].enabled && sections[section].mode === 'custom',
+  ).map((section) => ({ section, config: sections[section] }))
+}
+
+export interface FlatFrame {
+  /** 1-based: frame 0 is the implicit rest frame. */
+  frame: number
+  section: RomSection
+  name: string
+  morphs: Array<Morph>
+  group: RomGroup
+  pose: RomPose
+}
+
+/** Flattens the enabled custom sections into the frame sequence — the single source of frame numbers. */
+export function flattenRom(sections: RomSections): Array<FlatFrame> {
+  const frames: Array<FlatFrame> = []
+  let frame = 1
+  for (const { section, config } of customSections(sections)) {
+    for (const group of config.groups) {
+      for (const pose of group.poses) {
+        frames.push({
+          frame: frame++,
+          section,
+          name: pose.name,
+          morphs: pose.morphs,
+          group,
+          pose,
+        })
+      }
+    }
+  }
+  return frames
+}
+
+export function countPoses(sections: RomSections): number {
+  return customSections(sections).reduce(
+    (sum, { config }) => sum + config.groups.reduce((s, group) => s + group.poses.length, 0),
+    0,
+  )
+}
+
+/**
+ * Builds sections from a flat frame list (DazToHue-Scripts FBM JSONs, legacy
+ * studio data): consecutive frames of the same section become one group in
+ * that section, which is enabled and switched to custom mode.
+ */
+export function sectionsFromFlatFrames(
+  frames: Array<{ section: string; name: string; morphs: Array<Morph> }>,
+): RomSections {
+  const sections = defaultSections()
+  let lastSection: RomSection | null = null
+  for (const frame of frames) {
+    const section = (ROM_SECTIONS as ReadonlyArray<string>).includes(frame.section)
+      ? (frame.section as RomSection)
+      : 'MISC'
+    const config = sections[section]
+    config.enabled = true
+    config.mode = 'custom'
+    const pose: RomPose = {
+      id: newId(),
+      name: frame.name,
+      morphs: frame.morphs,
+      referenceFbx: '',
+    }
+    const lastGroup = config.groups[config.groups.length - 1]
+    if (section === lastSection && lastGroup) {
+      lastGroup.poses.push(pose)
+    } else {
+      config.groups.push({
+        id: newId(),
+        label: '',
+        suffix: 'centre',
+        method: 'default',
+        calculateFrom: 'default',
+        poses: [pose],
+      })
+    }
+    lastSection = section
+  }
+  return sections
+}
+
+/**
+ * Clones a left-suffixed group as its right-side counterpart, mirroring
+ * left/right markers in morph property names (best effort).
+ */
+export function mirrorGroup(group: RomGroup): RomGroup {
+  const swap = (value: string) =>
+    value
+      .replace(/Left/g, 'Right')
+      .replace(/left/g, 'right')
+      .replace(/_l\b/g, '_r')
+      .replace(/\bL_/g, 'R_')
+  return {
+    ...group,
+    id: newId(),
+    suffix: 'right',
+    label: swap(group.label),
+    poses: group.poses.map((pose) => ({
+      id: newId(),
+      name: pose.name,
+      referenceFbx: pose.referenceFbx,
+      morphs: pose.morphs.map((morph) => ({ ...morph, prop: swap(morph.prop) })),
+    })),
+  }
+}
