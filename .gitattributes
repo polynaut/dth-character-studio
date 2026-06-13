@@ -1,0 +1,14 @@
+# Normalize all text files to LF in the repo and the working tree, so Windows
+# checkouts stop re-CRLFing files (no more autocrlf churn in git status, and the
+# generated CSV/JSON have deterministic line endings).
+* text=auto eol=lf
+
+# Binary assets — never apply line-ending conversion.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.woff  binary
+*.woff2 binary
