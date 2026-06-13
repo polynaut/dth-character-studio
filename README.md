@@ -116,8 +116,9 @@ makes them freely shareable; bring your own licensed assets.
 
 - **[DazToHue](https://www.daztohue.com)** by *mrpdean* — the Houdini/UE toolset
   this studio targets (the PoseAsset node, ROMs and pose presets).
-- **DazToHue-Scripts** by *Soltude* and contributors — the Daz Studio scripting
-  framework the generated workflow files drive.
+- **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)** by *Soltude*
+  and contributors — the Daz Studio scripting framework the generated workflow
+  files drive.
 
 ## License
 
