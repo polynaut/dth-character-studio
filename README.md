@@ -61,6 +61,10 @@ pnpm dev:desktop      # web dev server (HMR) + an Electron window pointed at it
 pnpm start:desktop    # build web + shell, run the packaged-style production app
 ```
 
+> First desktop run downloads the Electron binary (~170 MB). If the shell errors
+> with `Electron uninstall`, pnpm skipped that download — run it once with
+> `pnpm --filter @dth/desktop exec node node_modules/electron/install.js`.
+
 After first launch, open **Settings** and point the two folders at:
 
 - your **DazToHue-Scripts** checkout (generated Daz files are written here, next

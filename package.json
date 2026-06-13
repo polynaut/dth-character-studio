@@ -23,5 +23,12 @@
   "devDependencies": {
     "concurrently": "^10.0.3",
     "wait-on": "^9.0.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "electron-winstaller"
+    ]
   }
 }
