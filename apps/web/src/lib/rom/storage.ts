@@ -1,6 +1,8 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { DATA_DIR } from '../../server/paths'
+
 import {
   ROM_SECTIONS,
   characterSchema,
@@ -17,7 +19,6 @@ import type { Character, DthPoseAsset, GenesisVersion, RomSection } from './type
  * sharing trivial once the tool goes public.
  */
 
-const DATA_DIR = join(process.cwd(), 'data')
 const CHARACTERS_DIR = join(DATA_DIR, 'characters')
 export const OUTPUT_DIR = join(DATA_DIR, 'out')
 
