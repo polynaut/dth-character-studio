@@ -63,16 +63,16 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
 }
 
 describe('flattenRom', () => {
-  it('numbers frames 1-based across enabled custom sections in canonical order', () => {
+  it('numbers frames 0-based across enabled custom sections in canonical order', () => {
     const sections = makeSections()
     sections.EXP.enabled = true
     sections.EXP.groups = [{ ...fbmGroup(), id: 'exp1' }]
     const frames = flattenRom(sections)
     expect(frames.map((f) => [f.frame, f.section, f.name])).toEqual([
-      [1, 'EXP', 'BodyTone'],
-      [2, 'EXP', 'Glute UpDown'],
-      [3, 'FBM', 'BodyTone'],
-      [4, 'FBM', 'Glute UpDown'],
+      [0, 'EXP', 'BodyTone'],
+      [1, 'EXP', 'Glute UpDown'],
+      [2, 'FBM', 'BodyTone'],
+      [3, 'FBM', 'Glute UpDown'],
     ])
   })
 
@@ -127,19 +127,19 @@ describe('mirrorGroup', () => {
 })
 
 describe('toDazFbmJson', () => {
-  it('produces the DazToHue-Scripts FBM JSON format with 1-based frames', () => {
+  it('produces the DazToHue-Scripts FBM JSON format with 0-based frames', () => {
     const file = toDazFbmJson(makeCharacter())
     expect(file.fileName).toBe('ElectraG9_FBMs.json')
     const json = JSON.parse(file.content)
     expect(json.meta.version).toBe('1.0')
     expect(json.meta.resetGPBeforeApplying).toBe(true)
     expect(json.frames[0]).toEqual({
-      frame: 1,
+      frame: 0,
       section: 'FBM',
       name: 'BodyTone',
       morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
     })
-    expect(json.frames[1].frame).toBe(2)
+    expect(json.frames[1].frame).toBe(1)
   })
 
   it('keeps base and autoBase morph fields, omitting them when unset', () => {
@@ -167,12 +167,11 @@ describe('toDazFbmJson', () => {
 })
 
 describe('toDazFbmCsv', () => {
-  it('matches the flat CSV format with the empty rest frame at 0', () => {
+  it('matches the flat CSV format, 0-based (first morph at frame 0)', () => {
     const file = toDazFbmCsv(makeCharacter())
     const lines = file.content.trimEnd().split('\n')
-    expect(lines[0]).toBe('0,FBM,Empty')
-    expect(lines[1]).toBe('1,FBM,BodyTone,Genesis9,body_bs_BodyTone,1')
-    expect(lines[2]).toBe('2,FBM,Glute UpDown,Genesis9,SS_body_bs_Glute UpDown,-1')
+    expect(lines[0]).toBe('0,FBM,BodyTone,Genesis9,body_bs_BodyTone,1')
+    expect(lines[1]).toBe('1,FBM,Glute UpDown,Genesis9,SS_body_bs_Glute UpDown,-1')
   })
 })
 
@@ -339,8 +338,8 @@ describe('generation method groups in the FBM JSON', () => {
         section: 'EXP',
         name: 'AnusOpen',
         method: 'cumulative',
-        startFrame: 1,
-        endFrame: 2,
+        startFrame: 0,
+        endFrame: 1,
       },
     ])
   })

@@ -401,7 +401,7 @@ export function customSections(
 }
 
 export interface FlatFrame {
-  /** 1-based: frame 0 is the implicit rest frame. */
+  /** 0-based: the first custom frame is 0 (Daz timelines are 0-based). */
   frame: number
   section: RomSection
   name: string
@@ -413,7 +413,7 @@ export interface FlatFrame {
 /** Flattens the enabled custom sections into the frame sequence — the single source of frame numbers. */
 export function flattenRom(sections: RomSections): Array<FlatFrame> {
   const frames: Array<FlatFrame> = []
-  let frame = 1
+  let frame = 0
   for (const { section, config } of customSections(sections)) {
     for (const group of config.groups) {
       for (const pose of group.poses) {

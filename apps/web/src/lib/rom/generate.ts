@@ -116,8 +116,9 @@ function morphJson(morph: { node: string; prop: string; value: number; base?: nu
 
 /**
  * <Name>_FBMs.json — extra ROM frames consumed by DthWorkflow.dsa via
- * `options.extraJSONs`. Frames are relative offsets from ROM start; frame 0
- * is the implicit empty/rest frame, so numbering starts at 1.
+ * `options.extraJSONs`. Frames are 0-based relative offsets from ROM start
+ * (first custom frame = 0), matching the 0-based DazToHue-Scripts handoff
+ * (a ROM block reserves its full frame count; the next section starts after it).
  */
 export function toDazFbmJson(character: Character): GeneratedFile {
   const slug = characterSlug(character)
@@ -167,11 +168,11 @@ export function toDazFbmJson(character: Character): GeneratedFile {
 /**
  * <Name>_FBMs.csv — same data as the JSON in the flat CSV form used by
  * DthWorkflowFromCSV.dsa: `frame,section,name,node,prop,value`, one line per
- * morph, with the empty rest frame at 0.
+ * morph, 0-based (the first morph is at frame 0).
  */
 export function toDazFbmCsv(character: Character): GeneratedFile {
   const slug = characterSlug(character)
-  const lines = ['0,FBM,Empty']
+  const lines: Array<string> = []
   for (const frame of flattenRom(character.sections)) {
     for (const morph of frame.morphs) {
       lines.push(
@@ -389,7 +390,7 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
     !includeDk
 
   if (matchesTemplate) {
-    const lines = poseAssetTemplateG9DqsFacGp.trimEnd().split('\n')
+    const lines = poseAssetTemplateG9DqsFacGp.replace(/\r\n/g, '\n').trimEnd().split('\n')
     const placeholder = lines.indexOf(CUSTOM_SECTIONS_PLACEHOLDER)
     let head = lines.slice(0, placeholder)
     const tail = lines.slice(placeholder + 1)
