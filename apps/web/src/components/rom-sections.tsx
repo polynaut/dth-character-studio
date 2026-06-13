@@ -16,7 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
 
-import { pickFbxFile } from '#/lib/rom/api.ts'
+import { pickFbxPath } from '#/lib/desktop.ts'
 
 import type { DragEndEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
@@ -441,7 +441,7 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
           className="flex shrink-0 items-center px-1 text-muted-foreground/60 hover:text-foreground"
           title="Pick the reference FBX with a file dialog"
           onClick={async () => {
-            const path = await pickFbxFile()
+            const path = await pickFbxPath()
             if (path) (table.options.meta as PoseTableMeta).update(row.index, { referenceFbx: path })
           }}
         >

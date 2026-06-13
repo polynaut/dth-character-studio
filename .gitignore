@@ -14,3 +14,7 @@ todos.json
 
 # Personal character data + generated DTH files (repo is public)
 data/
+
+# Electron build + packaging output
+out/
+release/
