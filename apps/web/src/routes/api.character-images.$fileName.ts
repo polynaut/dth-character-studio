@@ -14,13 +14,14 @@ export const Route = createFileRoute('/api/character-images/$fileName')({
     handlers: {
       GET: async ({ params }) => {
         const { readFile } = await import('node:fs/promises')
-        const { join, basename, extname } = await import('node:path')
+        const { basename, extname } = await import('node:path')
+        const { dataPath } = await import('../server/paths')
         // basename() blocks path traversal.
         const fileName = basename(params.fileName)
         const contentType = CONTENT_TYPES[extname(fileName).toLowerCase()]
         if (!contentType) return new Response('Unsupported file type', { status: 400 })
         try {
-          const data = await readFile(join(process.cwd(), 'data', 'images', fileName))
+          const data = await readFile(dataPath('images', fileName))
           return new Response(new Uint8Array(data), {
             headers: { 'Content-Type': contentType, 'Cache-Control': 'no-cache' },
           })
