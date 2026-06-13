@@ -38,6 +38,7 @@ import {
   genRomIncludes,
   mirrorGroup,
   newId,
+  presetFrameCount,
 } from '#/lib/rom/types.ts'
 
 import type { ColumnDef } from '@tanstack/react-table'
@@ -374,7 +375,7 @@ const columnHelper = createColumnHelper<RomPose>()
 const poseColumns: Array<ColumnDef<RomPose, any>> = [
   columnHelper.display({
     id: 'frame',
-    header: '#',
+    header: 'Frame',
     cell: ({ row, table }) => (
       <span className="px-2 text-sm text-muted-foreground tabular-nums">
         {(table.options.meta as PoseTableMeta).startFrame + row.index}
@@ -1070,9 +1071,10 @@ export function RomSections({
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
 
-  // Start frames are positions in the flattened custom sequence (frame 0 = rest).
+  // Absolute timeline frame of each custom group's first pose: the preset ROM
+  // blocks (base, GP/DK, Physics) come first, then the custom sequence continues.
   const startFrames = new Map<string, number>()
-  let frame = 1
+  let frame = presetFrameCount(sections, gender, skinning)
   for (const section of ROM_SECTIONS) {
     const config = sections[section]
     if (!config.enabled || config.mode !== 'custom') continue
