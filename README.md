@@ -1,7 +1,7 @@
 # DTH Character Studio
 
 Declarative character & ROM administration for the
-[DazToHue (DTH)](https://www.daztohue.com) character workflow — as a web app or
+[DazToHue (DTH)](https://www.artstation.com/marketplace/p/BLM5K/daztohue) character workflow — as a web app or
 a desktop app.
 
 You describe a character **once** — its Genesis version, gender, ROM sections,
@@ -114,7 +114,7 @@ makes them freely shareable; bring your own licensed assets.
 
 ## Related projects
 
-- **[DazToHue](https://www.daztohue.com)** by *mrpdean* — the Houdini/UE toolset
+- **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** by *mrpdean* — the Houdini/UE toolset
   this studio targets (the PoseAsset node, ROMs and pose presets).
 - **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)** by *Soltude*
   and contributors — the Daz Studio scripting framework the generated workflow
