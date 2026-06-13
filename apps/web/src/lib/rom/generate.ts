@@ -20,6 +20,10 @@ import type {
 // UE5 configuration, exported from a fully set-up DazToHuePoseAsset node.
 // The placeholder marks where the character's custom sections go.
 import poseAssetTemplateG9DqsFacGp from './templates/poseasset-g9-dqs-jcmfac-gp-ue5.csv?raw'
+// The fixed PHY preset block (G9 Physics Example ROM) — bones, pose names,
+// push-direction XYZ and group offset/radius, ground-truth from a node export.
+// Relative frames 0-42; renumbered to absolute on emit.
+import poseAssetPhysicsG9 from './templates/poseasset-physics-g9.csv?raw'
 
 const CUSTOM_SECTIONS_PLACEHOLDER = 'CUSTOM_SECTIONS_PLACEHOLDER'
 
@@ -362,6 +366,25 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
 }
 
 /**
+ * The fixed PHY preset block (G9 Physics Example ROM) as PoseAsset rows, with
+ * frames offset to `startFrame`. The mapping — bones, pose names, push-direction
+ * XYZ, group offset/radius — is ground-truth from a node export; only the PHY
+ * row frames are renumbered. PHYGROUP rows carry no frame and pass through.
+ */
+function physicsPoseAssetRows(startFrame: number): Array<string> {
+  return poseAssetPhysicsG9
+    .replace(/\r\n/g, '\n')
+    .trimEnd()
+    .split('\n')
+    .map((line) => {
+      if (!line.startsWith('PHY,')) return line
+      const cols = line.split(',')
+      cols[1] = String(startFrame + Number(cols[1]))
+      return cols.join(',')
+    })
+}
+
+/**
  * PoseAsset node CSV for Houdini/DTH (import format reverse-engineered from
  * the node's parser, see docs/poseasset-csv-spec.md).
  *
@@ -397,16 +420,17 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
     if (!includeGp) {
       head = head.filter((line) => !line.startsWith('GEN'))
     }
-    // The physics block shifts the custom frames, but its own PHY mapping
-    // rows are not in the template — map them in the node manually for now.
+    // Physics is a fixed preset block (the G9 Physics Example ROM, 43 frames)
+    // inserted after the GEN/GP block and before the custom sections.
+    const physStart = BASE_FRAMES_DQS + (includeGp ? GP_FRAMES : 0)
+    const physRows = includePhys ? physicsPoseAssetRows(physStart) : []
     const lastPresetFrame =
       BASE_FRAMES_DQS - 1 + (includeGp ? GP_FRAMES : 0) + (includePhys ? PHYS_FRAMES : 0)
     const customRows = customPoseAssetRows(character, lastPresetFrame)
     return {
       fileName: `${slug}_PoseAsset.csv`,
-      content: [...head, ...customRows, ...tail].join('\n') + '\n',
+      content: [...head, ...physRows, ...customRows, ...tail].join('\n') + '\n',
       target: 'houdini',
-      ...(includePhys ? { experimental: true } : {}),
     }
   }
 

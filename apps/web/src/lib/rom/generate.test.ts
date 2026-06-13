@@ -422,6 +422,22 @@ describe('toPoseAssetCsv', () => {
     expect(lines).toContain('FBM,433,GluteUpDown,')
   })
 
+  it('inserts the fixed PHY block after GP and shifts custom frames when physics is enabled', () => {
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    sections.PHY.enabled = true
+    sections.PHY.mode = 'preset'
+    const file = toPoseAssetCsv(makeCharacter({ sections }))
+    const lines = file.content.trimEnd().split('\n')
+    expect(file.experimental).toBeUndefined()
+    // base 0-327, GP 328-431, PHY 432-474, custom (FBM) 475+.
+    expect(lines).toContain('GEN,431,ClitorisErect')
+    expect(lines).toContain('PHYGROUP,0,0,breast_l,5.0,5.0')
+    expect(lines).toContain('PHY,432,BreastOut,-5.0,0.0,0.0')
+    expect(lines).toContain('PHY,474,StomachHangForward,0.0,0.0,-5.0')
+    expect(lines).toContain('FBM,475,BodyTone,')
+  })
+
   it('falls back to custom-only rows with index-based group headers off-template', () => {
     const sections = makeSections()
     sections.JCM.mode = 'custom'
