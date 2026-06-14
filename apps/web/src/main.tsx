@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 
 import { getRouter } from './router'
+import { checkForUpdates } from './lib/updater'
 import './styles.css'
 
 const router = getRouter()
@@ -18,3 +19,6 @@ createRoot(rootElement).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// Best-effort auto-update check (no-ops outside the packaged Tauri app).
+void checkForUpdates()
