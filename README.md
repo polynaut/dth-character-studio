@@ -33,16 +33,19 @@ Houdini sides. Genesis 8/8.1 and the male (Dicktator) path are planned.
 
 ## Repository layout
 
-A small pnpm-workspace monorepo:
+A 2-layer pnpm-workspace monorepo:
 
 ```
 apps/
-  web/      TanStack Start app — the studio itself. Runs standalone as a web app.
-  desktop/  Thin Electron shell that reuses apps/web for its UI.
+  web/      React SPA (Vite + TanStack Router) — the studio UI. Runs standalone in a browser.
+  desktop/  Tauri 2 shell (Rust) — the shippable desktop app; loads apps/web and
+            provides native file / dialog / auto-update access.
+packages/
+  rom/      Pure ROM/CSV/DSA generation core (@dth/rom) — framework-agnostic, no I/O.
 ```
 
-The web app never depends on Electron — it is always a first-class standalone
-application. The desktop shell is purely additive.
+The generation core (`packages/rom`) is pure TypeScript and is where the value
+lives; the apps are thin shells around it.
 
 ## Run — web
 
@@ -51,19 +54,19 @@ pnpm install
 pnpm dev          # http://localhost:4330  (also bound on the LAN)
 ```
 
-Other scripts: `pnpm build`, `pnpm start` (production server), `pnpm test`,
-`pnpm typecheck`, `pnpm generate-routes`.
+Other scripts: `pnpm build`, `pnpm preview`, `pnpm -r test`, `pnpm -r typecheck`,
+`pnpm generate-routes`. (Run as a plain web build, the native file features
+no-op — they require the Tauri desktop app.)
 
 ## Run — desktop
 
-```sh
-pnpm dev:desktop      # web dev server (HMR) + an Electron window pointed at it
-pnpm start:desktop    # build web + shell, run the packaged-style production app
-```
+Requires Rust ([rustup](https://rustup.rs)) and, on Windows, WebView2
+(preinstalled on Windows 11).
 
-> First desktop run downloads the Electron binary (~170 MB). If the shell errors
-> with `Electron uninstall`, pnpm skipped that download — run it once with
-> `pnpm --filter @dth/desktop exec node node_modules/electron/install.js`.
+```sh
+pnpm dev:desktop      # Tauri: starts the web dev server (HMR) + the native window
+pnpm build:desktop    # production build → NSIS installer under apps/desktop/target/release/bundle
+```
 
 After first launch, open **Settings** and point the two folders at:
 
@@ -72,38 +75,35 @@ After first launch, open **Settings** and point the two folders at:
 - your **DTH release or Poses folder** (scanned for the pre-defined pose preset
   catalog — accepts a release root or the installed library Poses folder).
 
-## How the desktop app reuses the web app
+## How the desktop app works
 
-The desktop shell does **not** reimplement the backend. The web app's TanStack
-Start server functions already do all file I/O, so the shell simply runs that
-server and points a window at it:
+The Tauri shell loads the `apps/web` SPA and exposes native capabilities through
+Tauri plugins instead of a Node backend:
 
-- **Dev** — the Electron window loads the web dev server at `localhost:4330`
-  (full HMR). You develop the web app exactly as before; Electron is optional.
-- **Production** — the main process boots the web app's *own* production server
-  (`apps/web/server/index.js`) on a random local port, then loads it.
+- **File I/O** — characters, settings, generated output, and the Poses-folder
+  scan go through `@tauri-apps/plugin-fs`; the native FBX picker uses
+  `@tauri-apps/plugin-dialog`. The generation itself (`packages/rom`) is pure
+  TypeScript and runs in the webview.
+- Character data lives in the per-user app-data folder (`appLocalDataDir()`), so
+  it survives app updates.
 
-The only Electron-specific surface is a deliberately tiny bridge
-(`apps/desktop/src/preload`) exposing `window.desktop` — native FBX dialog, app
-version, open-data-folder. The web UI feature-detects it and falls back to its
-server functions when running as a plain web app, so neither mode breaks.
+The native boundary is concentrated in `apps/web/src/lib/rom/{api,storage}.ts`
+and `lib/desktop.ts`, which keeps the SPA runnable in a plain browser (and lets
+web-only e2e tests mock that layer).
 
-Character data lives in `apps/web/data` for the standalone web app; the desktop
-shell sets `DTH_DATA_DIR` to the per-user application-data folder so characters
-survive app updates.
+### Releases & auto-update
 
-### Packaging status
-
-The dev and run-from-source flows work today. Producing a distributable
-**installer** additionally requires bundling the web server's runtime
-dependencies into the app resources (pnpm's symlinked `node_modules` don't copy
-as-is) — that is a planned follow-up; see `apps/desktop/electron-builder.yml`.
+Versioning is [Changesets](.changeset/); merging the auto-generated "version
+packages" PR triggers a GitHub Release (NSIS installer + signed updater
+metadata) built by `.github/workflows/release.yml`. Installed apps check for an
+update on launch and self-update on the user's confirmation. Full pipeline,
+signing-key, and branch-policy setup: see `docs/devops.md` and `CONTRIBUTING.md`.
 
 ## Data & sharing — share definitions, not assets
 
-Character definitions live as one JSON file per character in `apps/web/data/`
-(gitignored). Generated artifacts (`FBM` JSON/CSV, PoseAsset CSV, art-direction
-JSON) and these definitions are **recipes**: they reference Daz assets by morph
+Character definitions live as one JSON file per character in the app's per-user
+data folder (`appLocalDataDir()`). Generated artifacts (`FBM` JSON/CSV, PoseAsset
+CSV, art-direction JSON) and these definitions are **recipes**: they reference Daz assets by morph
 name, frame number and bone — they do **not** contain any licensed content. That
 makes them freely shareable; bring your own licensed assets.
 
