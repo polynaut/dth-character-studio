@@ -6,9 +6,9 @@ import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { fetchPoseAssets, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
-import { ROM_SECTIONS, SECTION_LABELS } from '#/lib/rom/types.ts'
+import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
-import type { DthPoseAsset, GenesisVersion } from '#/lib/rom/types.ts'
+import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/settings')({
   loader: () => fetchSettings(),

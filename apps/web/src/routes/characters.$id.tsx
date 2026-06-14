@@ -24,10 +24,10 @@ import {
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
-import { characterSkinning, countPoses, jcmMorphModSchema } from '#/lib/rom/types.ts'
+import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
-import type { GeneratedFile } from '#/lib/rom/generate.ts'
-import type { Character, GenesisVersion, TargetSkeleton } from '#/lib/rom/types.ts'
+import type { GeneratedFile } from '@dth/rom'
+import type { Character, GenesisVersion, TargetSkeleton } from '@dth/rom'
 
 export const Route = createFileRoute('/characters/$id')({
   loader: async ({ params }) => {

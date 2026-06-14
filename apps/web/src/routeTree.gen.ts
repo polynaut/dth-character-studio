@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CharactersIdRouteImport } from './routes/characters.$id'
-import { Route as ApiCharacterImagesFileNameRouteImport } from './routes/api.character-images.$fileName'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -29,54 +28,35 @@ const CharactersIdRoute = CharactersIdRouteImport.update({
   path: '/characters/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCharacterImagesFileNameRoute =
-  ApiCharacterImagesFileNameRouteImport.update({
-    id: '/api/character-images/$fileName',
-    path: '/api/character-images/$fileName',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/characters/$id': typeof CharactersIdRoute
-  '/api/character-images/$fileName': typeof ApiCharacterImagesFileNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/characters/$id': typeof CharactersIdRoute
-  '/api/character-images/$fileName': typeof ApiCharacterImagesFileNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/characters/$id': typeof CharactersIdRoute
-  '/api/character-images/$fileName': typeof ApiCharacterImagesFileNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/settings'
-    | '/characters/$id'
-    | '/api/character-images/$fileName'
+  fullPaths: '/' | '/settings' | '/characters/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/characters/$id' | '/api/character-images/$fileName'
-  id:
-    | '__root__'
-    | '/'
-    | '/settings'
-    | '/characters/$id'
-    | '/api/character-images/$fileName'
+  to: '/' | '/settings' | '/characters/$id'
+  id: '__root__' | '/' | '/settings' | '/characters/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SettingsRoute: typeof SettingsRoute
   CharactersIdRoute: typeof CharactersIdRoute
-  ApiCharacterImagesFileNameRoute: typeof ApiCharacterImagesFileNameRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -102,13 +82,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CharactersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/character-images/$fileName': {
-      id: '/api/character-images/$fileName'
-      path: '/api/character-images/$fileName'
-      fullPath: '/api/character-images/$fileName'
-      preLoaderRoute: typeof ApiCharacterImagesFileNameRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -116,17 +89,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SettingsRoute: SettingsRoute,
   CharactersIdRoute: CharactersIdRoute,
-  ApiCharacterImagesFileNameRoute: ApiCharacterImagesFileNameRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

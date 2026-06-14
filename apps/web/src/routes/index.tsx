@@ -18,9 +18,9 @@ import {
   importCharacterFromJson,
 } from '#/lib/rom/api.ts'
 
-import { characterSkinning, countPoses } from '#/lib/rom/types.ts'
+import { characterSkinning, countPoses } from '@dth/rom'
 
-import type { Gender, GenesisVersion } from '#/lib/rom/types.ts'
+import type { Gender, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/')({
   loader: () => fetchCharacters(),

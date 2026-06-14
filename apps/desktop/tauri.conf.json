@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DTH Character Studio",
+  "version": "0.1.0",
+  "identifier": "com.polynaut.dthcharacterstudio",
+  "build": {
+    "frontendDist": "../web/dist",
+    "devUrl": "http://localhost:4330",
+    "beforeDevCommand": "pnpm --filter @dth/web dev",
+    "beforeBuildCommand": "pnpm --filter @dth/web build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DTH Character Studio",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 960,
+        "minHeight": 640,
+        "backgroundColor": "#0a0a0a"
+      }
+    ],
+    "security": {
+      "comment": "Local-first tool, no remote content — CSP disabled so the SPA + any client lib runs unrestricted. Tighten later if remote resources are ever loaded.",
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPLOCALDATA/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/polynaut/dth-character-studio/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBKEY"
+    }
+  }
+}

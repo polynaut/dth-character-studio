@@ -1,29 +1,54 @@
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-
-import { DATA_DIR } from '../../server/paths'
+import {
+  exists,
+  mkdir,
+  readDir,
+  readTextFile,
+  remove,
+  stat,
+  writeTextFile,
+} from '@tauri-apps/plugin-fs'
+import { appLocalDataDir } from '@tauri-apps/api/path'
 
 import {
   ROM_SECTIONS,
   characterSchema,
   defaultSections,
   sectionsFromFlatFrames,
-} from './types'
+} from '@dth/rom'
 
-import type { Character, DthPoseAsset, GenesisVersion, RomSection } from './types'
+import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
 /**
- * SERVER ONLY — JSON-file-per-character storage.
- * Lives in <app>/data (gitignored): characters are personal data and the
- * repo is public. One readable, diffable JSON per character also makes
- * sharing trivial once the tool goes public.
+ * Local JSON-file-per-character storage, backed by the Tauri fs plugin.
+ * Data lives in the per-user app-local data dir (e.g.
+ * %LOCALAPPDATA%/com.polynaut.dthcharacterstudio) so it survives app updates
+ * and never depends on the working directory. One readable, diffable JSON per
+ * character also keeps sharing trivial.
  */
 
-const CHARACTERS_DIR = join(DATA_DIR, 'characters')
-export const OUTPUT_DIR = join(DATA_DIR, 'out')
+/** Join path segments with '/'. Tauri's fs normalizes separators on Windows. */
+function join(...parts: Array<string>): string {
+  return parts
+    .map((p) => p.replace(/[\\/]+$/g, ''))
+    .filter(Boolean)
+    .join('/')
+}
+
+let dataDirPromise: Promise<string> | null = null
+async function dataDir(): Promise<string> {
+  if (!dataDirPromise) {
+    dataDirPromise = appLocalDataDir().then((d) => d.replace(/[\\/]+$/g, ''))
+  }
+  return dataDirPromise
+}
+
+/** Resolve a path inside the per-user data directory. */
+export async function dataPath(...parts: Array<string>): Promise<string> {
+  return join(await dataDir(), ...parts)
+}
 
 async function ensureDirs(): Promise<void> {
-  await mkdir(CHARACTERS_DIR, { recursive: true })
+  await mkdir(await dataPath('characters'), { recursive: true })
 }
 
 /**
@@ -93,12 +118,10 @@ function parseCharacter(raw: unknown): Character {
 
 export async function listCharacters(): Promise<Array<Character>> {
   await ensureDirs()
-  const files = (await readdir(CHARACTERS_DIR)).filter((f) => f.endsWith('.json'))
+  const dir = await dataPath('characters')
+  const files = (await readDir(dir)).filter((e) => e.isFile && e.name.endsWith('.json'))
   const characters = await Promise.all(
-    files.map(async (file) => {
-      const raw = await readFile(join(CHARACTERS_DIR, file), 'utf8')
-      return parseCharacter(JSON.parse(raw))
-    }),
+    files.map(async (file) => parseCharacter(JSON.parse(await readTextFile(join(dir, file.name))))),
   )
   return characters.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -106,7 +129,7 @@ export async function listCharacters(): Promise<Array<Character>> {
 export async function getCharacter(id: string): Promise<Character | null> {
   await ensureDirs()
   try {
-    const raw = await readFile(join(CHARACTERS_DIR, `${id}.json`), 'utf8')
+    const raw = await readTextFile(await dataPath('characters', `${id}.json`))
     return parseCharacter(JSON.parse(raw))
   } catch {
     return null
@@ -116,27 +139,25 @@ export async function getCharacter(id: string): Promise<Character | null> {
 export async function saveCharacter(character: Character): Promise<Character> {
   await ensureDirs()
   const stamped = { ...character, updatedAt: new Date().toISOString() }
-  await writeFile(
-    join(CHARACTERS_DIR, `${character.id}.json`),
+  await writeTextFile(
+    await dataPath('characters', `${character.id}.json`),
     JSON.stringify(stamped, null, 2) + '\n',
-    'utf8',
   )
   return stamped
 }
 
 export async function deleteCharacter(id: string): Promise<void> {
-  await rm(join(CHARACTERS_DIR, `${id}.json`), { force: true })
+  const path = await dataPath('characters', `${id}.json`)
+  if (await exists(path)) await remove(path)
 }
 
 export async function writeGeneratedFiles(
   slug: string,
   files: Array<{ fileName: string; content: string }>,
 ): Promise<string> {
-  const dir = join(OUTPUT_DIR, slug)
+  const dir = await dataPath('out', slug)
   await mkdir(dir, { recursive: true })
-  await Promise.all(
-    files.map((file) => writeFile(join(dir, file.fileName), file.content, 'utf8')),
-  )
+  await Promise.all(files.map((file) => writeTextFile(join(dir, file.fileName), file.content)))
   return dir
 }
 
@@ -145,11 +166,8 @@ export async function writeFilesToFolder(
   folder: string,
   files: Array<{ fileName: string; content: string }>,
 ): Promise<void> {
-  const stats = await stat(folder)
-  if (!stats.isDirectory()) throw new Error(`Not a folder: ${folder}`)
-  await Promise.all(
-    files.map((file) => writeFile(join(folder, file.fileName), file.content, 'utf8')),
-  )
+  if (!(await isDir(folder))) throw new Error(`Not a folder: ${folder}`)
+  await Promise.all(files.map((file) => writeTextFile(join(folder, file.fileName), file.content)))
 }
 
 export interface StudioSettings {
@@ -159,30 +177,24 @@ export interface StudioSettings {
   dthPosesFolder: string
 }
 
-const SETTINGS_PATH = join(DATA_DIR, 'settings.json')
-
 async function isDir(path: string): Promise<boolean> {
   try {
-    return (await stat(path)).isDirectory()
+    return (await stat(path)).isDirectory
   } catch {
     return false
   }
 }
 
-/**
- * Defaults for a fresh install: both folders empty. The user points them at
- * their DazToHue-Scripts checkout and DTH release/Poses folder in Settings,
- * and the choice persists to data/settings.json.
- */
-async function defaultSettings(): Promise<StudioSettings> {
+/** Defaults for a fresh install: both folders empty. */
+function defaultSettings(): StudioSettings {
   return { dazScriptsFolder: '', dthPosesFolder: '' }
 }
 
 export async function getSettings(): Promise<StudioSettings> {
   await ensureDirs()
-  const defaults = await defaultSettings()
+  const defaults = defaultSettings()
   try {
-    const raw = JSON.parse(await readFile(SETTINGS_PATH, 'utf8'))
+    const raw = JSON.parse(await readTextFile(await dataPath('settings.json')))
     return {
       dazScriptsFolder:
         typeof raw.dazScriptsFolder === 'string' ? raw.dazScriptsFolder : defaults.dazScriptsFolder,
@@ -198,14 +210,26 @@ export async function getSettings(): Promise<StudioSettings> {
 
 export async function saveSettings(settings: StudioSettings): Promise<StudioSettings> {
   await ensureDirs()
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n', 'utf8')
+  await writeTextFile(await dataPath('settings.json'), JSON.stringify(settings, null, 2) + '\n')
   return settings
 }
 
+/** Recursively collect file paths (relative to `root`, '/'-separated). */
+async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
+  const here = rel ? join(root, rel) : root
+  const out: Array<string> = []
+  for (const entry of await readDir(here)) {
+    const childRel = rel ? `${rel}/${entry.name}` : entry.name
+    if (entry.isDirectory) out.push(...(await walkFiles(root, childRel)))
+    else out.push(childRel)
+  }
+  return out
+}
+
 /**
- * Scans the DazToHue Poses folder and classifies every .duf preset by
- * genesis generation, skinning variant and pose asset category. The folder
- * layout is `<Genesis X>/<Common|DQS|Linear>/...`.
+ * Scans the DazToHue Poses folder and classifies every .duf preset by genesis
+ * generation, skinning variant and pose asset category. The folder layout is
+ * `<Genesis X>/<Common|DQS|Linear>/...`.
  */
 export async function listPoseAssets(): Promise<{
   folder: string
@@ -217,27 +241,27 @@ export async function listPoseAssets(): Promise<{
     return { folder: '', assets: [], error: 'No DTH release / Poses folder configured.' }
   }
   if (!(await isDir(dthPosesFolder))) {
-    return {
-      folder: dthPosesFolder,
-      assets: [],
-      error: `Folder not reachable: ${dthPosesFolder}`,
-    }
+    return { folder: dthPosesFolder, assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
   }
   // Accept either the Poses folder itself or a DTH release root
   // (e.g. ".../Release 2.4.3", which contains Daz Studio Content/DazToHue/Poses).
   let posesFolder = dthPosesFolder
-  const looksLikePoses = (await Promise.all(
-    ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9'].map((g) => isDir(join(posesFolder, g))),
-  )).some(Boolean)
+  const looksLikePoses = (
+    await Promise.all(
+      ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9'].map((g) =>
+        isDir(join(posesFolder, g)),
+      ),
+    )
+  ).some(Boolean)
   if (!looksLikePoses) {
     const releaseContent = join(posesFolder, 'Daz Studio Content', 'DazToHue', 'Poses')
     if (await isDir(releaseContent)) posesFolder = releaseContent
   }
-  const entries = (await readdir(posesFolder, { recursive: true })) as Array<string>
+  const entries = await walkFiles(posesFolder)
   const assets: Array<DthPoseAsset> = []
   for (const entry of entries) {
     if (!entry.toLowerCase().endsWith('.duf')) continue
-    const relPath = entry.replaceAll('\\', '/')
+    const relPath = entry
     const parts = relPath.split('/')
     const fileName = parts[parts.length - 1]
     const name = fileName.replace(/\.duf$/i, '')
