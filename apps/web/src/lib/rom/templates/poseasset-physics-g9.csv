@@ -21,7 +21,7 @@ PHY,17,BreastHangForward,-0.0,0.0,-5.0
 PHYGROUP,0,0,glute_l,5.0,5.0
 PHY,18,GluteOut,-5.0,0.0,0.0
 PHY,19,GluteOutUp,-3.5,3.5,0.0
-PHY,20,GluteOutUp,0.0,5.0,0.0
+PHY,20,GluteUp,0.0,5.0,0.0
 PHY,21,GluteInUp,3.5,3.5,0.0
 PHY,22,GluteIn,5.0,0.0,0.0
 PHY,23,GluteInDown,3.5,-3.5,0.0
@@ -30,7 +30,7 @@ PHY,25,GluteOutDown,-3.5,-3.5,0.0
 PHYGROUP,0,2,glute_r,5.0,5.0
 PHY,26,GluteOut,5.0,0.0,0.0
 PHY,27,GluteOutUp,3.5,3.5,0.0
-PHY,28,GluteOutUp,-0.0,5.0,0.0
+PHY,28,GluteUp,0.0,5.0,0.0
 PHY,29,GluteInUp,-3.5,3.5,0.0
 PHY,30,GluteIn,-5.0,0.0,0.0
 PHY,31,GluteInDown,-3.5,-3.5,0.0

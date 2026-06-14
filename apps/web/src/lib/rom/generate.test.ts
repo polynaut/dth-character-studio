@@ -452,6 +452,8 @@ describe('toPoseAssetCsv', () => {
     expect(lines).toContain('GEN,431,ClitorisErect')
     expect(lines).toContain('PHYGROUP,0,0,breast_l,5.0,5.0')
     expect(lines).toContain('PHY,432,BreastOut,-5.0,0.0,0.0')
+    expect(lines).toContain('PHY,452,GluteUp,0.0,5.0,0.0')
+    expect(lines).toContain('PHY,460,GluteUp,0.0,5.0,0.0')
     expect(lines).toContain('PHY,474,StomachHangForward,0.0,0.0,-5.0')
     expect(lines).toContain('FBM,475,BodyTone,')
   })
