@@ -12,7 +12,7 @@
     "dev": "pnpm --filter @dth/web dev",
     "dev:desktop": "concurrently -k -n web,app -c blue,magenta \"pnpm --filter @dth/web dev\" \"wait-on tcp:127.0.0.1:4330 && pnpm --filter @dth/desktop dev\"",
     "build": "pnpm --filter @dth/web build",
-    "build:desktop": "pnpm --filter @dth/web build && pnpm --filter @dth/desktop build",
+    "build:desktop": "pnpm --filter @dth/web build && pnpm --filter @dth/web bundle:server && pnpm --filter @dth/desktop build",
     "start": "pnpm --filter @dth/web start",
     "start:desktop": "pnpm run build:desktop && pnpm --filter @dth/desktop start",
     "package:desktop": "pnpm run build:desktop && pnpm --filter @dth/desktop package",

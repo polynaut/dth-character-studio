@@ -26,13 +26,16 @@ function dataDir(): string {
 }
 
 /**
- * Locate the web app's production server entry (apps/web/server/index.js).
- * Packaged builds copy apps/web into resources/web; running from source uses
- * the monorepo layout (apps/desktop → ../web).
+ * Locate the web app's production server entry.
+ * Prefer the flat esbuild bundle (dist/standalone/server.mjs) — it carries its
+ * own dependencies, so it works both in packaged builds (copied into
+ * resources/web/dist) and from source after `bundle:server`. Fall back to the
+ * dynamic-import entry (server/index.js), which needs node_modules on disk.
  */
 function resolveWebEntry(): string {
   const candidates = [
-    join(process.resourcesPath, 'web', 'server', 'index.js'),
+    join(process.resourcesPath, 'web', 'dist', 'standalone', 'server.mjs'),
+    join(app.getAppPath(), '..', 'web', 'dist', 'standalone', 'server.mjs'),
     join(app.getAppPath(), '..', 'web', 'server', 'index.js'),
   ]
   for (const candidate of candidates) {
