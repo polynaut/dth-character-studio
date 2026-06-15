@@ -39,7 +39,7 @@ import {
   mirrorGroup,
   newId,
   presetFrameCount,
-} from '#/lib/rom/types.ts'
+} from '@dth/rom'
 
 import type { ColumnDef } from '@tanstack/react-table'
 import type {
@@ -57,7 +57,7 @@ import type {
   RomSectionConfig,
   RomSections as RomSectionsModel,
   SectionMode,
-} from '#/lib/rom/types.ts'
+} from '@dth/rom'
 
 /**
  * Accordion over the eight pose asset categories — all collapsed initially

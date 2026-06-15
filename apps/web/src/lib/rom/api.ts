@@ -1,38 +1,52 @@
-import { createServerFn } from '@tanstack/react-start'
+import { mkdir, readDir, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import { generateAll, resolveRomPaths } from './generate'
+import { generateAll, resolveRomPaths } from '@dth/rom'
+import * as storage from './storage'
+import { dataPath } from './storage'
+import { isExternalImage } from './image'
 import {
   characterSchema,
-  characterSlug,
   genderSchema,
   genesisVersionSchema,
   morphSchema,
   newId,
   sectionsFromFlatFrames,
-} from './types'
+} from '@dth/rom'
 
-import type { Character } from './types'
+import type { Character } from '@dth/rom'
+import type { StudioSettings } from './storage'
+
+export type { CharacterLocation } from './storage'
 
 /**
- * Server functions — the only bridge between the React UI and the
- * filesystem. Storage is imported dynamically inside handlers so no
- * node:fs code ever reaches the client bundle.
+ * Client data layer — the only bridge between the React UI and the filesystem.
+ * Backed by the Tauri fs/dialog plugins (no Node/server). Functions keep the
+ * `{ data }` call convention the route components already use, so the UI is
+ * unchanged.
  */
+
+function joinPath(...parts: Array<string>): string {
+  return parts
+    .map((p) => p.replace(/[\\/]+$/g, ''))
+    .filter(Boolean)
+    .join('/')
+}
+
+function basename(p: string): string {
+  return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
+}
 
 const idInput = z.object({ id: z.string() })
 
-export const fetchCharacters = createServerFn({ method: 'GET' }).handler(async () => {
-  const storage = await import('./storage')
+export async function fetchCharacters(): Promise<Array<Character>> {
   return storage.listCharacters()
-})
+}
 
-export const fetchCharacter = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => idInput.parse(input))
-  .handler(async ({ data }) => {
-    const storage = await import('./storage')
-    return storage.getCharacter(data.id)
-  })
+export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
+  return storage.getCharacter(idInput.parse(data).id)
+}
 
 const createInput = z.object({
   name: z.string().min(1),
@@ -40,35 +54,27 @@ const createInput = z.object({
   gender: genderSchema,
 })
 
-export const createCharacter = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => createInput.parse(input))
-  .handler(async ({ data }) => {
-    const storage = await import('./storage')
-    const now = new Date().toISOString()
-    const character: Character = characterSchema.parse({
-      id: newId(),
-      name: data.name,
-      genesis: data.genesis,
-      gender: data.gender,
-      createdAt: now,
-      updatedAt: now,
-    })
-    return storage.saveCharacter(character)
+export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
+  const input = createInput.parse(data)
+  const now = new Date().toISOString()
+  const character: Character = characterSchema.parse({
+    id: newId(),
+    name: input.name,
+    genesis: input.genesis,
+    gender: input.gender,
+    createdAt: now,
+    updatedAt: now,
   })
+  return storage.saveCharacter(character)
+}
 
-export const saveCharacter = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => characterSchema.parse(input))
-  .handler(async ({ data }) => {
-    const storage = await import('./storage')
-    return storage.saveCharacter(data)
-  })
+export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
+  return storage.saveCharacter(characterSchema.parse(data))
+}
 
-export const deleteCharacter = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => idInput.parse(input))
-  .handler(async ({ data }) => {
-    const storage = await import('./storage')
-    await storage.deleteCharacter(data.id)
-  })
+export async function deleteCharacter({ data }: { data: unknown }): Promise<void> {
+  await storage.deleteCharacter(idInput.parse(data).id)
+}
 
 /** Shape of an existing DazToHue-Scripts FBM file (e.g. ElectraG9_FBMs.json). */
 const fbmJsonSchema = z.object({
@@ -92,52 +98,24 @@ const importInput = z.object({
 })
 
 /** Seeds a new character from an existing DazToHue-Scripts FBM JSON file. */
-export const importCharacterFromJson = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => importInput.parse(input))
-  .handler(async ({ data }) => {
-    const { readFile } = await import('node:fs/promises')
-    const storage = await import('./storage')
-    const raw = fbmJsonSchema.parse(JSON.parse(await readFile(data.filePath, 'utf8')))
-    const now = new Date().toISOString()
-    const character: Character = characterSchema.parse({
-      id: newId(),
-      name: data.name,
-      genesis: data.genesis,
-      gender: data.gender,
-      createdAt: now,
-      updatedAt: now,
-      sections: sectionsFromFlatFrames([...raw.frames].sort((a, b) => a.frame - b.frame)),
-    })
-    if (raw.meta?.resetGPBeforeApplying !== undefined) {
-      character.resetGPBeforeApplying = raw.meta.resetGPBeforeApplying
-    }
-    return storage.saveCharacter(character)
+export async function importCharacterFromJson({ data }: { data: unknown }): Promise<Character> {
+  const input = importInput.parse(data)
+  const raw = fbmJsonSchema.parse(JSON.parse(await readTextFile(input.filePath)))
+  const now = new Date().toISOString()
+  const character: Character = characterSchema.parse({
+    id: newId(),
+    name: input.name,
+    genesis: input.genesis,
+    gender: input.gender,
+    createdAt: now,
+    updatedAt: now,
+    sections: sectionsFromFlatFrames([...raw.frames].sort((a, b) => a.frame - b.frame)),
   })
-
-/**
- * Opens a native file dialog ON THE MACHINE RUNNING THE STUDIO (which is the
- * user's machine for this local tool) and returns the picked path, or ''.
- */
-export const pickFbxFile = createServerFn({ method: 'POST' }).handler(async () => {
-  const { execFile } = await import('node:child_process')
-  const { promisify } = await import('node:util')
-  const script =
-    "Add-Type -AssemblyName System.Windows.Forms; " +
-    '$d = New-Object System.Windows.Forms.OpenFileDialog; ' +
-    "$d.Filter = 'FBX files (*.fbx)|*.fbx|All files (*.*)|*.*'; " +
-    "$d.Title = 'Select reference skeleton FBX'; " +
-    "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }"
-  try {
-    const { stdout } = await promisify(execFile)(
-      'powershell.exe',
-      ['-NoProfile', '-STA', '-Command', script],
-      { timeout: 300000 },
-    )
-    return stdout.trim()
-  } catch {
-    return ''
+  if (raw.meta?.resetGPBeforeApplying !== undefined) {
+    character.resetGPBeforeApplying = raw.meta.resetGPBeforeApplying
   }
-})
+  return storage.saveCharacter(character)
+}
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': '.png',
@@ -154,83 +132,128 @@ const uploadImageInput = z.object({
 })
 
 /**
- * Stores a dropped avatar image under data/images/ and returns the URL it
- * is served from (with a cache-busting version).
+ * Stores a dropped avatar image under <data>/images/ and returns its bare
+ * filename — the portable canonical reference saved on the character (see
+ * ./image). The UI resolves it to a loadable asset URL at render time via
+ * resolveImageSrc; the persisted JSON never embeds a machine-specific path.
  */
-export const uploadCharacterImage = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => uploadImageInput.parse(input))
-  .handler(async ({ data }) => {
-    const extension = IMAGE_EXTENSIONS[data.mimeType]
-    if (!extension) throw new Error(`Unsupported image type: ${data.mimeType}`)
-    const { mkdir, writeFile, readdir, rm } = await import('node:fs/promises')
-    const { join, basename } = await import('node:path')
-    const { dataPath } = await import('../../server/paths')
-    const dir = dataPath('images')
-    await mkdir(dir, { recursive: true })
-    const id = basename(data.characterId)
-    // One avatar per character — drop stale variants with other extensions.
-    for (const file of await readdir(dir)) {
-      if (file.startsWith(id) && !file.endsWith(extension)) {
-        await rm(join(dir, file), { force: true })
-      }
+export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
+  const input = uploadImageInput.parse(data)
+  const extension = IMAGE_EXTENSIONS[input.mimeType]
+  if (!extension) throw new Error(`Unsupported image type: ${input.mimeType}`)
+  const dir = await dataPath('images')
+  await mkdir(dir, { recursive: true })
+  const id = basename(input.characterId)
+  // One avatar per character — drop stale variants with other extensions.
+  for (const entry of await readDir(dir)) {
+    if (entry.isFile && entry.name.startsWith(id) && !entry.name.endsWith(extension)) {
+      await remove(joinPath(dir, entry.name))
     }
-    const fileName = `${id}${extension}`
-    await writeFile(join(dir, fileName), Buffer.from(data.dataBase64, 'base64'))
-    return `/api/character-images/${fileName}?v=${Date.now()}`
-  })
-
-export const fetchSettings = createServerFn({ method: 'GET' }).handler(async () => {
-  const storage = await import('./storage')
-  return storage.getSettings()
-})
-
-/** The pre-defined DTH pose preset catalog, scanned from the Poses folder. */
-export const fetchPoseAssets = createServerFn({ method: 'GET' }).handler(async () => {
-  const storage = await import('./storage')
-  return storage.listPoseAssets()
-})
-
-const settingsInput = z.object({ dazScriptsFolder: z.string(), dthPosesFolder: z.string() })
-
-export const saveSettings = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => settingsInput.parse(input))
-  .handler(async ({ data }) => {
-    const storage = await import('./storage')
-    return storage.saveSettings(data)
-  })
+  }
+  const fileName = `${id}${extension}`
+  const bytes = Uint8Array.from(atob(input.dataBase64), (c) => c.charCodeAt(0))
+  await writeFile(joinPath(dir, fileName), bytes)
+  return fileName
+}
 
 /**
- * Compiles the character into all DTH artifacts, writes them to
- * data/out/<slug>/ and — when a DazToHue-Scripts folder is configured —
- * writes the Daz-side files there too, runnable next to DthWorkflow.dsa.
- * Returns the files so the UI can offer downloads as well.
+ * Turns a stored `image` reference (see ./image) into a URL the webview can
+ * load. External URLs pass through unchanged; a local filename resolves to its
+ * asset URL under <data>/images/ with an mtime cache-buster (so replacing the
+ * avatar refreshes the image). Returns '' when the local file is missing — e.g.
+ * a character JSON shared from another machine — so the UI falls back to the
+ * initial-letter placeholder instead of showing a broken image.
  */
-export const generateCharacterFiles = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => idInput.parse(input))
-  .handler(async ({ data }) => {
-    const storage = await import('./storage')
-    const character = await storage.getCharacter(data.id)
-    if (!character) throw new Error(`Character ${data.id} not found`)
-    // Exact ROM paths from the installed preset catalog; {} when the folder
-    // is unavailable — the wrapper then falls back to DthOptions resolution.
-    const catalog = await storage.listPoseAssets()
-    const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
-    const files = generateAll(character, romPaths)
-    const outDir = await storage.writeGeneratedFiles(characterSlug(character), files)
+export async function resolveImageSrc(image: string): Promise<string> {
+  if (!image) return ''
+  if (isExternalImage(image)) return image
+  const filePath = await dataPath('images', image)
+  try {
+    const info = await stat(filePath)
+    const version = info.mtime ? `?v=${info.mtime.getTime()}` : ''
+    return `${convertFileSrc(filePath)}${version}`
+  } catch {
+    return ''
+  }
+}
 
-    const settings = await storage.getSettings()
-    let dazScriptsFolder: string | null = null
-    let dazScriptsError: string | null = null
-    if (settings.dazScriptsFolder) {
-      try {
-        await storage.writeFilesToFolder(
-          settings.dazScriptsFolder,
-          files.filter((file) => file.target === 'daz'),
-        )
-        dazScriptsFolder = settings.dazScriptsFolder
-      } catch (error) {
-        dazScriptsError = error instanceof Error ? error.message : String(error)
-      }
+export async function fetchSettings(): Promise<StudioSettings> {
+  return storage.getSettings()
+}
+
+/** The pre-defined DTH pose preset catalog, scanned from the Poses folder. */
+export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listPoseAssets>> {
+  return storage.listPoseAssets()
+}
+
+const settingsInput = z.object({
+  characterLibraryFolder: z.string(),
+  dazScriptsFolder: z.string(),
+  dthPosesFolder: z.string(),
+})
+
+export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
+  return storage.saveSettings(settingsInput.parse(data))
+}
+
+/**
+ * Compiles the character into all DTH artifacts, writes them into the
+ * character's own folder in the library (next to its definition) and — when a
+ * DazToHue-Scripts folder is configured — writes the Daz-side files there too,
+ * runnable next to DthWorkflow.dsa. Returns the files so the UI can offer
+ * downloads as well.
+ */
+export async function generateCharacterFiles({ data }: { data: unknown }): Promise<{
+  outDir: string
+  files: ReturnType<typeof generateAll>
+  dazScriptsFolder: string | null
+  dazScriptsError: string | null
+}> {
+  const { id } = idInput.parse(data)
+  const character = await storage.getCharacter(id)
+  if (!character) throw new Error(`Character ${id} not found`)
+  // Exact ROM paths from the installed preset catalog; {} when the folder is
+  // unavailable — the wrapper then falls back to DthOptions resolution.
+  const catalog = await storage.listPoseAssets()
+  const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
+  const files = generateAll(character, romPaths)
+  const outDir = await storage.getCharacterFolder(id)
+  await storage.writeFilesToFolder(outDir, files)
+
+  const settings = await storage.getSettings()
+  let dazScriptsFolder: string | null = null
+  let dazScriptsError: string | null = null
+  if (settings.dazScriptsFolder) {
+    try {
+      await storage.writeFilesToFolder(
+        settings.dazScriptsFolder,
+        files.filter((file) => file.target === 'daz'),
+      )
+      dazScriptsFolder = settings.dazScriptsFolder
+    } catch (error) {
+      dazScriptsError = error instanceof Error ? error.message : String(error)
     }
-    return { outDir, files, dazScriptsFolder, dazScriptsError }
-  })
+  }
+  return { outDir, files, dazScriptsFolder, dazScriptsError }
+}
+
+/** Where a character's files live (absolute + library-relative), for the editor. */
+export async function getCharacterPath({
+  data,
+}: {
+  data: unknown
+}): Promise<storage.CharacterLocation | null> {
+  return storage.getCharacterPath(idInput.parse(data).id)
+}
+
+const moveInput = z.object({ id: z.string().min(1), relFolder: z.string().min(1) })
+
+/** Move a character's whole folder to a new path relative to the library root. */
+export async function moveCharacter({
+  data,
+}: {
+  data: unknown
+}): Promise<storage.CharacterLocation> {
+  const { id, relFolder } = moveInput.parse(data)
+  return storage.moveCharacter(id, relFolder)
+}

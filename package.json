@@ -2,7 +2,7 @@
   "name": "dth-character-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Declarative character & ROM administration for the DazToHue (DTH) workflow — generates the Daz ROM scripts and the Houdini PoseAsset CSV from one definition. Runs as a standalone web app or an Electron desktop app.",
+  "description": "Declarative character & ROM administration for the DazToHue (DTH) workflow — generates the Daz ROM scripts and the Houdini PoseAsset CSV from one definition. Runs as a standalone web app or a Tauri desktop app.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -10,25 +10,22 @@
   },
   "scripts": {
     "dev": "pnpm --filter @dth/web dev",
-    "dev:desktop": "concurrently -k -n web,app -c blue,magenta \"pnpm --filter @dth/web dev\" \"wait-on tcp:127.0.0.1:4330 && pnpm --filter @dth/desktop dev\"",
+    "dev:desktop": "pnpm --filter @dth/desktop tauri dev",
     "build": "pnpm --filter @dth/web build",
-    "build:desktop": "pnpm --filter @dth/web build && pnpm --filter @dth/desktop build",
-    "start": "pnpm --filter @dth/web start",
-    "start:desktop": "pnpm run build:desktop && pnpm --filter @dth/desktop start",
-    "package:desktop": "pnpm run build:desktop && pnpm --filter @dth/desktop package",
+    "build:desktop": "pnpm --filter @dth/desktop tauri build",
     "generate-routes": "pnpm --filter @dth/web generate-routes",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3",
-    "wait-on": "^9.0.10"
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.7"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "electron",
-      "esbuild",
-      "electron-winstaller"
+      "esbuild"
     ]
   }
 }

@@ -1,29 +1,76 @@
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-
-import { DATA_DIR } from '../../server/paths'
+import {
+  exists,
+  mkdir,
+  readDir,
+  readTextFile,
+  remove,
+  rename,
+  stat,
+  writeTextFile,
+} from '@tauri-apps/plugin-fs'
+import { appLocalDataDir } from '@tauri-apps/api/path'
 
 import {
   ROM_SECTIONS,
   characterSchema,
   defaultSections,
   sectionsFromFlatFrames,
-} from './types'
+} from '@dth/rom'
 
-import type { Character, DthPoseAsset, GenesisVersion, RomSection } from './types'
+import { canonicalImage } from './image'
+import { characterFolderName, definitionFileName, normalizeRelPath } from './library'
+
+import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
 /**
- * SERVER ONLY — JSON-file-per-character storage.
- * Lives in <app>/data (gitignored): characters are personal data and the
- * repo is public. One readable, diffable JSON per character also makes
- * sharing trivial once the tool goes public.
+ * Storage, backed by the Tauri fs plugin, split across two roots:
+ *
+ *  - **App folder** = the per-user app-local data dir (e.g.
+ *    %LOCALAPPDATA%/com.polynaut.dthcharacterstudio). Holds app-owned data:
+ *    `settings.json` and `images/` (avatars). Created on first run.
+ *  - **Character library** = a user-chosen folder (`settings.characterLibraryFolder`),
+ *    kept OUTSIDE the app folder so the user can back it up. Each character is a
+ *    folder named after it (`<library>/<Name>/`) holding the definition
+ *    `<Name>.json` plus its generated artifacts. Discovery is a recursive scan —
+ *    no registry — so a folder's location simply *is* the character's location.
  */
 
-const CHARACTERS_DIR = join(DATA_DIR, 'characters')
-export const OUTPUT_DIR = join(DATA_DIR, 'out')
+/** Join path segments with '/'. Tauri's fs normalizes separators on Windows. */
+function join(...parts: Array<string>): string {
+  return parts
+    .map((p) => p.replace(/[\\/]+$/g, ''))
+    .filter(Boolean)
+    .join('/')
+}
 
-async function ensureDirs(): Promise<void> {
-  await mkdir(CHARACTERS_DIR, { recursive: true })
+/** Last path segment (folder or file name). */
+function basename(p: string): string {
+  return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
+}
+
+/** Everything but the last path segment. */
+function dirname(p: string): string {
+  const norm = p.replace(/[\\/]+$/g, '')
+  const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
+  return idx >= 0 ? norm.slice(0, idx) : norm
+}
+
+let dataDirPromise: Promise<string> | null = null
+async function dataDir(): Promise<string> {
+  if (!dataDirPromise) {
+    dataDirPromise = appLocalDataDir().then((d) => d.replace(/[\\/]+$/g, ''))
+  }
+  return dataDirPromise
+}
+
+/** Resolve a path inside the per-user data directory. */
+export async function dataPath(...parts: Array<string>): Promise<string> {
+  return join(await dataDir(), ...parts)
+}
+
+/** Ensure the app-data folder exists (it holds settings.json and images/). */
+async function ensureAppDir(): Promise<void> {
+  await mkdir(await dataDir(), { recursive: true })
 }
 
 /**
@@ -88,56 +135,172 @@ function parseCharacter(raw: unknown): Character {
       if (group.suffix === 'none') group.suffix = 'centre'
     }
   }
+  // Normalise avatar refs to the portable canonical form (filename or external
+  // URL) — drops machine-specific asset/convertFileSrc URLs persisted earlier.
+  data.image = canonicalImage(data.image)
   return characterSchema.parse(data)
 }
 
-export async function listCharacters(): Promise<Array<Character>> {
-  await ensureDirs()
-  const files = (await readdir(CHARACTERS_DIR)).filter((f) => f.endsWith('.json'))
-  const characters = await Promise.all(
-    files.map(async (file) => {
-      const raw = await readFile(join(CHARACTERS_DIR, file), 'utf8')
-      return parseCharacter(JSON.parse(raw))
-    }),
-  )
-  return characters.sort((a, b) => a.name.localeCompare(b.name))
+/** The configured character library folder, or '' when not yet set. */
+export async function libraryDir(): Promise<string> {
+  return (await getSettings()).characterLibraryFolder
 }
 
-export async function getCharacter(id: string): Promise<Character | null> {
-  await ensureDirs()
-  try {
-    const raw = await readFile(join(CHARACTERS_DIR, `${id}.json`), 'utf8')
-    return parseCharacter(JSON.parse(raw))
-  } catch {
-    return null
+interface LibraryEntry {
+  /** Absolute path to the character's folder. */
+  folderAbs: string
+  /** Absolute path to the definition JSON inside the folder. */
+  definitionAbs: string
+  /** Folder path relative to the library root ('/'-separated; '' at the root). */
+  relFolder: string
+  character: Character
+}
+
+/** Where a character's files live — surfaced in the editor + used by Generate. */
+export interface CharacterLocation {
+  definitionAbs: string
+  folderAbs: string
+  relFolder: string
+  libraryFolder: string
+}
+
+/**
+ * Recursively scan the library for character definitions. A `.json` file is a
+ * definition iff it parses as a character (generated `_FBMs.json` etc. fail the
+ * schema and are skipped). De-duplicates by id (first match wins).
+ */
+async function scanLibrary(): Promise<Array<LibraryEntry>> {
+  const lib = await libraryDir()
+  if (!lib || !(await isDir(lib))) return []
+  const entries: Array<LibraryEntry> = []
+  const seen = new Set<string>()
+  for (const rel of await walkFiles(lib)) {
+    if (!rel.toLowerCase().endsWith('.json')) continue
+    const definitionAbs = join(lib, rel)
+    let character: Character
+    try {
+      character = parseCharacter(JSON.parse(await readTextFile(definitionAbs)))
+    } catch {
+      continue // not a character definition
+    }
+    if (seen.has(character.id)) {
+      console.warn(`Duplicate character id ${character.id} at ${definitionAbs} — ignoring.`)
+      continue
+    }
+    seen.add(character.id)
+    const relFolder = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+    entries.push({ folderAbs: join(lib, relFolder), definitionAbs, relFolder, character })
+  }
+  return entries
+}
+
+async function findEntry(id: string): Promise<LibraryEntry | null> {
+  return (await scanLibrary()).find((entry) => entry.character.id === id) ?? null
+}
+
+/** First folder name under `parent` that doesn't already exist (`Name`, `Name (2)`, …). */
+async function uniqueFolder(parent: string, baseName: string): Promise<string> {
+  for (let i = 1; ; i++) {
+    const candidate = i === 1 ? baseName : `${baseName} (${i})`
+    const abs = join(parent, candidate)
+    if (!(await exists(abs))) return abs
   }
 }
 
+export async function listCharacters(): Promise<Array<Character>> {
+  const entries = await scanLibrary()
+  return entries.map((entry) => entry.character).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export async function getCharacter(id: string): Promise<Character | null> {
+  return (await findEntry(id))?.character ?? null
+}
+
 export async function saveCharacter(character: Character): Promise<Character> {
-  await ensureDirs()
+  const lib = await libraryDir()
+  if (!lib) throw new Error('No character library folder configured. Set one in Settings.')
+  await mkdir(lib, { recursive: true })
   const stamped = { ...character, updatedAt: new Date().toISOString() }
-  await writeFile(
-    join(CHARACTERS_DIR, `${character.id}.json`),
-    JSON.stringify(stamped, null, 2) + '\n',
-    'utf8',
-  )
+  const existing = await findEntry(character.id)
+
+  let definitionAbs: string
+  if (existing) {
+    const oldFolderName = basename(existing.folderAbs)
+    const newName = characterFolderName(character.name)
+    // Rename the folder + definition to match a new name only when the folder
+    // was still tracking the name (never clobber a manually moved/renamed one).
+    const tracksName = oldFolderName === characterFolderName(existing.character.name)
+    if (tracksName && oldFolderName !== newName) {
+      const folderAbs = await uniqueFolder(dirname(existing.folderAbs), newName)
+      await rename(existing.folderAbs, folderAbs)
+      const movedDefinition = join(folderAbs, basename(existing.definitionAbs))
+      definitionAbs = join(folderAbs, definitionFileName(character.name))
+      if (movedDefinition !== definitionAbs && (await exists(movedDefinition))) {
+        await rename(movedDefinition, definitionAbs)
+      }
+    } else {
+      definitionAbs = existing.definitionAbs
+    }
+  } else {
+    const folderAbs = await uniqueFolder(lib, characterFolderName(character.name))
+    await mkdir(folderAbs, { recursive: true })
+    definitionAbs = join(folderAbs, definitionFileName(character.name))
+  }
+
+  await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
   return stamped
 }
 
 export async function deleteCharacter(id: string): Promise<void> {
-  await rm(join(CHARACTERS_DIR, `${id}.json`), { force: true })
+  const entry = await findEntry(id)
+  if (!entry) return
+  // Guard: a definition manually dropped at the library root has folderAbs ===
+  // the library itself — only remove its file, never recursively wipe the library.
+  if (entry.relFolder === '') {
+    if (await exists(entry.definitionAbs)) await remove(entry.definitionAbs)
+  } else if (await exists(entry.folderAbs)) {
+    await remove(entry.folderAbs, { recursive: true })
+  }
 }
 
-export async function writeGeneratedFiles(
-  slug: string,
-  files: Array<{ fileName: string; content: string }>,
-): Promise<string> {
-  const dir = join(OUTPUT_DIR, slug)
-  await mkdir(dir, { recursive: true })
-  await Promise.all(
-    files.map((file) => writeFile(join(dir, file.fileName), file.content, 'utf8')),
-  )
-  return dir
+/** Absolute path to a character's folder (created if missing) — Generate's target. */
+export async function getCharacterFolder(id: string): Promise<string> {
+  const entry = await findEntry(id)
+  if (!entry) throw new Error(`Character ${id} not found`)
+  await mkdir(entry.folderAbs, { recursive: true })
+  return entry.folderAbs
+}
+
+export async function getCharacterPath(id: string): Promise<CharacterLocation | null> {
+  const entry = await findEntry(id)
+  if (!entry) return null
+  return {
+    definitionAbs: entry.definitionAbs,
+    folderAbs: entry.folderAbs,
+    relFolder: entry.relFolder,
+    libraryFolder: await libraryDir(),
+  }
+}
+
+/** Move a character's whole folder to a new path relative to the library root. */
+export async function moveCharacter(id: string, relFolder: string): Promise<CharacterLocation> {
+  const lib = await libraryDir()
+  if (!lib) throw new Error('No character library folder configured.')
+  const entry = await findEntry(id)
+  if (!entry) throw new Error(`Character ${id} not found`)
+  const cleanRel = normalizeRelPath(relFolder) // throws on invalid / escaping paths
+  const newFolderAbs = join(lib, cleanRel)
+  if (newFolderAbs !== entry.folderAbs) {
+    if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${cleanRel}".`)
+    await mkdir(dirname(newFolderAbs), { recursive: true })
+    await rename(entry.folderAbs, newFolderAbs)
+  }
+  return {
+    definitionAbs: join(newFolderAbs, basename(entry.definitionAbs)),
+    folderAbs: newFolderAbs,
+    relFolder: cleanRel,
+    libraryFolder: lib,
+  }
 }
 
 /** Writes files into an existing external folder (e.g. the DazToHue-Scripts checkout). */
@@ -145,45 +308,44 @@ export async function writeFilesToFolder(
   folder: string,
   files: Array<{ fileName: string; content: string }>,
 ): Promise<void> {
-  const stats = await stat(folder)
-  if (!stats.isDirectory()) throw new Error(`Not a folder: ${folder}`)
-  await Promise.all(
-    files.map((file) => writeFile(join(folder, file.fileName), file.content, 'utf8')),
-  )
+  if (!(await isDir(folder))) throw new Error(`Not a folder: ${folder}`)
+  await Promise.all(files.map((file) => writeTextFile(join(folder, file.fileName), file.content)))
 }
 
 export interface StudioSettings {
+  /**
+   * Character library — the user-owned folder (outside the app folder) where
+   * character folders live. Empty until chosen on first run.
+   */
+  characterLibraryFolder: string
   /** DazToHue-Scripts checkout — generated Daz files are written here, next to DthWorkflow.dsa. */
   dazScriptsFolder: string
   /** DazToHue Poses folder — scanned for the pre-defined pose preset catalog. */
   dthPosesFolder: string
 }
 
-const SETTINGS_PATH = join(DATA_DIR, 'settings.json')
-
 async function isDir(path: string): Promise<boolean> {
   try {
-    return (await stat(path)).isDirectory()
+    return (await stat(path)).isDirectory
   } catch {
     return false
   }
 }
 
-/**
- * Defaults for a fresh install: both folders empty. The user points them at
- * their DazToHue-Scripts checkout and DTH release/Poses folder in Settings,
- * and the choice persists to data/settings.json.
- */
-async function defaultSettings(): Promise<StudioSettings> {
-  return { dazScriptsFolder: '', dthPosesFolder: '' }
+/** Defaults for a fresh install: all folders empty. */
+function defaultSettings(): StudioSettings {
+  return { characterLibraryFolder: '', dazScriptsFolder: '', dthPosesFolder: '' }
 }
 
 export async function getSettings(): Promise<StudioSettings> {
-  await ensureDirs()
-  const defaults = await defaultSettings()
+  const defaults = defaultSettings()
   try {
-    const raw = JSON.parse(await readFile(SETTINGS_PATH, 'utf8'))
+    const raw = JSON.parse(await readTextFile(await dataPath('settings.json')))
     return {
+      characterLibraryFolder:
+        typeof raw.characterLibraryFolder === 'string'
+          ? raw.characterLibraryFolder
+          : defaults.characterLibraryFolder,
       dazScriptsFolder:
         typeof raw.dazScriptsFolder === 'string' ? raw.dazScriptsFolder : defaults.dazScriptsFolder,
       dthPosesFolder:
@@ -197,15 +359,27 @@ export async function getSettings(): Promise<StudioSettings> {
 }
 
 export async function saveSettings(settings: StudioSettings): Promise<StudioSettings> {
-  await ensureDirs()
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n', 'utf8')
+  await ensureAppDir()
+  await writeTextFile(await dataPath('settings.json'), JSON.stringify(settings, null, 2) + '\n')
   return settings
 }
 
+/** Recursively collect file paths (relative to `root`, '/'-separated). */
+async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
+  const here = rel ? join(root, rel) : root
+  const out: Array<string> = []
+  for (const entry of await readDir(here)) {
+    const childRel = rel ? `${rel}/${entry.name}` : entry.name
+    if (entry.isDirectory) out.push(...(await walkFiles(root, childRel)))
+    else out.push(childRel)
+  }
+  return out
+}
+
 /**
- * Scans the DazToHue Poses folder and classifies every .duf preset by
- * genesis generation, skinning variant and pose asset category. The folder
- * layout is `<Genesis X>/<Common|DQS|Linear>/...`.
+ * Scans the DazToHue Poses folder and classifies every .duf preset by genesis
+ * generation, skinning variant and pose asset category. The folder layout is
+ * `<Genesis X>/<Common|DQS|Linear>/...`.
  */
 export async function listPoseAssets(): Promise<{
   folder: string
@@ -217,27 +391,27 @@ export async function listPoseAssets(): Promise<{
     return { folder: '', assets: [], error: 'No DTH release / Poses folder configured.' }
   }
   if (!(await isDir(dthPosesFolder))) {
-    return {
-      folder: dthPosesFolder,
-      assets: [],
-      error: `Folder not reachable: ${dthPosesFolder}`,
-    }
+    return { folder: dthPosesFolder, assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
   }
   // Accept either the Poses folder itself or a DTH release root
   // (e.g. ".../Release 2.4.3", which contains Daz Studio Content/DazToHue/Poses).
   let posesFolder = dthPosesFolder
-  const looksLikePoses = (await Promise.all(
-    ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9'].map((g) => isDir(join(posesFolder, g))),
-  )).some(Boolean)
+  const looksLikePoses = (
+    await Promise.all(
+      ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9'].map((g) =>
+        isDir(join(posesFolder, g)),
+      ),
+    )
+  ).some(Boolean)
   if (!looksLikePoses) {
     const releaseContent = join(posesFolder, 'Daz Studio Content', 'DazToHue', 'Poses')
     if (await isDir(releaseContent)) posesFolder = releaseContent
   }
-  const entries = (await readdir(posesFolder, { recursive: true })) as Array<string>
+  const entries = await walkFiles(posesFolder)
   const assets: Array<DthPoseAsset> = []
   for (const entry of entries) {
     if (!entry.toLowerCase().endsWith('.duf')) continue
-    const relPath = entry.replaceAll('\\', '/')
+    const relPath = entry
     const parts = relPath.split('/')
     const fileName = parts[parts.length - 1]
     const name = fileName.replace(/\.duf$/i, '')

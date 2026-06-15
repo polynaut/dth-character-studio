@@ -113,10 +113,10 @@ block. 5 groups / 43 poses, all `PHYGROUP,0,<suffix>,<bone>,5.0,5.0`:
 
 `PHY` rows are `PHY,<frame>,<name>,<x>,<y>,<z>`, XYZ being the push direction —
 an 8-point circle of radius 5 in the bone's plane (Out `±5,0,0`, Up `0,5,0`, In,
-Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. **Quirk:** in
-both glute groups the *Up* pose (value `0,5,0`) is labelled `GluteOutUp` again — a
-naming typo in the source ROM, reproduced verbatim for byte-identity (worth raising
-with mrpdean).
+Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. **Fixed
+upstream (June 14 2026):** both glute groups originally mislabelled the *Up* pose
+(`0,5,0`) as `GluteOutUp`; mrpdean corrected it to `GluteUp` after we reported it,
+and the template now uses `GluteUp`.
 
 ## Consequences for the studio model
 
