@@ -43,14 +43,15 @@ import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { GeneratedFile } from '@dth/rom'
 import type { Character, GenesisVersion, TargetSkeleton } from '@dth/rom'
 
-export const Route = createFileRoute('/characters/$id')({
+export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params }) => {
-    const character = await fetchCharacter({ data: { id: params.id } })
+    const { projectId, characterId: id } = params
+    const character = await fetchCharacter({ data: { projectId, id } })
     if (!character) throw notFound()
     const [settings, catalog, location] = await Promise.all([
       fetchSettings(),
       fetchPoseAssets(),
-      getCharacterPath({ data: { id: params.id } }),
+      getCharacterPath({ data: { projectId, id } }),
     ])
     return { character, settings, catalog, location }
   },
@@ -266,7 +267,15 @@ function ImageDialog({
 }
 
 /** Shows where a character's folder lives and lets the user move it within the library. */
-function StorageLocation({ id, location }: { id: string; location: CharacterLocation | null }) {
+function StorageLocation({
+  projectId,
+  id,
+  location,
+}: {
+  projectId: string
+  id: string
+  location: CharacterLocation | null
+}) {
   const router = useRouter()
   const [relFolder, setRelFolder] = useState(location?.relFolder ?? '')
   const [busy, setBusy] = useState(false)
@@ -278,7 +287,7 @@ function StorageLocation({ id, location }: { id: string; location: CharacterLoca
     setBusy(true)
     setError('')
     try {
-      await moveCharacter({ data: { id, relFolder: relFolder.trim() } })
+      await moveCharacter({ data: { projectId, id, relFolder: relFolder.trim() } })
       await router.invalidate()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -330,6 +339,7 @@ function StorageLocation({ id, location }: { id: string; location: CharacterLoca
 }
 
 function CharacterPage() {
+  const { projectId } = Route.useParams()
   const { character: initial, settings, catalog, location } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
@@ -347,7 +357,7 @@ function CharacterPage() {
   async function onSave() {
     setSaving(true)
     try {
-      await saveCharacter({ data: character })
+      await saveCharacter({ data: { projectId, character } })
       await router.invalidate()
     } finally {
       setSaving(false)
@@ -356,7 +366,7 @@ function CharacterPage() {
 
   async function onGenerate() {
     if (dirty) await onSave()
-    const result = await generateCharacterFiles({ data: { id: character.id } })
+    const result = await generateCharacterFiles({ data: { projectId, id: character.id } })
     setGenerated(result)
   }
 
@@ -373,8 +383,12 @@ function CharacterPage() {
   return (
     <main className="mx-auto max-w-6xl p-8">
       <div className="mb-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> All characters
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId }}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" /> Back to project
         </Link>
         <div className="flex gap-2">
           <Button variant="outline" onClick={onSave} disabled={saving || !dirty}>
@@ -631,7 +645,7 @@ function CharacterPage() {
         />
       </section>
 
-      <StorageLocation id={character.id} location={location} />
+      <StorageLocation projectId={projectId} id={character.id} location={location} />
 
       <section className="rounded-lg border bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Generate</h2>
@@ -663,7 +677,7 @@ function CharacterPage() {
             // should survive a reload without needing the Save button.
             const updated = { ...character, image }
             setCharacter(updated)
-            await saveCharacter({ data: updated })
+            await saveCharacter({ data: { projectId, character: updated } })
             await router.invalidate()
           }}
           onClose={() => setImageDialogOpen(false)}

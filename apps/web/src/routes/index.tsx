@@ -1,58 +1,42 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { FileJson, FolderOpen, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
+import { FolderOpen, FolderPlus, Settings as SettingsIcon, Trash2 } from 'lucide-react'
 
-import { Avatar } from '#/components/avatar.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
-import {
-  createCharacter,
-  deleteCharacter,
-  fetchCharacters,
+  createProject,
+  deleteProject,
+  fetchProjects,
   fetchSettings,
-  importCharacterFromJson,
   saveSettings,
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 
-import { characterSkinning, countPoses } from '@dth/rom'
-
-import type { Gender, GenesisVersion } from '@dth/rom'
-
 export const Route = createFileRoute('/')({
   loader: async () => {
-    const [characters, settings] = await Promise.all([fetchCharacters(), fetchSettings()])
-    return { characters, settings }
+    const [projects, settings] = await Promise.all([fetchProjects(), fetchSettings()])
+    return { projects, settings }
   },
-  component: CharactersPage,
+  component: ProjectsPage,
 })
 
-function CharactersPage() {
-  const { characters, settings } = Route.useLoaderData()
+function ProjectsPage() {
+  const { projects, settings } = Route.useLoaderData()
   const router = useRouter()
   const [name, setName] = useState('')
-  const [genesis, setGenesis] = useState<GenesisVersion>('G9')
-  const [gender, setGender] = useState<Gender>('female')
-  const [importPath, setImportPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const hasLibrary = Boolean(settings.characterLibraryFolder)
+  const hasDazLibrary = Boolean(settings.dazLibraryFolder)
 
-  async function onChooseLibrary() {
-    const picked = await pickFolder('Choose where to store your characters')
+  async function onChooseDazLibrary() {
+    const picked = await pickFolder('Select your "My DAZ 3D Library" folder')
     if (!picked) return
     setBusy(true)
     setError('')
     try {
-      await saveSettings({ data: { ...settings, characterLibraryFolder: picked } })
+      await saveSettings({ data: { ...settings, dazLibraryFolder: picked } })
       await router.invalidate()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -61,20 +45,17 @@ function CharactersPage() {
     }
   }
 
-  async function onCreate() {
+  async function onAddProject() {
     if (!name.trim()) return
+    const picked = await pickFolder(`Choose the folder for "${name.trim()}"`)
+    if (!picked) return
     setBusy(true)
     setError('')
     try {
-      const character = importPath.trim()
-        ? await importCharacterFromJson({
-            data: { name: name.trim(), genesis, gender, filePath: importPath.trim() },
-          })
-        : await createCharacter({ data: { name: name.trim(), genesis, gender } })
+      const project = await createProject({ data: { name: name.trim(), path: picked } })
       setName('')
-      setImportPath('')
       await router.invalidate()
-      await router.navigate({ to: '/characters/$id', params: { id: character.id } })
+      await router.navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -82,155 +63,110 @@ function CharactersPage() {
     }
   }
 
-  async function onDelete(id: string, characterName: string) {
-    if (!window.confirm(`Delete character "${characterName}"? This cannot be undone.`)) return
-    await deleteCharacter({ data: { id } })
+  async function onDeleteProject(id: string, projectName: string) {
+    if (
+      !window.confirm(
+        `Remove project "${projectName}" from the list? Your character files on disk are kept — this only removes the project entry.`,
+      )
+    )
+      return
+    await deleteProject({ data: { id } })
     await router.invalidate()
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
+    <main className="mx-auto max-w-4xl p-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Characters</h1>
+          <h1 className="text-3xl font-bold">Projects</h1>
           <p className="mt-1 text-muted-foreground">
-            One definition per character — Daz ROM scripts and the Houdini PoseAsset CSV are
-            generated from it, so they always match.
+            Each game project keeps its own character library. Pick a project to manage its
+            characters.
           </p>
         </div>
         <Link
           to="/settings"
-          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <SettingsIcon className="size-4" /> Settings
         </Link>
       </header>
 
-      {hasLibrary && (
-        <p className="mb-6 text-xs text-muted-foreground">
-          Library:{' '}
-          <code className="rounded bg-muted px-1.5 py-0.5">{settings.characterLibraryFolder}</code>{' '}
-          ·{' '}
-          <Link to="/settings" className="underline hover:text-foreground">
-            change
-          </Link>
-        </p>
-      )}
-
-      {!hasLibrary ? (
+      {!hasDazLibrary ? (
         <div className="flex flex-col items-start gap-3 rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold">Choose your character library</h2>
+          <h2 className="text-lg font-semibold">Set your DAZ 3D Library</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Pick a folder where your characters will live — one folder per character, holding its
-            definition and its generated files. Keep it somewhere you back up; settings and avatars
-            stay in the app's private folder. You can change this later in Settings.
+            Point the studio at your <strong>My DAZ 3D Library</strong> folder (your Daz content
+            directory). Then you can add game projects — each with its own character library.
           </p>
-          <Button onClick={onChooseLibrary} disabled={busy}>
+          <Button onClick={onChooseDazLibrary} disabled={busy}>
             <FolderOpen /> Choose folder…
           </Button>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
       ) : (
         <>
-      <div className="mb-10 space-y-3 rounded-lg border bg-card p-4">
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="mb-1 block text-sm font-medium">Name</label>
-            <Input
-              placeholder="e.g. Electra G9"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Genesis</label>
-            <Select value={genesis} onValueChange={(v) => setGenesis(v as GenesisVersion)}>
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="G9">G9</SelectItem>
-                <SelectItem value="G8.1" disabled>
-                  G8.1 — later
-                </SelectItem>
-                <SelectItem value="G8" disabled>
-                  G8 — later
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Gender</label>
-            <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={onCreate} disabled={busy || !name.trim()}>
-            {importPath.trim() ? <FileJson /> : <UserPlus />}
-            {importPath.trim() ? 'Import' : 'Create'}
-          </Button>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-muted-foreground">
-            Optional: seed from an existing DazToHue-Scripts FBM JSON (absolute path)
-          </label>
-          <Input
-            placeholder="e.g. D:\Development\DazToHue-Scripts\ElectraG9_FBMs.json"
-            value={importPath}
-            onChange={(e) => setImportPath(e.target.value)}
-          />
-          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-        </div>
-      </div>
+          <p className="mb-6 text-xs text-muted-foreground">
+            DAZ 3D Library:{' '}
+            <code className="rounded bg-muted px-1.5 py-0.5 break-all">
+              {settings.dazLibraryFolder}
+            </code>{' '}
+            ·{' '}
+            <Link to="/settings" className="underline hover:text-foreground">
+              change
+            </Link>
+          </p>
 
-      {characters.length === 0 ? (
-        <p className="text-muted-foreground">No characters yet — create the first one above.</p>
-      ) : (
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {characters.map((character) => (
-            <li
-              key={character.id}
-              className="group relative overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary"
-            >
-              <Link
-                to="/characters/$id"
-                params={{ id: character.id }}
-                className="flex items-center gap-4 p-4"
-              >
-                <Avatar
-                  image={character.image}
-                  name={character.name}
-                  className="size-16 rounded-md"
-                  fallbackClassName="text-2xl"
-                />
-                <div>
-                  <div className="font-semibold">{character.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-                    {countPoses(character.sections)} custom frames
-                  </div>
-                </div>
-              </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100"
-                title="Delete character"
-                onClick={() => onDelete(character.id, character.name)}
-              >
-                <Trash2 className="text-destructive" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+          <div className="mb-8 flex items-end gap-3 rounded-lg border bg-card p-4">
+            <div className="flex-1">
+              <label className="mb-1 block text-sm font-medium">New project name</label>
+              <Input
+                placeholder="e.g. Project Nova"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onAddProject()}
+              />
+            </div>
+            <Button onClick={onAddProject} disabled={busy || !name.trim()}>
+              <FolderPlus /> Choose folder & add
+            </Button>
+          </div>
+          {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+
+          {projects.length === 0 ? (
+            <p className="text-muted-foreground">
+              No projects yet — name one above and pick its folder.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {projects.map((project) => (
+                <li
+                  key={project.id}
+                  className="group relative rounded-lg border bg-card transition-colors hover:border-primary"
+                >
+                  <Link
+                    to="/projects/$projectId"
+                    params={{ projectId: project.id }}
+                    className="block p-4 pr-12"
+                  >
+                    <div className="font-semibold">{project.name}</div>
+                    <div className="mt-0.5 text-xs break-all text-muted-foreground">
+                      {project.path}
+                    </div>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100"
+                    title="Remove project from the list"
+                    onClick={() => onDeleteProject(project.id, project.name)}
+                  >
+                    <Trash2 className="text-destructive" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
     </main>
