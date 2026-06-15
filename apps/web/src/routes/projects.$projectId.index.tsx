@@ -22,6 +22,7 @@ import {
   importCharacterFromJson,
   updateProject,
 } from '#/lib/rom/api.ts'
+import { displayPath } from '#/lib/path.ts'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -117,7 +118,7 @@ function ProjectCharactersPage() {
             }}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            <code className="rounded bg-muted px-1.5 py-0.5 break-all">{project.path}</code>
+            <code className="rounded bg-muted px-1.5 py-0.5 break-all">{displayPath(project.path)}</code>
           </p>
         </div>
         <Link

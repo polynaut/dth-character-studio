@@ -39,6 +39,7 @@ import {
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
+import { displayPath } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -282,13 +283,13 @@ function StorageLocation({
   const [relPath, setRelPath] = useState(() => {
     if (!location) return ''
     const fn = location.definitionAbs.split(/[\\/]/).pop() ?? ''
-    return location.relFolder ? `${location.relFolder}/${fn}` : fn
+    return displayPath(location.relFolder ? `${location.relFolder}/${fn}` : fn)
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   if (!location) return null
   const fileName = location.definitionAbs.split(/[\\/]/).pop() ?? ''
-  const currentPath = location.relFolder ? `${location.relFolder}/${fileName}` : fileName
+  const currentPath = displayPath(location.relFolder ? `${location.relFolder}/${fileName}` : fileName)
   const moved = relPath.trim() !== currentPath
 
   async function onMove() {
@@ -312,13 +313,13 @@ function StorageLocation({
       <div className="flex items-center gap-2">
         <span
           className="shrink-0 rounded-md border bg-muted px-2.5 py-2 font-mono text-xs text-muted-foreground"
-          title={location.libraryFolder}
+          title={displayPath(location.libraryFolder)}
         >
-          library /
+          {`library ${displayPath('/')}`}
         </span>
         <Input
           value={relPath}
-          placeholder="ElectraTest/ElectraTest.json"
+          placeholder={displayPath('ElectraTest/ElectraTest.json')}
           onChange={(e) => setRelPath(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -362,8 +363,8 @@ function CharacterPage() {
 
   // Absolute path to the character's definition JSON, shown under the header with
   // the project library root dimmed as a label prefix and the rest emphasized.
-  const libRoot = location?.libraryFolder ?? ''
-  const defAbs = location?.definitionAbs ?? ''
+  const libRoot = displayPath(location?.libraryFolder ?? '')
+  const defAbs = displayPath(location?.definitionAbs ?? '')
   const defSuffix = defAbs.startsWith(libRoot) ? defAbs.slice(libRoot.length) : defAbs
 
   function patch(p: Partial<Character>) {
@@ -716,12 +717,14 @@ function CharacterPage() {
           {settings.dazScriptsFolder ? (
             <>
               {' '}and the Daz files also to{' '}
-              <code className="rounded bg-muted px-1.5 py-0.5">{settings.dazScriptsFolder}</code>
+              <code className="rounded bg-muted px-1.5 py-0.5">
+                {displayPath(settings.dazScriptsFolder)}
+              </code>
             </>
           ) : null}
           {' · '}preset catalog from{' '}
           <code className="rounded bg-muted px-1.5 py-0.5">
-            {catalog.folder || 'not configured'}
+            {displayPath(catalog.folder) || 'not configured'}
           </code>
           {' — '}
           <Link to="/settings" className="underline hover:text-foreground">
@@ -752,12 +755,15 @@ function CharacterPage() {
       {generated && (
           <>
             <p className="mb-1 text-sm text-muted-foreground">
-              Written to <code className="rounded bg-muted px-1.5 py-0.5">{generated.outDir}</code>
+              Written to{' '}
+              <code className="rounded bg-muted px-1.5 py-0.5">{displayPath(generated.outDir)}</code>
             </p>
             {generated.dazScriptsFolder && (
               <p className="mb-1 text-sm text-muted-foreground">
                 Daz files also written to{' '}
-                <code className="rounded bg-muted px-1.5 py-0.5">{generated.dazScriptsFolder}</code>
+                <code className="rounded bg-muted px-1.5 py-0.5">
+                  {displayPath(generated.dazScriptsFolder)}
+                </code>
               </p>
             )}
             {generated.dazScriptsError && (

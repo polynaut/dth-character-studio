@@ -8,6 +8,7 @@ import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { fetchPoseAssets, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
+import { displayPath } from '#/lib/path.ts'
 import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
@@ -31,7 +32,11 @@ function FolderField({
     <div>
       <Label className="mb-1">{label}</Label>
       <div className="flex gap-2">
-        <Input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <Input
+          value={displayPath(value)}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
         <Button
           type="button"
           variant="outline"
@@ -79,7 +84,7 @@ function ScanSummary({ result }: { result: ScanResult }) {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Found <strong className="text-foreground">{result.assets.length}</strong> pose presets in{' '}
-        <code className="rounded bg-muted px-1.5 py-0.5">{result.folder}</code>
+        <code className="rounded bg-muted px-1.5 py-0.5">{displayPath(result.folder)}</code>
         {unclassified > 0 && <> — {unclassified} could not be classified</>}
       </p>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
