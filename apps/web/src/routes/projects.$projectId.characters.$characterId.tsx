@@ -500,7 +500,7 @@ function CharacterPage() {
         </div>
       </header>
 
-      <section className="mb-8 rounded-lg border bg-card p-5">
+      <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5">
             <div className="flex flex-wrap gap-4">
