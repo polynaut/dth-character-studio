@@ -500,9 +500,9 @@ function CharacterPage() {
         </div>
       </header>
 
-      <section className="mb-8 space-y-5 rounded-lg border bg-card p-5">
+      <section className="mb-8 rounded-lg border bg-card p-5">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
-          <div className="space-y-4">
+          <div className="flex flex-col gap-5">
             <div className="flex flex-wrap gap-4">
               <div>
                 <Label className="mb-1">Genesis</Label>
@@ -555,6 +555,9 @@ function CharacterPage() {
                 </Select>
               </div>
             </div>
+            {location && (
+              <StorageLocation projectId={projectId} id={character.id} location={location} />
+            )}
           </div>
 
           <fieldset className="self-start rounded-md border px-4 pt-1 pb-4">
@@ -587,9 +590,6 @@ function CharacterPage() {
             </div>
           </fieldset>
         </div>
-        {location && (
-          <StorageLocation projectId={projectId} id={character.id} location={location} />
-        )}
       </section>
 
       <details className="mb-8 rounded-lg border bg-card">
