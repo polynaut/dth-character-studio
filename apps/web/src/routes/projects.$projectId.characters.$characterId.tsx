@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
+import { EditableTitle } from '#/components/editable-title.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -347,11 +348,22 @@ function CharacterPage() {
   const [saving, setSaving] = useState(false)
   const [generated, setGenerated] = useState<GenerateResult | null>(null)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const swallowNavRef = useRef(false)
 
   const dirty = JSON.stringify(character) !== JSON.stringify(initial)
 
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
+  }
+
+  // Inline rename from the title — persists immediately (like the avatar) so the
+  // new name + folder rename stick without needing the Save button.
+  async function onRenameCharacter(next: string) {
+    const updated = { ...character, name: next }
+    setCharacter(updated)
+    await saveCharacter({ data: { projectId, character: updated } })
+    await router.invalidate()
   }
 
   async function onSave() {
@@ -386,6 +398,15 @@ function CharacterPage() {
         <Link
           to="/projects/$projectId"
           params={{ projectId }}
+          onMouseDown={() => {
+            swallowNavRef.current = editingTitle
+          }}
+          onClick={(e) => {
+            if (swallowNavRef.current) {
+              e.preventDefault()
+              swallowNavRef.current = false
+            }
+          }}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" /> Back to project
@@ -418,7 +439,12 @@ function CharacterPage() {
           </span>
         </button>
         <div>
-          <h1 className="text-3xl font-bold">{character.name}</h1>
+          <EditableTitle
+            name={character.name}
+            ariaLabel="Character name"
+            onEditingChange={setEditingTitle}
+            onSave={onRenameCharacter}
+          />
           <p className="text-muted-foreground">
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
