@@ -21,25 +21,25 @@ function RootComponent() {
     <>
       <Outlet />
       <Toaster
-        theme="dark"
-        position="bottom-right"
+        theme="light"
+        position="bottom-center"
         closeButton
-        // Match the app's dark panels with an orange accent instead of Sonner's
-        // default green/red rich-color fills, which clashed with the UI.
+        // Light-orange toast with dark text and a dark-orange border — the app's
+        // brand orange (#fe5c01) family, kept legible on a light surface.
         style={
           {
-            '--normal-bg': 'var(--popover)',
-            '--normal-border': 'var(--primary)',
-            '--normal-text': 'var(--foreground)',
+            '--normal-bg': '#ffe3cc',
+            '--normal-border': '#c2410c',
+            '--normal-text': '#2b1200',
             '--border-radius': 'var(--radius)',
           } as CSSProperties
         }
         toastOptions={{
           classNames: {
-            description: 'text-muted-foreground',
-            actionButton: 'bg-primary text-primary-foreground',
-            cancelButton: 'bg-muted text-muted-foreground',
-            closeButton: 'bg-popover border-border text-muted-foreground hover:text-foreground',
+            description: '!text-[#7a4a2c]',
+            actionButton: '!bg-[#c2410c] !text-white',
+            cancelButton: '!bg-black/10 !text-[#2b1200]',
+            closeButton: '!border-[#c2410c]/40 !bg-[#ffd5b5] !text-[#2b1200] hover:!bg-[#ffc99e]',
           },
         }}
       />
