@@ -1,8 +1,10 @@
 name: Release
 
-# On every push to main, if the app version (apps/desktop/package.json, bumped
-# by the "version packages" PR) has no matching tag yet, build the Tauri app and
-# publish a GitHub Release with the installer + the updater's latest.json.
+# On every push to main: release only when there are no pending changesets (i.e.
+# the "version packages" PR has just merged, bumping apps/desktop/package.json)
+# AND that version has no tag yet. Then build the Tauri app and publish a GitHub
+# Release with the installer + the updater's latest.json. Feature merges (which
+# still carry changesets) are skipped — they only feed the version packages PR.
 
 on:
   push:
@@ -28,7 +30,14 @@ jobs:
         run: |
           version=$(node -p "require('./apps/desktop/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git rev-parse "v$version" >/dev/null 2>&1; then
+          # Pending changesets mean a "version packages" PR is still open — the
+          # version hasn't been bumped yet, so don't release. Only release once
+          # that PR merges (which consumes the changesets + bumps the version).
+          pending=$(ls .changeset/*.md 2>/dev/null | grep -vi 'README.md' | wc -l)
+          if [ "$pending" -gt 0 ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "$pending pending changeset(s) — waiting for the version packages PR to merge."
+          elif git rev-parse "v$version" >/dev/null 2>&1; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "Tag v$version already exists — nothing to release."
           else

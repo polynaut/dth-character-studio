@@ -20,8 +20,10 @@ feature PR (+ changeset)  ──►  main
   `@dth/rom` are a **fixed** group → one product version. The Tauri app reads its
   version from `apps/desktop/package.json` (`tauri.conf.json` → `"version": "package.json"`),
   which Changesets bumps — so version → tag → installer stay in sync.
-- **Release gate:** `release.yml` only builds when the tag `v<version>` doesn't
-  exist yet (i.e. right after the "version packages" PR merges). Idempotent.
+- **Release gate:** `release.yml` builds only when there are **no pending
+  changesets** (so the "version packages" PR has merged and bumped the version)
+  **and** the tag `v<version>` doesn't exist yet. Feature merges still carrying
+  changesets are skipped — they just feed the version packages PR. Idempotent.
 - **Auto-update:** `apps/web/src/lib/updater.ts` runs `check()` on startup
   (no-ops outside the packaged app), prompts, then `downloadAndInstall()` +
   `relaunch()`.
