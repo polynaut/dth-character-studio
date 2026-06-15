@@ -6,7 +6,7 @@ import { ArrowLeft, FolderOpen, FolderSearch, Save } from 'lucide-react'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
-import { fetchPoseAssets, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
+import { buildPoseCatalog, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -62,6 +62,7 @@ export const Route = createFileRoute('/settings')({
 
 interface ScanResult {
   folder: string
+  releaseName: string
   assets: Array<DthPoseAsset>
   error: string | null
 }
@@ -84,8 +85,13 @@ function ScanSummary({ result }: { result: ScanResult }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Found <strong className="text-foreground">{result.assets.length}</strong> pose presets in{' '}
-        <PathCode path={displayPath(result.folder)} />
+        Cached <strong className="text-foreground">{result.assets.length}</strong> pose presets
+        {result.releaseName && (
+          <>
+            {' '}from <strong className="text-foreground">{result.releaseName}</strong>
+          </>
+        )}{' '}
+        in <PathCode path={displayPath(result.folder)} />
         {unclassified > 0 && <> — {unclassified} could not be classified</>}
       </p>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -147,10 +153,13 @@ function SettingsPage() {
     setBusy(true)
     try {
       if (dirty) await onSave()
-      const result = await fetchPoseAssets()
+      const result = await buildPoseCatalog()
       setScan(result)
       if (result.error) toast.error(result.error)
-      else toast.success(`Found ${result.assets.length} pose presets`)
+      else
+        toast.success(
+          `Cached ${result.assets.length} pose presets${result.releaseName ? ` from ${result.releaseName}` : ''}`,
+        )
     } finally {
       setBusy(false)
     }
@@ -185,16 +194,17 @@ function SettingsPage() {
           }
         />
         <FolderField
-          label="Current DTH release folder (or Poses folder)"
+          label="DTH releases folder (or a release / Poses folder)"
           value={settings.dthPosesFolder}
-          placeholder="X:\_3d\_resources\_DazToHue\Releases\Release 2.4.3"
+          placeholder="X:\_3d\_resources\_DazToHue\Releases"
           onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
           help={
             <>
-              Accepts a DTH release root (the Poses folder is found inside automatically) or a Poses
-              folder directly, e.g. the installed copy in your Daz library. The pose preset catalog
-              in the ROM sections is scanned from here — pointing this at a new release makes its
-              new presets available immediately, no studio update needed.
+              Point this at your DTH releases folder (the highest-versioned release is picked
+              automatically), a single release root, or a Poses folder directly. Hit “Scan DTH
+              release” to build the pose-preset catalog — it's cached, so opening characters never
+              re-scans. Re-scan after dropping in a new release. (Zipped releases: extract first for
+              now.)
             </>
           }
         />

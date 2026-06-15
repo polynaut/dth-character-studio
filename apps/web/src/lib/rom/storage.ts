@@ -520,46 +520,105 @@ async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
   return out
 }
 
-/**
- * Scans the DazToHue Poses folder and classifies every .duf preset by genesis
- * generation, skinning variant and pose asset category. The folder layout is
- * `<Genesis X>/<Common|DQS|Linear>/...`.
- */
-export async function listPoseAssets(): Promise<{
-  folder: string
+// --- Pose catalog (cached) ------------------------------------------------
+// Walking a DTH release folder is slow — and with many releases it made opening
+// a character take seconds. So scanning runs ONCE (explicitly, from Settings)
+// and the classified presets are cached in pose-catalog.json. Opening or
+// generating a character reads only that cache; it never walks the release.
+
+interface PoseCatalog {
+  /** The dthPosesFolder setting at scan time. */
+  sourceFolder: string
+  /** The picked release subfolder name, or '' when the folder was scanned directly. */
+  releaseName: string
+  /** The resolved Poses folder that was scanned. */
+  posesFolder: string
+  scannedAt: string
   assets: Array<DthPoseAsset>
-  error: string | null
-}> {
-  const { dthPosesFolder } = await getSettings()
-  if (!dthPosesFolder) {
-    return { folder: '', assets: [], error: 'No DTH release / Poses folder configured' }
+}
+
+const GENESIS_DIRS = ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9']
+
+/** Comparable version from a name: "Release 2.4.3" → [2,4,3] (last numeric run). */
+function parseVersion(name: string): Array<number> {
+  const runs = name.match(/\d+(?:\.\d+)*/g)
+  if (!runs) return []
+  return runs[runs.length - 1].split('.').map((n) => parseInt(n, 10))
+}
+
+function compareVersions(a: Array<number>, b: Array<number>): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0)
+    if (d !== 0) return d
   }
-  if (!(await isDir(dthPosesFolder))) {
-    return { folder: dthPosesFolder, assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
+  return 0
+}
+
+/** Does `folder` directly contain Genesis-X pose subfolders? */
+async function hasGenesisDirs(folder: string): Promise<boolean> {
+  return (await Promise.all(GENESIS_DIRS.map((g) => isDir(join(folder, g))))).some(Boolean)
+}
+
+/** The Poses folder inside a single release root (direct, or under Daz Studio Content). */
+async function resolvePosesInRelease(root: string): Promise<string | null> {
+  if (await hasGenesisDirs(root)) return root
+  const content = join(root, 'Daz Studio Content', 'DazToHue', 'Poses')
+  if (await isDir(content)) return content
+  return null
+}
+
+/**
+ * Resolve which Poses folder to scan from the configured `dthPosesFolder`:
+ *  - the Poses folder itself, or a single release root → use directly;
+ *  - a parent of several releases → pick the highest-versioned release subfolder.
+ * Zips are detected but not extracted yet (the latest-is-a-zip case errors).
+ */
+async function resolveRelease(
+  dthPosesFolder: string,
+): Promise<{ posesFolder: string; releaseName: string; error: string | null }> {
+  const direct = await resolvePosesInRelease(dthPosesFolder)
+  if (direct) return { posesFolder: direct, releaseName: '', error: null }
+
+  const children = await readDir(dthPosesFolder)
+  const folders: Array<{ name: string; posesFolder: string; version: Array<number> }> = []
+  let latestZip: { name: string; version: Array<number> } | null = null
+  for (const child of children) {
+    if (child.isDirectory) {
+      const poses = await resolvePosesInRelease(join(dthPosesFolder, child.name))
+      if (poses) folders.push({ name: child.name, posesFolder: poses, version: parseVersion(child.name) })
+    } else if (/\.zip$/i.test(child.name)) {
+      const version = parseVersion(child.name)
+      if (!latestZip || compareVersions(version, latestZip.version) > 0) {
+        latestZip = { name: child.name, version }
+      }
+    }
   }
-  // Accept either the Poses folder itself or a DTH release root
-  // (e.g. ".../Release 2.4.3", which contains Daz Studio Content/DazToHue/Poses).
-  let posesFolder = dthPosesFolder
-  const looksLikePoses = (
-    await Promise.all(
-      ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9'].map((g) =>
-        isDir(join(posesFolder, g)),
-      ),
-    )
-  ).some(Boolean)
-  if (!looksLikePoses) {
-    const releaseContent = join(posesFolder, 'Daz Studio Content', 'DazToHue', 'Poses')
-    if (await isDir(releaseContent)) posesFolder = releaseContent
+
+  if (folders.length === 0 && !latestZip) {
+    return { posesFolder: '', releaseName: '', error: `No DTH releases found in: ${dthPosesFolder}` }
   }
+  const latest = folders.sort((a, b) => compareVersions(a.version, b.version)).pop()
+  if (latestZip && (!latest || compareVersions(latestZip.version, latest.version) > 0)) {
+    return {
+      posesFolder: '',
+      releaseName: '',
+      error: `Latest release "${latestZip.name}" is a .zip — extract it first (zip support is coming)`,
+    }
+  }
+  return { posesFolder: latest!.posesFolder, releaseName: latest!.name, error: null }
+}
+
+/**
+ * Walk + classify a resolved Poses folder (layout `<Genesis X>/<Common|DQS|Linear>/...`)
+ * into pose assets, by genesis generation, skinning variant and ROM section.
+ */
+async function scanPosesFolder(posesFolder: string): Promise<Array<DthPoseAsset>> {
   const entries = await walkFiles(posesFolder)
   const assets: Array<DthPoseAsset> = []
   for (const entry of entries) {
     if (!entry.toLowerCase().endsWith('.duf')) continue
-    const relPath = entry
-    const parts = relPath.split('/')
-    const fileName = parts[parts.length - 1]
-    const name = fileName.replace(/\.duf$/i, '')
-
+    const parts = entry.split('/')
+    const name = parts[parts.length - 1].replace(/\.duf$/i, '')
     const genesis: GenesisVersion | null =
       parts[0] === 'Genesis 3'
         ? 'G3'
@@ -571,17 +630,15 @@ export async function listPoseAssets(): Promise<{
               ? 'G9'
               : null
     const skinning = parts[1] === 'DQS' ? 'dqs' : parts[1] === 'Linear' ? 'linear' : null
-
     let section: RomSection | null = null
     if (/retargett?ing poses/i.test(name)) section = 'RET'
     else if (/JCM( FAC)? - Base/i.test(name)) section = 'JCM'
     else if (/FAC - Mouth/i.test(name)) section = 'FAC'
     else if (parts.some((p) => /golden ?palace|dicktator/i.test(p))) section = 'GEN'
     else if (parts.some((p) => /physics/i.test(p))) section = 'PHY'
-
     assets.push({
       name,
-      relPath,
+      relPath: entry,
       genesis,
       skinning,
       section,
@@ -589,5 +646,60 @@ export async function listPoseAssets(): Promise<{
     })
   }
   assets.sort((a, b) => a.relPath.localeCompare(b.relPath))
-  return { folder: posesFolder, assets, error: null }
+  return assets
+}
+
+/**
+ * Explicitly (re)build the cached pose catalog from the configured DTH release
+ * folder: resolve the latest release, scan + classify its presets, and write
+ * pose-catalog.json into the app folder. Slow, but only runs from Settings.
+ */
+export async function buildPoseCatalog(): Promise<{
+  folder: string
+  releaseName: string
+  assets: Array<DthPoseAsset>
+  error: string | null
+}> {
+  const { dthPosesFolder } = await getSettings()
+  if (!dthPosesFolder) {
+    return { folder: '', releaseName: '', assets: [], error: 'No DTH release / Poses folder configured' }
+  }
+  if (!(await isDir(dthPosesFolder))) {
+    return { folder: dthPosesFolder, releaseName: '', assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
+  }
+  const resolved = await resolveRelease(dthPosesFolder)
+  if (resolved.error) {
+    return { folder: dthPosesFolder, releaseName: '', assets: [], error: resolved.error }
+  }
+  const assets = await scanPosesFolder(resolved.posesFolder)
+  const catalog: PoseCatalog = {
+    sourceFolder: dthPosesFolder,
+    releaseName: resolved.releaseName,
+    posesFolder: resolved.posesFolder,
+    scannedAt: new Date().toISOString(),
+    assets,
+  }
+  await ensureAppDir()
+  await writeTextFile(await dataPath('pose-catalog.json'), JSON.stringify(catalog, null, 2) + '\n')
+  return { folder: resolved.posesFolder, releaseName: resolved.releaseName, assets, error: null }
+}
+
+/**
+ * The cached pose catalog used wherever a character is opened or generated.
+ * Reads pose-catalog.json — it NEVER walks the release folder (that only happens
+ * in buildPoseCatalog, from Settings). Returns an error directing the user to
+ * Settings when the catalog hasn't been built yet.
+ */
+export async function listPoseAssets(): Promise<{
+  folder: string
+  assets: Array<DthPoseAsset>
+  error: string | null
+}> {
+  try {
+    const catalog = JSON.parse(await readTextFile(await dataPath('pose-catalog.json'))) as PoseCatalog
+    if (!Array.isArray(catalog.assets)) throw new Error('bad catalog')
+    return { folder: catalog.posesFolder, assets: catalog.assets, error: null }
+  } catch {
+    return { folder: '', assets: [], error: 'No pose catalog yet — scan a DTH release in Settings' }
+  }
 }

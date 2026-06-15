@@ -231,9 +231,18 @@ export async function fetchSettings(): Promise<StudioSettings> {
   return storage.getSettings()
 }
 
-/** The pre-defined DTH pose preset catalog, scanned from the Poses folder. */
+/** The cached DTH pose preset catalog (read from appdata; never walks the release). */
 export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listPoseAssets>> {
   return storage.listPoseAssets()
+}
+
+/**
+ * Rebuild the cached pose catalog: resolve the latest DTH release in the
+ * configured folder, scan + classify its presets, and persist them. Slow —
+ * invoked explicitly from Settings, not on every character open.
+ */
+export async function buildPoseCatalog(): Promise<ReturnType<typeof storage.buildPoseCatalog>> {
+  return storage.buildPoseCatalog()
 }
 
 const settingsInput = z.object({
