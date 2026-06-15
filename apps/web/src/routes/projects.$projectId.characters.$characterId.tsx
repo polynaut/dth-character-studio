@@ -69,6 +69,15 @@ interface GenerateResult {
   dazScriptsError: string | null
 }
 
+// Full display names per generation, used for the genesis-specific fieldset
+// legend. When G8 / G8.1 land, branch on the genesis to swap the fieldset body.
+const GENESIS_LABELS: Record<GenesisVersion, string> = {
+  G3: 'Genesis 3',
+  G8: 'Genesis 8',
+  'G8.1': 'Genesis 8.1',
+  G9: 'Genesis 9',
+}
+
 function NumberField({
   value,
   onCommit,
@@ -493,10 +502,6 @@ function CharacterPage() {
 
       <section className="mb-8 grid grid-cols-1 gap-6 rounded-lg border bg-card p-5 lg:grid-cols-2">
         <div className="space-y-4">
-          <div>
-            <Label className="mb-1">Name</Label>
-            <Input value={character.name} onChange={(e) => patch({ name: e.target.value })} />
-          </div>
           <div className="flex flex-wrap gap-4">
             <div>
               <Label className="mb-1">Genesis</Label>
@@ -551,8 +556,13 @@ function CharacterPage() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex gap-4">
+        <fieldset className="self-start rounded-md border px-4 pt-1 pb-4">
+          <legend className="px-1.5 text-sm font-medium text-muted-foreground">
+            {GENESIS_LABELS[character.genesis]} Specific
+          </legend>
+          {/* Genesis-9-specific tuning. When G8 / G8.1 support lands, branch on
+              character.genesis here and swap in that version's settings. */}
+          <div className="flex flex-wrap gap-4">
             <div>
               <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
                 FACS detail strength
@@ -574,14 +584,7 @@ function CharacterPage() {
               />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Switch
-              checked={character.resetGPBeforeApplying}
-              onCheckedChange={(resetGPBeforeApplying) => patch({ resetGPBeforeApplying })}
-            />
-            <span className="text-sm">Reset GP before applying extra frames</span>
-          </div>
-        </div>
+        </fieldset>
       </section>
 
       <details className="mb-8 rounded-lg border bg-card">
@@ -590,6 +593,13 @@ function CharacterPage() {
         </summary>
         <div className="space-y-6 border-t p-5">
           <StorageLocation projectId={projectId} id={character.id} location={location} />
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={character.resetGPBeforeApplying}
+              onCheckedChange={(resetGPBeforeApplying) => patch({ resetGPBeforeApplying })}
+            />
+            <span className="text-sm">Reset GP before applying extra frames</span>
+          </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
