@@ -437,6 +437,26 @@ export function presetFrameCount(
   return Math.max(lastPresetFrame, 0) + 1
 }
 
+/**
+ * Absolute timeline start frame of a pre-made GEN ROM block (GP or DK), so the
+ * editor can show absolute art-direction frame numbers. The base JCM ROM comes
+ * first; the workflow then applies DK before GP, so GP follows DK when both are
+ * present.
+ */
+export function genRomStartFrame(
+  sections: RomSections,
+  gender: Gender,
+  skinning: 'dqs' | 'linear',
+  rom: 'gp' | 'dk',
+): number {
+  const jcm = sections.JCM
+  const jcmBase =
+    jcm.enabled && (jcm.mode === 'preset' || (jcm.mode === 'custom' && jcm.customAssetPath.trim() !== ''))
+  const base = jcmBase ? (skinning === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR) : 0
+  const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+  return rom === 'dk' ? base : base + (roms.dk ? DK_FRAMES : 0)
+}
+
 export interface FlatFrame {
   /** 0-based: the first custom frame is 0 (Daz timelines are 0-based). */
   frame: number

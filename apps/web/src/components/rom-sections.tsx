@@ -45,6 +45,7 @@ import {
   genAssetGender,
   genDefaultNode,
   genRomIncludes,
+  genRomStartFrame,
   mirrorGroup,
   newId,
   presetFrameCount,
@@ -917,11 +918,15 @@ function GroupCard({
  */
 function ArtDirectionEditor({
   config,
+  sections,
   gender,
+  skinning,
   onChange,
 }: {
   config: RomSectionConfig
+  sections: RomSectionsModel
   gender: Gender
+  skinning: 'dqs' | 'linear'
   onChange: (artDirection: Array<ArtDirectionFrame>) => void
 }) {
   const roms = genRomIncludes(gender, config.presetAssets)
@@ -959,7 +964,9 @@ function ArtDirectionEditor({
         per-character art direction JSON. Frames marked <em>required</em> ship empty in the
         preset: without morphs here their generated morph does nothing.
       </p>
-      {activeRoms.map(([rom, label]) => (
+      {activeRoms.map(([rom, label]) => {
+        const romStart = genRomStartFrame(sections, gender, skinning, rom)
+        return (
         <div key={rom} className="space-y-1">
           {activeRoms.length > 1 && <p className="text-sm font-medium">{label}</p>}
           {ART_DIRECTION_CATALOG[rom].map((catalogFrame) => {
@@ -968,23 +975,27 @@ function ArtDirectionEditor({
               <ArtDirectionFrameRow
                 key={`${rom}-${catalogFrame.frame}`}
                 catalogFrame={catalogFrame}
+                absoluteFrame={romStart + catalogFrame.frame}
                 entry={entry}
                 onCommit={commit}
               />
             )
           })}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
 function ArtDirectionFrameRow({
   catalogFrame,
+  absoluteFrame,
   entry,
   onCommit,
 }: {
   catalogFrame: { frame: number; name: string; required: boolean; note?: string }
+  absoluteFrame: number
   entry: ArtDirectionFrame
   onCommit: (entry: ArtDirectionFrame) => void
 }) {
@@ -1009,8 +1020,8 @@ function ArtDirectionFrameRow({
         ) : (
           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
         )}
-        <span className="w-10 text-right font-mono text-xs text-muted-foreground tabular-nums">
-          +{catalogFrame.frame}
+        <span className="w-12 text-right font-mono text-xs text-muted-foreground tabular-nums">
+          {absoluteFrame}
         </span>
         <span className="text-sm">{catalogFrame.name}</span>
         {catalogFrame.required && !hasMorphs && (
@@ -1209,7 +1220,9 @@ export function RomSections({
                     {section === 'GEN' && (
                       <ArtDirectionEditor
                         config={config}
+                        sections={sections}
                         gender={gender}
+                        skinning={skinning}
                         onChange={(artDirection) => patchSection(section, { artDirection })}
                       />
                     )}
