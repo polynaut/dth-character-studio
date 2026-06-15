@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -43,11 +43,23 @@ export const Route = createFileRoute('/projects/$projectId/')({
 })
 
 /** Project title that becomes an inline input on click; saves on Enter or blur. */
-function EditableProjectTitle({ projectId, name }: { projectId: string; name: string }) {
+function EditableProjectTitle({
+  projectId,
+  name,
+  onEditingChange,
+}: {
+  projectId: string
+  name: string
+  onEditingChange?: (editing: boolean) => void
+}) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    onEditingChange?.(editing)
+  }, [editing, onEditingChange])
 
   async function commit() {
     if (busy) return
@@ -120,6 +132,8 @@ function ProjectCharactersPage() {
   const [importPath, setImportPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const swallowNavRef = useRef(false)
 
   async function onCreate() {
     if (!name.trim()) return
@@ -156,6 +170,17 @@ function ProjectCharactersPage() {
       <div className="mb-6">
         <Link
           to="/"
+          onMouseDown={() => {
+            // While the title is being edited, the first click here just commits
+            // and closes the edit (via the input's blur) — it must not navigate.
+            swallowNavRef.current = editingTitle
+          }}
+          onClick={(e) => {
+            if (swallowNavRef.current) {
+              e.preventDefault()
+              swallowNavRef.current = false
+            }
+          }}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" /> All projects
@@ -164,7 +189,11 @@ function ProjectCharactersPage() {
 
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <EditableProjectTitle projectId={projectId} name={project.name} />
+          <EditableProjectTitle
+            projectId={projectId}
+            name={project.name}
+            onEditingChange={setEditingTitle}
+          />
           <p className="mt-1 text-xs text-muted-foreground">
             <code className="rounded bg-muted px-1.5 py-0.5 break-all">{project.path}</code>
           </p>
