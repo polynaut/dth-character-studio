@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.2.1
+
+### Patch Changes
+
+- [#6](https://github.com/polynaut/dth-character-studio/pull/6) [`d78e690`](https://github.com/polynaut/dth-character-studio/commit/d78e690659c17d20baef8aa23385c91d9515c08b) Thanks [@polynaut](https://github.com/polynaut)! - New app icon — the flame-swirl character-profile logo — across the installer, window, and taskbar.
+
 ## 0.2.0
 
 ### Minor Changes
