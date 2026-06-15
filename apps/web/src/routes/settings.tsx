@@ -165,10 +165,9 @@ function SettingsPage() {
           onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
           help={
             <>
-              Your Daz content library. Used as the default location when adding a project, and
-              (in a later update) as the target for generating Daz scripts directly into the
-              library for faster testing. Each project's character library is its own folder, set
-              per project.
+              Your Daz content library. Stored for a later update that will generate Daz scripts
+              directly into the library for faster testing — not otherwise used yet. Each
+              project's character library is its own folder, set per project.
             </>
           }
         />

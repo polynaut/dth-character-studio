@@ -52,10 +52,7 @@ function ProjectsPage() {
 
   async function onAddProject() {
     if (!name.trim()) return
-    const picked = await pickFolder(
-      `Choose the folder for "${name.trim()}"`,
-      settings.dazLibraryFolder || undefined,
-    )
+    const picked = await pickFolder(`Choose the folder for "${name.trim()}"`)
     if (!picked) return
     setBusy(true)
     setError('')
