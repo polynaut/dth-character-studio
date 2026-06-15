@@ -318,7 +318,7 @@ function StorageLocation({
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-lg">
       <Label className="mb-1 block">Path in project</Label>
       <div className="flex items-center gap-2">
         <span
@@ -500,95 +500,95 @@ function CharacterPage() {
         </div>
       </header>
 
-      <section className="mb-8 grid grid-cols-1 gap-6 rounded-lg border bg-card p-5 lg:grid-cols-2">
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <Label className="mb-1">Genesis</Label>
-              <Select
-                value={character.genesis}
-                onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="G9">G9</SelectItem>
-                  <SelectItem value="G8.1" disabled>
-                    G8.1 — later
-                  </SelectItem>
-                  <SelectItem value="G8" disabled>
-                    G8 — later
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-1">Gender</Label>
-              <Select
-                value={character.gender}
-                onValueChange={(v) => patch({ gender: v as Character['gender'] })}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="male">Male</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-1">Target skeleton</Label>
-              <Select
-                value={character.targetSkeleton}
-                onValueChange={(v) => patch({ targetSkeleton: v as TargetSkeleton })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UE5">UE5 Mannequin</SelectItem>
-                  <SelectItem value="DTH">DTH native</SelectItem>
-                </SelectContent>
-              </Select>
+      <section className="mb-8 space-y-5 rounded-lg border bg-card p-5">
+        <div className="flex flex-wrap gap-x-12 gap-y-5">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <Label className="mb-1">Genesis</Label>
+                <Select
+                  value={character.genesis}
+                  onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="G9">G9</SelectItem>
+                    <SelectItem value="G8.1" disabled>
+                      G8.1 — later
+                    </SelectItem>
+                    <SelectItem value="G8" disabled>
+                      G8 — later
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1">Gender</Label>
+                <Select
+                  value={character.gender}
+                  onValueChange={(v) => patch({ gender: v as Character['gender'] })}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1">Target skeleton</Label>
+                <Select
+                  value={character.targetSkeleton}
+                  onValueChange={(v) => patch({ targetSkeleton: v as TargetSkeleton })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UE5">UE5 Mannequin</SelectItem>
+                    <SelectItem value="DTH">DTH native</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-        </div>
 
-        <fieldset className="self-start rounded-md border px-4 pt-1 pb-4">
-          <legend className="px-1.5 text-sm font-medium text-muted-foreground">
-            {GENESIS_LABELS[character.genesis]} Specific
-          </legend>
-          {/* Genesis-9-specific tuning. When G8 / G8.1 support lands, branch on
-              character.genesis here and swap in that version's settings. */}
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                FACS detail strength
-              </Label>
-              <NumberField
-                className="w-28"
-                value={character.facsDetailStrength}
-                onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
-              />
+          <fieldset className="self-start rounded-md border px-4 pt-1 pb-4">
+            <legend className="px-1.5 text-sm font-medium text-muted-foreground">
+              {GENESIS_LABELS[character.genesis]} Specific
+            </legend>
+            {/* Genesis-9-specific tuning. When G8 / G8.1 support lands, branch on
+                character.genesis here and swap in that version's settings. */}
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+                  FACS detail strength
+                </Label>
+                <NumberField
+                  className="w-28"
+                  value={character.facsDetailStrength}
+                  onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
+                />
+              </div>
+              <div>
+                <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+                  Flexion strength
+                </Label>
+                <NumberField
+                  className="w-28"
+                  value={character.flexionStrength}
+                  onCommit={(flexionStrength) => patch({ flexionStrength })}
+                />
+              </div>
             </div>
-            <div>
-              <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                Flexion strength
-              </Label>
-              <NumberField
-                className="w-28"
-                value={character.flexionStrength}
-                onCommit={(flexionStrength) => patch({ flexionStrength })}
-              />
-            </div>
-          </div>
-        </fieldset>
+          </fieldset>
+        </div>
         {location && (
-          <div className="lg:col-span-2">
-            <StorageLocation projectId={projectId} id={character.id} location={location} />
-          </div>
+          <StorageLocation projectId={projectId} id={character.id} location={location} />
         )}
       </section>
 
