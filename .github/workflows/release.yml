@@ -62,6 +62,16 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
+      # Build the release body from the Changesets CHANGELOGs (the actual changes),
+      # rather than letting it fall back to the "version packages" commit subject.
+      - id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            node scripts/release-notes.mjs "${{ needs.check.outputs.version }}"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -72,5 +82,6 @@ jobs:
           projectPath: apps/desktop
           tagName: v${{ needs.check.outputs.version }}
           releaseName: DTH Character Studio v${{ needs.check.outputs.version }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           includeUpdaterJson: true
