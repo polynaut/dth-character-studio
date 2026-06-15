@@ -325,7 +325,7 @@ function StorageLocation({
           className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground"
           title={displayPath(location.libraryFolder)}
         >
-          {`project${displayPath('/')}`}
+          {displayPath('/project/')}
         </span>
         <Input
           value={relPath}
