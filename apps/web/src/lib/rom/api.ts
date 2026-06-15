@@ -2,7 +2,7 @@ import { mkdir, readDir, readTextFile, remove, stat, writeFile } from '@tauri-ap
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import { characterScriptName, generateAll, resolveRomPaths } from '@dth/rom'
+import { characterScriptName, generateAll, poseAssetFileName, resolveRomPaths } from '@dth/rom'
 import * as storage from './storage'
 import { dataPath } from './storage'
 import { isExternalImage } from './image'
@@ -283,12 +283,20 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
   const files = generateAll(character, romPaths)
 
-  // Houdini deliverable(s) — PoseAsset.csv — live in the character's own folder.
+  // Houdini deliverable(s) — <Name>_PoseAsset.csv — live in the character's own folder.
   const outDir = await storage.getCharacterFolder(lib, id)
   await storage.writeFilesToFolder(
     outDir,
     files.filter((file) => file.target === 'houdini'),
   )
+  // After a rename the PoseAsset filename changes too — drop the old-named one
+  // that traveled with the folder.
+  if (previousName) {
+    const oldPose = poseAssetFileName({ ...character, name: previousName })
+    if (oldPose !== poseAssetFileName(character)) {
+      await storage.removeFilesFromFolder(outDir, [oldPose])
+    }
+  }
 
   // The character script + the runtime it imports go in the shared scripts folder.
   const settings = await storage.getSettings()

@@ -12,7 +12,8 @@ morph definitions inline — no more separate `_FBMs.json`, `_FBMs.csv`, wrapper
 runtime files it imports — `.DthWorkflow.dsa`, `.DthUtils.dsa`, `.DthOptions.dsa`
 (dot-prefixed so they read as hidden; ScanKeyFrames is merged into DthWorkflow),
 copied there from the configured DazToHue-Scripts folder. The Houdini
-`PoseAsset.csv` is written into the character's own folder next to its definition.
+`<Name>_PoseAsset.csv` is written into the character's own folder next to its
+definition.
 
 Requires the matching DazToHue-Scripts runtime that adds the `ApplyDTHCharacter`
 entry point and inline-data support.

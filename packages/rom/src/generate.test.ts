@@ -354,7 +354,7 @@ describe('generateAll', () => {
     const files = generateAll(makeCharacter())
     expect(files.map((f) => [f.fileName, f.target])).toEqual([
       ['ElectraG9_G9.dsa', 'daz'],
-      ['PoseAsset.csv', 'houdini'],
+      ['ElectraG9_PoseAsset.csv', 'houdini'],
     ])
   })
 })

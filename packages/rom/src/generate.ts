@@ -434,7 +434,7 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
       BASE_FRAMES_DQS - 1 + (includeGp ? GP_FRAMES : 0) + (includePhys ? PHYS_FRAMES : 0)
     const customRows = customPoseAssetRows(character, lastPresetFrame)
     return {
-      fileName: `PoseAsset.csv`,
+      fileName: poseAssetFileName(character),
       content: [...head, ...physRows, ...customRows, ...tail].join('\n') + '\n',
       target: 'houdini',
     }
@@ -448,7 +448,7 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
     (includeDk ? DK_FRAMES : 0) +
     (includePhys ? PHYS_FRAMES : 0)
   return {
-    fileName: `PoseAsset.csv`,
+    fileName: poseAssetFileName(character),
     content: customPoseAssetRows(character, Math.max(lastPresetFrame, 0)).join('\n') + '\n',
     target: 'houdini',
     experimental: true,
@@ -519,6 +519,11 @@ export function toArtDirectionJsons(character: Character): Array<GeneratedFile> 
 /** File base name for the self-contained character script: `<Name>_<Genesis>`. */
 export function characterScriptName(character: Character): string {
   return `${characterSlug(character)}_${character.genesis}`
+}
+
+/** File name for the Houdini PoseAsset CSV: `<Name>_PoseAsset.csv`. */
+export function poseAssetFileName(character: Character): string {
+  return `${characterSlug(character)}_PoseAsset.csv`
 }
 
 /**
