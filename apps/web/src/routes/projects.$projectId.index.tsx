@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
-import { Avatar } from '#/components/avatar.tsx'
+import { useResolvedImage } from '#/components/avatar.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button.tsx'
@@ -28,6 +28,34 @@ import { PathCode } from '#/components/path-code.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { Gender, GenesisVersion } from '@dth/rom'
+
+/**
+ * Overview card thumbnail: a portrait crop of the (square) Daz preview image,
+ * zoomed 200% and anchored to the top — `background-size: auto 200%` makes the
+ * image height twice the box, so a 3:4 box shows the top 50% vertically and a
+ * centered portrait slice horizontally. Light gray fills any transparency.
+ */
+function CharacterThumb({ image, name }: { image: string; name: string }) {
+  const src = useResolvedImage(image)
+  return (
+    <div className="aspect-[3/4] w-16 shrink-0 overflow-hidden rounded-md bg-neutral-300">
+      {src ? (
+        <div
+          className="size-full bg-no-repeat"
+          style={{
+            backgroundImage: `url("${src}")`,
+            backgroundSize: 'auto 200%',
+            backgroundPosition: 'center top',
+          }}
+        />
+      ) : (
+        <div className="flex size-full items-center justify-center bg-muted text-2xl font-bold text-muted-foreground">
+          {name.charAt(0).toUpperCase()}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
@@ -202,12 +230,7 @@ function ProjectCharactersPage() {
                 params={{ projectId, characterId: character.id }}
                 className="flex items-center gap-4 p-4"
               >
-                <Avatar
-                  image={character.image}
-                  name={character.name}
-                  className="size-16 rounded-md"
-                  fallbackClassName="text-2xl"
-                />
+                <CharacterThumb image={character.image} name={character.name} />
                 <div>
                   <div className="font-semibold">{character.name}</div>
                   <div className="text-sm text-muted-foreground">

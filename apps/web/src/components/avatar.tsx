@@ -4,7 +4,7 @@ import { resolveImageSrc } from '#/lib/rom/api.ts'
 import { cn } from '#/lib/utils.ts'
 
 /** Resolve a stored avatar reference to a loadable URL (see lib/rom/api). */
-function useResolvedImage(image: string): string {
+export function useResolvedImage(image: string): string {
   const [src, setSrc] = useState('')
   useEffect(() => {
     let active = true
