@@ -23,6 +23,13 @@ import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
 import { ConfigError } from '#/components/config-error.tsx'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
 import {
   ART_DIRECTION_CATALOG,
@@ -238,20 +245,28 @@ function PresetAssetPicker({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Asset:</span>
-        <select
-          className={headerSelectClass}
-          value={section === 'JCM' ? (selectedFirst || (jcmDefault ? fileNameOf(jcmDefault) : '')) : selectedFirst}
-          onChange={(e) => onChange(e.target.value ? [e.target.value] : [])}
+        <Select
+          value={
+            section === 'JCM'
+              ? selectedFirst || (jcmDefault ? fileNameOf(jcmDefault) : '')
+              : selectedFirst || AUTO_ASSET
+          }
+          onValueChange={(value) => onChange(value && value !== AUTO_ASSET ? [value] : [])}
         >
-          {section !== 'JCM' && (
-            <option value="">auto — matched to {genesis} at generation</option>
-          )}
-          {available.map((asset) => (
-            <option key={asset.relPath} value={fileNameOf(asset)}>
-              {asset.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger size="sm" className="w-fit max-w-[20rem]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {section !== 'JCM' && (
+              <SelectItem value={AUTO_ASSET}>auto — matched to {genesis} at generation</SelectItem>
+            )}
+            {available.map((asset) => (
+              <SelectItem key={asset.relPath} value={fileNameOf(asset)}>
+                {asset.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {effectiveAsset && (
         <p className="text-xs text-muted-foreground">{effectiveAsset.relPath}</p>
@@ -272,6 +287,10 @@ const cellInputClass =
 
 const headerSelectClass =
   'rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus:border-ring'
+
+// Radix Select forbids an empty-string item value, so the "auto" asset choice
+// (no explicit preset selected) uses a sentinel mapped back to [] on change.
+const AUTO_ASSET = '__auto__'
 
 function TextCell({
   value,
@@ -755,59 +774,71 @@ function GroupCard({
           />
         )}
         {showMethod && (
-          <label
+          <span
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title="How the group's morphs are calculated: default (the node's global setting) / individual (each in isolation) / additive (the rest are deltas on top of the first pose) / cumulative (each stacks on all previous poses) / advanced additive"
           >
             Generation
-            <select
-              className={`${headerSelectClass} text-sm text-foreground`}
+            <Select
               value={group.method}
-              onChange={(e) => onChange({ ...group, method: e.target.value as GenerationMethod })}
+              onValueChange={(value) => onChange({ ...group, method: value as GenerationMethod })}
             >
-              <option value="default">Default</option>
-              <option value="individual">Individual</option>
-              <option value="additive">Additive</option>
-              <option value="cumulative">Cumulative</option>
-              <option value="advancedAdditive">Advanced Additive</option>
-            </select>
-          </label>
+              <SelectTrigger size="sm" className="w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="individual">Individual</SelectItem>
+                <SelectItem value="additive">Additive</SelectItem>
+                <SelectItem value="cumulative">Cumulative</SelectItem>
+                <SelectItem value="advancedAdditive">Advanced Additive</SelectItem>
+              </SelectContent>
+            </Select>
+          </span>
         )}
         {showCalcFrom && (
-          <label
+          <span
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title="What the group's morph deltas are calculated against: default (the node's global setting) / the rest pose / the animation frame"
           >
             Calculate from
-            <select
-              className={`${headerSelectClass} text-sm text-foreground`}
+            <Select
               value={group.calculateFrom}
-              onChange={(e) =>
-                onChange({ ...group, calculateFrom: e.target.value as CalculateFrom })
+              onValueChange={(value) =>
+                onChange({ ...group, calculateFrom: value as CalculateFrom })
               }
             >
-              <option value="default">Default</option>
-              <option value="restPose">Rest Pose</option>
-              <option value="animationFrame">Animation Frame</option>
-            </select>
-          </label>
+              <SelectTrigger size="sm" className="w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="restPose">Rest Pose</SelectItem>
+                <SelectItem value="animationFrame">Animation Frame</SelectItem>
+              </SelectContent>
+            </Select>
+          </span>
         )}
         {showSuffix && (
-          <label
+          <span
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title="Suffix — generated morphs get _l/_r appended automatically"
           >
             Suffix
-            <select
-              className={`${headerSelectClass} text-sm text-foreground`}
+            <Select
               value={group.suffix}
-              onChange={(e) => onChange({ ...group, suffix: e.target.value as GroupSuffix })}
+              onValueChange={(value) => onChange({ ...group, suffix: value as GroupSuffix })}
             >
-              <option value="left">Left</option>
-              <option value="centre">Centre</option>
-              <option value="right">Right</option>
-            </select>
-          </label>
+              <SelectTrigger size="sm" className="w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="left">Left</SelectItem>
+                <SelectItem value="centre">Centre</SelectItem>
+                <SelectItem value="right">Right</SelectItem>
+              </SelectContent>
+            </Select>
+          </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">{frameRange}</span>
         {group.suffix === 'left' && (
@@ -1140,16 +1171,20 @@ export function RomSections({
                 {modes.length > 1 && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Mode:</span>
-                    <select
-                      className={headerSelectClass}
+                    <Select
                       value={config.mode}
-                      onChange={(e) =>
-                        patchSection(section, { mode: e.target.value as SectionMode })
+                      onValueChange={(value) =>
+                        patchSection(section, { mode: value as SectionMode })
                       }
                     >
-                      <option value="preset">Pre-defined DTH assets</option>
-                      <option value="custom">Custom morph list</option>
-                    </select>
+                      <SelectTrigger size="sm" className="w-fit min-w-[12rem]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="preset">Pre-defined DTH assets</SelectItem>
+                        <SelectItem value="custom">Custom morph list</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
