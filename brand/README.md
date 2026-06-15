@@ -9,10 +9,9 @@ High-res source logo art for DTH Character Studio — kept here for design work
 | `logo-on-black.png` | The original render, logo on a solid black background. |
 | `logo-on-white.png` | The original "transparent" export — actually flattened onto near-white (`#f8f8f8`, no alpha). Kept for light-background use. |
 
-`logo-transparent.png` was derived from `logo-on-white.png` by keying out the
-near-white background (edge flood-fill bounded by the logo's black outline), so
-the swirls and the white face silhouette stay intact while the background and
-the open gaps between swirls become transparent.
+`logo-transparent.png` is the hand-exported transparent master (RGBA, fully
+transparent background). `logo-on-white.png` / `logo-on-black.png` are earlier
+flattened renders kept for light- / dark-background design use.
 
 ## Regenerating app icons
 
