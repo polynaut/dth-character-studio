@@ -5,11 +5,19 @@ import {
   generateAll,
   resolveRomPaths,
   toArtDirectionJsons,
+  toCharacterScriptDsa,
   toDazFbmCsv,
   toDazFbmJson,
   toPoseAssetCsv,
   toWorkflowDsa,
 } from './generate'
+
+/** Parse the JSON argument of the single `ApplyDTHCharacter(...)` call. The
+ *  marker also appears in a comment, so anchor on the last occurrence (the call). */
+function characterConfig(content: string) {
+  const open = content.lastIndexOf('ApplyDTHCharacter(') + 'ApplyDTHCharacter('.length
+  return JSON.parse(content.slice(open, content.lastIndexOf(');')))
+}
 import {
   characterSchema,
   defaultSections,
@@ -290,6 +298,67 @@ describe('toWorkflowDsa', () => {
   })
 })
 
+describe('toCharacterScriptDsa', () => {
+  it('emits one self-contained script that calls ApplyDTHCharacter with inline data', () => {
+    const file = toCharacterScriptDsa(makeCharacter())
+    expect(file.fileName).toBe('ElectraG9_G9.dsa')
+    expect(file.target).toBe('daz')
+    expect(file.content).toContain('include(dir_self.filePath("DthWorkflow.dsa"));')
+    expect(file.content).toContain('ApplyDTHCharacter(')
+    const config = characterConfig(file.content)
+    expect(config.bIncludeJCM).toBe(true)
+    expect(config.bDQS).toBe(true)
+    expect(config.extraFrames.frames[0]).toEqual({
+      frame: 0,
+      section: 'FBM',
+      name: 'BodyTone',
+      morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
+    })
+    // No separate FBM / CSV / art-direction files — everything is inline.
+    expect(file.content).not.toContain('extraJSONs')
+    expect(file.content).not.toContain('_FBMs.json')
+  })
+
+  it('inlines GP art direction when GEN/GP is enabled', () => {
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    sections.GEN.artDirection = [
+      {
+        id: 'a1',
+        rom: 'gp',
+        frame: 100,
+        name: 'AnusOpen',
+        morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
+      },
+    ]
+    const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections })).content)
+    expect(config.bIncludeGP).toBe(true)
+    expect(config.gpArtDirection.frames[0].morphs[0].prop).toBe('GP_Anus_Open')
+    expect(config.dkArtDirection).toBeUndefined()
+  })
+
+  it('passes the resolved ROM paths through to the config', () => {
+    const config = characterConfig(
+      toCharacterScriptDsa(makeCharacter(), {
+        jcm: 'P/G9 DQS JCM FAC - Base.duf',
+        gp: 'P/GP9 - Golden Palace.duf',
+      }).content,
+    )
+    expect(config.jcmRomPath).toBe('P/G9 DQS JCM FAC - Base.duf')
+    expect(config.gpRomPath).toBe('P/GP9 - Golden Palace.duf')
+  })
+})
+
+describe('generateAll', () => {
+  it('produces the character script (daz) and the PoseAsset CSV (houdini)', () => {
+    const files = generateAll(makeCharacter())
+    expect(files.map((f) => [f.fileName, f.target])).toEqual([
+      ['ElectraG9_G9.dsa', 'daz'],
+      ['PoseAsset.csv', 'houdini'],
+    ])
+  })
+})
+
 describe('resolveRomPaths', () => {
   const catalog = {
     folder: 'D:/DAZ 3D/My DAZ 3D Library/DazToHue/Poses',
@@ -502,7 +571,7 @@ describe.skipIf(!existsSync(ELECTRA))('round-trip with the real ElectraG9_FBMs.j
       sections,
       resetGPBeforeApplying: original.meta.resetGPBeforeApplying,
     })
-    const regenerated = JSON.parse(generateAll(character)[0].content)
+    const regenerated = JSON.parse(toDazFbmJson(character).content)
     expect(regenerated.frames).toEqual(original.frames)
     expect(regenerated.meta.resetGPBeforeApplying).toBe(original.meta.resetGPBeforeApplying)
   })

@@ -65,8 +65,8 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
 interface GenerateResult {
   outDir: string
   files: Array<GeneratedFile>
-  dazScriptsFolder: string | null
-  dazScriptsError: string | null
+  scriptsDir: string | null
+  scriptsError: string | null
 }
 
 // Full display names per generation, used for the genesis-specific fieldset
@@ -409,8 +409,8 @@ function CharacterPage() {
       // buttons no longer depend on it, so it stays off the visible path.
       void router.invalidate()
       toast.success(`Saved “${saved.name}” and generated ${result.files.length} files`)
-      if (result.dazScriptsError) {
-        toast.warning(`Couldn't write to the DazToHue-Scripts folder: ${result.dazScriptsError}`)
+      if (result.scriptsError) {
+        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
       }
     } catch (e) {
       setSaving(false)
@@ -734,13 +734,18 @@ function CharacterPage() {
       <section className="rounded-lg border bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Generate</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Files are written into this character's folder
-          {settings.dazScriptsFolder ? (
+          The PoseAsset CSV is written into this character's folder; the
+          self-contained Daz script{' '}
+          {settings.dazLibraryFolder ? (
             <>
-              {' '}and the Daz files also to{' '}
-              <PathCode path={displayPath(settings.dazScriptsFolder)} />
+              (plus the DTH runtime it imports) installs to{' '}
+              <PathCode
+                path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+              />
             </>
-          ) : null}
+          ) : (
+            'installs once you set "My DAZ 3D Library" in Settings'
+          )}
           {' · '}preset catalog from{' '}
           {displayPath(catalog.folder) ? (
             <PathCode path={displayPath(catalog.folder)} />
@@ -776,18 +781,16 @@ function CharacterPage() {
       {generated && (
           <>
             <p className="mb-1 text-sm text-muted-foreground">
-              Written to <PathCode path={displayPath(generated.outDir)} />
+              PoseAsset written to <PathCode path={displayPath(generated.outDir)} />
             </p>
-            {generated.dazScriptsFolder && (
+            {generated.scriptsDir && (
               <p className="mb-1 text-sm text-muted-foreground">
-                Daz files also written to{' '}
-                <PathCode path={displayPath(generated.dazScriptsFolder)} />
+                Character script installed to{' '}
+                <PathCode path={displayPath(generated.scriptsDir)} />
               </p>
             )}
-            {generated.dazScriptsError && (
-              <p className="mb-1 text-sm text-destructive">
-                Could not write to the DazToHue-Scripts folder: {generated.dazScriptsError}
-              </p>
+            {generated.scriptsError && (
+              <p className="mb-1 text-sm text-destructive">{generated.scriptsError}</p>
             )}
             <ul className="mt-4 space-y-2">
               {generated.files.map((file) => (

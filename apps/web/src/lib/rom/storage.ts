@@ -336,13 +336,43 @@ export async function moveCharacter(
   }
 }
 
-/** Writes files into an existing external folder (e.g. the DazToHue-Scripts checkout). */
+/** Writes files into a folder, creating it if missing. */
 export async function writeFilesToFolder(
   folder: string,
   files: Array<{ fileName: string; content: string }>,
 ): Promise<void> {
-  if (!(await isDir(folder))) throw new Error(`Not a folder: ${folder}`)
+  await mkdir(folder, { recursive: true })
   await Promise.all(files.map((file) => writeTextFile(join(folder, file.fileName), file.content)))
+}
+
+/**
+ * The DTH runtime files the generated character script `include()`s. Copied from
+ * the DazToHue-Scripts checkout into the studio's shared scripts folder.
+ * DthWorkflow.dsa pulls in the other three, so all four must sit together.
+ */
+const RUNTIME_FILES = ['DthUtils.dsa', 'DthOptions.dsa', 'ScanKeyFrames.dsa', 'DthWorkflow.dsa']
+
+/** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install folder. */
+export function studioScriptsDir(dazLibraryFolder: string): string {
+  return join(dazLibraryFolder, 'Scripts', 'DTH-Character-Studio')
+}
+
+/**
+ * Install the DTH runtime files (from the DazToHue-Scripts checkout) into
+ * `destDir`, creating it if missing. Overwrites so the runtime stays in sync as
+ * the scripts evolve — they live once in the shared folder, not per character.
+ */
+export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
+  if (!srcDir) {
+    throw new Error('Set the DazToHue-Scripts folder in Settings to install the runtime.')
+  }
+  if (!(await isDir(srcDir))) throw new Error(`DazToHue-Scripts folder not reachable: ${srcDir}`)
+  await mkdir(destDir, { recursive: true })
+  for (const name of RUNTIME_FILES) {
+    const src = join(srcDir, name)
+    if (!(await exists(src))) throw new Error(`Missing runtime file in DazToHue-Scripts: ${name}`)
+    await writeTextFile(join(destDir, name), await readTextFile(src))
+  }
 }
 
 export interface StudioSettings {

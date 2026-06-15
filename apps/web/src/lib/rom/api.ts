@@ -247,44 +247,55 @@ export async function saveSettings({ data }: { data: unknown }): Promise<StudioS
 }
 
 /**
- * Compiles the character into all DTH artifacts, writes them into the
- * character's own folder in the project library (next to its definition) and —
- * when a DazToHue-Scripts folder is configured — writes the Daz-side files there
- * too. Returns the files so the UI can offer downloads as well.
+ * Compiles the character into its DTH artifacts and writes them to two places:
+ *  - the Houdini PoseAsset CSV → the character's own folder (next to its
+ *    definition JSON), and
+ *  - the self-contained Daz script (<Name>_<Genesis>.dsa) → the shared
+ *    `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` folder, into which the
+ *    DTH runtime files it imports are also installed (copied from the
+ *    DazToHue-Scripts checkout). Returns the files so the UI can offer downloads.
  */
 export async function generateCharacterFiles({ data }: { data: unknown }): Promise<{
   outDir: string
   files: ReturnType<typeof generateAll>
-  dazScriptsFolder: string | null
-  dazScriptsError: string | null
+  scriptsDir: string | null
+  scriptsError: string | null
 }> {
   const { projectId, id } = charScopeInput.parse(data)
   const lib = await projectPath(projectId)
   const character = await storage.getCharacter(lib, id)
   if (!character) throw new Error(`Character ${id} not found`)
   // Exact ROM paths from the installed preset catalog; {} when the folder is
-  // unavailable — the wrapper then falls back to DthOptions resolution.
+  // unavailable — the script then falls back to DthOptions resolution.
   const catalog = await storage.listPoseAssets()
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
   const files = generateAll(character, romPaths)
-  const outDir = await storage.getCharacterFolder(lib, id)
-  await storage.writeFilesToFolder(outDir, files)
 
+  // Houdini deliverable(s) — PoseAsset.csv — live in the character's own folder.
+  const outDir = await storage.getCharacterFolder(lib, id)
+  await storage.writeFilesToFolder(
+    outDir,
+    files.filter((file) => file.target === 'houdini'),
+  )
+
+  // The character script + the runtime it imports go in the shared scripts folder.
   const settings = await storage.getSettings()
-  let dazScriptsFolder: string | null = null
-  let dazScriptsError: string | null = null
-  if (settings.dazScriptsFolder) {
+  const dazFiles = files.filter((file) => file.target === 'daz')
+  let scriptsDir: string | null = null
+  let scriptsError: string | null = null
+  if (settings.dazLibraryFolder) {
+    const dir = storage.studioScriptsDir(settings.dazLibraryFolder)
     try {
-      await storage.writeFilesToFolder(
-        settings.dazScriptsFolder,
-        files.filter((file) => file.target === 'daz'),
-      )
-      dazScriptsFolder = settings.dazScriptsFolder
+      await storage.copyRuntimeFiles(settings.dazScriptsFolder, dir)
+      await storage.writeFilesToFolder(dir, dazFiles)
+      scriptsDir = dir
     } catch (error) {
-      dazScriptsError = error instanceof Error ? error.message : String(error)
+      scriptsError = error instanceof Error ? error.message : String(error)
     }
+  } else {
+    scriptsError = 'Set "My DAZ 3D Library" in Settings to install the character script.'
   }
-  return { outDir, files, dazScriptsFolder, dazScriptsError }
+  return { outDir, files, scriptsDir, scriptsError }
 }
 
 /** Where a character's files live (absolute + library-relative), for the editor. */
