@@ -319,13 +319,13 @@ function StorageLocation({
 
   return (
     <div className="max-w-lg">
-      <Label className="mb-1 block">Path in project</Label>
+      <Label className="mb-1 block">Path</Label>
       <div className="flex items-center gap-2">
         <span
           className="shrink-0 rounded-md border bg-muted px-2.5 py-2 font-mono text-xs text-muted-foreground"
           title={displayPath(location.libraryFolder)}
         >
-          {`library ${displayPath('/')}`}
+          {`project ${displayPath('/')}`}
         </span>
         <Input
           value={relPath}
