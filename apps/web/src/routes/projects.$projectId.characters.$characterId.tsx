@@ -340,14 +340,6 @@ function StorageLocation({
           <FolderInput /> Move
         </Button>
       </div>
-      <p className="mt-1.5 text-xs text-muted-foreground">
-        Edit to rename or reorganise — e.g.{' '}
-        <code className="rounded bg-muted px-1 py-0.5">
-          ElectraTest/OutfitDefault/ElectraTest.json
-        </code>
-        . Must stay inside the library and end in{' '}
-        <code className="rounded bg-muted px-1 py-0.5">.json</code>.
-      </p>
 
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
     </section>
