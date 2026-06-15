@@ -32,7 +32,7 @@ export type { CharacterLocation, Project } from './storage'
 
 function joinPath(...parts: Array<string>): string {
   return parts
-    .map((p) => p.replace(/[\\/]+$/g, ''))
+    .map((p) => p.replace(/\\/g, '/').replace(/\/+$/g, ''))
     .filter(Boolean)
     .join('/')
 }

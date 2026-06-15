@@ -43,10 +43,15 @@ import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/r
  *    The character functions below all take the active project's `libraryPath`.
  */
 
-/** Join path segments with '/'. Tauri's fs normalizes separators on Windows. */
+/**
+ * Join path segments with '/', normalising any '\' to '/'. A consistent
+ * forward-slash path matters for the Tauri fs *scope* check: a not-yet-existing
+ * path can't be canonicalised, so the raw string is matched against the `**`
+ * scope — and a mixed-separator string (e.g. `X:\proj/New`) fails to match.
+ */
 function join(...parts: Array<string>): string {
   return parts
-    .map((p) => p.replace(/[\\/]+$/g, ''))
+    .map((p) => p.replace(/\\/g, '/').replace(/\/+$/g, ''))
     .filter(Boolean)
     .join('/')
 }
