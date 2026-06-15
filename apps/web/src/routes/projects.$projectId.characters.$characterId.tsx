@@ -365,7 +365,8 @@ function CharacterPage() {
   async function onRenameCharacter(next: string) {
     const updated = { ...character, name: next }
     setCharacter(updated)
-    await saveCharacter({ data: { projectId, character: updated } })
+    const saved = await saveCharacter({ data: { projectId, character: updated } })
+    setCharacter(saved)
     await router.invalidate()
     toast.success(`Renamed to “${next}”`)
   }
@@ -374,11 +375,12 @@ function CharacterPage() {
   async function onSave() {
     setSaving(true)
     try {
-      await saveCharacter({ data: { projectId, character } })
-      const result = await generateCharacterFiles({ data: { projectId, id: character.id } })
+      const saved = await saveCharacter({ data: { projectId, character } })
+      setCharacter(saved) // reconcile the draft (incl. new updatedAt) so it's no longer "dirty"
+      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
       setGenerated(result)
       await router.invalidate()
-      toast.success(`Saved “${character.name}” and generated ${result.files.length} files`)
+      toast.success(`Saved “${saved.name}” and generated ${result.files.length} files`)
       if (result.dazScriptsError) {
         toast.warning(`Couldn't write to the DazToHue-Scripts folder: ${result.dazScriptsError}`)
       }
@@ -715,7 +717,8 @@ function CharacterPage() {
             // should survive a reload without needing the Save button.
             const updated = { ...character, image }
             setCharacter(updated)
-            await saveCharacter({ data: { projectId, character: updated } })
+            const saved = await saveCharacter({ data: { projectId, character: updated } })
+            setCharacter(saved)
             await router.invalidate()
             toast.success('Image updated')
           }}
