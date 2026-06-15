@@ -53,7 +53,9 @@ export type SectionMode = z.infer<typeof sectionModeSchema>
 /** Which modes each section supports (DTH only ships presets for some). */
 export const SECTION_MODES: Record<RomSection, ReadonlyArray<SectionMode>> = {
   RET: ['preset'],
-  JCM: ['preset', 'custom'],
+  // JCM is preset-only — the base Joint Corrective ROM always comes from a
+  // pre-defined DTH asset, so the editor hides the Mode picker (like RET).
+  JCM: ['preset'],
   FAC: ['preset', 'custom'],
   EXP: ['custom'],
   GEN: ['preset', 'custom'],
