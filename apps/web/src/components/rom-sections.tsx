@@ -16,13 +16,14 @@ import {
 } from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
 
-import { pickFbxPath } from '#/lib/desktop.ts'
+import { pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
 
 import type { DragEndEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
 import { ConfigError } from '#/components/config-error.tsx'
+import { Input } from '#/components/ui/input.tsx'
 import {
   Select,
   SelectContent,
@@ -1182,7 +1183,9 @@ export function RomSections({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="preset">Pre-defined DTH assets</SelectItem>
-                        <SelectItem value="custom">Custom morph list</SelectItem>
+                        <SelectItem value="custom">
+                          {section === 'JCM' ? 'Custom JCM asset' : 'Custom morph list'}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1210,6 +1213,36 @@ export function RomSections({
                         onChange={(artDirection) => patchSection(section, { artDirection })}
                       />
                     )}
+                  </div>
+                ) : section === 'JCM' ? (
+                  // Custom JCM asset: a user-supplied .duf path used as the base
+                  // ROM, just like a pre-defined DTH asset.
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Point to a custom JCM pose preset (.duf). It's loaded as the base ROM exactly
+                      like a pre-defined DTH asset.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Path:</span>
+                      <Input
+                        className="max-w-xl"
+                        value={config.customAssetPath}
+                        placeholder="X:\…\My Custom JCM.duf"
+                        onChange={(e) => patchSection(section, { customAssetPath: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={async () => {
+                          const picked = await pickDufPath('Select a custom JCM pose preset (.duf)')
+                          if (picked) patchSection(section, { customAssetPath: picked })
+                        }}
+                      >
+                        <FolderOpen /> Browse
+                      </Button>
+                    </div>
                   </div>
                 ) : !GROUPED_SECTIONS.includes(section) ? (
                   // FBM/MISC are flat lists in the PoseAsset node — exactly

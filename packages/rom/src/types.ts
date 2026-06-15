@@ -53,9 +53,7 @@ export type SectionMode = z.infer<typeof sectionModeSchema>
 /** Which modes each section supports (DTH only ships presets for some). */
 export const SECTION_MODES: Record<RomSection, ReadonlyArray<SectionMode>> = {
   RET: ['preset'],
-  // JCM is preset-only — the base Joint Corrective ROM always comes from a
-  // pre-defined DTH asset, so the editor hides the Mode picker (like RET).
-  JCM: ['preset'],
+  JCM: ['preset', 'custom'],
   FAC: ['preset', 'custom'],
   EXP: ['custom'],
   GEN: ['preset', 'custom'],
@@ -231,6 +229,11 @@ export const romSectionConfigSchema = z.object({
   artDirection: z.array(artDirectionFrameSchema).default([]),
   /** Only used in custom mode. */
   groups: z.array(romGroupSchema).default([]),
+  /**
+   * JCM custom mode: an absolute path to a custom `.duf` pose preset, loaded as
+   * the base ROM exactly like a pre-defined DTH JCM asset.
+   */
+  customAssetPath: z.string().default(''),
 })
 export type RomSectionConfig = z.infer<typeof romSectionConfigSchema>
 
@@ -241,6 +244,7 @@ export function defaultSections(): Record<RomSection, RomSectionConfig> {
     presetAssets: [],
     artDirection: [],
     groups: [],
+    customAssetPath: '',
   })
   return {
     RET: config(true, 'preset'),
@@ -388,7 +392,8 @@ export function characterSlug(character: Pick<Character, 'name'>): string {
  */
 export function characterSkinning(character: Pick<Character, 'sections'>): 'linear' | 'dqs' {
   const jcm = character.sections.JCM
-  const asset = jcm.mode === 'preset' ? jcm.presetAssets[0] : undefined
+  const asset =
+    jcm.mode === 'preset' ? jcm.presetAssets[0] : jcm.mode === 'custom' ? jcm.customAssetPath : undefined
   if (asset) return /\bDQS\b/i.test(asset) ? 'dqs' : 'linear'
   return 'dqs'
 }

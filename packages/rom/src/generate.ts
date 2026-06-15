@@ -76,6 +76,15 @@ export function resolveRomPaths(
     }
   }
 
+  // Custom JCM: the base ROM path comes from the user (set in the generator,
+  // not the catalog); still resolve the FAC mouth from the catalog when enabled.
+  if (sections.JCM.enabled && sections.JCM.mode === 'custom' && facPreset && !paths.mouth) {
+    const skinning = characterSkinning(character)
+    const mouths = catalog.assets.filter((a) => a.section === 'FAC' && forGenesis(a))
+    const mouth = mouths.find((a) => a.skinning === skinning) ?? mouths[0]
+    if (mouth) paths.mouth = join(mouth.relPath)
+  }
+
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
   if (genPreset) {
     const roms = genRomIncludes(gender, sections.GEN.presetAssets)
@@ -404,6 +413,13 @@ function physicsPoseAssetRows(startFrame: number): Array<string> {
 export function toPoseAssetCsv(character: Character): GeneratedFile {
   const { sections } = character
   const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
+  // A custom JCM asset (user .duf path) occupies the same base-ROM block as a
+  // pre-defined one, so it counts toward the template / preset frame length.
+  const jcmRom =
+    jcmPreset ||
+    (sections.JCM.enabled &&
+      sections.JCM.mode === 'custom' &&
+      sections.JCM.customAssetPath.trim() !== '')
   const facPreset = sections.FAC.enabled && sections.FAC.mode === 'preset'
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
   const roms = genRomIncludes(character.gender, sections.GEN.presetAssets)
@@ -414,7 +430,7 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
   const matchesTemplate =
     character.genesis === 'G9' &&
     characterSkinning(character) === 'dqs' &&
-    jcmPreset &&
+    jcmRom &&
     facPreset &&
     !includeDk
 
@@ -443,7 +459,7 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
   // Unvalidated configuration (linear, no FAC, Dicktator, …): only the
   // custom sections, frames continuing after the computed preset length.
   const lastPresetFrame =
-    (jcmPreset ? (characterSkinning(character) === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR) - 1 : -1) +
+    (jcmRom ? (characterSkinning(character) === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR) - 1 : -1) +
     (includeGp ? GP_FRAMES : 0) +
     (includeDk ? DK_FRAMES : 0) +
     (includePhys ? PHYS_FRAMES : 0)
@@ -535,7 +551,11 @@ export function poseAssetFileName(character: Character): string {
  */
 export function toCharacterScriptDsa(character: Character, romPaths: RomPaths = {}): GeneratedFile {
   const { sections } = character
-  const includeJCM = sections.JCM.enabled && sections.JCM.mode === 'preset'
+  // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
+  // a pre-defined asset (so it still drives bIncludeJCM + jcmRomPath).
+  const jcmCustomPath = sections.JCM.mode === 'custom' ? sections.JCM.customAssetPath.trim() : ''
+  const includeJCM =
+    sections.JCM.enabled && (sections.JCM.mode === 'preset' || jcmCustomPath !== '')
   const includeFAC = sections.FAC.enabled && sections.FAC.mode === 'preset'
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
   // No explicit selection: the character's gender decides (female → GP, male → DK).
@@ -556,7 +576,9 @@ export function toCharacterScriptDsa(character: Character, romPaths: RomPaths = 
     FACsDetailStrength: character.facsDetailStrength,
     FlexionStrength: character.flexionStrength,
   }
-  if (romPaths.jcm) config.jcmRomPath = romPaths.jcm
+  // Custom JCM path wins over the catalog-resolved one.
+  const jcmRomPath = jcmCustomPath || romPaths.jcm
+  if (jcmRomPath) config.jcmRomPath = jcmRomPath
   if (romPaths.mouth) config.mouthRomPath = romPaths.mouth
   if (romPaths.gp) config.gpRomPath = romPaths.gp
   if (romPaths.dk) config.dkRomPath = romPaths.dk
