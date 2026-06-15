@@ -33,7 +33,9 @@ jobs:
           # Pending changesets mean a "version packages" PR is still open — the
           # version hasn't been bumped yet, so don't release. Only release once
           # that PR merges (which consumes the changesets + bumps the version).
-          pending=$(ls .changeset/*.md 2>/dev/null | grep -vi 'README.md' | wc -l)
+          # `grep || true` so a no-match (only README.md left) doesn't trip the
+          # step's `set -e -o pipefail` — that is exactly the "release now" case.
+          pending=$(ls .changeset/*.md 2>/dev/null | { grep -vi 'README.md' || true; } | wc -l)
           if [ "$pending" -gt 0 ]; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "$pending pending changeset(s) — waiting for the version packages PR to merge."
