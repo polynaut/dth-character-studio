@@ -305,9 +305,7 @@ function StorageLocation({
   }
 
   return (
-    <section className="mb-8 max-w-3xl rounded-lg border bg-card p-5">
-      <h2 className="mb-4 text-xl font-semibold">Storage location</h2>
-
+    <div className="max-w-2xl">
       <Label className="mb-1 block">Path in project</Label>
       <div className="flex items-center gap-2">
         <span
@@ -337,8 +335,8 @@ function StorageLocation({
         </Button>
       </div>
 
-      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-    </section>
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+    </div>
   )
 }
 
@@ -550,9 +548,11 @@ function CharacterPage() {
 
       <details className="mb-8 rounded-lg border bg-card">
         <summary className="cursor-pointer px-5 py-3 font-medium select-none">
-          Advanced workflow options
+          Advanced options
         </summary>
-        <div className="grid grid-cols-1 gap-6 border-t p-5 lg:grid-cols-2">
+        <div className="space-y-6 border-t p-5">
+          <StorageLocation projectId={projectId} id={character.id} location={location} />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
               <Label className="mb-2 block">Preserve morphs after ROM loading</Label>
@@ -653,6 +653,7 @@ function CharacterPage() {
               onCommit={(jcmMorphMods) => patch({ jcmMorphMods })}
             />
           </div>
+          </div>
         </div>
       </details>
 
@@ -673,8 +674,6 @@ function CharacterPage() {
           onChange={(sections) => patch({ sections })}
         />
       </section>
-
-      <StorageLocation projectId={projectId} id={character.id} location={location} />
 
       <section className="rounded-lg border bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Generate</h2>
