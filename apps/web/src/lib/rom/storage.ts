@@ -19,7 +19,12 @@ import {
 } from '@dth/rom'
 
 import { canonicalImage } from './image'
-import { characterFolderName, definitionFileName, normalizeRelPath } from './library'
+import {
+  characterFolderName,
+  definitionFileName,
+  normalizeRelFolder,
+  normalizeRelPath,
+} from './library'
 
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
@@ -241,6 +246,45 @@ export async function saveCharacter(lib: string, character: Character): Promise<
     const folderAbs = await uniqueFolder(lib, characterFolderName(character.name))
     await mkdir(folderAbs, { recursive: true })
     definitionAbs = join(folderAbs, definitionFileName(character.name))
+  }
+
+  await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
+  return stamped
+}
+
+/**
+ * Create a new character at a chosen folder relative to the project root. An
+ * empty `relFolder` stores the definition directly in the project root; a
+ * non-empty one creates `<lib>/<relFolder>/` (auto-suffixed if it exists) to
+ * hold the definition + all generated files. The definition is named after the
+ * character (`<Name>.json`).
+ */
+export async function createCharacterAt(
+  lib: string,
+  character: Character,
+  relFolder: string,
+): Promise<Character> {
+  if (!lib) throw new Error('No project library configured.')
+  await mkdir(lib, { recursive: true })
+  const stamped = { ...character, updatedAt: new Date().toISOString() }
+  const fileName = definitionFileName(character.name)
+  const clean = normalizeRelFolder(relFolder)
+
+  let definitionAbs: string
+  if (clean) {
+    const slash = clean.lastIndexOf('/')
+    const parent = slash >= 0 ? join(lib, clean.slice(0, slash)) : lib
+    const leaf = slash >= 0 ? clean.slice(slash + 1) : clean
+    await mkdir(parent, { recursive: true })
+    const folderAbs = await uniqueFolder(parent, leaf)
+    await mkdir(folderAbs, { recursive: true })
+    definitionAbs = join(folderAbs, fileName)
+  } else {
+    // Store directly in the project root.
+    definitionAbs = join(lib, fileName)
+    if (await exists(definitionAbs)) {
+      throw new Error(`A character file "${fileName}" already exists in the project root.`)
+    }
   }
 
   await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')

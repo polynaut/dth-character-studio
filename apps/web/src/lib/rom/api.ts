@@ -1,4 +1,4 @@
-import { mkdir, readDir, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -6,6 +6,7 @@ import { characterScriptName, generateAll, poseAssetFileName, resolveRomPaths } 
 import * as storage from './storage'
 import { dataPath } from './storage'
 import { isExternalImage } from './image'
+import exampleCharacter from './example-character.json'
 import {
   characterSchema,
   genderSchema,
@@ -101,20 +102,71 @@ const createInput = z.object({
   name: z.string().min(1),
   genesis: genesisVersionSchema,
   gender: genderSchema,
+  /** Absolute path to the picked Daz scene (.duf) — its `.tip.png` becomes the avatar. */
+  scenePath: z.string().optional(),
+  /** Subfolder relative to the project root; '' stores in the project root. */
+  relFolder: z.string().optional(),
+  /** 'example' seeds the ROM definitions from the bundled example. */
+  prefill: z.enum(['empty', 'example']).optional(),
 })
+
+/** ROM-definition fields copied from the bundled example when prefill is 'example'. */
+function examplePrefill(): Record<string, unknown> {
+  const e = exampleCharacter as Record<string, unknown>
+  return {
+    sections: e.sections,
+    targetSkeleton: e.targetSkeleton,
+    facsDetailStrength: e.facsDetailStrength,
+    flexionStrength: e.flexionStrength,
+    resetGPBeforeApplying: e.resetGPBeforeApplying,
+    preserveMorphs: e.preserveMorphs,
+    preserveNodeTransforms: e.preserveNodeTransforms,
+    jcmMorphMods: e.jcmMorphMods,
+  }
+}
+
+/**
+ * Copy a Daz scene's tip thumbnail (`<scene>.tip.png`) into the app's images
+ * folder as the character's avatar (`<id>.png`). Returns the canonical filename,
+ * or '' when no tip image exists next to the scene.
+ */
+async function copyTipImage(characterId: string, scenePath: string): Promise<string> {
+  const tipPath = `${scenePath}.tip.png`
+  if (!(await exists(tipPath))) return ''
+  const bytes = await readFile(tipPath)
+  const dir = await dataPath('images')
+  await mkdir(dir, { recursive: true })
+  const id = basename(characterId)
+  for (const entry of await readDir(dir)) {
+    if (entry.isFile && entry.name.startsWith(id) && !entry.name.endsWith('.png')) {
+      await remove(joinPath(dir, entry.name))
+    }
+  }
+  const fileName = `${id}.png`
+  await writeFile(joinPath(dir, fileName), bytes)
+  return fileName
+}
 
 export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
   const input = createInput.parse(data)
   const now = new Date().toISOString()
-  const character: Character = characterSchema.parse({
-    id: newId(),
+  const id = newId()
+  const base: Record<string, unknown> = {
+    id,
     name: input.name,
     genesis: input.genesis,
     gender: input.gender,
     createdAt: now,
     updatedAt: now,
-  })
-  return storage.saveCharacter(await projectPath(input.projectId), character)
+    ...(input.prefill === 'example' ? examplePrefill() : {}),
+  }
+  // The picked scene's tip thumbnail becomes the avatar.
+  if (input.scenePath) {
+    const image = await copyTipImage(id, input.scenePath)
+    if (image) base.image = image
+  }
+  const character: Character = characterSchema.parse(base)
+  return storage.createCharacterAt(await projectPath(input.projectId), character, input.relFolder ?? '')
 }
 
 const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown() })

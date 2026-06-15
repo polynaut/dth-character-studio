@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
 import { useResolvedImage } from '#/components/avatar.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
@@ -19,9 +19,9 @@ import {
   deleteCharacter,
   fetchCharacters,
   fetchProject,
-  importCharacterFromJson,
   updateProject,
 } from '#/lib/rom/api.ts'
+import { pickDufPath } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 
@@ -71,27 +71,52 @@ function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
   const { project, characters } = Route.useLoaderData()
   const router = useRouter()
+  const [scenePath, setScenePath] = useState('')
   const [name, setName] = useState('')
+  const [path, setPath] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
   const [gender, setGender] = useState<Gender>('female')
-  const [importPath, setImportPath] = useState('')
+  const [prefill, setPrefill] = useState<'empty' | 'example'>('empty')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
+  /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
+  function sceneBaseName(p: string): string {
+    return (p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '').replace(/\.duf$/i, '')
+  }
+
+  async function onPickScene() {
+    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    if (!picked) return
+    setScenePath(picked)
+    // Prefill the name + path from the scene's filename (the user can edit them).
+    const base = sceneBaseName(picked)
+    setName(base)
+    setPath(base)
+  }
+
   async function onCreate() {
-    if (!name.trim()) return
+    if (!scenePath.trim() || !name.trim()) return
     setBusy(true)
     setError('')
     try {
-      const character = importPath.trim()
-        ? await importCharacterFromJson({
-            data: { projectId, name: name.trim(), genesis, gender, filePath: importPath.trim() },
-          })
-        : await createCharacter({ data: { projectId, name: name.trim(), genesis, gender } })
+      const character = await createCharacter({
+        data: {
+          projectId,
+          name: name.trim(),
+          genesis,
+          gender,
+          scenePath: scenePath.trim(),
+          relFolder: path.trim(),
+          prefill,
+        },
+      })
+      setScenePath('')
       setName('')
-      setImportPath('')
+      setPath('')
+      setPrefill('empty')
       await router.invalidate()
       toast.success(`Created “${character.name}”`)
       await router.navigate({
@@ -159,59 +184,89 @@ function ProjectCharactersPage() {
       </header>
 
       <div className="mb-8 max-w-5xl space-y-3 rounded-lg border bg-card p-4">
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="mb-1 block text-sm font-medium">Name</label>
-            <Input
-              placeholder="e.g. Electra G9"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Genesis</label>
-            <Select value={genesis} onValueChange={(v) => setGenesis(v as GenesisVersion)}>
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="G9">G9</SelectItem>
-                <SelectItem value="G8.1" disabled>
-                  G8.1 — later
-                </SelectItem>
-                <SelectItem value="G8" disabled>
-                  G8 — later
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Gender</label>
-            <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={onCreate} disabled={busy || !name.trim()}>
-            {importPath.trim() ? <FileJson /> : <UserPlus />}
-            {importPath.trim() ? 'Import' : 'Create'}
-          </Button>
-        </div>
         <div>
-          <label className="mb-1 block text-xs text-muted-foreground">
-            Optional: seed from an existing DazToHue-Scripts FBM JSON (absolute path)
-          </label>
-          <Input
-            placeholder="e.g. D:\Development\DazToHue-Scripts\ElectraG9_FBMs.json"
-            value={importPath}
-            onChange={(e) => setImportPath(e.target.value)}
-          />
+          <label className="mb-1 block text-sm font-medium">Daz Character Scene</label>
+          <div className="flex items-center gap-2">
+            <Input
+              className="flex-1"
+              placeholder="X:\…\Kira.duf"
+              value={scenePath}
+              onChange={(e) => setScenePath(e.target.value)}
+            />
+            <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
+              <FolderOpen /> Browse
+            </Button>
+          </div>
+        </div>
+
+        {scenePath.trim() && (
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-44">
+              <label className="mb-1 block text-sm font-medium">Path</label>
+              <Input
+                placeholder="(project root)"
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+              />
+            </div>
+            <div className="min-w-[12rem] flex-1">
+              <label className="mb-1 block text-sm font-medium">Name</label>
+              <Input
+                placeholder="e.g. Kira"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Genesis</label>
+              <Select value={genesis} onValueChange={(v) => setGenesis(v as GenesisVersion)}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="G9">G9</SelectItem>
+                  <SelectItem value="G8.1" disabled>
+                    G8.1 — later
+                  </SelectItem>
+                  <SelectItem value="G8" disabled>
+                    G8 — later
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Gender</label>
+              <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={onCreate} disabled={busy || !name.trim()}>
+              <UserPlus /> Create
+            </Button>
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">Optional: Prefill</label>
+          <Select value={prefill} onValueChange={(v) => setPrefill(v as 'empty' | 'example')}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="empty">Empty</SelectItem>
+              <SelectItem value="example">Example</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            “Example” seeds the ROM definitions from the bundled example character.
+          </p>
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         </div>
       </div>
