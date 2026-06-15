@@ -306,11 +306,7 @@ function StorageLocation({
 
   return (
     <section className="mb-8 max-w-3xl rounded-lg border bg-card p-5">
-      <h2 className="text-xl font-semibold">Storage location</h2>
-      <p className="mt-1 mb-5 text-sm text-muted-foreground">
-        This character's folder — its definition and all generated files — lives inside your
-        project library.
-      </p>
+      <h2 className="mb-4 text-xl font-semibold">Storage location</h2>
 
       <Label className="mb-1 block">Path in project</Label>
       <div className="flex items-center gap-2">
