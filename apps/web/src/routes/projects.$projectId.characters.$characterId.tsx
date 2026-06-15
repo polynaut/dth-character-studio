@@ -585,6 +585,11 @@ function CharacterPage() {
             </div>
           </div>
         </fieldset>
+        {location && (
+          <div className="lg:col-span-2">
+            <StorageLocation projectId={projectId} id={character.id} location={location} />
+          </div>
+        )}
       </section>
 
       <details className="mb-8 rounded-lg border bg-card">
@@ -592,7 +597,6 @@ function CharacterPage() {
           Advanced options
         </summary>
         <div className="space-y-6 border-t p-5">
-          <StorageLocation projectId={projectId} id={character.id} location={location} />
           <div className="flex items-center gap-3">
             <Switch
               checked={character.resetGPBeforeApplying}
