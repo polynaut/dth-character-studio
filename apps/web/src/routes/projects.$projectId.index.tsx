@@ -100,8 +100,7 @@ function ProjectCharactersPage() {
   const { project, characters } = Route.useLoaderData()
   const router = useRouter()
   const [scenePath, setScenePath] = useState('')
-  const [name, setName] = useState('')
-  const [path, setPath] = useState('')
+  const [filepath, setFilepath] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
   const [gender, setGender] = useState<Gender>('female')
   const [prefill, setPrefill] = useState<'empty' | 'example'>('empty')
@@ -119,14 +118,22 @@ function ProjectCharactersPage() {
     return (p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '').replace(/\.duf$/i, '')
   }
 
+  /** Split the "Filepath" field into a subfolder (relative to the project) + name. */
+  function parseFilepath(fp: string): { relFolder: string; name: string } {
+    const clean = fp.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+    const slash = clean.lastIndexOf('/')
+    const relFolder = slash >= 0 ? clean.slice(0, slash) : ''
+    const name = (slash >= 0 ? clean.slice(slash + 1) : clean).replace(/\.json$/i, '')
+    return { relFolder, name }
+  }
+
   async function onPickScene() {
     const picked = await pickDufPath('Select the Daz character scene (.duf)')
     if (!picked) return
     setScenePath(picked)
-    // Prefill the name + path from the scene's filename (the user can edit them).
+    // Prefill the filepath as "<base>/<base>.json" (the user can edit it).
     const base = sceneBaseName(picked)
-    setName(base)
-    setPath(base)
+    setFilepath(displayPath(`${base}/${base}.json`))
   }
 
   /** Is the picked scene located inside the project folder? */
@@ -136,7 +143,7 @@ function ProjectCharactersPage() {
   }
 
   async function onCreate() {
-    if (!scenePath.trim() || !name.trim()) return
+    if (!scenePath.trim() || !parseFilepath(filepath).name) return
     // Scene outside the project → ask whether to copy it into the character folder.
     if (!sceneInsideProject()) {
       setCopySubfolder('daz3d')
@@ -148,17 +155,18 @@ function ProjectCharactersPage() {
 
   /** Create the character; when `copyScene`, also copy the scene + its thumbnails. */
   async function doCreate(copyScene: boolean) {
+    const { relFolder, name } = parseFilepath(filepath)
     setBusy(true)
     setError('')
     try {
       const character = await createCharacter({
         data: {
           projectId,
-          name: name.trim(),
+          name,
           genesis,
           gender,
           scenePath: scenePath.trim(),
-          relFolder: path.trim(),
+          relFolder,
           prefill,
         },
       })
@@ -174,8 +182,7 @@ function ProjectCharactersPage() {
       }
       setCopyPrompt(false)
       setScenePath('')
-      setName('')
-      setPath('')
+      setFilepath('')
       setPrefill('empty')
       await router.invalidate()
       toast.success(`Created “${character.name}”`)
@@ -265,22 +272,20 @@ function ProjectCharactersPage() {
             <ScenePreview scenePath={scenePath} />
             <div className="min-w-[20rem] flex-1 space-y-3">
               <div className="flex flex-wrap items-end gap-3">
-                <div className="w-44">
-                  <label className="mb-1 block text-sm font-medium">Path</label>
-                  <Input
-                    placeholder="(project root)"
-                    value={path}
-                    onChange={(e) => setPath(e.target.value)}
-                  />
-                </div>
-                <div className="min-w-[12rem] flex-1">
-                  <label className="mb-1 block text-sm font-medium">Name</label>
-                  <Input
-                    placeholder="e.g. Kira"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-                  />
+                <div className="min-w-[16rem] flex-1">
+                  <label className="mb-1 block text-sm font-medium">Filepath</label>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
+                      {displayPath('/project/')}
+                    </span>
+                    <Input
+                      className="flex-1"
+                      placeholder={displayPath('Kira/Kira.json')}
+                      value={filepath}
+                      onChange={(e) => setFilepath(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium">Genesis</label>
@@ -311,7 +316,7 @@ function ProjectCharactersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={onCreate} disabled={busy || !name.trim()}>
+                <Button onClick={onCreate} disabled={busy || !parseFilepath(filepath).name}>
                   <UserPlus /> Create
                 </Button>
               </div>
