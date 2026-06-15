@@ -303,38 +303,6 @@ export async function moveCharacter(id: string, relFolder: string): Promise<Char
   }
 }
 
-/**
- * One-time migration: lift characters from the old app-folder `characters/`
- * location into a freshly-set library as `<library>/<Name>/<Name>.json`. Guarded
- * — only runs when the library has no characters yet, so it never clobbers an
- * existing library.
- */
-async function migrateLegacyCharacters(library: string): Promise<void> {
-  if (!library) return
-  const legacyDir = await dataPath('characters')
-  if (!(await isDir(legacyDir))) return
-  const libHasJson = (await isDir(library))
-    ? (await walkFiles(library)).some((f) => f.toLowerCase().endsWith('.json'))
-    : false
-  if (libHasJson) return
-  await mkdir(library, { recursive: true })
-  for (const file of await readDir(legacyDir)) {
-    if (!file.isFile || !file.name.endsWith('.json')) continue
-    try {
-      const character = parseCharacter(JSON.parse(await readTextFile(join(legacyDir, file.name))))
-      const folderAbs = await uniqueFolder(library, characterFolderName(character.name))
-      await mkdir(folderAbs, { recursive: true })
-      await writeTextFile(
-        join(folderAbs, definitionFileName(character.name)),
-        JSON.stringify(character, null, 2) + '\n',
-      )
-      await remove(join(legacyDir, file.name))
-    } catch {
-      // skip unreadable / invalid legacy files
-    }
-  }
-}
-
 /** Writes files into an existing external folder (e.g. the DazToHue-Scripts checkout). */
 export async function writeFilesToFolder(
   folder: string,
@@ -392,15 +360,7 @@ export async function getSettings(): Promise<StudioSettings> {
 
 export async function saveSettings(settings: StudioSettings): Promise<StudioSettings> {
   await ensureAppDir()
-  const previous = await getSettings()
   await writeTextFile(await dataPath('settings.json'), JSON.stringify(settings, null, 2) + '\n')
-  // First time a library is set, lift any legacy app-folder characters into it.
-  if (
-    settings.characterLibraryFolder &&
-    settings.characterLibraryFolder !== previous.characterLibraryFolder
-  ) {
-    await migrateLegacyCharacters(settings.characterLibraryFolder)
-  }
   return settings
 }
 
