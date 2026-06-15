@@ -4,12 +4,12 @@ import { z } from 'zod'
 import {
   ArrowLeft,
   Download,
-  FileCog,
   FolderInput,
   Pencil,
   Plus,
   Save,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react'
 
@@ -367,20 +367,21 @@ function CharacterPage() {
     await router.invalidate()
   }
 
+  // Saving also (re)generates all DTH files in the same step.
   async function onSave() {
     setSaving(true)
     try {
       await saveCharacter({ data: { projectId, character } })
+      const result = await generateCharacterFiles({ data: { projectId, id: character.id } })
+      setGenerated(result)
       await router.invalidate()
     } finally {
       setSaving(false)
     }
   }
 
-  async function onGenerate() {
-    if (dirty) await onSave()
-    const result = await generateCharacterFiles({ data: { projectId, id: character.id } })
-    setGenerated(result)
+  function onDiscard() {
+    setCharacter(initial)
   }
 
   function download(file: GeneratedFile) {
@@ -413,11 +414,11 @@ function CharacterPage() {
           <ArrowLeft className="size-4" /> Back to project
         </Link>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onSave} disabled={saving || !dirty}>
-            <Save /> {dirty ? 'Save' : 'Saved'}
+          <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
+            <Undo2 /> Discard
           </Button>
-          <Button onClick={onGenerate}>
-            <FileCog /> Generate DTH files
+          <Button onClick={onSave} disabled={saving || !dirty}>
+            <Save /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
           </Button>
         </div>
       </div>
