@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, FolderOpen, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
@@ -15,10 +15,12 @@ import {
   SelectValue,
 } from '#/components/ui/select.tsx'
 import {
+  copyDazScene,
   createCharacter,
   deleteCharacter,
   fetchCharacters,
   fetchProject,
+  resolveScenePreview,
   updateProject,
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
@@ -57,6 +59,32 @@ function CharacterThumb({ image, name }: { image: string; name: string }) {
   )
 }
 
+/** Live preview of the picked Daz scene's tip thumbnail (read as a data URL). */
+function ScenePreview({ scenePath }: { scenePath: string }) {
+  const [src, setSrc] = useState('')
+  useEffect(() => {
+    let active = true
+    if (!scenePath.trim()) {
+      setSrc('')
+      return
+    }
+    resolveScenePreview(scenePath.trim())
+      .then((s) => active && setSrc(s))
+      .catch(() => active && setSrc(''))
+    return () => {
+      active = false
+    }
+  }, [scenePath])
+  if (!src) return null
+  return (
+    <img
+      src={src}
+      alt=""
+      className="aspect-[3/4] w-32 rounded-lg bg-neutral-300 object-cover"
+    />
+  )
+}
+
 export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
     const project = await fetchProject({ data: { projectId: params.projectId } })
@@ -80,6 +108,10 @@ function ProjectCharactersPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [editingTitle, setEditingTitle] = useState(false)
+  // When the picked scene is outside the project, the create flow pauses on this
+  // modal to ask whether to copy the scene into the character folder.
+  const [copyPrompt, setCopyPrompt] = useState(false)
+  const [copySubfolder, setCopySubfolder] = useState('daz3d')
   const swallowNavRef = useRef(false)
 
   /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
@@ -97,8 +129,25 @@ function ProjectCharactersPage() {
     setPath(base)
   }
 
+  /** Is the picked scene located inside the project folder? */
+  function sceneInsideProject(): boolean {
+    const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+    return norm(scenePath).startsWith(norm(project.path) + '/')
+  }
+
   async function onCreate() {
     if (!scenePath.trim() || !name.trim()) return
+    // Scene outside the project → ask whether to copy it into the character folder.
+    if (!sceneInsideProject()) {
+      setCopySubfolder('daz3d')
+      setCopyPrompt(true)
+      return
+    }
+    await doCreate(false)
+  }
+
+  /** Create the character; when `copyScene`, also copy the scene + its thumbnails. */
+  async function doCreate(copyScene: boolean) {
     setBusy(true)
     setError('')
     try {
@@ -113,6 +162,17 @@ function ProjectCharactersPage() {
           prefill,
         },
       })
+      if (copyScene) {
+        await copyDazScene({
+          data: {
+            projectId,
+            characterId: character.id,
+            scenePath: scenePath.trim(),
+            subfolder: copySubfolder.trim(),
+          },
+        })
+      }
+      setCopyPrompt(false)
       setScenePath('')
       setName('')
       setPath('')
@@ -124,6 +184,7 @@ function ProjectCharactersPage() {
         params: { projectId, characterId: character.id },
       })
     } catch (e) {
+      setCopyPrompt(false)
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
@@ -198,6 +259,8 @@ function ProjectCharactersPage() {
             </Button>
           </div>
         </div>
+
+        {scenePath.trim() && <ScenePreview scenePath={scenePath} />}
 
         {scenePath.trim() && (
           <div className="flex flex-wrap items-end gap-3">
@@ -306,6 +369,43 @@ function ProjectCharactersPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {copyPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !busy && setCopyPrompt(false)}
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold">Copy the Daz scene into the project?</h2>
+            <p className="text-sm text-muted-foreground">
+              The selected scene lives outside this project. Copy it (and its{' '}
+              <code className="rounded bg-muted px-1 py-0.5">.png</code> /{' '}
+              <code className="rounded bg-muted px-1 py-0.5">.tip.png</code> thumbnails) into the
+              character's folder?
+            </p>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Subfolder</label>
+              <Input
+                value={copySubfolder}
+                placeholder="(character folder root)"
+                onChange={(e) => setCopySubfolder(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => void doCreate(false)}>
+                Don't copy
+              </Button>
+              <Button disabled={busy} onClick={() => void doCreate(true)}>
+                {busy ? 'Copying…' : 'Copy & create'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )

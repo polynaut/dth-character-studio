@@ -6,6 +6,7 @@ import { characterScriptName, generateAll, poseAssetFileName, resolveRomPaths } 
 import * as storage from './storage'
 import { dataPath } from './storage'
 import { isExternalImage } from './image'
+import { normalizeRelFolder } from './library'
 import exampleCharacter from './example-character.json'
 import {
   characterSchema,
@@ -169,6 +170,35 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   return storage.createCharacterAt(await projectPath(input.projectId), character, input.relFolder ?? '')
 }
 
+const copySceneInput = z.object({
+  projectId: z.string().min(1),
+  characterId: z.string().min(1),
+  /** Absolute path to the picked Daz scene (.duf). */
+  scenePath: z.string().min(1),
+  /** Subfolder inside the character's folder; '' copies into the folder itself. */
+  subfolder: z.string().optional(),
+})
+
+/**
+ * Copy a Daz scene into the character's folder (used when the picked scene lives
+ * outside the project). Copies the `.duf` plus its two sibling thumbnails
+ * (`<scene>.png` and `<scene>.tip.png`) into `<characterFolder>/<subfolder>/`.
+ */
+export async function copyDazScene({ data }: { data: unknown }): Promise<void> {
+  const input = copySceneInput.parse(data)
+  const lib = await projectPath(input.projectId)
+  const folder = await storage.getCharacterFolder(lib, input.characterId)
+  const sub = normalizeRelFolder(input.subfolder ?? '')
+  const destDir = sub ? joinPath(folder, sub) : folder
+  await mkdir(destDir, { recursive: true })
+  const sources = [input.scenePath, `${input.scenePath}.png`, `${input.scenePath}.tip.png`]
+  for (const src of sources) {
+    if (await exists(src)) {
+      await writeFile(joinPath(destDir, basename(src)), await readFile(src))
+    }
+  }
+}
+
 const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown() })
 
 export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
@@ -275,6 +305,29 @@ export async function resolveImageSrc(image: string): Promise<string> {
     const info = await stat(filePath)
     const version = info.mtime ? `?v=${info.mtime.getTime()}` : ''
     return `${convertFileSrc(filePath)}${version}`
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Preview a picked Daz scene's tip thumbnail (`<scene>.tip.png`) as a data URL.
+ * The asset protocol is scoped to the app folder, so an arbitrary scene path
+ * can't be served via convertFileSrc — we read the bytes and inline them.
+ * Returns '' when there's no tip image.
+ */
+export async function resolveScenePreview(scenePath: string): Promise<string> {
+  if (!scenePath) return ''
+  const tipPath = `${scenePath}.tip.png`
+  try {
+    if (!(await exists(tipPath))) return ''
+    const bytes = await readFile(tipPath)
+    let binary = ''
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    return `data:image/png;base64,${btoa(binary)}`
   } catch {
     return ''
   }
