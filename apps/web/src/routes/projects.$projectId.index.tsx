@@ -260,78 +260,81 @@ function ProjectCharactersPage() {
           </div>
         </div>
 
-        {scenePath.trim() && <ScenePreview scenePath={scenePath} />}
-
         {scenePath.trim() && (
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="w-44">
-              <label className="mb-1 block text-sm font-medium">Path</label>
-              <Input
-                placeholder="(project root)"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-              />
+          <div className="flex flex-wrap items-start gap-4">
+            <ScenePreview scenePath={scenePath} />
+            <div className="min-w-[20rem] flex-1 space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-44">
+                  <label className="mb-1 block text-sm font-medium">Path</label>
+                  <Input
+                    placeholder="(project root)"
+                    value={path}
+                    onChange={(e) => setPath(e.target.value)}
+                  />
+                </div>
+                <div className="min-w-[12rem] flex-1">
+                  <label className="mb-1 block text-sm font-medium">Name</label>
+                  <Input
+                    placeholder="e.g. Kira"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Genesis</label>
+                  <Select value={genesis} onValueChange={(v) => setGenesis(v as GenesisVersion)}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="G9">G9</SelectItem>
+                      <SelectItem value="G8.1" disabled>
+                        G8.1 — later
+                      </SelectItem>
+                      <SelectItem value="G8" disabled>
+                        G8 — later
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Gender</label>
+                  <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={onCreate} disabled={busy || !name.trim()}>
+                  <UserPlus /> Create
+                </Button>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Optional: Prefill</label>
+                <Select value={prefill} onValueChange={(v) => setPrefill(v as 'empty' | 'example')}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="empty">Empty</SelectItem>
+                    <SelectItem value="example">Example</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  “Example” seeds the ROM definitions from the bundled example character.
+                </p>
+                {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+              </div>
             </div>
-            <div className="min-w-[12rem] flex-1">
-              <label className="mb-1 block text-sm font-medium">Name</label>
-              <Input
-                placeholder="e.g. Kira"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Genesis</label>
-              <Select value={genesis} onValueChange={(v) => setGenesis(v as GenesisVersion)}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="G9">G9</SelectItem>
-                  <SelectItem value="G8.1" disabled>
-                    G8.1 — later
-                  </SelectItem>
-                  <SelectItem value="G8" disabled>
-                    G8 — later
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Gender</label>
-              <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="male">Male</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={onCreate} disabled={busy || !name.trim()}>
-              <UserPlus /> Create
-            </Button>
           </div>
         )}
-
-        <div>
-          <label className="mb-1 block text-xs text-muted-foreground">Optional: Prefill</label>
-          <Select value={prefill} onValueChange={(v) => setPrefill(v as 'empty' | 'example')}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="empty">Empty</SelectItem>
-              <SelectItem value="example">Example</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="mt-1 text-xs text-muted-foreground">
-            “Example” seeds the ROM definitions from the bundled example character.
-          </p>
-          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-        </div>
       </div>
 
       {characters.length === 0 ? (
