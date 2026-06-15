@@ -360,6 +360,12 @@ function CharacterPage() {
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
 
+  // Absolute path to the character's definition JSON, shown under the header with
+  // the project library root dimmed as a label prefix and the rest emphasized.
+  const libRoot = location?.libraryFolder ?? ''
+  const defAbs = location?.definitionAbs ?? ''
+  const defSuffix = defAbs.startsWith(libRoot) ? defAbs.slice(libRoot.length) : defAbs
+
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
   }
@@ -454,11 +460,11 @@ function CharacterPage() {
           <Avatar
             image={character.image}
             name={character.name}
-            className="size-20 rounded-lg"
-            fallbackClassName="text-3xl"
+            className="size-30 rounded-lg"
+            fallbackClassName="text-4xl"
           />
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <Pencil className="size-5 text-white" />
+            <Pencil className="size-6 text-white" />
           </span>
         </button>
         <div>
@@ -472,6 +478,12 @@ function CharacterPage() {
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
           </p>
+          {location && (
+            <p className="mt-1.5 font-mono text-xs break-all" title={defAbs}>
+              <span className="text-muted-foreground/60">{libRoot}</span>
+              <span className="text-foreground/80">{defSuffix}</span>
+            </p>
+          )}
         </div>
       </header>
 
