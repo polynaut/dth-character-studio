@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.3.0
+
+### Minor Changes
+
+- [#9](https://github.com/polynaut/dth-character-studio/pull/9) [`03f575d`](https://github.com/polynaut/dth-character-studio/commit/03f575d9d4e77926870c8369fb9d1e4714596b36) Thanks [@polynaut](https://github.com/polynaut)! - Support multiple game projects, each with its own character library. On first run the studio asks for your **"My DAZ 3D Library"** path; the home screen is now a **projects** list — each project is a name + a folder that holds that project's characters. Open a project to manage its characters, with the project name and folder shown.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes
