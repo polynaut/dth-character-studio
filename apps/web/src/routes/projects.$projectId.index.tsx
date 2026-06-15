@@ -44,7 +44,7 @@ function CharacterThumb({ image, name }: { image: string; name: string }) {
           className="size-full bg-no-repeat"
           style={{
             backgroundImage: `url("${src}")`,
-            backgroundSize: 'auto 200%',
+            backgroundSize: 'auto 220%',
             backgroundPosition: 'center top',
           }}
         />
