@@ -119,7 +119,7 @@ function SettingsPage() {
   const [scan, setScan] = useState<ScanResult | null>(null)
 
   const dirty =
-    settings.characterLibraryFolder !== initial.characterLibraryFolder ||
+    settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dazScriptsFolder !== initial.dazScriptsFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder
 
@@ -147,7 +147,7 @@ function SettingsPage() {
     <main className="mx-auto max-w-4xl p-8">
       <div className="mb-6">
         <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> All characters
+          <ArrowLeft className="size-4" /> All projects
         </Link>
       </div>
       <header className="mb-8">
@@ -159,16 +159,15 @@ function SettingsPage() {
 
       <section className="mb-8 space-y-5 rounded-lg border bg-card p-5">
         <FolderField
-          label="Character library folder"
-          value={settings.characterLibraryFolder}
-          placeholder="C:\Users\you\Documents\DTH Character Studio"
-          onChange={(value) => setSettings((s) => ({ ...s, characterLibraryFolder: value }))}
+          label="My DAZ 3D Library"
+          value={settings.dazLibraryFolder}
+          placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
+          onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
           help={
             <>
-              Your real work lives here: one folder per character holding its definition and its
-              generated files. Keep it somewhere you back up. Settings and avatars stay in the app's
-              private folder. Repointing this scans the new folder (it does not move existing
-              files).
+              Your Daz content library. Stored for a later update that will generate Daz scripts
+              directly into the library for faster testing — not otherwise used yet. Each
+              project's character library is its own folder, set per project.
             </>
           }
         />

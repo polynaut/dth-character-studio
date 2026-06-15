@@ -18,13 +18,14 @@ import {
 import type { Character } from '@dth/rom'
 import type { StudioSettings } from './storage'
 
-export type { CharacterLocation } from './storage'
+export type { CharacterLocation, Project } from './storage'
 
 /**
  * Client data layer — the only bridge between the React UI and the filesystem.
  * Backed by the Tauri fs/dialog plugins (no Node/server). Functions keep the
- * `{ data }` call convention the route components already use, so the UI is
- * unchanged.
+ * `{ data }` call convention the route components use. Character operations are
+ * scoped to a **project**: callers pass `projectId`, which resolves to that
+ * project's library path (avatars stay global in the app folder).
  */
 
 function joinPath(...parts: Array<string>): string {
@@ -38,17 +39,62 @@ function basename(p: string): string {
   return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
 }
 
-const idInput = z.object({ id: z.string() })
+/** Resolve a project id to its library path (throws if the project is gone). */
+async function projectPath(projectId: string): Promise<string> {
+  const project = await storage.getProject(projectId)
+  if (!project) throw new Error(`Project ${projectId} not found`)
+  return project.path
+}
 
-export async function fetchCharacters(): Promise<Array<Character>> {
-  return storage.listCharacters()
+// --- Projects -------------------------------------------------------------
+
+const projectIdInput = z.object({ projectId: z.string().min(1) })
+
+export async function fetchProjects(): Promise<Array<storage.Project>> {
+  return storage.listProjects()
+}
+
+export async function fetchProject({ data }: { data: unknown }): Promise<storage.Project | null> {
+  return storage.getProject(projectIdInput.parse(data).projectId)
+}
+
+const createProjectInput = z.object({ name: z.string().min(1), path: z.string().min(1) })
+
+export async function createProject({ data }: { data: unknown }): Promise<storage.Project> {
+  const { name, path } = createProjectInput.parse(data)
+  return storage.createProject(name, path)
+}
+
+const updateProjectInput = z.object({
+  id: z.string().min(1),
+  name: z.string().optional(),
+  path: z.string().optional(),
+})
+
+export async function updateProject({ data }: { data: unknown }): Promise<storage.Project> {
+  const { id, name, path } = updateProjectInput.parse(data)
+  return storage.updateProject(id, { name, path })
+}
+
+export async function deleteProject({ data }: { data: unknown }): Promise<void> {
+  await storage.deleteProject(z.object({ id: z.string().min(1) }).parse(data).id)
+}
+
+// --- Characters (scoped to a project) -------------------------------------
+
+const charScopeInput = z.object({ projectId: z.string().min(1), id: z.string().min(1) })
+
+export async function fetchCharacters({ data }: { data: unknown }): Promise<Array<Character>> {
+  return storage.listCharacters(await projectPath(projectIdInput.parse(data).projectId))
 }
 
 export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
-  return storage.getCharacter(idInput.parse(data).id)
+  const { projectId, id } = charScopeInput.parse(data)
+  return storage.getCharacter(await projectPath(projectId), id)
 }
 
 const createInput = z.object({
+  projectId: z.string().min(1),
   name: z.string().min(1),
   genesis: genesisVersionSchema,
   gender: genderSchema,
@@ -65,15 +111,19 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     createdAt: now,
     updatedAt: now,
   })
-  return storage.saveCharacter(character)
+  return storage.saveCharacter(await projectPath(input.projectId), character)
 }
 
+const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown() })
+
 export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
-  return storage.saveCharacter(characterSchema.parse(data))
+  const { projectId, character } = saveInput.parse(data)
+  return storage.saveCharacter(await projectPath(projectId), characterSchema.parse(character))
 }
 
 export async function deleteCharacter({ data }: { data: unknown }): Promise<void> {
-  await storage.deleteCharacter(idInput.parse(data).id)
+  const { projectId, id } = charScopeInput.parse(data)
+  await storage.deleteCharacter(await projectPath(projectId), id)
 }
 
 /** Shape of an existing DazToHue-Scripts FBM file (e.g. ElectraG9_FBMs.json). */
@@ -90,6 +140,7 @@ const fbmJsonSchema = z.object({
 })
 
 const importInput = z.object({
+  projectId: z.string().min(1),
   name: z.string().min(1),
   genesis: genesisVersionSchema,
   gender: genderSchema,
@@ -114,7 +165,7 @@ export async function importCharacterFromJson({ data }: { data: unknown }): Prom
   if (raw.meta?.resetGPBeforeApplying !== undefined) {
     character.resetGPBeforeApplying = raw.meta.resetGPBeforeApplying
   }
-  return storage.saveCharacter(character)
+  return storage.saveCharacter(await projectPath(input.projectId), character)
 }
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
@@ -134,8 +185,7 @@ const uploadImageInput = z.object({
 /**
  * Stores a dropped avatar image under <data>/images/ and returns its bare
  * filename — the portable canonical reference saved on the character (see
- * ./image). The UI resolves it to a loadable asset URL at render time via
- * resolveImageSrc; the persisted JSON never embeds a machine-specific path.
+ * ./image). Avatars are global (keyed by character id), not per-project.
  */
 export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
   const input = uploadImageInput.parse(data)
@@ -159,10 +209,8 @@ export async function uploadCharacterImage({ data }: { data: unknown }): Promise
 /**
  * Turns a stored `image` reference (see ./image) into a URL the webview can
  * load. External URLs pass through unchanged; a local filename resolves to its
- * asset URL under <data>/images/ with an mtime cache-buster (so replacing the
- * avatar refreshes the image). Returns '' when the local file is missing — e.g.
- * a character JSON shared from another machine — so the UI falls back to the
- * initial-letter placeholder instead of showing a broken image.
+ * asset URL under <data>/images/ with an mtime cache-buster. Returns '' when the
+ * local file is missing so the UI falls back to the initial-letter placeholder.
  */
 export async function resolveImageSrc(image: string): Promise<string> {
   if (!image) return ''
@@ -177,6 +225,8 @@ export async function resolveImageSrc(image: string): Promise<string> {
   }
 }
 
+// --- Settings + catalog ---------------------------------------------------
+
 export async function fetchSettings(): Promise<StudioSettings> {
   return storage.getSettings()
 }
@@ -187,7 +237,7 @@ export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listP
 }
 
 const settingsInput = z.object({
-  characterLibraryFolder: z.string(),
+  dazLibraryFolder: z.string(),
   dazScriptsFolder: z.string(),
   dthPosesFolder: z.string(),
 })
@@ -198,10 +248,9 @@ export async function saveSettings({ data }: { data: unknown }): Promise<StudioS
 
 /**
  * Compiles the character into all DTH artifacts, writes them into the
- * character's own folder in the library (next to its definition) and — when a
- * DazToHue-Scripts folder is configured — writes the Daz-side files there too,
- * runnable next to DthWorkflow.dsa. Returns the files so the UI can offer
- * downloads as well.
+ * character's own folder in the project library (next to its definition) and —
+ * when a DazToHue-Scripts folder is configured — writes the Daz-side files there
+ * too. Returns the files so the UI can offer downloads as well.
  */
 export async function generateCharacterFiles({ data }: { data: unknown }): Promise<{
   outDir: string
@@ -209,15 +258,16 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   dazScriptsFolder: string | null
   dazScriptsError: string | null
 }> {
-  const { id } = idInput.parse(data)
-  const character = await storage.getCharacter(id)
+  const { projectId, id } = charScopeInput.parse(data)
+  const lib = await projectPath(projectId)
+  const character = await storage.getCharacter(lib, id)
   if (!character) throw new Error(`Character ${id} not found`)
   // Exact ROM paths from the installed preset catalog; {} when the folder is
   // unavailable — the wrapper then falls back to DthOptions resolution.
   const catalog = await storage.listPoseAssets()
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
   const files = generateAll(character, romPaths)
-  const outDir = await storage.getCharacterFolder(id)
+  const outDir = await storage.getCharacterFolder(lib, id)
   await storage.writeFilesToFolder(outDir, files)
 
   const settings = await storage.getSettings()
@@ -243,10 +293,15 @@ export async function getCharacterPath({
 }: {
   data: unknown
 }): Promise<storage.CharacterLocation | null> {
-  return storage.getCharacterPath(idInput.parse(data).id)
+  const { projectId, id } = charScopeInput.parse(data)
+  return storage.getCharacterPath(await projectPath(projectId), id)
 }
 
-const moveInput = z.object({ id: z.string().min(1), relFolder: z.string().min(1) })
+const moveInput = z.object({
+  projectId: z.string().min(1),
+  id: z.string().min(1),
+  relFolder: z.string().min(1),
+})
 
 /** Move a character's whole folder to a new path relative to the library root. */
 export async function moveCharacter({
@@ -254,6 +309,6 @@ export async function moveCharacter({
 }: {
   data: unknown
 }): Promise<storage.CharacterLocation> {
-  const { id, relFolder } = moveInput.parse(data)
-  return storage.moveCharacter(id, relFolder)
+  const { projectId, id, relFolder } = moveInput.parse(data)
+  return storage.moveCharacter(await projectPath(projectId), id, relFolder)
 }
