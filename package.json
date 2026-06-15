@@ -1,6 +1,5 @@
 {
   "name": "dth-character-studio",
-  "version": "0.1.0",
   "private": true,
   "description": "Declarative character & ROM administration for the DazToHue (DTH) workflow — generates the Daz ROM scripts and the Houdini PoseAsset CSV from one definition. Runs as a standalone web app or a Tauri desktop app.",
   "license": "MIT",
