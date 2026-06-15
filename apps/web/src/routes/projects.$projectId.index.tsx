@@ -45,7 +45,7 @@ function CharacterThumb({ image, name }: { image: string; name: string }) {
           style={{
             backgroundImage: `url("${src}")`,
             backgroundSize: 'auto 220%',
-            backgroundPosition: 'center -10px',
+            backgroundPosition: 'center -5px',
           }}
         />
       ) : (
