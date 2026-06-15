@@ -22,6 +22,7 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
+import { ConfigError } from '#/components/config-error.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
 import {
   ART_DIRECTION_CATALOG,
@@ -118,7 +119,7 @@ function PresetAssetPicker({
   )
 
   if (catalog.error) {
-    return <p className="text-sm text-destructive">{catalog.error}</p>
+    return <ConfigError message={catalog.error} />
   }
   if (available.length === 0) {
     return (

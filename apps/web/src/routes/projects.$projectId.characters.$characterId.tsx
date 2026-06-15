@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
+import { ConfigError } from '#/components/config-error.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
@@ -790,7 +791,7 @@ function CharacterPage() {
               </p>
             )}
             {generated.scriptsError && (
-              <p className="mb-1 text-sm text-destructive">{generated.scriptsError}</p>
+              <ConfigError message={generated.scriptsError} className="mb-1" />
             )}
             <ul className="mt-4 space-y-2">
               {generated.files.map((file) => (

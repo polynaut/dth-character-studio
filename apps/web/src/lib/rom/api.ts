@@ -293,7 +293,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       scriptsError = error instanceof Error ? error.message : String(error)
     }
   } else {
-    scriptsError = 'Set "My DAZ 3D Library" in Settings to install the character script.'
+    scriptsError = 'Set “My DAZ 3D Library” to install the character script'
   }
   return { outDir, files, scriptsDir, scriptsError }
 }

@@ -364,7 +364,7 @@ export function studioScriptsDir(dazLibraryFolder: string): string {
  */
 export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
   if (!srcDir) {
-    throw new Error('Set the DazToHue-Scripts folder in Settings to install the runtime.')
+    throw new Error('Set the DazToHue-Scripts folder to install the runtime')
   }
   if (!(await isDir(srcDir))) throw new Error(`DazToHue-Scripts folder not reachable: ${srcDir}`)
   await mkdir(destDir, { recursive: true })
@@ -518,7 +518,7 @@ export async function listPoseAssets(): Promise<{
 }> {
   const { dthPosesFolder } = await getSettings()
   if (!dthPosesFolder) {
-    return { folder: '', assets: [], error: 'No DTH release / Poses folder configured.' }
+    return { folder: '', assets: [], error: 'No DTH release / Poses folder configured' }
   }
   if (!(await isDir(dthPosesFolder))) {
     return { folder: dthPosesFolder, assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
