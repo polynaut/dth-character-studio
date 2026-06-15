@@ -50,9 +50,7 @@ async function projectPath(projectId: string): Promise<string> {
 
 const projectIdInput = z.object({ projectId: z.string().min(1) })
 
-/** Projects list. Runs the one-time legacy carry-over migration first. */
 export async function fetchProjects(): Promise<Array<storage.Project>> {
-  await storage.ensureCarryover()
   return storage.listProjects()
 }
 
@@ -80,16 +78,6 @@ export async function updateProject({ data }: { data: unknown }): Promise<storag
 
 export async function deleteProject({ data }: { data: unknown }): Promise<void> {
   await storage.deleteProject(z.object({ id: z.string().min(1) }).parse(data).id)
-}
-
-/** Count of carried-over characters waiting to be restored into a project. */
-export async function fetchCarryoverCount(): Promise<number> {
-  return storage.carryoverCount()
-}
-
-/** Copy the carried-over characters into the given project's library. */
-export async function restoreCarryover({ data }: { data: unknown }): Promise<number> {
-  return storage.restoreCarryover(await projectPath(projectIdInput.parse(data).projectId))
 }
 
 // --- Characters (scoped to a project) -------------------------------------

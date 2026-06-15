@@ -1,13 +1,6 @@
 import { useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  FileJson,
-  FolderInput,
-  Settings as SettingsIcon,
-  Trash2,
-  UserPlus,
-} from 'lucide-react'
+import { ArrowLeft, FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { Button } from '#/components/ui/button.tsx'
@@ -22,11 +15,9 @@ import {
 import {
   createCharacter,
   deleteCharacter,
-  fetchCarryoverCount,
   fetchCharacters,
   fetchProject,
   importCharacterFromJson,
-  restoreCarryover,
 } from '#/lib/rom/api.ts'
 
 import { characterSkinning, countPoses } from '@dth/rom'
@@ -37,18 +28,15 @@ export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
-    const [characters, carryover] = await Promise.all([
-      fetchCharacters({ data: { projectId: params.projectId } }),
-      fetchCarryoverCount(),
-    ])
-    return { project, characters, carryover }
+    const characters = await fetchCharacters({ data: { projectId: params.projectId } })
+    return { project, characters }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters, carryover } = Route.useLoaderData()
+  const { project, characters } = Route.useLoaderData()
   const router = useRouter()
   const [name, setName] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
@@ -85,19 +73,6 @@ function ProjectCharactersPage() {
     if (!window.confirm(`Delete character "${characterName}"? This cannot be undone.`)) return
     await deleteCharacter({ data: { projectId, id } })
     await router.invalidate()
-  }
-
-  async function onRestore() {
-    setBusy(true)
-    setError('')
-    try {
-      await restoreCarryover({ data: { projectId } })
-      await router.invalidate()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
   }
 
   return (
@@ -184,23 +159,8 @@ function ProjectCharactersPage() {
         </div>
       </div>
 
-      {carryover > 0 && (
-        <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border bg-card p-4">
-          <p className="text-sm text-muted-foreground">
-            {carryover} carried-over character{carryover === 1 ? '' : 's'} from before the projects
-            update — restore them into this project.
-          </p>
-          <Button variant="outline" className="shrink-0" onClick={onRestore} disabled={busy}>
-            <FolderInput /> Restore {carryover}
-          </Button>
-        </div>
-      )}
-
       {characters.length === 0 ? (
-        <p className="text-muted-foreground">
-          No characters yet — create the first one above
-          {carryover > 0 ? ', or restore the carried-over ones' : ''}.
-        </p>
+        <p className="text-muted-foreground">No characters yet — create the first one above.</p>
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {characters.map((character) => (

@@ -1,5 +1,4 @@
 import {
-  copyFile,
   exists,
   mkdir,
   readDir,
@@ -29,8 +28,8 @@ import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/r
  *
  *  - **App folder** = the per-user app-local data dir (e.g.
  *    %LOCALAPPDATA%/com.polynaut.dthcharacterstudio). Holds app-owned data:
- *    `settings.json`, `projects.json`, `images/` (avatars), and a one-time
- *    `carryover/` backup. Created on first run.
+ *    `settings.json`, `projects.json`, and `images/` (avatars). Created on first
+ *    run.
  *  - **Project library** = each project's user-chosen folder (`Project.path`),
  *    kept OUTSIDE the app folder so the user can back it up. Each character is a
  *    folder named after it (`<library>/<Name>/`) holding the definition
@@ -429,60 +428,6 @@ export async function updateProject(
 
 export async function deleteProject(id: string): Promise<void> {
   await writeProjects((await readProjects()).filter((p) => p.id !== id))
-}
-
-// --- Carry-over (one-time migration from the old single library) ----------
-
-/** Recursively copy every file from `srcAbs` into `destAbs` (creating dirs). */
-async function copyTree(srcAbs: string, destAbs: string): Promise<void> {
-  for (const rel of await walkFiles(srcAbs)) {
-    const to = join(destAbs, rel)
-    await mkdir(dirname(to), { recursive: true })
-    await copyFile(join(srcAbs, rel), to)
-  }
-}
-
-/**
- * One-time: if a legacy `characterLibraryFolder` is still in settings.json (from
- * the pre-projects version), copy its contents into `carryover/` and strip the
- * key so this runs only once. The user restores it into a project later.
- */
-export async function ensureCarryover(): Promise<void> {
-  const settingsPath = await dataPath('settings.json')
-  let raw: Record<string, any>
-  try {
-    raw = JSON.parse(await readTextFile(settingsPath))
-  } catch {
-    return
-  }
-  if (!('characterLibraryFolder' in raw)) return
-  const old = raw.characterLibraryFolder
-  if (typeof old === 'string' && old && (await isDir(old))) {
-    const carry = await dataPath('carryover')
-    if (!(await exists(carry))) {
-      await mkdir(carry, { recursive: true })
-      await copyTree(old, carry)
-    }
-  }
-  delete raw.characterLibraryFolder
-  await ensureAppDir()
-  await writeTextFile(settingsPath, JSON.stringify(raw, null, 2) + '\n')
-}
-
-/** Number of carried-over characters waiting to be restored into a project. */
-export async function carryoverCount(): Promise<number> {
-  return (await scanLibrary(await dataPath('carryover'))).length
-}
-
-/** Copy the carried-over characters into a project's library, then clear them. */
-export async function restoreCarryover(targetLibraryPath: string): Promise<number> {
-  const carry = await dataPath('carryover')
-  if (!(await isDir(carry))) return 0
-  const count = (await scanLibrary(carry)).length
-  await mkdir(targetLibraryPath, { recursive: true })
-  await copyTree(carry, targetLibraryPath)
-  await remove(carry, { recursive: true })
-  return count
 }
 
 /** Recursively collect file paths (relative to `root`, '/'-separated). */

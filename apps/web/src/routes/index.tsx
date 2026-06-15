@@ -7,7 +7,6 @@ import { Input } from '#/components/ui/input.tsx'
 import {
   createProject,
   deleteProject,
-  fetchCarryoverCount,
   fetchProjects,
   fetchSettings,
   saveSettings,
@@ -16,18 +15,14 @@ import { pickFolder } from '#/lib/desktop.ts'
 
 export const Route = createFileRoute('/')({
   loader: async () => {
-    const [projects, settings, carryover] = await Promise.all([
-      fetchProjects(),
-      fetchSettings(),
-      fetchCarryoverCount(),
-    ])
-    return { projects, settings, carryover }
+    const [projects, settings] = await Promise.all([fetchProjects(), fetchSettings()])
+    return { projects, settings }
   },
   component: ProjectsPage,
 })
 
 function ProjectsPage() {
-  const { projects, settings, carryover } = Route.useLoaderData()
+  const { projects, settings } = Route.useLoaderData()
   const router = useRouter()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -121,13 +116,6 @@ function ProjectsPage() {
               change
             </Link>
           </p>
-
-          {carryover > 0 && (
-            <p className="mb-6 rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-              {carryover} carried-over character{carryover === 1 ? '' : 's'} from before the projects
-              update are waiting — open or create a project to restore them.
-            </p>
-          )}
 
           <div className="mb-8 flex items-end gap-3 rounded-lg border bg-card p-4">
             <div className="flex-1">
