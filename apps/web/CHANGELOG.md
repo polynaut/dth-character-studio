@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.3.1
+
+### Patch Changes
+
+- [#11](https://github.com/polynaut/dth-character-studio/pull/11) [`f9e8268`](https://github.com/polynaut/dth-character-studio/commit/f9e826844eeed6a5df53fd20db23c5a29a46bde2) Thanks [@polynaut](https://github.com/polynaut)! - Rename a project inline from its page: hover the title to reveal a pencil, click it to edit, and press Enter or click away to save.
+
+- [#11](https://github.com/polynaut/dth-character-studio/pull/11) [`f9e8268`](https://github.com/polynaut/dth-character-studio/commit/f9e826844eeed6a5df53fd20db23c5a29a46bde2) Thanks [@polynaut](https://github.com/polynaut)! - Switch the UI accent color from teal to the logo's orange (`#fe5c01`) — primary buttons, links, and focus rings.
+
+- Updated dependencies []:
+  - @dth/rom@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes

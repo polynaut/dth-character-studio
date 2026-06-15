@@ -1,6 +1,6 @@
 {
   "name": "@dth/rom",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Pure DTH ROM generation core — one character definition in, Daz ROM scripts + Houdini PoseAsset CSV out. Framework-agnostic, no I/O.",
