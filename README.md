@@ -68,12 +68,16 @@ pnpm dev:desktop      # Tauri: starts the web dev server (HMR) + the native wind
 pnpm build:desktop    # production build → NSIS installer under apps/desktop/target/release/bundle
 ```
 
-After first launch, open **Settings** and point the two folders at:
+On first launch you're asked to pick a **character library folder** — where your
+characters are stored (see [Data & sharing](#data--sharing--share-definitions-not-assets)).
+Then open **Settings** to point two more folders at:
 
-- your **DazToHue-Scripts** checkout (generated Daz files are written here, next
-  to `DthWorkflow.dsa`, so they run straight from Daz Studio), and
 - your **DTH release or Poses folder** (scanned for the pre-defined pose preset
-  catalog — accepts a release root or the installed library Poses folder).
+  catalog — accepts a release root or the installed library Poses folder), and
+- (optional) your **DazToHue-Scripts** checkout (generated Daz files are also
+  written here, next to `DthWorkflow.dsa`, so they run straight from Daz Studio).
+
+All three folders have a native **Browse…** picker.
 
 ## How the desktop app works
 
@@ -81,11 +85,12 @@ The Tauri shell loads the `apps/web` SPA and exposes native capabilities through
 Tauri plugins instead of a Node backend:
 
 - **File I/O** — characters, settings, generated output, and the Poses-folder
-  scan go through `@tauri-apps/plugin-fs`; the native FBX picker uses
+  scan go through `@tauri-apps/plugin-fs`; the native file/folder pickers use
   `@tauri-apps/plugin-dialog`. The generation itself (`packages/rom`) is pure
   TypeScript and runs in the webview.
-- Character data lives in the per-user app-data folder (`appLocalDataDir()`), so
-  it survives app updates.
+- **Two storage roots:** app-owned data (settings, avatars) lives in the per-user
+  app-data folder (`appLocalDataDir()`), so it survives app updates; your
+  **characters** live in a separate **library folder** you choose and back up.
 
 The native boundary is concentrated in `apps/web/src/lib/rom/{api,storage}.ts`
 and `lib/desktop.ts`, which keeps the SPA runnable in a plain browser (and lets
@@ -101,11 +106,14 @@ signing-key, and branch-policy setup: see `docs/devops.md` and `CONTRIBUTING.md`
 
 ## Data & sharing — share definitions, not assets
 
-Character definitions live as one JSON file per character in the app's per-user
-data folder (`appLocalDataDir()`). Generated artifacts (`FBM` JSON/CSV, PoseAsset
-CSV, art-direction JSON) and these definitions are **recipes**: they reference Daz assets by morph
-name, frame number and bone — they do **not** contain any licensed content. That
-makes them freely shareable; bring your own licensed assets.
+You pick a **character library folder** (kept outside the app's private data, so
+you can put it wherever you back up). Each character is a folder there —
+`<library>/<Name>/` — holding its definition `<Name>.json` plus its generated
+files, all named after the character and organizable into subfolders. Those
+generated artifacts (`FBM` JSON/CSV, PoseAsset CSV, art-direction JSON) and the
+definitions are **recipes**: they reference Daz assets by morph name, frame
+number and bone — they do **not** contain any licensed content. That makes them
+freely shareable; bring your own licensed assets.
 
 > **Do not share full Houdini projects or export folders.** Those contain baked
 > licensed content (Alembic/FBX geometry, copied textures) and redistributing

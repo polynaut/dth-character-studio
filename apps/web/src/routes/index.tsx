@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
+import { FileJson, FolderOpen, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { Button } from '#/components/ui/button.tsx'
@@ -16,20 +16,26 @@ import {
   createCharacter,
   deleteCharacter,
   fetchCharacters,
+  fetchSettings,
   importCharacterFromJson,
+  saveSettings,
 } from '#/lib/rom/api.ts'
+import { pickFolder } from '#/lib/desktop.ts'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { Gender, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/')({
-  loader: () => fetchCharacters(),
+  loader: async () => {
+    const [characters, settings] = await Promise.all([fetchCharacters(), fetchSettings()])
+    return { characters, settings }
+  },
   component: CharactersPage,
 })
 
 function CharactersPage() {
-  const characters = Route.useLoaderData()
+  const { characters, settings } = Route.useLoaderData()
   const router = useRouter()
   const [name, setName] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
@@ -37,6 +43,23 @@ function CharactersPage() {
   const [importPath, setImportPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  const hasLibrary = Boolean(settings.characterLibraryFolder)
+
+  async function onChooseLibrary() {
+    const picked = await pickFolder('Choose where to store your characters')
+    if (!picked) return
+    setBusy(true)
+    setError('')
+    try {
+      await saveSettings({ data: { ...settings, characterLibraryFolder: picked } })
+      await router.invalidate()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function onCreate() {
     if (!name.trim()) return
@@ -83,6 +106,32 @@ function CharactersPage() {
         </Link>
       </header>
 
+      {hasLibrary && (
+        <p className="mb-6 text-xs text-muted-foreground">
+          Library:{' '}
+          <code className="rounded bg-muted px-1.5 py-0.5">{settings.characterLibraryFolder}</code>{' '}
+          ·{' '}
+          <Link to="/settings" className="underline hover:text-foreground">
+            change
+          </Link>
+        </p>
+      )}
+
+      {!hasLibrary ? (
+        <div className="flex flex-col items-start gap-3 rounded-lg border bg-card p-6">
+          <h2 className="text-lg font-semibold">Choose your character library</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Pick a folder where your characters will live — one folder per character, holding its
+            definition and its generated files. Keep it somewhere you back up; settings and avatars
+            stay in the app's private folder. You can change this later in Settings.
+          </p>
+          <Button onClick={onChooseLibrary} disabled={busy}>
+            <FolderOpen /> Choose folder…
+          </Button>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      ) : (
+        <>
       <div className="mb-10 space-y-3 rounded-lg border bg-card p-4">
         <div className="flex items-end gap-3">
           <div className="flex-1">
@@ -181,6 +230,8 @@ function CharactersPage() {
             </li>
           ))}
         </ul>
+      )}
+        </>
       )}
     </main>
   )

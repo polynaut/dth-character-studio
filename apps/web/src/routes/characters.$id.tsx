@@ -1,7 +1,17 @@
 import { useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { z } from 'zod'
-import { ArrowLeft, Download, FileCog, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Download,
+  FileCog,
+  FolderInput,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+  X,
+} from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
@@ -22,11 +32,14 @@ import {
   fetchPoseAssets,
   fetchSettings,
   generateCharacterFiles,
+  getCharacterPath,
+  moveCharacter,
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
+import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { GeneratedFile } from '@dth/rom'
 import type { Character, GenesisVersion, TargetSkeleton } from '@dth/rom'
 
@@ -34,8 +47,12 @@ export const Route = createFileRoute('/characters/$id')({
   loader: async ({ params }) => {
     const character = await fetchCharacter({ data: { id: params.id } })
     if (!character) throw notFound()
-    const [settings, catalog] = await Promise.all([fetchSettings(), fetchPoseAssets()])
-    return { character, settings, catalog }
+    const [settings, catalog, location] = await Promise.all([
+      fetchSettings(),
+      fetchPoseAssets(),
+      getCharacterPath({ data: { id: params.id } }),
+    ])
+    return { character, settings, catalog, location }
   },
   component: CharacterPage,
 })
@@ -248,8 +265,72 @@ function ImageDialog({
   )
 }
 
+/** Shows where a character's folder lives and lets the user move it within the library. */
+function StorageLocation({ id, location }: { id: string; location: CharacterLocation | null }) {
+  const router = useRouter()
+  const [relFolder, setRelFolder] = useState(location?.relFolder ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  if (!location) return null
+  const moved = relFolder.trim() !== location.relFolder
+
+  async function onMove() {
+    setBusy(true)
+    setError('')
+    try {
+      await moveCharacter({ data: { id, relFolder: relFolder.trim() } })
+      await router.invalidate()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="mb-8 rounded-lg border bg-card p-5">
+      <h2 className="mb-1 text-xl font-semibold">Storage location</h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        This character's folder — its definition and all generated files — lives in your library.
+      </p>
+      <p className="mb-4">
+        <code className="rounded bg-muted px-1.5 py-0.5 text-xs break-all">
+          {location.definitionAbs}
+        </code>
+      </p>
+      <Label className="mb-1">Folder, relative to the library</Label>
+      <div className="flex items-center gap-2">
+        <span
+          className="shrink-0 rounded-md border bg-muted px-2 py-2 text-xs text-muted-foreground"
+          title={location.libraryFolder}
+        >
+          library /
+        </span>
+        <Input
+          value={relFolder}
+          placeholder="Electra"
+          onChange={(e) => setRelFolder(e.target.value)}
+        />
+        <Button
+          variant="outline"
+          className="shrink-0"
+          onClick={onMove}
+          disabled={busy || !moved || !relFolder.trim()}
+        >
+          <FolderInput /> Move
+        </Button>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Use subfolders to organise, e.g. <code>Clients/Acme/Electra</code>. Must stay inside the
+        library.
+      </p>
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+    </section>
+  )
+}
+
 function CharacterPage() {
-  const { character: initial, settings, catalog } = Route.useLoaderData()
+  const { character: initial, settings, catalog, location } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
   const [character, setCharacter] = useState<Character>(initial)
@@ -550,13 +631,18 @@ function CharacterPage() {
         />
       </section>
 
+      <StorageLocation id={character.id} location={location} />
+
       <section className="rounded-lg border bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Generate</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Daz files are written to{' '}
-          <code className="rounded bg-muted px-1.5 py-0.5">
-            {settings.dazScriptsFolder || "the app's out folder only"}
-          </code>
+          Files are written into this character's folder
+          {settings.dazScriptsFolder ? (
+            <>
+              {' '}and the Daz files also to{' '}
+              <code className="rounded bg-muted px-1.5 py-0.5">{settings.dazScriptsFolder}</code>
+            </>
+          ) : null}
           {' · '}preset catalog from{' '}
           <code className="rounded bg-muted px-1.5 py-0.5">
             {catalog.folder || 'not configured'}

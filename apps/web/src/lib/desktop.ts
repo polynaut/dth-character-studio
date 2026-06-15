@@ -13,3 +13,12 @@ export async function pickFbxPath(): Promise<string> {
   })
   return typeof selected === 'string' ? selected : ''
 }
+
+/**
+ * Native folder picker via the Tauri dialog plugin. Returns the picked absolute
+ * path, or '' if the user cancelled.
+ */
+export async function pickFolder(title: string): Promise<string> {
+  const selected = await open({ multiple: false, directory: true, title })
+  return typeof selected === 'string' ? selected : ''
+}

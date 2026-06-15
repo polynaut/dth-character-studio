@@ -8,7 +8,6 @@ import { dataPath } from './storage'
 import { isExternalImage } from './image'
 import {
   characterSchema,
-  characterSlug,
   genderSchema,
   genesisVersionSchema,
   morphSchema,
@@ -18,6 +17,8 @@ import {
 
 import type { Character } from '@dth/rom'
 import type { StudioSettings } from './storage'
+
+export type { CharacterLocation } from './storage'
 
 /**
  * Client data layer — the only bridge between the React UI and the filesystem.
@@ -185,17 +186,22 @@ export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listP
   return storage.listPoseAssets()
 }
 
-const settingsInput = z.object({ dazScriptsFolder: z.string(), dthPosesFolder: z.string() })
+const settingsInput = z.object({
+  characterLibraryFolder: z.string(),
+  dazScriptsFolder: z.string(),
+  dthPosesFolder: z.string(),
+})
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
   return storage.saveSettings(settingsInput.parse(data))
 }
 
 /**
- * Compiles the character into all DTH artifacts, writes them to
- * <data>/out/<slug>/ and — when a DazToHue-Scripts folder is configured —
- * writes the Daz-side files there too, runnable next to DthWorkflow.dsa.
- * Returns the files so the UI can offer downloads as well.
+ * Compiles the character into all DTH artifacts, writes them into the
+ * character's own folder in the library (next to its definition) and — when a
+ * DazToHue-Scripts folder is configured — writes the Daz-side files there too,
+ * runnable next to DthWorkflow.dsa. Returns the files so the UI can offer
+ * downloads as well.
  */
 export async function generateCharacterFiles({ data }: { data: unknown }): Promise<{
   outDir: string
@@ -211,7 +217,8 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const catalog = await storage.listPoseAssets()
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
   const files = generateAll(character, romPaths)
-  const outDir = await storage.writeGeneratedFiles(characterSlug(character), files)
+  const outDir = await storage.getCharacterFolder(id)
+  await storage.writeFilesToFolder(outDir, files)
 
   const settings = await storage.getSettings()
   let dazScriptsFolder: string | null = null
@@ -228,4 +235,25 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     }
   }
   return { outDir, files, dazScriptsFolder, dazScriptsError }
+}
+
+/** Where a character's files live (absolute + library-relative), for the editor. */
+export async function getCharacterPath({
+  data,
+}: {
+  data: unknown
+}): Promise<storage.CharacterLocation | null> {
+  return storage.getCharacterPath(idInput.parse(data).id)
+}
+
+const moveInput = z.object({ id: z.string().min(1), relFolder: z.string().min(1) })
+
+/** Move a character's whole folder to a new path relative to the library root. */
+export async function moveCharacter({
+  data,
+}: {
+  data: unknown
+}): Promise<storage.CharacterLocation> {
+  const { id, relFolder } = moveInput.parse(data)
+  return storage.moveCharacter(id, relFolder)
 }
