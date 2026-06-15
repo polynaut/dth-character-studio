@@ -480,7 +480,7 @@ function CharacterPage() {
           <Avatar
             image={character.image}
             name={character.name}
-            className="aspect-[3/4] w-[213px] rounded-lg bg-neutral-300"
+            className="aspect-[3/4] w-[170px] rounded-lg bg-neutral-300"
             fallbackClassName="text-6xl"
           />
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
