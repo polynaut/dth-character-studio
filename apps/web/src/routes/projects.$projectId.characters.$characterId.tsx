@@ -15,6 +15,7 @@ import {
 
 import { Avatar } from '#/components/avatar.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
+import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
@@ -480,11 +481,11 @@ function CharacterPage() {
             {countPoses(character.sections)} custom ROM frames
           </p>
           {location && (
-            <p className="mt-1.5 text-xs" title={defAbs}>
-              <code className="rounded bg-muted px-1.5 py-0.5 break-all">
+            <p className="mt-1.5 text-xs">
+              <PathCode path={defAbs}>
                 <span className="text-muted-foreground/60">{libRoot}</span>
                 <span className="text-foreground/80">{defSuffix}</span>
-              </code>
+              </PathCode>
             </p>
           )}
         </div>
@@ -719,15 +720,15 @@ function CharacterPage() {
           {settings.dazScriptsFolder ? (
             <>
               {' '}and the Daz files also to{' '}
-              <code className="rounded bg-muted px-1.5 py-0.5">
-                {displayPath(settings.dazScriptsFolder)}
-              </code>
+              <PathCode path={displayPath(settings.dazScriptsFolder)} />
             </>
           ) : null}
           {' · '}preset catalog from{' '}
-          <code className="rounded bg-muted px-1.5 py-0.5">
-            {displayPath(catalog.folder) || 'not configured'}
-          </code>
+          {displayPath(catalog.folder) ? (
+            <PathCode path={displayPath(catalog.folder)} />
+          ) : (
+            <code className="rounded bg-muted px-1.5 py-0.5">not configured</code>
+          )}
           {' — '}
           <Link to="/settings" className="underline hover:text-foreground">
             change in Settings
@@ -757,15 +758,12 @@ function CharacterPage() {
       {generated && (
           <>
             <p className="mb-1 text-sm text-muted-foreground">
-              Written to{' '}
-              <code className="rounded bg-muted px-1.5 py-0.5">{displayPath(generated.outDir)}</code>
+              Written to <PathCode path={displayPath(generated.outDir)} />
             </p>
             {generated.dazScriptsFolder && (
               <p className="mb-1 text-sm text-muted-foreground">
                 Daz files also written to{' '}
-                <code className="rounded bg-muted px-1.5 py-0.5">
-                  {displayPath(generated.dazScriptsFolder)}
-                </code>
+                <PathCode path={displayPath(generated.dazScriptsFolder)} />
               </p>
             )}
             {generated.dazScriptsError && (

@@ -13,6 +13,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
+import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
@@ -112,11 +113,7 @@ function ProjectsPage() {
       ) : (
         <>
           <p className="mb-6 text-xs text-muted-foreground">
-            DAZ 3D Library:{' '}
-            <code className="rounded bg-muted px-1.5 py-0.5 break-all">
-              {displayPath(settings.dazLibraryFolder)}
-            </code>{' '}
-            ·{' '}
+            DAZ 3D Library: <PathCode path={displayPath(settings.dazLibraryFolder)} /> ·{' '}
             <Link to="/settings" className="underline hover:text-foreground">
               change
             </Link>
