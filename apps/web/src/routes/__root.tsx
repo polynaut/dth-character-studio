@@ -1,6 +1,7 @@
 import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { Toaster } from 'sonner'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -18,6 +19,7 @@ function RootComponent() {
   return (
     <>
       <Outlet />
+      <Toaster theme="dark" position="bottom-right" richColors closeButton />
       {/* Dev-only: never ship the devtools button to installed/end-user builds. */}
       {import.meta.env.DEV && (
         <TanStackDevtools

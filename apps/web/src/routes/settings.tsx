@@ -8,6 +8,7 @@ import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { fetchPoseAssets, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
+import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
 import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
@@ -128,6 +129,9 @@ function SettingsPage() {
     try {
       await saveSettings({ data: settings })
       await router.invalidate()
+      toast.success('Settings saved')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -137,7 +141,10 @@ function SettingsPage() {
     setBusy(true)
     try {
       if (dirty) await onSave()
-      setScan(await fetchPoseAssets())
+      const result = await fetchPoseAssets()
+      setScan(result)
+      if (result.error) toast.error(result.error)
+      else toast.success(`Found ${result.assets.length} pose presets`)
     } finally {
       setBusy(false)
     }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 
 /**
  * A page title that becomes an inline input on click (pencil appears on hover).
@@ -38,8 +39,9 @@ export function EditableTitle({
     setBusy(true)
     try {
       await onSave(next)
-    } catch {
+    } catch (e) {
       setValue(name)
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
       setEditing(false)

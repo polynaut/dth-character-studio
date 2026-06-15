@@ -12,6 +12,7 @@ import {
   saveSettings,
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
   loader: async () => {
@@ -38,6 +39,7 @@ function ProjectsPage() {
     try {
       await saveSettings({ data: { ...settings, dazLibraryFolder: picked } })
       await router.invalidate()
+      toast.success('DAZ 3D Library set')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -55,6 +57,7 @@ function ProjectsPage() {
       const project = await createProject({ data: { name: name.trim(), path: picked } })
       setName('')
       await router.invalidate()
+      toast.success(`Project “${project.name}” created`)
       await router.navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -72,6 +75,7 @@ function ProjectsPage() {
       return
     await deleteProject({ data: { id } })
     await router.invalidate()
+    toast.success(`Removed “${projectName}”`)
   }
 
   return (

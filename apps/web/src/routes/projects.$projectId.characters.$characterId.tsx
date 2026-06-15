@@ -15,6 +15,7 @@ import {
 
 import { Avatar } from '#/components/avatar.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
+import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -297,6 +298,7 @@ function StorageLocation({
     try {
       await moveCharacter({ data: { projectId, id, relPath: relPath.trim() } })
       await router.invalidate()
+      toast.success(`Moved to ${relPath.trim()}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -365,6 +367,7 @@ function CharacterPage() {
     setCharacter(updated)
     await saveCharacter({ data: { projectId, character: updated } })
     await router.invalidate()
+    toast.success(`Renamed to “${next}”`)
   }
 
   // Saving also (re)generates all DTH files in the same step.
@@ -375,6 +378,12 @@ function CharacterPage() {
       const result = await generateCharacterFiles({ data: { projectId, id: character.id } })
       setGenerated(result)
       await router.invalidate()
+      toast.success(`Saved “${character.name}” and generated ${result.files.length} files`)
+      if (result.dazScriptsError) {
+        toast.warning(`Couldn't write to the DazToHue-Scripts folder: ${result.dazScriptsError}`)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
@@ -708,6 +717,7 @@ function CharacterPage() {
             setCharacter(updated)
             await saveCharacter({ data: { projectId, character: updated } })
             await router.invalidate()
+            toast.success('Image updated')
           }}
           onClose={() => setImageDialogOpen(false)}
         />

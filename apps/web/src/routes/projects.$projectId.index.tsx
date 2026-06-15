@@ -4,6 +4,7 @@ import { ArrowLeft, FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 
 
 import { Avatar } from '#/components/avatar.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
+import { toast } from 'sonner'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import {
@@ -62,6 +63,7 @@ function ProjectCharactersPage() {
       setName('')
       setImportPath('')
       await router.invalidate()
+      toast.success(`Created “${character.name}”`)
       await router.navigate({
         to: '/projects/$projectId/characters/$characterId',
         params: { projectId, characterId: character.id },
@@ -77,6 +79,7 @@ function ProjectCharactersPage() {
     if (!window.confirm(`Delete character "${characterName}"? This cannot be undone.`)) return
     await deleteCharacter({ data: { projectId, id } })
     await router.invalidate()
+    toast.success(`Deleted “${characterName}”`)
   }
 
   return (
@@ -110,6 +113,7 @@ function ProjectCharactersPage() {
             onSave={async (next) => {
               await updateProject({ data: { id: projectId, name: next } })
               await router.invalidate()
+              toast.success('Project renamed')
             }}
           />
           <p className="mt-1 text-xs text-muted-foreground">
