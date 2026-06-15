@@ -71,20 +71,35 @@ export function EditableTitle({
     )
   }
 
+  function startEdit() {
+    setValue(name)
+    setEditing(true)
+  }
+
   return (
-    <div className="group flex items-center gap-2">
-      <h1 className="text-3xl font-bold">{name}</h1>
-      <button
-        type="button"
+    <span className="group/title relative inline-flex max-w-full">
+      <h1
+        role="button"
+        tabIndex={0}
         title="Rename"
-        onClick={() => {
-          setValue(name)
-          setEditing(true)
+        aria-label={`Rename — ${name}`}
+        onClick={startEdit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            startEdit()
+          }
         }}
-        className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+        className="cursor-pointer text-3xl font-bold"
       >
-        <Pencil className="size-4" />
-      </button>
-    </div>
+        {name}
+      </h1>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border bg-card p-1 shadow-sm group-hover/title:flex"
+      >
+        <Pencil className="size-3 text-muted-foreground" />
+      </span>
+    </span>
   )
 }
