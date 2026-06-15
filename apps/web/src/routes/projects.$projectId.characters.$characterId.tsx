@@ -283,6 +283,8 @@ function StorageLocation({
   const [error, setError] = useState('')
   if (!location) return null
   const moved = relFolder.trim() !== location.relFolder
+  const fileName = location.definitionAbs.split(/[\\/]/).pop() ?? ''
+  const pathInProject = location.relFolder ? `${location.relFolder}/${fileName}` : fileName
 
   async function onMove() {
     setBusy(true)
@@ -308,10 +310,13 @@ function StorageLocation({
       <div className="space-y-4">
         <div>
           <div className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Full path
+            Path in project
           </div>
-          <code className="block rounded-md bg-muted px-2.5 py-2 text-xs break-all">
-            {location.definitionAbs}
+          <code
+            className="block rounded-md bg-muted px-2.5 py-2 text-xs break-all"
+            title={location.definitionAbs}
+          >
+            {pathInProject}
           </code>
         </div>
 
