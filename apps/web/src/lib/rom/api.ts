@@ -300,15 +300,15 @@ export async function getCharacterPath({
 const moveInput = z.object({
   projectId: z.string().min(1),
   id: z.string().min(1),
-  relFolder: z.string().min(1),
+  relPath: z.string().min(1),
 })
 
-/** Move a character's whole folder to a new path relative to the library root. */
+/** Move/rename a character by its definition path relative to the project library. */
 export async function moveCharacter({
   data,
 }: {
   data: unknown
 }): Promise<storage.CharacterLocation> {
-  const { projectId, id, relFolder } = moveInput.parse(data)
-  return storage.moveCharacter(await projectPath(projectId), id, relFolder)
+  const { projectId, id, relPath } = moveInput.parse(data)
+  return storage.moveCharacter(await projectPath(projectId), id, relPath)
 }

@@ -278,19 +278,24 @@ function StorageLocation({
   location: CharacterLocation | null
 }) {
   const router = useRouter()
-  const [relFolder, setRelFolder] = useState(location?.relFolder ?? '')
+  const [relPath, setRelPath] = useState(() => {
+    if (!location) return ''
+    const fn = location.definitionAbs.split(/[\\/]/).pop() ?? ''
+    return location.relFolder ? `${location.relFolder}/${fn}` : fn
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   if (!location) return null
-  const moved = relFolder.trim() !== location.relFolder
   const fileName = location.definitionAbs.split(/[\\/]/).pop() ?? ''
-  const pathInProject = location.relFolder ? `${location.relFolder}/${fileName}` : fileName
+  const currentPath = location.relFolder ? `${location.relFolder}/${fileName}` : fileName
+  const moved = relPath.trim() !== currentPath
 
   async function onMove() {
+    if (busy || !moved || !relPath.trim()) return
     setBusy(true)
     setError('')
     try {
-      await moveCharacter({ data: { projectId, id, relFolder: relFolder.trim() } })
+      await moveCharacter({ data: { projectId, id, relPath: relPath.trim() } })
       await router.invalidate()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -307,49 +312,42 @@ function StorageLocation({
         project library.
       </p>
 
-      <div className="space-y-4">
-        <div>
-          <div className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Path in project
-          </div>
-          <code
-            className="block rounded-md bg-muted px-2.5 py-2 text-xs break-all"
-            title={location.definitionAbs}
-          >
-            {pathInProject}
-          </code>
-        </div>
-
-        <div>
-          <Label className="mb-1 block">Folder in library</Label>
-          <div className="flex items-center gap-2">
-            <span
-              className="shrink-0 rounded-md border bg-muted px-2.5 py-2 font-mono text-xs text-muted-foreground"
-              title={location.libraryFolder}
-            >
-              library /
-            </span>
-            <Input
-              value={relFolder}
-              placeholder="ElectraTest"
-              onChange={(e) => setRelFolder(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              className="shrink-0"
-              onClick={onMove}
-              disabled={busy || !moved || !relFolder.trim()}
-            >
-              <FolderInput /> Move
-            </Button>
-          </div>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Rename the folder or nest it in subfolders (e.g.{' '}
-            <code className="rounded bg-muted px-1 py-0.5">Clients/Acme/Electra</code>) to keep
-            things organised — it must stay inside the library.
-          </p>
-        </div>
+      <Label className="mb-1 block">Path in project</Label>
+      <div className="flex items-center gap-2">
+        <span
+          className="shrink-0 rounded-md border bg-muted px-2.5 py-2 font-mono text-xs text-muted-foreground"
+          title={location.libraryFolder}
+        >
+          library /
+        </span>
+        <Input
+          value={relPath}
+          placeholder="ElectraTest/ElectraTest.json"
+          onChange={(e) => setRelPath(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void onMove()
+            }
+          }}
+        />
+        <Button
+          variant="outline"
+          className="shrink-0"
+          onClick={onMove}
+          disabled={busy || !moved || !relPath.trim()}
+        >
+          <FolderInput /> Move
+        </Button>
       </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        Edit to rename or reorganise — e.g.{' '}
+        <code className="rounded bg-muted px-1 py-0.5">
+          ElectraTest/OutfitDefault/ElectraTest.json
+        </code>
+        . Must stay inside the library and end in{' '}
+        <code className="rounded bg-muted px-1 py-0.5">.json</code>.
+      </p>
 
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
     </section>

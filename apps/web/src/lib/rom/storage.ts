@@ -278,26 +278,60 @@ export async function getCharacterPath(lib: string, id: string): Promise<Charact
   }
 }
 
-/** Move a character's whole folder to a new path relative to the library root. */
+/**
+ * Move/rename a character by its definition path relative to the project library
+ * (e.g. `Electra/Electra.json` → `Electra/OutfitDefault/Electra.json`). Moves the
+ * whole folder to the new location and renames the definition to the new
+ * filename. Collisions throw (the path is user-chosen — we don't silently rename
+ * it, unlike create/title-rename which auto-suffix with ` (2)`).
+ */
 export async function moveCharacter(
   lib: string,
   id: string,
-  relFolder: string,
+  relPath: string,
 ): Promise<CharacterLocation> {
   if (!lib) throw new Error('No project library configured.')
   const entry = await findEntry(lib, id)
   if (!entry) throw new Error(`Character ${id} not found`)
-  const cleanRel = normalizeRelPath(relFolder) // throws on invalid / escaping paths
-  const newFolderAbs = join(lib, cleanRel)
-  if (newFolderAbs !== entry.folderAbs) {
-    if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${cleanRel}".`)
-    await mkdir(dirname(newFolderAbs), { recursive: true })
-    await rename(entry.folderAbs, newFolderAbs)
+
+  const clean = normalizeRelPath(relPath) // separators, no '..' / absolute / illegal chars
+  if (!/\.json$/i.test(clean)) throw new Error('The path must end in ".json".')
+  const slash = clean.lastIndexOf('/')
+  if (slash <= 0) throw new Error('Keep the character in a folder, e.g. "Electra/Electra.json".')
+  const newFolderRel = clean.slice(0, slash)
+  const newFileName = clean.slice(slash + 1)
+  const newFolderAbs = join(lib, newFolderRel)
+  const newDefAbs = join(newFolderAbs, newFileName)
+  const oldDefName = basename(entry.definitionAbs)
+
+  if (newDefAbs !== entry.definitionAbs) {
+    if (newFolderAbs === entry.folderAbs) {
+      // Same folder — just renaming the definition file.
+      if (await exists(newDefAbs)) throw new Error(`A file already exists at "${clean}".`)
+      await rename(entry.definitionAbs, newDefAbs)
+    } else {
+      // Moving the whole folder to a new location.
+      if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${newFolderRel}".`)
+      await mkdir(dirname(newFolderAbs), { recursive: true })
+      if ((newFolderAbs + '/').startsWith(entry.folderAbs + '/')) {
+        // Destination is inside the source — a dir can't be renamed into its own
+        // descendant, so relocate via a temporary slot in the library root.
+        const tmp = join(lib, '.dth-moving')
+        if (await exists(tmp)) await remove(tmp, { recursive: true })
+        await rename(entry.folderAbs, tmp)
+        await mkdir(dirname(newFolderAbs), { recursive: true })
+        await rename(tmp, newFolderAbs)
+      } else {
+        await rename(entry.folderAbs, newFolderAbs)
+      }
+      if (newFileName !== oldDefName) await rename(join(newFolderAbs, oldDefName), newDefAbs)
+    }
   }
+
   return {
-    definitionAbs: join(newFolderAbs, basename(entry.definitionAbs)),
+    definitionAbs: newDefAbs,
     folderAbs: newFolderAbs,
-    relFolder: cleanRel,
+    relFolder: newFolderRel,
     libraryFolder: lib,
   }
 }
