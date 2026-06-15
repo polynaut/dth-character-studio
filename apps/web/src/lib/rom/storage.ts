@@ -345,6 +345,17 @@ export async function writeFilesToFolder(
   await Promise.all(files.map((file) => writeTextFile(join(folder, file.fileName), file.content)))
 }
 
+/** Remove the named files from a folder if present (no error when missing). */
+export async function removeFilesFromFolder(
+  folder: string,
+  fileNames: Array<string>,
+): Promise<void> {
+  for (const name of fileNames) {
+    const path = join(folder, name)
+    if (await exists(path)) await remove(path)
+  }
+}
+
 /**
  * The DTH runtime files the generated character script `include()`s. Copied from
  * the DazToHue-Scripts checkout into the studio's shared scripts folder, where

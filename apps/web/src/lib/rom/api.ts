@@ -2,7 +2,7 @@ import { mkdir, readDir, readTextFile, remove, stat, writeFile } from '@tauri-ap
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import { generateAll, resolveRomPaths } from '@dth/rom'
+import { characterScriptName, generateAll, resolveRomPaths } from '@dth/rom'
 import * as storage from './storage'
 import { dataPath } from './storage'
 import { isExternalImage } from './image'
@@ -83,6 +83,9 @@ export async function deleteProject({ data }: { data: unknown }): Promise<void> 
 // --- Characters (scoped to a project) -------------------------------------
 
 const charScopeInput = z.object({ projectId: z.string().min(1), id: z.string().min(1) })
+// Generate also accepts the character's previous name so a rename can clean up
+// the old-named script left behind in the shared scripts folder.
+const generateInput = charScopeInput.extend({ previousName: z.string().optional() })
 
 export async function fetchCharacters({ data }: { data: unknown }): Promise<Array<Character>> {
   return storage.listCharacters(await projectPath(projectIdInput.parse(data).projectId))
@@ -270,7 +273,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   scriptsDir: string | null
   scriptsError: string | null
 }> {
-  const { projectId, id } = charScopeInput.parse(data)
+  const { projectId, id, previousName } = generateInput.parse(data)
   const lib = await projectPath(projectId)
   const character = await storage.getCharacter(lib, id)
   if (!character) throw new Error(`Character ${id} not found`)
@@ -297,6 +300,14 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     try {
       await storage.copyRuntimeFiles(settings.dazScriptsFolder, dir)
       await storage.writeFilesToFolder(dir, dazFiles)
+      // After a rename the script's filename (<Name>_<Genesis>.dsa) changes —
+      // remove the stale previous-named one left in the shared folder.
+      if (previousName) {
+        const oldBase = characterScriptName({ ...character, name: previousName })
+        if (oldBase !== characterScriptName(character)) {
+          await storage.removeFilesFromFolder(dir, [`${oldBase}.dsa`])
+        }
+      }
       scriptsDir = dir
     } catch (error) {
       scriptsError = error instanceof Error ? error.message : String(error)

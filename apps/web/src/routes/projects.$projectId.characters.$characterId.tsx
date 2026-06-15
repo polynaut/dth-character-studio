@@ -385,13 +385,21 @@ function CharacterPage() {
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button.
   async function onRenameCharacter(next: string) {
+    const previousName = character.name
     const updated = { ...character, name: next }
     setCharacter(updated)
     const saved = await saveCharacter({ data: { projectId, character: updated } })
     setCharacter(saved)
     setBaseline(saved)
+    // Renaming moves the character folder + renames the generated script, so
+    // regenerate at the new name and drop the old-named script in the shared folder.
+    const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
+    setGenerated(result)
     void router.invalidate()
     toast.success(`Renamed to “${next}”`)
+    if (result.scriptsError) {
+      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
+    }
   }
 
   // Saving also (re)generates all DTH files in the same step.
