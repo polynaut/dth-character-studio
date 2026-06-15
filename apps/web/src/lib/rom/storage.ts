@@ -347,10 +347,12 @@ export async function writeFilesToFolder(
 
 /**
  * The DTH runtime files the generated character script `include()`s. Copied from
- * the DazToHue-Scripts checkout into the studio's shared scripts folder.
- * DthWorkflow.dsa pulls in the other three, so all four must sit together.
+ * the DazToHue-Scripts checkout into the studio's shared scripts folder, where
+ * they're dot-prefixed (hidden) so the user-facing character scripts stand out.
+ * DthWorkflow.dsa pulls in the other two (ScanKeyFrames is now merged into it),
+ * so all three must sit together.
  */
-const RUNTIME_FILES = ['DthUtils.dsa', 'DthOptions.dsa', 'ScanKeyFrames.dsa', 'DthWorkflow.dsa']
+const RUNTIME_FILES = ['DthUtils.dsa', 'DthOptions.dsa', 'DthWorkflow.dsa']
 
 /** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install folder. */
 export function studioScriptsDir(dazLibraryFolder: string): string {
@@ -359,8 +361,10 @@ export function studioScriptsDir(dazLibraryFolder: string): string {
 
 /**
  * Install the DTH runtime files (from the DazToHue-Scripts checkout) into
- * `destDir`, creating it if missing. Overwrites so the runtime stays in sync as
- * the scripts evolve — they live once in the shared folder, not per character.
+ * `destDir`, creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
+ * etc.) so they read as hidden, and the sibling `include()` references inside
+ * them are rewritten to the dotted names so resolution still works. Overwrites
+ * so the runtime stays in sync as the scripts evolve.
  */
 export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
   if (!srcDir) {
@@ -371,7 +375,17 @@ export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise
   for (const name of RUNTIME_FILES) {
     const src = join(srcDir, name)
     if (!(await exists(src))) throw new Error(`Missing runtime file in DazToHue-Scripts: ${name}`)
-    await writeTextFile(join(destDir, name), await readTextFile(src))
+    let content = await readTextFile(src)
+    for (const dep of RUNTIME_FILES) {
+      content = content.split(`"${dep}"`).join(`".${dep}"`)
+    }
+    await writeTextFile(join(destDir, `.${name}`), content)
+  }
+  // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)
+  // the studio installed before runtime files were dot-prefixed.
+  for (const legacy of [...RUNTIME_FILES, 'ScanKeyFrames.dsa']) {
+    const old = join(destDir, legacy)
+    if (await exists(old)) await remove(old)
   }
 }
 
