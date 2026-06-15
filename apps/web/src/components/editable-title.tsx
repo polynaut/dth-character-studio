@@ -66,7 +66,10 @@ export function EditableTitle({
           }
         }}
         onBlur={() => void commit()}
-        className="w-[26rem] max-w-full rounded-md border bg-background px-2 py-1 text-3xl font-bold outline-none focus:border-primary"
+        // No vertical padding + negative margins that absorb the border/h-padding,
+        // so the input occupies exactly the <h1> text box and editing causes no
+        // layout shift.
+        className="-mx-2 -my-px w-[26rem] max-w-full rounded-md border bg-background px-2 py-0 text-3xl font-bold outline-none focus:border-primary"
       />
     )
   }
