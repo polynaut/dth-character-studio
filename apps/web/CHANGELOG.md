@@ -1,5 +1,14 @@
 # @dth/web
 
+## 0.3.2
+
+### Patch Changes
+
+- [#13](https://github.com/polynaut/dth-character-studio/pull/13) [`26df863`](https://github.com/polynaut/dth-character-studio/commit/26df8634c08d082818fc4fce02abad46fde405a0) Thanks [@polynaut](https://github.com/polynaut)! - Rename a character inline from its page — hover the name, click the pencil, edit, and Enter or click away to save (the same interaction as renaming a project). Extracts a shared `EditableTitle` used by both.
+
+- Updated dependencies []:
+  - @dth/rom@0.3.2
+
 ## 0.3.1
 
 ### Patch Changes
