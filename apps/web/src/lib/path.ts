@@ -6,7 +6,9 @@ import { sep } from '@tauri-apps/api/path'
 // runtime (e.g. `pnpm dev:web` in a plain browser) it isn't available, so we
 // fall back to `/`.
 let cachedSep: string | null = null
-function osSep(): string {
+
+/** The OS path separator (`\` on Windows, `/` elsewhere), resolved lazily. */
+export function pathSeparator(): string {
   if (cachedSep == null) cachedSep = isTauri() ? sep() : '/'
   return cachedSep
 }
@@ -21,5 +23,5 @@ function osSep(): string {
  */
 export function displayPath(path: string): string {
   if (!path) return path
-  return path.replace(/[/\\]/g, osSep())
+  return path.replace(/[/\\]/g, pathSeparator())
 }

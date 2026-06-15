@@ -40,7 +40,7 @@ import {
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
-import { displayPath } from '#/lib/path.ts'
+import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -325,7 +325,7 @@ function StorageLocation({
           className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground"
           title={displayPath(location.libraryFolder)}
         >
-          {displayPath('/project/')}
+          {`${pathSeparator()}project${pathSeparator()}`}
         </span>
         <Input
           value={relPath}
