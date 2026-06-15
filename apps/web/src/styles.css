@@ -20,8 +20,8 @@
   --card-foreground: #d4d4d4;
   --popover: #383838;
   --popover-foreground: #d4d4d4;
-  --primary: #2ec4b6; /* Daz teal-green accent (checks, focus, primary action) */
-  --primary-foreground: #0c2926; /* dark teal text on the accent */
+  --primary: #fe5c01; /* logo orange — accent / primary action / focus */
+  --primary-foreground: #2b1200; /* dark warm text on the orange (AA-legible) */
   --secondary: #4a4a4a; /* raised gray buttons */
   --secondary-foreground: #e6e6e6;
   --muted: #2a2a2a; /* recessed surfaces (inputs, code) */
@@ -32,8 +32,8 @@
   --destructive-foreground: #fbe9e9;
   --border: #484848; /* subtle separators */
   --input: #4a4a4a; /* input field borders */
-  --ring: #2ec4b6; /* teal focus ring, like Daz */
-  --chart-1: #2ec4b6;
+  --ring: #fe5c01; /* orange focus ring */
+  --chart-1: #fe5c01;
   --chart-2: #5aa9e6;
   --chart-3: #e6b85a;
   --chart-4: #c98bdb;
@@ -41,12 +41,12 @@
   --radius: 0.4rem; /* tighter corners — closer to Daz's squared UI */
   --sidebar: #333333;
   --sidebar-foreground: #d4d4d4;
-  --sidebar-primary: #2ec4b6;
-  --sidebar-primary-foreground: #0c2926;
+  --sidebar-primary: #fe5c01;
+  --sidebar-primary-foreground: #2b1200;
   --sidebar-accent: #414141;
   --sidebar-accent-foreground: #ededed;
   --sidebar-border: #484848;
-  --sidebar-ring: #2ec4b6;
+  --sidebar-ring: #fe5c01;
 }
 
 @theme inline {
