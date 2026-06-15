@@ -3,9 +3,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { RomSections } from './rom-sections'
-import { defaultSections } from '#/lib/rom/types.ts'
+import { defaultSections } from '@dth/rom'
 
-import type { RomSections as RomSectionsModel } from '#/lib/rom/types.ts'
+import type { RomSections as RomSectionsModel } from '@dth/rom'
 
 function sectionsWithMultiMorphPose(): RomSectionsModel {
   const sections = defaultSections()

@@ -1,0 +1,23 @@
+{
+  "name": "@dth/rom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure DTH ROM generation core — one character definition in, Daz ROM scripts + Houdini PoseAsset CSV out. Framework-agnostic, no I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.5"
+  }
+}

@@ -2,20 +2,13 @@
   "name": "@dth/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron desktop shell for DTH Character Studio — boots the web app's own server on a local port and bridges native OS features.",
-  "main": "out/main/index.js",
+  "description": "Tauri desktop shell for DTH Character Studio — loads the @dth/web SPA and provides native file/dialog/updater access.",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "start": "electron .",
-    "typecheck": "tsc --noEmit",
-    "package": "electron-vite build && electron-builder"
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "electron": "^42.4.0",
-    "electron-builder": "^26.15.3",
-    "electron-vite": "^5.0.0",
-    "typescript": "^6.0.2"
+    "@tauri-apps/cli": "^2.9.1"
   }
 }
