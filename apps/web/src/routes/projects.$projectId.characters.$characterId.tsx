@@ -298,43 +298,55 @@ function StorageLocation({
   }
 
   return (
-    <section className="mb-8 rounded-lg border bg-card p-5">
-      <h2 className="mb-1 text-xl font-semibold">Storage location</h2>
-      <p className="mb-3 text-sm text-muted-foreground">
-        This character's folder — its definition and all generated files — lives in your library.
+    <section className="mb-8 max-w-3xl rounded-lg border bg-card p-5">
+      <h2 className="text-xl font-semibold">Storage location</h2>
+      <p className="mt-1 mb-5 text-sm text-muted-foreground">
+        This character's folder — its definition and all generated files — lives inside your
+        project library.
       </p>
-      <p className="mb-4">
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs break-all">
-          {location.definitionAbs}
-        </code>
-      </p>
-      <Label className="mb-1">Folder, relative to the library</Label>
-      <div className="flex items-center gap-2">
-        <span
-          className="shrink-0 rounded-md border bg-muted px-2 py-2 text-xs text-muted-foreground"
-          title={location.libraryFolder}
-        >
-          library /
-        </span>
-        <Input
-          value={relFolder}
-          placeholder="Electra"
-          onChange={(e) => setRelFolder(e.target.value)}
-        />
-        <Button
-          variant="outline"
-          className="shrink-0"
-          onClick={onMove}
-          disabled={busy || !moved || !relFolder.trim()}
-        >
-          <FolderInput /> Move
-        </Button>
+
+      <div className="space-y-4">
+        <div>
+          <div className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Full path
+          </div>
+          <code className="block rounded-md bg-muted px-2.5 py-2 text-xs break-all">
+            {location.definitionAbs}
+          </code>
+        </div>
+
+        <div>
+          <Label className="mb-1 block">Folder in library</Label>
+          <div className="flex items-center gap-2">
+            <span
+              className="shrink-0 rounded-md border bg-muted px-2.5 py-2 font-mono text-xs text-muted-foreground"
+              title={location.libraryFolder}
+            >
+              library /
+            </span>
+            <Input
+              value={relFolder}
+              placeholder="ElectraTest"
+              onChange={(e) => setRelFolder(e.target.value)}
+            />
+            <Button
+              variant="outline"
+              className="shrink-0"
+              onClick={onMove}
+              disabled={busy || !moved || !relFolder.trim()}
+            >
+              <FolderInput /> Move
+            </Button>
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Rename the folder or nest it in subfolders (e.g.{' '}
+            <code className="rounded bg-muted px-1 py-0.5">Clients/Acme/Electra</code>) to keep
+            things organised — it must stay inside the library.
+          </p>
+        </div>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Use subfolders to organise, e.g. <code>Clients/Acme/Electra</code>. Must stay inside the
-        library.
-      </p>
-      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+
+      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
     </section>
   )
 }
@@ -393,7 +405,7 @@ function CharacterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
+    <main className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <Link
           to="/projects/$projectId"

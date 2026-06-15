@@ -80,7 +80,7 @@ function ProjectCharactersPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
+    <main className="p-8">
       <div className="mb-6">
         <Link
           to="/"
@@ -124,7 +124,7 @@ function ProjectCharactersPage() {
         </Link>
       </header>
 
-      <div className="mb-8 space-y-3 rounded-lg border bg-card p-4">
+      <div className="mb-8 max-w-5xl space-y-3 rounded-lg border bg-card p-4">
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <label className="mb-1 block text-sm font-medium">Name</label>
@@ -185,7 +185,7 @@ function ProjectCharactersPage() {
       {characters.length === 0 ? (
         <p className="text-muted-foreground">No characters yet — create the first one above.</p>
       ) : (
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {characters.map((character) => (
             <li
               key={character.id}

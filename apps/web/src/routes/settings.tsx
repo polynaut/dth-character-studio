@@ -81,7 +81,7 @@ function ScanSummary({ result }: { result: ScanResult }) {
         <code className="rounded bg-muted px-1.5 py-0.5">{result.folder}</code>
         {unclassified > 0 && <> — {unclassified} could not be classified</>}
       </p>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {GENESIS_ORDER.filter((genesis) => byGenesis.has(genesis)).map((genesis) => {
           const assets = byGenesis.get(genesis)!
           return (
@@ -144,7 +144,7 @@ function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="p-8">
       <div className="mb-6">
         <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" /> All projects
@@ -157,7 +157,7 @@ function SettingsPage() {
         </p>
       </header>
 
-      <section className="mb-8 space-y-5 rounded-lg border bg-card p-5">
+      <section className="mb-8 max-w-3xl space-y-5 rounded-lg border bg-card p-5">
         <FolderField
           label="My DAZ 3D Library"
           value={settings.dazLibraryFolder}

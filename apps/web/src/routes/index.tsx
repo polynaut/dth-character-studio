@@ -75,7 +75,7 @@ function ProjectsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="p-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
@@ -93,7 +93,7 @@ function ProjectsPage() {
       </header>
 
       {!hasDazLibrary ? (
-        <div className="flex flex-col items-start gap-3 rounded-lg border bg-card p-6">
+        <div className="flex max-w-2xl flex-col items-start gap-3 rounded-lg border bg-card p-6">
           <h2 className="text-lg font-semibold">Set your DAZ 3D Library</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
             Point the studio at your <strong>My DAZ 3D Library</strong> folder (your Daz content
@@ -117,7 +117,7 @@ function ProjectsPage() {
             </Link>
           </p>
 
-          <div className="mb-8 flex items-end gap-3 rounded-lg border bg-card p-4">
+          <div className="mb-8 flex max-w-3xl items-end gap-3 rounded-lg border bg-card p-4">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">New project name</label>
               <Input
