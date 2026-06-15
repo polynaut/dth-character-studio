@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
+import { Avatar } from '#/components/avatar.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import {
@@ -154,17 +155,12 @@ function CharactersPage() {
                 params={{ id: character.id }}
                 className="flex items-center gap-4 p-4"
               >
-                {character.image ? (
-                  <img
-                    src={character.image}
-                    alt=""
-                    className="size-16 rounded-md object-cover"
-                  />
-                ) : (
-                  <div className="flex size-16 items-center justify-center rounded-md bg-muted text-2xl font-bold text-muted-foreground">
-                    {character.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <Avatar
+                  image={character.image}
+                  name={character.name}
+                  className="size-16 rounded-md"
+                  fallbackClassName="text-2xl"
+                />
                 <div>
                   <div className="font-semibold">{character.name}</div>
                   <div className="text-sm text-muted-foreground">

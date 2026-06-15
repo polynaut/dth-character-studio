@@ -3,6 +3,7 @@ import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-rout
 import { z } from 'zod'
 import { ArrowLeft, Download, FileCog, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 
+import { Avatar } from '#/components/avatar.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -106,9 +107,9 @@ function JcmModsEditor({
 }
 
 /**
- * Avatar edit dialog: shows the current image, accepts a path/URL, or a
- * drag-and-dropped (or picked) image file which is uploaded to the studio
- * server and served from data/images/.
+ * Avatar edit dialog: shows the current image, accepts an external image URL,
+ * or a drag-and-dropped (or picked) image file which is stored under
+ * <data>/images/ and referenced by filename (see lib/rom/image).
  */
 function ImageDialog({
   image,
@@ -180,13 +181,12 @@ function ImageDialog({
         </div>
 
         <div className="flex justify-center">
-          {url ? (
-            <img src={url} alt="" className="size-40 rounded-lg object-cover" />
-          ) : (
-            <div className="flex size-40 items-center justify-center rounded-lg bg-muted text-5xl font-bold text-muted-foreground">
-              {name.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <Avatar
+            image={url}
+            name={name}
+            className="size-40 rounded-lg"
+            fallbackClassName="text-5xl"
+          />
         </div>
 
         <div
@@ -212,7 +212,7 @@ function ImageDialog({
         <div className="flex items-center gap-2">
           <Input
             value={url}
-            placeholder="https://… or /images/electra.png"
+            placeholder="Paste an image URL (https://…)"
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -312,13 +312,12 @@ function CharacterPage() {
           title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
-          {character.image ? (
-            <img src={character.image} alt="" className="size-20 rounded-lg object-cover" />
-          ) : (
-            <div className="flex size-20 items-center justify-center rounded-lg bg-muted text-3xl font-bold text-muted-foreground">
-              {character.name.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <Avatar
+            image={character.image}
+            name={character.name}
+            className="size-20 rounded-lg"
+            fallbackClassName="text-3xl"
+          />
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <Pencil className="size-5 text-white" />
           </span>

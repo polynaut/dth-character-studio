@@ -1,10 +1,11 @@
-import { mkdir, readDir, readTextFile, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { mkdir, readDir, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { generateAll, resolveRomPaths } from '@dth/rom'
 import * as storage from './storage'
 import { dataPath } from './storage'
+import { isExternalImage } from './image'
 import {
   characterSchema,
   characterSlug,
@@ -130,8 +131,10 @@ const uploadImageInput = z.object({
 })
 
 /**
- * Stores a dropped avatar image under <data>/images/ and returns the asset URL
- * the webview loads it from (with a cache-busting version).
+ * Stores a dropped avatar image under <data>/images/ and returns its bare
+ * filename — the portable canonical reference saved on the character (see
+ * ./image). The UI resolves it to a loadable asset URL at render time via
+ * resolveImageSrc; the persisted JSON never embeds a machine-specific path.
  */
 export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
   const input = uploadImageInput.parse(data)
@@ -146,10 +149,31 @@ export async function uploadCharacterImage({ data }: { data: unknown }): Promise
       await remove(joinPath(dir, entry.name))
     }
   }
-  const filePath = joinPath(dir, `${id}${extension}`)
+  const fileName = `${id}${extension}`
   const bytes = Uint8Array.from(atob(input.dataBase64), (c) => c.charCodeAt(0))
-  await writeFile(filePath, bytes)
-  return `${convertFileSrc(filePath)}?v=${Date.now()}`
+  await writeFile(joinPath(dir, fileName), bytes)
+  return fileName
+}
+
+/**
+ * Turns a stored `image` reference (see ./image) into a URL the webview can
+ * load. External URLs pass through unchanged; a local filename resolves to its
+ * asset URL under <data>/images/ with an mtime cache-buster (so replacing the
+ * avatar refreshes the image). Returns '' when the local file is missing — e.g.
+ * a character JSON shared from another machine — so the UI falls back to the
+ * initial-letter placeholder instead of showing a broken image.
+ */
+export async function resolveImageSrc(image: string): Promise<string> {
+  if (!image) return ''
+  if (isExternalImage(image)) return image
+  const filePath = await dataPath('images', image)
+  try {
+    const info = await stat(filePath)
+    const version = info.mtime ? `?v=${info.mtime.getTime()}` : ''
+    return `${convertFileSrc(filePath)}${version}`
+  } catch {
+    return ''
+  }
 }
 
 export async function fetchSettings(): Promise<StudioSettings> {

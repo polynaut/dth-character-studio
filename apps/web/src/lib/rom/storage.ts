@@ -16,6 +16,8 @@ import {
   sectionsFromFlatFrames,
 } from '@dth/rom'
 
+import { canonicalImage } from './image'
+
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
 /**
@@ -113,6 +115,9 @@ function parseCharacter(raw: unknown): Character {
       if (group.suffix === 'none') group.suffix = 'centre'
     }
   }
+  // Normalise avatar refs to the portable canonical form (filename or external
+  // URL) — drops machine-specific asset/convertFileSrc URLs persisted earlier.
+  data.image = canonicalImage(data.image)
   return characterSchema.parse(data)
 }
 
