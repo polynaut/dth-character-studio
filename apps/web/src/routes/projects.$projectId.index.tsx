@@ -20,6 +20,7 @@ import {
   deleteCharacter,
   fetchCharacters,
   fetchProject,
+  generateCharacterFiles,
   resolveScenePreview,
   updateProject,
 } from '#/lib/rom/api.ts'
@@ -179,6 +180,13 @@ function ProjectCharactersPage() {
             subfolder: copySubfolder.trim(),
           },
         })
+      }
+      // Generate the initial files so they exist + match the UI right away — the
+      // editor's Save starts disabled (nothing dirty), so it wouldn't otherwise.
+      try {
+        await generateCharacterFiles({ data: { projectId, id: character.id } })
+      } catch {
+        // Non-fatal — the editor's Save can regenerate.
       }
       setCopyPrompt(false)
       setScenePath('')
