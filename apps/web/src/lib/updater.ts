@@ -5,12 +5,13 @@ import { check } from '@tauri-apps/plugin-updater'
 
 /**
  * On startup, check GitHub Releases for a newer signed version. If one exists,
- * ask the user; on yes, download + install it and relaunch. No-ops outside the
- * packaged Tauri app (dev server / web-only e2e), so it's safe to call
- * unconditionally.
+ * ask the user; on yes, download + install it and relaunch. Runs only in the
+ * packaged app — no-ops in the plain web build (no Tauri) and under
+ * `pnpm dev:desktop` (`import.meta.env.DEV`), so a dev build isn't offered an
+ * "update" to the released version. Safe to call unconditionally.
  */
 export async function checkForUpdates(): Promise<void> {
-  if (!isTauri()) return
+  if (!isTauri() || import.meta.env.DEV) return
   try {
     const update = await check()
     if (!update) return
