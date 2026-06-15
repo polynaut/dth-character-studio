@@ -480,9 +480,11 @@ function CharacterPage() {
             {countPoses(character.sections)} custom ROM frames
           </p>
           {location && (
-            <p className="mt-1.5 font-mono text-xs break-all" title={defAbs}>
-              <span className="text-muted-foreground/60">{libRoot}</span>
-              <span className="text-foreground/80">{defSuffix}</span>
+            <p className="mt-1.5 text-xs" title={defAbs}>
+              <code className="rounded bg-muted px-1.5 py-0.5 break-all">
+                <span className="text-muted-foreground/60">{libRoot}</span>
+                <span className="text-foreground/80">{defSuffix}</span>
+              </code>
             </p>
           )}
         </div>
