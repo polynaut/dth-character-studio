@@ -1,4 +1,5 @@
 import {
+  copyFile,
   exists,
   mkdir,
   readDir,
@@ -14,6 +15,7 @@ import {
   ROM_SECTIONS,
   characterSchema,
   defaultSections,
+  newId,
   sectionsFromFlatFrames,
 } from '@dth/rom'
 
@@ -27,12 +29,14 @@ import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/r
  *
  *  - **App folder** = the per-user app-local data dir (e.g.
  *    %LOCALAPPDATA%/com.polynaut.dthcharacterstudio). Holds app-owned data:
- *    `settings.json` and `images/` (avatars). Created on first run.
- *  - **Character library** = a user-chosen folder (`settings.characterLibraryFolder`),
+ *    `settings.json`, `projects.json`, `images/` (avatars), and a one-time
+ *    `carryover/` backup. Created on first run.
+ *  - **Project library** = each project's user-chosen folder (`Project.path`),
  *    kept OUTSIDE the app folder so the user can back it up. Each character is a
  *    folder named after it (`<library>/<Name>/`) holding the definition
  *    `<Name>.json` plus its generated artifacts. Discovery is a recursive scan —
  *    no registry — so a folder's location simply *is* the character's location.
+ *    The character functions below all take the active project's `libraryPath`.
  */
 
 /** Join path segments with '/'. Tauri's fs normalizes separators on Windows. */
@@ -141,11 +145,6 @@ function parseCharacter(raw: unknown): Character {
   return characterSchema.parse(data)
 }
 
-/** The configured character library folder, or '' when not yet set. */
-export async function libraryDir(): Promise<string> {
-  return (await getSettings()).characterLibraryFolder
-}
-
 interface LibraryEntry {
   /** Absolute path to the character's folder. */
   folderAbs: string
@@ -169,8 +168,7 @@ export interface CharacterLocation {
  * definition iff it parses as a character (generated `_FBMs.json` etc. fail the
  * schema and are skipped). De-duplicates by id (first match wins).
  */
-async function scanLibrary(): Promise<Array<LibraryEntry>> {
-  const lib = await libraryDir()
+async function scanLibrary(lib: string): Promise<Array<LibraryEntry>> {
   if (!lib || !(await isDir(lib))) return []
   const entries: Array<LibraryEntry> = []
   const seen = new Set<string>()
@@ -194,8 +192,8 @@ async function scanLibrary(): Promise<Array<LibraryEntry>> {
   return entries
 }
 
-async function findEntry(id: string): Promise<LibraryEntry | null> {
-  return (await scanLibrary()).find((entry) => entry.character.id === id) ?? null
+async function findEntry(lib: string, id: string): Promise<LibraryEntry | null> {
+  return (await scanLibrary(lib)).find((entry) => entry.character.id === id) ?? null
 }
 
 /** First folder name under `parent` that doesn't already exist (`Name`, `Name (2)`, …). */
@@ -207,21 +205,20 @@ async function uniqueFolder(parent: string, baseName: string): Promise<string> {
   }
 }
 
-export async function listCharacters(): Promise<Array<Character>> {
-  const entries = await scanLibrary()
+export async function listCharacters(lib: string): Promise<Array<Character>> {
+  const entries = await scanLibrary(lib)
   return entries.map((entry) => entry.character).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function getCharacter(id: string): Promise<Character | null> {
-  return (await findEntry(id))?.character ?? null
+export async function getCharacter(lib: string, id: string): Promise<Character | null> {
+  return (await findEntry(lib, id))?.character ?? null
 }
 
-export async function saveCharacter(character: Character): Promise<Character> {
-  const lib = await libraryDir()
-  if (!lib) throw new Error('No character library folder configured. Set one in Settings.')
+export async function saveCharacter(lib: string, character: Character): Promise<Character> {
+  if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
   const stamped = { ...character, updatedAt: new Date().toISOString() }
-  const existing = await findEntry(character.id)
+  const existing = await findEntry(lib, character.id)
 
   let definitionAbs: string
   if (existing) {
@@ -251,8 +248,8 @@ export async function saveCharacter(character: Character): Promise<Character> {
   return stamped
 }
 
-export async function deleteCharacter(id: string): Promise<void> {
-  const entry = await findEntry(id)
+export async function deleteCharacter(lib: string, id: string): Promise<void> {
+  const entry = await findEntry(lib, id)
   if (!entry) return
   // Guard: a definition manually dropped at the library root has folderAbs ===
   // the library itself — only remove its file, never recursively wipe the library.
@@ -264,29 +261,32 @@ export async function deleteCharacter(id: string): Promise<void> {
 }
 
 /** Absolute path to a character's folder (created if missing) — Generate's target. */
-export async function getCharacterFolder(id: string): Promise<string> {
-  const entry = await findEntry(id)
+export async function getCharacterFolder(lib: string, id: string): Promise<string> {
+  const entry = await findEntry(lib, id)
   if (!entry) throw new Error(`Character ${id} not found`)
   await mkdir(entry.folderAbs, { recursive: true })
   return entry.folderAbs
 }
 
-export async function getCharacterPath(id: string): Promise<CharacterLocation | null> {
-  const entry = await findEntry(id)
+export async function getCharacterPath(lib: string, id: string): Promise<CharacterLocation | null> {
+  const entry = await findEntry(lib, id)
   if (!entry) return null
   return {
     definitionAbs: entry.definitionAbs,
     folderAbs: entry.folderAbs,
     relFolder: entry.relFolder,
-    libraryFolder: await libraryDir(),
+    libraryFolder: lib,
   }
 }
 
 /** Move a character's whole folder to a new path relative to the library root. */
-export async function moveCharacter(id: string, relFolder: string): Promise<CharacterLocation> {
-  const lib = await libraryDir()
-  if (!lib) throw new Error('No character library folder configured.')
-  const entry = await findEntry(id)
+export async function moveCharacter(
+  lib: string,
+  id: string,
+  relFolder: string,
+): Promise<CharacterLocation> {
+  if (!lib) throw new Error('No project library configured.')
+  const entry = await findEntry(lib, id)
   if (!entry) throw new Error(`Character ${id} not found`)
   const cleanRel = normalizeRelPath(relFolder) // throws on invalid / escaping paths
   const newFolderAbs = join(lib, cleanRel)
@@ -314,10 +314,11 @@ export async function writeFilesToFolder(
 
 export interface StudioSettings {
   /**
-   * Character library — the user-owned folder (outside the app folder) where
-   * character folders live. Empty until chosen on first run.
+   * "My DAZ 3D Library" — the user's Daz content library path. Asked on first
+   * run; stored for a later feature (generating Daz scripts straight into it for
+   * faster testing). Not yet otherwise wired.
    */
-  characterLibraryFolder: string
+  dazLibraryFolder: string
   /** DazToHue-Scripts checkout — generated Daz files are written here, next to DthWorkflow.dsa. */
   dazScriptsFolder: string
   /** DazToHue Poses folder — scanned for the pre-defined pose preset catalog. */
@@ -334,7 +335,7 @@ async function isDir(path: string): Promise<boolean> {
 
 /** Defaults for a fresh install: all folders empty. */
 function defaultSettings(): StudioSettings {
-  return { characterLibraryFolder: '', dazScriptsFolder: '', dthPosesFolder: '' }
+  return { dazLibraryFolder: '', dazScriptsFolder: '', dthPosesFolder: '' }
 }
 
 export async function getSettings(): Promise<StudioSettings> {
@@ -342,10 +343,8 @@ export async function getSettings(): Promise<StudioSettings> {
   try {
     const raw = JSON.parse(await readTextFile(await dataPath('settings.json')))
     return {
-      characterLibraryFolder:
-        typeof raw.characterLibraryFolder === 'string'
-          ? raw.characterLibraryFolder
-          : defaults.characterLibraryFolder,
+      dazLibraryFolder:
+        typeof raw.dazLibraryFolder === 'string' ? raw.dazLibraryFolder : defaults.dazLibraryFolder,
       dazScriptsFolder:
         typeof raw.dazScriptsFolder === 'string' ? raw.dazScriptsFolder : defaults.dazScriptsFolder,
       dthPosesFolder:
@@ -362,6 +361,128 @@ export async function saveSettings(settings: StudioSettings): Promise<StudioSett
   await ensureAppDir()
   await writeTextFile(await dataPath('settings.json'), JSON.stringify(settings, null, 2) + '\n')
   return settings
+}
+
+// --- Projects -------------------------------------------------------------
+// Each game project is { id, name, path }; the path is that project's character
+// library. The list is app-folder metadata (projects.json). Deleting a project
+// removes only its record — never the user's files on disk.
+
+export interface Project {
+  id: string
+  name: string
+  path: string
+}
+
+async function readProjects(): Promise<Array<Project>> {
+  try {
+    const raw = JSON.parse(await readTextFile(await dataPath('projects.json')))
+    if (!Array.isArray(raw)) return []
+    return raw.filter(
+      (p): p is Project =>
+        p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.path === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+async function writeProjects(projects: Array<Project>): Promise<void> {
+  await ensureAppDir()
+  await writeTextFile(await dataPath('projects.json'), JSON.stringify(projects, null, 2) + '\n')
+}
+
+export async function listProjects(): Promise<Array<Project>> {
+  return (await readProjects()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export async function getProject(id: string): Promise<Project | null> {
+  return (await readProjects()).find((p) => p.id === id) ?? null
+}
+
+export async function createProject(name: string, path: string): Promise<Project> {
+  if (!name.trim()) throw new Error('Project name is required.')
+  if (!path.trim()) throw new Error('Project folder is required.')
+  const projects = await readProjects()
+  const project: Project = { id: newId(), name: name.trim(), path: path.trim() }
+  projects.push(project)
+  await writeProjects(projects)
+  await mkdir(project.path, { recursive: true })
+  return project
+}
+
+export async function updateProject(
+  id: string,
+  patch: { name?: string; path?: string },
+): Promise<Project> {
+  const projects = await readProjects()
+  const idx = projects.findIndex((p) => p.id === id)
+  if (idx < 0) throw new Error(`Project ${id} not found`)
+  projects[idx] = {
+    ...projects[idx],
+    ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+    ...(patch.path !== undefined ? { path: patch.path.trim() } : {}),
+  }
+  await writeProjects(projects)
+  return projects[idx]
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await writeProjects((await readProjects()).filter((p) => p.id !== id))
+}
+
+// --- Carry-over (one-time migration from the old single library) ----------
+
+/** Recursively copy every file from `srcAbs` into `destAbs` (creating dirs). */
+async function copyTree(srcAbs: string, destAbs: string): Promise<void> {
+  for (const rel of await walkFiles(srcAbs)) {
+    const to = join(destAbs, rel)
+    await mkdir(dirname(to), { recursive: true })
+    await copyFile(join(srcAbs, rel), to)
+  }
+}
+
+/**
+ * One-time: if a legacy `characterLibraryFolder` is still in settings.json (from
+ * the pre-projects version), copy its contents into `carryover/` and strip the
+ * key so this runs only once. The user restores it into a project later.
+ */
+export async function ensureCarryover(): Promise<void> {
+  const settingsPath = await dataPath('settings.json')
+  let raw: Record<string, any>
+  try {
+    raw = JSON.parse(await readTextFile(settingsPath))
+  } catch {
+    return
+  }
+  if (!('characterLibraryFolder' in raw)) return
+  const old = raw.characterLibraryFolder
+  if (typeof old === 'string' && old && (await isDir(old))) {
+    const carry = await dataPath('carryover')
+    if (!(await exists(carry))) {
+      await mkdir(carry, { recursive: true })
+      await copyTree(old, carry)
+    }
+  }
+  delete raw.characterLibraryFolder
+  await ensureAppDir()
+  await writeTextFile(settingsPath, JSON.stringify(raw, null, 2) + '\n')
+}
+
+/** Number of carried-over characters waiting to be restored into a project. */
+export async function carryoverCount(): Promise<number> {
+  return (await scanLibrary(await dataPath('carryover'))).length
+}
+
+/** Copy the carried-over characters into a project's library, then clear them. */
+export async function restoreCarryover(targetLibraryPath: string): Promise<number> {
+  const carry = await dataPath('carryover')
+  if (!(await isDir(carry))) return 0
+  const count = (await scanLibrary(carry)).length
+  await mkdir(targetLibraryPath, { recursive: true })
+  await copyTree(carry, targetLibraryPath)
+  await remove(carry, { recursive: true })
+  return count
 }
 
 /** Recursively collect file paths (relative to `root`, '/'-separated). */
