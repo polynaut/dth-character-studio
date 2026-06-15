@@ -66,10 +66,11 @@ export function EditableTitle({
           }
         }}
         onBlur={() => void commit()}
-        // No vertical padding + negative margins that absorb the border/h-padding,
-        // so the input occupies exactly the <h1> text box and editing causes no
-        // layout shift.
-        className="-mx-2 -my-px w-[26rem] max-w-full rounded-md border bg-background px-2 py-0 text-3xl font-bold outline-none focus:border-primary"
+        // The field outline is a ring (box-shadow), not a border, so it adds no
+        // layout height; with py-0 the input box equals the <h1> line box exactly
+        // and editing shifts nothing. -mx-2 offsets the h-padding to keep the
+        // text in the same place.
+        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none focus:ring-primary"
       />
     )
   }
