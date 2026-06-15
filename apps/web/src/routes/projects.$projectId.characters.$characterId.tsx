@@ -348,13 +348,17 @@ function CharacterPage() {
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
   const [character, setCharacter] = useState<Character>(initial)
+  // The last-persisted character. `dirty` compares against this — NOT the loader
+  // data — so saving can settle the buttons in a single paint instead of waiting
+  // on router.invalidate() to complete in a second, separate render.
+  const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
   const [generated, setGenerated] = useState<GenerateResult | null>(null)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
-  const dirty = JSON.stringify(character) !== JSON.stringify(initial)
+  const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
 
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
@@ -367,7 +371,8 @@ function CharacterPage() {
     setCharacter(updated)
     const saved = await saveCharacter({ data: { projectId, character: updated } })
     setCharacter(saved)
-    await router.invalidate()
+    setBaseline(saved)
+    void router.invalidate()
     toast.success(`Renamed to “${next}”`)
   }
 
@@ -376,23 +381,28 @@ function CharacterPage() {
     setSaving(true)
     try {
       const saved = await saveCharacter({ data: { projectId, character } })
-      setCharacter(saved) // reconcile the draft (incl. new updatedAt) so it's no longer "dirty"
       const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
+      // Settle everything in one batched render: reconcile the draft + baseline
+      // (so it's no longer "dirty") and drop the saving flag together.
+      setCharacter(saved)
+      setBaseline(saved)
       setGenerated(result)
-      await router.invalidate()
+      setSaving(false)
+      // Refresh the loader for re-entry/navigation, but don't await it — the
+      // buttons no longer depend on it, so it stays off the visible path.
+      void router.invalidate()
       toast.success(`Saved “${saved.name}” and generated ${result.files.length} files`)
       if (result.dazScriptsError) {
         toast.warning(`Couldn't write to the DazToHue-Scripts folder: ${result.dazScriptsError}`)
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
       setSaving(false)
+      toast.error(e instanceof Error ? e.message : String(e))
     }
   }
 
   function onDiscard() {
-    setCharacter(initial)
+    setCharacter(baseline)
   }
 
   function download(file: GeneratedFile) {
@@ -719,7 +729,8 @@ function CharacterPage() {
             setCharacter(updated)
             const saved = await saveCharacter({ data: { projectId, character: updated } })
             setCharacter(saved)
-            await router.invalidate()
+            setBaseline(saved)
+            void router.invalidate()
             toast.success('Image updated')
           }}
           onClose={() => setImageDialogOpen(false)}
