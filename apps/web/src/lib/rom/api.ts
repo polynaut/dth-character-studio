@@ -126,14 +126,31 @@ function examplePrefill(): Record<string, unknown> {
   }
 }
 
+/** Scene path with a trailing ".duf" stripped (case-insensitive). */
+function sceneBase(scenePath: string): string {
+  return scenePath.replace(/\.duf$/i, '')
+}
+
 /**
- * Copy a Daz scene's tip thumbnail (`<scene>.tip.png`) into the app's images
- * folder as the character's avatar (`<id>.png`). Returns the canonical filename,
- * or '' when no tip image exists next to the scene.
+ * First existing Daz tip thumbnail next to a scene, trying both naming
+ * conventions: `<scene>.tip.png` (e.g. Kira.duf.tip.png) and `<base>.tip.png`
+ * (Kira.tip.png). Returns '' when neither exists.
+ */
+async function findTipImage(scenePath: string): Promise<string> {
+  for (const p of [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]) {
+    if (await exists(p)) return p
+  }
+  return ''
+}
+
+/**
+ * Copy a Daz scene's tip thumbnail into the app's images folder as the
+ * character's avatar (`<id>.png`). Returns the canonical filename, or '' when
+ * no tip image exists next to the scene.
  */
 async function copyTipImage(characterId: string, scenePath: string): Promise<string> {
-  const tipPath = `${scenePath}.tip.png`
-  if (!(await exists(tipPath))) return ''
+  const tipPath = await findTipImage(scenePath)
+  if (!tipPath) return ''
   const bytes = await readFile(tipPath)
   const dir = await dataPath('images')
   await mkdir(dir, { recursive: true })
@@ -191,7 +208,12 @@ export async function copyDazScene({ data }: { data: unknown }): Promise<void> {
   const sub = normalizeRelFolder(input.subfolder ?? '')
   const destDir = sub ? joinPath(folder, sub) : folder
   await mkdir(destDir, { recursive: true })
-  const sources = [input.scenePath, `${input.scenePath}.png`, `${input.scenePath}.tip.png`]
+  const sources = [
+    input.scenePath,
+    `${input.scenePath}.png`,
+    `${input.scenePath}.tip.png`,
+    `${sceneBase(input.scenePath)}.tip.png`,
+  ]
   for (const src of sources) {
     if (await exists(src)) {
       await writeFile(joinPath(destDir, basename(src)), await readFile(src))
@@ -318,9 +340,9 @@ export async function resolveImageSrc(image: string): Promise<string> {
  */
 export async function resolveScenePreview(scenePath: string): Promise<string> {
   if (!scenePath) return ''
-  const tipPath = `${scenePath}.tip.png`
   try {
-    if (!(await exists(tipPath))) return ''
+    const tipPath = await findTipImage(scenePath)
+    if (!tipPath) return ''
     const bytes = await readFile(tipPath)
     let binary = ''
     const chunk = 0x8000
