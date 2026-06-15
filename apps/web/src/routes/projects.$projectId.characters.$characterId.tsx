@@ -560,8 +560,12 @@ function CharacterPage() {
             )}
           </div>
 
-          <fieldset className="self-start rounded-md border px-4 pt-1 pb-4">
-            <legend className="px-1.5 text-sm font-medium text-muted-foreground">
+          {/* The legend is positioned absolutely (a notch on the border) so it
+              doesn't consume a row of flow — that keeps the FACS / Flexion fields
+              on the same baseline as the Genesis row on the left. -mt-2 + pt-2
+              lift the box so its fields start at the same y as the left column. */}
+          <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-2 pb-4">
+            <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground">
               {GENESIS_LABELS[character.genesis]} Specific
             </legend>
             {/* Genesis-9-specific tuning. When G8 / G8.1 support lands, branch on
