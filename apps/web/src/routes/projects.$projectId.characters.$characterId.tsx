@@ -480,11 +480,11 @@ function CharacterPage() {
           <Avatar
             image={character.image}
             name={character.name}
-            className="size-30 rounded-lg"
-            fallbackClassName="text-4xl"
+            className="size-64 rounded-lg"
+            fallbackClassName="text-7xl"
           />
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <Pencil className="size-6 text-white" />
+            <Pencil className="size-9 text-white" />
           </span>
         </button>
         <div>
