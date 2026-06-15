@@ -1,15 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  FileJson,
-  Pencil,
-  Settings as SettingsIcon,
-  Trash2,
-  UserPlus,
-} from 'lucide-react'
+import { ArrowLeft, FileJson, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
+import { EditableTitle } from '#/components/editable-title.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import {
@@ -41,86 +35,6 @@ export const Route = createFileRoute('/projects/$projectId/')({
   },
   component: ProjectCharactersPage,
 })
-
-/** Project title that becomes an inline input on click; saves on Enter or blur. */
-function EditableProjectTitle({
-  projectId,
-  name,
-  onEditingChange,
-}: {
-  projectId: string
-  name: string
-  onEditingChange?: (editing: boolean) => void
-}) {
-  const router = useRouter()
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(name)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    onEditingChange?.(editing)
-  }, [editing, onEditingChange])
-
-  async function commit() {
-    if (busy) return
-    const next = value.trim()
-    if (!next || next === name) {
-      setValue(name)
-      setEditing(false)
-      return
-    }
-    setBusy(true)
-    try {
-      await updateProject({ data: { id: projectId, name: next } })
-      await router.invalidate()
-    } catch {
-      setValue(name)
-    } finally {
-      setBusy(false)
-      setEditing(false)
-    }
-  }
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        value={value}
-        disabled={busy}
-        aria-label="Project name"
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            e.currentTarget.blur()
-          } else if (e.key === 'Escape') {
-            setValue(name)
-            setEditing(false)
-          }
-        }}
-        onBlur={() => void commit()}
-        className="w-[26rem] max-w-full rounded-md border bg-background px-2 py-1 text-3xl font-bold outline-none focus:border-primary"
-      />
-    )
-  }
-
-  return (
-    <div className="group flex items-center gap-2">
-      <h1 className="text-3xl font-bold">{name}</h1>
-      <button
-        type="button"
-        title="Rename project"
-        onClick={() => {
-          setValue(name)
-          setEditing(true)
-        }}
-        className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
-      >
-        <Pencil className="size-4" />
-      </button>
-    </div>
-  )
-}
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
@@ -189,10 +103,14 @@ function ProjectCharactersPage() {
 
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <EditableProjectTitle
-            projectId={projectId}
+          <EditableTitle
             name={project.name}
+            ariaLabel="Project name"
             onEditingChange={setEditingTitle}
+            onSave={async (next) => {
+              await updateProject({ data: { id: projectId, name: next } })
+              await router.invalidate()
+            }}
           />
           <p className="mt-1 text-xs text-muted-foreground">
             <code className="rounded bg-muted px-1.5 py-0.5 break-all">{project.path}</code>
