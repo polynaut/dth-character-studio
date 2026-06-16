@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FolderOpen, Save } from 'lucide-react'
+import { ArrowLeft, CircleCheck, CircleSlash, CircleX, Download, FolderOpen, Save } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
   Select,
   SelectContent,
@@ -14,7 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select.tsx'
-import { buildPoseCatalog, fetchSettings, listDthReleases, saveSettings } from '#/lib/rom/api.ts'
+import {
+  buildPoseCatalog,
+  fetchSettings,
+  installDth,
+  listDthExporterReleases,
+  listDthReleases,
+  saveSettings,
+} from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -22,7 +30,7 @@ import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
 import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
-import type { DthReleaseInfo } from '#/lib/rom/api.ts'
+import type { DthExporterReleaseInfo, DthReleaseInfo, InstallReport } from '#/lib/rom/api.ts'
 
 /** A folder-path text field with a native "Browse…" picker button. */
 function FolderField({
@@ -81,6 +89,13 @@ interface ReleasesState {
   mode: 'single' | 'multi' | 'none'
   version: string
   releases: Array<DthReleaseInfo>
+  error: string | null
+}
+
+interface ExporterReleasesState {
+  mode: 'single' | 'multi' | 'none'
+  version: string
+  releases: Array<DthExporterReleaseInfo>
   error: string | null
 }
 
@@ -148,6 +163,69 @@ function ReleasePicker({
             releases don't switch automatically — pick one and Save.
           </p>
         )}
+      </div>
+    )
+  }
+  return null
+}
+
+/**
+ * Under the Exporter Plugin folder field — mirrors {@link ReleasePicker}: the
+ * detected version for a single plugin folder, or a version dropdown when the
+ * folder holds several. The version is read from the exporter DLL.
+ */
+function ExporterReleasePicker({
+  releases,
+  loading,
+  value,
+  onChange,
+}: {
+  releases: ExporterReleasesState
+  loading: boolean
+  value: string
+  onChange: (version: string) => void
+}) {
+  if (loading) {
+    return <p className="mt-2 text-xs text-muted-foreground">Looking for the DTH Exporter Plugin…</p>
+  }
+  if (releases.error) {
+    return <p className="mt-2 text-sm text-destructive">{releases.error}</p>
+  }
+  if (releases.mode === 'single') {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Plugin detected
+        {releases.version ? (
+          <>
+            {' '}— version <strong className="text-foreground">{releases.version}</strong>
+          </>
+        ) : (
+          <> — no version info in the exporter DLL</>
+        )}
+        .
+      </p>
+    )
+  }
+  if (releases.mode === 'multi') {
+    return (
+      <div className="mt-3">
+        <Label className="mb-1">Exporter Plugin version</Label>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="w-72">
+            <SelectValue placeholder="Select a version" />
+          </SelectTrigger>
+          <SelectContent>
+            {releases.releases.map((r) => (
+              <SelectItem key={r.version} value={r.version}>
+                {r.version}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {releases.releases.length} plugin version{releases.releases.length === 1 ? '' : 's'} found.
+          New ones don't switch automatically — pick one and Save.
+        </p>
       </div>
     )
   }
@@ -227,6 +305,15 @@ function SettingsPage() {
     error: null,
   })
   const [releasesLoading, setReleasesLoading] = useState(false)
+  const [exporter, setExporter] = useState<ExporterReleasesState>({
+    mode: 'none',
+    version: '',
+    releases: [],
+    error: null,
+  })
+  const [exporterLoading, setExporterLoading] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [installReport, setInstallReport] = useState<InstallReport | null>(null)
 
   // Inspect the DTH folder whenever it changes (debounced — typing shouldn't
   // hammer the filesystem; Browse sets it directly). Detects a single release vs
@@ -253,6 +340,29 @@ function SettingsPage() {
     }
   }, [settings.dthPosesFolder])
 
+  // Same debounced inspection for the Exporter Plugin folder.
+  useEffect(() => {
+    const folder = settings.dthExporterFolder
+    if (!folder) {
+      setExporter({ mode: 'none', version: '', releases: [], error: null })
+      return
+    }
+    let cancelled = false
+    setExporterLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const result = await listDthExporterReleases({ data: { folder } })
+        if (!cancelled) setExporter(result)
+      } finally {
+        if (!cancelled) setExporterLoading(false)
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [settings.dthExporterFolder])
+
   // Multi-release with no valid selection yet → pre-select the latest. That
   // marks the form dirty so the user saves once to store CURRENT_DTH_VERSION;
   // later releases never switch the active version on their own.
@@ -266,11 +376,33 @@ function SettingsPage() {
     })
   }, [releases])
 
+  // Keep the stored Exporter version in step with the inspected folder: a single
+  // plugin folder pins its detected version; a multi folder pre-selects the
+  // newest when the current pick isn't among them.
+  useEffect(() => {
+    if (exporter.mode === 'single') {
+      setSettings((s) =>
+        s.currentDthExporterVersion === exporter.version
+          ? s
+          : { ...s, currentDthExporterVersion: exporter.version },
+      )
+    } else if (exporter.mode === 'multi' && exporter.releases.length > 0) {
+      setSettings((s) => {
+        if (exporter.releases.some((r) => r.version === s.currentDthExporterVersion)) return s
+        return { ...s, currentDthExporterVersion: exporter.releases[0].version }
+      })
+    }
+  }, [exporter])
+
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dazScriptsFolder !== initial.dazScriptsFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder ||
     settings.currentDthVersion !== initial.currentDthVersion ||
+    settings.dthExporterFolder !== initial.dthExporterFolder ||
+    settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
+    settings.dazInstallFolder !== initial.dazInstallFolder ||
+    settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.dazSubdir !== initial.dazSubdir ||
     settings.houdiniSubdir !== initial.houdiniSubdir ||
     settings.createHoudiniSubdir !== initial.createHoudiniSubdir
@@ -298,6 +430,47 @@ function SettingsPage() {
     }
   }
 
+  // The install copies the active DTH release + Exporter Plugin into the local
+  // Daz Studio + Houdini installs. Enabled once every prerequisite is set; any
+  // pending edits are saved automatically before it runs (it reads the saved
+  // settings), so there's no separate Save step.
+  const releaseReady = !releases.error && releases.mode !== 'none'
+  const exporterReady = !exporter.error && exporter.mode !== 'none'
+  const canInstall =
+    releaseReady && exporterReady && !!settings.dazInstallFolder && !!settings.houdiniDocsFolder
+  const installBlockers: Array<string> = []
+  if (!releaseReady) installBlockers.push('a DTH release')
+  if (!exporterReady) installBlockers.push('a DTH Exporter Plugin')
+  if (!settings.dazInstallFolder) installBlockers.push('the Daz Studio install folder')
+  if (!settings.houdiniDocsFolder) installBlockers.push('the Houdini documents folder')
+
+  async function onInstall(dryRun: boolean) {
+    setInstalling(true)
+    setInstallReport(null)
+    try {
+      // The install resolves paths from the saved settings — persist any pending
+      // edits first so it uses exactly what's on screen.
+      if (dirty) {
+        await saveSettings({ data: settings })
+        await router.invalidate()
+      }
+      const report = await installDth({ data: { dryRun } })
+      setInstallReport(report)
+      const errors = report.steps.filter((step) => step.status === 'error').length
+      if (errors > 0) {
+        toast.error(`Install finished with ${errors} error${errors === 1 ? '' : 's'}`)
+      } else if (dryRun) {
+        toast.success(`Dry run — would copy ${report.totalFiles} file(s)`)
+      } else {
+        toast.success(`Installed ${report.totalFiles} file(s)`)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setInstalling(false)
+    }
+  }
+
   return (
     <main className="p-8">
       <div className="mb-6">
@@ -309,85 +482,211 @@ function SettingsPage() {
         <h1 className="text-3xl font-bold">Settings</h1>
       </header>
 
-      <section className="mb-8 max-w-3xl space-y-5 rounded-lg border bg-card p-5">
-        <FolderField
-          label="My DAZ 3D Library"
-          value={settings.dazLibraryFolder}
-          placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
-          onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
-          help={<>Your Daz content library. Needed as output location for generated Daz scripts.</>}
-        />
-        <div>
+      <Tabs defaultValue="general" className="max-w-3xl">
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="daztohue">DazToHue</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
           <FolderField
-            label="DTH release or releases folder"
-            value={settings.dthPosesFolder}
-            placeholder="X:\_3d\_resources\_DazToHue\Releases"
-            onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
+            label="My DAZ 3D Library"
+            value={settings.dazLibraryFolder}
+            placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
+            onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
             help={
-              <>
-                Point this at a single DTH release folder, or a folder of
-                multiple releases. Zipped releases are listed but must be extracted first.
-              </>
+              <>Your Daz content library. Needed as output location for generated Daz scripts.</>
             }
           />
-          <ReleasePicker
-            releases={releases}
-            loading={releasesLoading}
-            value={settings.currentDthVersion}
-            onChange={(version) => setSettings((s) => ({ ...s, currentDthVersion: version }))}
-          />
-        </div>
-        <FolderField
-          label="DazToHue-Scripts folder"
-          value={settings.dazScriptsFolder}
-          placeholder="D:\Development\DazToHue-Scripts"
-          onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
-          help={
-            <>
-              Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so they
-              are directly runnable from Daz Studio.
-            </>
-          }
-        />
-        <div className="max-w-[20rem]">
-          <Label className="mb-1">Default Daz scenes subfolder</Label>
-          <Input
-            value={settings.dazSubdir}
-            placeholder="daz3d"
-            onChange={(e) => setSettings((s) => ({ ...s, dazSubdir: e.target.value }))}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Pre-fills the subfolder when copying a Daz scene into a character.
-          </p>
-        </div>
-        <div className="max-w-[20rem]">
-          <Label className="mb-1">Default Houdini projects subfolder</Label>
-          <Input
-            value={settings.houdiniSubdir}
-            placeholder="houdini"
-            disabled={!settings.createHoudiniSubdir}
-            onChange={(e) => setSettings((s) => ({ ...s, houdiniSubdir: e.target.value }))}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Seeded empty in each new character so you can drop its Houdini project there.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Switch
-            checked={settings.createHoudiniSubdir}
-            onCheckedChange={(createHoudiniSubdir) =>
-              setSettings((s) => ({ ...s, createHoudiniSubdir }))
-            }
-          />
-          <span className="text-sm">Create the Houdini subfolder in new characters</span>
-        </div>
+          <div className="max-w-[20rem]">
+            <Label className="mb-1">Default Daz scenes subfolder</Label>
+            <Input
+              value={settings.dazSubdir}
+              placeholder="daz3d"
+              onChange={(e) => setSettings((s) => ({ ...s, dazSubdir: e.target.value }))}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Pre-fills the subfolder when copying a Daz scene into a character.
+            </p>
+          </div>
+          <div className="max-w-[20rem]">
+            <Label className="mb-1">Default Houdini projects subfolder</Label>
+            <Input
+              value={settings.houdiniSubdir}
+              placeholder="houdini"
+              disabled={!settings.createHoudiniSubdir}
+              onChange={(e) => setSettings((s) => ({ ...s, houdiniSubdir: e.target.value }))}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Seeded empty in each new character so you can drop its Houdini project there.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={settings.createHoudiniSubdir}
+              onCheckedChange={(createHoudiniSubdir) =>
+                setSettings((s) => ({ ...s, createHoudiniSubdir }))
+              }
+            />
+            <span className="text-sm">Create Houdini project subfolder in new characters</span>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="daztohue" className="space-y-5">
+          <section className="space-y-5 rounded-lg border bg-card p-5">
+            <div>
+              <FolderField
+                label="DTH release(s) folder"
+                value={settings.dthPosesFolder}
+                placeholder="X:\_3d\_resources\_DazToHue\Releases"
+                onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
+                help={
+                  <>
+                    Point this at a single DTH release folder, or a folder of multiple releases.
+                    Zipped releases are listed but must be extracted first.
+                  </>
+                }
+              />
+              <ReleasePicker
+                releases={releases}
+                loading={releasesLoading}
+                value={settings.currentDthVersion}
+                onChange={(version) => setSettings((s) => ({ ...s, currentDthVersion: version }))}
+              />
+            </div>
+            <div>
+              <FolderField
+                label="DTH Exporter Plugin release(s) folder"
+                value={settings.dthExporterFolder}
+                placeholder="X:\_3d\_resources\_DazToHue\ExporterPlugin"
+                onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
+                help={
+                  <>
+                    The DazToHue Exporter plugin folder (contains the exporter DLL), or a folder of
+                    versioned plugin folders. The version is read from the DLL.
+                  </>
+                }
+              />
+              <ExporterReleasePicker
+                releases={exporter}
+                loading={exporterLoading}
+                value={settings.currentDthExporterVersion}
+                onChange={(version) =>
+                  setSettings((s) => ({ ...s, currentDthExporterVersion: version }))
+                }
+              />
+            </div>
+            <FolderField
+              label="DazToHue-Scripts folder"
+              value={settings.dazScriptsFolder}
+              placeholder="D:\Development\DazToHue-Scripts"
+              onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
+              help={
+                <>
+                  Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so
+                  they are directly runnable from Daz Studio.
+                </>
+              }
+            />
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Install DTH to Daz &amp; Houdini</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Copies the selected DTH release into “My DAZ 3D Library”, the exporter plugin DLLs
+                into Daz Studio, and the release's Houdini assets into your Houdini folder — a
+                one-click port of the dth-cli install commands.
+              </p>
+            </div>
+
+            <FolderField
+              label="Daz Studio install folder (optional)"
+              value={settings.dazInstallFolder}
+              placeholder="C:\Program Files\DAZ 3D\DAZStudio4"
+              onChange={(value) => setSettings((s) => ({ ...s, dazInstallFolder: value }))}
+              help={
+                <>
+                  Where Daz Studio is installed. The install drops the exporter plugin DLLs into its
+                  <span className="font-mono"> plugins</span> subfolder.
+                </>
+              }
+            />
+            <FolderField
+              label="Houdini documents folder (optional)"
+              value={settings.houdiniDocsFolder}
+              placeholder="D:\User Data\Documents\houdini20.5"
+              onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
+              help={
+                <>
+                  Your Houdini user folder. The install merges the release's Houdini assets
+                  (otls/presets/toolbar) into it.
+                </>
+              }
+            />
+
+            {canInstall ? (
+              <p className="text-sm text-muted-foreground">
+                Ready to install DTH{' '}
+                <strong className="text-foreground">{releases.version || settings.currentDthVersion || '?'}</strong>{' '}
+                + Exporter{' '}
+                <strong className="text-foreground">
+                  {exporter.version ||
+                    settings.currentDthExporterVersion ||
+                    settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
+                    '?'}
+                </strong>
+                {dirty ? ' — pending changes are saved on install.' : '.'}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Set {installBlockers.join(', ')} to enable the install.
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onInstall(true)} disabled={!canInstall || installing}>
+                {installing ? 'Working…' : 'Dry run'}
+              </Button>
+              <Button onClick={() => onInstall(false)} disabled={!canInstall || installing}>
+                <Download /> {installing ? 'Installing…' : 'Install'}
+              </Button>
+            </div>
+
+            {installReport && (
+              <ul className="space-y-1 border-t pt-3 text-sm">
+                {installReport.steps.map((step, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    {step.status === 'ok' ? (
+                      <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                    ) : step.status === 'error' ? (
+                      <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
+                    ) : (
+                      <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className={step.status === 'error' ? 'text-destructive' : ''}>
+                      <span className="font-medium">{step.label}</span>
+                      {step.status === 'ok' && step.files > 0 && (
+                        <span className="text-muted-foreground"> — {step.files} file(s)</span>
+                      )}
+                      {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
+
+      <div className="mt-6 max-w-3xl">
         <Button onClick={onSave} disabled={busy || !dirty}>
           <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
         </Button>
-      </section>
+      </div>
 
       {scan && (
-        <section>
+        <section className="mt-8">
           <h2 className="mb-3 text-xl font-semibold">Pose catalog</h2>
           <ScanSummary result={scan} />
         </section>

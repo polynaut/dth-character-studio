@@ -2,6 +2,7 @@ import {
   exists,
   mkdir,
   readDir,
+  readFile,
   readTextFile,
   remove,
   rename,
@@ -521,6 +522,30 @@ export interface StudioSettings {
    * dropped-in release from silently becoming the active one.
    */
   currentDthVersion: string
+  /**
+   * The DTH Exporter Plugin folder (contains `dth_exporter.dll`), or a folder of
+   * versioned plugin folders. Stored for reference; the version is read from the
+   * DLL rather than the folder name.
+   */
+  dthExporterFolder: string
+  /**
+   * Selected Exporter Plugin version (the DLL's FileVersion, e.g. "1.0.0.1"), or
+   * a folder name fallback when a plugin folder carries no version resource.
+   * Empty = not chosen / none detected.
+   */
+  currentDthExporterVersion: string
+  /**
+   * Where Daz Studio is installed (e.g. `C:/Program Files/DAZ 3D/DAZStudio4`).
+   * Optional — the DTH install drops the exporter plugin DLLs into its `plugins`
+   * subfolder.
+   */
+  dazInstallFolder: string
+  /**
+   * The Houdini documents folder (e.g. `D:/User Data/Documents/houdini20.5`).
+   * Optional — the DTH install merges the release's Houdini assets
+   * (otls/presets/toolbar) into it.
+   */
+  houdiniDocsFolder: string
   /** Default subfolder a copied Daz scene lands in, under the character folder. */
   dazSubdir: string
   /** Name of the empty Houdini folder seeded into each new character (a nudge to
@@ -545,6 +570,10 @@ function defaultSettings(): StudioSettings {
     dazScriptsFolder: '',
     dthPosesFolder: '',
     currentDthVersion: '',
+    dthExporterFolder: '',
+    currentDthExporterVersion: '',
+    dazInstallFolder: '',
+    houdiniDocsFolder: '',
     dazSubdir: 'daz3d',
     houdiniSubdir: 'houdini',
     createHoudiniSubdir: true,
@@ -568,6 +597,22 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.currentDthVersion === 'string'
           ? raw.currentDthVersion
           : defaults.currentDthVersion,
+      dthExporterFolder:
+        typeof raw.dthExporterFolder === 'string'
+          ? raw.dthExporterFolder
+          : defaults.dthExporterFolder,
+      currentDthExporterVersion:
+        typeof raw.currentDthExporterVersion === 'string'
+          ? raw.currentDthExporterVersion
+          : defaults.currentDthExporterVersion,
+      dazInstallFolder:
+        typeof raw.dazInstallFolder === 'string'
+          ? raw.dazInstallFolder
+          : defaults.dazInstallFolder,
+      houdiniDocsFolder:
+        typeof raw.houdiniDocsFolder === 'string'
+          ? raw.houdiniDocsFolder
+          : defaults.houdiniDocsFolder,
       dazSubdir:
         typeof raw.dazSubdir === 'string' && raw.dazSubdir ? raw.dazSubdir : defaults.dazSubdir,
       houdiniSubdir:
@@ -795,6 +840,114 @@ export async function listDthReleases(folder: string): Promise<{
   return { mode: 'multi', version: '', releases, error: null }
 }
 
+// --- DTH Exporter Plugin --------------------------------------------------
+// The Exporter Plugin ships as DLLs (not a content pack), so a "release" is a
+// folder holding the exporter DLL (`dth_tools.dll` is an optional companion).
+// Folder names carry no version, so the version is read from the DLL itself.
+
+export interface DthExporterReleaseInfo {
+  /** The DLL's FileVersion (e.g. "1.0.0.1"), or the folder name when it has none. */
+  version: string
+  /** The folder name on disk holding the plugin. */
+  name: string
+}
+
+/**
+ * Whether a filename is the exporter DLL. Matched by pattern, not a fixed name:
+ * the DLL has been renamed across releases (`dth_exporter.dll` →
+ * `dsp_dth_exporter.dll`), so any `*dth_exporter*.dll` counts (which still
+ * excludes the optional `dth_tools.dll` companion).
+ */
+function isExporterDll(name: string): boolean {
+  const lower = name.toLowerCase()
+  return lower.endsWith('.dll') && lower.includes('dth_exporter')
+}
+
+/** Absolute path to the exporter DLL in `folder`, or null when there isn't one. */
+async function findExporterDll(folder: string): Promise<string | null> {
+  let entries: Awaited<ReturnType<typeof readDir>>
+  try {
+    entries = await readDir(folder)
+  } catch {
+    return null
+  }
+  const match = entries.find((entry) => entry.isFile && isExporterDll(entry.name))
+  return match ? join(folder, match.name) : null
+}
+
+/**
+ * Read a Windows DLL/EXE FileVersion from its `VS_FIXEDFILEINFO` resource by
+ * scanning the bytes for the `0xFEEF04BD` signature (no full PE parse needed).
+ * The two 32-bit words after the signature+struct-version encode the version as
+ * major.minor.build.revision. Returns a dotted string, or '' when absent.
+ */
+async function readDllFileVersion(path: string): Promise<string> {
+  let bytes: Uint8Array
+  try {
+    bytes = await readFile(path)
+  } catch {
+    return ''
+  }
+  for (let i = 0; i + 16 <= bytes.length; i++) {
+    // 0xFEEF04BD, little-endian on disk → bytes BD 04 EF FE.
+    if (bytes[i] === 0xbd && bytes[i + 1] === 0x04 && bytes[i + 2] === 0xef && bytes[i + 3] === 0xfe) {
+      const view = new DataView(bytes.buffer, bytes.byteOffset + i + 8, 8)
+      const ms = view.getUint32(0, true)
+      const ls = view.getUint32(4, true)
+      return [(ms >>> 16) & 0xffff, ms & 0xffff, (ls >>> 16) & 0xffff, ls & 0xffff].join('.')
+    }
+  }
+  return ''
+}
+
+/**
+ * Inspect a configured Exporter Plugin folder — mirrors `listDthReleases`:
+ *  - **single**: the folder itself holds the exporter DLL; its version is read
+ *    from the DLL;
+ *  - **multi**: a folder of plugin folders (each with the exporter DLL), newest
+ *    version first, de-duplicated by version.
+ */
+export async function listDthExporterReleases(folder: string): Promise<{
+  mode: 'single' | 'multi' | 'none'
+  version: string
+  releases: Array<DthExporterReleaseInfo>
+  error: string | null
+}> {
+  if (!folder) return { mode: 'none', version: '', releases: [], error: null }
+  if (!(await isDir(folder))) {
+    return { mode: 'none', version: '', releases: [], error: `Folder not reachable: ${folder}` }
+  }
+  const dll = await findExporterDll(folder)
+  if (dll) {
+    return { mode: 'single', version: await readDllFileVersion(dll), releases: [], error: null }
+  }
+  const children = await readDir(folder)
+  const found: Array<DthExporterReleaseInfo & { v: Array<number> }> = []
+  for (const child of children) {
+    if (!child.isDirectory) continue
+    const subDll = await findExporterDll(join(folder, child.name))
+    if (!subDll) continue
+    // Fall back to the folder name so a version-less DLL is still selectable.
+    const version = (await readDllFileVersion(subDll)) || child.name
+    found.push({ version, name: child.name, v: parseVersion(version) })
+  }
+  if (found.length === 0) {
+    return {
+      mode: 'none',
+      version: '',
+      releases: [],
+      error:
+        'No DTH Exporter Plugin here. Pick the plugin folder (containing the exporter DLL) or a folder of versioned plugin folders.',
+    }
+  }
+  const byVersion = new Map<string, DthExporterReleaseInfo & { v: Array<number> }>()
+  for (const r of found) if (!byVersion.has(r.version)) byVersion.set(r.version, r)
+  const releases = [...byVersion.values()]
+    .sort((a, b) => compareVersions(b.v, a.v))
+    .map(({ v: _v, ...r }) => r)
+  return { mode: 'multi', version: '', releases, error: null }
+}
+
 /** Shown when a release is only available as a zip — Daz can't load from one. */
 export const ZIP_RELEASE_WARNING = 'Extract the release zip first and select folders only.'
 
@@ -957,5 +1110,124 @@ export async function listPoseAssets(): Promise<{
     return { folder: catalog.posesFolder, assets: catalog.assets, error: null }
   } catch {
     return { folder: '', assets: [], error: 'No pose catalog yet — scan a DTH release in Settings' }
+  }
+}
+
+// --- DTH install plan -----------------------------------------------------
+// The "Install" button copies a DTH release + the Exporter Plugin into the local
+// Daz Studio + Houdini installs (a port of the dth-cli install commands). The
+// heavy recursive copy runs in Rust (see apps/desktop); these helpers only
+// resolve WHICH release/plugin and WHERE — fast, and reusing the pickers' logic.
+
+/**
+ * Resolve the active DTH release *root* (the folder holding `Daz Studio Content`
+ * and `Houdini Assets`) from the configured folder + selected version — the
+ * install counterpart to {@link resolveActiveRelease}, which returns the Poses
+ * subfolder instead.
+ */
+async function resolveActiveReleaseRoot(
+  folder: string,
+  currentVersion: string,
+): Promise<{ releaseRoot: string; version: string; name: string; error: string | null }> {
+  if (!folder) return { releaseRoot: '', version: '', name: '', error: 'No DTH release folder configured' }
+  if (!(await isDir(folder))) {
+    return { releaseRoot: '', version: '', name: '', error: `Folder not reachable: ${folder}` }
+  }
+  if (await isReleaseFolder(folder)) {
+    return {
+      releaseRoot: folder,
+      version: versionLabel(parseVersion(basename(folder))),
+      name: basename(folder),
+      error: null,
+    }
+  }
+  const list = await listDthReleases(folder)
+  if (list.mode !== 'multi' || list.releases.length === 0) {
+    return { releaseRoot: '', version: '', name: '', error: list.error ?? `No DTH release found in: ${folder}` }
+  }
+  const chosen =
+    list.releases.find((r) => r.version === currentVersion) ??
+    list.releases.find((r) => r.kind === 'folder') ??
+    list.releases[0]
+  if (chosen.kind === 'zip') {
+    return { releaseRoot: '', version: chosen.version, name: chosen.name, error: ZIP_RELEASE_WARNING }
+  }
+  return { releaseRoot: join(folder, chosen.name), version: chosen.version, name: chosen.name, error: null }
+}
+
+/**
+ * Resolve the active Exporter Plugin *folder* (the one holding the DLLs) from the
+ * configured folder + selected version — single mode is the folder itself, multi
+ * mode the chosen versioned subfolder.
+ */
+async function resolveExporterFolder(
+  folder: string,
+  currentVersion: string,
+): Promise<{ exporterFolder: string; version: string; error: string | null }> {
+  if (!folder) return { exporterFolder: '', version: '', error: 'No Exporter Plugin folder configured' }
+  if (!(await isDir(folder))) {
+    return { exporterFolder: '', version: '', error: `Folder not reachable: ${folder}` }
+  }
+  const dll = await findExporterDll(folder)
+  if (dll) {
+    return { exporterFolder: folder, version: await readDllFileVersion(dll), error: null }
+  }
+  const list = await listDthExporterReleases(folder)
+  if (list.mode !== 'multi' || list.releases.length === 0) {
+    return { exporterFolder: '', version: '', error: list.error ?? `No Exporter Plugin found in: ${folder}` }
+  }
+  const chosen = list.releases.find((r) => r.version === currentVersion) ?? list.releases[0]
+  return { exporterFolder: join(folder, chosen.name), version: chosen.version, error: null }
+}
+
+/** The concrete source/destination paths the Rust install command needs. */
+export interface InstallPlan {
+  /** Release root (contains `Daz Studio Content` + `Houdini Assets`). */
+  releaseRoot: string
+  releaseName: string
+  releaseVersion: string
+  /** Folder holding the exporter DLLs. */
+  exporterFolder: string
+  exporterVersion: string
+  /** "My DAZ 3D Library" — destination for the release's Daz content ('' skips it). */
+  dazLibFolder: string
+  /** Daz Studio install root — DLLs go to its `plugins` subfolder. */
+  dazInstallFolder: string
+  /** Houdini documents folder — destination for the release's Houdini assets. */
+  houdiniDocsFolder: string
+  /** Blocking problems; non-empty means the install can't run yet. */
+  errors: Array<string>
+}
+
+/**
+ * Resolve everything the DTH install needs from the saved settings: the active
+ * release root, the exporter folder, and the configured tool paths. Collects
+ * blocking problems in `errors` (the caller refuses to install when non-empty).
+ */
+export async function resolveInstallPlan(): Promise<InstallPlan> {
+  const s = await getSettings()
+  const errors: Array<string> = []
+
+  const release = await resolveActiveReleaseRoot(s.dthPosesFolder, s.currentDthVersion)
+  if (release.error || !release.releaseRoot) {
+    errors.push(release.error ?? 'No DTH release resolved — set the DTH release folder.')
+  }
+  const exporter = await resolveExporterFolder(s.dthExporterFolder, s.currentDthExporterVersion)
+  if (exporter.error || !exporter.exporterFolder) {
+    errors.push(exporter.error ?? 'No DTH Exporter Plugin resolved — set the Exporter Plugin folder.')
+  }
+  if (!s.dazInstallFolder) errors.push('Set the Daz Studio install folder.')
+  if (!s.houdiniDocsFolder) errors.push('Set the Houdini documents folder.')
+
+  return {
+    releaseRoot: release.releaseRoot,
+    releaseName: release.name,
+    releaseVersion: release.version,
+    exporterFolder: exporter.exporterFolder,
+    exporterVersion: exporter.version,
+    dazLibFolder: s.dazLibraryFolder,
+    dazInstallFolder: s.dazInstallFolder,
+    houdiniDocsFolder: s.houdiniDocsFolder,
+    errors,
   }
 }
