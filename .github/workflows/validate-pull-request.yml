@@ -1,0 +1,35 @@
+name: Validate Pull Request
+
+# Basic checks on every pull request: typecheck, tests, and a web build. The
+# version/release workflows only run on pushes to main, so this is the gate that
+# catches regressions before a PR is merged.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm -r typecheck
+      - name: Test
+        run: pnpm -r test
+      - name: Build web
+        run: pnpm --filter @dth/web build
