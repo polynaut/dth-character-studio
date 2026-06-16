@@ -4,7 +4,9 @@ import { z } from 'zod'
 import {
   ArrowLeft,
   Download,
+  ExternalLink,
   FolderInput,
+  Link2,
   Pencil,
   Plus,
   Save,
@@ -32,15 +34,20 @@ import {
 import { Switch } from '#/components/ui/switch.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import {
+  copyDazScene,
   fetchCharacter,
   fetchPoseAssets,
   fetchSettings,
+  fileExists,
   generateCharacterFiles,
   getCharacterPath,
   moveCharacter,
+  openScene,
+  relinkScene,
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
+import { pickDufPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
@@ -53,12 +60,15 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
     const { projectId, characterId: id } = params
     const character = await fetchCharacter({ data: { projectId, id } })
     if (!character) throw notFound()
-    const [settings, catalog, location] = await Promise.all([
+    const [settings, catalog, location, sceneExists] = await Promise.all([
       fetchSettings(),
       fetchPoseAssets(),
       getCharacterPath({ data: { projectId, id } }),
+      character.scenePath
+        ? fileExists({ data: { path: character.scenePath } })
+        : Promise.resolve(false),
     ])
-    return { character, settings, catalog, location }
+    return { character, settings, catalog, location, sceneExists }
   },
   component: CharacterPage,
 })
@@ -354,9 +364,166 @@ function StorageLocation({
   )
 }
 
+/**
+ * The linked Daz scene: an "Open in Daz" button when the scene file is present,
+ * or a "Link Daz scene" picker when it's missing / never linked. Picking a scene
+ * outside the project pauses on a modal offering to copy it into the character's
+ * folder (mirrors the create flow). Linking persists immediately, preserving any
+ * unsaved editor edits.
+ */
+function DazSceneField({
+  projectId,
+  character,
+  location,
+  sceneExists,
+  onLinked,
+}: {
+  projectId: string
+  character: Character
+  location: CharacterLocation
+  sceneExists: boolean
+  onLinked: (character: Character) => void
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  // A picked scene outside the project pauses here awaiting the copy decision.
+  const [pending, setPending] = useState('')
+  const [subfolder, setSubfolder] = useState('daz3d')
+
+  const linked = Boolean(character.scenePath)
+  const ready = linked && sceneExists
+
+  function insideProject(p: string): boolean {
+    const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+    return norm(p).startsWith(norm(location.libraryFolder) + '/')
+  }
+
+  async function onOpen() {
+    setError('')
+    try {
+      await openScene({ data: { scenePath: character.scenePath } })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      toast.error(`Couldn't open in Daz: ${msg}`)
+    }
+  }
+
+  async function onPick() {
+    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    if (!picked) return
+    if (!insideProject(picked)) {
+      setSubfolder('daz3d')
+      setPending(picked)
+      return
+    }
+    await applyLink(picked, false)
+  }
+
+  async function applyLink(scene: string, copyInto: boolean) {
+    setBusy(true)
+    setError('')
+    try {
+      const finalScene = copyInto
+        ? await copyDazScene({
+            data: {
+              projectId,
+              characterId: character.id,
+              scenePath: scene,
+              subfolder: subfolder.trim(),
+            },
+          })
+        : scene
+      const saved = await relinkScene({ data: { projectId, character, scenePath: finalScene } })
+      onLinked(saved)
+      setPending('')
+      void router.invalidate()
+      toast.success('Linked Daz scene')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <Label className="mb-1 block">Daz scene</Label>
+      <div className="flex flex-wrap items-center gap-3">
+        {ready ? (
+          <PathCode path={displayPath(character.scenePath)} className="text-xs" />
+        ) : linked ? (
+          <span className="text-xs text-muted-foreground">
+            Missing —{' '}
+            <code className="rounded bg-muted px-1 py-0.5 break-all">
+              {displayPath(character.scenePath)}
+            </code>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">No scene linked.</span>
+        )}
+        {ready ? (
+          <Button size="sm" className="shrink-0" onClick={() => void onOpen()}>
+            <ExternalLink /> Open in Daz
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            disabled={busy}
+            onClick={() => void onPick()}
+          >
+            <Link2 /> {busy ? 'Linking…' : 'Link Daz scene'}
+          </Button>
+        )}
+      </div>
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+
+      {pending && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !busy && setPending('')}
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold">Copy the Daz scene into the project?</h2>
+            <p className="text-sm text-muted-foreground">
+              The selected scene lives outside this project. Copy it (and its{' '}
+              <code className="rounded bg-muted px-1 py-0.5">.png</code> /{' '}
+              <code className="rounded bg-muted px-1 py-0.5">.tip.png</code> thumbnails) into the
+              character's folder?
+            </p>
+            <div>
+              <Label className="mb-1 block">Subfolder</Label>
+              <Input
+                value={subfolder}
+                placeholder="(character folder root)"
+                onChange={(e) => setSubfolder(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => void applyLink(pending, false)}>
+                Link in place
+              </Button>
+              <Button disabled={busy} onClick={() => void applyLink(pending, true)}>
+                {busy ? 'Copying…' : 'Copy & link'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CharacterPage() {
   const { projectId } = Route.useParams()
-  const { character: initial, settings, catalog, location } = Route.useLoaderData()
+  const { character: initial, settings, catalog, location, sceneExists } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
   const [character, setCharacter] = useState<Character>(initial)
@@ -429,6 +596,13 @@ function CharacterPage() {
 
   function onDiscard() {
     setCharacter(baseline)
+  }
+
+  // Linking a Daz scene persists immediately (see relinkScene), so settle the
+  // draft + baseline on the saved result — like the inline rename / avatar.
+  function onSceneLinked(saved: Character) {
+    setCharacter(saved)
+    setBaseline(saved)
   }
 
   function download(file: GeneratedFile) {
@@ -603,12 +777,13 @@ function CharacterPage() {
         {location && (
           <div className="mt-6 space-y-4 border-t pt-5">
             <StorageLocation projectId={projectId} id={character.id} location={location} />
-            {character.scenePath && (
-              <div>
-                <Label className="mb-1 block">Daz scene</Label>
-                <PathCode path={displayPath(character.scenePath)} className="text-xs" />
-              </div>
-            )}
+            <DazSceneField
+              projectId={projectId}
+              character={character}
+              location={location}
+              sceneExists={sceneExists}
+              onLinked={onSceneLinked}
+            />
           </div>
         )}
       </section>

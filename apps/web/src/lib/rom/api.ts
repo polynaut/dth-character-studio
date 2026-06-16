@@ -1,5 +1,6 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
 import { characterScriptName, generateAll, poseAssetFileName, resolveRomPaths } from '@dth/rom'
@@ -202,8 +203,9 @@ const copySceneInput = z.object({
  * Copy a Daz scene into the character's folder (used when the picked scene lives
  * outside the project). Copies the `.duf` plus its two sibling thumbnails
  * (`<scene>.png` and `<scene>.tip.png`) into `<characterFolder>/<subfolder>/`.
+ * Returns the absolute path of the copied `.duf`.
  */
-export async function copyDazScene({ data }: { data: unknown }): Promise<void> {
+export async function copyDazScene({ data }: { data: unknown }): Promise<string> {
   const input = copySceneInput.parse(data)
   const lib = await projectPath(input.projectId)
   const folder = await storage.getCharacterFolder(lib, input.characterId)
@@ -220,6 +222,46 @@ export async function copyDazScene({ data }: { data: unknown }): Promise<void> {
     if (await exists(src)) {
       await writeFile(joinPath(destDir, basename(src)), await readFile(src))
     }
+  }
+  return joinPath(destDir, basename(input.scenePath))
+}
+
+const relinkInput = z.object({
+  projectId: z.string().min(1),
+  /** The current (possibly draft) character — saved with the new scene path. */
+  character: z.unknown(),
+  /** Absolute path to the newly-linked Daz scene (.duf). */
+  scenePath: z.string().min(1),
+})
+
+/**
+ * Point a character at a (new) Daz scene: persist the path and refresh the
+ * avatar from that scene's `.tip.png`. Operates on the passed-in character so
+ * any unsaved editor edits are preserved (mirrors the inline rename).
+ */
+export async function relinkScene({ data }: { data: unknown }): Promise<Character> {
+  const { projectId, character, scenePath } = relinkInput.parse(data)
+  const parsed = characterSchema.parse(character)
+  const next: Character = { ...parsed, scenePath, updatedAt: new Date().toISOString() }
+  const image = await copyTipImage(parsed.id, scenePath)
+  if (image) next.image = image
+  return storage.saveCharacter(await projectPath(projectId), next)
+}
+
+/** Open a file with its OS-default application (a `.duf` opens in Daz Studio). */
+export async function openScene({ data }: { data: unknown }): Promise<void> {
+  const { scenePath } = z.object({ scenePath: z.string().min(1) }).parse(data)
+  await shellOpen(scenePath)
+}
+
+/** Whether a path exists on disk; false (never throws) when it can't be probed. */
+export async function fileExists({ data }: { data: unknown }): Promise<boolean> {
+  const { path } = z.object({ path: z.string() }).parse(data)
+  if (!path) return false
+  try {
+    return await exists(path)
+  } catch {
+    return false
   }
 }
 
