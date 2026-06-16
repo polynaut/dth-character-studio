@@ -178,8 +178,10 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     updatedAt: now,
     ...(input.prefill === 'example' ? examplePrefill() : {}),
   }
-  // The picked scene's tip thumbnail becomes the avatar.
+  // The picked scene's tip thumbnail becomes the avatar, and we record the scene
+  // path as read-only provenance shown in the editor.
   if (input.scenePath) {
+    base.scenePath = input.scenePath
     const image = await copyTipImage(id, input.scenePath)
     if (image) base.image = image
   }

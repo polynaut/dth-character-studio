@@ -319,7 +319,7 @@ function StorageLocation({
   }
 
   return (
-    <div className="max-w-lg">
+    <div>
       <Label className="mb-1 block">Filepath</Label>
       <div className="flex items-center gap-2">
         <span
@@ -564,9 +564,6 @@ function CharacterPage() {
                 </Select>
               </div>
             </div>
-            {location && (
-              <StorageLocation projectId={projectId} id={character.id} location={location} />
-            )}
           </div>
 
           {/* The legend is positioned absolutely (a notch on the border) so it
@@ -603,6 +600,17 @@ function CharacterPage() {
             </div>
           </fieldset>
         </div>
+        {location && (
+          <div className="mt-6 space-y-4 border-t pt-5">
+            <StorageLocation projectId={projectId} id={character.id} location={location} />
+            {character.scenePath && (
+              <div>
+                <Label className="mb-1 block">Daz scene</Label>
+                <PathCode path={displayPath(character.scenePath)} className="text-xs" />
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <details className="mb-8 rounded-lg border bg-card">

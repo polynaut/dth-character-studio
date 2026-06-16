@@ -344,6 +344,12 @@ export const characterSchema = z.object({
   name: z.string().min(1),
   /** Path or URL to a recognition image; optional. */
   image: z.string().default(''),
+  /**
+   * Absolute path to the Daz scene (`.duf`) this character was created from.
+   * Read-only provenance shown in the editor; empty for characters made before
+   * the scene-based create flow.
+   */
+  scenePath: z.string().default(''),
   genesis: genesisVersionSchema.default('G9'),
   gender: genderSchema.default('female'),
   targetSkeleton: targetSkeletonSchema.default('UE5'),
