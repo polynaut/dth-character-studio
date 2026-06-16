@@ -22,6 +22,7 @@ import {
   fetchProject,
   generateCharacterFiles,
   resolveScenePreview,
+  saveCharacter,
   updateProject,
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
@@ -160,7 +161,7 @@ function ProjectCharactersPage() {
     setBusy(true)
     setError('')
     try {
-      const character = await createCharacter({
+      let character = await createCharacter({
         data: {
           projectId,
           name,
@@ -172,13 +173,19 @@ function ProjectCharactersPage() {
         },
       })
       if (copyScene) {
-        await copyDazScene({
+        // Copying brings the scene into the character folder — repoint the
+        // stored scenePath at that in-project copy (createCharacter recorded the
+        // original external path).
+        const movedScene = await copyDazScene({
           data: {
             projectId,
             characterId: character.id,
             scenePath: scenePath.trim(),
             subfolder: copySubfolder.trim(),
           },
+        })
+        character = await saveCharacter({
+          data: { projectId, character: { ...character, scenePath: movedScene } },
         })
       }
       // Generate the initial files so they exist + match the UI right away — the
