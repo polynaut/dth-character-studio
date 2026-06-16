@@ -1,5 +1,33 @@
 # @dth/web
 
+## 0.5.0
+
+### Minor Changes
+
+- [#20](https://github.com/polynaut/dth-character-studio/pull/20) [`4f00e2a`](https://github.com/polynaut/dth-character-studio/commit/4f00e2a1eeda2a2ca23c5027f36b38c24c5119e0) Thanks [@polynaut](https://github.com/polynaut)! - Rework the DTH release settings. The folder now accepts exactly two shapes: a
+  single DTH release (detected by its `copyright.txt`), or a folder of versioned
+  release folders. A multi-release folder shows a **version dropdown**; the chosen
+  version is stored as `currentDthVersion` (`CURRENT_DTH_VERSION`) and, once set,
+  newer releases dropped in later don't switch it automatically — you pick and
+  save. When unset it pre-selects the latest extracted release and flags the form
+  so you save once to record it.
+
+  Saving now (re)builds the pose catalog for the active release — the separate
+  "Scan DTH release" button is gone. Zipped releases are listed in the dropdown so
+  you can see they exist, but they can't be used directly (Daz can't load poses
+  from inside an archive); selecting one shows an "extract the release zip first"
+  warning. The "point directly at a Poses folder" option was dropped — we always
+  work with a full DTH release.
+
+### Patch Changes
+
+- [#19](https://github.com/polynaut/dth-character-studio/pull/19) [`2fa47cf`](https://github.com/polynaut/dth-character-studio/commit/2fa47cfdd80408c721605d5ca52aab102403cb7f) Thanks [@polynaut](https://github.com/polynaut)! - Remove the "DAZ 3D Library: …path… · change" line from the Projects overview —
+  it's redundant there since the library is managed in Settings (reachable via the
+  header link). The first-run prompt to set the library (shown only when none is
+  configured) is kept.
+- Updated dependencies []:
+  - @dth/rom@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes
