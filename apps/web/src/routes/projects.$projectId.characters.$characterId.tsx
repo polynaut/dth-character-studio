@@ -666,7 +666,7 @@ function CharacterPage() {
         </div>
       </div>
 
-      <header className="mb-8 flex items-center gap-5">
+      <header className="mb-8 flex items-end gap-5">
         <button
           type="button"
           className="group relative shrink-0"
@@ -683,7 +683,7 @@ function CharacterPage() {
             <Pencil className="size-8 text-white" />
           </span>
         </button>
-        <div>
+        <div className="pb-2">
           <EditableTitle
             name={character.name}
             ariaLabel="Character name"
