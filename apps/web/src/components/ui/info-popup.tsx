@@ -136,7 +136,7 @@ export function InfoPopup({
             <div
               style={transitionStyles}
               onClick={onContentClick}
-              className="max-w-xs rounded-lg border bg-popover px-4 py-3 text-sm leading-relaxed text-popover-foreground shadow-md [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+              className="max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl shadow-black/60 ring-1 ring-black/40 [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
             >
               {children}
               <FloatingArrow
@@ -144,7 +144,10 @@ export function InfoPopup({
                 context={context}
                 height={ARROW_HEIGHT}
                 width={ARROW_HEIGHT * 2}
-                className="fill-popover"
+                tipRadius={1}
+                className="fill-neutral-900"
+                stroke="rgb(255 255 255 / 0.1)"
+                strokeWidth={1}
               />
             </div>
           </div>
