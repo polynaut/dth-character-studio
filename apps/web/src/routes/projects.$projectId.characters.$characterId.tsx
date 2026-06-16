@@ -638,74 +638,78 @@ function CharacterPage() {
   }
 
   return (
-    <main className="p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId }}
-          onMouseDown={() => {
-            swallowNavRef.current = editingTitle
-          }}
-          onClick={(e) => {
-            if (swallowNavRef.current) {
-              e.preventDefault()
-              swallowNavRef.current = false
-            }
-          }}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" /> Back to project
-        </Link>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
-            <Undo2 /> Discard
-          </Button>
-          <Button onClick={onSave} disabled={saving || !dirty}>
-            <Save /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-          </Button>
+    <main className="p-8 pt-0">
+      {/* Floating header — pinned to the top so the buttons, avatar and title
+          stay visible while the form below scrolls under it. */}
+      <div className="sticky top-0 z-20 -mx-8 border-b bg-background px-8 pt-8 pb-5">
+        <div className="mb-6 flex items-center justify-between">
+          <Link
+            to="/projects/$projectId"
+            params={{ projectId }}
+            onMouseDown={() => {
+              swallowNavRef.current = editingTitle
+            }}
+            onClick={(e) => {
+              if (swallowNavRef.current) {
+                e.preventDefault()
+                swallowNavRef.current = false
+              }
+            }}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" /> Back to project
+          </Link>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
+              <Undo2 /> Discard
+            </Button>
+            <Button onClick={onSave} disabled={saving || !dirty}>
+              <Save /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+            </Button>
+          </div>
         </div>
+
+        <header className="flex items-end gap-5">
+          <button
+            type="button"
+            className="group relative shrink-0"
+            title="Edit the character image"
+            onClick={() => setImageDialogOpen(true)}
+          >
+            <Avatar
+              image={character.image}
+              name={character.name}
+              className="aspect-[3/4] w-[170px] rounded-lg bg-neutral-300"
+              fallbackClassName="text-6xl"
+            />
+            <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              <Pencil className="size-8 text-white" />
+            </span>
+          </button>
+          <div className="pb-6">
+            <EditableTitle
+              name={character.name}
+              ariaLabel="Character name"
+              onEditingChange={setEditingTitle}
+              onSave={onRenameCharacter}
+            />
+            <p className="text-muted-foreground">
+              {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
+              {countPoses(character.sections)} custom ROM frames
+            </p>
+            {location && (
+              <p className="mt-1.5 text-xs">
+                <PathCode path={defAbs}>
+                  <span className="text-muted-foreground/60">{libRoot}</span>
+                  <span className="text-foreground/80">{defSuffix}</span>
+                </PathCode>
+              </p>
+            )}
+          </div>
+        </header>
       </div>
 
-      <header className="mb-8 flex items-end gap-5">
-        <button
-          type="button"
-          className="group relative shrink-0"
-          title="Edit the character image"
-          onClick={() => setImageDialogOpen(true)}
-        >
-          <Avatar
-            image={character.image}
-            name={character.name}
-            className="aspect-[3/4] w-[170px] rounded-lg bg-neutral-300"
-            fallbackClassName="text-6xl"
-          />
-          <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <Pencil className="size-8 text-white" />
-          </span>
-        </button>
-        <div className="pb-6">
-          <EditableTitle
-            name={character.name}
-            ariaLabel="Character name"
-            onEditingChange={setEditingTitle}
-            onSave={onRenameCharacter}
-          />
-          <p className="text-muted-foreground">
-            {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-            {countPoses(character.sections)} custom ROM frames
-          </p>
-          {location && (
-            <p className="mt-1.5 text-xs">
-              <PathCode path={defAbs}>
-                <span className="text-muted-foreground/60">{libRoot}</span>
-                <span className="text-foreground/80">{defSuffix}</span>
-              </PathCode>
-            </p>
-          )}
-        </div>
-      </header>
-
-      <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
+      <section className="mt-8 mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5">
             <div className="flex flex-wrap gap-4">
