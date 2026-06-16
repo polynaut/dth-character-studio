@@ -2,7 +2,6 @@ import {
   exists,
   mkdir,
   readDir,
-  readFile,
   readTextFile,
   remove,
   rename,
@@ -10,7 +9,6 @@ import {
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { appLocalDataDir } from '@tauri-apps/api/path'
-import { unzipSync } from 'fflate'
 
 import {
   ROM_SECTIONS,
@@ -709,9 +707,6 @@ function posesFolderOf(releaseRoot: string): string {
   return join(releaseRoot, 'Daz Studio Content', 'DazToHue', 'Poses')
 }
 
-/** Lower-cased zip-entry prefix the pose presets live under, inside a release archive. */
-const ZIP_POSES_PREFIX = 'daz studio content/daztohue/poses/'
-
 export interface DthReleaseInfo {
   /** Dotted version label parsed from the name, e.g. "2.4.3". */
   version: string
@@ -775,27 +770,28 @@ export async function listDthReleases(folder: string): Promise<{
   return { mode: 'multi', version: '', releases, error: null }
 }
 
+/** Shown when a release is only available as a zip — Daz can't load from one. */
+export const ZIP_RELEASE_WARNING = 'Extract the release zip first and select folders only.'
+
 /**
  * Resolve the release to scan from the configured folder + the selected version.
  * A single-release folder resolves to itself; a multi-release folder resolves to
- * the chosen version (newest as a fallback when the stored selection is gone).
+ * the chosen version (falling back to the newest extracted folder). A zip
+ * release can't be scanned — Daz can't load poses from inside an archive — so it
+ * resolves to the extract-first warning.
  */
 async function resolveActiveRelease(
   folder: string,
   currentVersion: string,
 ): Promise<{
-  kind: 'folder' | 'zip'
   posesFolder: string
-  zipPath: string
   version: string
   releaseName: string
   error: string | null
 }> {
   if (await isReleaseFolder(folder)) {
     return {
-      kind: 'folder',
       posesFolder: posesFolderOf(folder),
-      zipPath: '',
       version: versionLabel(parseVersion(basename(folder))),
       releaseName: basename(folder),
       error: null,
@@ -803,30 +799,17 @@ async function resolveActiveRelease(
   }
   const list = await listDthReleases(folder)
   if (list.mode !== 'multi' || list.releases.length === 0) {
-    return {
-      kind: 'folder',
-      posesFolder: '',
-      zipPath: '',
-      version: '',
-      releaseName: '',
-      error: list.error ?? `No DTH release found in: ${folder}`,
-    }
+    return { posesFolder: '', version: '', releaseName: '', error: list.error ?? `No DTH release found in: ${folder}` }
   }
-  const chosen = list.releases.find((r) => r.version === currentVersion) ?? list.releases[0]
+  const chosen =
+    list.releases.find((r) => r.version === currentVersion) ??
+    list.releases.find((r) => r.kind === 'folder') ??
+    list.releases[0]
   if (chosen.kind === 'zip') {
-    return {
-      kind: 'zip',
-      posesFolder: '',
-      zipPath: join(folder, chosen.name),
-      version: chosen.version,
-      releaseName: chosen.name,
-      error: null,
-    }
+    return { posesFolder: '', version: chosen.version, releaseName: chosen.name, error: ZIP_RELEASE_WARNING }
   }
   return {
-    kind: 'folder',
     posesFolder: posesFolderOf(join(folder, chosen.name)),
-    zipPath: '',
     version: chosen.version,
     releaseName: chosen.name,
     error: null,
@@ -878,63 +861,6 @@ async function scanPosesFolder(posesFolder: string): Promise<Array<DthPoseAsset>
   return assets
 }
 
-/** Largest release zip we'll read into memory to list its pose entries (~1.5 GB). */
-const MAX_ZIP_BYTES = 1_500_000_000
-
-/**
- * Scan a zipped release WITHOUT extracting it: read the archive and list its
- * entries via fflate (the filter returns false so nothing is decompressed), then
- * classify the `.duf` presets found under the `Daz Studio Content/DazToHue/Poses/`
- * prefix. Guarded by a size cap so a huge archive can't exhaust memory.
- */
-async function scanZipRelease(
-  zipPath: string,
-): Promise<{ assets: Array<DthPoseAsset>; error: string | null }> {
-  let size = 0
-  try {
-    size = (await stat(zipPath)).size
-  } catch {
-    /* readFile below will surface a clearer error */
-  }
-  if (size > MAX_ZIP_BYTES) {
-    return {
-      assets: [],
-      error: `Release zip is too large to read in-app (~${Math.round(size / 1e8) / 10} GB) — extract it first.`,
-    }
-  }
-  let bytes: Uint8Array
-  try {
-    bytes = await readFile(zipPath)
-  } catch (e) {
-    return { assets: [], error: `Couldn't read ${basename(zipPath)}: ${e instanceof Error ? e.message : String(e)}` }
-  }
-  const names: Array<string> = []
-  try {
-    unzipSync(bytes, {
-      filter: (file) => {
-        names.push(file.name)
-        return false // collect the name only — don't decompress the entry
-      },
-    })
-  } catch (e) {
-    return {
-      assets: [],
-      error: `Couldn't read the contents of ${basename(zipPath)}: ${e instanceof Error ? e.message : String(e)}`,
-    }
-  }
-  const assets: Array<DthPoseAsset> = []
-  for (const raw of names) {
-    const entry = raw.replace(/\\/g, '/')
-    if (!entry.toLowerCase().endsWith('.duf')) continue
-    const idx = entry.toLowerCase().indexOf(ZIP_POSES_PREFIX)
-    if (idx < 0) continue
-    const relPath = entry.slice(idx + ZIP_POSES_PREFIX.length)
-    if (relPath) assets.push(classifyPose(relPath))
-  }
-  assets.sort((a, b) => a.relPath.localeCompare(b.relPath))
-  return { assets, error: null }
-}
-
 /**
  * Explicitly (re)build the cached pose catalog from the configured DTH release
  * folder: resolve the latest release, scan + classify its presets, and write
@@ -957,33 +883,25 @@ export async function buildPoseCatalog(): Promise<{
   }
   const resolved = await resolveActiveRelease(dthPosesFolder, currentDthVersion)
   if (resolved.error) {
-    return { ...empty, folder: dthPosesFolder, error: resolved.error }
-  }
-  let assets: Array<DthPoseAsset>
-  let posesFolder: string
-  if (resolved.kind === 'zip') {
-    const scanned = await scanZipRelease(resolved.zipPath)
-    if (scanned.error) {
-      return { ...empty, folder: dthPosesFolder, releaseName: resolved.releaseName, version: resolved.version, error: scanned.error }
+    return {
+      ...empty,
+      folder: dthPosesFolder,
+      releaseName: resolved.releaseName,
+      version: resolved.version,
+      error: resolved.error,
     }
-    assets = scanned.assets
-    // A zip has no on-disk Poses folder, so generated scripts can't reference
-    // absolute paths into it. Leave the folder empty so resolveRomPaths falls
-    // back to the DthOptions runtime resolution of the installed release.
-    posesFolder = ''
-  } else {
-    posesFolder = resolved.posesFolder
-    if (!(await isDir(posesFolder))) {
-      return {
-        ...empty,
-        folder: dthPosesFolder,
-        releaseName: resolved.releaseName,
-        version: resolved.version,
-        error: `Release "${resolved.releaseName}" has no Poses folder (expected at ${posesFolder})`,
-      }
-    }
-    assets = await scanPosesFolder(posesFolder)
   }
+  const posesFolder = resolved.posesFolder
+  if (!(await isDir(posesFolder))) {
+    return {
+      ...empty,
+      folder: dthPosesFolder,
+      releaseName: resolved.releaseName,
+      version: resolved.version,
+      error: `Release "${resolved.releaseName}" has no Poses folder (expected at ${posesFolder})`,
+    }
+  }
+  const assets = await scanPosesFolder(posesFolder)
   const catalog: PoseCatalog = {
     sourceFolder: dthPosesFolder,
     releaseName: resolved.releaseName,

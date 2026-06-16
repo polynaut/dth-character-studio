@@ -120,26 +120,33 @@ function ReleasePicker({
     )
   }
   if (releases.mode === 'multi') {
+    const selected = releases.releases.find((r) => r.version === value)
     return (
       <div className="mt-3">
         <Label className="mb-1">DTH release version</Label>
         <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="w-64">
+          <SelectTrigger className="w-72">
             <SelectValue placeholder="Select a version" />
           </SelectTrigger>
           <SelectContent>
             {releases.releases.map((r) => (
               <SelectItem key={r.version} value={r.version}>
                 {r.version}
-                {r.kind === 'zip' ? ' (zip)' : ''}
+                {r.kind === 'zip' ? ' — zip (extract first)' : ''}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {releases.releases.length} release{releases.releases.length === 1 ? '' : 's'} found. New
-          releases don't switch automatically — pick one and Save.
-        </p>
+        {selected?.kind === 'zip' ? (
+          <div className="mt-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+            Extract the release zip first and select folders only.
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {releases.releases.length} release{releases.releases.length === 1 ? '' : 's'} found. New
+            releases don't switch automatically — pick one and Save.
+          </p>
+        )}
       </div>
     )
   }
@@ -250,11 +257,12 @@ function SettingsPage() {
   // later releases never switch the active version on their own.
   useEffect(() => {
     if (releases.mode !== 'multi' || releases.releases.length === 0) return
-    setSettings((s) =>
-      releases.releases.some((r) => r.version === s.currentDthVersion)
-        ? s
-        : { ...s, currentDthVersion: releases.releases[0].version },
-    )
+    setSettings((s) => {
+      if (releases.releases.some((r) => r.version === s.currentDthVersion)) return s
+      // Prefer the newest extracted folder — a zip can't be scanned.
+      const preferred = releases.releases.find((r) => r.kind === 'folder') ?? releases.releases[0]
+      return { ...s, currentDthVersion: preferred.version }
+    })
   }, [releases])
 
   const dirty =
@@ -315,9 +323,9 @@ function SettingsPage() {
               <>
                 Point this at a single DTH release folder (one containing{' '}
                 <code className="rounded bg-muted px-1 py-0.5">copyright.txt</code>), or a folder of
-                versioned releases — release folders and/or <code className="rounded bg-muted px-1 py-0.5">.zip</code>{' '}
-                archives. For a multi-release folder, choose the version below. Saving caches the
-                pose presets for the selected release.
+                versioned release folders. Zipped releases are listed but must be extracted first.
+                For a multi-release folder, choose the version below. Saving caches the pose presets
+                for the selected release.
               </>
             }
           />
