@@ -41,6 +41,9 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "shell": {
+      "open": ".+\\.[Dd][Uu][Ff]"
+    },
     "updater": {
       "endpoints": [
         "https://github.com/polynaut/dth-character-studio/releases/latest/download/latest.json"

@@ -15,6 +15,20 @@ export async function pickFbxPath(): Promise<string> {
 }
 
 /**
+ * Native .duf pose-preset picker via the Tauri dialog plugin. Returns the
+ * picked absolute path, or '' if the user cancelled.
+ */
+export async function pickDufPath(title: string): Promise<string> {
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title,
+    filters: [{ name: 'DAZ pose presets', extensions: ['duf'] }],
+  })
+  return typeof selected === 'string' ? selected : ''
+}
+
+/**
  * Native folder picker via the Tauri dialog plugin. Returns the picked absolute
  * path, or '' if the user cancelled. `defaultPath` opens the dialog there.
  */

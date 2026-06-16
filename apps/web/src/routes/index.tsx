@@ -12,6 +12,9 @@ import {
   saveSettings,
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
+import { displayPath } from '#/lib/path.ts'
+import { PathCode } from '#/components/path-code.tsx'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
   loader: async () => {
@@ -38,6 +41,7 @@ function ProjectsPage() {
     try {
       await saveSettings({ data: { ...settings, dazLibraryFolder: picked } })
       await router.invalidate()
+      toast.success('DAZ 3D Library set')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -55,6 +59,7 @@ function ProjectsPage() {
       const project = await createProject({ data: { name: name.trim(), path: picked } })
       setName('')
       await router.invalidate()
+      toast.success(`Project “${project.name}” created`)
       await router.navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -72,10 +77,11 @@ function ProjectsPage() {
       return
     await deleteProject({ data: { id } })
     await router.invalidate()
+    toast.success(`Removed “${projectName}”`)
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="p-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
@@ -93,7 +99,7 @@ function ProjectsPage() {
       </header>
 
       {!hasDazLibrary ? (
-        <div className="flex flex-col items-start gap-3 rounded-lg border bg-card p-6">
+        <div className="flex max-w-2xl flex-col items-start gap-3 rounded-lg border bg-card p-6">
           <h2 className="text-lg font-semibold">Set your DAZ 3D Library</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
             Point the studio at your <strong>My DAZ 3D Library</strong> folder (your Daz content
@@ -107,17 +113,13 @@ function ProjectsPage() {
       ) : (
         <>
           <p className="mb-6 text-xs text-muted-foreground">
-            DAZ 3D Library:{' '}
-            <code className="rounded bg-muted px-1.5 py-0.5 break-all">
-              {settings.dazLibraryFolder}
-            </code>{' '}
-            ·{' '}
+            DAZ 3D Library: <PathCode path={displayPath(settings.dazLibraryFolder)} /> ·{' '}
             <Link to="/settings" className="underline hover:text-foreground">
               change
             </Link>
           </p>
 
-          <div className="mb-8 flex items-end gap-3 rounded-lg border bg-card p-4">
+          <div className="mb-8 flex max-w-3xl items-end gap-3 rounded-lg border bg-card p-4">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">New project name</label>
               <Input
@@ -151,7 +153,7 @@ function ProjectsPage() {
                   >
                     <div className="font-semibold">{project.name}</div>
                     <div className="mt-0.5 text-xs break-all text-muted-foreground">
-                      {project.path}
+                      {displayPath(project.path)}
                     </div>
                   </Link>
                   <Button
