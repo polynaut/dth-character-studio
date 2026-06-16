@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.8.0
+
+### Minor Changes
+
+- [#26](https://github.com/polynaut/dth-character-studio/pull/26) [`eb4a91b`](https://github.com/polynaut/dth-character-studio/commit/eb4a91b24abe0348344d903db9d9458579a5724d) Thanks [@polynaut](https://github.com/polynaut)! - Add an "i" info popup: hover to peek the rich-text content like a tooltip, click the "i" to pin it open for reading longer text and following links (closes on outside click / Escape). Positioned with Floating UI — it flips to wherever there's room and the arrow always points at the trigger. First used on the DTH Exporter Plugin field in Settings.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.8.0
+
 ## 0.7.0
 
 ### Minor Changes
