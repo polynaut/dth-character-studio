@@ -7,6 +7,7 @@ import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
+import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
   Select,
@@ -39,16 +40,22 @@ function FolderField({
   placeholder,
   help,
   onChange,
+  info,
 }: {
   label: string
   value: string
   placeholder: string
   help: ReactNode
   onChange: (value: string) => void
+  /** Optional rich text shown in an "i" info popup next to the label. */
+  info?: ReactNode
 }) {
   return (
     <div>
-      <Label className="mb-1">{label}</Label>
+      <Label className="mb-1 flex w-fit items-center gap-1">
+        {label}
+        {info ? <InfoPopup label={`${label} — more information`}>{info}</InfoPopup> : null}
+      </Label>
       <div className="flex gap-2">
         <Input
           value={displayPath(value)}
@@ -560,6 +567,21 @@ function SettingsPage() {
                 value={settings.dthExporterFolder}
                 placeholder="X:\_3d\_resources\_DazToHue\ExporterPlugin"
                 onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
+                info={
+                  <>
+                    The Daz Studio <strong>DazToHue Exporter</strong> plugin — the DLL named like{' '}
+                    <em>dsp_dth_exporter.dll</em>. Its version is read straight from the DLL, so the
+                    folder needn't be version-named. Part of{' '}
+                    <a
+                      href="https://www.artstation.com/marketplace/p/BLM5K/daztohue"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      DazToHue
+                    </a>{' '}
+                    by mrpdean.
+                  </>
+                }
                 help={
                   <>
                     The DazToHue Exporter plugin folder (contains the exporter DLL), or a folder of
