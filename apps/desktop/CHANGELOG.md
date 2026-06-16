@@ -1,5 +1,18 @@
 # @dth/desktop
 
+## 0.4.0
+
+### Minor Changes
+
+- [#16](https://github.com/polynaut/dth-character-studio/pull/16) [`99a888e`](https://github.com/polynaut/dth-character-studio/commit/99a888e51d0d338f22692d3ec7ae9a2294ad2687) Thanks [@polynaut](https://github.com/polynaut)! - Add **Open in Daz** / **Link Daz scene** to the character editor. When a
+  character's linked scene exists on disk, an "Open in Daz" button opens that
+  `.duf` straight into Daz Studio. When the scene is missing (deleted or renamed)
+  or was never linked, the button becomes "Link Daz scene": it opens a file picker
+  and — if the chosen scene lives outside the project — offers (via the same modal
+  as create) to copy it and its thumbnails into the character's folder. Linking
+  persists immediately and refreshes the avatar from the new scene. The desktop
+  shell `open` scope is widened to permit `.duf` paths (was http/tel/mailto only).
+
 ## 0.3.2
 
 ## 0.3.1
