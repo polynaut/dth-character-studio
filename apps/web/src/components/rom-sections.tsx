@@ -16,12 +16,21 @@ import {
 } from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
 
-import { pickFbxPath } from '#/lib/desktop.ts'
+import { pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
 
 import type { DragEndEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
+import { ConfigError } from '#/components/config-error.tsx'
+import { Input } from '#/components/ui/input.tsx'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
 import {
   ART_DIRECTION_CATALOG,
@@ -36,6 +45,7 @@ import {
   genAssetGender,
   genDefaultNode,
   genRomIncludes,
+  genRomStartFrame,
   mirrorGroup,
   newId,
   presetFrameCount,
@@ -118,7 +128,7 @@ function PresetAssetPicker({
   )
 
   if (catalog.error) {
-    return <p className="text-sm text-destructive">{catalog.error}</p>
+    return <ConfigError message={catalog.error} />
   }
   if (available.length === 0) {
     return (
@@ -237,20 +247,28 @@ function PresetAssetPicker({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Asset:</span>
-        <select
-          className={headerSelectClass}
-          value={section === 'JCM' ? (selectedFirst || (jcmDefault ? fileNameOf(jcmDefault) : '')) : selectedFirst}
-          onChange={(e) => onChange(e.target.value ? [e.target.value] : [])}
+        <Select
+          value={
+            section === 'JCM'
+              ? selectedFirst || (jcmDefault ? fileNameOf(jcmDefault) : '')
+              : selectedFirst || AUTO_ASSET
+          }
+          onValueChange={(value) => onChange(value && value !== AUTO_ASSET ? [value] : [])}
         >
-          {section !== 'JCM' && (
-            <option value="">auto — matched to {genesis} at generation</option>
-          )}
-          {available.map((asset) => (
-            <option key={asset.relPath} value={fileNameOf(asset)}>
-              {asset.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger size="sm" className="w-fit max-w-[20rem]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {section !== 'JCM' && (
+              <SelectItem value={AUTO_ASSET}>auto — matched to {genesis} at generation</SelectItem>
+            )}
+            {available.map((asset) => (
+              <SelectItem key={asset.relPath} value={fileNameOf(asset)}>
+                {asset.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {effectiveAsset && (
         <p className="text-xs text-muted-foreground">{effectiveAsset.relPath}</p>
@@ -271,6 +289,10 @@ const cellInputClass =
 
 const headerSelectClass =
   'rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus:border-ring'
+
+// Radix Select forbids an empty-string item value, so the "auto" asset choice
+// (no explicit preset selected) uses a sentinel mapped back to [] on change.
+const AUTO_ASSET = '__auto__'
 
 function TextCell({
   value,
@@ -754,59 +776,71 @@ function GroupCard({
           />
         )}
         {showMethod && (
-          <label
+          <span
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title="How the group's morphs are calculated: default (the node's global setting) / individual (each in isolation) / additive (the rest are deltas on top of the first pose) / cumulative (each stacks on all previous poses) / advanced additive"
           >
             Generation
-            <select
-              className={`${headerSelectClass} text-sm text-foreground`}
+            <Select
               value={group.method}
-              onChange={(e) => onChange({ ...group, method: e.target.value as GenerationMethod })}
+              onValueChange={(value) => onChange({ ...group, method: value as GenerationMethod })}
             >
-              <option value="default">Default</option>
-              <option value="individual">Individual</option>
-              <option value="additive">Additive</option>
-              <option value="cumulative">Cumulative</option>
-              <option value="advancedAdditive">Advanced Additive</option>
-            </select>
-          </label>
+              <SelectTrigger size="sm" className="w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="individual">Individual</SelectItem>
+                <SelectItem value="additive">Additive</SelectItem>
+                <SelectItem value="cumulative">Cumulative</SelectItem>
+                <SelectItem value="advancedAdditive">Advanced Additive</SelectItem>
+              </SelectContent>
+            </Select>
+          </span>
         )}
         {showCalcFrom && (
-          <label
+          <span
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title="What the group's morph deltas are calculated against: default (the node's global setting) / the rest pose / the animation frame"
           >
             Calculate from
-            <select
-              className={`${headerSelectClass} text-sm text-foreground`}
+            <Select
               value={group.calculateFrom}
-              onChange={(e) =>
-                onChange({ ...group, calculateFrom: e.target.value as CalculateFrom })
+              onValueChange={(value) =>
+                onChange({ ...group, calculateFrom: value as CalculateFrom })
               }
             >
-              <option value="default">Default</option>
-              <option value="restPose">Rest Pose</option>
-              <option value="animationFrame">Animation Frame</option>
-            </select>
-          </label>
+              <SelectTrigger size="sm" className="w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="restPose">Rest Pose</SelectItem>
+                <SelectItem value="animationFrame">Animation Frame</SelectItem>
+              </SelectContent>
+            </Select>
+          </span>
         )}
         {showSuffix && (
-          <label
+          <span
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title="Suffix — generated morphs get _l/_r appended automatically"
           >
             Suffix
-            <select
-              className={`${headerSelectClass} text-sm text-foreground`}
+            <Select
               value={group.suffix}
-              onChange={(e) => onChange({ ...group, suffix: e.target.value as GroupSuffix })}
+              onValueChange={(value) => onChange({ ...group, suffix: value as GroupSuffix })}
             >
-              <option value="left">Left</option>
-              <option value="centre">Centre</option>
-              <option value="right">Right</option>
-            </select>
-          </label>
+              <SelectTrigger size="sm" className="w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="left">Left</SelectItem>
+                <SelectItem value="centre">Centre</SelectItem>
+                <SelectItem value="right">Right</SelectItem>
+              </SelectContent>
+            </Select>
+          </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">{frameRange}</span>
         {group.suffix === 'left' && (
@@ -884,11 +918,15 @@ function GroupCard({
  */
 function ArtDirectionEditor({
   config,
+  sections,
   gender,
+  skinning,
   onChange,
 }: {
   config: RomSectionConfig
+  sections: RomSectionsModel
   gender: Gender
+  skinning: 'dqs' | 'linear'
   onChange: (artDirection: Array<ArtDirectionFrame>) => void
 }) {
   const roms = genRomIncludes(gender, config.presetAssets)
@@ -926,7 +964,9 @@ function ArtDirectionEditor({
         per-character art direction JSON. Frames marked <em>required</em> ship empty in the
         preset: without morphs here their generated morph does nothing.
       </p>
-      {activeRoms.map(([rom, label]) => (
+      {activeRoms.map(([rom, label]) => {
+        const romStart = genRomStartFrame(sections, gender, skinning, rom)
+        return (
         <div key={rom} className="space-y-1">
           {activeRoms.length > 1 && <p className="text-sm font-medium">{label}</p>}
           {ART_DIRECTION_CATALOG[rom].map((catalogFrame) => {
@@ -935,23 +975,27 @@ function ArtDirectionEditor({
               <ArtDirectionFrameRow
                 key={`${rom}-${catalogFrame.frame}`}
                 catalogFrame={catalogFrame}
+                absoluteFrame={romStart + catalogFrame.frame}
                 entry={entry}
                 onCommit={commit}
               />
             )
           })}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
 function ArtDirectionFrameRow({
   catalogFrame,
+  absoluteFrame,
   entry,
   onCommit,
 }: {
   catalogFrame: { frame: number; name: string; required: boolean; note?: string }
+  absoluteFrame: number
   entry: ArtDirectionFrame
   onCommit: (entry: ArtDirectionFrame) => void
 }) {
@@ -976,8 +1020,8 @@ function ArtDirectionFrameRow({
         ) : (
           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
         )}
-        <span className="w-10 text-right font-mono text-xs text-muted-foreground tabular-nums">
-          +{catalogFrame.frame}
+        <span className="w-12 text-right font-mono text-xs text-muted-foreground tabular-nums">
+          {absoluteFrame}
         </span>
         <span className="text-sm">{catalogFrame.name}</span>
         {catalogFrame.required && !hasMorphs && (
@@ -1139,16 +1183,22 @@ export function RomSections({
                 {modes.length > 1 && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Mode:</span>
-                    <select
-                      className={headerSelectClass}
+                    <Select
                       value={config.mode}
-                      onChange={(e) =>
-                        patchSection(section, { mode: e.target.value as SectionMode })
+                      onValueChange={(value) =>
+                        patchSection(section, { mode: value as SectionMode })
                       }
                     >
-                      <option value="preset">Pre-defined DTH assets</option>
-                      <option value="custom">Custom morph list</option>
-                    </select>
+                      <SelectTrigger size="sm" className="w-fit min-w-[12rem]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="preset">Pre-defined DTH assets</SelectItem>
+                        <SelectItem value="custom">
+                          {section === 'JCM' ? 'Custom JCM asset' : 'Custom morph list'}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
@@ -1170,10 +1220,42 @@ export function RomSections({
                     {section === 'GEN' && (
                       <ArtDirectionEditor
                         config={config}
+                        sections={sections}
                         gender={gender}
+                        skinning={skinning}
                         onChange={(artDirection) => patchSection(section, { artDirection })}
                       />
                     )}
+                  </div>
+                ) : section === 'JCM' ? (
+                  // Custom JCM asset: a user-supplied .duf path used as the base
+                  // ROM, just like a pre-defined DTH asset.
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Point to a custom JCM pose preset (.duf). It's loaded as the base ROM exactly
+                      like a pre-defined DTH asset.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Path:</span>
+                      <Input
+                        className="max-w-xl"
+                        value={config.customAssetPath}
+                        placeholder="X:\…\My Custom JCM.duf"
+                        onChange={(e) => patchSection(section, { customAssetPath: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={async () => {
+                          const picked = await pickDufPath('Select a custom JCM pose preset (.duf)')
+                          if (picked) patchSection(section, { customAssetPath: picked })
+                        }}
+                      >
+                        <FolderOpen /> Browse
+                      </Button>
+                    </div>
                   </div>
                 ) : !GROUPED_SECTIONS.includes(section) ? (
                   // FBM/MISC are flat lists in the PoseAsset node — exactly

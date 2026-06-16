@@ -19,7 +19,12 @@ import {
 } from '@dth/rom'
 
 import { canonicalImage } from './image'
-import { characterFolderName, definitionFileName, normalizeRelPath } from './library'
+import {
+  characterFolderName,
+  definitionFileName,
+  normalizeRelFolder,
+  normalizeRelPath,
+} from './library'
 
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
@@ -38,12 +43,33 @@ import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/r
  *    The character functions below all take the active project's `libraryPath`.
  */
 
-/** Join path segments with '/'. Tauri's fs normalizes separators on Windows. */
+/**
+ * Join path segments with '/', normalising any '\' to '/'. A consistent
+ * forward-slash path matters for the Tauri fs *scope* check: a not-yet-existing
+ * path can't be canonicalised, so the raw string is matched against the `**`
+ * scope — and a mixed-separator string (e.g. `X:\proj/New`) fails to match.
+ */
 function join(...parts: Array<string>): string {
   return parts
-    .map((p) => p.replace(/[\\/]+$/g, ''))
+    .map((p) => p.replace(/\\/g, '/').replace(/\/+$/g, ''))
     .filter(Boolean)
     .join('/')
+}
+
+/**
+ * If `child` lives inside `parent`, return its path relative to `parent`
+ * ('/'-joined); otherwise null. Separator-agnostic and case-insensitive (matches
+ * Windows semantics), so it works regardless of how either path was stored.
+ */
+function relativeInside(parent: string, child: string): string | null {
+  const segs = (p: string) => p.replace(/\\/g, '/').split('/').filter(Boolean)
+  const p = segs(parent)
+  const c = segs(child)
+  if (c.length <= p.length) return null
+  for (let i = 0; i < p.length; i++) {
+    if (c[i].toLowerCase() !== p[i].toLowerCase()) return null
+  }
+  return c.slice(p.length).join('/')
 }
 
 /** Last path segment (folder or file name). */
@@ -195,13 +221,33 @@ async function findEntry(lib: string, id: string): Promise<LibraryEntry | null> 
   return (await scanLibrary(lib)).find((entry) => entry.character.id === id) ?? null
 }
 
-/** First folder name under `parent` that doesn't already exist (`Name`, `Name (2)`, …). */
+/**
+ * Whether `path` already exists — or can't be confirmed absent. Tauri's `exists`
+ * *throws* (rather than returning false) for a path it can't canonicalize for
+ * the fs scope check, e.g. a locked / delete-pending folder on a network share.
+ * Treat that as taken so callers skip the name instead of crashing.
+ */
+async function isTaken(path: string): Promise<boolean> {
+  try {
+    return await exists(path)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * First folder name under `parent` that isn't taken (`Name`, `Name (2)`, …).
+ * A pre-existing folder — including one that's locked / mid-delete and so can't
+ * even be probed — just bumps the numeric suffix. Capped so a wholly
+ * inaccessible parent fails loudly instead of spinning forever.
+ */
 async function uniqueFolder(parent: string, baseName: string): Promise<string> {
-  for (let i = 1; ; i++) {
+  for (let i = 1; i <= 9999; i++) {
     const candidate = i === 1 ? baseName : `${baseName} (${i})`
     const abs = join(parent, candidate)
-    if (!(await exists(abs))) return abs
+    if (!(await isTaken(abs))) return abs
   }
+  throw new Error(`Could not find a free folder name for "${baseName}" in ${parent}.`)
 }
 
 export async function listCharacters(lib: string): Promise<Array<Character>> {
@@ -247,6 +293,45 @@ export async function saveCharacter(lib: string, character: Character): Promise<
   return stamped
 }
 
+/**
+ * Create a new character at a chosen folder relative to the project root. An
+ * empty `relFolder` stores the definition directly in the project root; a
+ * non-empty one creates `<lib>/<relFolder>/` (auto-suffixed if it exists) to
+ * hold the definition + all generated files. The definition is named after the
+ * character (`<Name>.json`).
+ */
+export async function createCharacterAt(
+  lib: string,
+  character: Character,
+  relFolder: string,
+): Promise<Character> {
+  if (!lib) throw new Error('No project library configured.')
+  await mkdir(lib, { recursive: true })
+  const stamped = { ...character, updatedAt: new Date().toISOString() }
+  const fileName = definitionFileName(character.name)
+  const clean = normalizeRelFolder(relFolder)
+
+  let definitionAbs: string
+  if (clean) {
+    const slash = clean.lastIndexOf('/')
+    const parent = slash >= 0 ? join(lib, clean.slice(0, slash)) : lib
+    const leaf = slash >= 0 ? clean.slice(slash + 1) : clean
+    await mkdir(parent, { recursive: true })
+    const folderAbs = await uniqueFolder(parent, leaf)
+    await mkdir(folderAbs, { recursive: true })
+    definitionAbs = join(folderAbs, fileName)
+  } else {
+    // Store directly in the project root.
+    definitionAbs = join(lib, fileName)
+    if (await isTaken(definitionAbs)) {
+      throw new Error(`A character file "${fileName}" already exists in the project root.`)
+    }
+  }
+
+  await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
+  return stamped
+}
+
 export async function deleteCharacter(lib: string, id: string): Promise<void> {
   const entry = await findEntry(lib, id)
   if (!entry) return
@@ -278,37 +363,142 @@ export async function getCharacterPath(lib: string, id: string): Promise<Charact
   }
 }
 
-/** Move a character's whole folder to a new path relative to the library root. */
+/**
+ * Move/rename a character by its definition path relative to the project library
+ * (e.g. `Electra/Electra.json` → `Electra/OutfitDefault/Electra.json`). Moves the
+ * whole folder to the new location and renames the definition to the new
+ * filename. Collisions throw (the path is user-chosen — we don't silently rename
+ * it, unlike create/title-rename which auto-suffix with ` (2)`).
+ */
 export async function moveCharacter(
   lib: string,
   id: string,
-  relFolder: string,
-): Promise<CharacterLocation> {
+  relPath: string,
+): Promise<{ location: CharacterLocation; character: Character }> {
   if (!lib) throw new Error('No project library configured.')
   const entry = await findEntry(lib, id)
   if (!entry) throw new Error(`Character ${id} not found`)
-  const cleanRel = normalizeRelPath(relFolder) // throws on invalid / escaping paths
-  const newFolderAbs = join(lib, cleanRel)
-  if (newFolderAbs !== entry.folderAbs) {
-    if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${cleanRel}".`)
-    await mkdir(dirname(newFolderAbs), { recursive: true })
-    await rename(entry.folderAbs, newFolderAbs)
+
+  const clean = normalizeRelPath(relPath) // separators, no '..' / absolute / illegal chars
+  if (!/\.json$/i.test(clean)) throw new Error('The path must end in ".json".')
+  const slash = clean.lastIndexOf('/')
+  if (slash <= 0) throw new Error('Keep the character in a folder, e.g. "Electra/Electra.json".')
+  const newFolderRel = clean.slice(0, slash)
+  const newFileName = clean.slice(slash + 1)
+  const newFolderAbs = join(lib, newFolderRel)
+  const newDefAbs = join(newFolderAbs, newFileName)
+  const oldDefName = basename(entry.definitionAbs)
+
+  if (newDefAbs !== entry.definitionAbs) {
+    if (newFolderAbs === entry.folderAbs) {
+      // Same folder — just renaming the definition file.
+      if (await exists(newDefAbs)) throw new Error(`A file already exists at "${clean}".`)
+      await rename(entry.definitionAbs, newDefAbs)
+    } else {
+      // Moving the whole folder to a new location.
+      if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${newFolderRel}".`)
+      await mkdir(dirname(newFolderAbs), { recursive: true })
+      if ((newFolderAbs + '/').startsWith(entry.folderAbs + '/')) {
+        // Destination is inside the source — a dir can't be renamed into its own
+        // descendant, so relocate via a temporary slot in the library root.
+        const tmp = join(lib, '.dth-moving')
+        if (await exists(tmp)) await remove(tmp, { recursive: true })
+        await rename(entry.folderAbs, tmp)
+        await mkdir(dirname(newFolderAbs), { recursive: true })
+        await rename(tmp, newFolderAbs)
+      } else {
+        await rename(entry.folderAbs, newFolderAbs)
+      }
+      if (newFileName !== oldDefName) await rename(join(newFolderAbs, oldDefName), newDefAbs)
+    }
   }
+
+  // If the linked Daz scene lived inside the (now moved) character folder, it
+  // travelled with it — repoint the stored scenePath at the new location. A
+  // scene linked in place outside the character folder didn't move, so it's left
+  // untouched.
+  let character = entry.character
+  if (newFolderAbs !== entry.folderAbs && character.scenePath) {
+    const rel = relativeInside(entry.folderAbs, character.scenePath)
+    if (rel) {
+      character = { ...character, scenePath: join(newFolderAbs, rel) }
+      await writeTextFile(newDefAbs, JSON.stringify(character, null, 2) + '\n')
+    }
+  }
+
   return {
-    definitionAbs: join(newFolderAbs, basename(entry.definitionAbs)),
-    folderAbs: newFolderAbs,
-    relFolder: cleanRel,
-    libraryFolder: lib,
+    location: {
+      definitionAbs: newDefAbs,
+      folderAbs: newFolderAbs,
+      relFolder: newFolderRel,
+      libraryFolder: lib,
+    },
+    character,
   }
 }
 
-/** Writes files into an existing external folder (e.g. the DazToHue-Scripts checkout). */
+/** Writes files into a folder, creating it if missing. */
 export async function writeFilesToFolder(
   folder: string,
   files: Array<{ fileName: string; content: string }>,
 ): Promise<void> {
-  if (!(await isDir(folder))) throw new Error(`Not a folder: ${folder}`)
+  await mkdir(folder, { recursive: true })
   await Promise.all(files.map((file) => writeTextFile(join(folder, file.fileName), file.content)))
+}
+
+/** Remove the named files from a folder if present (no error when missing). */
+export async function removeFilesFromFolder(
+  folder: string,
+  fileNames: Array<string>,
+): Promise<void> {
+  for (const name of fileNames) {
+    const path = join(folder, name)
+    if (await exists(path)) await remove(path)
+  }
+}
+
+/**
+ * The DTH runtime files the generated character script `include()`s. Copied from
+ * the DazToHue-Scripts checkout into the studio's shared scripts folder, where
+ * they're dot-prefixed (hidden) so the user-facing character scripts stand out.
+ * DthWorkflow.dsa pulls in the other two (ScanKeyFrames is now merged into it),
+ * so all three must sit together.
+ */
+const RUNTIME_FILES = ['DthUtils.dsa', 'DthOptions.dsa', 'DthWorkflow.dsa']
+
+/** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install folder. */
+export function studioScriptsDir(dazLibraryFolder: string): string {
+  return join(dazLibraryFolder, 'Scripts', 'DTH-Character-Studio')
+}
+
+/**
+ * Install the DTH runtime files (from the DazToHue-Scripts checkout) into
+ * `destDir`, creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
+ * etc.) so they read as hidden, and the sibling `include()` references inside
+ * them are rewritten to the dotted names so resolution still works. Overwrites
+ * so the runtime stays in sync as the scripts evolve.
+ */
+export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
+  if (!srcDir) {
+    throw new Error('Set the DazToHue-Scripts folder to install the runtime')
+  }
+  if (!(await isDir(srcDir))) throw new Error(`DazToHue-Scripts folder not reachable: ${srcDir}`)
+  await mkdir(destDir, { recursive: true })
+  for (const name of RUNTIME_FILES) {
+    const src = join(srcDir, name)
+    if (!(await exists(src))) throw new Error(`Missing runtime file in DazToHue-Scripts: ${name}`)
+    let content = await readTextFile(src)
+    for (const dep of RUNTIME_FILES) {
+      content = content.split(`"${dep}"`).join(`".${dep}"`)
+    }
+    await writeTextFile(join(destDir, `.${name}`), content)
+  }
+  // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)
+  // the studio installed before runtime files were dot-prefixed.
+  for (const legacy of [...RUNTIME_FILES, 'ScanKeyFrames.dsa']) {
+    const old = join(destDir, legacy)
+    if (await exists(old)) await remove(old)
+  }
 }
 
 export interface StudioSettings {
@@ -433,8 +623,21 @@ export async function deleteProject(id: string): Promise<void> {
 /** Recursively collect file paths (relative to `root`, '/'-separated). */
 async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
   const here = rel ? join(root, rel) : root
+  let listing: Awaited<ReturnType<typeof readDir>>
+  try {
+    listing = await readDir(here)
+  } catch (err) {
+    // A locked, permission-restricted, or delete-pending folder (common on
+    // network shares — e.g. a directory whose delete is still pending because a
+    // handle stays open) makes readDir throw. Tauri even reports it as a
+    // "forbidden path" because it can't canonicalize the path for its scope
+    // check. Skip the subtree so one unreadable folder can't blank the whole
+    // library overview.
+    console.warn(`Skipping unreadable folder ${here}: ${err}`)
+    return []
+  }
   const out: Array<string> = []
-  for (const entry of await readDir(here)) {
+  for (const entry of listing) {
     const childRel = rel ? `${rel}/${entry.name}` : entry.name
     if (entry.isDirectory) out.push(...(await walkFiles(root, childRel)))
     else out.push(childRel)
@@ -442,46 +645,105 @@ async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
   return out
 }
 
-/**
- * Scans the DazToHue Poses folder and classifies every .duf preset by genesis
- * generation, skinning variant and pose asset category. The folder layout is
- * `<Genesis X>/<Common|DQS|Linear>/...`.
- */
-export async function listPoseAssets(): Promise<{
-  folder: string
+// --- Pose catalog (cached) ------------------------------------------------
+// Walking a DTH release folder is slow — and with many releases it made opening
+// a character take seconds. So scanning runs ONCE (explicitly, from Settings)
+// and the classified presets are cached in pose-catalog.json. Opening or
+// generating a character reads only that cache; it never walks the release.
+
+interface PoseCatalog {
+  /** The dthPosesFolder setting at scan time. */
+  sourceFolder: string
+  /** The picked release subfolder name, or '' when the folder was scanned directly. */
+  releaseName: string
+  /** The resolved Poses folder that was scanned. */
+  posesFolder: string
+  scannedAt: string
   assets: Array<DthPoseAsset>
-  error: string | null
-}> {
-  const { dthPosesFolder } = await getSettings()
-  if (!dthPosesFolder) {
-    return { folder: '', assets: [], error: 'No DTH release / Poses folder configured.' }
+}
+
+const GENESIS_DIRS = ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9']
+
+/** Comparable version from a name: "Release 2.4.3" → [2,4,3] (last numeric run). */
+function parseVersion(name: string): Array<number> {
+  const runs = name.match(/\d+(?:\.\d+)*/g)
+  if (!runs) return []
+  return runs[runs.length - 1].split('.').map((n) => parseInt(n, 10))
+}
+
+function compareVersions(a: Array<number>, b: Array<number>): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0)
+    if (d !== 0) return d
   }
-  if (!(await isDir(dthPosesFolder))) {
-    return { folder: dthPosesFolder, assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
+  return 0
+}
+
+/** Does `folder` directly contain Genesis-X pose subfolders? */
+async function hasGenesisDirs(folder: string): Promise<boolean> {
+  return (await Promise.all(GENESIS_DIRS.map((g) => isDir(join(folder, g))))).some(Boolean)
+}
+
+/** The Poses folder inside a single release root (direct, or under Daz Studio Content). */
+async function resolvePosesInRelease(root: string): Promise<string | null> {
+  if (await hasGenesisDirs(root)) return root
+  const content = join(root, 'Daz Studio Content', 'DazToHue', 'Poses')
+  if (await isDir(content)) return content
+  return null
+}
+
+/**
+ * Resolve which Poses folder to scan from the configured `dthPosesFolder`:
+ *  - the Poses folder itself, or a single release root → use directly;
+ *  - a parent of several releases → pick the highest-versioned release subfolder.
+ * Zips are detected but not extracted yet (the latest-is-a-zip case errors).
+ */
+async function resolveRelease(
+  dthPosesFolder: string,
+): Promise<{ posesFolder: string; releaseName: string; error: string | null }> {
+  const direct = await resolvePosesInRelease(dthPosesFolder)
+  if (direct) return { posesFolder: direct, releaseName: '', error: null }
+
+  const children = await readDir(dthPosesFolder)
+  const folders: Array<{ name: string; posesFolder: string; version: Array<number> }> = []
+  let latestZip: { name: string; version: Array<number> } | null = null
+  for (const child of children) {
+    if (child.isDirectory) {
+      const poses = await resolvePosesInRelease(join(dthPosesFolder, child.name))
+      if (poses) folders.push({ name: child.name, posesFolder: poses, version: parseVersion(child.name) })
+    } else if (/\.zip$/i.test(child.name)) {
+      const version = parseVersion(child.name)
+      if (!latestZip || compareVersions(version, latestZip.version) > 0) {
+        latestZip = { name: child.name, version }
+      }
+    }
   }
-  // Accept either the Poses folder itself or a DTH release root
-  // (e.g. ".../Release 2.4.3", which contains Daz Studio Content/DazToHue/Poses).
-  let posesFolder = dthPosesFolder
-  const looksLikePoses = (
-    await Promise.all(
-      ['Genesis 3', 'Genesis 8', 'Genesis 8.1', 'Genesis 9'].map((g) =>
-        isDir(join(posesFolder, g)),
-      ),
-    )
-  ).some(Boolean)
-  if (!looksLikePoses) {
-    const releaseContent = join(posesFolder, 'Daz Studio Content', 'DazToHue', 'Poses')
-    if (await isDir(releaseContent)) posesFolder = releaseContent
+
+  if (folders.length === 0 && !latestZip) {
+    return { posesFolder: '', releaseName: '', error: `No DTH releases found in: ${dthPosesFolder}` }
   }
+  const latest = folders.sort((a, b) => compareVersions(a.version, b.version)).pop()
+  if (latestZip && (!latest || compareVersions(latestZip.version, latest.version) > 0)) {
+    return {
+      posesFolder: '',
+      releaseName: '',
+      error: `Latest release "${latestZip.name}" is a .zip — extract it first (zip support is coming)`,
+    }
+  }
+  return { posesFolder: latest!.posesFolder, releaseName: latest!.name, error: null }
+}
+
+/**
+ * Walk + classify a resolved Poses folder (layout `<Genesis X>/<Common|DQS|Linear>/...`)
+ * into pose assets, by genesis generation, skinning variant and ROM section.
+ */
+async function scanPosesFolder(posesFolder: string): Promise<Array<DthPoseAsset>> {
   const entries = await walkFiles(posesFolder)
   const assets: Array<DthPoseAsset> = []
   for (const entry of entries) {
     if (!entry.toLowerCase().endsWith('.duf')) continue
-    const relPath = entry
-    const parts = relPath.split('/')
-    const fileName = parts[parts.length - 1]
-    const name = fileName.replace(/\.duf$/i, '')
-
+    const parts = entry.split('/')
+    const name = parts[parts.length - 1].replace(/\.duf$/i, '')
     const genesis: GenesisVersion | null =
       parts[0] === 'Genesis 3'
         ? 'G3'
@@ -493,17 +755,15 @@ export async function listPoseAssets(): Promise<{
               ? 'G9'
               : null
     const skinning = parts[1] === 'DQS' ? 'dqs' : parts[1] === 'Linear' ? 'linear' : null
-
     let section: RomSection | null = null
     if (/retargett?ing poses/i.test(name)) section = 'RET'
     else if (/JCM( FAC)? - Base/i.test(name)) section = 'JCM'
     else if (/FAC - Mouth/i.test(name)) section = 'FAC'
     else if (parts.some((p) => /golden ?palace|dicktator/i.test(p))) section = 'GEN'
     else if (parts.some((p) => /physics/i.test(p))) section = 'PHY'
-
     assets.push({
       name,
-      relPath,
+      relPath: entry,
       genesis,
       skinning,
       section,
@@ -511,5 +771,60 @@ export async function listPoseAssets(): Promise<{
     })
   }
   assets.sort((a, b) => a.relPath.localeCompare(b.relPath))
-  return { folder: posesFolder, assets, error: null }
+  return assets
+}
+
+/**
+ * Explicitly (re)build the cached pose catalog from the configured DTH release
+ * folder: resolve the latest release, scan + classify its presets, and write
+ * pose-catalog.json into the app folder. Slow, but only runs from Settings.
+ */
+export async function buildPoseCatalog(): Promise<{
+  folder: string
+  releaseName: string
+  assets: Array<DthPoseAsset>
+  error: string | null
+}> {
+  const { dthPosesFolder } = await getSettings()
+  if (!dthPosesFolder) {
+    return { folder: '', releaseName: '', assets: [], error: 'No DTH release / Poses folder configured' }
+  }
+  if (!(await isDir(dthPosesFolder))) {
+    return { folder: dthPosesFolder, releaseName: '', assets: [], error: `Folder not reachable: ${dthPosesFolder}` }
+  }
+  const resolved = await resolveRelease(dthPosesFolder)
+  if (resolved.error) {
+    return { folder: dthPosesFolder, releaseName: '', assets: [], error: resolved.error }
+  }
+  const assets = await scanPosesFolder(resolved.posesFolder)
+  const catalog: PoseCatalog = {
+    sourceFolder: dthPosesFolder,
+    releaseName: resolved.releaseName,
+    posesFolder: resolved.posesFolder,
+    scannedAt: new Date().toISOString(),
+    assets,
+  }
+  await ensureAppDir()
+  await writeTextFile(await dataPath('pose-catalog.json'), JSON.stringify(catalog, null, 2) + '\n')
+  return { folder: resolved.posesFolder, releaseName: resolved.releaseName, assets, error: null }
+}
+
+/**
+ * The cached pose catalog used wherever a character is opened or generated.
+ * Reads pose-catalog.json — it NEVER walks the release folder (that only happens
+ * in buildPoseCatalog, from Settings). Returns an error directing the user to
+ * Settings when the catalog hasn't been built yet.
+ */
+export async function listPoseAssets(): Promise<{
+  folder: string
+  assets: Array<DthPoseAsset>
+  error: string | null
+}> {
+  try {
+    const catalog = JSON.parse(await readTextFile(await dataPath('pose-catalog.json'))) as PoseCatalog
+    if (!Array.isArray(catalog.assets)) throw new Error('bad catalog')
+    return { folder: catalog.posesFolder, assets: catalog.assets, error: null }
+  } catch {
+    return { folder: '', assets: [], error: 'No pose catalog yet — scan a DTH release in Settings' }
+  }
 }

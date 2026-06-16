@@ -6,8 +6,11 @@ import { ArrowLeft, FolderOpen, FolderSearch, Save } from 'lucide-react'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
-import { fetchPoseAssets, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
+import { buildPoseCatalog, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
+import { displayPath } from '#/lib/path.ts'
+import { PathCode } from '#/components/path-code.tsx'
+import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
 import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
@@ -30,7 +33,11 @@ function FolderField({
     <div>
       <Label className="mb-1">{label}</Label>
       <div className="flex gap-2">
-        <Input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <Input
+          value={displayPath(value)}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
         <Button
           type="button"
           variant="outline"
@@ -55,6 +62,7 @@ export const Route = createFileRoute('/settings')({
 
 interface ScanResult {
   folder: string
+  releaseName: string
   assets: Array<DthPoseAsset>
   error: string | null
 }
@@ -77,11 +85,16 @@ function ScanSummary({ result }: { result: ScanResult }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Found <strong className="text-foreground">{result.assets.length}</strong> pose presets in{' '}
-        <code className="rounded bg-muted px-1.5 py-0.5">{result.folder}</code>
+        Cached <strong className="text-foreground">{result.assets.length}</strong> pose presets
+        {result.releaseName && (
+          <>
+            {' '}from <strong className="text-foreground">{result.releaseName}</strong>
+          </>
+        )}{' '}
+        in <PathCode path={displayPath(result.folder)} />
         {unclassified > 0 && <> — {unclassified} could not be classified</>}
       </p>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {GENESIS_ORDER.filter((genesis) => byGenesis.has(genesis)).map((genesis) => {
           const assets = byGenesis.get(genesis)!
           return (
@@ -128,6 +141,9 @@ function SettingsPage() {
     try {
       await saveSettings({ data: settings })
       await router.invalidate()
+      toast.success('Settings saved')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -137,14 +153,20 @@ function SettingsPage() {
     setBusy(true)
     try {
       if (dirty) await onSave()
-      setScan(await fetchPoseAssets())
+      const result = await buildPoseCatalog()
+      setScan(result)
+      if (result.error) toast.error(result.error)
+      else
+        toast.success(
+          `Cached ${result.assets.length} pose presets${result.releaseName ? ` from ${result.releaseName}` : ''}`,
+        )
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="p-8">
       <div className="mb-6">
         <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" /> All projects
@@ -157,7 +179,7 @@ function SettingsPage() {
         </p>
       </header>
 
-      <section className="mb-8 space-y-5 rounded-lg border bg-card p-5">
+      <section className="mb-8 max-w-3xl space-y-5 rounded-lg border bg-card p-5">
         <FolderField
           label="My DAZ 3D Library"
           value={settings.dazLibraryFolder}
@@ -172,16 +194,17 @@ function SettingsPage() {
           }
         />
         <FolderField
-          label="Current DTH release folder (or Poses folder)"
+          label="DTH releases folder (or a release / Poses folder)"
           value={settings.dthPosesFolder}
-          placeholder="X:\_3d\_resources\_DazToHue\Releases\Release 2.4.3"
+          placeholder="X:\_3d\_resources\_DazToHue\Releases"
           onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
           help={
             <>
-              Accepts a DTH release root (the Poses folder is found inside automatically) or a Poses
-              folder directly, e.g. the installed copy in your Daz library. The pose preset catalog
-              in the ROM sections is scanned from here — pointing this at a new release makes its
-              new presets available immediately, no studio update needed.
+              Point this at your DTH releases folder (the highest-versioned release is picked
+              automatically), a single release root, or a Poses folder directly. Hit “Scan DTH
+              release” to build the pose-preset catalog — it's cached, so opening characters never
+              re-scans. Re-scan after dropping in a new release. (Zipped releases: extract first for
+              now.)
             </>
           }
         />

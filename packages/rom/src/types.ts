@@ -229,6 +229,11 @@ export const romSectionConfigSchema = z.object({
   artDirection: z.array(artDirectionFrameSchema).default([]),
   /** Only used in custom mode. */
   groups: z.array(romGroupSchema).default([]),
+  /**
+   * JCM custom mode: an absolute path to a custom `.duf` pose preset, loaded as
+   * the base ROM exactly like a pre-defined DTH JCM asset.
+   */
+  customAssetPath: z.string().default(''),
 })
 export type RomSectionConfig = z.infer<typeof romSectionConfigSchema>
 
@@ -239,6 +244,7 @@ export function defaultSections(): Record<RomSection, RomSectionConfig> {
     presetAssets: [],
     artDirection: [],
     groups: [],
+    customAssetPath: '',
   })
   return {
     RET: config(true, 'preset'),
@@ -338,6 +344,12 @@ export const characterSchema = z.object({
   name: z.string().min(1),
   /** Path or URL to a recognition image; optional. */
   image: z.string().default(''),
+  /**
+   * Absolute path to the Daz scene (`.duf`) this character was created from.
+   * Read-only provenance shown in the editor; empty for characters made before
+   * the scene-based create flow.
+   */
+  scenePath: z.string().default(''),
   genesis: genesisVersionSchema.default('G9'),
   gender: genderSchema.default('female'),
   targetSkeleton: targetSkeletonSchema.default('UE5'),
@@ -386,7 +398,8 @@ export function characterSlug(character: Pick<Character, 'name'>): string {
  */
 export function characterSkinning(character: Pick<Character, 'sections'>): 'linear' | 'dqs' {
   const jcm = character.sections.JCM
-  const asset = jcm.mode === 'preset' ? jcm.presetAssets[0] : undefined
+  const asset =
+    jcm.mode === 'preset' ? jcm.presetAssets[0] : jcm.mode === 'custom' ? jcm.customAssetPath : undefined
   if (asset) return /\bDQS\b/i.test(asset) ? 'dqs' : 'linear'
   return 'dqs'
 }
@@ -428,6 +441,26 @@ export function presetFrameCount(
     (genPreset && roms.dk ? DK_FRAMES : 0) +
     (sections.PHY.enabled && sections.PHY.mode === 'preset' ? PHYS_FRAMES : 0)
   return Math.max(lastPresetFrame, 0) + 1
+}
+
+/**
+ * Absolute timeline start frame of a pre-made GEN ROM block (GP or DK), so the
+ * editor can show absolute art-direction frame numbers. The base JCM ROM comes
+ * first; the workflow then applies DK before GP, so GP follows DK when both are
+ * present.
+ */
+export function genRomStartFrame(
+  sections: RomSections,
+  gender: Gender,
+  skinning: 'dqs' | 'linear',
+  rom: 'gp' | 'dk',
+): number {
+  const jcm = sections.JCM
+  const jcmBase =
+    jcm.enabled && (jcm.mode === 'preset' || (jcm.mode === 'custom' && jcm.customAssetPath.trim() !== ''))
+  const base = jcmBase ? (skinning === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR) : 0
+  const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+  return rom === 'dk' ? base : base + (roms.dk ? DK_FRAMES : 0)
 }
 
 export interface FlatFrame {

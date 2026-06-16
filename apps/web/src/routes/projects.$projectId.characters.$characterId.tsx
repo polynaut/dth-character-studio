@@ -4,17 +4,22 @@ import { z } from 'zod'
 import {
   ArrowLeft,
   Download,
-  FileCog,
+  ExternalLink,
   FolderInput,
+  Link2,
   Pencil,
   Plus,
   Save,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
+import { ConfigError } from '#/components/config-error.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
+import { PathCode } from '#/components/path-code.tsx'
+import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -29,15 +34,21 @@ import {
 import { Switch } from '#/components/ui/switch.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import {
+  copyDazScene,
   fetchCharacter,
   fetchPoseAssets,
   fetchSettings,
+  fileExists,
   generateCharacterFiles,
   getCharacterPath,
   moveCharacter,
+  openScene,
+  relinkScene,
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
+import { pickDufPath } from '#/lib/desktop.ts'
+import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -49,12 +60,15 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
     const { projectId, characterId: id } = params
     const character = await fetchCharacter({ data: { projectId, id } })
     if (!character) throw notFound()
-    const [settings, catalog, location] = await Promise.all([
+    const [settings, catalog, location, sceneExists] = await Promise.all([
       fetchSettings(),
       fetchPoseAssets(),
       getCharacterPath({ data: { projectId, id } }),
+      character.scenePath
+        ? fileExists({ data: { path: character.scenePath } })
+        : Promise.resolve(false),
     ])
-    return { character, settings, catalog, location }
+    return { character, settings, catalog, location, sceneExists }
   },
   component: CharacterPage,
 })
@@ -62,8 +76,17 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
 interface GenerateResult {
   outDir: string
   files: Array<GeneratedFile>
-  dazScriptsFolder: string | null
-  dazScriptsError: string | null
+  scriptsDir: string | null
+  scriptsError: string | null
+}
+
+// Full display names per generation, used for the genesis-specific fieldset
+// legend. When G8 / G8.1 land, branch on the genesis to swap the fieldset body.
+const GENESIS_LABELS: Record<GenesisVersion, string> = {
+  G3: 'Genesis 3',
+  G8: 'Genesis 8',
+  'G8.1': 'Genesis 8.1',
+  G9: 'Genesis 9',
 }
 
 function NumberField({
@@ -272,24 +295,35 @@ function StorageLocation({
   projectId,
   id,
   location,
+  onMoved,
 }: {
   projectId: string
   id: string
   location: CharacterLocation | null
+  onMoved: (character: Character) => void
 }) {
   const router = useRouter()
-  const [relFolder, setRelFolder] = useState(location?.relFolder ?? '')
+  const [relPath, setRelPath] = useState(() => {
+    if (!location) return ''
+    const fn = location.definitionAbs.split(/[\\/]/).pop() ?? ''
+    return displayPath(location.relFolder ? `${location.relFolder}/${fn}` : fn)
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   if (!location) return null
-  const moved = relFolder.trim() !== location.relFolder
+  const fileName = location.definitionAbs.split(/[\\/]/).pop() ?? ''
+  const currentPath = displayPath(location.relFolder ? `${location.relFolder}/${fileName}` : fileName)
+  const moved = relPath.trim() !== currentPath
 
   async function onMove() {
+    if (busy || !moved || !relPath.trim()) return
     setBusy(true)
     setError('')
     try {
-      await moveCharacter({ data: { projectId, id, relFolder: relFolder.trim() } })
+      const { character } = await moveCharacter({ data: { projectId, id, relPath: relPath.trim() } })
       await router.invalidate()
+      onMoved(character)
+      toast.success(`Moved to ${relPath.trim()}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -298,60 +332,232 @@ function StorageLocation({
   }
 
   return (
-    <section className="mb-8 rounded-lg border bg-card p-5">
-      <h2 className="mb-1 text-xl font-semibold">Storage location</h2>
-      <p className="mb-3 text-sm text-muted-foreground">
-        This character's folder — its definition and all generated files — lives in your library.
-      </p>
-      <p className="mb-4">
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs break-all">
-          {location.definitionAbs}
-        </code>
-      </p>
-      <Label className="mb-1">Folder, relative to the library</Label>
+    <div>
+      <Label className="mb-1 block">Filepath</Label>
       <div className="flex items-center gap-2">
-        <span
-          className="shrink-0 rounded-md border bg-muted px-2 py-2 text-xs text-muted-foreground"
-          title={location.libraryFolder}
-        >
-          library /
+        <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
+          {`${displayPath(location.libraryFolder)}${pathSeparator()}`}
         </span>
         <Input
-          value={relFolder}
-          placeholder="Electra"
-          onChange={(e) => setRelFolder(e.target.value)}
+          value={relPath}
+          placeholder={displayPath('ElectraTest/ElectraTest.json')}
+          onChange={(e) => setRelPath(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void onMove()
+            }
+          }}
         />
         <Button
           variant="outline"
           className="shrink-0"
           onClick={onMove}
-          disabled={busy || !moved || !relFolder.trim()}
+          disabled={busy || !moved || !relPath.trim()}
         >
           <FolderInput /> Move
         </Button>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Use subfolders to organise, e.g. <code>Clients/Acme/Electra</code>. Must stay inside the
-        library.
-      </p>
+
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-    </section>
+    </div>
+  )
+}
+
+/**
+ * The linked Daz scene: an "Open in Daz" button when the scene file is present,
+ * or a "Link Daz scene" picker when it's missing / never linked. Picking a scene
+ * outside the project pauses on a modal offering to copy it into the character's
+ * folder (mirrors the create flow). Linking persists immediately, preserving any
+ * unsaved editor edits.
+ */
+function DazSceneField({
+  projectId,
+  character,
+  location,
+  sceneExists,
+  onLinked,
+}: {
+  projectId: string
+  character: Character
+  location: CharacterLocation
+  sceneExists: boolean
+  onLinked: (character: Character) => void
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  // A picked scene outside the project pauses here awaiting the copy decision.
+  const [pending, setPending] = useState('')
+  const [subfolder, setSubfolder] = useState('daz3d')
+
+  const linked = Boolean(character.scenePath)
+  const ready = linked && sceneExists
+
+  function insideProject(p: string): boolean {
+    const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+    return norm(p).startsWith(norm(location.libraryFolder) + '/')
+  }
+
+  async function onOpen() {
+    setError('')
+    try {
+      await openScene({ data: { scenePath: character.scenePath } })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      toast.error(`Couldn't open in Daz: ${msg}`)
+    }
+  }
+
+  async function onPick() {
+    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    if (!picked) return
+    if (!insideProject(picked)) {
+      setSubfolder('daz3d')
+      setPending(picked)
+      return
+    }
+    await applyLink(picked, false)
+  }
+
+  async function applyLink(scene: string, copyInto: boolean) {
+    setBusy(true)
+    setError('')
+    try {
+      const finalScene = copyInto
+        ? await copyDazScene({
+            data: {
+              projectId,
+              characterId: character.id,
+              scenePath: scene,
+              subfolder: subfolder.trim(),
+            },
+          })
+        : scene
+      const saved = await relinkScene({ data: { projectId, character, scenePath: finalScene } })
+      onLinked(saved)
+      setPending('')
+      void router.invalidate()
+      toast.success('Linked Daz scene')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Two-tone path chip like the header's definition path: the part that matches
+  // the project folder is dimmed, the rest emphasized.
+  const sceneAbs = displayPath(character.scenePath)
+  const projectRoot = displayPath(location.libraryFolder)
+  const sceneRootLen = sceneAbs.toLowerCase().startsWith(projectRoot.toLowerCase())
+    ? projectRoot.length
+    : 0
+  const scenePathChip = (
+    <PathCode path={sceneAbs} className="text-xs">
+      {sceneRootLen > 0 && (
+        <span className="text-muted-foreground/60">{sceneAbs.slice(0, sceneRootLen)}</span>
+      )}
+      <span className="text-foreground/80">{sceneAbs.slice(sceneRootLen)}</span>
+    </PathCode>
+  )
+
+  return (
+    <div>
+      <Label className="mb-1 block">Daz scene</Label>
+      <div className="flex flex-wrap items-center gap-3">
+        {ready ? (
+          <Button size="sm" className="shrink-0" onClick={() => void onOpen()}>
+            <ExternalLink /> Open in Daz
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            disabled={busy}
+            onClick={() => void onPick()}
+          >
+            <Link2 /> {busy ? 'Linking…' : 'Link Daz scene'}
+          </Button>
+        )}
+        {ready ? (
+          scenePathChip
+        ) : linked ? (
+          <>
+            <span className="text-xs text-muted-foreground">Missing —</span>
+            {scenePathChip}
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">No scene linked.</span>
+        )}
+      </div>
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+
+      {pending && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !busy && setPending('')}
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold">Copy the Daz scene into the project?</h2>
+            <p className="text-sm text-muted-foreground">
+              The selected scene lives outside this project. Copy it (and its{' '}
+              <code className="rounded bg-muted px-1 py-0.5">.png</code> /{' '}
+              <code className="rounded bg-muted px-1 py-0.5">.tip.png</code> thumbnails) into the
+              character's folder?
+            </p>
+            <div>
+              <Label className="mb-1 block">Subfolder</Label>
+              <Input
+                value={subfolder}
+                placeholder="(character folder root)"
+                onChange={(e) => setSubfolder(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => void applyLink(pending, false)}>
+                Link in place
+              </Button>
+              <Button disabled={busy} onClick={() => void applyLink(pending, true)}>
+                {busy ? 'Copying…' : 'Copy & link'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
 function CharacterPage() {
   const { projectId } = Route.useParams()
-  const { character: initial, settings, catalog, location } = Route.useLoaderData()
+  const { character: initial, settings, catalog, location, sceneExists } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
   const [character, setCharacter] = useState<Character>(initial)
+  // The last-persisted character. `dirty` compares against this — NOT the loader
+  // data — so saving can settle the buttons in a single paint instead of waiting
+  // on router.invalidate() to complete in a second, separate render.
+  const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
   const [generated, setGenerated] = useState<GenerateResult | null>(null)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
-  const dirty = JSON.stringify(character) !== JSON.stringify(initial)
+  const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
+
+  // Absolute path to the character's definition JSON, shown under the header with
+  // the project library root dimmed as a label prefix and the rest emphasized.
+  const libRoot = displayPath(location?.libraryFolder ?? '')
+  const defAbs = displayPath(location?.definitionAbs ?? '')
+  const defSuffix = defAbs.startsWith(libRoot) ? defAbs.slice(libRoot.length) : defAbs
 
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
@@ -360,26 +566,65 @@ function CharacterPage() {
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button.
   async function onRenameCharacter(next: string) {
+    const previousName = character.name
     const updated = { ...character, name: next }
     setCharacter(updated)
-    await saveCharacter({ data: { projectId, character: updated } })
-    await router.invalidate()
-  }
-
-  async function onSave() {
-    setSaving(true)
-    try {
-      await saveCharacter({ data: { projectId, character } })
-      await router.invalidate()
-    } finally {
-      setSaving(false)
+    const saved = await saveCharacter({ data: { projectId, character: updated } })
+    setCharacter(saved)
+    setBaseline(saved)
+    // Renaming moves the character folder + renames the generated script, so
+    // regenerate at the new name and drop the old-named script in the shared folder.
+    const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
+    setGenerated(result)
+    void router.invalidate()
+    toast.success(`Renamed to “${next}”`)
+    if (result.scriptsError) {
+      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
     }
   }
 
-  async function onGenerate() {
-    if (dirty) await onSave()
-    const result = await generateCharacterFiles({ data: { projectId, id: character.id } })
-    setGenerated(result)
+  // Saving also (re)generates all DTH files in the same step.
+  async function onSave() {
+    setSaving(true)
+    try {
+      const saved = await saveCharacter({ data: { projectId, character } })
+      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
+      // Settle everything in one batched render: reconcile the draft + baseline
+      // (so it's no longer "dirty") and drop the saving flag together.
+      setCharacter(saved)
+      setBaseline(saved)
+      setGenerated(result)
+      setSaving(false)
+      // Refresh the loader for re-entry/navigation, but don't await it — the
+      // buttons no longer depend on it, so it stays off the visible path.
+      void router.invalidate()
+      toast.success(`Saved “${saved.name}” and generated ${result.files.length} files`)
+      if (result.scriptsError) {
+        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
+      }
+    } catch (e) {
+      setSaving(false)
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  function onDiscard() {
+    setCharacter(baseline)
+  }
+
+  // Linking a Daz scene persists immediately (see relinkScene), so settle the
+  // draft + baseline on the saved result — like the inline rename / avatar.
+  function onSceneLinked(saved: Character) {
+    setCharacter(saved)
+    setBaseline(saved)
+  }
+
+  // A folder move can repoint the linked scene (it travels with the folder when
+  // it lives inside it). Sync just the scene path into the draft + baseline so
+  // the Daz scene field stays correct without discarding any unsaved edits.
+  function onCharacterMoved(moved: Character) {
+    setCharacter((c) => ({ ...c, scenePath: moved.scenePath }))
+    setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
   }
 
   function download(file: GeneratedFile) {
@@ -393,7 +638,7 @@ function CharacterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
+    <main className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <Link
           to="/projects/$projectId"
@@ -412,16 +657,16 @@ function CharacterPage() {
           <ArrowLeft className="size-4" /> Back to project
         </Link>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onSave} disabled={saving || !dirty}>
-            <Save /> {dirty ? 'Save' : 'Saved'}
+          <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
+            <Undo2 /> Discard
           </Button>
-          <Button onClick={onGenerate}>
-            <FileCog /> Generate DTH files
+          <Button onClick={onSave} disabled={saving || !dirty}>
+            <Save /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
           </Button>
         </div>
       </div>
 
-      <header className="mb-8 flex items-center gap-5">
+      <header className="mb-8 flex items-end gap-5">
         <button
           type="button"
           className="group relative shrink-0"
@@ -431,14 +676,14 @@ function CharacterPage() {
           <Avatar
             image={character.image}
             name={character.name}
-            className="size-20 rounded-lg"
-            fallbackClassName="text-3xl"
+            className="aspect-[3/4] w-[170px] rounded-lg bg-neutral-300"
+            fallbackClassName="text-6xl"
           />
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <Pencil className="size-5 text-white" />
+            <Pencil className="size-8 text-white" />
           </span>
         </button>
-        <div>
+        <div className="pb-6">
           <EditableTitle
             name={character.name}
             ariaLabel="Character name"
@@ -449,92 +694,132 @@ function CharacterPage() {
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
           </p>
+          {location && (
+            <p className="mt-1.5 text-xs">
+              <PathCode path={defAbs}>
+                <span className="text-muted-foreground/60">{libRoot}</span>
+                <span className="text-foreground/80">{defSuffix}</span>
+              </PathCode>
+            </p>
+          )}
         </div>
       </header>
 
-      <section className="mb-8 grid grid-cols-1 gap-6 rounded-lg border bg-card p-5 lg:grid-cols-2">
-        <div className="space-y-4">
-          <div>
-            <Label className="mb-1">Name</Label>
-            <Input value={character.name} onChange={(e) => patch({ name: e.target.value })} />
-          </div>
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <Label className="mb-1">Genesis</Label>
-              <Select
-                value={character.genesis}
-                onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="G9">G9</SelectItem>
-                  <SelectItem value="G8.1" disabled>
-                    G8.1 — later
-                  </SelectItem>
-                  <SelectItem value="G8" disabled>
-                    G8 — later
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-1">Gender</Label>
-              <Select
-                value={character.gender}
-                onValueChange={(v) => patch({ gender: v as Character['gender'] })}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="male">Male</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-1">Target skeleton</Label>
-              <Select
-                value={character.targetSkeleton}
-                onValueChange={(v) => patch({ targetSkeleton: v as TargetSkeleton })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UE5">UE5 Mannequin</SelectItem>
-                  <SelectItem value="DTH">DTH native</SelectItem>
-                </SelectContent>
-              </Select>
+      <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
+        <div className="flex flex-wrap gap-x-12 gap-y-5">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <Label className="mb-1">Genesis</Label>
+                <Select
+                  value={character.genesis}
+                  onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="G9">G9</SelectItem>
+                    <SelectItem value="G8.1" disabled>
+                      G8.1 — later
+                    </SelectItem>
+                    <SelectItem value="G8" disabled>
+                      G8 — later
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1">Gender</Label>
+                <Select
+                  value={character.gender}
+                  onValueChange={(v) => patch({ gender: v as Character['gender'] })}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1">Target skeleton</Label>
+                <Select
+                  value={character.targetSkeleton}
+                  onValueChange={(v) => patch({ targetSkeleton: v as TargetSkeleton })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UE5">UE5 Mannequin</SelectItem>
+                    <SelectItem value="DTH">DTH native</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="space-y-4">
-          <div className="flex gap-4">
-            <div>
-              <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                FACS detail strength
-              </Label>
-              <NumberField
-                className="w-28"
-                value={character.facsDetailStrength}
-                onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
-              />
+          {/* The legend is positioned absolutely (a notch on the border) so it
+              doesn't consume a row of flow — that keeps the FACS / Flexion fields
+              on the same baseline as the Genesis row on the left. -mt-2 + pt-2
+              lift the box so its fields start at the same y as the left column. */}
+          <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-2 pb-4">
+            <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground">
+              {GENESIS_LABELS[character.genesis]} Specific
+            </legend>
+            {/* Genesis-9-specific tuning. When G8 / G8.1 support lands, branch on
+                character.genesis here and swap in that version's settings. */}
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+                  FACS detail strength
+                </Label>
+                <NumberField
+                  className="w-28"
+                  value={character.facsDetailStrength}
+                  onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
+                />
+              </div>
+              <div>
+                <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+                  Flexion strength
+                </Label>
+                <NumberField
+                  className="w-28"
+                  value={character.flexionStrength}
+                  onCommit={(flexionStrength) => patch({ flexionStrength })}
+                />
+              </div>
             </div>
-            <div>
-              <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                Flexion strength
-              </Label>
-              <NumberField
-                className="w-28"
-                value={character.flexionStrength}
-                onCommit={(flexionStrength) => patch({ flexionStrength })}
-              />
-            </div>
+          </fieldset>
+        </div>
+        {location && (
+          <div className="mt-6 space-y-4 border-t pt-5">
+            <StorageLocation
+              projectId={projectId}
+              id={character.id}
+              location={location}
+              onMoved={onCharacterMoved}
+            />
+            <DazSceneField
+              projectId={projectId}
+              character={character}
+              location={location}
+              sceneExists={sceneExists}
+              onLinked={onSceneLinked}
+            />
           </div>
+        )}
+      </section>
+
+      <details className="mb-8 rounded-lg border bg-card">
+        <summary className="cursor-pointer px-5 py-3 font-medium select-none">
+          Advanced options
+        </summary>
+        <div className="space-y-6 border-t p-5">
           <div className="flex items-center gap-3">
             <Switch
               checked={character.resetGPBeforeApplying}
@@ -542,14 +827,7 @@ function CharacterPage() {
             />
             <span className="text-sm">Reset GP before applying extra frames</span>
           </div>
-        </div>
-      </section>
-
-      <details className="mb-8 rounded-lg border bg-card">
-        <summary className="cursor-pointer px-5 py-3 font-medium select-none">
-          Advanced workflow options
-        </summary>
-        <div className="grid grid-cols-1 gap-6 border-t p-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
               <Label className="mb-2 block">Preserve morphs after ROM loading</Label>
@@ -650,6 +928,7 @@ function CharacterPage() {
               onCommit={(jcmMorphMods) => patch({ jcmMorphMods })}
             />
           </div>
+          </div>
         </div>
       </details>
 
@@ -671,22 +950,27 @@ function CharacterPage() {
         />
       </section>
 
-      <StorageLocation projectId={projectId} id={character.id} location={location} />
-
       <section className="rounded-lg border bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Generate</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Files are written into this character's folder
-          {settings.dazScriptsFolder ? (
+          The PoseAsset CSV is written into this character's folder; the
+          self-contained Daz script{' '}
+          {settings.dazLibraryFolder ? (
             <>
-              {' '}and the Daz files also to{' '}
-              <code className="rounded bg-muted px-1.5 py-0.5">{settings.dazScriptsFolder}</code>
+              (plus the DTH runtime it imports) installs to{' '}
+              <PathCode
+                path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+              />
             </>
-          ) : null}
+          ) : (
+            'installs once you set "My DAZ 3D Library" in Settings'
+          )}
           {' · '}preset catalog from{' '}
-          <code className="rounded bg-muted px-1.5 py-0.5">
-            {catalog.folder || 'not configured'}
-          </code>
+          {displayPath(catalog.folder) ? (
+            <PathCode path={displayPath(catalog.folder)} />
+          ) : (
+            <code className="rounded bg-muted px-1.5 py-0.5">not configured</code>
+          )}
           {' — '}
           <Link to="/settings" className="underline hover:text-foreground">
             change in Settings
@@ -703,8 +987,11 @@ function CharacterPage() {
             // should survive a reload without needing the Save button.
             const updated = { ...character, image }
             setCharacter(updated)
-            await saveCharacter({ data: { projectId, character: updated } })
-            await router.invalidate()
+            const saved = await saveCharacter({ data: { projectId, character: updated } })
+            setCharacter(saved)
+            setBaseline(saved)
+            void router.invalidate()
+            toast.success('Image updated')
           }}
           onClose={() => setImageDialogOpen(false)}
         />
@@ -713,18 +1000,16 @@ function CharacterPage() {
       {generated && (
           <>
             <p className="mb-1 text-sm text-muted-foreground">
-              Written to <code className="rounded bg-muted px-1.5 py-0.5">{generated.outDir}</code>
+              PoseAsset written to <PathCode path={displayPath(generated.outDir)} />
             </p>
-            {generated.dazScriptsFolder && (
+            {generated.scriptsDir && (
               <p className="mb-1 text-sm text-muted-foreground">
-                Daz files also written to{' '}
-                <code className="rounded bg-muted px-1.5 py-0.5">{generated.dazScriptsFolder}</code>
+                Character script installed to{' '}
+                <PathCode path={displayPath(generated.scriptsDir)} />
               </p>
             )}
-            {generated.dazScriptsError && (
-              <p className="mb-1 text-sm text-destructive">
-                Could not write to the DazToHue-Scripts folder: {generated.dazScriptsError}
-              </p>
+            {generated.scriptsError && (
+              <ConfigError message={generated.scriptsError} className="mb-1" />
             )}
             <ul className="mt-4 space-y-2">
               {generated.files.map((file) => (
