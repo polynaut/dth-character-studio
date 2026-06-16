@@ -471,16 +471,6 @@ function DazSceneField({
       <Label className="mb-1 block">Daz scene</Label>
       <div className="flex flex-wrap items-center gap-3">
         {ready ? (
-          scenePathChip
-        ) : linked ? (
-          <>
-            <span className="text-xs text-muted-foreground">Missing —</span>
-            {scenePathChip}
-          </>
-        ) : (
-          <span className="text-xs text-muted-foreground">No scene linked.</span>
-        )}
-        {ready ? (
           <Button size="sm" className="shrink-0" onClick={() => void onOpen()}>
             <ExternalLink /> Open in Daz
           </Button>
@@ -494,6 +484,16 @@ function DazSceneField({
           >
             <Link2 /> {busy ? 'Linking…' : 'Link Daz scene'}
           </Button>
+        )}
+        {ready ? (
+          scenePathChip
+        ) : linked ? (
+          <>
+            <span className="text-xs text-muted-foreground">Missing —</span>
+            {scenePathChip}
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">No scene linked.</span>
         )}
       </div>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
