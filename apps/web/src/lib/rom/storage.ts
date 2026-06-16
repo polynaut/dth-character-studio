@@ -205,13 +205,33 @@ async function findEntry(lib: string, id: string): Promise<LibraryEntry | null> 
   return (await scanLibrary(lib)).find((entry) => entry.character.id === id) ?? null
 }
 
-/** First folder name under `parent` that doesn't already exist (`Name`, `Name (2)`, …). */
+/**
+ * Whether `path` already exists — or can't be confirmed absent. Tauri's `exists`
+ * *throws* (rather than returning false) for a path it can't canonicalize for
+ * the fs scope check, e.g. a locked / delete-pending folder on a network share.
+ * Treat that as taken so callers skip the name instead of crashing.
+ */
+async function isTaken(path: string): Promise<boolean> {
+  try {
+    return await exists(path)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * First folder name under `parent` that isn't taken (`Name`, `Name (2)`, …).
+ * A pre-existing folder — including one that's locked / mid-delete and so can't
+ * even be probed — just bumps the numeric suffix. Capped so a wholly
+ * inaccessible parent fails loudly instead of spinning forever.
+ */
 async function uniqueFolder(parent: string, baseName: string): Promise<string> {
-  for (let i = 1; ; i++) {
+  for (let i = 1; i <= 9999; i++) {
     const candidate = i === 1 ? baseName : `${baseName} (${i})`
     const abs = join(parent, candidate)
-    if (!(await exists(abs))) return abs
+    if (!(await isTaken(abs))) return abs
   }
+  throw new Error(`Could not find a free folder name for "${baseName}" in ${parent}.`)
 }
 
 export async function listCharacters(lib: string): Promise<Array<Character>> {
@@ -287,7 +307,7 @@ export async function createCharacterAt(
   } else {
     // Store directly in the project root.
     definitionAbs = join(lib, fileName)
-    if (await exists(definitionAbs)) {
+    if (await isTaken(definitionAbs)) {
       throw new Error(`A character file "${fileName}" already exists in the project root.`)
     }
   }
@@ -571,8 +591,21 @@ export async function deleteProject(id: string): Promise<void> {
 /** Recursively collect file paths (relative to `root`, '/'-separated). */
 async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
   const here = rel ? join(root, rel) : root
+  let listing: Awaited<ReturnType<typeof readDir>>
+  try {
+    listing = await readDir(here)
+  } catch (err) {
+    // A locked, permission-restricted, or delete-pending folder (common on
+    // network shares — e.g. a directory whose delete is still pending because a
+    // handle stays open) makes readDir throw. Tauri even reports it as a
+    // "forbidden path" because it can't canonicalize the path for its scope
+    // check. Skip the subtree so one unreadable folder can't blank the whole
+    // library overview.
+    console.warn(`Skipping unreadable folder ${here}: ${err}`)
+    return []
+  }
   const out: Array<string> = []
-  for (const entry of await readDir(here)) {
+  for (const entry of listing) {
     const childRel = rel ? `${rel}/${entry.name}` : entry.name
     if (entry.isDirectory) out.push(...(await walkFiles(root, childRel)))
     else out.push(childRel)
