@@ -335,11 +335,8 @@ function StorageLocation({
     <div>
       <Label className="mb-1 block">Filepath</Label>
       <div className="flex items-center gap-2">
-        <span
-          className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground"
-          title={displayPath(location.libraryFolder)}
-        >
-          {`${pathSeparator()}project${pathSeparator()}`}
+        <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
+          {`${displayPath(location.libraryFolder)}${pathSeparator()}`}
         </span>
         <Input
           value={relPath}
