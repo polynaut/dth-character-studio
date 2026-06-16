@@ -666,7 +666,7 @@ function CharacterPage() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background">
+      <header className="sticky -top-2 z-10 mb-8 flex items-end gap-5 bg-background">
         <button
           type="button"
           className="group relative shrink-0"

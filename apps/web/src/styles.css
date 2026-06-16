@@ -163,7 +163,7 @@ a {
   .avatar-scroll-shrink {
     animation: dth-avatar-shrink linear both;
     animation-timeline: scroll(root block);
-    animation-range: 0 300px;
+    animation-range: 0 183px;
     will-change: width;
   }
 }
