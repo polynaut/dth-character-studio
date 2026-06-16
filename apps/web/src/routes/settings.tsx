@@ -6,6 +6,7 @@ import { ArrowLeft, FolderOpen, Save } from 'lucide-react'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { Switch } from '#/components/ui/switch.tsx'
 import {
   Select,
   SelectContent,
@@ -269,7 +270,10 @@ function SettingsPage() {
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dazScriptsFolder !== initial.dazScriptsFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder ||
-    settings.currentDthVersion !== initial.currentDthVersion
+    settings.currentDthVersion !== initial.currentDthVersion ||
+    settings.dazSubdir !== initial.dazSubdir ||
+    settings.houdiniSubdir !== initial.houdiniSubdir ||
+    settings.createHoudiniSubdir !== initial.createHoudiniSubdir
 
   // Saving also (re)builds the pose catalog for the active release — there's no
   // separate scan step.
@@ -321,11 +325,8 @@ function SettingsPage() {
             onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
             help={
               <>
-                Point this at a single DTH release folder (one containing{' '}
-                <code className="rounded bg-muted px-1 py-0.5">copyright.txt</code>), or a folder of
-                versioned release folders. Zipped releases are listed but must be extracted first.
-                For a multi-release folder, choose the version below. Saving caches the pose presets
-                for the selected release.
+                Point this at a single DTH release folder, or a folder of
+                multiple releases. Zipped releases are listed but must be extracted first.
               </>
             }
           />
@@ -348,6 +349,38 @@ function SettingsPage() {
             </>
           }
         />
+        <div className="max-w-[20rem]">
+          <Label className="mb-1">Default Daz scenes subfolder</Label>
+          <Input
+            value={settings.dazSubdir}
+            placeholder="daz3d"
+            onChange={(e) => setSettings((s) => ({ ...s, dazSubdir: e.target.value }))}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Pre-fills the subfolder when copying a Daz scene into a character.
+          </p>
+        </div>
+        <div className="max-w-[20rem]">
+          <Label className="mb-1">Default Houdini projects subfolder</Label>
+          <Input
+            value={settings.houdiniSubdir}
+            placeholder="houdini"
+            disabled={!settings.createHoudiniSubdir}
+            onChange={(e) => setSettings((s) => ({ ...s, houdiniSubdir: e.target.value }))}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Seeded empty in each new character so you can drop its Houdini project there.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={settings.createHoudiniSubdir}
+            onCheckedChange={(createHoudiniSubdir) =>
+              setSettings((s) => ({ ...s, createHoudiniSubdir }))
+            }
+          />
+          <span className="text-sm">Create the Houdini subfolder in new characters</span>
+        </div>
         <Button onClick={onSave} disabled={busy || !dirty}>
           <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
         </Button>

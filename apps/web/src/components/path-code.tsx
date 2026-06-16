@@ -13,14 +13,28 @@ import { cn } from '#/lib/utils.ts'
  * library root + an emphasized tail) pass custom `children` — `path` is still
  * what gets copied.
  */
+/**
+ * Surface classes for a path chip, shared by `PathCode` and non-interactive
+ * chips (e.g. inside a button, where `PathCode`'s click can't be nested).
+ * `secondary` reads on a light / coloured background — it overrides the global
+ * (unlayered) `code` rule's muted fill with `!`.
+ */
+export function pathChipClass(variant: 'default' | 'secondary' = 'default'): string {
+  return variant === 'secondary'
+    ? 'rounded bg-foreground/10! px-1.5 py-0.5 text-foreground/80'
+    : 'rounded bg-muted px-1.5 py-0.5 text-foreground'
+}
+
 export function PathCode({
   path,
   children,
   className,
+  variant = 'default',
 }: {
   path: string
   children?: ReactNode
   className?: string
+  variant?: 'default' | 'secondary'
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -51,7 +65,9 @@ export function PathCode({
     >
       <code
         className={cn(
-          'rounded bg-muted px-1.5 py-0.5 break-all transition-colors group-hover/path:bg-accent',
+          pathChipClass(variant),
+          'break-all transition-colors',
+          variant === 'secondary' ? 'group-hover/path:bg-foreground/20!' : 'group-hover/path:bg-accent',
           className,
         )}
       >

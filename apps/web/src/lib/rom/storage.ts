@@ -521,6 +521,13 @@ export interface StudioSettings {
    * dropped-in release from silently becoming the active one.
    */
   currentDthVersion: string
+  /** Default subfolder a copied Daz scene lands in, under the character folder. */
+  dazSubdir: string
+  /** Name of the empty Houdini folder seeded into each new character (a nudge to
+   *  create the character's Houdini project there). Gated by `createHoudiniSubdir`. */
+  houdiniSubdir: string
+  /** Whether to seed the empty Houdini folder when a character is created. */
+  createHoudiniSubdir: boolean
 }
 
 async function isDir(path: string): Promise<boolean> {
@@ -533,7 +540,15 @@ async function isDir(path: string): Promise<boolean> {
 
 /** Defaults for a fresh install: all folders empty, no release version chosen. */
 function defaultSettings(): StudioSettings {
-  return { dazLibraryFolder: '', dazScriptsFolder: '', dthPosesFolder: '', currentDthVersion: '' }
+  return {
+    dazLibraryFolder: '',
+    dazScriptsFolder: '',
+    dthPosesFolder: '',
+    currentDthVersion: '',
+    dazSubdir: 'daz3d',
+    houdiniSubdir: 'houdini',
+    createHoudiniSubdir: true,
+  }
 }
 
 export async function getSettings(): Promise<StudioSettings> {
@@ -553,6 +568,16 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.currentDthVersion === 'string'
           ? raw.currentDthVersion
           : defaults.currentDthVersion,
+      dazSubdir:
+        typeof raw.dazSubdir === 'string' && raw.dazSubdir ? raw.dazSubdir : defaults.dazSubdir,
+      houdiniSubdir:
+        typeof raw.houdiniSubdir === 'string' && raw.houdiniSubdir
+          ? raw.houdiniSubdir
+          : defaults.houdiniSubdir,
+      createHoudiniSubdir:
+        typeof raw.createHoudiniSubdir === 'boolean'
+          ? raw.createHoudiniSubdir
+          : defaults.createHoudiniSubdir,
     }
   } catch {
     return defaults
