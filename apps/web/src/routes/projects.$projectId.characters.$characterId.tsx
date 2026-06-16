@@ -295,10 +295,12 @@ function StorageLocation({
   projectId,
   id,
   location,
+  onMoved,
 }: {
   projectId: string
   id: string
   location: CharacterLocation | null
+  onMoved: (character: Character) => void
 }) {
   const router = useRouter()
   const [relPath, setRelPath] = useState(() => {
@@ -318,8 +320,9 @@ function StorageLocation({
     setBusy(true)
     setError('')
     try {
-      await moveCharacter({ data: { projectId, id, relPath: relPath.trim() } })
+      const { character } = await moveCharacter({ data: { projectId, id, relPath: relPath.trim() } })
       await router.invalidate()
+      onMoved(character)
       toast.success(`Moved to ${relPath.trim()}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -605,6 +608,14 @@ function CharacterPage() {
     setBaseline(saved)
   }
 
+  // A folder move can repoint the linked scene (it travels with the folder when
+  // it lives inside it). Sync just the scene path into the draft + baseline so
+  // the Daz scene field stays correct without discarding any unsaved edits.
+  function onCharacterMoved(moved: Character) {
+    setCharacter((c) => ({ ...c, scenePath: moved.scenePath }))
+    setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
+  }
+
   function download(file: GeneratedFile) {
     const blob = new Blob([file.content], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
@@ -776,7 +787,12 @@ function CharacterPage() {
         </div>
         {location && (
           <div className="mt-6 space-y-4 border-t pt-5">
-            <StorageLocation projectId={projectId} id={character.id} location={location} />
+            <StorageLocation
+              projectId={projectId}
+              id={character.id}
+              location={location}
+              onMoved={onCharacterMoved}
+            />
             <DazSceneField
               projectId={projectId}
               character={character}

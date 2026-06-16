@@ -518,7 +518,7 @@ export async function moveCharacter({
   data,
 }: {
   data: unknown
-}): Promise<storage.CharacterLocation> {
+}): Promise<{ location: storage.CharacterLocation; character: Character }> {
   const { projectId, id, relPath } = moveInput.parse(data)
   return storage.moveCharacter(await projectPath(projectId), id, relPath)
 }

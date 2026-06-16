@@ -56,6 +56,22 @@ function join(...parts: Array<string>): string {
     .join('/')
 }
 
+/**
+ * If `child` lives inside `parent`, return its path relative to `parent`
+ * ('/'-joined); otherwise null. Separator-agnostic and case-insensitive (matches
+ * Windows semantics), so it works regardless of how either path was stored.
+ */
+function relativeInside(parent: string, child: string): string | null {
+  const segs = (p: string) => p.replace(/\\/g, '/').split('/').filter(Boolean)
+  const p = segs(parent)
+  const c = segs(child)
+  if (c.length <= p.length) return null
+  for (let i = 0; i < p.length; i++) {
+    if (c[i].toLowerCase() !== p[i].toLowerCase()) return null
+  }
+  return c.slice(p.length).join('/')
+}
+
 /** Last path segment (folder or file name). */
 function basename(p: string): string {
   return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
@@ -358,7 +374,7 @@ export async function moveCharacter(
   lib: string,
   id: string,
   relPath: string,
-): Promise<CharacterLocation> {
+): Promise<{ location: CharacterLocation; character: Character }> {
   if (!lib) throw new Error('No project library configured.')
   const entry = await findEntry(lib, id)
   if (!entry) throw new Error(`Character ${id} not found`)
@@ -397,11 +413,27 @@ export async function moveCharacter(
     }
   }
 
+  // If the linked Daz scene lived inside the (now moved) character folder, it
+  // travelled with it — repoint the stored scenePath at the new location. A
+  // scene linked in place outside the character folder didn't move, so it's left
+  // untouched.
+  let character = entry.character
+  if (newFolderAbs !== entry.folderAbs && character.scenePath) {
+    const rel = relativeInside(entry.folderAbs, character.scenePath)
+    if (rel) {
+      character = { ...character, scenePath: join(newFolderAbs, rel) }
+      await writeTextFile(newDefAbs, JSON.stringify(character, null, 2) + '\n')
+    }
+  }
+
   return {
-    definitionAbs: newDefAbs,
-    folderAbs: newFolderAbs,
-    relFolder: newFolderRel,
-    libraryFolder: lib,
+    location: {
+      definitionAbs: newDefAbs,
+      folderAbs: newFolderAbs,
+      relFolder: newFolderRel,
+      libraryFolder: lib,
+    },
+    character,
   }
 }
 
