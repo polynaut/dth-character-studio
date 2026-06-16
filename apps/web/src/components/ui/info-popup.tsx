@@ -16,6 +16,7 @@ import {
   useRole,
   useTransitionStyles,
 } from '@floating-ui/react'
+import { useNavigate } from '@tanstack/react-router'
 import { open as openExternal } from '@tauri-apps/plugin-shell'
 
 import { cn } from '#/lib/utils.ts'
@@ -35,6 +36,9 @@ const GAP = 4
  *
  * Pass the content as children — any inline markup works:
  *   <span>IP65 <InfoPopup>Protected against <strong>dust</strong>. <a href="…">More</a></InfoPopup></span>
+ *
+ * Links are intercepted: an in-app path (`/settings`) navigates via the router,
+ * while an external URL/scheme (`https://…`, `mailto:…`) opens in the OS browser.
  */
 export function InfoPopup({
   children,
@@ -50,6 +54,7 @@ export function InfoPopup({
   const [open, setOpen] = React.useState(false)
   const [pinned, setPinned] = React.useState(false)
   const arrowRef = React.useRef<SVGSVGElement>(null)
+  const navigate = useNavigate()
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
@@ -84,10 +89,9 @@ export function InfoPopup({
 
   const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss, role])
 
-  const { isMounted, styles: transitionStyles } = useTransitionStyles(context, {
-    duration: 150,
-    initial: { opacity: 0, transform: 'scale(0.96)' },
-  })
+  // Opacity-only fade — the floating element's positioning already owns its
+  // `transform`, so the transition must not also animate transform.
+  const { isMounted, styles: transitionStyles } = useTransitionStyles(context, { duration: 150 })
 
   function onTriggerClick() {
     if (pinned) {
@@ -99,13 +103,19 @@ export function InfoPopup({
     }
   }
 
-  // In the desktop app a bare <a href> would navigate the whole webview, so
-  // route external links through the OS browser instead. Other links fall
-  // through to default handling.
+  // Links inside the popup are intercepted so they don't replace the whole app
+  // webview: an in-app path ("/settings", …) navigates via the router, and any
+  // external scheme (http(s), mailto, …) opens in the OS default browser.
   function onContentClick(event: React.MouseEvent<HTMLDivElement>) {
     const anchor = (event.target as HTMLElement).closest('a')
     const href = anchor?.getAttribute('href')
-    if (href && /^https?:\/\//i.test(href)) {
+    if (!href) return
+    if (href.startsWith('/')) {
+      event.preventDefault()
+      setPinned(false)
+      setOpen(false)
+      void (navigate as (opts: { to: string }) => unknown)({ to: href })
+    } else if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
       event.preventDefault()
       void openExternal(href)
     }
@@ -132,24 +142,23 @@ export function InfoPopup({
 
       {isMounted && (
         <FloatingPortal>
-          <div ref={refs.setFloating} style={floatingStyles} className="z-50" {...getFloatingProps()}>
-            <div
-              style={transitionStyles}
-              onClick={onContentClick}
-              className="max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl shadow-black/60 ring-1 ring-black/40 [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
-            >
-              {children}
-              <FloatingArrow
-                ref={arrowRef}
-                context={context}
-                height={ARROW_HEIGHT}
-                width={ARROW_HEIGHT * 2}
-                tipRadius={1}
-                className="fill-neutral-900"
-                stroke="rgb(255 255 255 / 0.1)"
-                strokeWidth={1}
-              />
-            </div>
+          <div
+            ref={refs.setFloating}
+            style={{ ...floatingStyles, ...transitionStyles }}
+            className="z-50 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+            {...getFloatingProps({ onClick: onContentClick })}
+          >
+            {children}
+            <FloatingArrow
+              ref={arrowRef}
+              context={context}
+              height={ARROW_HEIGHT}
+              width={ARROW_HEIGHT * 2}
+              tipRadius={2}
+              className="fill-neutral-900"
+              stroke="rgb(255 255 255 / 0.1)"
+              strokeWidth={1}
+            />
           </div>
         </FloatingPortal>
       )}
