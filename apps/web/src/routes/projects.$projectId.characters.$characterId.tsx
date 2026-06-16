@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { z } from 'zod'
 import {
@@ -550,53 +550,6 @@ function CharacterPage() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
-  const pinButtonsRef = useRef<HTMLDivElement>(null)
-  const pinAvatarRef = useRef<HTMLButtonElement>(null)
-  const pinTitleRef = useRef<HTMLDivElement>(null)
-
-  // Fancy staggered floating header: each piece pins to the top at its OWN
-  // offset, locking the moment its own top would scroll past that line — so the
-  // back link scrolls away, then the avatar locks, then the title. Driven by
-  // `transform` (the elements stay in normal flow, so no layout jump), which
-  // also lets each one persist over the whole page independently — something CSS
-  // `sticky` can't do for side-by-side elements that must outlive their parent
-  // box. Tweak the per-element px offsets below to taste.
-  useEffect(() => {
-    const pins: Array<[HTMLElement | null, number]> = [
-      [pinButtonsRef.current, 16], // Discard / Save
-      [pinAvatarRef.current, 24], // avatar
-      [pinTitleRef.current, 32], // title block
-    ]
-    const applied = new Map<HTMLElement, number>()
-    let frame = 0
-    const apply = () => {
-      frame = 0
-      for (const [el, top] of pins) {
-        if (!el) continue
-        const current = applied.get(el) ?? 0
-        // Back out the current transform to get the element's un-pinned top.
-        const naturalTop = el.getBoundingClientRect().top - current
-        const next = Math.max(0, top - naturalTop)
-        if (next !== current) {
-          el.style.transform = next ? `translateY(${next}px)` : ''
-          el.style.willChange = next ? 'transform' : ''
-          applied.set(el, next)
-        }
-      }
-    }
-    const onScroll = () => {
-      if (!frame) frame = requestAnimationFrame(apply)
-    }
-    apply()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll)
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onScroll)
-      if (frame) cancelAnimationFrame(frame)
-      for (const [el] of pins) if (el) el.style.transform = ''
-    }
-  }, [])
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
 
@@ -686,8 +639,7 @@ function CharacterPage() {
 
   return (
     <main className="p-8">
-      <div className="mb-6 flex items-start justify-between">
-        {/* The back link is not pinned — it scrolls away. */}
+      <div className="mb-6 flex items-center justify-between">
         <Link
           to="/projects/$projectId"
           params={{ projectId }}
@@ -704,8 +656,7 @@ function CharacterPage() {
         >
           <ArrowLeft className="size-4" /> Back to project
         </Link>
-        {/* Buttons — pinned to the top from the start (see the sticky effect). */}
-        <div ref={pinButtonsRef} className="relative z-30 flex gap-2 rounded-md bg-background">
+        <div className="flex gap-2">
           <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
             <Undo2 /> Discard
           </Button>
@@ -716,11 +667,9 @@ function CharacterPage() {
       </div>
 
       <header className="mb-8 flex items-end gap-5">
-        {/* Avatar — pins once the back link has scrolled out of view. */}
         <button
-          ref={pinAvatarRef}
           type="button"
-          className="group relative z-20 shrink-0"
+          className="group relative shrink-0"
           title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
@@ -734,8 +683,7 @@ function CharacterPage() {
             <Pencil className="size-8 text-white" />
           </span>
         </button>
-        {/* Title block — pins to the top at its own offset. */}
-        <div ref={pinTitleRef} className="relative z-10 self-end rounded-md bg-background pr-3 pb-6">
+        <div className="pb-6">
           <EditableTitle
             name={character.name}
             ariaLabel="Character name"
