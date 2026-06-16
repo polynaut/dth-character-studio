@@ -1,5 +1,5 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
@@ -21,7 +21,7 @@ import {
 import type { Character } from '@dth/rom'
 import type { StudioSettings } from './storage'
 
-export type { CharacterLocation, DthReleaseInfo, Project } from './storage'
+export type { CharacterLocation, DthExporterReleaseInfo, DthReleaseInfo, Project } from './storage'
 
 /**
  * Client data layer — the only bridge between the React UI and the filesystem.
@@ -488,12 +488,26 @@ export async function listDthReleases({
   return storage.listDthReleases(folder)
 }
 
+/** Inspect a DTH Exporter Plugin folder: a single plugin, or versioned folders. */
+export async function listDthExporterReleases({
+  data,
+}: {
+  data: unknown
+}): Promise<ReturnType<typeof storage.listDthExporterReleases>> {
+  const { folder } = z.object({ folder: z.string() }).parse(data)
+  return storage.listDthExporterReleases(folder)
+}
+
 const settingsInput = z.object({
   dazLibraryFolder: z.string(),
   dazScriptsFolder: z.string(),
   dthPosesFolder: z.string(),
   // Tolerate older payloads that predate the field (kept = '' = not chosen).
   currentDthVersion: z.string().default(''),
+  dthExporterFolder: z.string().default(''),
+  currentDthExporterVersion: z.string().default(''),
+  dazInstallFolder: z.string().default(''),
+  houdiniDocsFolder: z.string().default(''),
   dazSubdir: z.string().default('daz3d'),
   houdiniSubdir: z.string().default('houdini'),
   createHoudiniSubdir: z.boolean().default(true),
@@ -501,6 +515,45 @@ const settingsInput = z.object({
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
   return storage.saveSettings(settingsInput.parse(data))
+}
+
+/** One copy step of the DTH install (mirrors the Rust `InstallStep`). */
+export interface InstallStep {
+  label: string
+  files: number
+  status: 'ok' | 'skipped' | 'error'
+  detail: string
+}
+
+/** Outcome of a DTH install run (mirrors the Rust `InstallReport`). */
+export interface InstallReport {
+  dryRun: boolean
+  steps: Array<InstallStep>
+  totalFiles: number
+}
+
+/**
+ * Install a DTH release + the Exporter Plugin into the local Daz Studio + Houdini
+ * installs — a port of the dth-cli `install-daz-dth` / `install-houdini-dth`
+ * commands. Path resolution (which release/plugin, where) happens here; the
+ * recursive file copy runs in native Rust (`install_dth`) for speed. Throws with
+ * a combined message when prerequisites are missing. `dryRun` previews counts
+ * without writing anything.
+ */
+export async function installDth({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const plan = await storage.resolveInstallPlan()
+  if (plan.errors.length) throw new Error(plan.errors.join('\n'))
+  return invoke<InstallReport>('install_dth', {
+    request: {
+      releaseRoot: plan.releaseRoot,
+      exporterFolder: plan.exporterFolder,
+      dazLibFolder: plan.dazLibFolder,
+      dazInstallFolder: plan.dazInstallFolder,
+      houdiniDocsFolder: plan.houdiniDocsFolder,
+      dryRun: dryRun ?? false,
+    },
+  })
 }
 
 /**
