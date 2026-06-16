@@ -4,6 +4,7 @@ import { FolderOpen, FolderPlus, Settings as SettingsIcon, Trash2 } from 'lucide
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
+import { pathChipClass } from '#/components/path-code.tsx'
 import {
   createProject,
   deleteProject,
@@ -27,6 +28,7 @@ function ProjectsPage() {
   const { projects, settings } = Route.useLoaderData()
   const router = useRouter()
   const [name, setName] = useState('')
+  const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -48,15 +50,22 @@ function ProjectsPage() {
     }
   }
 
-  async function onAddProject() {
-    if (!name.trim()) return
-    const picked = await pickFolder(`Choose the folder for "${name.trim()}"`)
+  async function onChooseFolder() {
+    const picked = await pickFolder('Choose the project folder')
     if (!picked) return
+    setPath(picked)
+    // Suggest the project name from the folder's own name (editable).
+    setName(picked.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '')
+  }
+
+  async function onCreate() {
+    if (!path || !name.trim()) return
     setBusy(true)
     setError('')
     try {
-      const project = await createProject({ data: { name: name.trim(), path: picked } })
+      const project = await createProject({ data: { name: name.trim(), path } })
       setName('')
+      setPath('')
       await router.invalidate()
       toast.success(`Project “${project.name}” created`)
       await router.navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
@@ -111,25 +120,51 @@ function ProjectsPage() {
         </div>
       ) : (
         <>
-          <div className="mb-8 flex max-w-3xl items-end gap-3 rounded-lg border bg-card p-4">
-            <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium">New project name</label>
-              <Input
-                placeholder="e.g. Project Nova"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && onAddProject()}
-              />
+          <div className="mb-8 max-w-3xl space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="text-lg font-semibold">Create project</h2>
+              <p className="text-sm text-muted-foreground">
+                Choose the project's folder location on disk.
+              </p>
             </div>
-            <Button onClick={onAddProject} disabled={busy || !name.trim()}>
-              <FolderPlus /> Choose folder & add
-            </Button>
+            <div className="flex flex-wrap items-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                onClick={onChooseFolder}
+                disabled={busy}
+              >
+                <FolderOpen /> {path ? 'Choose another…' : 'Choose folder…'}
+              </Button>
+              {path && (
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {displayPath(path)}
+                </span>
+              )}
+            </div>
+            {path && (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[12rem] flex-1">
+                  <label className="mb-1 block text-sm font-medium">Project name</label>
+                  <Input
+                    placeholder="e.g. Project Nova"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                  />
+                </div>
+                <Button onClick={onCreate} disabled={busy || !name.trim()}>
+                  <FolderPlus /> Create
+                </Button>
+              </div>
+            )}
           </div>
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
           {projects.length === 0 ? (
             <p className="text-muted-foreground">
-              No projects yet — name one above and pick its folder.
+              No projects yet — choose a folder above to add one.
             </p>
           ) : (
             <ul className="space-y-3">
@@ -144,9 +179,11 @@ function ProjectsPage() {
                     className="block p-4 pr-12"
                   >
                     <div className="font-semibold">{project.name}</div>
-                    <div className="mt-0.5 text-xs break-all text-muted-foreground">
+                    <code
+                      className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+                    >
                       {displayPath(project.path)}
-                    </div>
+                    </code>
                   </Link>
                   <Button
                     variant="ghost"
