@@ -683,7 +683,7 @@ function CharacterPage() {
             <Pencil className="size-8 text-white" />
           </span>
         </button>
-        <div className="pb-2">
+        <div className="pb-6">
           <EditableTitle
             name={character.name}
             ariaLabel="Character name"
