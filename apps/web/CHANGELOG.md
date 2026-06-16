@@ -1,5 +1,20 @@
 # @dth/web
 
+## 0.7.0
+
+### Minor Changes
+
+- [#24](https://github.com/polynaut/dth-character-studio/pull/24) [`d6d1f1e`](https://github.com/polynaut/dth-character-studio/commit/d6d1f1e01a20dfb0b4d3a6fec25287f253e193d9) Thanks [@polynaut](https://github.com/polynaut)! - Select a DTH Exporter Plugin release in Settings — point at the plugin folder (or a folder of versioned plugin folders) and the version is read straight from the exporter DLL.
+
+- [#24](https://github.com/polynaut/dth-character-studio/pull/24) [`d6d1f1e`](https://github.com/polynaut/dth-character-studio/commit/d6d1f1e01a20dfb0b4d3a6fec25287f253e193d9) Thanks [@polynaut](https://github.com/polynaut)! - One-click install of a DTH release and the Exporter Plugin into your local Daz Studio and Houdini — a native (Rust) port of the dth-cli install commands, with a dry-run preview and new optional settings for the Daz Studio install folder and the Houdini documents folder.
+
+- [#24](https://github.com/polynaut/dth-character-studio/pull/24) [`d6d1f1e`](https://github.com/polynaut/dth-character-studio/commit/d6d1f1e01a20dfb0b4d3a6fec25287f253e193d9) Thanks [@polynaut](https://github.com/polynaut)! - Settings is now organized into **General** and **DazToHue** tabs.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes
