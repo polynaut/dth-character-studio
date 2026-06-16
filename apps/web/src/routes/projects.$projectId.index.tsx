@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, FolderOpen, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
 
-import { useResolvedImage } from '#/components/avatar.tsx'
+import { Field } from '#/components/field.tsx'
+import { Portrait } from '#/components/portrait.tsx'
+import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button.tsx'
@@ -20,46 +22,19 @@ import {
   deleteCharacter,
   fetchCharacters,
   fetchProject,
+  fetchSettings,
   generateCharacterFiles,
   resolveScenePreview,
   saveCharacter,
   updateProject,
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { Gender, GenesisVersion } from '@dth/rom'
-
-/**
- * Overview card thumbnail: a portrait crop of the (square) Daz preview image,
- * zoomed 200% and anchored to the top — `background-size: auto 200%` makes the
- * image height twice the box, so a 3:4 box shows the top 50% vertically and a
- * centered portrait slice horizontally. Light gray fills any transparency.
- */
-function CharacterThumb({ image, name }: { image: string; name: string }) {
-  const src = useResolvedImage(image)
-  return (
-    <div className="aspect-[3/4] w-16 shrink-0 overflow-hidden rounded-md bg-neutral-300">
-      {src ? (
-        <div
-          className="size-full bg-no-repeat"
-          style={{
-            backgroundImage: `url("${src}")`,
-            backgroundSize: 'auto 230%',
-            backgroundPosition: 'center -5px',
-          }}
-        />
-      ) : (
-        <div className="flex size-full items-center justify-center bg-muted text-2xl font-bold text-muted-foreground">
-          {name.charAt(0).toUpperCase()}
-        </div>
-      )}
-    </div>
-  )
-}
 
 /** Live preview of the picked Daz scene's tip thumbnail (read as a data URL). */
 function ScenePreview({ scenePath }: { scenePath: string }) {
@@ -82,7 +57,7 @@ function ScenePreview({ scenePath }: { scenePath: string }) {
     <img
       src={src}
       alt=""
-      className="aspect-[3/4] w-32 rounded-lg bg-neutral-300 object-cover"
+      className="aspect-[130/227] w-32 rounded-lg bg-neutral-500 object-cover object-top"
     />
   )
 }
@@ -91,28 +66,36 @@ export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
-    const characters = await fetchCharacters({ data: { projectId: params.projectId } })
-    return { project, characters }
+    const [characters, settings] = await Promise.all([
+      fetchCharacters({ data: { projectId: params.projectId } }),
+      fetchSettings(),
+    ])
+    return { project, characters, settings }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters } = Route.useLoaderData()
+  const { project, characters, settings } = Route.useLoaderData()
   const router = useRouter()
   const [scenePath, setScenePath] = useState('')
-  const [filepath, setFilepath] = useState('')
+  const [name, setName] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
   const [gender, setGender] = useState<Gender>('female')
-  const [prefill, setPrefill] = useState<'empty' | 'example'>('empty')
+  // 'empty' | 'example' | an existing character's id (copy its ROM definitions).
+  const [prefill, setPrefill] = useState<string>('empty')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [editingTitle, setEditingTitle] = useState(false)
   // When the picked scene is outside the project, the create flow pauses on this
   // modal to ask whether to copy the scene into the character folder.
   const [copyPrompt, setCopyPrompt] = useState(false)
-  const [copySubfolder, setCopySubfolder] = useState('daz3d')
+  // The scenes folder for a new character is editable (default from Settings);
+  // the subfolder is the optional nested path inside it (empty = the base root).
+  const [copyBase, setCopyBase] = useState(settings.dazSubdir)
+  const [copySubfolder, setCopySubfolder] = useState('')
+  const [copyDeleteOriginal, setCopyDeleteOriginal] = useState(false)
   const swallowNavRef = useRef(false)
 
   /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
@@ -120,22 +103,20 @@ function ProjectCharactersPage() {
     return (p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '').replace(/\.duf$/i, '')
   }
 
-  /** Split the "Filepath" field into a subfolder (relative to the project) + name. */
-  function parseFilepath(fp: string): { relFolder: string; name: string } {
-    const clean = fp.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
-    const slash = clean.lastIndexOf('/')
-    const relFolder = slash >= 0 ? clean.slice(0, slash) : ''
-    const name = (slash >= 0 ? clean.slice(slash + 1) : clean).replace(/\.json$/i, '')
-    return { relFolder, name }
-  }
+  // The character's folder (and its JSON filename) are created from the name, so
+  // disallow a trailing ".json".
+  const nameTrimmed = name.trim()
+  const nameError = /\.json$/i.test(nameTrimmed) ? 'A character name can’t end in “.json”.' : ''
+  const canCreate = Boolean(nameTrimmed) && !nameError
+  // ROM-prefill candidates: existing characters that match the chosen G + gender.
+  const prefillChars = characters.filter((c) => c.genesis === genesis && c.gender === gender)
 
   async function onPickScene() {
     const picked = await pickDufPath('Select the Daz character scene (.duf)')
     if (!picked) return
     setScenePath(picked)
-    // Prefill the filepath as "<base>/<base>.json" (the user can edit it).
-    const base = sceneBaseName(picked)
-    setFilepath(displayPath(`${base}/${base}.json`))
+    // Prefill the name from the scene's filename (the folder is created from it).
+    setName(sceneBaseName(picked))
   }
 
   /** Is the picked scene located inside the project folder? */
@@ -145,10 +126,12 @@ function ProjectCharactersPage() {
   }
 
   async function onCreate() {
-    if (!scenePath.trim() || !parseFilepath(filepath).name) return
+    if (!scenePath.trim() || !canCreate) return
     // Scene outside the project → ask whether to copy it into the character folder.
     if (!sceneInsideProject()) {
-      setCopySubfolder('daz3d')
+      setCopyBase(settings.dazSubdir)
+      setCopySubfolder('')
+      setCopyDeleteOriginal(false)
       setCopyPrompt(true)
       return
     }
@@ -157,31 +140,36 @@ function ProjectCharactersPage() {
 
   /** Create the character; when `copyScene`, also copy the scene + its thumbnails. */
   async function doCreate(copyScene: boolean) {
-    const { relFolder, name } = parseFilepath(filepath)
+    // ROM prefill is 'empty' / 'example', or an existing character's id to copy.
+    const fromChar = prefill !== 'empty' && prefill !== 'example'
     setBusy(true)
     setError('')
     try {
       let character = await createCharacter({
         data: {
           projectId,
-          name,
+          name: nameTrimmed,
           genesis,
           gender,
           scenePath: scenePath.trim(),
-          relFolder,
-          prefill,
+          relFolder: nameTrimmed,
+          prefill: fromChar ? 'empty' : prefill,
+          prefillFromId: fromChar ? prefill : undefined,
         },
       })
       if (copyScene) {
         // Copying brings the scene into the character folder — repoint the
         // stored scenePath at that in-project copy (createCharacter recorded the
         // original external path).
+        const base = copyBase.split(/[\\/]+/).filter(Boolean).join('/')
+        const nested = copySubfolder.split(/[\\/]+/).filter(Boolean).join('/')
         const movedScene = await copyDazScene({
           data: {
             projectId,
             characterId: character.id,
             scenePath: scenePath.trim(),
-            subfolder: copySubfolder.trim(),
+            subfolder: [base, nested].filter(Boolean).join('/'),
+            deleteOriginal: copyDeleteOriginal,
           },
         })
         character = await saveCharacter({
@@ -197,7 +185,7 @@ function ProjectCharactersPage() {
       }
       setCopyPrompt(false)
       setScenePath('')
-      setFilepath('')
+      setName('')
       setPrefill('empty')
       await router.invalidate()
       toast.success(`Created “${character.name}”`)
@@ -266,94 +254,119 @@ function ProjectCharactersPage() {
         </Link>
       </header>
 
-      <div className="mb-8 max-w-5xl space-y-3 rounded-lg border bg-card p-4">
+      <div className="mb-8 max-w-5xl space-y-4 rounded-lg border bg-card p-5">
         <div>
-          <label className="mb-1 block text-sm font-medium">Daz Character Scene</label>
-          <div className="flex items-center gap-2">
-            <Input
-              className="flex-1"
-              placeholder="X:\…\Kira.duf"
-              value={scenePath}
-              onChange={(e) => setScenePath(e.target.value)}
-            />
-            <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
-              <FolderOpen /> Browse
-            </Button>
-          </div>
+          <h2 className="text-lg font-semibold">Create character</h2>
+          <p className="text-sm text-muted-foreground">
+            Create a character by choosing its Daz scene file.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
+            <FolderOpen /> {scenePath.trim() ? 'Choose another…' : 'Choose Daz scene…'}
+          </Button>
+          {scenePath.trim() && (
+            <span className="truncate font-mono text-xs text-muted-foreground">
+              {sceneBaseName(scenePath)}.duf
+            </span>
+          )}
         </div>
 
         {scenePath.trim() && (
-          <div className="flex flex-wrap items-start gap-4">
-            <ScenePreview scenePath={scenePath} />
-            <div className="min-w-[20rem] flex-1 space-y-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-[16rem] flex-1">
-                  <label className="mb-1 block text-sm font-medium">Filepath</label>
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
-                      {displayPath('/project/')}
-                    </span>
-                    <Input
-                      className="flex-1"
-                      placeholder={displayPath('Kira/Kira.json')}
-                      value={filepath}
-                      onChange={(e) => setFilepath(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-                    />
-                  </div>
+          <>
+            <div className="flex flex-wrap items-start gap-4">
+              <ScenePreview scenePath={scenePath} />
+              <div className="min-w-[20rem] flex-1 space-y-4">
+                <div className="flex flex-wrap items-start gap-3">
+                  <Field label="Character name" error={nameError} className="min-w-[14rem] flex-1">
+                    {/* The folder is created from the name, so it carries the
+                        project-path prefix. */}
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
+                        {displayPath('/project/')}
+                      </span>
+                      <Input
+                        className="min-w-0 flex-1"
+                        placeholder="KiraDefault_G9_GP"
+                        value={name}
+                        aria-invalid={nameError ? true : undefined}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                      />
+                    </div>
+                  </Field>
+                  <Field label="Genesis" className="shrink-0">
+                    <Select
+                      value={genesis}
+                      onValueChange={(v) => {
+                        setGenesis(v as GenesisVersion)
+                        setPrefill('empty')
+                      }}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="G9">G9</SelectItem>
+                        <SelectItem value="G8.1" disabled>
+                          G8.1 — later
+                        </SelectItem>
+                        <SelectItem value="G8" disabled>
+                          G8 — later
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Gender" className="shrink-0">
+                    <Select
+                      value={gender}
+                      onValueChange={(v) => {
+                        setGender(v as Gender)
+                        setPrefill('empty')
+                      }}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="male">Male</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Genesis</label>
-                  <Select value={genesis} onValueChange={(v) => setGenesis(v as GenesisVersion)}>
-                    <SelectTrigger className="w-24">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="G9">G9</SelectItem>
-                      <SelectItem value="G8.1" disabled>
-                        G8.1 — later
-                      </SelectItem>
-                      <SelectItem value="G8" disabled>
-                        G8 — later
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Gender</label>
-                  <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
-                    <SelectTrigger className="w-28">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="male">Male</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={onCreate} disabled={busy || !parseFilepath(filepath).name}>
-                  <UserPlus /> Create
-                </Button>
-              </div>
 
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Optional: Prefill</label>
-                <Select value={prefill} onValueChange={(v) => setPrefill(v as 'empty' | 'example')}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="empty">Empty</SelectItem>
-                    <SelectItem value="example">Example</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  “Example” seeds the ROM definitions from the bundled example character.
-                </p>
-                {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+                <Field label="ROM prefill" className="w-72">
+                  <Select value={prefill} onValueChange={setPrefill}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empty">Empty</SelectItem>
+                      <SelectItem value="example">Example</SelectItem>
+                      {prefillChars.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Copy the ROM definitions from the bundled example or an existing {genesis}{' '}
+                    {gender} character.
+                  </p>
+                </Field>
               </div>
             </div>
-          </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <div className="flex justify-end">
+              <Button onClick={onCreate} disabled={busy || !canCreate}>
+                <UserPlus /> Create
+              </Button>
+            </div>
+          </>
         )}
       </div>
 
@@ -371,7 +384,12 @@ function ProjectCharactersPage() {
                 params={{ projectId, characterId: character.id }}
                 className="flex items-center gap-4 p-4"
               >
-                <CharacterThumb image={character.image} name={character.name} />
+                <Portrait
+                  image={character.image}
+                  name={character.name}
+                  className="aspect-[3/4] w-16 shrink-0 rounded-md"
+                  fallbackClassName="text-2xl"
+                />
                 <div>
                   <div className="font-semibold">{character.name}</div>
                   <div className="text-sm text-muted-foreground">
@@ -395,40 +413,23 @@ function ProjectCharactersPage() {
       )}
 
       {copyPrompt && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => !busy && setCopyPrompt(false)}
-        >
-          <div
-            className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold">Copy the Daz scene into the project?</h2>
-            <p className="text-sm text-muted-foreground">
-              The selected scene lives outside this project. Copy it (and its{' '}
-              <code className="rounded bg-muted px-1 py-0.5">.png</code> /{' '}
-              <code className="rounded bg-muted px-1 py-0.5">.tip.png</code> thumbnails) into the
-              character's folder?
-            </p>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Subfolder</label>
-              <Input
-                value={copySubfolder}
-                placeholder="(character folder root)"
-                onChange={(e) => setCopySubfolder(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" disabled={busy} onClick={() => void doCreate(false)}>
-                Don't copy
-              </Button>
-              <Button disabled={busy} onClick={() => void doCreate(true)}>
-                {busy ? 'Copying…' : 'Copy & create'}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <SceneCopyDialog
+          title="Copy Daz scene files?"
+          description="Do you want to copy the Daz scene files into the character's folder structure?"
+          baseValue={copyBase}
+          onBaseChange={setCopyBase}
+          separator={pathSeparator()}
+          subfolder={copySubfolder}
+          onSubfolderChange={setCopySubfolder}
+          deleteOriginal={copyDeleteOriginal}
+          onDeleteOriginalChange={setCopyDeleteOriginal}
+          busy={busy}
+          error={error}
+          copyLabel="Copy & create"
+          onCopy={() => void doCreate(true)}
+          onLink={() => void doCreate(false)}
+          onClose={() => setCopyPrompt(false)}
+        />
       )}
     </main>
   )

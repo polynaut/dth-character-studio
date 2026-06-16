@@ -110,20 +110,22 @@ const createInput = z.object({
   relFolder: z.string().optional(),
   /** 'example' seeds the ROM definitions from the bundled example. */
   prefill: z.enum(['empty', 'example']).optional(),
+  /** Copy the ROM definitions from this existing character (in the same project). */
+  prefillFromId: z.string().optional(),
 })
 
-/** ROM-definition fields copied from the bundled example when prefill is 'example'. */
-function examplePrefill(): Record<string, unknown> {
-  const e = exampleCharacter as Record<string, unknown>
+/** ROM-definition fields copied when prefilling from the example or another
+ *  character — everything that shapes the ROM, minus identity / provenance. */
+function romFields(src: Record<string, unknown>): Record<string, unknown> {
   return {
-    sections: e.sections,
-    targetSkeleton: e.targetSkeleton,
-    facsDetailStrength: e.facsDetailStrength,
-    flexionStrength: e.flexionStrength,
-    resetGPBeforeApplying: e.resetGPBeforeApplying,
-    preserveMorphs: e.preserveMorphs,
-    preserveNodeTransforms: e.preserveNodeTransforms,
-    jcmMorphMods: e.jcmMorphMods,
+    sections: src.sections,
+    targetSkeleton: src.targetSkeleton,
+    facsDetailStrength: src.facsDetailStrength,
+    flexionStrength: src.flexionStrength,
+    resetGPBeforeApplying: src.resetGPBeforeApplying,
+    preserveMorphs: src.preserveMorphs,
+    preserveNodeTransforms: src.preserveNodeTransforms,
+    jcmMorphMods: src.jcmMorphMods,
   }
 }
 
@@ -168,8 +170,17 @@ async function copyTipImage(characterId: string, scenePath: string): Promise<str
 
 export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
   const input = createInput.parse(data)
+  const lib = await projectPath(input.projectId)
   const now = new Date().toISOString()
   const id = newId()
+  // ROM prefill: from the bundled example, or copied from an existing character.
+  let prefill: Record<string, unknown> = {}
+  if (input.prefill === 'example') {
+    prefill = romFields(exampleCharacter as Record<string, unknown>)
+  } else if (input.prefillFromId) {
+    const source = await storage.getCharacter(lib, input.prefillFromId)
+    if (source) prefill = romFields(source as unknown as Record<string, unknown>)
+  }
   const base: Record<string, unknown> = {
     id,
     name: input.name,
@@ -177,7 +188,7 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     gender: input.gender,
     createdAt: now,
     updatedAt: now,
-    ...(input.prefill === 'example' ? examplePrefill() : {}),
+    ...prefill,
   }
   // The picked scene's tip thumbnail becomes the avatar, and we record the scene
   // path as read-only provenance shown in the editor.
@@ -187,7 +198,21 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     if (image) base.image = image
   }
   const character: Character = characterSchema.parse(base)
-  return storage.createCharacterAt(await projectPath(input.projectId), character, input.relFolder ?? '')
+  const created = await storage.createCharacterAt(lib, character, input.relFolder ?? '')
+  // Seed an empty Houdini folder (named from settings) so the user is nudged to
+  // create the character's Houdini project there. Best-effort and only for
+  // characters that own a folder — never scatter it into the project root.
+  const settings = await storage.getSettings()
+  const houSub = normalizeRelFolder(settings.houdiniSubdir)
+  if (settings.createHoudiniSubdir && houSub) {
+    try {
+      const loc = await storage.getCharacterPath(lib, created.id)
+      if (loc?.relFolder) await mkdir(joinPath(loc.folderAbs, houSub), { recursive: true })
+    } catch {
+      // a missing seed folder shouldn't fail character creation
+    }
+  }
+  return created
 }
 
 const copySceneInput = z.object({
@@ -197,12 +222,15 @@ const copySceneInput = z.object({
   scenePath: z.string().min(1),
   /** Subfolder inside the character's folder; '' copies into the folder itself. */
   subfolder: z.string().optional(),
+  /** When true, delete the source `.duf` + thumbnails after copying (a move). */
+  deleteOriginal: z.boolean().optional(),
 })
 
 /**
  * Copy a Daz scene into the character's folder (used when the picked scene lives
  * outside the project). Copies the `.duf` plus its two sibling thumbnails
  * (`<scene>.png` and `<scene>.tip.png`) into `<characterFolder>/<subfolder>/`.
+ * With `deleteOriginal`, the sources are removed afterwards (effectively a move).
  * Returns the absolute path of the copied `.duf`.
  */
 export async function copyDazScene({ data }: { data: unknown }): Promise<string> {
@@ -218,9 +246,23 @@ export async function copyDazScene({ data }: { data: unknown }): Promise<string>
     `${input.scenePath}.tip.png`,
     `${sceneBase(input.scenePath)}.tip.png`,
   ]
+  const copied: Array<string> = []
   for (const src of sources) {
     if (await exists(src)) {
       await writeFile(joinPath(destDir, basename(src)), await readFile(src))
+      copied.push(src)
+    }
+  }
+  // Delete the originals only after every copy succeeded (so a failed copy never
+  // loses the source). Each removal is best-effort — a locked source shouldn't
+  // undo the add now that the in-project copy exists.
+  if (input.deleteOriginal) {
+    for (const src of copied) {
+      try {
+        await remove(src)
+      } catch {
+        // leave a stray original rather than failing the whole operation
+      }
     }
   }
   return joinPath(destDir, basename(input.scenePath))
@@ -252,6 +294,23 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
 export async function openScene({ data }: { data: unknown }): Promise<void> {
   const { scenePath } = z.object({ scenePath: z.string().min(1) }).parse(data)
   await shellOpen(scenePath)
+}
+
+/**
+ * Delete files from disk (best-effort, each independently) — used when unlinking
+ * a Daz scene / Houdini project with "Delete file on disk" on. The caller passes
+ * the asset plus any siblings (e.g. a scene's `.png` / `.tip.png` thumbnails).
+ */
+export async function deleteFiles({ data }: { data: unknown }): Promise<void> {
+  const { paths } = z.object({ paths: z.array(z.string()) }).parse(data)
+  for (const p of paths) {
+    if (!p) continue
+    try {
+      if (await exists(p)) await remove(p)
+    } catch {
+      // best-effort — a locked/absent file shouldn't fail the whole unlink
+    }
+  }
 }
 
 /** Whether a path exists on disk; false (never throws) when it can't be probed. */
@@ -435,6 +494,9 @@ const settingsInput = z.object({
   dthPosesFolder: z.string(),
   // Tolerate older payloads that predate the field (kept = '' = not chosen).
   currentDthVersion: z.string().default(''),
+  dazSubdir: z.string().default('daz3d'),
+  houdiniSubdir: z.string().default('houdini'),
+  createHoudiniSubdir: z.boolean().default(true),
 })
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {

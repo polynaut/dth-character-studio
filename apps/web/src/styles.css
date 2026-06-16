@@ -32,7 +32,8 @@
   --destructive-foreground: #fbe9e9;
   --border: #484848; /* subtle separators */
   --input: #4a4a4a; /* input field borders */
-  --ring: #fe5c01; /* orange focus ring */
+  --ring: #ee7027; /* orange focus ring */
+  --daz-green: #3fae6b; /* Daz brand leaf-green — the linked-scene card accent */
   --chart-1: #fe5c01;
   --chart-2: #5aa9e6;
   --chart-3: #e6b85a;
@@ -70,6 +71,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-daz-green: var(--daz-green);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -93,6 +95,15 @@ html,
 body,
 #root {
   min-height: 100%;
+}
+
+/* The character-editor's collapsing header shrinks the document on scroll. By
+   default the browser's *scroll anchoring* counter-adjusts the scroll position
+   each frame to keep content stable — which, with a scroll-driven height
+   animation, feeds back into the animation and oscillates (the lag). Disabling
+   anchoring on the document scroller breaks that loop; nothing else relies on it. */
+html {
+  overflow-anchor: none;
 }
 
 body {
@@ -150,20 +161,177 @@ a {
   }
 }
 
-/* Collapsing header: the character-editor avatar shrinks over the first ~300px
-   of page scroll, then settles (its height follows via aspect-ratio, so the
-   sticky header collapses too). Scroll-driven animation — Chromium / WebView2
-   support it; browsers without scroll timelines just keep the avatar full size. */
+/* Collapsing header: this animates the HEIGHT of the avatar *wrapper* (not the
+   image). The wrapper is overflow-hidden around a fixed 170×227 image, so the
+   box goes 170×227 → 170×96 and simply crops the portrait top-down — its width,
+   right edge, and the title beside it never move. Animating the wrapper's clip
+   (rather than the <img>'s own height with object-cover) means the image is
+   rasterized once and never re-fit per frame, which keeps the scroll smooth. A
+   soft drop shadow fades in as it settles. Scroll-driven animation — Chromium /
+   WebView2 support it; browsers without scroll timelines just keep it full size.
+   The transparent `from` shadow guarantees a smooth fade. */
 @keyframes dth-avatar-shrink {
+  from {
+    height: 227px;
+    box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
+    border-color: transparent;
+  }
   to {
-    width: 96px;
+    height: 90px;
+    box-shadow: 2px 6px 8px 0 rgb(0 0 0 / 0.75);
+    border-color: var(--color-neutral-500);
   }
 }
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-shrink {
+    border: 2px solid transparent;
     animation: dth-avatar-shrink linear both;
     animation-timeline: scroll(root block);
-    animation-range: 0 183px;
-    will-change: width;
+    animation-range: 100px 242px;
+    will-change: height, box-shadow, border-color;
+  }
+}
+
+/* A second, *staggered* scroll animation layered on the image itself: while the
+   wrapper above crops the box, the image drifts up by 8% of its height — on a
+   later, longer range than the crop (130 → 320 vs 100 → 242) so the two motions
+   don't move in lockstep and the portrait gently pans as it settles. translateY
+   is composited, so this stays smooth and never touches layout. The clipped
+   wrapper hides the top edge the drift exposes. */
+@keyframes dth-avatar-pan {
+  from {
+    transform: translateY(2%);
+  }
+  to {
+    transform: translateY(-10%);
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .avatar-scroll-pan {
+    animation: dth-avatar-pan linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 130px 248px;
+    will-change: transform;
+  }
+}
+
+/* Title collapse, layered on the same scroll as the avatar: the title text
+   scales down a touch, the subtitle below it collapses to nothing and fades out
+   (the path chip stays), and a growing margin-top drops the title so it isn't
+   jammed against the pinned top edge. The header is `items-end`, so the subtitle
+   collapsing already lets the bottom-aligned title sit lower — the margin-top
+   adds a bit extra once the block is shorter than the avatar. Tunable: the rem
+   values and ranges. These animate layout inside the sticky header, but
+   overflow-anchor:none + the contained body keep it smooth (same machinery as
+   the avatar's height). */
+@keyframes dth-title-drop {
+  from {
+    margin-top: 0;
+  }
+  to {
+    margin-top: 0.5rem;
+  }
+}
+@keyframes dth-title-text {
+  from {
+    font-size: 1.875rem; /* text-3xl */
+  }
+  to {
+    font-size: 1.870rem;
+  }
+}
+@keyframes dth-subtitle-collapse {
+  from {
+    max-height: 1.75rem;
+    opacity: 1;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .title-scroll {
+    animation: dth-title-drop linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+  .title-scroll h1 {
+    animation: dth-title-text linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+    will-change: font-size;
+  }
+  .title-subtitle {
+    overflow: hidden;
+    animation: dth-subtitle-collapse linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+}
+
+/* The Discard / Save actions start a little larger — taller, more horizontal
+   padding, bigger text — and settle to the default Button size as the header
+   collapses. Real size properties (not a transform) so the buttons genuinely
+   occupy the space and stay crisp. The container's static mb-6 keeps them
+   bottom-aligned on the path-chip line (items-end), so they shrink in place from
+   the top while the right edge stays pinned. `to` matches the default Button. */
+@keyframes dth-actions-shrink {
+  from {
+    height: 2.75rem;
+    padding-inline: 1.25rem;
+    font-size: 1rem;
+    margin-bottom: 0rem;
+  }
+  to {
+    height: 2.25rem; /* h-9 */
+    padding-inline: 0.75rem; /* px-3 (has icon) */
+    font-size: 0.875rem; /* text-sm */
+    margin-bottom: 1.0rem; /* mb-2 */
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .actions-scroll button {
+    animation: dth-actions-shrink linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+    will-change: height, padding, font-size;
+  }
+}
+
+/* Isolates the character-editor body from the sticky header's collapse. When the
+   header's height animates on scroll, every following element would normally be
+   re-laid-out on the main thread each frame (the heavy form = the lag). Layout +
+   paint containment lets the browser treat this subtree as one independent,
+   pre-painted layer, so the collapse merely re-positions it. NB: the editor's
+   popup dialogs are portaled to <body>, because containment also makes this box
+   the containing block for `position: fixed` descendants. */
+@utility contain-editor-body {
+  contain: layout paint;
+}
+
+/* The linked-scene "Daz card": a muted leaf-green tint — the Daz brand green
+   mixed into the dark card so the contrast against the text and portrait stays
+   soft — with a stronger green border that brightens on hover. */
+@utility daz-card {
+  background-color: color-mix(in oklab, var(--daz-green) 15%, var(--card));
+  border-color: color-mix(in oklab, var(--daz-green) 38%, var(--border));
+  &:hover {
+    border-color: color-mix(in oklab, var(--daz-green) 70%, var(--border));
+  }
+}
+
+/* Like `bg-background`, but the fill is drawn by an absolutely-positioned
+   `::after` that stops 20px short of the bottom — so a sticky header's backdrop
+   leaves a gap at its lower edge. The host must be positioned (the sticky header
+   already is). z-index keeps the fill behind the host's own content. */
+@utility bg-background-inset {
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    height: calc(100% - 10px);
+    background-color: var(--background);
+    z-index: -1;
   }
 }

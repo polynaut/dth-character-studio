@@ -29,6 +29,20 @@ export async function pickDufPath(title: string): Promise<string> {
 }
 
 /**
+ * Native Houdini project picker via the Tauri dialog plugin. Returns the picked
+ * absolute path, or '' if the user cancelled.
+ */
+export async function pickHipPath(title: string): Promise<string> {
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title,
+    filters: [{ name: 'Houdini projects', extensions: ['hip', 'hipnc', 'hiplc'] }],
+  })
+  return typeof selected === 'string' ? selected : ''
+}
+
+/**
  * Native folder picker via the Tauri dialog plugin. Returns the picked absolute
  * path, or '' if the user cancelled. `defaultPath` opens the dialog there.
  */

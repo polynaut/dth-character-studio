@@ -350,6 +350,18 @@ export const characterSchema = z.object({
    * the scene-based create flow.
    */
   scenePath: z.string().default(''),
+  /**
+   * Additional Daz scenes (`.duf`) — outfit / look variants linked to this
+   * character beyond the primary `scenePath`. Each opens in Daz; they live in
+   * the character's Daz-scenes folder (next to the primary scene).
+   */
+  extraScenes: z.array(z.string()).default([]),
+  /**
+   * Houdini project files (`.hip` / `.hipnc` / `.hiplc`) linked to this character.
+   * Each opens in Houdini; they live in the character's Houdini folder. No
+   * thumbnails — the cards show the Houdini logo.
+   */
+  houdiniProjects: z.array(z.string()).default([]),
   genesis: genesisVersionSchema.default('G9'),
   gender: genderSchema.default('female'),
   targetSkeleton: targetSkeletonSchema.default('UE5'),
