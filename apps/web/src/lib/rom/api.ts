@@ -21,7 +21,7 @@ import {
 import type { Character } from '@dth/rom'
 import type { StudioSettings } from './storage'
 
-export type { CharacterLocation, Project } from './storage'
+export type { CharacterLocation, DthReleaseInfo, Project } from './storage'
 
 /**
  * Client data layer — the only bridge between the React UI and the filesystem.
@@ -419,10 +419,22 @@ export async function buildPoseCatalog(): Promise<ReturnType<typeof storage.buil
   return storage.buildPoseCatalog()
 }
 
+/** Inspect a DTH folder: a single release, or a list of versioned releases. */
+export async function listDthReleases({
+  data,
+}: {
+  data: unknown
+}): Promise<ReturnType<typeof storage.listDthReleases>> {
+  const { folder } = z.object({ folder: z.string() }).parse(data)
+  return storage.listDthReleases(folder)
+}
+
 const settingsInput = z.object({
   dazLibraryFolder: z.string(),
   dazScriptsFolder: z.string(),
   dthPosesFolder: z.string(),
+  // Tolerate older payloads that predate the field (kept = '' = not chosen).
+  currentDthVersion: z.string().default(''),
 })
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {

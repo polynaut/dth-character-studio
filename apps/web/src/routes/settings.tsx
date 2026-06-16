@@ -1,12 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FolderOpen, FolderSearch, Save } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Save } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
-import { buildPoseCatalog, fetchSettings, saveSettings } from '#/lib/rom/api.ts'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select.tsx'
+import { buildPoseCatalog, fetchSettings, listDthReleases, saveSettings } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -14,6 +21,7 @@ import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
 import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
+import type { DthReleaseInfo } from '#/lib/rom/api.ts'
 
 /** A folder-path text field with a native "Browse…" picker button. */
 function FolderField({
@@ -63,11 +71,80 @@ export const Route = createFileRoute('/settings')({
 interface ScanResult {
   folder: string
   releaseName: string
+  version: string
   assets: Array<DthPoseAsset>
   error: string | null
 }
 
+interface ReleasesState {
+  mode: 'single' | 'multi' | 'none'
+  version: string
+  releases: Array<DthReleaseInfo>
+  error: string | null
+}
+
 const GENESIS_ORDER: Array<GenesisVersion> = ['G3', 'G8', 'G8.1', 'G9']
+
+/**
+ * Under the DTH folder field: nothing for an empty folder, the detected version
+ * for a single release, or a version dropdown when the folder holds several.
+ */
+function ReleasePicker({
+  releases,
+  loading,
+  value,
+  onChange,
+}: {
+  releases: ReleasesState
+  loading: boolean
+  value: string
+  onChange: (version: string) => void
+}) {
+  if (loading) {
+    return <p className="mt-2 text-xs text-muted-foreground">Looking for DTH releases…</p>
+  }
+  if (releases.error) {
+    return <p className="mt-2 text-sm text-destructive">{releases.error}</p>
+  }
+  if (releases.mode === 'single') {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Single release detected
+        {releases.version && (
+          <>
+            {' '}— version <strong className="text-foreground">{releases.version}</strong>
+          </>
+        )}
+        .
+      </p>
+    )
+  }
+  if (releases.mode === 'multi') {
+    return (
+      <div className="mt-3">
+        <Label className="mb-1">DTH release version</Label>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Select a version" />
+          </SelectTrigger>
+          <SelectContent>
+            {releases.releases.map((r) => (
+              <SelectItem key={r.version} value={r.version}>
+                {r.version}
+                {r.kind === 'zip' ? ' (zip)' : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {releases.releases.length} release{releases.releases.length === 1 ? '' : 's'} found. New
+          releases don't switch automatically — pick one and Save.
+        </p>
+      </div>
+    )
+  }
+  return null
+}
 
 function ScanSummary({ result }: { result: ScanResult }) {
   if (result.error) {
@@ -89,9 +166,14 @@ function ScanSummary({ result }: { result: ScanResult }) {
         {result.releaseName && (
           <>
             {' '}from <strong className="text-foreground">{result.releaseName}</strong>
+            {result.version && <> (v{result.version})</>}
           </>
-        )}{' '}
-        in <PathCode path={displayPath(result.folder)} />
+        )}
+        {result.folder && (
+          <>
+            {' '}in <PathCode path={displayPath(result.folder)} />
+          </>
+        )}
         {unclassified > 0 && <> — {unclassified} could not be classified</>}
       </p>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -130,36 +212,75 @@ function SettingsPage() {
   const [settings, setSettings] = useState(initial)
   const [busy, setBusy] = useState(false)
   const [scan, setScan] = useState<ScanResult | null>(null)
+  const [releases, setReleases] = useState<ReleasesState>({
+    mode: 'none',
+    version: '',
+    releases: [],
+    error: null,
+  })
+  const [releasesLoading, setReleasesLoading] = useState(false)
+
+  // Inspect the DTH folder whenever it changes (debounced — typing shouldn't
+  // hammer the filesystem; Browse sets it directly). Detects a single release vs
+  // a folder of versioned releases.
+  useEffect(() => {
+    const folder = settings.dthPosesFolder
+    if (!folder) {
+      setReleases({ mode: 'none', version: '', releases: [], error: null })
+      return
+    }
+    let cancelled = false
+    setReleasesLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const result = await listDthReleases({ data: { folder } })
+        if (!cancelled) setReleases(result)
+      } finally {
+        if (!cancelled) setReleasesLoading(false)
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [settings.dthPosesFolder])
+
+  // Multi-release with no valid selection yet → pre-select the latest. That
+  // marks the form dirty so the user saves once to store CURRENT_DTH_VERSION;
+  // later releases never switch the active version on their own.
+  useEffect(() => {
+    if (releases.mode !== 'multi' || releases.releases.length === 0) return
+    setSettings((s) =>
+      releases.releases.some((r) => r.version === s.currentDthVersion)
+        ? s
+        : { ...s, currentDthVersion: releases.releases[0].version },
+    )
+  }, [releases])
 
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dazScriptsFolder !== initial.dazScriptsFolder ||
-    settings.dthPosesFolder !== initial.dthPosesFolder
+    settings.dthPosesFolder !== initial.dthPosesFolder ||
+    settings.currentDthVersion !== initial.currentDthVersion
 
+  // Saving also (re)builds the pose catalog for the active release — there's no
+  // separate scan step.
   async function onSave() {
     setBusy(true)
     try {
       await saveSettings({ data: settings })
-      await router.invalidate()
-      toast.success('Settings saved')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onScan() {
-    setBusy(true)
-    try {
-      if (dirty) await onSave()
       const result = await buildPoseCatalog()
       setScan(result)
+      await router.invalidate()
       if (result.error) toast.error(result.error)
       else
         toast.success(
-          `Cached ${result.assets.length} pose presets${result.releaseName ? ` from ${result.releaseName}` : ''}`,
+          `Saved — cached ${result.assets.length} pose presets${
+            result.releaseName ? ` from ${result.releaseName}` : ''
+          }`,
         )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -174,9 +295,6 @@ function SettingsPage() {
       </div>
       <header className="mb-8">
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="mt-1 text-muted-foreground">
-          Machine-specific folders — stored in the app's private settings file, never committed.
-        </p>
       </header>
 
       <section className="mb-8 max-w-3xl space-y-5 rounded-lg border bg-card p-5">
@@ -185,29 +303,31 @@ function SettingsPage() {
           value={settings.dazLibraryFolder}
           placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
           onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
-          help={
-            <>
-              Your Daz content library. Stored for a later update that will generate Daz scripts
-              directly into the library for faster testing — not otherwise used yet. Each
-              project's character library is its own folder, set per project.
-            </>
-          }
+          help={<>Your Daz content library. Needed as output location for generated Daz scripts.</>}
         />
-        <FolderField
-          label="DTH releases folder (or a release / Poses folder)"
-          value={settings.dthPosesFolder}
-          placeholder="X:\_3d\_resources\_DazToHue\Releases"
-          onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
-          help={
-            <>
-              Point this at your DTH releases folder (the highest-versioned release is picked
-              automatically), a single release root, or a Poses folder directly. Hit “Scan DTH
-              release” to build the pose-preset catalog — it's cached, so opening characters never
-              re-scans. Re-scan after dropping in a new release. (Zipped releases: extract first for
-              now.)
-            </>
-          }
-        />
+        <div>
+          <FolderField
+            label="DTH release or releases folder"
+            value={settings.dthPosesFolder}
+            placeholder="X:\_3d\_resources\_DazToHue\Releases"
+            onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
+            help={
+              <>
+                Point this at a single DTH release folder (one containing{' '}
+                <code className="rounded bg-muted px-1 py-0.5">copyright.txt</code>), or a folder of
+                versioned releases — release folders and/or <code className="rounded bg-muted px-1 py-0.5">.zip</code>{' '}
+                archives. For a multi-release folder, choose the version below. Saving caches the
+                pose presets for the selected release.
+              </>
+            }
+          />
+          <ReleasePicker
+            releases={releases}
+            loading={releasesLoading}
+            value={settings.currentDthVersion}
+            onChange={(version) => setSettings((s) => ({ ...s, currentDthVersion: version }))}
+          />
+        </div>
         <FolderField
           label="DazToHue-Scripts folder"
           value={settings.dazScriptsFolder}
@@ -220,19 +340,14 @@ function SettingsPage() {
             </>
           }
         />
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onSave} disabled={busy || !dirty}>
-            <Save /> {dirty ? 'Save' : 'Saved'}
-          </Button>
-          <Button onClick={onScan} disabled={busy}>
-            <FolderSearch /> Scan DTH release
-          </Button>
-        </div>
+        <Button onClick={onSave} disabled={busy || !dirty}>
+          <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+        </Button>
       </section>
 
       {scan && (
         <section>
-          <h2 className="mb-3 text-xl font-semibold">Scan result</h2>
+          <h2 className="mb-3 text-xl font-semibold">Pose catalog</h2>
           <ScanSummary result={scan} />
         </section>
       )}
