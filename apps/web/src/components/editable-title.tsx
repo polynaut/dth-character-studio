@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 
 /**
  * A page title that becomes an inline input on click (pencil appears on hover).
@@ -38,8 +39,9 @@ export function EditableTitle({
     setBusy(true)
     try {
       await onSave(next)
-    } catch {
+    } catch (e) {
       setValue(name)
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
       setEditing(false)
@@ -64,25 +66,44 @@ export function EditableTitle({
           }
         }}
         onBlur={() => void commit()}
-        className="w-[26rem] max-w-full rounded-md border bg-background px-2 py-1 text-3xl font-bold outline-none focus:border-primary"
+        // The field outline is a ring (box-shadow), not a border, so it adds no
+        // layout height; with py-0 the input box equals the <h1> line box exactly
+        // and editing shifts nothing. -mx-2 offsets the h-padding to keep the
+        // text in the same place.
+        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none focus:ring-primary"
       />
     )
   }
 
+  function startEdit() {
+    setValue(name)
+    setEditing(true)
+  }
+
   return (
-    <div className="group flex items-center gap-2">
-      <h1 className="text-3xl font-bold">{name}</h1>
-      <button
-        type="button"
+    <span className="group/title relative inline-flex max-w-full">
+      <h1
+        role="button"
+        tabIndex={0}
         title="Rename"
-        onClick={() => {
-          setValue(name)
-          setEditing(true)
+        aria-label={`Rename — ${name}`}
+        onClick={startEdit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            startEdit()
+          }
         }}
-        className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+        className="cursor-pointer text-3xl font-bold"
       >
-        <Pencil className="size-4" />
-      </button>
-    </div>
+        {name}
+      </h1>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border bg-card p-1 shadow-sm group-hover/title:flex"
+      >
+        <Pencil className="size-3 text-muted-foreground" />
+      </span>
+    </span>
   )
 }

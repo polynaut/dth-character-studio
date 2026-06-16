@@ -68,3 +68,32 @@ export function normalizeRelPath(relPath: string): string {
   }
   return segments.join('/')
 }
+
+/**
+ * Validate + normalise a user-entered FOLDER path relative to the project root
+ * (the create-form "Path" field). Returns a clean '/'-separated relative path,
+ * or `''` for "store directly in the project root". Throws on anything that
+ * could escape the project (absolute paths, drive letters, `..`) or contains a
+ * path-illegal character.
+ */
+export function normalizeRelFolder(relPath: string): string {
+  const raw = (relPath ?? '').trim()
+  if (!raw) return ''
+  if (/^([a-zA-Z]:|[\\/])/.test(raw)) {
+    throw new Error('Use a path relative to the project folder, not an absolute path.')
+  }
+  const segments = raw
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s && s !== '.')
+  for (const segment of segments) {
+    if (segment === '..') throw new Error('Path cannot step outside the project folder ("..").')
+    if (ILLEGAL_SEGMENT_CHARS.test(segment)) {
+      throw new Error(`Illegal character in path segment: "${segment}"`)
+    }
+    if (/[. ]$/.test(segment)) {
+      throw new Error(`Path segment cannot end with a dot or space: "${segment}"`)
+    }
+  }
+  return segments.join('/')
+}
