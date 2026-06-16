@@ -450,19 +450,33 @@ function DazSceneField({
     }
   }
 
+  // Two-tone path chip like the header's definition path: the part that matches
+  // the project folder is dimmed, the rest emphasized.
+  const sceneAbs = displayPath(character.scenePath)
+  const projectRoot = displayPath(location.libraryFolder)
+  const sceneRootLen = sceneAbs.toLowerCase().startsWith(projectRoot.toLowerCase())
+    ? projectRoot.length
+    : 0
+  const scenePathChip = (
+    <PathCode path={sceneAbs} className="text-xs">
+      {sceneRootLen > 0 && (
+        <span className="text-muted-foreground/60">{sceneAbs.slice(0, sceneRootLen)}</span>
+      )}
+      <span className="text-foreground/80">{sceneAbs.slice(sceneRootLen)}</span>
+    </PathCode>
+  )
+
   return (
     <div>
       <Label className="mb-1 block">Daz scene</Label>
       <div className="flex flex-wrap items-center gap-3">
         {ready ? (
-          <PathCode path={displayPath(character.scenePath)} className="text-xs" />
+          scenePathChip
         ) : linked ? (
-          <span className="text-xs text-muted-foreground">
-            Missing —{' '}
-            <code className="rounded bg-muted px-1 py-0.5 break-all">
-              {displayPath(character.scenePath)}
-            </code>
-          </span>
+          <>
+            <span className="text-xs text-muted-foreground">Missing —</span>
+            {scenePathChip}
+          </>
         ) : (
           <span className="text-xs text-muted-foreground">No scene linked.</span>
         )}
