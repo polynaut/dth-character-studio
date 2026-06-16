@@ -149,3 +149,21 @@ a {
     color: var(--foreground);
   }
 }
+
+/* Collapsing header: the character-editor avatar shrinks over the first ~300px
+   of page scroll, then settles (its height follows via aspect-ratio, so the
+   sticky header collapses too). Scroll-driven animation — Chromium / WebView2
+   support it; browsers without scroll timelines just keep the avatar full size. */
+@keyframes dth-avatar-shrink {
+  to {
+    width: 96px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .avatar-scroll-shrink {
+    animation: dth-avatar-shrink linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 300px;
+    will-change: width;
+  }
+}
