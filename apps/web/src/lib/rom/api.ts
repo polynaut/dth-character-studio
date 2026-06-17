@@ -742,7 +742,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // Frame lengths measured live from the actual .duf assets (hard-errors if an
   // included block can't be read — never a wrong-length ROM).
   const frames = await resolvePresetFrames(character, catalog)
-  const files = generateAll(character, romPaths, frames)
+  // Stamp the generating studio version into the script header for traceability.
+  const versioned = { ...character, studioVersion: await storage.studioVersion() }
+  const files = generateAll(versioned, romPaths, frames)
 
   // Houdini deliverable(s) — <Name>_PoseAsset.csv — live in the character's own folder.
   const outDir = await storage.getCharacterFolder(lib, id)
