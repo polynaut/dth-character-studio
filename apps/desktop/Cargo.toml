@@ -33,3 +33,11 @@ serde_json = "1"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+# Windows-only: resolving / re-mapping network drives via the WNet API. 0.59 is
+# already in the tree (via tauri), so this pulls in no new windows-sys version.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_WNet",
+] }

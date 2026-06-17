@@ -21,7 +21,13 @@ import {
 import type { Character } from '@dth/rom'
 import type { StudioSettings } from './storage'
 
-export type { CharacterLocation, DthExporterReleaseInfo, DthReleaseInfo, Project } from './storage'
+export type {
+  CharacterLocation,
+  DthExporterReleaseInfo,
+  DthReleaseInfo,
+  KnownDrive,
+  Project,
+} from './storage'
 
 /**
  * Client data layer — the only bridge between the React UI and the filesystem.
@@ -554,6 +560,57 @@ export async function installDth({ data }: { data: unknown }): Promise<InstallRe
       dryRun: dryRun ?? false,
     },
   })
+}
+
+// --- Network drives -------------------------------------------------------
+
+/** Outcome of trying to ensure one known network drive is mapped (mirrors Rust). */
+export interface RemapResult {
+  drive: string
+  unc: string
+  status: 'already' | 'remapped' | 'conflict' | 'failed' | 'unsupported'
+  detail: string
+}
+
+/** UNC a mapped network drive points to ("X:\…" → "\\host\share"), or '' when
+ *  the path isn't on a (mapped) network drive / the native command is absent. */
+export async function uncForPath(path: string): Promise<string> {
+  try {
+    return (await invoke<string | null>('unc_for_path', { path })) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * If `path` lives on a mapped network drive, remember that drive→UNC mapping so
+ * it can be re-mapped later (e.g. after relaunching elevated). Fire-and-forget,
+ * called as folders/files are picked; a no-op off Windows / in web-only mode.
+ */
+export async function rememberNetworkPath(path: string): Promise<void> {
+  if (!path || path[1] !== ':') return
+  const unc = await uncForPath(path)
+  if (unc) await storage.rememberDrive(path.slice(0, 2), unc)
+}
+
+/** Re-map any known network drives that aren't currently available. Runs on
+ *  startup; returns a per-drive report. No-op (empty) off Windows / web-only. */
+export async function ensureNetworkDrives(): Promise<Array<RemapResult>> {
+  try {
+    const mappings = await storage.listKnownDrives()
+    if (mappings.length === 0) return []
+    return await invoke<Array<RemapResult>>('ensure_network_drives', { mappings })
+  } catch {
+    return []
+  }
+}
+
+export async function fetchKnownDrives(): Promise<Array<storage.KnownDrive>> {
+  return storage.listKnownDrives()
+}
+
+export async function forgetNetworkDrive({ data }: { data: unknown }): Promise<void> {
+  await storage.forgetDrive(z.object({ drive: z.string().min(1) }).parse(data).drive)
 }
 
 /**
