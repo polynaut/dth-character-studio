@@ -29,6 +29,7 @@ import {
   updateProject,
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 
@@ -111,12 +112,15 @@ function ProjectCharactersPage() {
   // ROM-prefill candidates: existing characters that match the chosen G + gender.
   const prefillChars = characters.filter((c) => c.genesis === genesis && c.gender === gender)
 
-  async function onPickScene() {
-    const picked = await pickDufPath('Select the Daz character scene (.duf)')
-    if (!picked) return
+  function applyScene(picked: string) {
     setScenePath(picked)
     // Prefill the name from the scene's filename (the folder is created from it).
     setName(sceneBaseName(picked))
+  }
+
+  async function onPickScene() {
+    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    if (picked) applyScene(picked)
   }
 
   /** Is the picked scene located inside the project folder? */
@@ -254,11 +258,16 @@ function ProjectCharactersPage() {
         </Link>
       </header>
 
-      <div className="mb-8 max-w-5xl space-y-4 rounded-lg border bg-card p-5">
+      <FileDropZone
+        accept={['duf']}
+        onDrop={(paths) => paths[0] && applyScene(paths[0])}
+        label="Drop a Daz scene (.duf)"
+        className="mb-8 max-w-5xl space-y-4 rounded-lg border bg-card p-5"
+      >
         <div>
           <h2 className="text-lg font-semibold">Create character</h2>
           <p className="text-sm text-muted-foreground">
-            Create a character by choosing its Daz scene file.
+            Create a character by choosing — or dragging in — its Daz scene file.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -368,7 +377,7 @@ function ProjectCharactersPage() {
             </div>
           </>
         )}
-      </div>
+      </FileDropZone>
 
       {characters.length === 0 ? (
         <p className="text-muted-foreground">No characters yet — create the first one above.</p>

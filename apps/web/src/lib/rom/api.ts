@@ -429,6 +429,37 @@ export async function uploadCharacterImage({ data }: { data: unknown }): Promise
   return fileName
 }
 
+/** Extension → MIME for avatar images dropped as a file path (native drag-drop). */
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+}
+
+/**
+ * Store an avatar image from an absolute file path — native OS drag-drop hands us
+ * a path, not file bytes. Reads it, infers the MIME from the extension, and
+ * delegates to {@link uploadCharacterImage}.
+ */
+export async function uploadCharacterImageFromPath({ data }: { data: unknown }): Promise<string> {
+  const { characterId, path } = z
+    .object({ characterId: z.string().min(1), path: z.string().min(1) })
+    .parse(data)
+  const ext = (path.split('.').pop() ?? '').toLowerCase()
+  const mimeType = IMAGE_MIME[ext]
+  if (!mimeType) throw new Error(`Unsupported image type${ext ? `: .${ext}` : ''}`)
+  const bytes = await readFile(path)
+  if (bytes.length > 10 * 1024 * 1024) throw new Error('Image is larger than 10 MB.')
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return uploadCharacterImage({ data: { characterId, mimeType, dataBase64: btoa(binary) } })
+}
+
 /**
  * Turns a stored `image` reference (see ./image) into a URL the webview can
  * load. External URLs pass through unchanged; a local filename resolves to its
