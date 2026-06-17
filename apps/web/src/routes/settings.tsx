@@ -22,7 +22,9 @@ import {
   fetchKnownDrives,
   fetchSettings,
   forgetNetworkDrive,
-  installDth,
+  installDthPlugin,
+  installDthRelease,
+  installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
   saveSettings,
@@ -384,6 +386,32 @@ function NetworkDrivesSection() {
   )
 }
 
+/** Per-step result list shared by both install panes. */
+function InstallReportList({ report }: { report: InstallReport }) {
+  return (
+    <ul className="space-y-1 border-t pt-3 text-sm">
+      {report.steps.map((step, i) => (
+        <li key={i} className="flex items-start gap-2">
+          {step.status === 'ok' ? (
+            <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+          ) : step.status === 'error' ? (
+            <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
+          ) : (
+            <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className={step.status === 'error' ? 'text-destructive' : ''}>
+            <span className="font-medium">{step.label}</span>
+            {step.status === 'ok' && step.files > 0 && (
+              <span className="text-muted-foreground"> — {step.files} file(s)</span>
+            )}
+            {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function SettingsPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
@@ -404,8 +432,13 @@ function SettingsPage() {
     error: null,
   })
   const [exporterLoading, setExporterLoading] = useState(false)
-  const [installing, setInstalling] = useState(false)
-  const [installReport, setInstallReport] = useState<InstallReport | null>(null)
+  const [releaseInstalling, setReleaseInstalling] = useState(false)
+  const [releaseReport, setReleaseReport] = useState<InstallReport | null>(null)
+  const [pluginInstalling, setPluginInstalling] = useState(false)
+  const [pluginReport, setPluginReport] = useState<InstallReport | null>(null)
+  // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
+  // checked / no install folder; '' = folder set but plugin not installed there.
+  const [installedExporter, setInstalledExporter] = useState<string | null>(null)
 
   // Inspect the DTH folder whenever it changes (debounced — typing shouldn't
   // hammer the filesystem; Browse sets it directly). Detects a single release vs
@@ -486,6 +519,22 @@ function SettingsPage() {
     }
   }, [exporter])
 
+  // Read the version of the exporter DLL already installed in the Daz plugins
+  // folder, so the pane can show up-to-date / update-available. Debounced so
+  // typing the install path doesn't re-read the DLL on every keystroke.
+  const loadInstalledExporter = useCallback(async () => {
+    if (!settings.dazInstallFolder) {
+      setInstalledExporter(null)
+      return
+    }
+    setInstalledExporter(await installedExporterVersion(settings.dazInstallFolder))
+  }, [settings.dazInstallFolder])
+
+  useEffect(() => {
+    const timer = setTimeout(() => void loadInstalledExporter(), 350)
+    return () => clearTimeout(timer)
+  }, [loadInstalledExporter])
+
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dazScriptsFolder !== initial.dazScriptsFolder ||
@@ -522,35 +571,54 @@ function SettingsPage() {
     }
   }
 
-  // The install copies the active DTH release + Exporter Plugin into the local
-  // Daz Studio + Houdini installs. Enabled once every prerequisite is set; any
-  // pending edits are saved automatically before it runs (it reads the saved
-  // settings), so there's no separate Save step.
+  // Two independent installs: the DTH release content (Daz library + Houdini),
+  // and the admin-sensitive Exporter Plugin DLLs (Daz install). Each is enabled
+  // once its own prerequisites are set; pending edits are saved automatically
+  // before either runs (they read the saved settings).
   const releaseReady = !releases.error && releases.mode !== 'none'
   const exporterReady = !exporter.error && exporter.mode !== 'none'
-  const canInstall =
-    releaseReady && exporterReady && !!settings.dazInstallFolder && !!settings.houdiniDocsFolder
-  const installBlockers: Array<string> = []
-  if (!releaseReady) installBlockers.push('a DTH release')
-  if (!exporterReady) installBlockers.push('a DTH Exporter Plugin')
-  if (!settings.dazInstallFolder) installBlockers.push('the Daz Studio install folder')
-  if (!settings.houdiniDocsFolder) installBlockers.push('the Houdini documents folder')
+  const canInstallRelease = releaseReady && !!settings.dazLibraryFolder
+  const canInstallPlugin = exporterReady && !!settings.dazInstallFolder
+  const releaseBlockers: Array<string> = []
+  if (!releaseReady) releaseBlockers.push('a DTH release')
+  if (!settings.dazLibraryFolder) releaseBlockers.push('“My DAZ 3D Library”')
+  const pluginBlockers: Array<string> = []
+  if (!exporterReady) pluginBlockers.push('a DTH Exporter Plugin')
+  if (!settings.dazInstallFolder) pluginBlockers.push('the Daz Studio install folder')
 
-  async function onInstall(dryRun: boolean) {
-    setInstalling(true)
-    setInstallReport(null)
+  // Compare the release's exporter version with the one already in the plugins
+  // folder to drive the status line + button label (Install / Update / Reinstall).
+  const sourceExporterVer = exporter.version || settings.currentDthExporterVersion || ''
+  const exporterUpToDate =
+    !!installedExporter && !!sourceExporterVer && installedExporter === sourceExporterVer
+  const pluginInstallLabel = !installedExporter
+    ? 'Install'
+    : exporterUpToDate
+      ? 'Reinstall'
+      : 'Update'
+
+  // Run a scoped install: persist pending edits first, then surface the per-step
+  // report. On failure the first errored step's message is toasted verbatim — it
+  // carries the "close all apps / restart as administrator" guidance.
+  async function runInstall(
+    install: (args: { data: { dryRun: boolean } }) => Promise<InstallReport>,
+    dryRun: boolean,
+    setBusyState: (value: boolean) => void,
+    setReport: (report: InstallReport | null) => void,
+    onComplete?: () => void,
+  ) {
+    setBusyState(true)
+    setReport(null)
     try {
-      // The install resolves paths from the saved settings — persist any pending
-      // edits first so it uses exactly what's on screen.
       if (dirty) {
         await saveSettings({ data: settings })
         await router.invalidate()
       }
-      const report = await installDth({ data: { dryRun } })
-      setInstallReport(report)
-      const errors = report.steps.filter((step) => step.status === 'error').length
-      if (errors > 0) {
-        toast.error(`Install finished with ${errors} error${errors === 1 ? '' : 's'}`)
+      const report = await install({ data: { dryRun } })
+      setReport(report)
+      const firstError = report.steps.find((step) => step.status === 'error')
+      if (firstError) {
+        toast.error(firstError.detail || 'Install failed')
       } else if (dryRun) {
         toast.success(`Dry run — would copy ${report.totalFiles} file(s)`)
       } else {
@@ -559,7 +627,8 @@ function SettingsPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
-      setInstalling(false)
+      setBusyState(false)
+      onComplete?.()
     }
   }
 
@@ -582,12 +651,15 @@ function SettingsPage() {
 
         <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
           <FolderField
-            label="My DAZ 3D Library"
-            value={settings.dazLibraryFolder}
-            placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
-            onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
+            label="DazToHue-Scripts folder"
+            value={settings.dazScriptsFolder}
+            placeholder="D:\Development\DazToHue-Scripts"
+            onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
             help={
-              <>Your Daz content library. Needed as output location for generated Daz scripts.</>
+              <>
+                Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so they
+                are directly runnable from Daz Studio.
+              </>
             }
           />
           <div className="max-w-[20rem]">
@@ -633,7 +705,15 @@ function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="daztohue" className="space-y-5">
-          <section className="space-y-5 rounded-lg border bg-card p-5">
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Setup DTH Release</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select your DTH release, then install it into your Daz library and (optionally) your
+                Houdini documents folder.
+              </p>
+            </div>
+
             <div>
               <FolderField
                 label="DTH release(s) folder"
@@ -654,6 +734,74 @@ function SettingsPage() {
                 onChange={(version) => setSettings((s) => ({ ...s, currentDthVersion: version }))}
               />
             </div>
+
+            <FolderField
+              label="My DAZ 3D Library"
+              value={settings.dazLibraryFolder}
+              placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
+              onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
+              help={
+                <>
+                  Your Daz content library — where the release's content is installed, and the output
+                  location for generated character scripts.
+                </>
+              }
+            />
+            <FolderField
+              label="Houdini documents folder (optional)"
+              value={settings.houdiniDocsFolder}
+              placeholder="D:\User Data\Documents\houdini20.5"
+              onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
+              help={
+                <>
+                  Your Houdini user folder. The install merges the release's Houdini assets
+                  (otls/presets/toolbar) into it.
+                </>
+              }
+            />
+
+            {canInstallRelease ? (
+              <p className="text-sm text-muted-foreground">
+                Ready to install DTH{' '}
+                <strong className="text-foreground">
+                  {releases.version || settings.currentDthVersion || '?'}
+                </strong>
+                {dirty ? ' — pending changes are saved on install.' : '.'}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Set {releaseBlockers.join(', ')} to enable the install.
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDthRelease, true, setReleaseInstalling, setReleaseReport)}
+                disabled={!canInstallRelease || releaseInstalling}
+              >
+                {releaseInstalling ? 'Working…' : 'Dry run'}
+              </Button>
+              <Button
+                onClick={() => runInstall(installDthRelease, false, setReleaseInstalling, setReleaseReport)}
+                disabled={!canInstallRelease || releaseInstalling}
+              >
+                <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
+              </Button>
+            </div>
+
+            {releaseReport && <InstallReportList report={releaseReport} />}
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Setup DTH Exporter Plugin Release</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select the Exporter Plugin release, then install its DLLs into Daz Studio's
+                <span className="font-mono"> plugins</span> folder.
+              </p>
+            </div>
+
             <div>
               <FolderField
                 label="DTH Exporter Plugin release(s) folder"
@@ -691,105 +839,83 @@ function SettingsPage() {
                 }
               />
             </div>
-            <FolderField
-              label="DazToHue-Scripts folder"
-              value={settings.dazScriptsFolder}
-              placeholder="D:\Development\DazToHue-Scripts"
-              onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
-              help={
-                <>
-                  Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so
-                  they are directly runnable from Daz Studio.
-                </>
-              }
-            />
-          </section>
-
-          <section className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="font-semibold">Install DTH to Daz &amp; Houdini</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Copies the selected DTH release into “My DAZ 3D Library”, the exporter plugin DLLs
-                into Daz Studio, and the release's Houdini assets into your Houdini folder — a
-                one-click port of the dth-cli install commands.
-              </p>
-            </div>
 
             <FolderField
-              label="Daz Studio install folder (optional)"
+              label="Daz Studio install folder"
               value={settings.dazInstallFolder}
               placeholder="C:\Program Files\DAZ 3D\DAZStudio4"
               onChange={(value) => setSettings((s) => ({ ...s, dazInstallFolder: value }))}
               help={
                 <>
-                  Where Daz Studio is installed. The install drops the exporter plugin DLLs into its
-                  <span className="font-mono"> plugins</span> subfolder.
-                </>
-              }
-            />
-            <FolderField
-              label="Houdini documents folder (optional)"
-              value={settings.houdiniDocsFolder}
-              placeholder="D:\User Data\Documents\houdini20.5"
-              onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
-              help={
-                <>
-                  Your Houdini user folder. The install merges the release's Houdini assets
-                  (otls/presets/toolbar) into it.
+                  Where Daz Studio is installed. The DLLs go into its
+                  <span className="font-mono"> plugins</span> subfolder — writing there usually needs
+                  administrator rights.
                 </>
               }
             />
 
-            {canInstall ? (
-              <p className="text-sm text-muted-foreground">
-                Ready to install DTH{' '}
-                <strong className="text-foreground">{releases.version || settings.currentDthVersion || '?'}</strong>{' '}
-                + Exporter{' '}
-                <strong className="text-foreground">
-                  {exporter.version ||
-                    settings.currentDthExporterVersion ||
-                    settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
-                    '?'}
-                </strong>
-                {dirty ? ' — pending changes are saved on install.' : '.'}
-              </p>
+            {canInstallPlugin ? (
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Ready to install Exporter{' '}
+                  <strong className="text-foreground">
+                    {sourceExporterVer ||
+                      settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
+                      '?'}
+                  </strong>
+                  {dirty ? ' — pending changes are saved on install.' : '.'}
+                </p>
+                {installedExporter === '' ? (
+                  <p className="text-xs">Not installed in this Daz Studio yet.</p>
+                ) : installedExporter ? (
+                  exporterUpToDate ? (
+                    <p className="text-xs text-emerald-500">
+                      Already installed ({installedExporter}) — up to date.
+                    </p>
+                  ) : (
+                    <p className="text-xs">
+                      Installed: <strong className="text-foreground">{installedExporter}</strong> →
+                      updating to <strong className="text-foreground">{sourceExporterVer || '?'}</strong>.
+                    </p>
+                  )
+                ) : null}
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Set {installBlockers.join(', ')} to enable the install.
+                Set {pluginBlockers.join(', ')} to enable the install.
               </p>
             )}
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => onInstall(true)} disabled={!canInstall || installing}>
-                {installing ? 'Working…' : 'Dry run'}
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDthPlugin, true, setPluginInstalling, setPluginReport)}
+                disabled={!canInstallPlugin || pluginInstalling}
+              >
+                {pluginInstalling ? 'Working…' : 'Dry run'}
               </Button>
-              <Button onClick={() => onInstall(false)} disabled={!canInstall || installing}>
-                <Download /> {installing ? 'Installing…' : 'Install'}
+              <Button
+                onClick={() =>
+                  runInstall(
+                    installDthPlugin,
+                    false,
+                    setPluginInstalling,
+                    setPluginReport,
+                    () => void loadInstalledExporter(),
+                  )
+                }
+                disabled={!canInstallPlugin || pluginInstalling}
+              >
+                <Download /> {pluginInstalling ? 'Installing…' : pluginInstallLabel}
               </Button>
             </div>
 
-            {installReport && (
-              <ul className="space-y-1 border-t pt-3 text-sm">
-                {installReport.steps.map((step, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    {step.status === 'ok' ? (
-                      <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-                    ) : step.status === 'error' ? (
-                      <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
-                    ) : (
-                      <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className={step.status === 'error' ? 'text-destructive' : ''}>
-                      <span className="font-medium">{step.label}</span>
-                      {step.status === 'ok' && step.files > 0 && (
-                        <span className="text-muted-foreground"> — {step.files} file(s)</span>
-                      )}
-                      {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {pluginReport && <InstallReportList report={pluginReport} />}
+
+            <p className="text-xs text-muted-foreground">
+              If installing fails, close all Daz and Houdini apps and restart DTH Character Studio as
+              administrator, then try again.
+            </p>
           </section>
         </TabsContent>
       </Tabs>
