@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.13.0
+
+### Minor Changes
+
+- [#37](https://github.com/polynaut/dth-character-studio/pull/37) [`981567d`](https://github.com/polynaut/dth-character-studio/commit/981567dd2c5c2aac6a237a3ab1221ad0555caa7d) Thanks [@polynaut](https://github.com/polynaut)! - Add a **Refresh Assets** button in Settings → General that re-generates the Daz scripts and PoseAsset CSVs for every character across all projects — run it after updating the studio or switching DTH release so every character's generated files match the current version. Per-character failures are reported rather than aborting the sweep, and character definition JSONs are left untouched (they self-migrate on open/save).
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.13.0
+
 ## 0.12.0
 
 ### Minor Changes
