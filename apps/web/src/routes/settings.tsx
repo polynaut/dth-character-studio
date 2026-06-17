@@ -24,6 +24,7 @@ import {
   forgetNetworkDrive,
   installDthPlugin,
   installDthRelease,
+  installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
   saveSettings,
@@ -435,6 +436,9 @@ function SettingsPage() {
   const [releaseReport, setReleaseReport] = useState<InstallReport | null>(null)
   const [pluginInstalling, setPluginInstalling] = useState(false)
   const [pluginReport, setPluginReport] = useState<InstallReport | null>(null)
+  // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
+  // checked / no install folder; '' = folder set but plugin not installed there.
+  const [installedExporter, setInstalledExporter] = useState<string | null>(null)
 
   // Inspect the DTH folder whenever it changes (debounced — typing shouldn't
   // hammer the filesystem; Browse sets it directly). Detects a single release vs
@@ -515,6 +519,22 @@ function SettingsPage() {
     }
   }, [exporter])
 
+  // Read the version of the exporter DLL already installed in the Daz plugins
+  // folder, so the pane can show up-to-date / update-available. Debounced so
+  // typing the install path doesn't re-read the DLL on every keystroke.
+  const loadInstalledExporter = useCallback(async () => {
+    if (!settings.dazInstallFolder) {
+      setInstalledExporter(null)
+      return
+    }
+    setInstalledExporter(await installedExporterVersion(settings.dazInstallFolder))
+  }, [settings.dazInstallFolder])
+
+  useEffect(() => {
+    const timer = setTimeout(() => void loadInstalledExporter(), 350)
+    return () => clearTimeout(timer)
+  }, [loadInstalledExporter])
+
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dazScriptsFolder !== initial.dazScriptsFolder ||
@@ -566,6 +586,17 @@ function SettingsPage() {
   if (!exporterReady) pluginBlockers.push('a DTH Exporter Plugin')
   if (!settings.dazInstallFolder) pluginBlockers.push('the Daz Studio install folder')
 
+  // Compare the release's exporter version with the one already in the plugins
+  // folder to drive the status line + button label (Install / Update / Reinstall).
+  const sourceExporterVer = exporter.version || settings.currentDthExporterVersion || ''
+  const exporterUpToDate =
+    !!installedExporter && !!sourceExporterVer && installedExporter === sourceExporterVer
+  const pluginInstallLabel = !installedExporter
+    ? 'Install'
+    : exporterUpToDate
+      ? 'Reinstall'
+      : 'Update'
+
   // Run a scoped install: persist pending edits first, then surface the per-step
   // report. On failure the first errored step's message is toasted verbatim — it
   // carries the "close all apps / restart as administrator" guidance.
@@ -574,6 +605,7 @@ function SettingsPage() {
     dryRun: boolean,
     setBusyState: (value: boolean) => void,
     setReport: (report: InstallReport | null) => void,
+    onComplete?: () => void,
   ) {
     setBusyState(true)
     setReport(null)
@@ -596,6 +628,7 @@ function SettingsPage() {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusyState(false)
+      onComplete?.()
     }
   }
 
@@ -822,16 +855,31 @@ function SettingsPage() {
             />
 
             {canInstallPlugin ? (
-              <p className="text-sm text-muted-foreground">
-                Ready to install Exporter{' '}
-                <strong className="text-foreground">
-                  {exporter.version ||
-                    settings.currentDthExporterVersion ||
-                    settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
-                    '?'}
-                </strong>
-                {dirty ? ' — pending changes are saved on install.' : '.'}
-              </p>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Ready to install Exporter{' '}
+                  <strong className="text-foreground">
+                    {sourceExporterVer ||
+                      settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
+                      '?'}
+                  </strong>
+                  {dirty ? ' — pending changes are saved on install.' : '.'}
+                </p>
+                {installedExporter === '' ? (
+                  <p className="text-xs">Not installed in this Daz Studio yet.</p>
+                ) : installedExporter ? (
+                  exporterUpToDate ? (
+                    <p className="text-xs text-emerald-500">
+                      Already installed ({installedExporter}) — up to date.
+                    </p>
+                  ) : (
+                    <p className="text-xs">
+                      Installed: <strong className="text-foreground">{installedExporter}</strong> →
+                      updating to <strong className="text-foreground">{sourceExporterVer || '?'}</strong>.
+                    </p>
+                  )
+                ) : null}
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Set {pluginBlockers.join(', ')} to enable the install.
@@ -847,10 +895,18 @@ function SettingsPage() {
                 {pluginInstalling ? 'Working…' : 'Dry run'}
               </Button>
               <Button
-                onClick={() => runInstall(installDthPlugin, false, setPluginInstalling, setPluginReport)}
+                onClick={() =>
+                  runInstall(
+                    installDthPlugin,
+                    false,
+                    setPluginInstalling,
+                    setPluginReport,
+                    () => void loadInstalledExporter(),
+                  )
+                }
                 disabled={!canInstallPlugin || pluginInstalling}
               >
-                <Download /> {pluginInstalling ? 'Installing…' : 'Install'}
+                <Download /> {pluginInstalling ? 'Installing…' : pluginInstallLabel}
               </Button>
             </div>
 

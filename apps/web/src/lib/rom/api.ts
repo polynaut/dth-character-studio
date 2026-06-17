@@ -624,6 +624,15 @@ export async function fetchKnownDrives(): Promise<Array<storage.KnownDrive>> {
   return storage.listKnownDrives()
 }
 
+/** Version of the exporter DLL already installed in `<dazInstall>/plugins` (''=none). */
+export async function installedExporterVersion(dazInstallFolder: string): Promise<string> {
+  try {
+    return await storage.installedExporterVersion(dazInstallFolder)
+  } catch {
+    return ''
+  }
+}
+
 export async function forgetNetworkDrive({ data }: { data: unknown }): Promise<void> {
   await storage.forgetDrive(z.object({ drive: z.string().min(1) }).parse(data).drive)
 }

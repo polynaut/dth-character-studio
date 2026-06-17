@@ -1244,6 +1244,17 @@ export async function resolvePluginInstall(): Promise<PluginInstall> {
   }
 }
 
+/**
+ * Version of the exporter DLL already installed in `<dazInstallFolder>/plugins`,
+ * or '' when none is there / the folder isn't set. Lets the UI tell whether the
+ * plugin is missing, out of date, or already current before installing.
+ */
+export async function installedExporterVersion(dazInstallFolder: string): Promise<string> {
+  if (!dazInstallFolder) return ''
+  const dll = await findExporterDll(join(dazInstallFolder, 'plugins'))
+  return dll ? readDllFileVersion(dll) : ''
+}
+
 // --- Known network drives (metadata) --------------------------------------
 // Mapped network drives (X: → \\host\share) live in the user's logon session,
 // so an elevated relaunch loses them. We remember each one's UNC as paths are
