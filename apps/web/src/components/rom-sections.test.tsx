@@ -41,6 +41,7 @@ describe('RomSections multi-morph editor', () => {
         gender="female"
         skinning="dqs"
         catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
         onChange={() => {}}
       />,
     )
