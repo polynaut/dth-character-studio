@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, CircleCheck, CircleSlash, CircleX, Download, FolderOpen, Save } from 'lucide-react'
+import {
+  ArrowLeft,
+  CircleCheck,
+  CircleSlash,
+  CircleX,
+  Download,
+  FolderOpen,
+  RefreshCw,
+  Save,
+} from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -28,6 +37,7 @@ import {
   installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
+  refreshAllAssets,
   saveSettings,
   uncForPath,
 } from '#/lib/rom/api.ts'
@@ -39,7 +49,12 @@ import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
 import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
-import type { DthExporterReleaseInfo, DthReleaseInfo, InstallReport } from '#/lib/rom/api.ts'
+import type {
+  DthExporterReleaseInfo,
+  DthReleaseInfo,
+  InstallReport,
+  RefreshSummary,
+} from '#/lib/rom/api.ts'
 
 /** A folder-path text field with a native "Browse…" picker button. */
 function FolderField({
@@ -387,6 +402,88 @@ function NetworkDrivesSection() {
   )
 }
 
+/**
+ * "Refresh Assets" — re-generate the Daz scripts + PoseAsset CSVs for every
+ * character in every project (e.g. after a studio update or a DTH-release
+ * switch). Character definition JSONs aren't touched. Shows a per-run summary
+ * with any failures/warnings.
+ */
+function RefreshAssetsSection() {
+  const [refreshing, setRefreshing] = useState(false)
+  const [summary, setSummary] = useState<RefreshSummary | null>(null)
+
+  async function onRefresh() {
+    setRefreshing(true)
+    setSummary(null)
+    try {
+      const result = await refreshAllAssets()
+      setSummary(result)
+      if (result.total === 0) {
+        toast('No characters to refresh yet')
+      } else if (result.failed > 0) {
+        toast.error(`Re-generated ${result.regenerated} of ${result.total} — ${result.failed} failed`)
+      } else {
+        toast.success(
+          `Re-generated assets for ${result.regenerated} character${result.regenerated === 1 ? '' : 's'}`,
+        )
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const failures = summary?.results.filter((r) => !r.ok) ?? []
+  const warnings = summary?.results.filter((r) => r.ok && r.detail) ?? []
+
+  return (
+    <div className="space-y-3">
+      <Button variant="outline" onClick={() => void onRefresh()} disabled={refreshing}>
+        <RefreshCw className={refreshing ? 'animate-spin' : ''} />
+        {refreshing ? 'Refreshing…' : 'Refresh Assets'}
+      </Button>
+      {summary && (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            Re-generated <strong className="text-foreground">{summary.regenerated}</strong> of{' '}
+            {summary.total} character{summary.total === 1 ? '' : 's'}
+            {summary.failed > 0 && (
+              <>
+                {' · '}
+                <span className="text-destructive">{summary.failed} failed</span>
+              </>
+            )}
+            .
+          </p>
+          {failures.map((r, i) => (
+            <p key={`f${i}`} className="flex items-start gap-2 text-destructive">
+              <CircleX className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <span className="font-medium">
+                  {r.project} · {r.character}
+                </span>
+                {r.detail && <span className="text-muted-foreground"> — {r.detail}</span>}
+              </span>
+            </p>
+          ))}
+          {warnings.map((r, i) => (
+            <p key={`w${i}`} className="flex items-start gap-2 text-muted-foreground">
+              <CircleSlash className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <span className="font-medium">
+                  {r.project} · {r.character}
+                </span>{' '}
+                — {r.detail}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Per-step result list shared by both install panes. */
 function InstallReportList({ report }: { report: InstallReport }) {
   return (
@@ -701,6 +798,15 @@ function SettingsPage() {
               }
             />
             <span className="text-sm">Create Houdini project subfolder in new characters</span>
+          </div>
+          <div className="border-t pt-5">
+            <h2 className="mb-1 font-semibold">Refresh assets</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Re-generate the Daz scripts and PoseAsset CSVs for every character in every project —
+              run this after updating the studio or switching DTH release so all generated files
+              match the current version. Character definitions aren't changed.
+            </p>
+            <RefreshAssetsSection />
           </div>
           <div className="border-t pt-5">
             <h2 className="mb-1 font-semibold">App data folder</h2>
