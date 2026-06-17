@@ -1180,54 +1180,66 @@ async function resolveExporterFolder(
   return { exporterFolder: join(folder, chosen.name), version: chosen.version, error: null }
 }
 
-/** The concrete source/destination paths the Rust install command needs. */
-export interface InstallPlan {
-  /** Release root (contains `Daz Studio Content` + `Houdini Assets`). */
+/** Resolved paths for the DTH *release* install (Daz content + Houdini assets). */
+export interface ReleaseInstall {
   releaseRoot: string
   releaseName: string
   releaseVersion: string
-  /** Folder holding the exporter DLLs. */
-  exporterFolder: string
-  exporterVersion: string
-  /** "My DAZ 3D Library" — destination for the release's Daz content ('' skips it). */
+  /** "My DAZ 3D Library" — required destination for the Daz content. */
   dazLibFolder: string
-  /** Daz Studio install root — DLLs go to its `plugins` subfolder. */
-  dazInstallFolder: string
-  /** Houdini documents folder — destination for the release's Houdini assets. */
+  /** Houdini documents folder — optional destination for the Houdini assets. */
   houdiniDocsFolder: string
-  /** Blocking problems; non-empty means the install can't run yet. */
+  /** Blocking problems; non-empty means this install can't run yet. */
   errors: Array<string>
 }
 
 /**
- * Resolve everything the DTH install needs from the saved settings: the active
- * release root, the exporter folder, and the configured tool paths. Collects
- * blocking problems in `errors` (the caller refuses to install when non-empty).
+ * Resolve the DTH *release* install from saved settings: the active release root
+ * + "My DAZ 3D Library" (required) + the Houdini documents folder (optional).
  */
-export async function resolveInstallPlan(): Promise<InstallPlan> {
+export async function resolveReleaseInstall(): Promise<ReleaseInstall> {
   const s = await getSettings()
   const errors: Array<string> = []
-
   const release = await resolveActiveReleaseRoot(s.dthPosesFolder, s.currentDthVersion)
   if (release.error || !release.releaseRoot) {
     errors.push(release.error ?? 'No DTH release resolved — set the DTH release folder.')
   }
+  if (!s.dazLibraryFolder) errors.push('Set “My DAZ 3D Library”.')
+  return {
+    releaseRoot: release.releaseRoot,
+    releaseName: release.name,
+    releaseVersion: release.version,
+    dazLibFolder: s.dazLibraryFolder,
+    houdiniDocsFolder: s.houdiniDocsFolder,
+    errors,
+  }
+}
+
+/** Resolved paths for the Exporter *plugin* install (DLLs → Daz install). */
+export interface PluginInstall {
+  exporterFolder: string
+  exporterVersion: string
+  /** Daz Studio install root — required; DLLs go to its `plugins` subfolder. */
+  dazInstallFolder: string
+  errors: Array<string>
+}
+
+/**
+ * Resolve the Exporter *plugin* install from saved settings: the active exporter
+ * folder + the Daz Studio install folder (required).
+ */
+export async function resolvePluginInstall(): Promise<PluginInstall> {
+  const s = await getSettings()
+  const errors: Array<string> = []
   const exporter = await resolveExporterFolder(s.dthExporterFolder, s.currentDthExporterVersion)
   if (exporter.error || !exporter.exporterFolder) {
     errors.push(exporter.error ?? 'No DTH Exporter Plugin resolved — set the Exporter Plugin folder.')
   }
   if (!s.dazInstallFolder) errors.push('Set the Daz Studio install folder.')
-  if (!s.houdiniDocsFolder) errors.push('Set the Houdini documents folder.')
-
   return {
-    releaseRoot: release.releaseRoot,
-    releaseName: release.name,
-    releaseVersion: release.version,
     exporterFolder: exporter.exporterFolder,
     exporterVersion: exporter.version,
-    dazLibFolder: s.dazLibraryFolder,
     dazInstallFolder: s.dazInstallFolder,
-    houdiniDocsFolder: s.houdiniDocsFolder,
     errors,
   }
 }

@@ -2,23 +2,45 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-/// Concrete paths resolved by the frontend (which release/plugin, where). The
-/// native side only does the heavy recursive copy. Keys arrive camelCase from JS.
+// Paths are resolved by the frontend (which release/plugin, where); the native
+// side only does the heavy recursive copy. Keys arrive camelCase from JS. The
+// install is split in two — the DTH release content vs the (admin-sensitive)
+// plugin DLLs — so each reports only its own steps and fails independently.
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct InstallRequest {
+struct ReleaseInstallRequest {
     /// Release root holding `Daz Studio Content` and `Houdini Assets`.
     release_root: String,
-    /// Folder holding the exporter DLLs (`dth_exporter.dll`, optional `dth_tools.dll`).
-    exporter_folder: String,
-    /// "My DAZ 3D Library" — destination for the release's Daz content ("" skips it).
+    /// "My DAZ 3D Library" — destination for the release's Daz content.
     daz_lib_folder: String,
-    /// Daz Studio install root — DLLs go into its `plugins` subfolder ("" skips them).
-    daz_install_folder: String,
     /// Houdini documents folder — destination for the release's Houdini assets ("" skips).
     houdini_docs_folder: String,
     /// Count what would be copied without writing anything.
     dry_run: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginInstallRequest {
+    /// Folder holding the exporter DLLs (`dth_exporter.dll` / `dsp_dth_exporter.dll`).
+    exporter_folder: String,
+    /// Daz Studio install root — DLLs go into its `plugins` subfolder.
+    daz_install_folder: String,
+    dry_run: bool,
+}
+
+/// Shared guidance for the failures that need elevation (or a locked DLL).
+const ADMIN_HINT: &str =
+    "close all Daz / Houdini / DTH apps, then restart DTH Character Studio as administrator and try again";
+
+/// Format an IO error, appending the admin guidance for permission failures.
+fn io_detail(prefix: &str, e: &std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::PermissionDenied {
+        format!("{prefix}: access denied — {ADMIN_HINT}")
+    } else {
+        format!("{prefix}: {e}")
+    }
 }
 
 #[derive(Serialize)]
@@ -94,7 +116,7 @@ fn install_folder(label: &str, src: &Path, dst: &Path, dry: bool) -> InstallStep
     }
     match copy_dir(src, dst) {
         Ok(n) => step_ok(label, n, format!("→ {}", dst.display())),
-        Err(e) => step_err(label, format!("{} → {}: {}", src.display(), dst.display(), e)),
+        Err(e) => step_err(label, io_detail(&format!("{} → {}", src.display(), dst.display()), &e)),
     }
 }
 
@@ -110,7 +132,7 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
     };
     if !dry {
         if let Err(e) = fs::create_dir_all(dst_dir) {
-            return step_err(label, format!("{}: {}", dst_dir.display(), e));
+            return step_err(label, io_detail(&dst_dir.display().to_string(), &e));
         }
     }
     let mut files = 0u64;
@@ -128,7 +150,7 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
         };
         match result {
             Ok(n) => files += n,
-            Err(e) => return step_err(label, format!("{}: {}", from.display(), e)),
+            Err(e) => return step_err(label, io_detail(&from.display().to_string(), &e)),
         }
     }
     let detail = if dry {
@@ -174,16 +196,12 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
     let mut files = 0u64;
     for dll in &dlls {
         let to = plugins.join(dll.file_name().unwrap());
-        if let Err(e) = fs::copy(dll, &to) {
-            // Windows locks plugin DLLs loaded by a running Daz Studio, and the
-            // plugins folder usually needs elevation to write.
+        if fs::copy(dll, &to).is_err() {
+            // Writing into Program Files needs elevation, and Windows also locks
+            // plugin DLLs that a running Daz Studio has loaded — both surface here.
             return step_err(
                 label,
-                format!(
-                    "could not write {}: {} — close Daz Studio (it locks loaded plugin DLLs) and run the studio as Administrator if needed",
-                    to.display(),
-                    e
-                ),
+                format!("couldn't write {} — {ADMIN_HINT} (Daz also locks loaded plugin DLLs)", to.display()),
             );
         }
         files += 1;
@@ -191,51 +209,34 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
     step_ok(label, files, format!("{} dll(s) → {}", files, plugins.display()))
 }
 
-/// Install a DTH release + the Exporter Plugin into the local Daz Studio +
-/// Houdini installs — the native port of the dth-cli install commands. Each
-/// destination with an empty path is skipped; the report lists every step.
+/// Install the DTH *release* content: `Daz Studio Content/{data,DazToHue}` → the
+/// Daz library, and (optionally) `Houdini Assets/*` → the Houdini documents
+/// folder. Native port of the dth-cli `install-daz-dth` / `install-houdini-dth`.
 #[tauri::command]
-fn install_dth(request: InstallRequest) -> InstallReport {
+fn install_dth_release(request: ReleaseInstallRequest) -> InstallReport {
     let dry = request.dry_run;
     let release_root = Path::new(&request.release_root);
     let daz_content = release_root.join("Daz Studio Content");
-    let houdini_assets = release_root.join("Houdini Assets");
+    let lib = Path::new(&request.daz_lib_folder);
     let mut steps: Vec<InstallStep> = Vec::new();
 
-    // 1. Daz content (data, DazToHue) → My DAZ 3D Library.
-    if request.daz_lib_folder.is_empty() {
-        steps.push(step_skip("Daz content", "“My DAZ 3D Library” not set".into()));
-    } else {
-        let lib = Path::new(&request.daz_lib_folder);
-        for folder in ["data", "DazToHue"] {
-            steps.push(install_folder(
-                &format!("Daz content: {folder}"),
-                &daz_content.join(folder),
-                &lib.join(folder),
-                dry,
-            ));
-        }
-    }
-
-    // 2. Exporter plugin DLLs → <Daz install>/plugins.
-    if request.daz_install_folder.is_empty() {
-        steps.push(step_skip("Exporter plugin", "Daz Studio install folder not set".into()));
-    } else {
-        steps.push(install_plugin_dlls(
-            "Exporter plugin",
-            Path::new(&request.exporter_folder),
-            Path::new(&request.daz_install_folder),
+    // Daz content (data, DazToHue) → My DAZ 3D Library.
+    for folder in ["data", "DazToHue"] {
+        steps.push(install_folder(
+            &format!("Daz content: {folder}"),
+            &daz_content.join(folder),
+            &lib.join(folder),
             dry,
         ));
     }
 
-    // 3. Houdini assets (otls/presets/toolbar/…) → Houdini documents folder.
+    // Houdini assets (otls/presets/toolbar/…) → Houdini documents folder (optional).
     if request.houdini_docs_folder.is_empty() {
         steps.push(step_skip("Houdini assets", "Houdini documents folder not set".into()));
     } else {
         steps.push(install_contents(
             "Houdini assets",
-            &houdini_assets,
+            &release_root.join("Houdini Assets"),
             Path::new(&request.houdini_docs_folder),
             dry,
         ));
@@ -243,6 +244,21 @@ fn install_dth(request: InstallRequest) -> InstallReport {
 
     let total_files = steps.iter().map(|s| s.files).sum();
     InstallReport { dry_run: dry, steps, total_files }
+}
+
+/// Install the *Exporter Plugin* DLLs into `<Daz install>/plugins`. This is the
+/// admin-sensitive half — writing into Program Files needs elevation and Daz
+/// locks loaded plugin DLLs (see `install_plugin_dlls`).
+#[tauri::command]
+fn install_dth_plugin(request: PluginInstallRequest) -> InstallReport {
+    let step = install_plugin_dlls(
+        "Exporter plugin",
+        Path::new(&request.exporter_folder),
+        Path::new(&request.daz_install_folder),
+        request.dry_run,
+    );
+    let total_files = step.files;
+    InstallReport { dry_run: request.dry_run, steps: vec![step], total_files }
 }
 
 // --- Network drives -------------------------------------------------------
@@ -417,7 +433,8 @@ pub fn run() {
 
     builder
         .invoke_handler(tauri::generate_handler![
-            install_dth,
+            install_dth_release,
+            install_dth_plugin,
             unc_for_path,
             ensure_network_drives
         ])
