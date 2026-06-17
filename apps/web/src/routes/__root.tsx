@@ -1,9 +1,11 @@
 import type { CSSProperties } from 'react'
+import { useEffect } from 'react'
 import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import { Toaster } from 'sonner'
+import { Toaster, toast } from 'sonner'
 
+import { ensureNetworkDrives } from '#/lib/rom/api.ts'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import type { QueryClient } from '@tanstack/react-query'
@@ -17,6 +19,20 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 })
 
 function RootComponent() {
+  // On launch, re-map any known network drives that aren't currently available
+  // (an elevated relaunch doesn't inherit the user's interactive mappings).
+  useEffect(() => {
+    void (async () => {
+      const results = await ensureNetworkDrives()
+      const remapped = results.filter((r) => r.status === 'remapped').map((r) => r.drive)
+      const failed = results.filter((r) => r.status === 'failed')
+      if (remapped.length > 0) toast.success(`Re-mapped network drive ${remapped.join(', ')}`)
+      for (const f of failed) {
+        toast.error(`Couldn't map ${f.drive} → ${f.unc}: ${f.detail}`)
+      }
+    })()
+  }, [])
+
   return (
     <>
       <Outlet />

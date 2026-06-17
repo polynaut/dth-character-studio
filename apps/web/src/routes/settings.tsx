@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, CircleCheck, CircleSlash, CircleX, Download, FolderOpen, Save } from 'lucide-react'
@@ -18,14 +18,19 @@ import {
 } from '#/components/ui/select.tsx'
 import {
   buildPoseCatalog,
+  ensureNetworkDrives,
+  fetchKnownDrives,
   fetchSettings,
+  forgetNetworkDrive,
   installDth,
   listDthExporterReleases,
   listDthReleases,
   saveSettings,
+  uncForPath,
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
+import { cn } from '#/lib/utils.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
@@ -299,6 +304,86 @@ function ScanSummary({ result }: { result: ScanResult }) {
   )
 }
 
+/**
+ * Lists the network drives the app has remembered (X: → \\host\share) with their
+ * current mapped status, a "Forget" per drive, and a manual re-map. Drives are
+ * remembered automatically as paths are picked and re-mapped on startup.
+ */
+function NetworkDrivesSection() {
+  const [drives, setDrives] = useState<Array<{ drive: string; unc: string; mapped: boolean }>>([])
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    const known = await fetchKnownDrives()
+    const withStatus = await Promise.all(
+      known.map(async (d) => ({ ...d, mapped: (await uncForPath(d.drive)) !== '' })),
+    )
+    setDrives(withStatus)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  if (drives.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Network drives are remembered automatically as you pick paths, then re-mapped on startup —
+        so the app keeps working after you relaunch it as administrator (when Windows hides your
+        mappings from the elevated session).
+      </p>
+    )
+  }
+
+  async function remap() {
+    setBusy(true)
+    try {
+      const results = await ensureNetworkDrives()
+      const failed = results.filter((r) => r.status === 'failed')
+      const remapped = results.filter((r) => r.status === 'remapped').length
+      if (failed.length > 0) toast.error(`${failed.length} drive(s) failed to map`)
+      else toast.success(remapped > 0 ? `Re-mapped ${remapped} drive(s)` : 'All drives already mapped')
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function forget(drive: string) {
+    await forgetNetworkDrive({ data: { drive } })
+    await load()
+  }
+
+  return (
+    <div className="space-y-3">
+      <ul className="space-y-2 text-sm">
+        {drives.map((d) => (
+          <li key={d.drive} className="flex items-center gap-2">
+            <span
+              className={cn('size-2 shrink-0 rounded-full', d.mapped ? 'bg-emerald-500' : 'bg-muted-foreground/40')}
+              title={d.mapped ? 'Mapped' : 'Not mapped'}
+            />
+            <span className="font-mono">{d.drive}</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="truncate font-mono text-muted-foreground">{d.unc}</span>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="ml-auto shrink-0"
+              onClick={() => void forget(d.drive)}
+            >
+              Forget
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <Button variant="outline" size="sm" onClick={() => void remap()} disabled={busy}>
+        {busy ? 'Mapping…' : 'Re-map missing now'}
+      </Button>
+    </div>
+  )
+}
+
 function SettingsPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
@@ -536,6 +621,14 @@ function SettingsPage() {
               }
             />
             <span className="text-sm">Create Houdini project subfolder in new characters</span>
+          </div>
+          <div className="border-t pt-5">
+            <h2 className="mb-1 font-semibold">Network drives</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
+              keeps working after relaunching as administrator.
+            </p>
+            <NetworkDrivesSection />
           </div>
         </TabsContent>
 
