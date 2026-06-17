@@ -425,33 +425,47 @@ export function customSections(
   ).map((section) => ({ section, config: sections[section] }))
 }
 
-/** Frame counts of the preset ROM blocks (see docs/poseasset-csv-spec.md). */
-export const BASE_FRAMES_DQS = 328
-export const BASE_FRAMES_LINEAR = 626
-export const GP_FRAMES = 104
-export const DK_FRAMES = 54
-export const PHYS_FRAMES = 43
+/**
+ * Measured frame lengths of the preset ROM blocks for a specific character,
+ * read on the fly from the actual `.duf` pose assets (see apps/desktop
+ * `pose_asset_frames`). Nothing is hard-coded — a custom asset measures exactly
+ * the same way a DTH one does. `base` is the base ROM (JCM/RET/FAC) at the
+ * character's skinning; `gp`/`dk`/`phys` are 0 when that block isn't included.
+ */
+export interface PresetFrames {
+  base: number
+  gp: number
+  dk: number
+  phys: number
+}
+
+/** Whether JCM contributes a base ROM block — a preset, or a custom asset path. */
+export function jcmIsBaseRom(sections: RomSections): boolean {
+  const jcm = sections.JCM
+  return (
+    jcm.enabled &&
+    (jcm.mode === 'preset' || (jcm.mode === 'custom' && jcm.customAssetPath.trim() !== ''))
+  )
+}
 
 /**
- * Absolute timeline frame of the first custom pose — the sum of the preset ROM
- * blocks preceding the custom sequence (base ROM when JCM is preset, then
- * GP / DK / Physics when enabled as presets). Mirrors the lastPresetFrame math
- * in generate.ts so the editor shows the same absolute frames it generates.
+ * Absolute timeline frame of the first custom pose — the sum of the measured
+ * preset ROM blocks preceding the custom sequence (base ROM when JCM is a base,
+ * then GP / DK / Physics when included). Mirrors the lastPresetFrame math in
+ * generate.ts so the editor shows the same absolute frames it generates.
  */
 export function presetFrameCount(
   sections: RomSections,
   gender: Gender,
-  skinning: 'dqs' | 'linear',
+  frames: PresetFrames,
 ): number {
-  const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
-  const base = skinning === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
   const roms = genRomIncludes(gender, sections.GEN.presetAssets)
   const lastPresetFrame =
-    (jcmPreset ? base - 1 : -1) +
-    (genPreset && roms.gp ? GP_FRAMES : 0) +
-    (genPreset && roms.dk ? DK_FRAMES : 0) +
-    (sections.PHY.enabled && sections.PHY.mode === 'preset' ? PHYS_FRAMES : 0)
+    (jcmIsBaseRom(sections) ? frames.base - 1 : -1) +
+    (genPreset && roms.gp ? frames.gp : 0) +
+    (genPreset && roms.dk ? frames.dk : 0) +
+    (sections.PHY.enabled && sections.PHY.mode === 'preset' ? frames.phys : 0)
   return Math.max(lastPresetFrame, 0) + 1
 }
 
@@ -464,15 +478,12 @@ export function presetFrameCount(
 export function genRomStartFrame(
   sections: RomSections,
   gender: Gender,
-  skinning: 'dqs' | 'linear',
   rom: 'gp' | 'dk',
+  frames: PresetFrames,
 ): number {
-  const jcm = sections.JCM
-  const jcmBase =
-    jcm.enabled && (jcm.mode === 'preset' || (jcm.mode === 'custom' && jcm.customAssetPath.trim() !== ''))
-  const base = jcmBase ? (skinning === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR) : 0
+  const base = jcmIsBaseRom(sections) ? frames.base : 0
   const roms = genRomIncludes(gender, sections.GEN.presetAssets)
-  return rom === 'dk' ? base : base + (roms.dk ? DK_FRAMES : 0)
+  return rom === 'dk' ? base : base + (roms.dk ? frames.dk : 0)
 }
 
 export interface FlatFrame {

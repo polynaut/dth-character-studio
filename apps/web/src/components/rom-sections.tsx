@@ -61,6 +61,7 @@ import type {
   GenesisVersion,
   GroupSuffix,
   Morph,
+  PresetFrames,
   RomGroup,
   RomPose,
   RomSection,
@@ -89,6 +90,8 @@ interface RomSectionsProps {
   gender: Gender
   skinning: 'linear' | 'dqs'
   catalog: PoseAssetCatalog
+  /** Measured preset-block frame lengths; null while unmeasurable (assets unread). */
+  presetFrames: PresetFrames | null
   onChange: (sections: RomSectionsModel) => void
 }
 
@@ -920,13 +923,13 @@ function ArtDirectionEditor({
   config,
   sections,
   gender,
-  skinning,
+  presetFrames,
   onChange,
 }: {
   config: RomSectionConfig
   sections: RomSectionsModel
   gender: Gender
-  skinning: 'dqs' | 'linear'
+  presetFrames: PresetFrames | null
   onChange: (artDirection: Array<ArtDirectionFrame>) => void
 }) {
   const roms = genRomIncludes(gender, config.presetAssets)
@@ -965,7 +968,7 @@ function ArtDirectionEditor({
         preset: without morphs here their generated morph does nothing.
       </p>
       {activeRoms.map(([rom, label]) => {
-        const romStart = genRomStartFrame(sections, gender, skinning, rom)
+        const romStart = presetFrames ? genRomStartFrame(sections, gender, rom, presetFrames) : null
         return (
         <div key={rom} className="space-y-1">
           {activeRoms.length > 1 && <p className="text-sm font-medium">{label}</p>}
@@ -975,7 +978,7 @@ function ArtDirectionEditor({
               <ArtDirectionFrameRow
                 key={`${rom}-${catalogFrame.frame}`}
                 catalogFrame={catalogFrame}
-                absoluteFrame={romStart + catalogFrame.frame}
+                absoluteFrame={romStart === null ? null : romStart + catalogFrame.frame}
                 entry={entry}
                 onCommit={commit}
               />
@@ -995,7 +998,8 @@ function ArtDirectionFrameRow({
   onCommit,
 }: {
   catalogFrame: { frame: number; name: string; required: boolean; note?: string }
-  absoluteFrame: number
+  /** Absolute timeline frame, or null when the preset lengths couldn't be measured. */
+  absoluteFrame: number | null
   entry: ArtDirectionFrame
   onCommit: (entry: ArtDirectionFrame) => void
 }) {
@@ -1021,7 +1025,7 @@ function ArtDirectionFrameRow({
           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
         )}
         <span className="w-12 text-right font-mono text-xs text-muted-foreground tabular-nums">
-          {absoluteFrame}
+          {absoluteFrame ?? '—'}
         </span>
         <span className="text-sm">{catalogFrame.name}</span>
         {catalogFrame.required && !hasMorphs && (
@@ -1111,20 +1115,25 @@ export function RomSections({
   gender,
   skinning,
   catalog,
+  presetFrames,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
 
-  // Absolute timeline frame of each custom group's first pose: the preset ROM
-  // blocks (base, GP/DK, Physics) come first, then the custom sequence continues.
+  // Absolute timeline frame of each custom group's first pose: the measured
+  // preset ROM blocks (base, GP/DK, Physics) come first, then the custom
+  // sequence continues. Left empty when frames couldn't be measured — the
+  // editor shows a notice and the group editors fall back to a relative count.
   const startFrames = new Map<string, number>()
-  let frame = presetFrameCount(sections, gender, skinning)
-  for (const section of ROM_SECTIONS) {
-    const config = sections[section]
-    if (!config.enabled || config.mode !== 'custom') continue
-    for (const group of config.groups) {
-      startFrames.set(group.id, frame)
-      frame += group.poses.length
+  if (presetFrames) {
+    let frame = presetFrameCount(sections, gender, presetFrames)
+    for (const section of ROM_SECTIONS) {
+      const config = sections[section]
+      if (!config.enabled || config.mode !== 'custom') continue
+      for (const group of config.groups) {
+        startFrames.set(group.id, frame)
+        frame += group.poses.length
+      }
     }
   }
 
@@ -1134,6 +1143,12 @@ export function RomSections({
 
   return (
     <div className="space-y-2">
+      {!presetFrames && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          Couldn't measure the preset ROM frame lengths from the pose assets, so absolute frame
+          numbers are unavailable. Make sure the DTH release is scanned in Settings and reachable.
+        </div>
+      )}
       {ROM_SECTIONS.map((section) => {
         const config = sections[section]
         const modes = SECTION_MODES[section]
@@ -1222,7 +1237,7 @@ export function RomSections({
                         config={config}
                         sections={sections}
                         gender={gender}
-                        skinning={skinning}
+                        presetFrames={presetFrames}
                         onChange={(artDirection) => patchSection(section, { artDirection })}
                       />
                     )}
