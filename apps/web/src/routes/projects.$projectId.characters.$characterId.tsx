@@ -56,6 +56,7 @@ import {
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
@@ -677,6 +678,29 @@ function DazSceneField({
     }
   }
 
+  // OS drag-and-drop of a .duf: with no scene yet, link it as the primary; once
+  // linked, add it as an extra. Reuses the same copy-vs-link prompts as Browse.
+  function onDropScene(paths: Array<string>) {
+    const scene = paths[0]
+    if (!scene) return
+    if (!linked) {
+      if (!insideProject(scene)) {
+        setSubfolder(defaultSubdir)
+        setPending(scene)
+        return
+      }
+      void applyLink(scene, false)
+    } else {
+      if (!insideCharFolder(scene)) {
+        setAddSubfolder('')
+        setDeleteOriginal(false)
+        setPendingAdd(scene)
+        return
+      }
+      void applyAdd(scene, false)
+    }
+  }
+
   // Open the unlink confirm. Default "delete file" on for a scene inside the
   // character folder (a copy), off for one linked in place outside it.
   function askRemove(scene: string) {
@@ -736,7 +760,12 @@ function DazSceneField({
   )
 
   return (
-    <div>
+    <FileDropZone
+      accept={['duf']}
+      onDrop={onDropScene}
+      label={linked ? 'Drop a Daz scene (.duf) to add' : 'Drop a Daz scene (.duf) to link'}
+      className="rounded-lg"
+    >
       <Label className="mb-1 block">Daz scenes</Label>
       {linked ? (
         folderMissing ? (
@@ -882,7 +911,7 @@ function DazSceneField({
           onClose={() => setPendingRemove('')}
         />
       )}
-    </div>
+    </FileDropZone>
   )
 }
 
@@ -982,26 +1011,34 @@ function HoudiniProjectsField({
     }
   }
 
-  // Houdini projects are linked in place — pick a `.hip` and store its path as-is.
-  async function onAddPick() {
-    const picked = await pickHipPath('Select a Houdini project (.hip)')
-    if (!picked) return
+  // Houdini projects are linked in place — store each `.hip` path as-is, skipping
+  // any already linked. Shared by the Browse button and OS drag-and-drop.
+  async function addProjects(paths: Array<string>) {
+    const fresh = paths.filter((p) => !character.houdiniProjects.includes(p))
+    if (fresh.length === 0) return
     setBusy(true)
     setError('')
     try {
       const next: Character = {
         ...character,
-        houdiniProjects: [...character.houdiniProjects, picked],
+        houdiniProjects: [...character.houdiniProjects, ...fresh],
       }
       const saved = await saveCharacter({ data: { projectId, character: next } })
       onChanged(saved)
       void router.invalidate()
-      toast.success('Linked Houdini project')
+      toast.success(
+        fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
+  }
+
+  async function onAddPick() {
+    const picked = await pickHipPath('Select a Houdini project (.hip)')
+    if (picked) await addProjects([picked])
   }
 
   // Open the unlink confirm. Default "delete file" on when the project lives
@@ -1035,11 +1072,16 @@ function HoudiniProjectsField({
   }
 
   return (
-    <div>
+    <FileDropZone
+      accept={['hip', 'hipnc', 'hiplc']}
+      onDrop={(paths) => void addProjects(paths)}
+      label="Drop Houdini project(s) to link"
+      className="rounded-lg"
+    >
       <Label className="mb-1 block">Houdini projects</Label>
       <p className="mb-2 text-xs text-muted-foreground">
         Linked in place (not copied) — a Houdini project keeps absolute import paths
-        that a copy would break.
+        that a copy would break. Drag <code>.hip</code> files here or use the button.
       </p>
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
@@ -1076,7 +1118,7 @@ function HoudiniProjectsField({
           onClose={() => setPendingRemove('')}
         />
       )}
-    </div>
+    </FileDropZone>
   )
 }
 
