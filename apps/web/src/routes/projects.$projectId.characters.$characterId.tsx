@@ -1158,6 +1158,22 @@ function CharacterPage() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
+  // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
+  // disk even when nothing changed (handy during development).
+  const [ctrlHeld, setCtrlHeld] = useState(false)
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => e.key === 'Control' && setCtrlHeld(true)
+    const up = (e: KeyboardEvent) => e.key === 'Control' && setCtrlHeld(false)
+    const reset = () => setCtrlHeld(false) // don't get stuck "held" after alt-tab
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', reset)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', reset)
+    }
+  }, [])
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
 
@@ -1351,8 +1367,12 @@ function CharacterPage() {
           <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
             <Undo2 /> Discard
           </Button>
-          <Button onClick={onSave} disabled={saving || !dirty}>
-            <Save /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+          <Button
+            onClick={onSave}
+            disabled={saving || (!dirty && !ctrlHeld)}
+            title={ctrlHeld && !dirty ? 'Force re-save the JSON to disk (Ctrl)' : undefined}
+          >
+            <Save /> {saving ? 'Saving…' : dirty ? 'Save' : ctrlHeld ? 'Re-save' : 'Saved'}
           </Button>
         </div>
       </header>

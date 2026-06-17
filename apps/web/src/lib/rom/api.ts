@@ -829,6 +829,69 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   return { outDir, files, scriptsDir, scriptsError }
 }
 
+/** One character's outcome in a {@link refreshAllAssets} run. */
+export interface RefreshResult {
+  project: string
+  character: string
+  /** false = generation threw (e.g. an asset couldn't be measured). */
+  ok: boolean
+  /** Generation error (when !ok) or a soft warning (e.g. scripts skipped). */
+  detail?: string
+}
+
+export interface RefreshSummary {
+  total: number
+  regenerated: number
+  failed: number
+  results: Array<RefreshResult>
+}
+
+/**
+ * Re-generate the derived artifacts (Daz scripts + PoseAsset CSVs) for every
+ * character in every project — run after a studio update or a DTH-release switch
+ * so all generated files match the current version. Character definition JSONs
+ * are NOT touched (they self-migrate on open/save). Per-character failures are
+ * collected, not thrown, so one bad character can't abort the whole sweep.
+ */
+export async function refreshAllAssets(): Promise<RefreshSummary> {
+  const projects = await storage.listProjects()
+  const results: Array<RefreshResult> = []
+  for (const project of projects) {
+    let characters: Array<Character>
+    try {
+      characters = await storage.listCharacters(project.path)
+    } catch (e) {
+      results.push({
+        project: project.name,
+        character: '(project unreachable)',
+        ok: false,
+        detail: e instanceof Error ? e.message : String(e),
+      })
+      continue
+    }
+    for (const character of characters) {
+      try {
+        const res = await generateCharacterFiles({ data: { projectId: project.id, id: character.id } })
+        results.push({
+          project: project.name,
+          character: character.name,
+          ok: true,
+          detail: res.scriptsError ?? undefined,
+        })
+      } catch (e) {
+        results.push({
+          project: project.name,
+          character: character.name,
+          ok: false,
+          detail: e instanceof Error ? e.message : String(e),
+        })
+      }
+    }
+  }
+  const failed = results.filter((r) => !r.ok).length
+  return { total: results.length, regenerated: results.length - failed, failed, results }
+}
+
 /** Where a character's files live (absolute + library-relative), for the editor. */
 export async function getCharacterPath({
   data,
