@@ -32,7 +32,7 @@ struct PluginInstallRequest {
 
 /// Shared guidance for the failures that need elevation (or a locked DLL).
 const ADMIN_HINT: &str =
-    "close all Daz / Houdini / DTH apps, then restart DTH Character Studio as administrator and try again";
+    "close all Daz and Houdini apps, then restart DTH Character Studio as administrator and try again";
 
 /// Format an IO error, appending the admin guidance for permission failures.
 fn io_detail(prefix: &str, e: &std::io::Error) -> String {

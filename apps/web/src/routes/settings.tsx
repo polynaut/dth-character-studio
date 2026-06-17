@@ -858,8 +858,8 @@ function SettingsPage() {
             {pluginReport && <InstallReportList report={pluginReport} />}
 
             <p className="text-xs text-muted-foreground">
-              If installing fails, close all Daz / Houdini / DTH apps and restart DTH Character Studio
-              as administrator, then try again.
+              If installing fails, close all Daz and Houdini apps and restart DTH Character Studio as
+              administrator, then try again.
             </p>
           </section>
         </TabsContent>
