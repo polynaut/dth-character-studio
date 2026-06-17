@@ -3,4 +3,4 @@
 "@dth/desktop": minor
 ---
 
-Split the DTH install into two independent panes: "Install DTH Release" (copies the release into "My DAZ 3D Library" + optionally the Houdini documents folder — My DAZ 3D Library moved here as the required field) and "Install DTH Exporter Plugin" (copies the plugin DLLs into the Daz Studio install folder). Each has its own dry-run, gating, and report, and the admin-sensitive plugin step now fails with a clear "close all apps and restart as administrator" message.
+Reorganized the DazToHue settings into two self-contained panes: **Setup DTH Release** (DTH release selection + My DAZ 3D Library + Houdini documents folder + install) and **Setup DTH Exporter Plugin Release** (Exporter Plugin selection + Daz Studio install folder + install). Each has its own dry-run, gating, and report, and the admin-sensitive plugin step fails with a clear "close all Daz and Houdini apps and restart as administrator" message. The DazToHue-Scripts folder moved to General settings.

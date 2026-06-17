@@ -617,6 +617,18 @@ function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
+          <FolderField
+            label="DazToHue-Scripts folder"
+            value={settings.dazScriptsFolder}
+            placeholder="D:\Development\DazToHue-Scripts"
+            onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
+            help={
+              <>
+                Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so they
+                are directly runnable from Daz Studio.
+              </>
+            }
+          />
           <div className="max-w-[20rem]">
             <Label className="mb-1">Default Daz scenes subfolder</Label>
             <Input
@@ -660,7 +672,15 @@ function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="daztohue" className="space-y-5">
-          <section className="space-y-5 rounded-lg border bg-card p-5">
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Setup DTH Release</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select your DTH release, then install it into your Daz library and (optionally) your
+                Houdini documents folder.
+              </p>
+            </div>
+
             <div>
               <FolderField
                 label="DTH release(s) folder"
@@ -680,65 +700,6 @@ function SettingsPage() {
                 value={settings.currentDthVersion}
                 onChange={(version) => setSettings((s) => ({ ...s, currentDthVersion: version }))}
               />
-            </div>
-            <div>
-              <FolderField
-                label="DTH Exporter Plugin release(s) folder"
-                value={settings.dthExporterFolder}
-                placeholder="X:\_3d\_resources\_DazToHue\ExporterPlugin"
-                onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
-                info={
-                  <>
-                    The Daz Studio <strong>DazToHue Exporter</strong> plugin — the DLL named like{' '}
-                    <em>dsp_dth_exporter.dll</em>. Its version is read straight from the DLL, so the
-                    folder needn't be version-named. Part of{' '}
-                    <a
-                      href="https://www.artstation.com/marketplace/p/BLM5K/daztohue"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      DazToHue
-                    </a>{' '}
-                    by mrpdean.
-                  </>
-                }
-                help={
-                  <>
-                    The DazToHue Exporter plugin folder (contains the exporter DLL), or a folder of
-                    versioned plugin folders. The version is read from the DLL.
-                  </>
-                }
-              />
-              <ExporterReleasePicker
-                releases={exporter}
-                loading={exporterLoading}
-                value={settings.currentDthExporterVersion}
-                onChange={(version) =>
-                  setSettings((s) => ({ ...s, currentDthExporterVersion: version }))
-                }
-              />
-            </div>
-            <FolderField
-              label="DazToHue-Scripts folder"
-              value={settings.dazScriptsFolder}
-              placeholder="D:\Development\DazToHue-Scripts"
-              onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
-              help={
-                <>
-                  Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so
-                  they are directly runnable from Daz Studio.
-                </>
-              }
-            />
-          </section>
-
-          <section className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="font-semibold">Install DTH Release</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Copies the selected DTH release into “My DAZ 3D Library” and — if set — your Houdini
-                documents folder.
-              </p>
             </div>
 
             <FolderField
@@ -801,11 +762,49 @@ function SettingsPage() {
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
             <div>
-              <h2 className="font-semibold">Install DTH Exporter Plugin</h2>
+              <h2 className="font-semibold">Setup DTH Exporter Plugin Release</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Copies the exporter plugin DLLs into Daz Studio's
+                Select the Exporter Plugin release, then install its DLLs into Daz Studio's
                 <span className="font-mono"> plugins</span> folder.
               </p>
+            </div>
+
+            <div>
+              <FolderField
+                label="DTH Exporter Plugin release(s) folder"
+                value={settings.dthExporterFolder}
+                placeholder="X:\_3d\_resources\_DazToHue\ExporterPlugin"
+                onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
+                info={
+                  <>
+                    The Daz Studio <strong>DazToHue Exporter</strong> plugin — the DLL named like{' '}
+                    <em>dsp_dth_exporter.dll</em>. Its version is read straight from the DLL, so the
+                    folder needn't be version-named. Part of{' '}
+                    <a
+                      href="https://www.artstation.com/marketplace/p/BLM5K/daztohue"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      DazToHue
+                    </a>{' '}
+                    by mrpdean.
+                  </>
+                }
+                help={
+                  <>
+                    The DazToHue Exporter plugin folder (contains the exporter DLL), or a folder of
+                    versioned plugin folders. The version is read from the DLL.
+                  </>
+                }
+              />
+              <ExporterReleasePicker
+                releases={exporter}
+                loading={exporterLoading}
+                value={settings.currentDthExporterVersion}
+                onChange={(version) =>
+                  setSettings((s) => ({ ...s, currentDthExporterVersion: version }))
+                }
+              />
             </div>
 
             <FolderField
