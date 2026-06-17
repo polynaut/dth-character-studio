@@ -52,6 +52,7 @@ import {
   moveCharacter,
   openScene,
   relinkScene,
+  resolvePresetFrames,
   saveCharacter,
   uploadCharacterImage,
 } from '#/lib/rom/api.ts'
@@ -60,7 +61,7 @@ import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
-import type { GeneratedFile } from '@dth/rom'
+import type { GeneratedFile, PresetFrames } from '@dth/rom'
 import type { Character, GenesisVersion, TargetSkeleton } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
@@ -83,6 +84,10 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
         : Promise.resolve(false),
       sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
     ])
+    // Preset ROM block lengths, measured live from the actual .duf assets. Null
+    // (best-effort) when an included asset can't be read — the editor then shows
+    // a notice and generation hard-errors; opening the character never fails.
+    const presetFrames = await resolvePresetFrames(character, catalog).catch(() => null)
     return {
       character,
       settings,
@@ -90,6 +95,7 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
       location,
       sceneExists,
       sceneFolderExists,
+      presetFrames,
     }
   },
   component: CharacterPage,
@@ -1083,10 +1089,15 @@ function CharacterPage() {
     location,
     sceneExists,
     sceneFolderExists,
+    presetFrames: initialFrames,
   } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
   const [character, setCharacter] = useState<Character>(initial)
+  // Preset ROM block lengths, re-measured from the .duf assets whenever the
+  // preset/custom selections change (kept from the last good measure during a
+  // re-measure; null only when an included asset can't be read).
+  const [presetFrames, setPresetFrames] = useState<PresetFrames | null>(initialFrames)
   // The last-persisted character. `dirty` compares against this — NOT the loader
   // data — so saving can settle the buttons in a single paint instead of waiting
   // on router.invalidate() to complete in a second, separate render.
@@ -1098,6 +1109,37 @@ function CharacterPage() {
   const swallowNavRef = useRef(false)
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
+
+  // Re-measure the preset ROM block lengths when a preset/custom selection that
+  // affects them changes (not on every custom-pose keystroke). Debounced; the
+  // last good value is kept until the new one lands, so frame numbers don't
+  // flicker. Null only when an included asset can't be read.
+  const presetSignature = JSON.stringify({
+    genesis: character.genesis,
+    gender: character.gender,
+    jcm: [
+      character.sections.JCM.enabled,
+      character.sections.JCM.mode,
+      character.sections.JCM.presetAssets,
+      character.sections.JCM.customAssetPath,
+    ],
+    gen: [character.sections.GEN.enabled, character.sections.GEN.mode, character.sections.GEN.presetAssets],
+    phy: [character.sections.PHY.enabled, character.sections.PHY.mode],
+  })
+  useEffect(() => {
+    let cancelled = false
+    const timer = setTimeout(() => {
+      resolvePresetFrames(character, catalog)
+        .then((frames) => !cancelled && setPresetFrames(frames))
+        .catch(() => !cancelled && setPresetFrames(null))
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // character/catalog are captured fresh each render; presetSignature gates re-runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetSignature, catalog])
 
   // The character's folder, shown under the header with the project library root
   // dimmed as a label prefix and the rest emphasized. The definition filename is
@@ -1520,6 +1562,7 @@ function CharacterPage() {
           gender={character.gender}
           skinning={characterSkinning(character)}
           catalog={catalog}
+          presetFrames={presetFrames}
           onChange={(sections) => patch({ sections })}
         />
       </section>

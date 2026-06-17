@@ -3,7 +3,14 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
-import { characterScriptName, generateAll, poseAssetFileName, resolveRomPaths } from '@dth/rom'
+import {
+  characterScriptName,
+  generateAll,
+  genRomIncludes,
+  jcmIsBaseRom,
+  poseAssetFileName,
+  resolveRomPaths,
+} from '@dth/rom'
 import * as storage from './storage'
 import { dataPath } from './storage'
 import { isExternalImage } from './image'
@@ -18,7 +25,7 @@ import {
   sectionsFromFlatFrames,
 } from '@dth/rom'
 
-import type { Character } from '@dth/rom'
+import type { Character, PresetFrames } from '@dth/rom'
 import type { StudioSettings } from './storage'
 
 export type {
@@ -637,6 +644,78 @@ export async function forgetNetworkDrive({ data }: { data: unknown }): Promise<v
   await storage.forgetDrive(z.object({ drive: z.string().min(1) }).parse(data).drive)
 }
 
+// --- Pose-asset frame measurement -----------------------------------------
+
+interface MeasuredFrames {
+  frames: number
+  error: string
+}
+
+/** Measure the frame length of each `.duf` via the native command. */
+async function measureFrames(paths: Array<string>): Promise<Map<string, MeasuredFrames>> {
+  const unique = [...new Set(paths.filter(Boolean))]
+  if (unique.length === 0) return new Map()
+  const results = await invoke<Array<{ path: string; frames: number; error: string }>>(
+    'pose_asset_frames',
+    { paths: unique },
+  )
+  return new Map(results.map((r) => [r.path, { frames: r.frames, error: r.error }]))
+}
+
+/**
+ * Measure the preset ROM block lengths (base JCM/RET/FAC, GP, DK, Physics) for a
+ * character from the actual `.duf` assets — read on the fly, nothing hard-coded,
+ * custom assets measured the same way as DTH ones. **Throws** when an included
+ * block's asset can't be found or read, so a missing/bad `.duf` can never
+ * silently produce a wrong-length ROM. `gp`/`dk`/`phys` are 0 when not included.
+ */
+export async function resolvePresetFrames(
+  character: Character,
+  catalog?: Awaited<ReturnType<typeof storage.listPoseAssets>>,
+): Promise<PresetFrames> {
+  const cat = catalog ?? (await storage.listPoseAssets())
+  const romPaths = cat.error ? {} : resolveRomPaths(character, cat)
+  const { sections, gender } = character
+  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
+  const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+
+  const basePath =
+    sections.JCM.mode === 'custom' ? sections.JCM.customAssetPath.trim() : (romPaths.jcm ?? '')
+  const blocks: Array<{
+    key: keyof PresetFrames
+    label: string
+    need: boolean
+    path: string
+  }> = [
+    { key: 'base', label: 'base ROM (JCM / RET / FAC)', need: jcmIsBaseRom(sections), path: basePath },
+    { key: 'gp', label: 'Golden Palace', need: genPreset && roms.gp, path: romPaths.gp ?? '' },
+    { key: 'dk', label: 'Dicktator', need: genPreset && roms.dk, path: romPaths.dk ?? '' },
+    {
+      key: 'phys',
+      label: 'Physics',
+      need: sections.PHY.enabled && sections.PHY.mode === 'preset',
+      path: romPaths.phys ?? '',
+    },
+  ]
+
+  const measured = await measureFrames(blocks.filter((b) => b.need).map((b) => b.path))
+  const frames: PresetFrames = { base: 0, gp: 0, dk: 0, phys: 0 }
+  for (const block of blocks) {
+    if (!block.need) continue
+    if (!block.path) {
+      throw new Error(
+        `Couldn't locate the ${block.label} pose asset — re-scan the DTH release in Settings.`,
+      )
+    }
+    const hit = measured.get(block.path)
+    if (!hit || hit.error) {
+      throw new Error(`Couldn't read frames from the ${block.label} asset:\n${hit?.error ?? block.path}`)
+    }
+    frames[block.key] = hit.frames
+  }
+  return frames
+}
+
 /**
  * Compiles the character into its DTH artifacts and writes them to two places:
  *  - the Houdini PoseAsset CSV → the character's own folder (next to its
@@ -660,7 +739,10 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // unavailable — the script then falls back to DthOptions resolution.
   const catalog = await storage.listPoseAssets()
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
-  const files = generateAll(character, romPaths)
+  // Frame lengths measured live from the actual .duf assets (hard-errors if an
+  // included block can't be read — never a wrong-length ROM).
+  const frames = await resolvePresetFrames(character, catalog)
+  const files = generateAll(character, romPaths, frames)
 
   // Houdini deliverable(s) — <Name>_PoseAsset.csv — live in the character's own folder.
   const outDir = await storage.getCharacterFolder(lib, id)

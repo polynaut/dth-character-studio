@@ -1,9 +1,4 @@
 import {
-  BASE_FRAMES_DQS,
-  BASE_FRAMES_LINEAR,
-  DK_FRAMES,
-  GP_FRAMES,
-  PHYS_FRAMES,
   characterSkinning,
   characterSlug,
   customSections,
@@ -19,6 +14,7 @@ import type {
   DthPoseAsset,
   GenerationMethod,
   GroupSuffix,
+  PresetFrames,
 } from './types'
 
 // Ground-truth PoseAsset rows for the G9 / DQS / JCM+FAC / Golden Palace /
@@ -410,11 +406,11 @@ function physicsPoseAssetRows(startFrame: number): Array<string> {
  * Other configurations fall back to generating only the custom sections and
  * stay flagged experimental.
  */
-export function toPoseAssetCsv(character: Character): GeneratedFile {
+export function toPoseAssetCsv(character: Character, frames: PresetFrames): GeneratedFile {
   const { sections } = character
   const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
   // A custom JCM asset (user .duf path) occupies the same base-ROM block as a
-  // pre-defined one, so it counts toward the template / preset frame length.
+  // pre-defined one, so it counts toward the preset frame length.
   const jcmRom =
     jcmPreset ||
     (sections.JCM.enabled &&
@@ -427,10 +423,13 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
   const includeDk = genPreset && roms.dk
   const includePhys = sections.PHY.enabled && sections.PHY.mode === 'preset'
 
+  // The ground-truth template bakes the *preset* base ROM rows at fixed frames,
+  // so it only fits the all-preset validated config — a custom JCM base goes
+  // through the fully-measured path below instead.
   const matchesTemplate =
     character.genesis === 'G9' &&
     characterSkinning(character) === 'dqs' &&
-    jcmRom &&
+    jcmPreset &&
     facPreset &&
     !includeDk
 
@@ -442,12 +441,12 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
     if (!includeGp) {
       head = head.filter((line) => !line.startsWith('GEN'))
     }
-    // Physics is a fixed preset block (the G9 Physics Example ROM, 43 frames)
-    // inserted after the GEN/GP block and before the custom sections.
-    const physStart = BASE_FRAMES_DQS + (includeGp ? GP_FRAMES : 0)
+    // Physics is a fixed preset block (the G9 Physics Example ROM) inserted after
+    // the GEN/GP block and before the custom sections.
+    const physStart = frames.base + (includeGp ? frames.gp : 0)
     const physRows = includePhys ? physicsPoseAssetRows(physStart) : []
     const lastPresetFrame =
-      BASE_FRAMES_DQS - 1 + (includeGp ? GP_FRAMES : 0) + (includePhys ? PHYS_FRAMES : 0)
+      frames.base - 1 + (includeGp ? frames.gp : 0) + (includePhys ? frames.phys : 0)
     const customRows = customPoseAssetRows(character, lastPresetFrame)
     return {
       fileName: poseAssetFileName(character),
@@ -456,13 +455,13 @@ export function toPoseAssetCsv(character: Character): GeneratedFile {
     }
   }
 
-  // Unvalidated configuration (linear, no FAC, Dicktator, …): only the
-  // custom sections, frames continuing after the computed preset length.
+  // Unvalidated configuration (linear, no FAC, Dicktator, custom base, …): only
+  // the custom sections, frames continuing after the measured preset length.
   const lastPresetFrame =
-    (jcmRom ? (characterSkinning(character) === 'dqs' ? BASE_FRAMES_DQS : BASE_FRAMES_LINEAR) - 1 : -1) +
-    (includeGp ? GP_FRAMES : 0) +
-    (includeDk ? DK_FRAMES : 0) +
-    (includePhys ? PHYS_FRAMES : 0)
+    (jcmRom ? frames.base - 1 : -1) +
+    (includeGp ? frames.gp : 0) +
+    (includeDk ? frames.dk : 0) +
+    (includePhys ? frames.phys : 0)
   return {
     fileName: poseAssetFileName(character),
     content: customPoseAssetRows(character, Math.max(lastPresetFrame, 0)).join('\n') + '\n',
@@ -616,6 +615,10 @@ ApplyDTHCharacter(${JSON.stringify(config, null, 2)});
  * the PoseAsset CSV (Houdini). The legacy split generators (toDazFbmJson /
  * toWorkflowDsa / toArtDirectionJsons …) remain exported for tests and reuse.
  */
-export function generateAll(character: Character, romPaths: RomPaths = {}): Array<GeneratedFile> {
-  return [toCharacterScriptDsa(character, romPaths), toPoseAssetCsv(character)]
+export function generateAll(
+  character: Character,
+  romPaths: RomPaths,
+  frames: PresetFrames,
+): Array<GeneratedFile> {
+  return [toCharacterScriptDsa(character, romPaths), toPoseAssetCsv(character, frames)]
 }

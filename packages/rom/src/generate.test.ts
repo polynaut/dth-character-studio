@@ -27,7 +27,11 @@ import {
   sectionsFromFlatFrames,
 } from './types'
 
-import type { Character, RomGroup, RomSections } from './types'
+import type { Character, PresetFrames, RomGroup, RomSections } from './types'
+
+/** Known preset-block lengths (the validated DTH G9 assets) — the pure frame
+ *  math now takes measured frames explicitly instead of hard-coded constants. */
+const FRAMES: PresetFrames = { base: 328, gp: 104, dk: 54, phys: 43 }
 
 function fbmGroup(): RomGroup {
   return {
@@ -95,17 +99,17 @@ describe('flattenRom', () => {
 describe('presetFrameCount', () => {
   it('is the absolute frame of the first custom pose (matches the generated CSV)', () => {
     // base only (GEN off) → custom starts at 328
-    expect(presetFrameCount(makeSections(), 'female', 'dqs')).toBe(328)
+    expect(presetFrameCount(makeSections(), 'female', FRAMES)).toBe(328)
 
     const gp = makeSections()
     gp.GEN.enabled = true
-    expect(presetFrameCount(gp, 'female', 'dqs')).toBe(432)
+    expect(presetFrameCount(gp, 'female', FRAMES)).toBe(432)
 
     const gpPhy = makeSections()
     gpPhy.GEN.enabled = true
     gpPhy.PHY.enabled = true
     gpPhy.PHY.mode = 'preset'
-    expect(presetFrameCount(gpPhy, 'female', 'dqs')).toBe(475)
+    expect(presetFrameCount(gpPhy, 'female', FRAMES)).toBe(475)
   })
 })
 
@@ -351,7 +355,7 @@ describe('toCharacterScriptDsa', () => {
 
 describe('generateAll', () => {
   it('produces the character script (daz) and the PoseAsset CSV (houdini)', () => {
-    const files = generateAll(makeCharacter())
+    const files = generateAll(makeCharacter(), {}, FRAMES)
     expect(files.map((f) => [f.fileName, f.target])).toEqual([
       ['ElectraG9_G9.dsa', 'daz'],
       ['ElectraG9_PoseAsset.csv', 'houdini'],
@@ -482,7 +486,7 @@ describe('toArtDirectionJsons', () => {
 
 describe('toPoseAssetCsv', () => {
   it('uses the ground-truth template for the validated config without GEN', () => {
-    const file = toPoseAssetCsv(makeCharacter())
+    const file = toPoseAssetCsv(makeCharacter(), FRAMES)
     expect(file.experimental).toBeUndefined()
     expect(file.target).toBe('houdini')
     const lines = file.content.trimEnd().split('\n')
@@ -500,7 +504,7 @@ describe('toPoseAssetCsv', () => {
   it('keeps the GP block and starts custom frames at 432 when GEN is enabled', () => {
     const sections = makeSections()
     sections.GEN.enabled = true
-    const file = toPoseAssetCsv(makeCharacter({ sections }))
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
     const lines = file.content.trimEnd().split('\n')
     expect(file.experimental).toBeUndefined()
     expect(lines).toContain('GEN,328,Fence01')
@@ -514,7 +518,7 @@ describe('toPoseAssetCsv', () => {
     sections.GEN.enabled = true
     sections.PHY.enabled = true
     sections.PHY.mode = 'preset'
-    const file = toPoseAssetCsv(makeCharacter({ sections }))
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
     const lines = file.content.trimEnd().split('\n')
     expect(file.experimental).toBeUndefined()
     // base 0-327, GP 328-431, PHY 432-474, custom (FBM) 475+.
@@ -543,7 +547,7 @@ describe('toPoseAssetCsv', () => {
         ],
       },
     ]
-    const file = toPoseAssetCsv(makeCharacter({ sections }))
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
     expect(file.experimental).toBe(true)
     expect(file.content.trimEnd().split('\n')).toEqual([
       'JCMGROUP,1,0,ball_l',
