@@ -539,24 +539,39 @@ export interface InstallReport {
 }
 
 /**
- * Install a DTH release + the Exporter Plugin into the local Daz Studio + Houdini
- * installs — a port of the dth-cli `install-daz-dth` / `install-houdini-dth`
- * commands. Path resolution (which release/plugin, where) happens here; the
- * recursive file copy runs in native Rust (`install_dth`) for speed. Throws with
- * a combined message when prerequisites are missing. `dryRun` previews counts
- * without writing anything.
+ * Install the DTH *release* content into the local Daz library + (optionally) the
+ * Houdini documents folder — a port of the dth-cli `install-daz-dth` /
+ * `install-houdini-dth` commands. Path resolution happens here; the recursive
+ * copy runs in native Rust (`install_dth_release`). Throws with a combined
+ * message when prerequisites are missing. `dryRun` previews without writing.
  */
-export async function installDth({ data }: { data: unknown }): Promise<InstallReport> {
+export async function installDthRelease({ data }: { data: unknown }): Promise<InstallReport> {
   const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
-  const plan = await storage.resolveInstallPlan()
+  const plan = await storage.resolveReleaseInstall()
   if (plan.errors.length) throw new Error(plan.errors.join('\n'))
-  return invoke<InstallReport>('install_dth', {
+  return invoke<InstallReport>('install_dth_release', {
     request: {
       releaseRoot: plan.releaseRoot,
-      exporterFolder: plan.exporterFolder,
       dazLibFolder: plan.dazLibFolder,
-      dazInstallFolder: plan.dazInstallFolder,
       houdiniDocsFolder: plan.houdiniDocsFolder,
+      dryRun: dryRun ?? false,
+    },
+  })
+}
+
+/**
+ * Install the Exporter *plugin* DLLs into `<Daz install>/plugins` (the
+ * admin-sensitive half) — native `install_dth_plugin`. Throws when prerequisites
+ * are missing; `dryRun` previews without writing.
+ */
+export async function installDthPlugin({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const plan = await storage.resolvePluginInstall()
+  if (plan.errors.length) throw new Error(plan.errors.join('\n'))
+  return invoke<InstallReport>('install_dth_plugin', {
+    request: {
+      exporterFolder: plan.exporterFolder,
+      dazInstallFolder: plan.dazInstallFolder,
       dryRun: dryRun ?? false,
     },
   })
@@ -607,6 +622,15 @@ export async function ensureNetworkDrives(): Promise<Array<RemapResult>> {
 
 export async function fetchKnownDrives(): Promise<Array<storage.KnownDrive>> {
   return storage.listKnownDrives()
+}
+
+/** Version of the exporter DLL already installed in `<dazInstall>/plugins` (''=none). */
+export async function installedExporterVersion(dazInstallFolder: string): Promise<string> {
+  try {
+    return await storage.installedExporterVersion(dazInstallFolder)
+  } catch {
+    return ''
+  }
 }
 
 export async function forgetNetworkDrive({ data }: { data: unknown }): Promise<void> {
