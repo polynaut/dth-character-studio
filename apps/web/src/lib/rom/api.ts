@@ -477,6 +477,15 @@ export async function fetchSettings(): Promise<StudioSettings> {
   return storage.getSettings()
 }
 
+/**
+ * The app's internal per-user data folder — where settings.json, projects.json,
+ * the pose catalog and avatar images live. Surfaced in Settings so the user can
+ * find (and back up) the app's state.
+ */
+export async function fetchAppDataFolder(): Promise<string> {
+  return dataPath()
+}
+
 /** The cached DTH pose preset catalog (read from appdata; never walks the release). */
 export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listPoseAssets>> {
   return storage.listPoseAssets()
