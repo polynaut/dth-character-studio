@@ -477,6 +477,15 @@ export async function fetchSettings(): Promise<StudioSettings> {
   return storage.getSettings()
 }
 
+/**
+ * The app's internal per-user data folder — where settings.json, projects.json,
+ * the pose catalog and avatar images live. Surfaced in Settings so the user can
+ * find (and back up) the app's state.
+ */
+export async function fetchAppDataFolder(): Promise<string> {
+  return dataPath()
+}
+
 /** The cached DTH pose preset catalog (read from appdata; never walks the release). */
 export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listPoseAssets>> {
   return storage.listPoseAssets()
@@ -742,7 +751,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // Frame lengths measured live from the actual .duf assets (hard-errors if an
   // included block can't be read — never a wrong-length ROM).
   const frames = await resolvePresetFrames(character, catalog)
-  const files = generateAll(character, romPaths, frames)
+  // Stamp the generating studio version into the script header for traceability.
+  const versioned = { ...character, studioVersion: await storage.studioVersion() }
+  const files = generateAll(versioned, romPaths, frames)
 
   // Houdini deliverable(s) — <Name>_PoseAsset.csv — live in the character's own folder.
   const outDir = await storage.getCharacterFolder(lib, id)

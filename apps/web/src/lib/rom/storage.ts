@@ -10,6 +10,7 @@ import {
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { appLocalDataDir } from '@tauri-apps/api/path'
+import { getVersion } from '@tauri-apps/api/app'
 
 import {
   ROM_SECTIONS,
@@ -96,6 +97,15 @@ async function dataDir(): Promise<string> {
 /** Resolve a path inside the per-user data directory. */
 export async function dataPath(...parts: Array<string>): Promise<string> {
   return join(await dataDir(), ...parts)
+}
+
+let versionPromise: Promise<string> | null = null
+/** The DTH Character Studio app version, cached; '' when unavailable (e.g. the
+ *  web-only build with no native layer). Stamped onto saved characters and the
+ *  generated Daz scripts for traceability. */
+export async function studioVersion(): Promise<string> {
+  if (!versionPromise) versionPromise = getVersion().catch(() => '')
+  return versionPromise
 }
 
 /** Ensure the app-data folder exists (it holds settings.json and images/). */
@@ -263,7 +273,11 @@ export async function getCharacter(lib: string, id: string): Promise<Character |
 export async function saveCharacter(lib: string, character: Character): Promise<Character> {
   if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
-  const stamped = { ...character, updatedAt: new Date().toISOString() }
+  const stamped = {
+    ...character,
+    updatedAt: new Date().toISOString(),
+    studioVersion: await studioVersion(),
+  }
   const existing = await findEntry(lib, character.id)
 
   let definitionAbs: string
@@ -308,7 +322,11 @@ export async function createCharacterAt(
 ): Promise<Character> {
   if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
-  const stamped = { ...character, updatedAt: new Date().toISOString() }
+  const stamped = {
+    ...character,
+    updatedAt: new Date().toISOString(),
+    studioVersion: await studioVersion(),
+  }
   const fileName = definitionFileName(character.name)
   const clean = normalizeRelFolder(relFolder)
 

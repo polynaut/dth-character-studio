@@ -377,6 +377,9 @@ export const characterSchema = z.object({
   sections: sectionsSchema.default(defaultSections()),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** DTH Character Studio version that last wrote this character ('' = unknown,
+   *  e.g. created before this was tracked). Stamped on every save. */
+  studioVersion: z.string().default(''),
 })
 export type Character = z.infer<typeof characterSchema>
 

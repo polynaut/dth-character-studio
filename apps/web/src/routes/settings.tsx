@@ -19,6 +19,7 @@ import {
 import {
   buildPoseCatalog,
   ensureNetworkDrives,
+  fetchAppDataFolder,
   fetchKnownDrives,
   fetchSettings,
   forgetNetworkDrive,
@@ -439,6 +440,13 @@ function SettingsPage() {
   // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
   // checked / no install folder; '' = folder set but plugin not installed there.
   const [installedExporter, setInstalledExporter] = useState<string | null>(null)
+  // The app's internal data folder (settings.json, projects.json, images/, …),
+  // resolved once for display in the General tab.
+  const [appDataFolder, setAppDataFolder] = useState('')
+
+  useEffect(() => {
+    void fetchAppDataFolder().then(setAppDataFolder)
+  }, [])
 
   // Inspect the DTH folder whenever it changes (debounced — typing shouldn't
   // hammer the filesystem; Browse sets it directly). Detects a single release vs
@@ -693,6 +701,17 @@ function SettingsPage() {
               }
             />
             <span className="text-sm">Create Houdini project subfolder in new characters</span>
+          </div>
+          <div className="border-t pt-5">
+            <h2 className="mb-1 font-semibold">App data folder</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Where the app keeps its settings, project list, pose catalog and avatar images.
+            </p>
+            {appDataFolder ? (
+              <PathCode path={displayPath(appDataFolder)} />
+            ) : (
+              <p className="text-xs text-muted-foreground">Resolving…</p>
+            )}
           </div>
           <div className="border-t pt-5">
             <h2 className="mb-1 font-semibold">Network drives</h2>
