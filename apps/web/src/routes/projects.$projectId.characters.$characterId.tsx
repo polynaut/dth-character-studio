@@ -55,6 +55,7 @@ import {
   resolvePresetFrames,
   saveCharacter,
   uploadCharacterImage,
+  uploadCharacterImageFromPath,
 } from '#/lib/rom/api.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
@@ -196,10 +197,24 @@ function ImageDialog({
   onClose: () => void
 }) {
   const [url, setUrl] = useState(image)
-  const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
+
+  // Native OS drag-drop gives a path — read + upload it server-side.
+  async function uploadPath(path: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
+      setUrl(served)
+      onApply(served)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function uploadFile(file: File) {
     if (!file.type.startsWith('image/')) {
@@ -262,25 +277,19 @@ function ImageDialog({
           />
         </div>
 
-        <div
-          className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-center text-sm transition-colors ${
-            dragOver ? 'border-primary bg-primary/5 text-foreground' : 'border-input text-muted-foreground'
-          }`}
-          onClick={() => fileInput.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragOver(true)
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault()
-            setDragOver(false)
-            const file = e.dataTransfer.files[0]
-            if (file) uploadFile(file)
-          }}
+        <FileDropZone
+          accept={['png', 'jpg', 'jpeg', 'webp', 'gif']}
+          onDrop={(paths) => paths[0] && void uploadPath(paths[0])}
+          label="Drop image to set the avatar"
+          className="rounded-lg"
         >
-          {busy ? 'Uploading…' : 'Drop an image here, or click to pick one'}
-        </div>
+          <div
+            className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-input px-4 py-6 text-center text-sm text-muted-foreground transition-colors hover:border-primary"
+            onClick={() => fileInput.current?.click()}
+          >
+            {busy ? 'Uploading…' : 'Drop an image here, or click to pick one'}
+          </div>
+        </FileDropZone>
 
         <div className="flex items-center gap-2">
           <Input
