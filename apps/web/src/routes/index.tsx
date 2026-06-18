@@ -1,10 +1,22 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { FolderOpen, FolderPlus, Settings as SettingsIcon, Trash2 } from 'lucide-react'
+import { FolderOpen, FolderPlus, Settings as SettingsIcon } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { pathChipClass } from '#/components/path-code.tsx'
+import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import {
+  SelectCheckbox,
+  SelectionBar,
+  SortSelect,
+  ViewToggle,
+  formatDate,
+  sortItems,
+  type SortKey,
+  type ViewMode,
+} from '#/components/overview-controls.tsx'
+import { cn } from '#/lib/utils.ts'
 import {
   createProject,
   deleteProject,
@@ -14,6 +26,8 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
+import { usePersistentState } from '#/lib/use-persistent-state.ts'
+import { useSelection } from '#/lib/use-selection.ts'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
@@ -32,7 +46,16 @@ function ProjectsPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const [view, setView] = usePersistentState<ViewMode>('dth.projects.view', 'list')
+  const [sort, setSort] = usePersistentState<SortKey>('dth.projects.sort', 'alpha')
+  const sel = useSelection()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
+  const sorted = sortItems(projects, sort, { name: (p) => p.name, date: (p) => p.createdAt ?? '' })
+  const selectedProjects = sorted.filter((p) => sel.isSelected(p.id))
 
   async function onChooseDazLibrary() {
     const picked = await pickFolder('Select your "My DAZ 3D Library" folder')
@@ -76,16 +99,23 @@ function ProjectsPage() {
     }
   }
 
-  async function onDeleteProject(id: string, projectName: string) {
-    if (
-      !window.confirm(
-        `Remove project "${projectName}" from the list? Your character files on disk are kept — this only removes the project entry.`,
-      )
-    )
-      return
-    await deleteProject({ data: { id } })
-    await router.invalidate()
-    toast.success(`Removed “${projectName}”`)
+  async function onBulkDelete() {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      for (const project of selectedProjects) {
+        await deleteProject({ data: { id: project.id } })
+      }
+      const n = selectedProjects.length
+      sel.clear()
+      setConfirmOpen(false)
+      await router.invalidate()
+      toast.success(`Removed ${n} project${n === 1 ? '' : 's'}`)
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -167,38 +197,110 @@ function ProjectsPage() {
               No projects yet — choose a folder above to add one.
             </p>
           ) : (
-            <ul className="space-y-3">
-              {projects.map((project) => (
-                <li
-                  key={project.id}
-                  className="group relative rounded-lg border bg-card transition-colors hover:border-primary"
-                >
-                  <Link
-                    to="/projects/$projectId"
-                    params={{ projectId: project.id }}
-                    className="block p-4 pr-12"
-                  >
-                    <div className="font-semibold">{project.name}</div>
-                    <code
-                      className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+            <>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {projects.length} project{projects.length === 1 ? '' : 's'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <SortSelect value={sort} onChange={setSort} />
+                  <ViewToggle value={view} onChange={setView} />
+                </div>
+              </div>
+              <ul
+                className={
+                  view === 'grid'
+                    ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                    : 'divide-y rounded-lg border bg-card'
+                }
+              >
+                {sorted.map((project) => {
+                  const created = formatDate(project.createdAt ?? '')
+                  return (
+                    <li
+                      key={project.id}
+                      className={cn(
+                        'group relative transition-colors hover:border-primary',
+                        view === 'grid'
+                          ? 'rounded-lg border bg-card'
+                          : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                      )}
                     >
-                      {displayPath(project.path)}
-                    </code>
-                  </Link>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100"
-                    title="Remove project from the list"
-                    onClick={() => onDeleteProject(project.id, project.name)}
-                  >
-                    <Trash2 className="text-destructive" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                      <Link
+                        to="/projects/$projectId"
+                        params={{ projectId: project.id }}
+                        onClick={(e) => {
+                          // In selection mode a click toggles instead of navigating.
+                          if (sel.selecting) {
+                            e.preventDefault()
+                            sel.toggle(project.id)
+                          }
+                        }}
+                        className={cn('block pr-12', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
+                      >
+                        {view === 'grid' ? (
+                          <>
+                            <div className="font-semibold">{project.name}</div>
+                            <code
+                              className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+                            >
+                              {displayPath(project.path)}
+                            </code>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <span className="shrink-0 font-medium">{project.name}</span>
+                            <code
+                              className={`${pathChipClass()} min-w-0 flex-1 truncate text-xs`}
+                            >
+                              {displayPath(project.path)}
+                            </code>
+                            {created && (
+                              <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                                {created}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Link>
+                      <SelectCheckbox
+                        checked={sel.isSelected(project.id)}
+                        selecting={sel.selecting}
+                        onChange={() => sel.toggle(project.id)}
+                        className={cn(
+                          'absolute right-3',
+                          view === 'grid' ? 'top-3' : 'top-1/2 -translate-y-1/2',
+                        )}
+                      />
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
           )}
         </>
+      )}
+
+      <SelectionBar
+        open={sel.selecting}
+        count={sel.count}
+        total={sorted.length}
+        noun="project"
+        onSelectAll={() => sel.selectAll(sorted.map((p) => p.id))}
+        onClear={sel.clear}
+        onDelete={() => setConfirmOpen(true)}
+        busy={deleting}
+      />
+
+      {confirmOpen && (
+        <BulkDeleteDialog
+          noun="project"
+          names={selectedProjects.map((p) => p.name)}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={onBulkDelete}
+          onClose={() => setConfirmOpen(false)}
+        />
       )}
     </main>
   )

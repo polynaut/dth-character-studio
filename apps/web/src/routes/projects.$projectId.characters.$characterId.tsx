@@ -4,6 +4,7 @@ import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-rout
 import { z } from 'zod'
 import {
   ArrowLeft,
+  Copy,
   Download,
   ExternalLink,
   FolderInput,
@@ -41,7 +42,9 @@ import {
 import { Switch } from '#/components/ui/switch.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import {
+  cloneCharacter,
   copyDazScene,
+  deleteCharacter,
   deleteFiles,
   fetchCharacter,
   fetchPoseAssets,
@@ -57,6 +60,7 @@ import {
   uploadCharacterImage,
   uploadCharacterImageFromPath,
 } from '#/lib/rom/api.ts'
+import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
@@ -1295,6 +1299,42 @@ function CharacterPage() {
     URL.revokeObjectURL(url)
   }
 
+  // --- Special operations (clone / delete) ---
+  const [cloning, setCloning] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  async function onClone() {
+    setCloning(true)
+    try {
+      const clone = await cloneCharacter({ data: { projectId, id: character.id } })
+      toast.success(`Cloned to “${clone.name}”`)
+      await router.navigate({
+        to: '/projects/$projectId/characters/$characterId',
+        params: { projectId, characterId: clone.id },
+      })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCloning(false)
+    }
+  }
+
+  async function onDeleteCharacter({ keepDaz, keepHoudini }: { keepDaz: boolean; keepHoudini: boolean }) {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteCharacter({ data: { projectId, id: character.id, keepDaz, keepHoudini } })
+      toast.success(`Deleted “${character.name}”`)
+      // Navigation unmounts this editor — no need to reset the busy flag.
+      await router.navigate({ to: '/projects/$projectId', params: { projectId } })
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e))
+      setDeleting(false)
+    }
+  }
+
   return (
     <main className="p-8">
       <div className="mb-1">
@@ -1723,7 +1763,40 @@ function CharacterPage() {
           </>
         )}
       </section>
+
+      <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
+        <h2 className="mb-1 text-xl font-semibold">Special operations</h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Duplicate this character into a new copy, or delete it from the project.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={onClone} disabled={cloning || deleting}>
+            <Copy /> {cloning ? 'Cloning…' : 'Clone'}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => setDeleteOpen(true)}
+            disabled={cloning || deleting}
+          >
+            <Trash2 /> Delete
+          </Button>
+        </div>
+      </section>
       </div>
+
+      {deleteOpen && (
+        <BulkDeleteDialog
+          noun="character"
+          names={[character.name]}
+          showKeepFiles
+          dazSubdirLabel={settings.dazSubdir}
+          houdiniSubdirLabel={settings.houdiniSubdir}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={onDeleteCharacter}
+          onClose={() => setDeleteOpen(false)}
+        />
+      )}
     </main>
   )
 }

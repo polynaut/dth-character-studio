@@ -344,9 +344,61 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
   return storage.saveCharacter(await projectPath(projectId), characterSchema.parse(character))
 }
 
+const deleteCharacterInput = charScopeInput.extend({
+  /** Preserve the character's Daz-scenes subfolder (settings.dazSubdir). */
+  keepDaz: z.boolean().optional(),
+  /** Preserve the character's Houdini subfolder (settings.houdiniSubdir). */
+  keepHoudini: z.boolean().optional(),
+})
+
 export async function deleteCharacter({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id, keepDaz, keepHoudini } = deleteCharacterInput.parse(data)
+  // Resolve the keep flags to the configured top-level subfolder names so the
+  // recursive delete can spare them.
+  const keepFolders: Array<string> = []
+  if (keepDaz || keepHoudini) {
+    const settings = await storage.getSettings()
+    if (keepDaz && settings.dazSubdir) keepFolders.push(settings.dazSubdir)
+    if (keepHoudini && settings.houdiniSubdir) keepFolders.push(settings.houdiniSubdir)
+  }
+  await storage.deleteCharacter(await projectPath(projectId), id, { keepFolders })
+}
+
+/**
+ * Duplicate a character within its project: copies the ROM definition under a
+ * fresh id + unique name, clones the avatar image, and generates its initial
+ * artifacts so the copy is immediately complete. Returns the new character.
+ */
+export async function cloneCharacter({ data }: { data: unknown }): Promise<Character> {
   const { projectId, id } = charScopeInput.parse(data)
-  await storage.deleteCharacter(await projectPath(projectId), id)
+  const lib = await projectPath(projectId)
+  const source = await storage.getCharacter(lib, id)
+  if (!source) throw new Error(`Character ${id} not found`)
+  let clone = await storage.cloneCharacter(lib, id)
+  // Duplicate the avatar so the copy is visually identifiable right away (only
+  // for locally-stored images; external URLs already carry through unchanged).
+  if (source.image && !isExternalImage(source.image)) {
+    try {
+      const srcFile = await dataPath('images', source.image)
+      if (await exists(srcFile)) {
+        const ext = source.image.includes('.') ? `.${source.image.split('.').pop()}` : '.png'
+        const dir = await dataPath('images')
+        await mkdir(dir, { recursive: true })
+        const fileName = `${basename(clone.id)}${ext}`
+        await writeFile(joinPath(dir, fileName), await readFile(srcFile))
+        clone = await storage.saveCharacter(lib, { ...clone, image: fileName })
+      }
+    } catch {
+      // a missing/locked avatar shouldn't fail the clone — it just has no image
+    }
+  }
+  // Best-effort initial generation (mirrors createCharacter) so the copy's files exist.
+  try {
+    await generateCharacterFiles({ data: { projectId, id: clone.id } })
+  } catch {
+    // non-fatal — the editor's Save can regenerate
+  }
+  return clone
 }
 
 /** Shape of an existing DazToHue-Scripts FBM file (e.g. ElectraG9_FBMs.json). */
@@ -767,10 +819,11 @@ export async function resolvePresetFrames(
  * Compiles the character into its DTH artifacts and writes them to two places:
  *  - the Houdini PoseAsset CSV → the character's own folder (next to its
  *    definition JSON), and
- *  - the self-contained Daz script (<Name>_<Genesis>.dsa) → the shared
- *    `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` folder, into which the
- *    DTH runtime files it imports are also installed (copied from the
- *    DazToHue-Scripts checkout). Returns the files so the UI can offer downloads.
+ *  - the self-contained Daz script (<Name>_<Genesis>.dsa) → a per-character
+ *    subfolder `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`.
+ *    The DTH runtime files it imports are installed ONCE in that root (copied
+ *    from the DazToHue-Scripts checkout); the script imports them two levels up.
+ *    Returns the files so the UI can offer downloads.
  */
 export async function generateCharacterFiles({ data }: { data: unknown }): Promise<{
   outDir: string
@@ -779,7 +832,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   scriptsError: string | null
 }> {
   const { projectId, id, previousName } = generateInput.parse(data)
-  const lib = await projectPath(projectId)
+  const project = await storage.getProject(projectId)
+  if (!project) throw new Error(`Project ${projectId} not found`)
+  const lib = project.path
   const character = await storage.getCharacter(lib, id)
   if (!character) throw new Error(`Character ${id} not found`)
   // Exact ROM paths from the installed preset catalog; {} when the folder is
@@ -808,30 +863,41 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     }
   }
 
-  // The character script + the runtime it imports go in the shared scripts folder.
+  // The character script goes in its own <project>/<character>/ subfolder of the
+  // shared scripts folder; the runtime it imports is installed once in the root.
   const settings = await storage.getSettings()
   const dazFiles = files.filter((file) => file.target === 'daz')
   let scriptsDir: string | null = null
   let scriptsError: string | null = null
-  if (settings.dazLibraryFolder) {
-    const dir = storage.studioScriptsDir(settings.dazLibraryFolder)
+  if (!settings.dazLibraryFolder) {
+    scriptsError = 'Set “My DAZ 3D Library” to install the character script'
+  } else {
+    const root = storage.studioScriptsDir(settings.dazLibraryFolder)
+    const charDir = storage.studioCharScriptsDir(settings.dazLibraryFolder, project.name, character.name)
     try {
-      await storage.copyRuntimeFiles(settings.dazScriptsFolder, dir)
-      await storage.writeFilesToFolder(dir, dazFiles)
-      // After a rename the script's filename (<Name>_<Genesis>.dsa) changes —
-      // remove the stale previous-named one left in the shared folder.
+      await storage.copyRuntimeFiles(settings.dazScriptsFolder, root)
+      await storage.writeFilesToFolder(charDir, dazFiles)
+      // Migration: older versions wrote the script flat in the root — drop this
+      // character's flat-layout script (current + previous name) if it lingers.
+      await storage.removeFilesFromFolder(root, [
+        `${characterScriptName(character)}.dsa`,
+        ...(previousName ? [`${characterScriptName({ ...character, name: previousName })}.dsa`] : []),
+      ])
+      // After a rename the character subfolder name changes — remove the stale one.
       if (previousName) {
-        const oldBase = characterScriptName({ ...character, name: previousName })
-        if (oldBase !== characterScriptName(character)) {
-          await storage.removeFilesFromFolder(dir, [`${oldBase}.dsa`])
+        const oldCharDir = storage.studioCharScriptsDir(
+          settings.dazLibraryFolder,
+          project.name,
+          previousName,
+        )
+        if (oldCharDir !== charDir && (await exists(oldCharDir))) {
+          await remove(oldCharDir, { recursive: true })
         }
       }
-      scriptsDir = dir
+      scriptsDir = charDir
     } catch (error) {
       scriptsError = error instanceof Error ? error.message : String(error)
     }
-  } else {
-    scriptsError = 'Set “My DAZ 3D Library” to install the character script'
   }
   return { outDir, files, scriptsDir, scriptsError }
 }
