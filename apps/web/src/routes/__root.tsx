@@ -38,7 +38,7 @@ function RootComponent() {
       <Outlet />
       <Toaster
         theme="light"
-        position="bottom-center"
+        position="top-center"
         closeButton
         // Light-orange toast with dark text and a dark-orange border — the app's
         // brand orange (#fe5c01) family, kept legible on a light surface.
