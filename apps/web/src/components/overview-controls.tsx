@@ -53,7 +53,7 @@ export function formatDate(iso: string): string {
 /** Grid / list segmented toggle. */
 export function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
   return (
-    <div className="flex items-center rounded-md border p-0.5">
+    <div className="flex items-center rounded-lg bg-muted p-[3px]">
       {([
         ['grid', LayoutGrid, 'Grid view'],
         ['list', List, 'List view'],
@@ -65,10 +65,10 @@ export function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v:
           aria-pressed={value === mode}
           onClick={() => onChange(mode)}
           className={cn(
-            'flex size-7 items-center justify-center rounded-sm transition-colors',
+            'flex size-7 items-center justify-center rounded-md border border-transparent transition-[color,box-shadow]',
             value === mode
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              ? 'bg-background text-foreground shadow-sm dark:border-input dark:bg-input/30'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <Icon className="size-4" />
