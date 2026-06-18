@@ -542,9 +542,27 @@ export async function removeFilesFromFolder(
  */
 const RUNTIME_FILES = ['DthUtils.dsa', 'DthOptions.dsa', 'DthWorkflow.dsa']
 
-/** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install folder. */
+/** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install root,
+ *  holding the DTH runtime files (installed once) at its top level. */
 export function studioScriptsDir(dazLibraryFolder: string): string {
   return join(dazLibraryFolder, 'Scripts', 'DTH-Character-Studio')
+}
+
+/**
+ * Per-character script folder: `<root>/<project>/<character>/`. The generated
+ * `<Name>_<Genesis>.dsa` lives here and imports the runtime from the root two
+ * levels up. Both segments are filesystem-sanitised from the display names.
+ */
+export function studioCharScriptsDir(
+  dazLibraryFolder: string,
+  projectName: string,
+  characterName: string,
+): string {
+  return join(
+    studioScriptsDir(dazLibraryFolder),
+    characterFolderName(projectName),
+    characterFolderName(characterName),
+  )
 }
 
 /**

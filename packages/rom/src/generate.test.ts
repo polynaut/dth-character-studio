@@ -307,7 +307,7 @@ describe('toCharacterScriptDsa', () => {
     const file = toCharacterScriptDsa(makeCharacter())
     expect(file.fileName).toBe('ElectraG9_G9.dsa')
     expect(file.target).toBe('daz')
-    expect(file.content).toContain('include(dir_self.filePath(".DthWorkflow.dsa"));')
+    expect(file.content).toContain('include(dir_self.filePath("../../.DthWorkflow.dsa"));')
     expect(file.content).toContain('ApplyDTHCharacter(')
     const config = characterConfig(file.content)
     expect(config.bIncludeJCM).toBe(true)
