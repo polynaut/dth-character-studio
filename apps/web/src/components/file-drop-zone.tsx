@@ -29,9 +29,12 @@ export function FileDropZone({
     <div data-filedrop-id={id} className={cn('relative', className)}>
       {children}
       {isOver && (
+        // Floats just outside the content (negative inset) so the dashed border
+        // has breathing room without nudging the wrapped layout. Parents have
+        // their own padding, so it stays clear of neighbours.
         <div
           className={cn(
-            'pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-sm font-medium text-primary',
+            'pointer-events-none absolute -inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-sm font-medium text-primary',
             overlayClassName,
           )}
         >
