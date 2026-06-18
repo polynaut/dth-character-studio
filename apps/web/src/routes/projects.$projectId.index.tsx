@@ -435,17 +435,6 @@ function ProjectCharactersPage() {
         <p className="text-muted-foreground">No characters yet — create the first one above.</p>
       ) : (
         <>
-          {sel.selecting && (
-            <SelectionBar
-              count={sel.count}
-              total={visible.length}
-              noun="character"
-              onSelectAll={() => sel.selectAll(visible.map((c) => c.id))}
-              onClear={sel.clear}
-              onDelete={() => setConfirmOpen(true)}
-              busy={deleting}
-            />
-          )}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-muted-foreground">
               {visible.length === characters.length
@@ -578,6 +567,17 @@ function ProjectCharactersPage() {
           onClose={() => setCopyPrompt(false)}
         />
       )}
+
+      <SelectionBar
+        open={sel.selecting}
+        count={sel.count}
+        total={visible.length}
+        noun="character"
+        onSelectAll={() => sel.selectAll(visible.map((c) => c.id))}
+        onClear={sel.clear}
+        onDelete={() => setConfirmOpen(true)}
+        busy={deleting}
+      />
 
       {confirmOpen && (
         <BulkDeleteDialog

@@ -198,17 +198,6 @@ function ProjectsPage() {
             </p>
           ) : (
             <>
-              {sel.selecting && (
-                <SelectionBar
-                  count={sel.count}
-                  total={sorted.length}
-                  noun="project"
-                  onSelectAll={() => sel.selectAll(sorted.map((p) => p.id))}
-                  onClear={sel.clear}
-                  onDelete={() => setConfirmOpen(true)}
-                  busy={deleting}
-                />
-              )}
               <div className="mb-4 flex items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">
                   {projects.length} project{projects.length === 1 ? '' : 's'}
@@ -291,6 +280,17 @@ function ProjectsPage() {
           )}
         </>
       )}
+
+      <SelectionBar
+        open={sel.selecting}
+        count={sel.count}
+        total={sorted.length}
+        noun="project"
+        onSelectAll={() => sel.selectAll(sorted.map((p) => p.id))}
+        onClear={sel.clear}
+        onDelete={() => setConfirmOpen(true)}
+        busy={deleting}
+      />
 
       {confirmOpen && (
         <BulkDeleteDialog

@@ -1,4 +1,5 @@
-import { Check, LayoutGrid, List, Trash2, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Check, CheckCheck, LayoutGrid, List, Trash2, X } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import {
@@ -174,11 +175,14 @@ export function SelectCheckbox({
 }
 
 /**
- * The bulk-action bar shown above an overview while ≥1 item is selected: the
- * count, select-all / clear, and the destructive Delete that opens the confirm
- * modal. Sticky so it stays reachable while scrolling a long list.
+ * The bulk-action bar for an overview's multi-select: count, select-all, clear,
+ * and the destructive Delete that opens the confirm modal. A floating pill fixed
+ * to the bottom-centre of the *viewport* (portaled to <body>) — it slides up
+ * from below when `open` and back down when not, so it never shifts the page
+ * layout. Pointer-events are disabled while hidden. Sits below modals (z-40).
  */
 export function SelectionBar({
+  open,
   count,
   total,
   noun,
@@ -187,6 +191,8 @@ export function SelectionBar({
   onDelete,
   busy,
 }: {
+  /** Whether a selection is active (drives the slide-in / slide-out). */
+  open: boolean
   count: number
   total: number
   /** Singular item noun, e.g. "project" / "character". */
@@ -196,25 +202,47 @@ export function SelectionBar({
   onDelete: () => void
   busy: boolean
 }) {
-  return (
-    <div className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-lg border bg-card/95 px-4 py-2 shadow-sm backdrop-blur">
-      <span className="text-sm font-medium">
-        {count} {noun}
-        {count === 1 ? '' : 's'} selected
-      </span>
-      {count < total && (
-        <Button variant="ghost" size="sm" onClick={onSelectAll} disabled={busy}>
-          Select all ({total})
-        </Button>
+  return createPortal(
+    <div
+      aria-hidden={!open}
+      className={cn(
+        'fixed bottom-6 left-1/2 z-40 -translate-x-1/2 transition-[transform,opacity] duration-300 ease-out',
+        open
+          ? 'translate-y-0 opacity-100'
+          : 'pointer-events-none translate-y-[calc(100%+2.5rem)] opacity-0',
       )}
-      <Button variant="ghost" size="sm" onClick={onClear} disabled={busy}>
-        <X /> Clear
-      </Button>
-      <div className="ml-auto">
-        <Button variant="destructive" size="sm" onClick={onDelete} disabled={busy}>
+    >
+      <div className="flex items-center gap-1 rounded-full border bg-card/95 py-2 pr-2 pl-4 shadow-lg shadow-black/25 backdrop-blur">
+        <span className="text-sm font-medium whitespace-nowrap">
+          {count} {noun}
+          {count === 1 ? '' : 's'} selected
+        </span>
+        <div className="mx-1 h-5 w-px bg-border" />
+        {count < total && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-full"
+            onClick={onSelectAll}
+            disabled={busy}
+          >
+            <CheckCheck /> All ({total})
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" className="rounded-full" onClick={onClear} disabled={busy}>
+          <X /> Clear
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="rounded-full"
+          onClick={onDelete}
+          disabled={busy}
+        >
           <Trash2 /> Delete
         </Button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
