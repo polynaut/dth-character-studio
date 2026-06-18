@@ -339,6 +339,23 @@ export const jcmMorphModSchema = z.object({
 })
 export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
 
+/**
+ * Version of the character-JSON **schema** — independent of the app version.
+ * Bump this ONLY when the stored character shape changes in a way old/new JSONs
+ * must be migrated across: a field is **added, renamed, or removed**, or its
+ * meaning/type changes. Pure app improvements that don't touch the persisted
+ * shape must NOT bump it.
+ *
+ * Stamped onto every saved character as `schemaVersion`. A stored value below
+ * this means the JSON predates a schema change and is a migration candidate;
+ * above it means the JSON came from a newer build. The migration framework that
+ * acts on the difference is a later addition — this constant is its groundwork.
+ *
+ * History:
+ *   1 — initial versioned schema (the shape as of its introduction).
+ */
+export const CHARACTER_SCHEMA_VERSION = 1
+
 export const characterSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
@@ -382,6 +399,13 @@ export const characterSchema = z.object({
   /** DTH Character Studio version that last wrote this character ('' = unknown,
    *  e.g. created before this was tracked). Stamped on every save. */
   studioVersion: z.string().default(''),
+  /**
+   * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
+   * on every save. The default is the BASELINE `1` — never the live constant —
+   * so a JSON written before versioning existed (no field) reads as 1, which is
+   * correctly *below* any future bumped version and thus a migration candidate.
+   */
+  schemaVersion: z.number().int().positive().default(1),
 })
 export type Character = z.infer<typeof characterSchema>
 
