@@ -1,5 +1,28 @@
 # @dth/web
 
+## 0.14.0
+
+### Minor Changes
+
+- [#41](https://github.com/polynaut/dth-character-studio/pull/41) [`ce6d790`](https://github.com/polynaut/dth-character-studio/commit/ce6d790f69901930ed48642636a527094167348c) Thanks [@polynaut](https://github.com/polynaut)! - Overhauled the project and character overviews with management controls. Both now have a **grid / list** view toggle and **sort** (name, newest, oldest); the character overview adds **Genesis** and **Gender** filters. Items are **selectable** — the per-item trash button is gone; instead, selecting one or more reveals a bulk-action bar with **Delete**, which opens a confirm modal (for characters, with options to **keep the Daz / Houdini files** on disk). Each character now also has a **Special operations** pane with **Clone** (duplicate into a new copy) and **Delete**.
+
+- [#40](https://github.com/polynaut/dth-character-studio/pull/40) [`2d28983`](https://github.com/polynaut/dth-character-studio/commit/2d28983450883ccd0248d116b121a79d5b38518f) Thanks [@polynaut](https://github.com/polynaut)! - Generalize the "Reset GP before applying extra frames" option: it's now **"Reset genitalia morphs before extra frames"** with a clear description, and it applies to whichever genital ROM is active — Golden Palace _or_ Dicktator — not just GP. The character field `resetGPBeforeApplying` was renamed to `resetGenBeforeApplying` (old definitions migrate automatically on load), and generation now emits the per-block reset flags the DTH runtime understands for both GP and DK.
+
+- [#41](https://github.com/polynaut/dth-character-studio/pull/41) [`ce6d790`](https://github.com/polynaut/dth-character-studio/commit/ce6d790f69901930ed48642636a527094167348c) Thanks [@polynaut](https://github.com/polynaut)! - Generated Daz scripts are now installed into a per-character subfolder —
+  `…/Scripts/DTH-Character-Studio/<project>/<character>/<Name>_<Genesis>.dsa` —
+  instead of all sitting flat in the `DTH-Character-Studio` root. The DTH runtime
+  (`.DthWorkflow.dsa` + `.DthUtils.dsa` + `.DthOptions.dsa`) is installed **once**
+  in that root, and each character script now imports it from two levels up. A
+  character rename moves its subfolder, and any flat-layout script left by an
+  earlier version is cleaned up on the next generate.
+
+### Patch Changes
+
+- [#39](https://github.com/polynaut/dth-character-studio/pull/39) [`e2be4c4`](https://github.com/polynaut/dth-character-studio/commit/e2be4c43415abe4753987b6379a319fa2f6e128b) Thanks [@polynaut](https://github.com/polynaut)! - Give the file drag-and-drop highlight some breathing room — the dashed overlay now floats just outside the content instead of hugging it tightly.
+
+- Updated dependencies [[`2d28983`](https://github.com/polynaut/dth-character-studio/commit/2d28983450883ccd0248d116b121a79d5b38518f), [`ce6d790`](https://github.com/polynaut/dth-character-studio/commit/ce6d790f69901930ed48642636a527094167348c)]:
+  - @dth/rom@0.14.0
+
 ## 0.13.0
 
 ### Minor Changes
