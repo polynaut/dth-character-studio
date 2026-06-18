@@ -65,8 +65,10 @@ export function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v:
           aria-pressed={value === mode}
           onClick={() => onChange(mode)}
           className={cn(
-            'flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors',
-            value === mode ? 'bg-muted text-foreground' : 'hover:text-foreground',
+            'flex size-7 items-center justify-center rounded-sm transition-colors',
+            value === mode
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
           )}
         >
           <Icon className="size-4" />
