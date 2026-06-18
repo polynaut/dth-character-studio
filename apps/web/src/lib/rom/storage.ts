@@ -162,13 +162,19 @@ function parseCharacter(raw: unknown): Character {
       ]
     }
     if (typeof options.resetGPBeforeApplying === 'boolean') {
-      data.resetGPBeforeApplying = options.resetGPBeforeApplying
+      data.resetGenBeforeApplying = options.resetGPBeforeApplying
     }
     data.sections = sections
     delete data.entries
     delete data.groups
     delete data.options
   }
+  // Field renamed resetGPBeforeApplying → resetGenBeforeApplying (now generic
+  // over GP/DK); carry forward characters saved under the old name.
+  if (data.resetGPBeforeApplying !== undefined && data.resetGenBeforeApplying === undefined) {
+    data.resetGenBeforeApplying = data.resetGPBeforeApplying
+  }
+  delete data.resetGPBeforeApplying
   // The PoseAsset node knows no "none" suffix — older data migrates to centre.
   for (const config of Object.values(data.sections as Record<string, any>)) {
     for (const group of config?.groups ?? []) {
