@@ -11,10 +11,12 @@ import {
   SelectionBar,
   SortSelect,
   ViewToggle,
+  formatDate,
   sortItems,
   type SortKey,
   type ViewMode,
 } from '#/components/overview-controls.tsx'
+import { cn } from '#/lib/utils.ts'
 import {
   createProject,
   deleteProject,
@@ -220,41 +222,70 @@ function ProjectsPage() {
                 className={
                   view === 'grid'
                     ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                    : 'space-y-3'
+                    : 'divide-y rounded-lg border bg-card'
                 }
               >
-                {sorted.map((project) => (
-                  <li
-                    key={project.id}
-                    className="group relative rounded-lg border bg-card transition-colors hover:border-primary"
-                  >
-                    <Link
-                      to="/projects/$projectId"
-                      params={{ projectId: project.id }}
-                      onClick={(e) => {
-                        // In selection mode a click toggles instead of navigating.
-                        if (sel.selecting) {
-                          e.preventDefault()
-                          sel.toggle(project.id)
-                        }
-                      }}
-                      className="block p-4 pr-12"
+                {sorted.map((project) => {
+                  const created = formatDate(project.createdAt ?? '')
+                  return (
+                    <li
+                      key={project.id}
+                      className={cn(
+                        'group relative transition-colors hover:border-primary',
+                        view === 'grid'
+                          ? 'rounded-lg border bg-card'
+                          : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                      )}
                     >
-                      <div className="font-semibold">{project.name}</div>
-                      <code
-                        className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+                      <Link
+                        to="/projects/$projectId"
+                        params={{ projectId: project.id }}
+                        onClick={(e) => {
+                          // In selection mode a click toggles instead of navigating.
+                          if (sel.selecting) {
+                            e.preventDefault()
+                            sel.toggle(project.id)
+                          }
+                        }}
+                        className={cn('block pr-12', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
                       >
-                        {displayPath(project.path)}
-                      </code>
-                    </Link>
-                    <SelectCheckbox
-                      checked={sel.isSelected(project.id)}
-                      selecting={sel.selecting}
-                      onChange={() => sel.toggle(project.id)}
-                      className="absolute top-3 right-3"
-                    />
-                  </li>
-                ))}
+                        {view === 'grid' ? (
+                          <>
+                            <div className="font-semibold">{project.name}</div>
+                            <code
+                              className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+                            >
+                              {displayPath(project.path)}
+                            </code>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <span className="shrink-0 font-medium">{project.name}</span>
+                            <code
+                              className={`${pathChipClass()} min-w-0 flex-1 truncate text-xs`}
+                            >
+                              {displayPath(project.path)}
+                            </code>
+                            {created && (
+                              <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                                {created}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Link>
+                      <SelectCheckbox
+                        checked={sel.isSelected(project.id)}
+                        selecting={sel.selecting}
+                        onChange={() => sel.toggle(project.id)}
+                        className={cn(
+                          'absolute right-3',
+                          view === 'grid' ? 'top-3' : 'top-1/2 -translate-y-1/2',
+                        )}
+                      />
+                    </li>
+                  )
+                })}
               </ul>
             </>
           )}

@@ -43,6 +43,13 @@ export function sortItems<T>(
   return arr
 }
 
+/** Short locale date for an ISO timestamp; '' when absent / invalid. */
+export function formatDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString()
+}
+
 /** Grid / list segmented toggle. */
 export function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
   return (

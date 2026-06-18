@@ -12,10 +12,12 @@ import {
   SelectionBar,
   SortSelect,
   ViewToggle,
+  formatDate,
   sortItems,
   type SortKey,
   type ViewMode,
 } from '#/components/overview-controls.tsx'
+import { cn } from '#/lib/utils.ts'
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
 import { useSelection } from '#/lib/use-selection.ts'
 import { EditableTitle } from '#/components/editable-title.tsx'
@@ -479,48 +481,83 @@ function ProjectCharactersPage() {
               className={
                 view === 'grid'
                   ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-                  : 'space-y-3'
+                  : 'divide-y rounded-lg border bg-card'
               }
             >
-              {visible.map((character) => (
-                <li
-                  key={character.id}
-                  className="group relative overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary"
-                >
-                  <Link
-                    to="/projects/$projectId/characters/$characterId"
-                    params={{ projectId, characterId: character.id }}
-                    onClick={(e) => {
-                      // In selection mode a click toggles instead of navigating.
-                      if (sel.selecting) {
-                        e.preventDefault()
-                        sel.toggle(character.id)
-                      }
-                    }}
-                    className="flex items-center gap-4 p-4 pr-12"
+              {visible.map((character) => {
+                const skinning = characterSkinning(character).toUpperCase()
+                const frames = countPoses(character.sections)
+                const updated = formatDate(character.updatedAt || character.createdAt || '')
+                return (
+                  <li
+                    key={character.id}
+                    className={cn(
+                      'group relative transition-colors hover:border-primary',
+                      view === 'grid'
+                        ? 'overflow-hidden rounded-lg border bg-card'
+                        : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                    )}
                   >
-                    <Portrait
-                      image={character.image}
-                      name={character.name}
-                      className="aspect-[3/4] w-16 shrink-0 rounded-md"
-                      fallbackClassName="text-2xl"
+                    <Link
+                      to="/projects/$projectId/characters/$characterId"
+                      params={{ projectId, characterId: character.id }}
+                      onClick={(e) => {
+                        // In selection mode a click toggles instead of navigating.
+                        if (sel.selecting) {
+                          e.preventDefault()
+                          sel.toggle(character.id)
+                        }
+                      }}
+                      className={cn(
+                        'flex items-center pr-12',
+                        view === 'grid' ? 'gap-4 p-4' : 'gap-3 px-3 py-2',
+                      )}
+                    >
+                      <Portrait
+                        image={character.image}
+                        name={character.name}
+                        className={cn(
+                          'aspect-[3/4] shrink-0 rounded-md',
+                          view === 'grid' ? 'w-16' : 'w-8',
+                        )}
+                        fallbackClassName={view === 'grid' ? 'text-2xl' : 'text-xs'}
+                      />
+                      {view === 'grid' ? (
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold">{character.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {character.genesis} · {skinning} · {frames} custom frames
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="min-w-0 flex-1 truncate font-medium">
+                            {character.name}
+                          </span>
+                          <div className="hidden shrink-0 items-center gap-x-5 text-xs text-muted-foreground sm:flex">
+                            <span className="w-10">{character.genesis}</span>
+                            <span className="hidden w-14 capitalize md:inline">
+                              {character.gender}
+                            </span>
+                            <span className="w-14">{skinning}</span>
+                            <span className="w-20">{frames} frames</span>
+                            <span className="hidden w-14 lg:inline">{character.targetSkeleton}</span>
+                            {updated && (
+                              <span className="hidden w-24 text-right xl:inline">{updated}</span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </Link>
+                    <SelectCheckbox
+                      checked={sel.isSelected(character.id)}
+                      selecting={sel.selecting}
+                      onChange={() => sel.toggle(character.id)}
+                      className={cn('absolute right-3', view === 'grid' ? 'top-3' : 'top-1/2 -translate-y-1/2')}
                     />
-                    <div className="min-w-0">
-                      <div className="truncate font-semibold">{character.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-                        {countPoses(character.sections)} custom frames
-                      </div>
-                    </div>
-                  </Link>
-                  <SelectCheckbox
-                    checked={sel.isSelected(character.id)}
-                    selecting={sel.selecting}
-                    onChange={() => sel.toggle(character.id)}
-                    className="absolute top-3 right-3"
-                  />
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>
