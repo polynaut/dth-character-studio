@@ -55,11 +55,16 @@ function basename(p: string): string {
   return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
 }
 
-/** Resolve a project id to its library path (throws if the project is gone). */
-async function projectPath(projectId: string): Promise<string> {
+/** Resolve a project id to its record (throws if the project is gone). */
+async function resolveProject(projectId: string): Promise<storage.Project> {
   const project = await storage.getProject(projectId)
   if (!project) throw new Error(`Project ${projectId} not found`)
-  return project.path
+  return project
+}
+
+/** Resolve a project id to its library path (throws if the project is gone). */
+async function projectPath(projectId: string): Promise<string> {
+  return (await resolveProject(projectId)).path
 }
 
 // --- Projects -------------------------------------------------------------
@@ -183,7 +188,8 @@ async function copyTipImage(characterId: string, scenePath: string): Promise<str
 
 export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
   const input = createInput.parse(data)
-  const lib = await projectPath(input.projectId)
+  const project = await resolveProject(input.projectId)
+  const lib = project.path
   const now = new Date().toISOString()
   const id = newId()
   // ROM prefill: from the bundled example, or copied from an existing character.
@@ -211,7 +217,7 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     if (image) base.image = image
   }
   const character: Character = characterSchema.parse(base)
-  const created = await storage.createCharacterAt(lib, character, input.relFolder ?? '')
+  const created = await storage.createCharacterAt(project, character, input.relFolder ?? '')
   // Seed an empty Houdini folder (named from settings) so the user is nudged to
   // create the character's Houdini project there. Best-effort and only for
   // characters that own a folder — never scatter it into the project root.
@@ -300,7 +306,7 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
   const next: Character = { ...parsed, scenePath, updatedAt: new Date().toISOString() }
   const image = await copyTipImage(parsed.id, scenePath)
   if (image) next.image = image
-  return storage.saveCharacter(await projectPath(projectId), next)
+  return storage.saveCharacter(await resolveProject(projectId), next)
 }
 
 /** Open a file with its OS-default application (a `.duf` opens in Daz Studio). */
@@ -341,7 +347,7 @@ const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown(
 
 export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
   const { projectId, character } = saveInput.parse(data)
-  return storage.saveCharacter(await projectPath(projectId), characterSchema.parse(character))
+  return storage.saveCharacter(await resolveProject(projectId), characterSchema.parse(character))
 }
 
 const deleteCharacterInput = charScopeInput.extend({
@@ -371,10 +377,11 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
  */
 export async function cloneCharacter({ data }: { data: unknown }): Promise<Character> {
   const { projectId, id } = charScopeInput.parse(data)
-  const lib = await projectPath(projectId)
+  const project = await resolveProject(projectId)
+  const lib = project.path
   const source = await storage.getCharacter(lib, id)
   if (!source) throw new Error(`Character ${id} not found`)
-  let clone = await storage.cloneCharacter(lib, id)
+  let clone = await storage.cloneCharacter(project, id)
   // Duplicate the avatar so the copy is visually identifiable right away (only
   // for locally-stored images; external URLs already carry through unchanged).
   if (source.image && !isExternalImage(source.image)) {
@@ -386,7 +393,7 @@ export async function cloneCharacter({ data }: { data: unknown }): Promise<Chara
         await mkdir(dir, { recursive: true })
         const fileName = `${basename(clone.id)}${ext}`
         await writeFile(joinPath(dir, fileName), await readFile(srcFile))
-        clone = await storage.saveCharacter(lib, { ...clone, image: fileName })
+        clone = await storage.saveCharacter(project, { ...clone, image: fileName })
       }
     } catch {
       // a missing/locked avatar shouldn't fail the clone — it just has no image
@@ -447,7 +454,7 @@ export async function importCharacterFromJson({ data }: { data: unknown }): Prom
   if (importedReset !== undefined) {
     character.resetGenBeforeApplying = importedReset
   }
-  return storage.saveCharacter(await projectPath(input.projectId), character)
+  return storage.saveCharacter(await resolveProject(input.projectId), character)
 }
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
