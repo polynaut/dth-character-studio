@@ -160,10 +160,10 @@ export function SelectCheckbox({
         onChange(!checked)
       }}
       className={cn(
-        'flex size-5 items-center justify-center rounded border bg-background/80 shadow-sm backdrop-blur transition-opacity',
+        'flex size-5 items-center justify-center rounded-[5px] border transition-colors',
         checked
           ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-muted-foreground/40 hover:border-foreground',
+          : 'border-input hover:border-foreground',
         !selecting && !checked && 'opacity-0 group-hover:opacity-100',
         className,
       )}
