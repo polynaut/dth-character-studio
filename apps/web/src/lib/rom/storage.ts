@@ -357,16 +357,67 @@ export async function createCharacterAt(
   return stamped
 }
 
-export async function deleteCharacter(lib: string, id: string): Promise<void> {
+/**
+ * Delete a character. By default removes its whole folder. `keepFolders` (top-
+ * level subfolder names, e.g. the configured Daz / Houdini subdirs) are
+ * preserved: every other top-level entry in the folder is removed, but those
+ * subfolders are left on disk. When everything was kept (nothing else to remove)
+ * the empty character folder itself stays. A definition dropped loosely at the
+ * library root only ever has its own file removed (never the library).
+ */
+export async function deleteCharacter(
+  lib: string,
+  id: string,
+  opts: { keepFolders?: Array<string> } = {},
+): Promise<void> {
   const entry = await findEntry(lib, id)
   if (!entry) return
   // Guard: a definition manually dropped at the library root has folderAbs ===
   // the library itself — only remove its file, never recursively wipe the library.
   if (entry.relFolder === '') {
     if (await exists(entry.definitionAbs)) await remove(entry.definitionAbs)
-  } else if (await exists(entry.folderAbs)) {
-    await remove(entry.folderAbs, { recursive: true })
+    return
   }
+  if (!(await exists(entry.folderAbs))) return
+
+  const keep = new Set((opts.keepFolders ?? []).map((f) => basename(f).toLowerCase()).filter(Boolean))
+  if (keep.size === 0) {
+    await remove(entry.folderAbs, { recursive: true })
+    return
+  }
+  // Selective delete: drop every top-level entry except the kept subfolders.
+  for (const child of await readDir(entry.folderAbs)) {
+    if (child.isDirectory && keep.has(child.name.toLowerCase())) continue
+    const abs = join(entry.folderAbs, child.name)
+    if (await exists(abs)) await remove(abs, { recursive: true })
+  }
+}
+
+/**
+ * Duplicate a character within the same library: a fresh id + a unique name
+ * ("<name> copy"), a new folder, and a copy of the definition. Provenance that
+ * points into the source folder (extra scenes / Houdini projects) is dropped —
+ * those files aren't copied — but the primary `scenePath` is kept as a reference.
+ * Returns the new character; the caller copies the avatar + regenerates files.
+ */
+export async function cloneCharacter(lib: string, id: string): Promise<Character> {
+  if (!lib) throw new Error('No project library configured.')
+  const source = await getCharacter(lib, id)
+  if (!source) throw new Error(`Character ${id} not found`)
+  const existingNames = new Set((await listCharacters(lib)).map((c) => c.name.toLowerCase()))
+  let name = `${source.name} copy`
+  for (let i = 2; existingNames.has(name.toLowerCase()); i++) name = `${source.name} copy ${i}`
+  const now = new Date().toISOString()
+  const clone: Character = {
+    ...source,
+    id: newId(),
+    name,
+    extraScenes: [],
+    houdiniProjects: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+  return createCharacterAt(lib, clone, name)
 }
 
 /** Absolute path to a character's folder (created if missing) — Generate's target. */
@@ -668,16 +719,21 @@ export interface Project {
   id: string
   name: string
   path: string
+  /** ISO timestamp the project was added; absent for projects created before
+   *  this was tracked (those sort oldest under "by date"). */
+  createdAt?: string
 }
 
 async function readProjects(): Promise<Array<Project>> {
   try {
     const raw = JSON.parse(await readTextFile(await dataPath('projects.json')))
     if (!Array.isArray(raw)) return []
-    return raw.filter(
-      (p): p is Project =>
-        p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.path === 'string',
-    )
+    return raw
+      .filter(
+        (p): p is Project =>
+          p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.path === 'string',
+      )
+      .map((p) => ({ ...p, ...(typeof p.createdAt === 'string' ? { createdAt: p.createdAt } : {}) }))
   } catch {
     return []
   }
@@ -700,7 +756,12 @@ export async function createProject(name: string, path: string): Promise<Project
   if (!name.trim()) throw new Error('Project name is required.')
   if (!path.trim()) throw new Error('Project folder is required.')
   const projects = await readProjects()
-  const project: Project = { id: newId(), name: name.trim(), path: path.trim() }
+  const project: Project = {
+    id: newId(),
+    name: name.trim(),
+    path: path.trim(),
+    createdAt: new Date().toISOString(),
+  }
   projects.push(project)
   await writeProjects(projects)
   await mkdir(project.path, { recursive: true })

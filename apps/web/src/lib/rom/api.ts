@@ -344,9 +344,61 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
   return storage.saveCharacter(await projectPath(projectId), characterSchema.parse(character))
 }
 
+const deleteCharacterInput = charScopeInput.extend({
+  /** Preserve the character's Daz-scenes subfolder (settings.dazSubdir). */
+  keepDaz: z.boolean().optional(),
+  /** Preserve the character's Houdini subfolder (settings.houdiniSubdir). */
+  keepHoudini: z.boolean().optional(),
+})
+
 export async function deleteCharacter({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id, keepDaz, keepHoudini } = deleteCharacterInput.parse(data)
+  // Resolve the keep flags to the configured top-level subfolder names so the
+  // recursive delete can spare them.
+  const keepFolders: Array<string> = []
+  if (keepDaz || keepHoudini) {
+    const settings = await storage.getSettings()
+    if (keepDaz && settings.dazSubdir) keepFolders.push(settings.dazSubdir)
+    if (keepHoudini && settings.houdiniSubdir) keepFolders.push(settings.houdiniSubdir)
+  }
+  await storage.deleteCharacter(await projectPath(projectId), id, { keepFolders })
+}
+
+/**
+ * Duplicate a character within its project: copies the ROM definition under a
+ * fresh id + unique name, clones the avatar image, and generates its initial
+ * artifacts so the copy is immediately complete. Returns the new character.
+ */
+export async function cloneCharacter({ data }: { data: unknown }): Promise<Character> {
   const { projectId, id } = charScopeInput.parse(data)
-  await storage.deleteCharacter(await projectPath(projectId), id)
+  const lib = await projectPath(projectId)
+  const source = await storage.getCharacter(lib, id)
+  if (!source) throw new Error(`Character ${id} not found`)
+  let clone = await storage.cloneCharacter(lib, id)
+  // Duplicate the avatar so the copy is visually identifiable right away (only
+  // for locally-stored images; external URLs already carry through unchanged).
+  if (source.image && !isExternalImage(source.image)) {
+    try {
+      const srcFile = await dataPath('images', source.image)
+      if (await exists(srcFile)) {
+        const ext = source.image.includes('.') ? `.${source.image.split('.').pop()}` : '.png'
+        const dir = await dataPath('images')
+        await mkdir(dir, { recursive: true })
+        const fileName = `${basename(clone.id)}${ext}`
+        await writeFile(joinPath(dir, fileName), await readFile(srcFile))
+        clone = await storage.saveCharacter(lib, { ...clone, image: fileName })
+      }
+    } catch {
+      // a missing/locked avatar shouldn't fail the clone — it just has no image
+    }
+  }
+  // Best-effort initial generation (mirrors createCharacter) so the copy's files exist.
+  try {
+    await generateCharacterFiles({ data: { projectId, id: clone.id } })
+  } catch {
+    // non-fatal — the editor's Save can regenerate
+  }
+  return clone
 }
 
 /** Shape of an existing DazToHue-Scripts FBM file (e.g. ElectraG9_FBMs.json). */

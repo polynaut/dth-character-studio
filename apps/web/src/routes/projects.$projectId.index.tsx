@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FolderOpen, Settings as SettingsIcon, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Settings as SettingsIcon, UserPlus } from 'lucide-react'
 
 import { Field } from '#/components/field.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
+import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import {
+  FilterSelect,
+  SelectCheckbox,
+  SelectionBar,
+  SortSelect,
+  ViewToggle,
+  sortItems,
+  type SortKey,
+  type ViewMode,
+} from '#/components/overview-controls.tsx'
+import { usePersistentState } from '#/lib/use-persistent-state.ts'
+import { useSelection } from '#/lib/use-selection.ts'
 import { EditableTitle } from '#/components/editable-title.tsx'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button.tsx'
@@ -98,6 +111,16 @@ function ProjectCharactersPage() {
   const [copySubfolder, setCopySubfolder] = useState('')
   const [copyDeleteOriginal, setCopyDeleteOriginal] = useState(false)
   const swallowNavRef = useRef(false)
+
+  // Overview view / sort (persisted) + transient Genesis & Gender filters.
+  const [view, setView] = usePersistentState<ViewMode>('dth.characters.view', 'grid')
+  const [sort, setSort] = usePersistentState<SortKey>('dth.characters.sort', 'alpha')
+  const [genesisFilter, setGenesisFilter] = useState('')
+  const [genderFilter, setGenderFilter] = useState('')
+  const sel = useSelection()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
   function sceneBaseName(p: string): string {
@@ -205,11 +228,38 @@ function ProjectCharactersPage() {
     }
   }
 
-  async function onDelete(id: string, characterName: string) {
-    if (!window.confirm(`Delete character "${characterName}"? This cannot be undone.`)) return
-    await deleteCharacter({ data: { projectId, id } })
-    await router.invalidate()
-    toast.success(`Deleted “${characterName}”`)
+  // Filter options come from the values actually present, so a single-Genesis (or
+  // single-gender) project shows no redundant filter. Sort runs after filtering.
+  const genesisValues = [...new Set(characters.map((c) => c.genesis))].sort()
+  const genderValues = [...new Set(characters.map((c) => c.gender))].sort()
+  const visible = sortItems(
+    characters.filter(
+      (c) =>
+        (!genesisFilter || c.genesis === genesisFilter) &&
+        (!genderFilter || c.gender === genderFilter),
+    ),
+    sort,
+    { name: (c) => c.name, date: (c) => c.updatedAt || c.createdAt || '' },
+  )
+  const selectedChars = visible.filter((c) => sel.isSelected(c.id))
+
+  async function onBulkDelete({ keepDaz, keepHoudini }: { keepDaz: boolean; keepHoudini: boolean }) {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      for (const character of selectedChars) {
+        await deleteCharacter({ data: { projectId, id: character.id, keepDaz, keepHoudini } })
+      }
+      const n = selectedChars.length
+      sel.clear()
+      setConfirmOpen(false)
+      await router.invalidate()
+      toast.success(`Deleted ${n} character${n === 1 ? '' : 's'}`)
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -382,43 +432,98 @@ function ProjectCharactersPage() {
       {characters.length === 0 ? (
         <p className="text-muted-foreground">No characters yet — create the first one above.</p>
       ) : (
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {characters.map((character) => (
-            <li
-              key={character.id}
-              className="group relative overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary"
-            >
-              <Link
-                to="/projects/$projectId/characters/$characterId"
-                params={{ projectId, characterId: character.id }}
-                className="flex items-center gap-4 p-4"
-              >
-                <Portrait
-                  image={character.image}
-                  name={character.name}
-                  className="aspect-[3/4] w-16 shrink-0 rounded-md"
-                  fallbackClassName="text-2xl"
+        <>
+          {sel.selecting && (
+            <SelectionBar
+              count={sel.count}
+              total={visible.length}
+              noun="character"
+              onSelectAll={() => sel.selectAll(visible.map((c) => c.id))}
+              onClear={sel.clear}
+              onDelete={() => setConfirmOpen(true)}
+              busy={deleting}
+            />
+          )}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              {visible.length === characters.length
+                ? `${characters.length} character${characters.length === 1 ? '' : 's'}`
+                : `${visible.length} of ${characters.length}`}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {genesisValues.length > 1 && (
+                <FilterSelect
+                  label="Genesis"
+                  value={genesisFilter}
+                  options={genesisValues}
+                  onChange={setGenesisFilter}
                 />
-                <div>
-                  <div className="font-semibold">{character.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-                    {countPoses(character.sections)} custom frames
-                  </div>
-                </div>
-              </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100"
-                title="Delete character"
-                onClick={() => onDelete(character.id, character.name)}
-              >
-                <Trash2 className="text-destructive" />
-              </Button>
-            </li>
-          ))}
-        </ul>
+              )}
+              {genderValues.length > 1 && (
+                <FilterSelect
+                  label="genders"
+                  value={genderFilter}
+                  options={genderValues}
+                  onChange={setGenderFilter}
+                  renderOption={(g) => g.charAt(0).toUpperCase() + g.slice(1)}
+                />
+              )}
+              <SortSelect value={sort} onChange={setSort} />
+              <ViewToggle value={view} onChange={setView} />
+            </div>
+          </div>
+          {visible.length === 0 ? (
+            <p className="text-muted-foreground">No characters match the current filters.</p>
+          ) : (
+            <ul
+              className={
+                view === 'grid'
+                  ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+                  : 'space-y-3'
+              }
+            >
+              {visible.map((character) => (
+                <li
+                  key={character.id}
+                  className="group relative overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary"
+                >
+                  <Link
+                    to="/projects/$projectId/characters/$characterId"
+                    params={{ projectId, characterId: character.id }}
+                    onClick={(e) => {
+                      // In selection mode a click toggles instead of navigating.
+                      if (sel.selecting) {
+                        e.preventDefault()
+                        sel.toggle(character.id)
+                      }
+                    }}
+                    className="flex items-center gap-4 p-4 pr-12"
+                  >
+                    <Portrait
+                      image={character.image}
+                      name={character.name}
+                      className="aspect-[3/4] w-16 shrink-0 rounded-md"
+                      fallbackClassName="text-2xl"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{character.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
+                        {countPoses(character.sections)} custom frames
+                      </div>
+                    </div>
+                  </Link>
+                  <SelectCheckbox
+                    checked={sel.isSelected(character.id)}
+                    selecting={sel.selecting}
+                    onChange={() => sel.toggle(character.id)}
+                    className="absolute top-3 right-3"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       {copyPrompt && (
@@ -438,6 +543,20 @@ function ProjectCharactersPage() {
           onCopy={() => void doCreate(true)}
           onLink={() => void doCreate(false)}
           onClose={() => setCopyPrompt(false)}
+        />
+      )}
+
+      {confirmOpen && (
+        <BulkDeleteDialog
+          noun="character"
+          names={selectedChars.map((c) => c.name)}
+          showKeepFiles
+          dazSubdirLabel={settings.dazSubdir}
+          houdiniSubdirLabel={settings.houdiniSubdir}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={onBulkDelete}
+          onClose={() => setConfirmOpen(false)}
         />
       )}
     </main>
