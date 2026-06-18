@@ -165,7 +165,11 @@ export function buildFbmData(character: Character) {
   return {
     meta: {
       version: '1.0',
-      resetGPBeforeApplying: character.resetGPBeforeApplying,
+      // The single generic flag drives both per-block reset flags the DTH
+      // runtime understands; the runtime only acts on whichever genital ROM's
+      // art-direction data is actually present (GP for female, DK for male).
+      resetGPBeforeApplying: character.resetGenBeforeApplying,
+      resetDKBeforeApplying: character.resetGenBeforeApplying,
       description: `${character.name} Full Body Morphs - relative frame offsets from ROM start`,
     },
     frames: flat.map((frame) => ({

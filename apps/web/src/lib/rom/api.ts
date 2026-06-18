@@ -135,7 +135,7 @@ function romFields(src: Record<string, unknown>): Record<string, unknown> {
     targetSkeleton: src.targetSkeleton,
     facsDetailStrength: src.facsDetailStrength,
     flexionStrength: src.flexionStrength,
-    resetGPBeforeApplying: src.resetGPBeforeApplying,
+    resetGenBeforeApplying: src.resetGenBeforeApplying,
     preserveMorphs: src.preserveMorphs,
     preserveNodeTransforms: src.preserveNodeTransforms,
     jcmMorphMods: src.jcmMorphMods,
@@ -351,7 +351,12 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
 
 /** Shape of an existing DazToHue-Scripts FBM file (e.g. ElectraG9_FBMs.json). */
 const fbmJsonSchema = z.object({
-  meta: z.object({ resetGPBeforeApplying: z.boolean().optional() }).optional(),
+  meta: z
+    .object({
+      resetGPBeforeApplying: z.boolean().optional(),
+      resetDKBeforeApplying: z.boolean().optional(),
+    })
+    .optional(),
   frames: z.array(
     z.object({
       frame: z.number(),
@@ -385,8 +390,10 @@ export async function importCharacterFromJson({ data }: { data: unknown }): Prom
     updatedAt: now,
     sections: sectionsFromFlatFrames([...raw.frames].sort((a, b) => a.frame - b.frame)),
   })
-  if (raw.meta?.resetGPBeforeApplying !== undefined) {
-    character.resetGPBeforeApplying = raw.meta.resetGPBeforeApplying
+  // Map either per-block reset flag from the imported FBM JSON onto the generic field.
+  const importedReset = raw.meta?.resetGPBeforeApplying ?? raw.meta?.resetDKBeforeApplying
+  if (importedReset !== undefined) {
+    character.resetGenBeforeApplying = importedReset
   }
   return storage.saveCharacter(await projectPath(input.projectId), character)
 }
