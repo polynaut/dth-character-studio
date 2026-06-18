@@ -573,7 +573,7 @@ describe.skipIf(!existsSync(ELECTRA))('round-trip with the real ElectraG9_FBMs.j
     sections.GEN.enabled = true // Electra uses the Golden Palace ROM
     const character = makeCharacter({
       sections,
-      resetGPBeforeApplying: original.meta.resetGPBeforeApplying,
+      resetGenBeforeApplying: original.meta.resetGPBeforeApplying,
     })
     const regenerated = JSON.parse(toDazFbmJson(character).content)
     expect(regenerated.frames).toEqual(original.frames)

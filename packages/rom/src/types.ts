@@ -368,7 +368,9 @@ export const characterSchema = z.object({
   /** G9 detail strengths set at frame 0 (DthWorkflow.dsa applies them when > 0). */
   facsDetailStrength: z.number().default(1),
   flexionStrength: z.number().default(1),
-  resetGPBeforeApplying: z.boolean().default(true),
+  /** Zero the active genital ROM's morphs (Golden Palace or Dicktator) at the
+   *  first custom frame, so they don't leak into the full-body/custom poses. */
+  resetGenBeforeApplying: z.boolean().default(true),
   /** Morph values restored after ROM loading (e.g. breast position). */
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */

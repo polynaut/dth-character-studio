@@ -2,7 +2,7 @@
   "targetSkeleton": "UE5",
   "facsDetailStrength": 1,
   "flexionStrength": 1,
-  "resetGPBeforeApplying": true,
+  "resetGenBeforeApplying": true,
   "preserveMorphs": [
     {
       "name": "body_ctrl_BreastsUp-Down",
