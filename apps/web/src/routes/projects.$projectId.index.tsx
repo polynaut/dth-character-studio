@@ -453,23 +453,19 @@ function ProjectCharactersPage() {
                 : `${visible.length} of ${characters.length}`}
             </span>
             <div className="flex flex-wrap items-center gap-2">
-              {genesisValues.length > 1 && (
-                <FilterSelect
-                  label="Genesis"
-                  value={genesisFilter}
-                  options={genesisValues}
-                  onChange={setGenesisFilter}
-                />
-              )}
-              {genderValues.length > 1 && (
-                <FilterSelect
-                  label="genders"
-                  value={genderFilter}
-                  options={genderValues}
-                  onChange={setGenderFilter}
-                  renderOption={(g) => g.charAt(0).toUpperCase() + g.slice(1)}
-                />
-              )}
+              <FilterSelect
+                label="Genesis"
+                value={genesisFilter}
+                options={genesisValues}
+                onChange={setGenesisFilter}
+              />
+              <FilterSelect
+                label="genders"
+                value={genderFilter}
+                options={genderValues}
+                onChange={setGenderFilter}
+                renderOption={(g) => g.charAt(0).toUpperCase() + g.slice(1)}
+              />
               <SortSelect value={sort} onChange={setSort} />
               <ViewToggle value={view} onChange={setView} />
             </div>
