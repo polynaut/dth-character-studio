@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   FolderInput,
+  FolderOpen,
   Link2,
   Pencil,
   Plus,
@@ -32,6 +33,7 @@ import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import {
   Select,
   SelectContent,
@@ -1096,11 +1098,13 @@ function HoudiniProjectsField({
       label="Drop Houdini project(s) to link"
       className="rounded-lg"
     >
-      <Label className="mb-1 block">Houdini projects</Label>
-      <p className="mb-2 text-xs text-muted-foreground">
-        Linked in place (not copied) — a Houdini project keeps absolute import paths
-        that a copy would break. Drag <code>.hip</code> files here or use the button.
-      </p>
+      <Label className="mb-2 flex w-fit items-center gap-1">
+        Houdini projects
+        <InfoPopup label="Houdini projects — more information">
+          Linked in place (not copied) — a Houdini project keeps absolute import paths that a
+          copy would break. Drag <code>.hip</code> files here or use the button.
+        </InfoPopup>
+      </Label>
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
           {projects.map((hip, i) => (
@@ -1312,6 +1316,22 @@ function CharacterPage() {
   const [deleteError, setDeleteError] = useState('')
 
   const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
+
+  // Warn if the export directory sits inside the project library — the exporter
+  // makes its own <characterName> subfolder, so it should be a separate place.
+  const exportInsideProject = (() => {
+    const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+    return Boolean(
+      character.exportPath &&
+        location &&
+        norm(character.exportPath).startsWith(norm(location.libraryFolder) + '/'),
+    )
+  })()
+
+  async function onPickExportDir() {
+    const picked = await pickFolder('Choose the export directory for the DTH Exporter')
+    if (picked) patch({ exportPath: picked })
+  }
 
   async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
     setCloning(true)
@@ -1546,6 +1566,44 @@ function CharacterPage() {
         )}
       </section>
 
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
+          Export directory
+          <InfoPopup label="Export directory — more information">
+            Set an export directory and the generated Daz script runs the DTH Exporter Plugin
+            (v1.8.1+) automatically after building the ROM — exporting{' '}
+            {character.exportPath ? (
+              <>
+                into a <code>{character.name}</code> subfolder it creates there
+              </>
+            ) : (
+              'straight into the DTH pipeline'
+            )}
+            . Leave empty to skip auto-export. Reference frames are taken from the ROM's
+            reference-skeleton poses.
+          </InfoPopup>
+        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={onPickExportDir}>
+            <FolderOpen /> {character.exportPath ? 'Change…' : 'Choose folder…'}
+          </Button>
+          {character.exportPath && (
+            <>
+              <PathCode path={displayPath(character.exportPath)} />
+              <Button variant="ghost" size="sm" onClick={() => patch({ exportPath: '' })}>
+                <X /> Clear
+              </Button>
+            </>
+          )}
+        </div>
+        {exportInsideProject && (
+          <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+            This folder is inside the project — pick one outside it, since the exporter creates its
+            own character subfolder.
+          </p>
+        )}
+      </section>
+
       <details className="mb-8 rounded-lg border bg-card">
         <summary className="cursor-pointer px-5 py-3 font-medium select-none">
           Advanced options
@@ -1557,23 +1615,31 @@ function CharacterPage() {
             location={location}
             onMoved={onCharacterMoved}
           />
-          <div>
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={character.resetGenBeforeApplying}
-                onCheckedChange={(resetGenBeforeApplying) => patch({ resetGenBeforeApplying })}
-              />
-              <span className="text-sm">Reset genitalia morphs before extra frames</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Zeroes the active genital ROM (Golden Palace or Dicktator) at the first custom frame,
-              so its morphs don't leak into your full-body and custom poses.
-            </p>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={character.resetGenBeforeApplying}
+              onCheckedChange={(resetGenBeforeApplying) => patch({ resetGenBeforeApplying })}
+            />
+            <span className="flex items-center gap-1 text-sm">
+              Reset genitalia morphs before extra frames
+              <InfoPopup label="Reset genitalia morphs before extra frames — more information">
+                Zeroes the active genital ROM (Golden Palace or Dicktator) at the first custom
+                frame, so its morphs don't leak into your full-body and custom poses.
+              </InfoPopup>
+            </span>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
-              <Label className="mb-2 block">Preserve morphs after ROM loading</Label>
+              <Label className="mb-2 flex w-fit items-center gap-1">
+                Preserve morphs after ROM loading
+                <InfoPopup label="Preserve morphs after ROM loading — more information">
+                  Morphs listed here are restored to the value you set after the DTH ROM loads —
+                  which otherwise zeroes them. Use it for body-shaping controls (e.g. breast or
+                  muscle morphs) you want to keep across the ROM. Enter the morph's property name
+                  and its hold value.
+                </InfoPopup>
+              </Label>
               {character.preserveMorphs.map((morph, i) => (
                 <div key={i} className="mb-2 flex items-center gap-2">
                   <Input
@@ -1611,7 +1677,7 @@ function CharacterPage() {
                 </div>
               ))}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() =>
                   patch({ preserveMorphs: [...character.preserveMorphs, { name: '', keepValue: 1 }] })
@@ -1621,7 +1687,14 @@ function CharacterPage() {
               </Button>
             </div>
             <div>
-              <Label className="mb-2 block">Preserve node transforms (e.g. eyes)</Label>
+              <Label className="mb-2 flex w-fit items-center gap-1">
+                Preserve node transforms (e.g. eyes)
+                <InfoPopup label="Preserve node transforms — more information">
+                  A node's transform is memorized before the ROM loads and restored afterwards, so
+                  posed nodes (e.g. eyes) keep their orientation instead of being reset. Enter the
+                  node's label as it appears in Daz.
+                </InfoPopup>
+              </Label>
               {character.preserveNodeTransforms.map((transform, i) => (
                 <div key={i} className="mb-2 flex items-center gap-2">
                   <Input
@@ -1652,7 +1725,7 @@ function CharacterPage() {
                 </div>
               ))}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() =>
                   patch({
@@ -1676,13 +1749,15 @@ function CharacterPage() {
       </details>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-xl font-semibold">ROM</h2>
-        <p className="mb-3 text-sm text-muted-foreground">
-          The eight pose asset categories in their canonical order. Pre-defined sections load the
-          DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
-          section, group and pose order — the generated Daz script and PoseAsset CSV share them
-          automatically.
-        </p>
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+          ROM
+          <InfoPopup label="ROM — more information">
+            The eight pose asset categories in their canonical order. Pre-defined sections load
+            the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
+            section, group and pose order — the generated Daz script and PoseAsset CSV share them
+            automatically.
+          </InfoPopup>
+        </h2>
         <RomSections
           sections={character.sections}
           genesis={character.genesis}
@@ -1775,7 +1850,7 @@ function CharacterPage() {
       </section>
 
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
-        <h2 className="mb-1 text-xl font-semibold">Special operations</h2>
+        <h2 className="mb-1 text-xl font-semibold">Operations</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Duplicate this character into a new copy, or delete it from the project.
         </p>

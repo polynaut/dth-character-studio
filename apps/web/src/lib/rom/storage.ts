@@ -29,6 +29,14 @@ import {
   normalizeRelFolder,
   normalizeRelPath,
 } from './library'
+// The DTH runtime (DazToHue-Scripts) is bundled into the app so the studio is
+// self-contained — no external checkout to configure. copyRuntimeFiles installs
+// these (rewritten + dot-prefixed). Keep them in sync with the DazToHue-Scripts
+// source; a future runtime-version constant will flag when a studio update needs
+// to refresh them.
+import dthUtilsRuntime from './runtime/DthUtils.dsa?raw'
+import dthOptionsRuntime from './runtime/DthOptions.dsa?raw'
+import dthWorkflowRuntime from './runtime/DthWorkflow.dsa?raw'
 
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
@@ -576,7 +584,12 @@ export async function removeFilesFromFolder(
  * DthWorkflow.dsa pulls in the other two (ScanKeyFrames is now merged into it),
  * so all three must sit together.
  */
-const RUNTIME_FILES = ['DthUtils.dsa', 'DthOptions.dsa', 'DthWorkflow.dsa']
+/** The bundled DTH runtime files (name → raw source), installed by copyRuntimeFiles. */
+const RUNTIME_FILES: Record<string, string> = {
+  'DthUtils.dsa': dthUtilsRuntime,
+  'DthOptions.dsa': dthOptionsRuntime,
+  'DthWorkflow.dsa': dthWorkflowRuntime,
+}
 
 /** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install root,
  *  holding the DTH runtime files (installed once) at its top level. */
@@ -602,37 +615,31 @@ export function studioCharScriptsDir(
 }
 
 /**
- * Install the DTH runtime files (from the DazToHue-Scripts checkout) into
- * `destDir` (the DTH-Character-Studio root), creating it if missing. They're
- * written dot-prefixed (`.DthWorkflow.dsa` etc.) so they read as hidden, and the
- * sibling `include()` references inside them are rewritten so resolution still
- * works from a character script two levels deep — see the rewrite below.
- * Overwrites so the runtime stays in sync as the scripts evolve.
+ * Install the bundled DTH runtime files into `destDir` (the DTH-Character-Studio
+ * root), creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
+ * etc.) so they read as hidden, and the sibling `include()` references inside
+ * them are rewritten so resolution still works from a character script two levels
+ * deep — see the rewrite below. Overwrites so the runtime stays current with the
+ * app version.
  */
-export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
-  if (!srcDir) {
-    throw new Error('Set the DazToHue-Scripts folder to install the runtime')
-  }
-  if (!(await isDir(srcDir))) throw new Error(`DazToHue-Scripts folder not reachable: ${srcDir}`)
+export async function copyRuntimeFiles(destDir: string): Promise<void> {
   await mkdir(destDir, { recursive: true })
-  for (const name of RUNTIME_FILES) {
-    const src = join(srcDir, name)
-    if (!(await exists(src))) throw new Error(`Missing runtime file in DazToHue-Scripts: ${name}`)
-    let content = await readTextFile(src)
+  for (const [name, raw] of Object.entries(RUNTIME_FILES)) {
     // The runtime files include each other via `dir_self.filePath("Dep.dsa")`,
     // where dir_self comes from getScriptFileName() — which, inside an include(),
     // is the TOP-LEVEL character script at <root>/<project>/<character>/, two
     // levels below this runtime root. So rewrite each sibling reference to the
     // dot-prefixed name AND climb `../../` back to the root where it lives
     // (mirrors the character script's own `../../.DthWorkflow.dsa` include).
-    for (const dep of RUNTIME_FILES) {
+    let content = raw
+    for (const dep of Object.keys(RUNTIME_FILES)) {
       content = content.split(`"${dep}"`).join(`"../../.${dep}"`)
     }
     await writeTextFile(join(destDir, `.${name}`), content)
   }
   // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)
   // the studio installed before runtime files were dot-prefixed.
-  for (const legacy of [...RUNTIME_FILES, 'ScanKeyFrames.dsa']) {
+  for (const legacy of [...Object.keys(RUNTIME_FILES), 'ScanKeyFrames.dsa']) {
     const old = join(destDir, legacy)
     if (await exists(old)) await remove(old)
   }
@@ -645,8 +652,6 @@ export interface StudioSettings {
    * faster testing). Not yet otherwise wired.
    */
   dazLibraryFolder: string
-  /** DazToHue-Scripts checkout — generated Daz files are written here, next to DthWorkflow.dsa. */
-  dazScriptsFolder: string
   /**
    * A DTH release folder (contains `copyright.txt`), or a folder of versioned
    * releases (release folders and/or `.zip`s). Scanned for the pose catalog.
@@ -703,7 +708,6 @@ async function isDir(path: string): Promise<boolean> {
 function defaultSettings(): StudioSettings {
   return {
     dazLibraryFolder: '',
-    dazScriptsFolder: '',
     dthPosesFolder: '',
     currentDthVersion: '',
     dthExporterFolder: '',
@@ -723,8 +727,6 @@ export async function getSettings(): Promise<StudioSettings> {
     return {
       dazLibraryFolder:
         typeof raw.dazLibraryFolder === 'string' ? raw.dazLibraryFolder : defaults.dazLibraryFolder,
-      dazScriptsFolder:
-        typeof raw.dazScriptsFolder === 'string' ? raw.dazScriptsFolder : defaults.dazScriptsFolder,
       dthPosesFolder:
         typeof raw.dthPosesFolder === 'string' && raw.dthPosesFolder
           ? raw.dthPosesFolder
