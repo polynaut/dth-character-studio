@@ -603,10 +603,11 @@ export function studioCharScriptsDir(
 
 /**
  * Install the DTH runtime files (from the DazToHue-Scripts checkout) into
- * `destDir`, creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
- * etc.) so they read as hidden, and the sibling `include()` references inside
- * them are rewritten to the dotted names so resolution still works. Overwrites
- * so the runtime stays in sync as the scripts evolve.
+ * `destDir` (the DTH-Character-Studio root), creating it if missing. They're
+ * written dot-prefixed (`.DthWorkflow.dsa` etc.) so they read as hidden, and the
+ * sibling `include()` references inside them are rewritten so resolution still
+ * works from a character script two levels deep — see the rewrite below.
+ * Overwrites so the runtime stays in sync as the scripts evolve.
  */
 export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
   if (!srcDir) {
@@ -618,8 +619,14 @@ export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise
     const src = join(srcDir, name)
     if (!(await exists(src))) throw new Error(`Missing runtime file in DazToHue-Scripts: ${name}`)
     let content = await readTextFile(src)
+    // The runtime files include each other via `dir_self.filePath("Dep.dsa")`,
+    // where dir_self comes from getScriptFileName() — which, inside an include(),
+    // is the TOP-LEVEL character script at <root>/<project>/<character>/, two
+    // levels below this runtime root. So rewrite each sibling reference to the
+    // dot-prefixed name AND climb `../../` back to the root where it lives
+    // (mirrors the character script's own `../../.DthWorkflow.dsa` include).
     for (const dep of RUNTIME_FILES) {
-      content = content.split(`"${dep}"`).join(`".${dep}"`)
+      content = content.split(`"${dep}"`).join(`"../../.${dep}"`)
     }
     await writeTextFile(join(destDir, `.${name}`), content)
   }
