@@ -13,6 +13,7 @@ import { appLocalDataDir } from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 
 import {
+  CHARACTER_SCHEMA_VERSION,
   ROM_SECTIONS,
   characterSchema,
   defaultSections,
@@ -184,6 +185,9 @@ function parseCharacter(raw: unknown): Character {
   // Normalise avatar refs to the portable canonical form (filename or external
   // URL) — drops machine-specific asset/convertFileSrc URLs persisted earlier.
   data.image = canonicalImage(data.image)
+  // Future migration framework: branch on `data.schemaVersion` (absent → 1) to
+  // upgrade older shapes to CHARACTER_SCHEMA_VERSION before the parse below. The
+  // shape fix-ups above are the implicit "pre-versioning → v1" migration.
   return characterSchema.parse(data)
 }
 
@@ -283,6 +287,7 @@ export async function saveCharacter(lib: string, character: Character): Promise<
     ...character,
     updatedAt: new Date().toISOString(),
     studioVersion: await studioVersion(),
+    schemaVersion: CHARACTER_SCHEMA_VERSION,
   }
   const existing = await findEntry(lib, character.id)
 
@@ -332,6 +337,7 @@ export async function createCharacterAt(
     ...character,
     updatedAt: new Date().toISOString(),
     studioVersion: await studioVersion(),
+    schemaVersion: CHARACTER_SCHEMA_VERSION,
   }
   const fileName = definitionFileName(character.name)
   const clean = normalizeRelFolder(relFolder)
