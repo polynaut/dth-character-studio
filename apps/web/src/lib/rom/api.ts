@@ -368,18 +368,73 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   await storage.deleteCharacter(await projectPath(projectId), id, { keepFolders })
 }
 
+const cloneInput = charScopeInput.extend({
+  /** Name for the copy (the dialog pre-fills "<name> copy"). */
+  name: z.string().min(1),
+  /** Bring the character's Daz scenes across: local ones (inside the source
+   *  folder) are copied into the copy's folder; linked ones are kept as links. */
+  copyScenes: z.boolean().optional(),
+})
+
+/** Is `p` located inside `folderAbs` (separator/case-insensitive)? */
+function pathInside(folderAbs: string, p: string): boolean {
+  const norm = (s: string) => s.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  return norm(p).startsWith(norm(folderAbs) + '/')
+}
+
+/** Subfolder of `p`'s parent relative to `folderAbs` ('' = directly in it). */
+function relSubfolder(folderAbs: string, p: string): string {
+  const norm = (s: string) => s.replace(/\\/g, '/').replace(/\/+$/, '')
+  const rel = norm(p).slice(norm(folderAbs).length + 1) // "<sub>/Name.duf"
+  const slash = rel.lastIndexOf('/')
+  return slash >= 0 ? rel.slice(0, slash) : ''
+}
+
 /**
- * Duplicate a character within its project: copies the ROM definition under a
- * fresh id + unique name, clones the avatar image, and generates its initial
- * artifacts so the copy is immediately complete. Returns the new character.
+ * Duplicate a character within its project: copies the ROM definition under the
+ * given name, clones the avatar, optionally brings its Daz scenes across (local
+ * scenes copied into the copy's folder, linked scenes kept as references), and
+ * generates the copy's initial artifacts. Returns the new character.
  */
 export async function cloneCharacter({ data }: { data: unknown }): Promise<Character> {
-  const { projectId, id } = charScopeInput.parse(data)
+  const { projectId, id, name, copyScenes } = cloneInput.parse(data)
   const project = await resolveProject(projectId)
   const lib = project.path
   const source = await storage.getCharacter(lib, id)
   if (!source) throw new Error(`Character ${id} not found`)
-  let clone = await storage.cloneCharacter(project, id)
+  const sourceLoc = await storage.getCharacterPath(lib, id)
+  let clone = await storage.cloneCharacter(project, id, name)
+
+  // Bring the Daz scenes across when asked: a scene inside the source folder is
+  // a local copy → copy its files into the clone's folder at the same relative
+  // subpath; a scene linked in place → keep the link (never touch the file).
+  if (copyScenes && sourceLoc) {
+    const sourceScenes = [source.scenePath, ...source.extraScenes].filter(Boolean)
+    const resolved: Array<string> = []
+    for (const scene of sourceScenes) {
+      if (pathInside(sourceLoc.folderAbs, scene)) {
+        resolved.push(
+          await copyDazScene({
+            data: {
+              projectId,
+              characterId: clone.id,
+              scenePath: scene,
+              subfolder: relSubfolder(sourceLoc.folderAbs, scene),
+              deleteOriginal: false,
+            },
+          }),
+        )
+      } else {
+        resolved.push(scene)
+      }
+    }
+    clone = await storage.saveCharacter(project, {
+      ...clone,
+      scenePath: resolved[0] ?? '',
+      extraScenes: resolved.slice(1),
+    })
+  }
+
   // Duplicate the avatar so the copy is visually identifiable right away (only
   // for locally-stored images; external URLs already carry through unchanged).
   if (source.image && !isExternalImage(source.image)) {

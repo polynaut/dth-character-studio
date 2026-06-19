@@ -407,30 +407,34 @@ export async function deleteCharacter(
 
 /**
  * Duplicate a character within the same library: a fresh id + a unique name
- * ("<name> copy"), a new folder, and a copy of the definition. Provenance that
- * points into the source folder (extra scenes / Houdini projects) is dropped —
- * those files aren't copied — but the primary `scenePath` is kept as a reference.
- * Returns the new character; the caller copies the avatar + regenerates files.
+ * a new folder, and a copy of the ROM definition under the given `name`. ALL
+ * asset references (primary + extra Daz scenes, Houdini projects) are cleared
+ * here — the caller decides which to bring across (copying local Daz scenes,
+ * keeping linked ones). Returns the new character; the caller copies the avatar,
+ * links/copies scenes, and regenerates files.
  */
-export async function cloneCharacter(project: Project, id: string): Promise<Character> {
+export async function cloneCharacter(
+  project: Project,
+  id: string,
+  name: string,
+): Promise<Character> {
   const lib = project.path
   if (!lib) throw new Error('No project library configured.')
   const source = await getCharacter(lib, id)
   if (!source) throw new Error(`Character ${id} not found`)
-  const existingNames = new Set((await listCharacters(lib)).map((c) => c.name.toLowerCase()))
-  let name = `${source.name} copy`
-  for (let i = 2; existingNames.has(name.toLowerCase()); i++) name = `${source.name} copy ${i}`
+  const cloneName = name.trim() || `${source.name} copy`
   const now = new Date().toISOString()
   const clone: Character = {
     ...source,
     id: newId(),
-    name,
+    name: cloneName,
+    scenePath: '',
     extraScenes: [],
     houdiniProjects: [],
     createdAt: now,
     updatedAt: now,
   }
-  return createCharacterAt(project, clone, name)
+  return createCharacterAt(project, clone, cloneName)
 }
 
 /** Absolute path to a character's folder (created if missing) — Generate's target. */
