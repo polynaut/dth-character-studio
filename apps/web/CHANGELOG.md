@@ -1,5 +1,43 @@
 # @dth/web
 
+## 0.17.0
+
+### Minor Changes
+
+- [#53](https://github.com/polynaut/dth-character-studio/pull/53) [`c080d34`](https://github.com/polynaut/dth-character-studio/commit/c080d3408c4fbfab2fce0afc03d1efb68e3b41d0) Thanks [@polynaut](https://github.com/polynaut)! - Deleting a project can now remove its files from disk. The project delete
+  confirm has a **"Keep project files on disk"** toggle — **off by default**, so
+  deleting a project now also deletes its library folder (all character data) and
+  its generated-scripts subfolder. Turn the toggle on to remove only the project
+  entry and leave every file in place (the previous behaviour). (The shared delete
+  dialog was generalised; the character delete keeps its "Keep the Daz files
+  folder" toggle, also off by default.)
+
+- [#53](https://github.com/polynaut/dth-character-studio/pull/53) [`c080d34`](https://github.com/polynaut/dth-character-studio/commit/c080d3408c4fbfab2fce0afc03d1efb68e3b41d0) Thanks [@polynaut](https://github.com/polynaut)! - The "Create project" pane now accepts a **dragged-in folder** — drop a folder
+  onto the pane to set it as the project's location (the name is suggested from the
+  folder, editable), the same way the choose-folder button works. Dropping a file
+  uses its containing folder. `FileDropZone` gained an `acceptFolders` mode, since
+  folders can't be matched by file extension.
+
+### Patch Changes
+
+- [#53](https://github.com/polynaut/dth-character-studio/pull/53) [`c080d34`](https://github.com/polynaut/dth-character-studio/commit/c080d3408c4fbfab2fce0afc03d1efb68e3b41d0) Thanks [@polynaut](https://github.com/polynaut)! - Deleting a character or project now also removes its generated Daz script folder
+  from the library (`…/Scripts/DTH-Character-Studio/<project>/<character>/` for a
+  character, the whole `…/<project>/` folder for a project). These are derived
+  artifacts that were previously orphaned on delete. The script cleanup runs
+  regardless of the "keep files" toggles, since the scripts are always
+  regenerated from the character definitions.
+
+- [#53](https://github.com/polynaut/dth-character-studio/pull/53) [`c080d34`](https://github.com/polynaut/dth-character-studio/commit/c080d3408c4fbfab2fce0afc03d1efb68e3b41d0) Thanks [@polynaut](https://github.com/polynaut)! - Fix the generated Daz script failing with "ReferenceError: options is not
+  defined". Since generated scripts moved into per-character subfolders, the DTH
+  runtime's internal `include()`s (DthWorkflow → DthUtils / DthOptions) still
+  resolved relative to the character folder instead of the runtime root, so
+  DthOptions never loaded. Those includes are now rewritten to climb two levels to
+  the root (matching the character script's own `../../.DthWorkflow.dsa` include).
+  Re-generate (save a character, or Settings → Refresh Assets) to update the
+  installed runtime.
+- Updated dependencies []:
+  - @dth/rom@0.17.0
+
 ## 0.16.0
 
 ### Minor Changes
