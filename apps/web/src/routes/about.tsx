@@ -50,7 +50,7 @@ function AboutPage() {
               e.preventDefault()
               void openExternal(GITHUB_URL)
             }}
-            className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-2 hover:text-muted-foreground"
+            className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
           >
             GitHub <ExternalLink className="size-3.5" />
           </a>

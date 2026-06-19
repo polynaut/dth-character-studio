@@ -174,14 +174,23 @@ function ProjectsPage() {
 
   return (
     <main className="p-8">
+      {/* Reserve the height of a project's "← All projects" nav row (text-sm +
+          mb-6) so entering/leaving a project doesn't shift the layout. */}
+      <div className="mb-6 h-5" aria-hidden />
+
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
+          {/* Reserve the height of a project's path-chip subtitle (text-xs chip,
+              mt-1) — kept empty here since the projects list has no path. */}
+          <div className="mt-1 h-5" aria-hidden />
         </div>
         <div className="flex shrink-0 items-center gap-4">
           <Link
             to="/about"
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            // `!` overrides the global unlayered `a { color: primary }` rule
+            // (styles.css) so this reads as a muted link, not an orange one.
+            className="text-sm text-muted-foreground! underline-offset-4 hover:text-foreground! hover:underline"
           >
             About
           </Link>
