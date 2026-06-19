@@ -73,11 +73,13 @@ function FolderField({
   /** Optional rich text shown in an "i" info popup next to the label. */
   info?: ReactNode
 }) {
+  // Prefer the richer `info` text in the popup, falling back to `help`.
+  const popup = info ?? help
   return (
     <div>
       <Label className="mb-1 flex w-fit items-center gap-1">
         {label}
-        {info ? <InfoPopup label={`${label} — more information`}>{info}</InfoPopup> : null}
+        {popup ? <InfoPopup label={`${label} — more information`}>{popup}</InfoPopup> : null}
       </Label>
       <div className="flex gap-2">
         <Input
@@ -97,7 +99,6 @@ function FolderField({
           <FolderOpen /> Browse
         </Button>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">{help}</p>
     </div>
   )
 }
@@ -764,27 +765,31 @@ function SettingsPage() {
 
         <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
           <div className="max-w-[20rem]">
-            <Label className="mb-1">Default Daz scenes subfolder</Label>
+            <Label className="mb-1 flex w-fit items-center gap-1">
+              Default Daz scenes subfolder
+              <InfoPopup label="Default Daz scenes subfolder — more information">
+                Pre-fills the subfolder when copying a Daz scene into a character.
+              </InfoPopup>
+            </Label>
             <Input
               value={settings.dazSubdir}
               placeholder="daz3d"
               onChange={(e) => setSettings((s) => ({ ...s, dazSubdir: e.target.value }))}
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pre-fills the subfolder when copying a Daz scene into a character.
-            </p>
           </div>
           <div className="max-w-[20rem]">
-            <Label className="mb-1">Default Houdini projects subfolder</Label>
+            <Label className="mb-1 flex w-fit items-center gap-1">
+              Default Houdini projects subfolder
+              <InfoPopup label="Default Houdini projects subfolder — more information">
+                Seeded empty in each new character so you can drop its Houdini project there.
+              </InfoPopup>
+            </Label>
             <Input
               value={settings.houdiniSubdir}
               placeholder="houdini"
               disabled={!settings.createHoudiniSubdir}
               onChange={(e) => setSettings((s) => ({ ...s, houdiniSubdir: e.target.value }))}
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Seeded empty in each new character so you can drop its Houdini project there.
-            </p>
           </div>
           <div className="flex items-center gap-3">
             <Switch
@@ -796,19 +801,23 @@ function SettingsPage() {
             <span className="text-sm">Create Houdini project subfolder in new characters</span>
           </div>
           <div className="border-t pt-5">
-            <h2 className="mb-1 font-semibold">Refresh assets</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Re-generate the Daz scripts and PoseAsset CSVs for every character in every project —
-              run this after updating the studio or switching DTH release so all generated files
-              match the current version. Character definitions aren't changed.
-            </p>
+            <h2 className="mb-3 flex items-center gap-1 font-semibold">
+              Refresh assets
+              <InfoPopup label="Refresh assets — more information">
+                Re-generate the Daz scripts and PoseAsset CSVs for every character in every project —
+                run this after updating the studio or switching DTH release so all generated files
+                match the current version. Character definitions aren't changed.
+              </InfoPopup>
+            </h2>
             <RefreshAssetsSection />
           </div>
           <div className="border-t pt-5">
-            <h2 className="mb-1 font-semibold">App data folder</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Where the app keeps its settings, project list, pose catalog and avatar images.
-            </p>
+            <h2 className="mb-3 flex items-center gap-1 font-semibold">
+              App data folder
+              <InfoPopup label="App data folder — more information">
+                Where the app keeps its settings, project list, pose catalog and avatar images.
+              </InfoPopup>
+            </h2>
             {appDataFolder ? (
               <PathCode path={displayPath(appDataFolder)} />
             ) : (
@@ -816,11 +825,13 @@ function SettingsPage() {
             )}
           </div>
           <div className="border-t pt-5">
-            <h2 className="mb-1 font-semibold">Network drives</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
-              keeps working after relaunching as administrator.
-            </p>
+            <h2 className="mb-3 flex items-center gap-1 font-semibold">
+              Network drives
+              <InfoPopup label="Network drives — more information">
+                Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
+                keeps working after relaunching as administrator.
+              </InfoPopup>
+            </h2>
             <NetworkDrivesSection />
           </div>
         </TabsContent>

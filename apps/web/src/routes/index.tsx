@@ -177,10 +177,6 @@ function ProjectsPage() {
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="mt-1 text-muted-foreground">
-            Each game project keeps its own character library. Pick a project to manage its
-            characters.
-          </p>
         </div>
         <Link
           to="/settings"
@@ -213,9 +209,6 @@ function ProjectsPage() {
             <div className="space-y-4 rounded-lg border bg-card p-5">
             <div>
               <h2 className="text-lg font-semibold">Create project</h2>
-              <p className="text-sm text-muted-foreground">
-                Choose — or drag in — the project's folder location on disk.
-              </p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <Button
