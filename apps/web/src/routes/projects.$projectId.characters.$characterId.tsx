@@ -1631,7 +1631,15 @@ function CharacterPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
-              <Label className="mb-2 block">Preserve morphs after ROM loading</Label>
+              <Label className="mb-2 flex w-fit items-center gap-1">
+                Preserve morphs after ROM loading
+                <InfoPopup label="Preserve morphs after ROM loading — more information">
+                  Morphs listed here are restored to the value you set after the DTH ROM loads —
+                  which otherwise zeroes them. Use it for body-shaping controls (e.g. breast or
+                  muscle morphs) you want to keep across the ROM. Enter the morph's property name
+                  and its hold value.
+                </InfoPopup>
+              </Label>
               {character.preserveMorphs.map((morph, i) => (
                 <div key={i} className="mb-2 flex items-center gap-2">
                   <Input
@@ -1679,7 +1687,14 @@ function CharacterPage() {
               </Button>
             </div>
             <div>
-              <Label className="mb-2 block">Preserve node transforms (e.g. eyes)</Label>
+              <Label className="mb-2 flex w-fit items-center gap-1">
+                Preserve node transforms (e.g. eyes)
+                <InfoPopup label="Preserve node transforms — more information">
+                  A node's transform is memorized before the ROM loads and restored afterwards, so
+                  posed nodes (e.g. eyes) keep their orientation instead of being reset. Enter the
+                  node's label as it appears in Daz.
+                </InfoPopup>
+              </Label>
               {character.preserveNodeTransforms.map((transform, i) => (
                 <div key={i} className="mb-2 flex items-center gap-2">
                   <Input
