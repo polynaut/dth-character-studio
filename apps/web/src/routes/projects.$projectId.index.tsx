@@ -48,6 +48,7 @@ import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
+import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -315,8 +316,10 @@ function ProjectCharactersPage() {
         <div>
           <h2 className="text-lg font-semibold">Create character</h2>
           <p className="text-sm text-muted-foreground">
-            Create a character by choosing — or dragging in — its Daz scene file. Each character
-            has its own ROM definition and generated Daz files.
+            Create a character by choosing — or dragging in — its Daz scene file.{' '}
+            <InfoPopup label="Daz scene requirements">
+              It should not contain an existing animation — only the character itself.
+            </InfoPopup>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
