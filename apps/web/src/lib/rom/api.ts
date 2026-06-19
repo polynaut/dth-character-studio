@@ -111,7 +111,10 @@ export async function moveProject({ data }: { data: unknown }): Promise<storage.
 }
 
 export async function deleteProject({ data }: { data: unknown }): Promise<void> {
-  await storage.deleteProject(z.object({ id: z.string().min(1) }).parse(data).id)
+  const { id, deleteFiles } = z
+    .object({ id: z.string().min(1), deleteFiles: z.boolean().optional() })
+    .parse(data)
+  await storage.deleteProject(id, { deleteFiles })
 }
 
 // --- Characters (scoped to a project) -------------------------------------

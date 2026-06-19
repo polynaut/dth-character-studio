@@ -845,8 +845,34 @@ export async function updateProject(
   return projects[idx]
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await writeProjects((await readProjects()).filter((p) => p.id !== id))
+/**
+ * Remove a project. By default only its list entry is removed (files on disk are
+ * kept). With `deleteFiles`, the project's library folder (all character data)
+ * and its generated-scripts subfolder are deleted too. The folder is removed
+ * before the record so a failure leaves the project visible to retry.
+ */
+export async function deleteProject(
+  id: string,
+  opts: { deleteFiles?: boolean } = {},
+): Promise<void> {
+  const projects = await readProjects()
+  const project = projects.find((p) => p.id === id)
+  if (opts.deleteFiles && project) {
+    const folder = join(project.path)
+    if (await exists(folder)) await remove(folder, { recursive: true })
+    // Generated scripts live in the shared DTH-Character-Studio root, keyed by
+    // project name — derived data, so best-effort (never fail the delete on it).
+    const { dazLibraryFolder } = await getSettings()
+    if (dazLibraryFolder) {
+      const scripts = join(studioScriptsDir(dazLibraryFolder), characterFolderName(project.name))
+      try {
+        if (await exists(scripts)) await remove(scripts, { recursive: true })
+      } catch {
+        // leave orphaned generated scripts rather than failing the delete
+      }
+    }
+  }
+  await writeProjects(projects.filter((p) => p.id !== id))
 }
 
 /**

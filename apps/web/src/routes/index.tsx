@@ -140,18 +140,18 @@ function ProjectsPage() {
     }
   }
 
-  async function onBulkDelete() {
+  async function onBulkDelete({ keep }: { keep: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
       for (const project of selectedProjects) {
-        await deleteProject({ data: { id: project.id } })
+        await deleteProject({ data: { id: project.id, deleteFiles: !keep } })
       }
       const n = selectedProjects.length
       sel.clear()
       setConfirmOpen(false)
       await router.invalidate()
-      toast.success(`Removed ${n} project${n === 1 ? '' : 's'}`)
+      toast.success(`Deleted ${n} project${n === 1 ? '' : 's'}`)
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -369,6 +369,9 @@ function ProjectsPage() {
         <BulkDeleteDialog
           noun="project"
           names={selectedProjects.map((p) => p.name)}
+          message="This permanently deletes the project folder and all character data inside it. This cannot be undone."
+          keepLabel="Keep project files on disk"
+          keepNote="When on, only the project entry is removed — your files are left untouched."
           busy={deleting}
           error={deleteError}
           onConfirm={onBulkDelete}
