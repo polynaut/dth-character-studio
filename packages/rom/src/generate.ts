@@ -581,9 +581,9 @@ export function characterScriptName(character: Character): string {
   return `${characterSlug(character)}_${character.genesis}`
 }
 
-/** File name for the Houdini PoseAsset CSV: `<Name>_PoseAsset.csv`. */
+/** File name for the Houdini PoseAsset CSV: `<Name>_pose_asset.csv` (DTH naming). */
 export function poseAssetFileName(character: Character): string {
-  return `${characterSlug(character)}_PoseAsset.csv`
+  return `${characterSlug(character)}_pose_asset.csv`
 }
 
 /**

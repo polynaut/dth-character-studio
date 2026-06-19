@@ -960,6 +960,10 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       await storage.removeFilesFromFolder(outDir, [oldPose])
     }
   }
+  // Drop the legacy-cased CSV (<name>_PoseAsset.csv) left by older versions —
+  // the file is now <name>_pose_asset.csv.
+  const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
+  await storage.removeFilesFromFolder(outDir, [legacyPose])
 
   // When an export directory is set, also drop the PoseAsset CSV there so it sits
   // alongside the exporter's output (Kira.fbx / .abc / .dth / …) — everything for
@@ -972,6 +976,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         exportDir,
         files.filter((file) => file.target === 'houdini'),
       )
+      await storage.removeFilesFromFolder(exportDir, [legacyPose])
     } catch {
       // export folder not ready/writable yet — leave the CSV in the character folder
     }
