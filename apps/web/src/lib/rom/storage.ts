@@ -7,6 +7,7 @@ import {
   remove,
   rename,
   stat,
+  writeFile,
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { appLocalDataDir } from '@tauri-apps/api/path'
@@ -839,6 +840,92 @@ export async function updateProject(
 
 export async function deleteProject(id: string): Promise<void> {
   await writeProjects((await readProjects()).filter((p) => p.id !== id))
+}
+
+/**
+ * Move a filesystem entry (file or directory) from `src` to `dst`: a fast rename
+ * first, falling back to a recursive copy + delete when rename can't apply (e.g.
+ * across drives).
+ */
+async function moveEntry(src: string, dst: string): Promise<void> {
+  try {
+    await rename(src, dst)
+    return
+  } catch {
+    // cross-volume / un-renamable — copy then remove the source below.
+  }
+  if (await isDir(src)) {
+    await mkdir(dst, { recursive: true })
+    for (const rel of await walkFiles(src)) {
+      const target = join(dst, rel)
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(target, await readFile(join(src, rel)))
+    }
+  } else {
+    await mkdir(dirname(dst), { recursive: true })
+    await writeFile(dst, await readFile(src))
+  }
+  await remove(src, { recursive: true })
+}
+
+/**
+ * Re-home a project to a different folder, keeping all of its characters' data
+ * and references intact (the project's name is unchanged — that's `updateProject`).
+ * Every top-level entry of the old library is moved into the new one, then each
+ * character JSON has its in-folder asset paths (Daz scenes / Houdini projects
+ * stored inside the character folder) repointed to the new location and its
+ * `projectPath` provenance refreshed. Scenes linked in place outside the project
+ * folder are left untouched.
+ */
+export async function moveProject(id: string, newPath: string): Promise<Project> {
+  const projects = await readProjects()
+  const idx = projects.findIndex((p) => p.id === id)
+  if (idx < 0) throw new Error(`Project ${id} not found`)
+  if (!newPath.trim()) throw new Error('Project folder is required.')
+  const name = projects[idx].name
+
+  const from = join(projects[idx].path) // normalise separators / trailing slash
+  const to = join(newPath)
+  if (from.toLowerCase() === to.toLowerCase()) return projects[idx] // same folder — no-op
+
+  // Never move a folder into itself or its own subtree.
+  const a = (from + '/').toLowerCase()
+  const b = (to + '/').toLowerCase()
+  if (b.startsWith(a) || a.startsWith(b)) {
+    throw new Error('Choose a folder outside the current project folder.')
+  }
+  await mkdir(to, { recursive: true })
+  if (await isDir(from)) {
+    for (const entry of await readDir(from)) {
+      const src = join(from, entry.name)
+      const dst = join(to, entry.name)
+      if (await exists(dst)) {
+        throw new Error(`"${entry.name}" already exists in the target folder.`)
+      }
+      await moveEntry(src, dst)
+    }
+  }
+  // Repoint each moved character's in-folder paths + provenance.
+  for (const entry of await scanLibrary(to)) {
+    const c = entry.character
+    const repoint = (p: string): string => {
+      const rel = relativeInside(from, p)
+      return rel ? join(to, rel) : p
+    }
+    const updated: Character = {
+      ...c,
+      scenePath: repoint(c.scenePath),
+      extraScenes: c.extraScenes.map(repoint),
+      houdiniProjects: c.houdiniProjects.map(repoint),
+      projectName: name,
+      projectPath: to,
+    }
+    await writeTextFile(entry.definitionAbs, JSON.stringify(updated, null, 2) + '\n')
+  }
+
+  projects[idx] = { ...projects[idx], path: to }
+  await writeProjects(projects)
+  return projects[idx]
 }
 
 /** Recursively collect file paths (relative to `root`, '/'-separated). */
