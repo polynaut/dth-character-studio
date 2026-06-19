@@ -355,8 +355,9 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   1 — initial versioned schema (the shape as of its introduction).
  *   2 — added `projectName` + `projectPath`.
  *   3 — added `exportPath`.
+ *   4 — added `exportSceneSubfolders`.
  */
-export const CHARACTER_SCHEMA_VERSION = 3
+export const CHARACTER_SCHEMA_VERSION = 4
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -415,6 +416,14 @@ export const characterSchema = z.object({
    * project's character directory.
    */
   exportPath: z.string().default(''),
+  /**
+   * When `exportPath` is set, also nest the export under a subfolder named after
+   * the Daz scene open in Daz when the script runs (`Scene.getFilename()`), so a
+   * character's scene/outfit variants export side by side. The exporter's own
+   * `<characterName>` subfolder is created inside that. No effect without an
+   * export path, or when no scene is loaded/saved at run time.
+   */
+  exportSceneSubfolders: z.boolean().default(false),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —
