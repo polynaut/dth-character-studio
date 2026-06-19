@@ -176,6 +176,10 @@ function ProjectsPage() {
         <div className="space-y-4 rounded-lg border bg-card p-5">
         <div>
           <h2 className="text-lg font-semibold">Create project</h2>
+          <p className="text-sm text-muted-foreground">
+            Create a project by choosing — or dragging in — its folder. Each project has its own
+            character library.
+          </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <Button
