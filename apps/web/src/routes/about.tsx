@@ -37,10 +37,13 @@ function AboutPage() {
           {version && <span className="text-muted-foreground">v{version}</span>}
         </h1>
         <p className="mt-4 max-w-prose leading-relaxed text-muted-foreground">
-          A companion studio for the DazToHue (DTH) workflow. Define a character's morphs and
+          A companion app for the DazToHue (DTH) workflow. Define a character's morphs and
           poses once, then generate the Daz scripts and PoseAsset data that drive a clean
           Daz&nbsp;→&nbsp;Houdini&nbsp;→&nbsp;Unreal character-ROM pipeline — so every character
-          exports the same way, every time. Find the source, releases and issues on{' '}
+          exports the same way, every time.
+        </p>
+        <p className="mt-12 max-w-prose leading-relaxed text-muted-foreground">
+          Find the source, releases and issues on{' '}
           <a
             href={GITHUB_URL}
             onClick={(e) => {

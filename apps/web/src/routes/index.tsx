@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { FolderInput, FolderOpen, FolderPlus, Info, Pencil, Settings as SettingsIcon } from 'lucide-react'
+import { FolderInput, FolderOpen, FolderPlus, Pencil, Settings as SettingsIcon } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -178,12 +178,12 @@ function ProjectsPage() {
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-4">
           <Link
             to="/about"
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
-            <Info className="size-4" /> About
+            About
           </Link>
           <Link
             to="/settings"
