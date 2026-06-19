@@ -637,7 +637,7 @@ function SortablePoseRow({
               ))}
             </div>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               className="mt-1 h-7 text-xs"
               onClick={() => meta.addMorph(row.index)}
@@ -906,7 +906,7 @@ function GroupCard({
         </table>
       </DndContext>
       <div className="border-t p-1.5">
-        <Button variant="ghost" size="sm" onClick={addPose}>
+        <Button variant="outline" size="sm" onClick={addPose}>
           <Plus /> Add morph
         </Button>
       </div>
@@ -1076,7 +1076,7 @@ function ArtDirectionFrameRow({
             </div>
           ))}
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             className="h-7 text-xs"
             onClick={() =>

@@ -1669,7 +1669,7 @@ function CharacterPage() {
                 </div>
               ))}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() =>
                   patch({ preserveMorphs: [...character.preserveMorphs, { name: '', keepValue: 1 }] })
@@ -1710,7 +1710,7 @@ function CharacterPage() {
                 </div>
               ))}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() =>
                   patch({
