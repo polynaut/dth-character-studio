@@ -801,19 +801,23 @@ function SettingsPage() {
             <span className="text-sm">Create Houdini project subfolder in new characters</span>
           </div>
           <div className="border-t pt-5">
-            <h2 className="mb-1 font-semibold">Refresh assets</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Re-generate the Daz scripts and PoseAsset CSVs for every character in every project —
-              run this after updating the studio or switching DTH release so all generated files
-              match the current version. Character definitions aren't changed.
-            </p>
+            <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
+              Refresh assets
+              <InfoPopup label="Refresh assets — more information">
+                Re-generate the Daz scripts and PoseAsset CSVs for every character in every project —
+                run this after updating the studio or switching DTH release so all generated files
+                match the current version. Character definitions aren't changed.
+              </InfoPopup>
+            </h2>
             <RefreshAssetsSection />
           </div>
           <div className="border-t pt-5">
-            <h2 className="mb-1 font-semibold">App data folder</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Where the app keeps its settings, project list, pose catalog and avatar images.
-            </p>
+            <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
+              App data folder
+              <InfoPopup label="App data folder — more information">
+                Where the app keeps its settings, project list, pose catalog and avatar images.
+              </InfoPopup>
+            </h2>
             {appDataFolder ? (
               <PathCode path={displayPath(appDataFolder)} />
             ) : (
@@ -821,11 +825,13 @@ function SettingsPage() {
             )}
           </div>
           <div className="border-t pt-5">
-            <h2 className="mb-1 font-semibold">Network drives</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
-              keeps working after relaunching as administrator.
-            </p>
+            <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
+              Network drives
+              <InfoPopup label="Network drives — more information">
+                Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
+                keeps working after relaunching as administrator.
+              </InfoPopup>
+            </h2>
             <NetworkDrivesSection />
           </div>
         </TabsContent>
@@ -974,8 +980,7 @@ function SettingsPage() {
               help={
                 <>
                   Where Daz Studio is installed. The DLLs go into its
-                  <span className="font-mono"> plugins</span> subfolder — writing there usually needs
-                  administrator rights.
+                  <span className="font-mono"> /plugins</span> subfolder.
                 </>
               }
             />
@@ -997,7 +1002,7 @@ function SettingsPage() {
                   <p className="text-xs">Not installed in this Daz Studio yet.</p>
                 ) : installedExporter ? (
                   exporterUpToDate ? (
-                    <p className="text-xs text-emerald-500">
+                    <p className="text-emerald-500">
                       Already installed ({installedExporter}) — up to date.
                     </p>
                   ) : (
