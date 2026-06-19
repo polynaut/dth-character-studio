@@ -1,5 +1,31 @@
 # @dth/web
 
+## 0.15.0
+
+### Minor Changes
+
+- [#47](https://github.com/polynaut/dth-character-studio/pull/47) [`99ba2ba`](https://github.com/polynaut/dth-character-studio/commit/99ba2ba0ef94c1ff76965f8607f1efe3023d20b2) Thanks [@polynaut](https://github.com/polynaut)! - Character JSONs now carry their owning project's **name and library path**
+  (`projectName` / `projectPath`), stamped on every save. Being a shape change,
+  this bumps `CHARACTER_SCHEMA_VERSION` to **2** — characters last written before
+  this (read as version 1) gain the fields on their next save.
+
+- [#43](https://github.com/polynaut/dth-character-studio/pull/43) [`11d9b77`](https://github.com/polynaut/dth-character-studio/commit/11d9b770b58a2ff059305e708df66bfe705a4c35) Thanks [@polynaut](https://github.com/polynaut)! - Add a **character-JSON schema version**, independent of the app version. A new
+  `CHARACTER_SCHEMA_VERSION` constant (starting at `1`) is stamped onto every saved
+  character as `schemaVersion`. It changes only when the stored character shape
+  changes (a field added, renamed, or removed) — pure app improvements leave it
+  untouched. Existing JSONs without the field read as version `1`. This is the
+  groundwork for a future migration framework: a stored version below the constant
+  marks a definition that needs upgrading.
+
+### Patch Changes
+
+- [#45](https://github.com/polynaut/dth-character-studio/pull/45) [`bf9f145`](https://github.com/polynaut/dth-character-studio/commit/bf9f145a193b6dc7a4b97be1d2ad98264ddf0ebd) Thanks [@polynaut](https://github.com/polynaut)! - Remove the "Keep Houdini files" option from the character delete dialog. Houdini
+  projects are only ever linked in place (never copied into the character folder),
+  so there was no Houdini subfolder to preserve — the toggle was misleading. The
+  delete dialog now offers just "Keep the Daz files folder".
+- Updated dependencies [[`99ba2ba`](https://github.com/polynaut/dth-character-studio/commit/99ba2ba0ef94c1ff76965f8607f1efe3023d20b2), [`11d9b77`](https://github.com/polynaut/dth-character-studio/commit/11d9b770b58a2ff059305e708df66bfe705a4c35)]:
+  - @dth/rom@0.15.0
+
 ## 0.14.0
 
 ### Minor Changes
