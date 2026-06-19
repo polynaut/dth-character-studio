@@ -982,15 +982,17 @@ function SettingsPage() {
 
             {canInstallPlugin ? (
               <div className="space-y-1 text-sm text-muted-foreground">
-                <p>
-                  Ready to install Exporter{' '}
-                  <strong className="text-foreground">
-                    {sourceExporterVer ||
-                      settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
-                      '?'}
-                  </strong>
-                  {dirty ? ' — pending changes are saved on install.' : '.'}
-                </p>
+                {!exporterUpToDate && (
+                  <p>
+                    Ready to install Exporter{' '}
+                    <strong className="text-foreground">
+                      {sourceExporterVer ||
+                        settings.dthExporterFolder.split(/[\\/]/).filter(Boolean).pop() ||
+                        '?'}
+                    </strong>
+                    {dirty ? ' — pending changes are saved on install.' : '.'}
+                  </p>
+                )}
                 {installedExporter === '' ? (
                   <p className="text-xs">Not installed in this Daz Studio yet.</p>
                 ) : installedExporter ? (
