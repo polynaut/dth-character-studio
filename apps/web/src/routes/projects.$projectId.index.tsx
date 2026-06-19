@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FolderOpen, Settings as SettingsIcon, UserPlus } from 'lucide-react'
+import { ArrowLeft, FolderOpen, UserPlus } from 'lucide-react'
 
 import { Field } from '#/components/field.tsx'
 import { Portrait } from '#/components/portrait.tsx'
@@ -47,6 +47,8 @@ import { pickDufPath } from '#/lib/desktop.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
+import { HeaderNav } from '#/components/header-nav.tsx'
+import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -302,12 +304,7 @@ function ProjectCharactersPage() {
             <PathCode path={displayPath(project.path)} />
           </p>
         </div>
-        <Link
-          to="/settings"
-          className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <SettingsIcon className="size-4" /> Settings
-        </Link>
+        <HeaderNav />
       </header>
 
       <FileDropZone
@@ -319,7 +316,10 @@ function ProjectCharactersPage() {
         <div>
           <h2 className="text-lg font-semibold">Create character</h2>
           <p className="text-sm text-muted-foreground">
-            Create a character by choosing — or dragging in — its Daz scene file.
+            Create a character by choosing — or dragging in — its Daz scene file.{' '}
+            <InfoPopup label="Daz scene requirements">
+              It must not contain an existing animation — only the character itself.
+            </InfoPopup>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

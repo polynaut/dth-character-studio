@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   generateAll,
+  referenceFrames,
   resolveRomPaths,
   toArtDirectionJsons,
   toCharacterScriptDsa,
@@ -358,7 +359,7 @@ describe('generateAll', () => {
     const files = generateAll(makeCharacter(), {}, FRAMES)
     expect(files.map((f) => [f.fileName, f.target])).toEqual([
       ['ElectraG9_G9.dsa', 'daz'],
-      ['ElectraG9_PoseAsset.csv', 'houdini'],
+      ['ElectraG9_pose_asset.csv', 'houdini'],
     ])
   })
 })
@@ -578,5 +579,40 @@ describe.skipIf(!existsSync(ELECTRA))('round-trip with the real ElectraG9_FBMs.j
     const regenerated = JSON.parse(toDazFbmJson(character).content)
     expect(regenerated.frames).toEqual(original.frames)
     expect(regenerated.meta.resetGPBeforeApplying).toBe(original.meta.resetGPBeforeApplying)
+  })
+})
+
+describe('exporter integration', () => {
+  /** A character with one reference-skeleton FBM pose and no GEN preset (so the
+   *  CSV carries no template GEN rows to confuse the reference-frame check). */
+  function withReferencePose(overrides: Partial<Character> = {}): Character {
+    const sections = makeSections()
+    sections.GEN.enabled = false
+    sections.FBM.groups[0].poses[0].referenceFbx = 'ProportionHeight.fbx'
+    return makeCharacter({ sections, ...overrides })
+  }
+
+  it('referenceFrames matches the CSV frames of the reference-skeleton poses', () => {
+    const character = withReferencePose()
+    const csvRefFrames = toPoseAssetCsv(character, FRAMES)
+      .content.split('\n')
+      .map((line) => line.split(','))
+      .filter((c) => ['FBM', 'MIS', 'GEN'].includes(c[0]) && (c[3] ?? '').trim() !== '')
+      .map((c) => Number(c[1]))
+      .sort((a, b) => a - b)
+    expect(csvRefFrames.length).toBe(1)
+    expect(referenceFrames(character, FRAMES)).toEqual(csvRefFrames)
+  })
+
+  it('appends a doExport call (forward-slashed path, reference frames) when an export path is set', () => {
+    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    const refs = referenceFrames(character, FRAMES).join(' ')
+    expect(content).toContain('findAction("DazToHueExporterAction")')
+    expect(content).toContain(`dthExportAction.doExport("X:/exports/electra", "Electra", "${refs}", false)`)
+  })
+
+  it('omits the export call when no export path is set', () => {
+    expect(toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content).not.toContain('doExport')
   })
 })

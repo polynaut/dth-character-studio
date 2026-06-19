@@ -1,0 +1,92 @@
+// Default options for DthWorkflow and userscripts calling it. Can be overridden. 
+
+
+// YOU MUST CHANGE THIS. If using windows, backslashes must be escaped (use two backslashes '\\")
+var DTH_POSES_PATH =  "D:/DAZ 3D/My DAZ 3D Library/DazToHue/Poses/";
+
+var options = {
+	bIncludeJCM: true,
+	// set true to include use the FAC version of the ROM
+	bIncludeFAC: true,
+	bIncludeDK: false,
+	bIncludeGP: false,
+	// Append the physics example ROM (breast/glute jiggle poses, 43 frames)
+	bIncludePhysics: false,
+	// Offsets for the fence poses, relative to the first frame of the GP ROM file
+	aGPFenceOffsets: [0, 95, 99, 102],
+	// Offsets for the fence poses, relative to the first frame of the DK9 ROM file
+	aDK9FenceOffsets: [0, 33, 46, 47, 49, 52],
+	bDQS: false,// set true to enable Dual Quat Skinning, defaults to linear
+	FACsDetailStrength: 1.0,
+	FlexionStrength: 1.0,
+	extraJSONs: [],
+	extraCSVs: [],  // Legacy - only used by DthExportFBMs.dsa
+	// Write OUT*.csv debug dumps (frameDatas / success / failed / scanned) into the
+	// scripts folder. Off by default so normal runs don't litter the repo.
+	bWriteDebugCSV: false,
+	scannedCSV: dir_self.filePath ("OUT.csv"),
+	successCSV: dir_self.filePath ("OUT_success.csv"),
+	failCSV: dir_self.filePath ("OUT_failed.csv"),
+	// Exact ROM file paths (e.g. from DTH Character Studio). Null falls back
+	// to the DTH_POSES_PATH resolution below.
+	jcmRomPath: null,
+	mouthRomPath: null,
+	gpRomPath: null,
+	dkRomPath: null,
+	physRomPath: null,
+	// Per-character art direction JSONs for the pre-made GP/DK ROM blocks.
+	// Null falls back to GP9_ArtDirection.json / DK9_ArtDirection.json next to the scripts.
+	gpArtDirectionPath: null,
+	dkArtDirectionPath: null,
+	// Morphs to preserve after ROM loading. Example: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1 }]
+	preserveMorphs: [],
+	// Node transforms to preserve after ROM loading. Example: [{ nodeLabel: "Left Eye" }]
+	preserveNodeTransforms: [],
+	jcmMorphMods: []
+};
+
+
+// Set up paths - should only need to change if using custom ROMs
+var sRomPath = DTH_POSES_PATH + "Genesis 9/";
+var ROM_DK9 = sRomPath + "Common/Dicktator 9/DK9 - Dicktator.duf";
+var ROM_GP9 = sRomPath + "Common/Golden Palace 9/GP9 - Golden Palace.duf";
+var ROM_PHYS = sRomPath + "Common/Physics/G9 Physics Example.duf";
+
+var G9_LINEAR_JCM = sRomPath + "Linear/G9 LINEAR JCM FAC - Base.duf";
+var G9_LINEAR_JCM_FAC = sRomPath + "Linear/G9 LINEAR JCM FAC - Base.duf";
+var G9_LINEAR_JCM_FAC_MOUTH = sRomPath + "Linear/G9 LINEAR JCM FAC - Mouth.duf";
+var G9_DQS_JCM = sRomPath + "DQS/G9 DQS JCM FAC - Base.duf";
+var G9_DQS_JCM_FAC = sRomPath + "DQS/G9 DQS JCM FAC - Base.duf";
+var G9_DQS_JCM_FAC_MOUTH = sRomPath + "DQS/G9 DQS JCM FAC - Mouth.duf"; 
+
+
+
+function getRomPaths(options)
+{
+
+	var sJcmROM;
+	var sMouthROM;
+
+	// Exact paths from the caller win over the DTH_POSES_PATH resolution.
+	if( options["jcmRomPath"] ){
+		return [options["jcmRomPath"], options["mouthRomPath"]];
+	}
+
+	if( !options["bDQS"] )
+	{
+		if( options["bIncludeFAC"] ){
+			sJcmROM = G9_LINEAR_JCM_FAC;
+			sMouthROM = G9_LINEAR_JCM_FAC_MOUTH;
+		} else {
+			sJcmROM = G9_LINEAR_JCM;
+		} 
+	} else {
+		if( options["bIncludeFAC"] ){
+			sJcmROM = G9_DQS_JCM_FAC;
+			sMouthROM = G9_DQS_JCM_FAC_MOUTH;
+		} else {
+			sJcmROM = G9_DQS_JCM;
+		}
+	}
+	return [sJcmROM, sMouthROM];
+}

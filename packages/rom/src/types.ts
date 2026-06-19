@@ -354,8 +354,9 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  * History:
  *   1 — initial versioned schema (the shape as of its introduction).
  *   2 — added `projectName` + `projectPath`.
+ *   3 — added `exportPath`.
  */
-export const CHARACTER_SCHEMA_VERSION = 2
+export const CHARACTER_SCHEMA_VERSION = 3
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -406,6 +407,14 @@ export const characterSchema = z.object({
   projectName: z.string().default(''),
   /** Absolute path of the owning project's library folder, stamped on save. */
   projectPath: z.string().default(''),
+  /**
+   * Export directory for the DTH Exporter plugin (v1.8.1+). When set, the
+   * generated Daz script runs the exporter (`doExport`) into this folder after
+   * building the ROM — empty = no auto-export. The exporter creates its own
+   * `<characterName>` subfolder here, so this should be a folder OUTSIDE the
+   * project's character directory.
+   */
+  exportPath: z.string().default(''),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —

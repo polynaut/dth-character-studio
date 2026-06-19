@@ -666,6 +666,11 @@ export async function fetchSettings(): Promise<StudioSettings> {
   return storage.getSettings()
 }
 
+/** The running app's version (e.g. "0.17.0"); '' on the web-only build. */
+export async function fetchAppVersion(): Promise<string> {
+  return storage.studioVersion()
+}
+
 /**
  * The app's internal per-user data folder — where settings.json, projects.json,
  * the pose catalog and avatar images live. Surfaced in Settings so the user can
@@ -711,7 +716,6 @@ export async function listDthExporterReleases({
 
 const settingsInput = z.object({
   dazLibraryFolder: z.string(),
-  dazScriptsFolder: z.string(),
   dthPosesFolder: z.string(),
   // Tolerate older payloads that predate the field (kept = '' = not chosen).
   currentDthVersion: z.string().default(''),
@@ -961,6 +965,27 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       await storage.removeFilesFromFolder(outDir, [oldPose])
     }
   }
+  // Drop the legacy-cased CSV (<name>_PoseAsset.csv) left by older versions —
+  // the file is now <name>_pose_asset.csv.
+  const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
+  await storage.removeFilesFromFolder(outDir, [legacyPose])
+
+  // When an export directory is set, also drop the PoseAsset CSV there so it sits
+  // alongside the exporter's output (Kira.fbx / .abc / .dth / …) — everything for
+  // the next step ends up in one folder. Best-effort: a missing/locked export
+  // folder must not fail generation (the CSV still lives in the character folder).
+  const exportDir = character.exportPath.trim()
+  if (exportDir) {
+    try {
+      await storage.writeFilesToFolder(
+        exportDir,
+        files.filter((file) => file.target === 'houdini'),
+      )
+      await storage.removeFilesFromFolder(exportDir, [legacyPose])
+    } catch {
+      // export folder not ready/writable yet — leave the CSV in the character folder
+    }
+  }
 
   // The character script goes in its own <project>/<character>/ subfolder of the
   // shared scripts folder; the runtime it imports is installed once in the root.
@@ -974,7 +999,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     const root = storage.studioScriptsDir(settings.dazLibraryFolder)
     const charDir = storage.studioCharScriptsDir(settings.dazLibraryFolder, project.name, character.name)
     try {
-      await storage.copyRuntimeFiles(settings.dazScriptsFolder, root)
+      await storage.copyRuntimeFiles(root)
       await storage.writeFilesToFolder(charDir, dazFiles)
       // Migration: older versions wrote the script flat in the root — drop this
       // character's flat-layout script (current + previous name) if it lingers.
@@ -1016,16 +1041,31 @@ export interface RefreshSummary {
   regenerated: number
   failed: number
   results: Array<RefreshResult>
+  /** Outcome of refreshing the bundled DTH runtime files (null = no DAZ library
+   *  set, so nothing to install into). */
+  runtime: { ok: boolean; detail?: string } | null
 }
 
 /**
- * Re-generate the derived artifacts (Daz scripts + PoseAsset CSVs) for every
- * character in every project — run after a studio update or a DTH-release switch
- * so all generated files match the current version. Character definition JSONs
- * are NOT touched (they self-migrate on open/save). Per-character failures are
- * collected, not thrown, so one bad character can't abort the whole sweep.
+ * Re-generate the derived artifacts for every character in every project — run
+ * after a studio update or a DTH-release switch so all generated files match the
+ * current version. Also re-installs the bundled DTH runtime files once (so an app
+ * update pushes the new runtime even with zero characters). Character definition
+ * JSONs are NOT touched (they self-migrate on open/save). Per-character failures
+ * are collected, not thrown, so one bad character can't abort the whole sweep.
  */
 export async function refreshAllAssets(): Promise<RefreshSummary> {
+  const settings = await storage.getSettings()
+  // Refresh the bundled runtime once, up front — independent of any characters.
+  let runtime: RefreshSummary['runtime'] = null
+  if (settings.dazLibraryFolder) {
+    try {
+      await storage.copyRuntimeFiles(storage.studioScriptsDir(settings.dazLibraryFolder))
+      runtime = { ok: true }
+    } catch (e) {
+      runtime = { ok: false, detail: e instanceof Error ? e.message : String(e) }
+    }
+  }
   const projects = await storage.listProjects()
   const results: Array<RefreshResult> = []
   for (const project of projects) {
@@ -1061,7 +1101,7 @@ export async function refreshAllAssets(): Promise<RefreshSummary> {
     }
   }
   const failed = results.filter((r) => !r.ok).length
-  return { total: results.length, regenerated: results.length - failed, failed, results }
+  return { total: results.length, regenerated: results.length - failed, failed, results, runtime }
 }
 
 /** Where a character's files live (absolute + library-relative), for the editor. */
