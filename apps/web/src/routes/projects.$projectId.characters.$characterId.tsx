@@ -104,8 +104,19 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
       presetFrames,
     }
   },
-  component: CharacterPage,
+  component: CharacterPageRoute,
 })
+
+/**
+ * Keys the editor by the character id so it remounts on an editor→editor
+ * navigation (e.g. Clone jumping to the new copy). Without this, only the URL
+ * param changes — the same `CharacterPage` instance stays mounted and its draft
+ * state, seeded from the loader at mount, keeps showing the previous character.
+ */
+function CharacterPageRoute() {
+  const { characterId } = Route.useParams()
+  return <CharacterPage key={characterId} />
+}
 
 interface GenerateResult {
   outDir: string
