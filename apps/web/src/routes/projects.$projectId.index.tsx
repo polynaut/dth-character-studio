@@ -245,12 +245,12 @@ function ProjectCharactersPage() {
   )
   const selectedChars = visible.filter((c) => sel.isSelected(c.id))
 
-  async function onBulkDelete({ keepDaz, keepHoudini }: { keepDaz: boolean; keepHoudini: boolean }) {
+  async function onBulkDelete({ keepDaz }: { keepDaz: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
       for (const character of selectedChars) {
-        await deleteCharacter({ data: { projectId, id: character.id, keepDaz, keepHoudini } })
+        await deleteCharacter({ data: { projectId, id: character.id, keepDaz } })
       }
       const n = selectedChars.length
       sel.clear()
@@ -585,7 +585,6 @@ function ProjectCharactersPage() {
           names={selectedChars.map((c) => c.name)}
           showKeepFiles
           dazSubdirLabel={settings.dazSubdir}
-          houdiniSubdirLabel={settings.houdiniSubdir}
           busy={deleting}
           error={deleteError}
           onConfirm={onBulkDelete}

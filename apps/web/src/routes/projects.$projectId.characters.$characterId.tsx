@@ -1321,11 +1321,11 @@ function CharacterPage() {
     }
   }
 
-  async function onDeleteCharacter({ keepDaz, keepHoudini }: { keepDaz: boolean; keepHoudini: boolean }) {
+  async function onDeleteCharacter({ keepDaz }: { keepDaz: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
-      await deleteCharacter({ data: { projectId, id: character.id, keepDaz, keepHoudini } })
+      await deleteCharacter({ data: { projectId, id: character.id, keepDaz } })
       toast.success(`Deleted “${character.name}”`)
       // Navigation unmounts this editor — no need to reset the busy flag.
       await router.navigate({ to: '/projects/$projectId', params: { projectId } })
@@ -1790,7 +1790,6 @@ function CharacterPage() {
           names={[character.name]}
           showKeepFiles
           dazSubdirLabel={settings.dazSubdir}
-          houdiniSubdirLabel={settings.houdiniSubdir}
           busy={deleting}
           error={deleteError}
           onConfirm={onDeleteCharacter}
