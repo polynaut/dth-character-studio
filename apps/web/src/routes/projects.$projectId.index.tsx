@@ -315,7 +315,8 @@ function ProjectCharactersPage() {
         <div>
           <h2 className="text-lg font-semibold">Create character</h2>
           <p className="text-sm text-muted-foreground">
-            Create a character by choosing — or dragging in — its Daz scene file.
+            Create a character by choosing — or dragging in — its Daz scene file. Each character
+            has its own ROM definition and generated Daz files.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
