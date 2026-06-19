@@ -3,13 +3,16 @@ import { createPortal } from 'react-dom'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
+import { cn } from '#/lib/utils.ts'
 
 /**
  * Confirm unlinking an asset (a Daz scene / Houdini project) from a character.
  * The "Delete file on disk" toggle decides whether the underlying file is also
  * removed — the caller defaults it on for files inside the character folder and
- * off for ones linked in place outside it. Esc / backdrop cancel (ignored while
- * busy). Portaled to <body> so a CSS-contained ancestor can't capture it.
+ * off for ones linked in place outside it. For a linked-in-place file (the
+ * user's original), pass `deleteFileDisabled` so delete can't be turned on at
+ * all. Esc / backdrop cancel (ignored while busy). Portaled to <body> so a
+ * CSS-contained ancestor can't capture it.
  */
 export function RemoveAssetDialog({
   title,
@@ -17,6 +20,7 @@ export function RemoveAssetDialog({
   deleteFile = false,
   onDeleteFileChange,
   showDeleteFile = true,
+  deleteFileDisabled = false,
   busy,
   error,
   onConfirm,
@@ -33,6 +37,12 @@ export function RemoveAssetDialog({
    * action is unlink-only.
    */
   showDeleteFile?: boolean
+  /**
+   * Show the toggle but lock it off — for a scene linked in place (outside the
+   * character folder), which is the user's original. Communicates "can't delete"
+   * rather than hiding the option, so deleting the original is never one tap away.
+   */
+  deleteFileDisabled?: boolean
   busy: boolean
   error?: ReactNode
   onConfirm: () => void
@@ -58,9 +68,22 @@ export function RemoveAssetDialog({
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
         {showDeleteFile && onDeleteFileChange && (
-          <div className="flex items-center gap-2">
-            <Switch checked={deleteFile} onCheckedChange={onDeleteFileChange} />
-            <span className="text-sm">Delete file on disk</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={deleteFile && !deleteFileDisabled}
+                onCheckedChange={onDeleteFileChange}
+                disabled={deleteFileDisabled}
+              />
+              <span className={cn('text-sm', deleteFileDisabled && 'text-muted-foreground')}>
+                Delete file on disk
+              </span>
+            </div>
+            {deleteFileDisabled && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Linked in place — your original file is kept.
+              </p>
+            )}
           </div>
         )}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -69,7 +92,7 @@ export function RemoveAssetDialog({
             Cancel
           </Button>
           <Button variant="destructive" disabled={busy} onClick={onConfirm}>
-            {busy ? 'Removing…' : deleteFile ? 'Delete' : 'Unlink'}
+            {busy ? 'Removing…' : deleteFile && !deleteFileDisabled ? 'Delete' : 'Unlink'}
           </Button>
         </div>
       </div>

@@ -918,6 +918,9 @@ function DazSceneField({
           description="Unlink this Daz scene from the character."
           deleteFile={removeDeleteFile}
           onDeleteFileChange={setRemoveDeleteFile}
+          // A scene linked in place (outside the character folder) is the user's
+          // original — disable delete so it can only be unlinked, never removed.
+          deleteFileDisabled={!insideCharFolder(pendingRemove)}
           busy={busy}
           error={error}
           onConfirm={() => void confirmRemove()}
