@@ -353,8 +353,9 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *
  * History:
  *   1 — initial versioned schema (the shape as of its introduction).
+ *   2 — added `projectName` + `projectPath`.
  */
-export const CHARACTER_SCHEMA_VERSION = 1
+export const CHARACTER_SCHEMA_VERSION = 2
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -399,6 +400,12 @@ export const characterSchema = z.object({
   /** DTH Character Studio version that last wrote this character ('' = unknown,
    *  e.g. created before this was tracked). Stamped on every save. */
   studioVersion: z.string().default(''),
+  /** Name of the project this character belongs to, stamped on every save
+   *  (provenance — the character lives in this project's library). Empty for
+   *  characters last written before this was tracked. */
+  projectName: z.string().default(''),
+  /** Absolute path of the owning project's library folder, stamped on save. */
+  projectPath: z.string().default(''),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —
