@@ -23,10 +23,8 @@ import {
   createProject,
   deleteProject,
   fetchProjects,
-  fetchSettings,
   isDirectory,
   moveProject,
-  saveSettings,
   updateProject,
 } from '#/lib/rom/api.ts'
 import type { Project } from '#/lib/rom/api.ts'
@@ -38,15 +36,12 @@ import { useSelection } from '#/lib/use-selection.ts'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
-  loader: async () => {
-    const [projects, settings] = await Promise.all([fetchProjects(), fetchSettings()])
-    return { projects, settings }
-  },
+  loader: () => fetchProjects(),
   component: ProjectsPage,
 })
 
 function ProjectsPage() {
-  const { projects, settings } = Route.useLoaderData()
+  const projects = Route.useLoaderData()
   const router = useRouter()
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
@@ -65,25 +60,8 @@ function ProjectsPage() {
   const [opBusy, setOpBusy] = useState(false)
   const [opError, setOpError] = useState('')
 
-  const hasDazLibrary = Boolean(settings.dazLibraryFolder)
   const sorted = sortItems(projects, sort, { name: (p) => p.name, date: (p) => p.createdAt ?? '' })
   const selectedProjects = sorted.filter((p) => sel.isSelected(p.id))
-
-  async function onChooseDazLibrary() {
-    const picked = await pickFolder('Select your "My DAZ 3D Library" folder')
-    if (!picked) return
-    setBusy(true)
-    setError('')
-    try {
-      await saveSettings({ data: { ...settings, dazLibraryFolder: picked } })
-      await router.invalidate()
-      toast.success('DAZ 3D Library set')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   function applyFolder(folder: string) {
     setPath(folder)
@@ -189,184 +167,168 @@ function ProjectsPage() {
         <HeaderNav />
       </header>
 
-      {!hasDazLibrary ? (
-        <div className="flex max-w-2xl flex-col items-start gap-3 rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold">Set your DAZ 3D Library</h2>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            Point the studio at your <strong>My DAZ 3D Library</strong> folder (your Daz content
-            directory). Then you can add game projects — each with its own character library.
-          </p>
-          <Button onClick={onChooseDazLibrary} disabled={busy}>
-            <FolderOpen /> Choose folder…
-          </Button>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+      <FileDropZone
+        acceptFolders
+        onDrop={onDropFolder}
+        label="Drop a folder to use as the project"
+        className="mb-8 max-w-5xl"
+      >
+        <div className="space-y-4 rounded-lg border bg-card p-5">
+        <div>
+          <h2 className="text-lg font-semibold">Create project</h2>
         </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={onChooseFolder}
+            disabled={busy}
+          >
+            <FolderOpen /> {path ? 'Choose another…' : 'Choose folder…'}
+          </Button>
+          {path && (
+            <span className="truncate font-mono text-xs text-muted-foreground">
+              {displayPath(path)}
+            </span>
+          )}
+        </div>
+        {path && (
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[12rem] flex-1">
+              <label className="mb-1 block text-sm font-medium">Project name</label>
+              <Input
+                placeholder="e.g. Project Nova"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+              />
+            </div>
+            <Button onClick={onCreate} disabled={busy || !name.trim()}>
+              <FolderPlus /> Create
+            </Button>
+          </div>
+        )}
+        </div>
+      </FileDropZone>
+      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+
+      {projects.length === 0 ? (
+        <p className="text-muted-foreground">
+          No projects yet — choose a folder above to add one.
+        </p>
       ) : (
         <>
-          <FileDropZone
-            acceptFolders
-            onDrop={onDropFolder}
-            label="Drop a folder to use as the project"
-            className="mb-8 max-w-5xl"
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              {projects.length} project{projects.length === 1 ? '' : 's'}
+            </span>
+            <div className="flex items-center gap-2">
+              <SortSelect value={sort} onChange={setSort} />
+              <ViewToggle value={view} onChange={setView} />
+            </div>
+          </div>
+          <ul
+            className={
+              view === 'grid'
+                ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                : 'divide-y rounded-lg border bg-card'
+            }
           >
-            <div className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="text-lg font-semibold">Create project</h2>
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0"
-                onClick={onChooseFolder}
-                disabled={busy}
-              >
-                <FolderOpen /> {path ? 'Choose another…' : 'Choose folder…'}
-              </Button>
-              {path && (
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {displayPath(path)}
-                </span>
-              )}
-            </div>
-            {path && (
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-[12rem] flex-1">
-                  <label className="mb-1 block text-sm font-medium">Project name</label>
-                  <Input
-                    placeholder="e.g. Project Nova"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-                  />
-                </div>
-                <Button onClick={onCreate} disabled={busy || !name.trim()}>
-                  <FolderPlus /> Create
-                </Button>
-              </div>
-            )}
-            </div>
-          </FileDropZone>
-          {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-
-          {projects.length === 0 ? (
-            <p className="text-muted-foreground">
-              No projects yet — choose a folder above to add one.
-            </p>
-          ) : (
-            <>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <span className="text-sm text-muted-foreground">
-                  {projects.length} project{projects.length === 1 ? '' : 's'}
-                </span>
-                <div className="flex items-center gap-2">
-                  <SortSelect value={sort} onChange={setSort} />
-                  <ViewToggle value={view} onChange={setView} />
-                </div>
-              </div>
-              <ul
-                className={
-                  view === 'grid'
-                    ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                    : 'divide-y rounded-lg border bg-card'
-                }
-              >
-                {sorted.map((project) => {
-                  const created = formatDate(project.createdAt ?? '')
-                  return (
-                    <li
-                      key={project.id}
+            {sorted.map((project) => {
+              const created = formatDate(project.createdAt ?? '')
+              return (
+                <li
+                  key={project.id}
+                  className={cn(
+                    'group relative transition-colors hover:border-primary',
+                    view === 'grid'
+                      ? 'rounded-lg border bg-card'
+                      : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                  )}
+                >
+                  <Link
+                    to="/projects/$projectId"
+                    params={{ projectId: project.id }}
+                    onClick={(e) => {
+                      // In selection mode a click toggles instead of navigating.
+                      if (sel.selecting) {
+                        e.preventDefault()
+                        sel.toggle(project.id)
+                      }
+                    }}
+                    className={cn('block pr-24', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
+                  >
+                    {view === 'grid' ? (
+                      <>
+                        <div className="font-semibold">{project.name}</div>
+                        <code
+                          className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+                        >
+                          {displayPath(project.path)}
+                        </code>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <span className="shrink-0 font-medium">{project.name}</span>
+                        <code
+                          className={`${pathChipClass()} min-w-0 flex-1 truncate text-xs`}
+                        >
+                          {displayPath(project.path)}
+                        </code>
+                        {created && (
+                          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                            {created}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </Link>
+                  <div
+                    className={cn(
+                      'absolute flex items-center gap-1',
+                      view === 'grid' ? 'top-2.5 right-2.5' : 'top-1/2 right-2.5 -translate-y-1/2',
+                    )}
+                  >
+                    {/* Rename ("easy") + move-folder ("meaty"); hidden while selecting. */}
+                    <button
+                      type="button"
+                      title="Rename project"
+                      onClick={() => {
+                        setOpError('')
+                        setRenaming(project)
+                      }}
                       className={cn(
-                        'group relative transition-colors hover:border-primary',
-                        view === 'grid'
-                          ? 'rounded-lg border bg-card'
-                          : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                        'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
+                        sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
                       )}
                     >
-                      <Link
-                        to="/projects/$projectId"
-                        params={{ projectId: project.id }}
-                        onClick={(e) => {
-                          // In selection mode a click toggles instead of navigating.
-                          if (sel.selecting) {
-                            e.preventDefault()
-                            sel.toggle(project.id)
-                          }
-                        }}
-                        className={cn('block pr-24', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
-                      >
-                        {view === 'grid' ? (
-                          <>
-                            <div className="font-semibold">{project.name}</div>
-                            <code
-                              className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
-                            >
-                              {displayPath(project.path)}
-                            </code>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-4">
-                            <span className="shrink-0 font-medium">{project.name}</span>
-                            <code
-                              className={`${pathChipClass()} min-w-0 flex-1 truncate text-xs`}
-                            >
-                              {displayPath(project.path)}
-                            </code>
-                            {created && (
-                              <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
-                                {created}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </Link>
-                      <div
-                        className={cn(
-                          'absolute flex items-center gap-1',
-                          view === 'grid' ? 'top-2.5 right-2.5' : 'top-1/2 right-2.5 -translate-y-1/2',
-                        )}
-                      >
-                        {/* Rename ("easy") + move-folder ("meaty"); hidden while selecting. */}
-                        <button
-                          type="button"
-                          title="Rename project"
-                          onClick={() => {
-                            setOpError('')
-                            setRenaming(project)
-                          }}
-                          className={cn(
-                            'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
-                            sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
-                          )}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Move project to another folder"
-                          onClick={() => {
-                            setOpError('')
-                            setMovingProject(project)
-                          }}
-                          className={cn(
-                            'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
-                            sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
-                          )}
-                        >
-                          <FolderInput className="size-4" />
-                        </button>
-                        <SelectCheckbox
-                          checked={sel.isSelected(project.id)}
-                          selecting={sel.selecting}
-                          onChange={() => sel.toggle(project.id)}
-                        />
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            </>
-          )}
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Move project to another folder"
+                      onClick={() => {
+                        setOpError('')
+                        setMovingProject(project)
+                      }}
+                      className={cn(
+                        'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
+                        sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
+                      )}
+                    >
+                      <FolderInput className="size-4" />
+                    </button>
+                    <SelectCheckbox
+                      checked={sel.isSelected(project.id)}
+                      selecting={sel.selecting}
+                      onChange={() => sel.toggle(project.id)}
+                    />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </>
       )}
 
