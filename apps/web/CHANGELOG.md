@@ -1,5 +1,27 @@
 # @dth/web
 
+## 0.16.0
+
+### Minor Changes
+
+- [#51](https://github.com/polynaut/dth-character-studio/pull/51) [`9628933`](https://github.com/polynaut/dth-character-studio/commit/9628933c612c8c3761489fb75d4a06d6b2b24690) Thanks [@polynaut](https://github.com/polynaut)! - Projects can now be renamed and moved from the overview. Each project card gets
+  two hover actions: **Rename** (the light operation — just changes the name) and
+  **Move** (the heavy one — relocates the project to a different folder). A move
+  physically relocates all character data to the new folder and repoints every
+  character's in-folder references (Daz scenes / Houdini projects stored inside the
+  character folder) plus its stored project name/path; scenes linked in place
+  outside the project folder are left untouched.
+
+### Patch Changes
+
+- [#51](https://github.com/polynaut/dth-character-studio/pull/51) [`9628933`](https://github.com/polynaut/dth-character-studio/commit/9628933c612c8c3761489fb75d4a06d6b2b24690) Thanks [@polynaut](https://github.com/polynaut)! - Fix Daz scenes becoming "unlinked" after renaming a character. Renaming renames
+  the character's folder, but the stored scene/Houdini paths still pointed at the
+  old folder name, breaking any scene stored inside the character folder. Renaming
+  now repoints those in-folder paths to the new folder (scenes linked in place
+  outside the folder are left untouched).
+- Updated dependencies []:
+  - @dth/rom@0.16.0
+
 ## 0.15.1
 
 ### Patch Changes
