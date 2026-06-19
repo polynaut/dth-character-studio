@@ -318,7 +318,7 @@ function ProjectCharactersPage() {
           <p className="text-sm text-muted-foreground">
             Create a character by choosing — or dragging in — its Daz scene file.{' '}
             <InfoPopup label="Daz scene requirements">
-              It should not contain an existing animation — only the character itself.
+              It must not contain an existing animation — only the character itself.
             </InfoPopup>
           </p>
         </div>
