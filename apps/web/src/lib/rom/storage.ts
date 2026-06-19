@@ -295,6 +295,10 @@ export async function saveCharacter(project: Project, character: Character): Pro
   const existing = await findEntry(lib, character.id)
 
   let definitionAbs: string
+  // A name change renames the character's folder; asset paths that lived inside
+  // it travel with it, so they must be repointed (or they'd break — the classic
+  // "scenes unlinked after rename"). Captured here, applied below.
+  let folderMove: { from: string; to: string } | null = null
   if (existing) {
     const oldFolderName = basename(existing.folderAbs)
     const newName = characterFolderName(character.name)
@@ -309,6 +313,7 @@ export async function saveCharacter(project: Project, character: Character): Pro
       if (movedDefinition !== definitionAbs && (await exists(movedDefinition))) {
         await rename(movedDefinition, definitionAbs)
       }
+      folderMove = { from: existing.folderAbs, to: folderAbs }
     } else {
       definitionAbs = existing.definitionAbs
     }
@@ -316,6 +321,19 @@ export async function saveCharacter(project: Project, character: Character): Pro
     const folderAbs = await uniqueFolder(lib, characterFolderName(character.name))
     await mkdir(folderAbs, { recursive: true })
     definitionAbs = join(folderAbs, definitionFileName(character.name))
+  }
+
+  // Repoint scenes / Houdini projects that lived inside the renamed folder to its
+  // new location; a scene linked in place outside the folder is left untouched.
+  if (folderMove) {
+    const { from, to } = folderMove
+    const repoint = (p: string): string => {
+      const rel = relativeInside(from, p)
+      return rel ? join(to, rel) : p
+    }
+    stamped.scenePath = repoint(stamped.scenePath)
+    stamped.extraScenes = stamped.extraScenes.map(repoint)
+    stamped.houdiniProjects = stamped.houdiniProjects.map(repoint)
   }
 
   await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
