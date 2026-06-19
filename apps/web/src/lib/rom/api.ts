@@ -666,6 +666,11 @@ export async function fetchSettings(): Promise<StudioSettings> {
   return storage.getSettings()
 }
 
+/** The running app's version (e.g. "0.17.0"); '' on the web-only build. */
+export async function fetchAppVersion(): Promise<string> {
+  return storage.studioVersion()
+}
+
 /**
  * The app's internal per-user data folder — where settings.json, projects.json,
  * the pose catalog and avatar images live. Surfaced in Settings so the user can
