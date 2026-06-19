@@ -61,6 +61,7 @@ import {
   uploadCharacterImageFromPath,
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
@@ -1311,23 +1312,30 @@ function CharacterPage() {
   }
 
   // --- Special operations (clone / delete) ---
+  const [cloneOpen, setCloneOpen] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [cloneError, setCloneError] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  async function onClone() {
+  const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
+
+  async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
     setCloning(true)
+    setCloneError('')
     try {
-      const clone = await cloneCharacter({ data: { projectId, id: character.id } })
+      const clone = await cloneCharacter({ data: { projectId, id: character.id, name, copyScenes } })
+      setCloneOpen(false)
       toast.success(`Cloned to “${clone.name}”`)
+      // Navigation remounts the editor (keyed by id) onto the copy — see the
+      // route wrapper — so the busy flag doesn't need resetting on success.
       await router.navigate({
         to: '/projects/$projectId/characters/$characterId',
         params: { projectId, characterId: clone.id },
       })
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
+      setCloneError(e instanceof Error ? e.message : String(e))
       setCloning(false)
     }
   }
@@ -1781,7 +1789,14 @@ function CharacterPage() {
           Duplicate this character into a new copy, or delete it from the project.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={onClone} disabled={cloning || deleting}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCloneError('')
+              setCloneOpen(true)
+            }}
+            disabled={cloning || deleting}
+          >
             <Copy /> {cloning ? 'Cloning…' : 'Clone'}
           </Button>
           <Button
@@ -1794,6 +1809,17 @@ function CharacterPage() {
         </div>
       </section>
       </div>
+
+      {cloneOpen && (
+        <CloneCharacterDialog
+          defaultName={`${character.name} copy`}
+          hasScenes={hasScenes}
+          busy={cloning}
+          error={cloneError}
+          onConfirm={doClone}
+          onClose={() => setCloneOpen(false)}
+        />
+      )}
 
       {deleteOpen && (
         <BulkDeleteDialog
