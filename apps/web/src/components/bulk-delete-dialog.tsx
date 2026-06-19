@@ -6,16 +6,18 @@ import { Switch } from '#/components/ui/switch.tsx'
 
 /**
  * The "really delete?" confirm for an overview's bulk delete and the character
- * editor's single delete. For characters it offers to keep the Daz / Houdini
- * subfolders on disk; for projects it just clarifies that only the project entry
- * is removed (files are always kept). Esc / backdrop cancel (ignored while busy).
+ * editor's single delete. `message` is the (destructive) description. When
+ * `keepLabel` is set, a single "keep on disk" toggle is shown — OFF by default,
+ * so the default action deletes the files; turning it on opts out. The chosen
+ * value is reported as `{ keep }`. Esc / backdrop cancel (ignored while busy).
  * Portaled to <body> so a CSS-contained ancestor can't capture its positioning.
  */
 export function BulkDeleteDialog({
   noun,
   names,
-  showKeepFiles = false,
-  dazSubdirLabel = 'daz3d',
+  message,
+  keepLabel,
+  keepNote,
   busy,
   error,
   onConfirm,
@@ -25,15 +27,18 @@ export function BulkDeleteDialog({
   noun: string
   /** Names of the items being deleted (drives the heading + preview). */
   names: Array<string>
-  /** Characters can keep their Daz scenes folder; projects can't (files kept). */
-  showKeepFiles?: boolean
-  dazSubdirLabel?: string
+  /** The description line under the heading (what deleting does). */
+  message: ReactNode
+  /** Label for the optional "keep files on disk" toggle; omit for no toggle. */
+  keepLabel?: ReactNode
+  /** Extra clarification shown under the toggle. */
+  keepNote?: ReactNode
   busy: boolean
   error?: ReactNode
-  onConfirm: (opts: { keepDaz: boolean }) => void
+  onConfirm: (opts: { keep: boolean }) => void
   onClose: () => void
 }) {
-  const [keepDaz, setKeepDaz] = useState(false)
+  const [keep, setKeep] = useState(false)
   const count = names.length
 
   useEffect(() => {
@@ -44,10 +49,7 @@ export function BulkDeleteDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, onClose])
 
-  const heading =
-    count === 1
-      ? `Delete ${noun} “${names[0]}”?`
-      : `Delete ${count} ${noun}s?`
+  const heading = count === 1 ? `Delete ${noun} “${names[0]}”?` : `Delete ${count} ${noun}s?`
   const preview =
     count > 1 && count <= 8 ? names.join(', ') : count > 8 ? `${names.slice(0, 8).join(', ')}…` : ''
 
@@ -62,30 +64,22 @@ export function BulkDeleteDialog({
       >
         <h2 className="text-lg font-semibold">{heading}</h2>
         {preview && <p className="text-sm text-muted-foreground">{preview}</p>}
-        <p className="text-sm text-muted-foreground">
-          {showKeepFiles
-            ? 'This removes the character folder and its generated files. This cannot be undone.'
-            : `This only removes the ${noun} from the list — your files on disk are kept.`}
-        </p>
-        {showKeepFiles && (
-          <label className="flex items-center justify-between gap-3 rounded-md border bg-card p-3 text-sm">
-            <span>
-              Keep the Daz files folder{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">{dazSubdirLabel}</code> on disk
-            </span>
-            <Switch checked={keepDaz} onCheckedChange={setKeepDaz} />
-          </label>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        {keepLabel && (
+          <div className="rounded-md border bg-card p-3">
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>{keepLabel}</span>
+              <Switch checked={keep} onCheckedChange={setKeep} />
+            </label>
+            {keepNote && <p className="mt-1.5 text-xs text-muted-foreground">{keepNote}</p>}
+          </div>
         )}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            disabled={busy}
-            onClick={() => onConfirm({ keepDaz })}
-          >
+          <Button variant="destructive" disabled={busy} onClick={() => onConfirm({ keep })}>
             {busy ? 'Deleting…' : count === 1 ? 'Delete' : `Delete ${count}`}
           </Button>
         </div>

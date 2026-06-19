@@ -603,10 +603,11 @@ export function studioCharScriptsDir(
 
 /**
  * Install the DTH runtime files (from the DazToHue-Scripts checkout) into
- * `destDir`, creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
- * etc.) so they read as hidden, and the sibling `include()` references inside
- * them are rewritten to the dotted names so resolution still works. Overwrites
- * so the runtime stays in sync as the scripts evolve.
+ * `destDir` (the DTH-Character-Studio root), creating it if missing. They're
+ * written dot-prefixed (`.DthWorkflow.dsa` etc.) so they read as hidden, and the
+ * sibling `include()` references inside them are rewritten so resolution still
+ * works from a character script two levels deep — see the rewrite below.
+ * Overwrites so the runtime stays in sync as the scripts evolve.
  */
 export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise<void> {
   if (!srcDir) {
@@ -618,8 +619,14 @@ export async function copyRuntimeFiles(srcDir: string, destDir: string): Promise
     const src = join(srcDir, name)
     if (!(await exists(src))) throw new Error(`Missing runtime file in DazToHue-Scripts: ${name}`)
     let content = await readTextFile(src)
+    // The runtime files include each other via `dir_self.filePath("Dep.dsa")`,
+    // where dir_self comes from getScriptFileName() — which, inside an include(),
+    // is the TOP-LEVEL character script at <root>/<project>/<character>/, two
+    // levels below this runtime root. So rewrite each sibling reference to the
+    // dot-prefixed name AND climb `../../` back to the root where it lives
+    // (mirrors the character script's own `../../.DthWorkflow.dsa` include).
     for (const dep of RUNTIME_FILES) {
-      content = content.split(`"${dep}"`).join(`".${dep}"`)
+      content = content.split(`"${dep}"`).join(`"../../.${dep}"`)
     }
     await writeTextFile(join(destDir, `.${name}`), content)
   }
@@ -838,8 +845,38 @@ export async function updateProject(
   return projects[idx]
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await writeProjects((await readProjects()).filter((p) => p.id !== id))
+/**
+ * Remove a project. Its generated-scripts subfolder in the Daz library is ALWAYS
+ * removed (a derived artifact that's orphaned once the project is gone). With
+ * `deleteFiles`, the project's library folder (all character data) is deleted
+ * too; otherwise only the list entry goes and the data stays on disk. The
+ * library folder is removed before the record so a failure leaves the project
+ * visible to retry.
+ */
+export async function deleteProject(
+  id: string,
+  opts: { deleteFiles?: boolean } = {},
+): Promise<void> {
+  const projects = await readProjects()
+  const project = projects.find((p) => p.id === id)
+  if (project) {
+    if (opts.deleteFiles) {
+      const folder = join(project.path)
+      if (await exists(folder)) await remove(folder, { recursive: true })
+    }
+    // Always drop the generated-scripts subfolder (keyed by project name) — it's
+    // derived data, so best-effort (never fail the delete on it).
+    const { dazLibraryFolder } = await getSettings()
+    if (dazLibraryFolder) {
+      const scripts = join(studioScriptsDir(dazLibraryFolder), characterFolderName(project.name))
+      try {
+        if (await exists(scripts)) await remove(scripts, { recursive: true })
+      } catch {
+        // leave orphaned generated scripts rather than failing the delete
+      }
+    }
+  }
+  await writeProjects(projects.filter((p) => p.id !== id))
 }
 
 /**
