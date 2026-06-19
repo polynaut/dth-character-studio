@@ -1,5 +1,29 @@
 # @dth/web
 
+## 0.15.1
+
+### Patch Changes
+
+- [#49](https://github.com/polynaut/dth-character-studio/pull/49) [`1e69028`](https://github.com/polynaut/dth-character-studio/commit/1e690282161c797faea15c55352e4f4b73bfb76f) Thanks [@polynaut](https://github.com/polynaut)! - Cloning a character is now a proper flow. The **Clone** button opens a dialog to
+  name the copy (pre-filled "<name> copy") and choose whether to **copy its Daz
+  scenes** — scenes stored in the character folder are copied into the copy, while
+  scenes linked in place are kept as links (their files untouched). After cloning,
+  the editor now actually lands on the new copy: it's keyed by the character id, so
+  an editor→editor navigation remounts and re-seeds from the copy (previously only
+  the URL changed while the editor kept showing the original).
+
+- [#48](https://github.com/polynaut/dth-character-studio/pull/48) [`96b8044`](https://github.com/polynaut/dth-character-studio/commit/96b8044db44d3add68e53790265ff1b976126079) Thanks [@polynaut](https://github.com/polynaut)! - Make asset removal safer so a user can never delete an original file by mistake:
+
+  - **Houdini projects** are only ever linked in place, so the _Remove Houdini
+    project_ dialog no longer offers "Delete file on disk" — removal is unlink-only.
+  - **Daz scenes** linked in place (outside the character folder) are the user's
+    originals, so the _Remove Daz scene_ dialog now shows the "Delete file on disk"
+    toggle locked off, with a "Linked in place — your original file is kept" note.
+    Scenes copied _into_ the character folder keep the toggle on, as before.
+
+- Updated dependencies []:
+  - @dth/rom@0.15.1
+
 ## 0.15.0
 
 ### Minor Changes
