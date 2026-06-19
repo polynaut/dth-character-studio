@@ -609,10 +609,28 @@ describe('exporter integration', () => {
     const content = toCharacterScriptDsa(character, {}, FRAMES).content
     const refs = referenceFrames(character, FRAMES).join(' ')
     expect(content).toContain('findAction("DazToHueExporterAction")')
-    expect(content).toContain(`dthExportAction.doExport("X:/exports/electra", "Electra", "${refs}", false)`)
+    expect(content).toContain('var dthExportDir = "X:/exports/electra";')
+    expect(content).toContain(`dthExportAction.doExport(dthExportDir, "Electra", "${refs}", false)`)
   })
 
   it('omits the export call when no export path is set', () => {
     expect(toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content).not.toContain('doExport')
+  })
+
+  it('nests the export under the open scene name when exportSceneSubfolders is set', () => {
+    const character = withReferencePose({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+      exportSceneSubfolders: true,
+    })
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    expect(content).toContain('Scene.getFilename()')
+    expect(content).toContain('new DzFileInfo(dthSceneFile).completeBaseName()')
+    expect(content).toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
+  })
+
+  it('does not read the scene name when exportSceneSubfolders is off', () => {
+    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain('Scene.getFilename()')
   })
 })
