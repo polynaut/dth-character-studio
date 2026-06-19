@@ -16,7 +16,6 @@ export function BulkDeleteDialog({
   names,
   showKeepFiles = false,
   dazSubdirLabel = 'daz3d',
-  houdiniSubdirLabel = 'houdini',
   busy,
   error,
   onConfirm,
@@ -26,17 +25,15 @@ export function BulkDeleteDialog({
   noun: string
   /** Names of the items being deleted (drives the heading + preview). */
   names: Array<string>
-  /** Characters can keep their Daz/Houdini folders; projects can't (files kept). */
+  /** Characters can keep their Daz scenes folder; projects can't (files kept). */
   showKeepFiles?: boolean
   dazSubdirLabel?: string
-  houdiniSubdirLabel?: string
   busy: boolean
   error?: ReactNode
-  onConfirm: (opts: { keepDaz: boolean; keepHoudini: boolean }) => void
+  onConfirm: (opts: { keepDaz: boolean }) => void
   onClose: () => void
 }) {
   const [keepDaz, setKeepDaz] = useState(false)
-  const [keepHoudini, setKeepHoudini] = useState(false)
   const count = names.length
 
   useEffect(() => {
@@ -71,23 +68,13 @@ export function BulkDeleteDialog({
             : `This only removes the ${noun} from the list — your files on disk are kept.`}
         </p>
         {showKeepFiles && (
-          <div className="space-y-3 rounded-md border bg-card p-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase">Keep on disk</p>
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>
-                Keep Daz files{' '}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">{dazSubdirLabel}</code>
-              </span>
-              <Switch checked={keepDaz} onCheckedChange={setKeepDaz} />
-            </label>
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>
-                Keep Houdini files{' '}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">{houdiniSubdirLabel}</code>
-              </span>
-              <Switch checked={keepHoudini} onCheckedChange={setKeepHoudini} />
-            </label>
-          </div>
+          <label className="flex items-center justify-between gap-3 rounded-md border bg-card p-3 text-sm">
+            <span>
+              Keep the Daz files folder{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">{dazSubdirLabel}</code> on disk
+            </span>
+            <Switch checked={keepDaz} onCheckedChange={setKeepDaz} />
+          </label>
         )}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
@@ -97,7 +84,7 @@ export function BulkDeleteDialog({
           <Button
             variant="destructive"
             disabled={busy}
-            onClick={() => onConfirm({ keepDaz, keepHoudini })}
+            onClick={() => onConfirm({ keepDaz })}
           >
             {busy ? 'Deleting…' : count === 1 ? 'Delete' : `Delete ${count}`}
           </Button>
