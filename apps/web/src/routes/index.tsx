@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { FolderInput, FolderOpen, FolderPlus, Pencil, Settings as SettingsIcon } from 'lucide-react'
+import { FolderInput, FolderOpen, FolderPlus, Pencil } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { pathChipClass } from '#/components/path-code.tsx'
+import { HeaderNav } from '#/components/header-nav.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { ProjectMoveDialog, ProjectRenameDialog } from '#/components/project-dialogs.tsx'
 import {
@@ -185,22 +186,7 @@ function ProjectsPage() {
               mt-1) — kept empty here since the projects list has no path. */}
           <div className="mt-1 h-5" aria-hidden />
         </div>
-        <div className="flex shrink-0 items-center gap-4">
-          <Link
-            to="/about"
-            // `!` overrides the global unlayered `a { color: primary }` rule
-            // (styles.css) so this reads as a muted link, not an orange one.
-            className="text-sm text-muted-foreground! underline-offset-4 hover:text-foreground! hover:underline"
-          >
-            About
-          </Link>
-          <Link
-            to="/settings"
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <SettingsIcon className="size-4" /> Settings
-          </Link>
-        </div>
+        <HeaderNav />
       </header>
 
       {!hasDazLibrary ? (

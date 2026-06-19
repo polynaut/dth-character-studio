@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FolderOpen, Settings as SettingsIcon, UserPlus } from 'lucide-react'
+import { ArrowLeft, FolderOpen, UserPlus } from 'lucide-react'
 
 import { Field } from '#/components/field.tsx'
 import { Portrait } from '#/components/portrait.tsx'
@@ -47,6 +47,7 @@ import { pickDufPath } from '#/lib/desktop.ts'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
+import { HeaderNav } from '#/components/header-nav.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -302,12 +303,7 @@ function ProjectCharactersPage() {
             <PathCode path={displayPath(project.path)} />
           </p>
         </div>
-        <Link
-          to="/settings"
-          className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <SettingsIcon className="size-4" /> Settings
-        </Link>
+        <HeaderNav />
       </header>
 
       <FileDropZone
