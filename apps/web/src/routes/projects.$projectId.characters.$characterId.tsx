@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   FolderInput,
+  FolderOpen,
   Link2,
   Pencil,
   Plus,
@@ -1313,6 +1314,22 @@ function CharacterPage() {
 
   const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
 
+  // Warn if the export directory sits inside the project library — the exporter
+  // makes its own <characterName> subfolder, so it should be a separate place.
+  const exportInsideProject = (() => {
+    const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+    return Boolean(
+      character.exportPath &&
+        location &&
+        norm(character.exportPath).startsWith(norm(location.libraryFolder) + '/'),
+    )
+  })()
+
+  async function onPickExportDir() {
+    const picked = await pickFolder('Choose the export directory for the DTH Exporter')
+    if (picked) patch({ exportPath: picked })
+  }
+
   async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
     setCloning(true)
     setCloneError('')
@@ -1692,6 +1709,43 @@ function CharacterPage() {
           presetFrames={presetFrames}
           onChange={(sections) => patch({ sections })}
         />
+      </section>
+
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-1 text-xl font-semibold">Export</h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Set an export directory and the generated Daz script runs the DTH Exporter Plugin
+          (v1.8.1+) automatically after building the ROM — exporting{' '}
+          {character.exportPath ? (
+            <>
+              into a <code className="rounded bg-muted px-1 py-0.5 text-xs">{character.name}</code>{' '}
+              subfolder it creates there
+            </>
+          ) : (
+            'straight into the DTH pipeline'
+          )}
+          . Leave empty to skip auto-export. Reference frames are taken from the ROM's
+          reference-skeleton poses.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={onPickExportDir}>
+            <FolderOpen /> {character.exportPath ? 'Change…' : 'Choose folder…'}
+          </Button>
+          {character.exportPath && (
+            <>
+              <PathCode path={displayPath(character.exportPath)} />
+              <Button variant="ghost" size="sm" onClick={() => patch({ exportPath: '' })}>
+                <X /> Clear
+              </Button>
+            </>
+          )}
+        </div>
+        {exportInsideProject && (
+          <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+            This folder is inside the project — pick one outside it, since the exporter creates its
+            own character subfolder.
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border bg-card p-5">
