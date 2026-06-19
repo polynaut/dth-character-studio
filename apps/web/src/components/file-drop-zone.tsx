@@ -8,23 +8,27 @@ import { cn } from '#/lib/utils.ts'
  * need to target a button). While such a file hovers, a dashed overlay with
  * `label` appears. `accept` is lower-case extensions without the dot, e.g.
  * `['duf']` or `['hip', 'hipnc', 'hiplc']`; `onDrop` receives the matching paths.
+ * Pass `acceptFolders` instead to take a dropped folder (the caller resolves the
+ * path) — folders can't be matched by extension.
  */
 export function FileDropZone({
-  accept,
+  accept = [],
+  acceptFolders,
   onDrop,
   label = 'Drop to add',
   className,
   overlayClassName,
   children,
 }: {
-  accept: Array<string>
+  accept?: Array<string>
+  acceptFolders?: boolean
   onDrop: (paths: Array<string>) => void
   label?: string
   className?: string
   overlayClassName?: string
   children: ReactNode
 }) {
-  const { id, isOver } = useFileDrop({ accept, onDrop })
+  const { id, isOver } = useFileDrop({ accept, acceptFolders, onDrop })
   return (
     <div data-filedrop-id={id} className={cn('relative', className)}>
       {children}

@@ -359,6 +359,17 @@ export async function fileExists({ data }: { data: unknown }): Promise<boolean> 
   }
 }
 
+/** Whether `path` is a directory (false, never throws, when it can't be probed).
+ *  Used to resolve a dropped folder vs file in the create-project drop zone. */
+export async function isDirectory(path: string): Promise<boolean> {
+  if (!path) return false
+  try {
+    return (await stat(path)).isDirectory
+  } catch {
+    return false
+  }
+}
+
 const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown() })
 
 export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
