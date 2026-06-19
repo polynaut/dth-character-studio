@@ -1332,11 +1332,11 @@ function CharacterPage() {
     }
   }
 
-  async function onDeleteCharacter({ keepDaz }: { keepDaz: boolean }) {
+  async function onDeleteCharacter({ keep }: { keep: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
-      await deleteCharacter({ data: { projectId, id: character.id, keepDaz } })
+      await deleteCharacter({ data: { projectId, id: character.id, keepDaz: keep } })
       toast.success(`Deleted “${character.name}”`)
       // Navigation unmounts this editor — no need to reset the busy flag.
       await router.navigate({ to: '/projects/$projectId', params: { projectId } })
@@ -1816,8 +1816,13 @@ function CharacterPage() {
         <BulkDeleteDialog
           noun="character"
           names={[character.name]}
-          showKeepFiles
-          dazSubdirLabel={settings.dazSubdir}
+          message="This removes the character folder and its generated files. This cannot be undone."
+          keepLabel={
+            <>
+              Keep the Daz files folder{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">{settings.dazSubdir}</code>
+            </>
+          }
           busy={deleting}
           error={deleteError}
           onConfirm={onDeleteCharacter}

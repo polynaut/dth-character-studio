@@ -23,11 +23,13 @@ import {
   deleteProject,
   fetchProjects,
   fetchSettings,
+  isDirectory,
   moveProject,
   saveSettings,
   updateProject,
 } from '#/lib/rom/api.ts'
 import type { Project } from '#/lib/rom/api.ts'
+import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
@@ -82,12 +84,23 @@ function ProjectsPage() {
     }
   }
 
+  function applyFolder(folder: string) {
+    setPath(folder)
+    // Suggest the project name from the folder's own name (editable).
+    setName(folder.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '')
+  }
+
   async function onChooseFolder() {
     const picked = await pickFolder('Choose the project folder')
-    if (!picked) return
-    setPath(picked)
-    // Suggest the project name from the folder's own name (editable).
-    setName(picked.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '')
+    if (picked) applyFolder(picked)
+  }
+
+  async function onDropFolder(paths: Array<string>) {
+    const dropped = paths[0]
+    if (!dropped) return
+    setError('')
+    // A dropped folder is used as-is; a dropped file resolves to its folder.
+    applyFolder((await isDirectory(dropped)) ? dropped : dropped.replace(/[\\/][^\\/]*$/, ''))
   }
 
   async function onCreate() {
@@ -140,18 +153,18 @@ function ProjectsPage() {
     }
   }
 
-  async function onBulkDelete() {
+  async function onBulkDelete({ keep }: { keep: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
       for (const project of selectedProjects) {
-        await deleteProject({ data: { id: project.id } })
+        await deleteProject({ data: { id: project.id, deleteFiles: !keep } })
       }
       const n = selectedProjects.length
       sel.clear()
       setConfirmOpen(false)
       await router.invalidate()
-      toast.success(`Removed ${n} project${n === 1 ? '' : 's'}`)
+      toast.success(`Deleted ${n} project${n === 1 ? '' : 's'}`)
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -191,11 +204,17 @@ function ProjectsPage() {
         </div>
       ) : (
         <>
-          <div className="mb-8 max-w-3xl space-y-4 rounded-lg border bg-card p-5">
+          <FileDropZone
+            acceptFolders
+            onDrop={onDropFolder}
+            label="Drop a folder to use as the project"
+            className="mb-8 max-w-3xl"
+          >
+            <div className="space-y-4 rounded-lg border bg-card p-5">
             <div>
               <h2 className="text-lg font-semibold">Create project</h2>
               <p className="text-sm text-muted-foreground">
-                Choose the project's folder location on disk.
+                Choose — or drag in — the project's folder location on disk.
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
@@ -230,7 +249,8 @@ function ProjectsPage() {
                 </Button>
               </div>
             )}
-          </div>
+            </div>
+          </FileDropZone>
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
           {projects.length === 0 ? (
@@ -369,6 +389,9 @@ function ProjectsPage() {
         <BulkDeleteDialog
           noun="project"
           names={selectedProjects.map((p) => p.name)}
+          message="This permanently deletes the project folder and all character data inside it. This cannot be undone."
+          keepLabel="Keep project files on disk"
+          keepNote="When on, only the project entry is removed — your files are left untouched."
           busy={deleting}
           error={deleteError}
           onConfirm={onBulkDelete}

@@ -16,6 +16,10 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 interface Zone {
   /** Lower-case extensions (no dot) this zone accepts, e.g. ['duf']. */
   accept: Array<string>
+  /** Accept any dropped path (a folder, or a file whose folder the caller uses).
+   *  Folders can't be matched by extension, and the OS doesn't tell us dir-vs-file
+   *  during hover, so the zone optimistically accepts and the caller resolves it. */
+  acceptFolders: boolean
   onDrop: (paths: Array<string>) => void
   setOver: (over: boolean) => void
 }
@@ -40,6 +44,7 @@ function zoneIdAt(physX: number, physY: number): string | null {
 }
 
 function zoneAccepts(zone: Zone, paths: Array<string>): boolean {
+  if (zone.acceptFolders) return paths.length > 0
   return paths.some((p) => zone.accept.includes(extOf(p)))
 }
 
@@ -72,7 +77,9 @@ async function ensureListening() {
         const id = zoneIdAt(p.position.x, p.position.y)
         const zone = id ? zones.get(id) : null
         if (zone) {
-          const matching = p.paths.filter((path) => zone.accept.includes(extOf(path)))
+          const matching = zone.acceptFolders
+            ? p.paths
+            : p.paths.filter((path) => zone.accept.includes(extOf(path)))
           if (matching.length) zone.onDrop(matching)
         }
         draggedPaths = []
@@ -95,16 +102,22 @@ async function ensureListening() {
  * file hovers this zone). The latest `onDrop` is always used without
  * re-registering.
  */
-export function useFileDrop(opts: { accept: Array<string>; onDrop: (paths: Array<string>) => void }) {
+export function useFileDrop(opts: {
+  accept?: Array<string>
+  acceptFolders?: boolean
+  onDrop: (paths: Array<string>) => void
+}) {
   const id = useId()
   const [isOver, setIsOver] = useState(false)
   const onDropRef = useRef(opts.onDrop)
   onDropRef.current = opts.onDrop
-  const acceptKey = opts.accept.join(',').toLowerCase()
+  const acceptKey = (opts.accept ?? []).join(',').toLowerCase()
+  const acceptFolders = opts.acceptFolders ?? false
 
   useEffect(() => {
     zones.set(id, {
       accept: acceptKey ? acceptKey.split(',') : [],
+      acceptFolders,
       onDrop: (paths) => onDropRef.current(paths),
       setOver: setIsOver,
     })
@@ -113,7 +126,7 @@ export function useFileDrop(opts: { accept: Array<string>; onDrop: (paths: Array
       zones.delete(id)
       if (activeId === id) activeId = null
     }
-  }, [id, acceptKey])
+  }, [id, acceptKey, acceptFolders])
 
   return { id, isOver }
 }

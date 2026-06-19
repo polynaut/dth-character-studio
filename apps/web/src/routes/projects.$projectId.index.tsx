@@ -245,12 +245,12 @@ function ProjectCharactersPage() {
   )
   const selectedChars = visible.filter((c) => sel.isSelected(c.id))
 
-  async function onBulkDelete({ keepDaz }: { keepDaz: boolean }) {
+  async function onBulkDelete({ keep }: { keep: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
       for (const character of selectedChars) {
-        await deleteCharacter({ data: { projectId, id: character.id, keepDaz } })
+        await deleteCharacter({ data: { projectId, id: character.id, keepDaz: keep } })
       }
       const n = selectedChars.length
       sel.clear()
@@ -583,8 +583,13 @@ function ProjectCharactersPage() {
         <BulkDeleteDialog
           noun="character"
           names={selectedChars.map((c) => c.name)}
-          showKeepFiles
-          dazSubdirLabel={settings.dazSubdir}
+          message="This removes the character folder and its generated files. This cannot be undone."
+          keepLabel={
+            <>
+              Keep the Daz files folder{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">{settings.dazSubdir}</code>
+            </>
+          }
           busy={deleting}
           error={deleteError}
           onConfirm={onBulkDelete}
