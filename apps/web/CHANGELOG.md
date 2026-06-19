@@ -1,5 +1,71 @@
 # @dth/web
 
+## 0.18.0
+
+### Minor Changes
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Add an **About** page: a new "About" link sits next to Settings on the projects
+  home, opening a page with the large app logo, the title "DTH Character Studio
+  v&lt;version&gt;" (the running app version), a short description of the studio,
+  and a link to the GitHub repository (opens in the OS browser).
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - The studio is now **self-contained**: the DTH runtime (`DthWorkflow.dsa` /
+  `DthUtils.dsa` / `DthOptions.dsa`) is bundled into the app and installed from
+  there, so it no longer needs a DazToHue-Scripts checkout. The "DazToHue-Scripts
+  folder" setting is removed — generating a character installs the runtime
+  straight from the bundled copy. (A runtime version, to flag when an app update
+  should refresh the bundled files, is planned as a follow-up.)
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Integrate the DTH Exporter Plugin's new scripting hook (v1.8.1+). A character now
+  has an **export directory** (editor → Export section); when set, the generated
+  Daz script runs the exporter automatically after building the ROM —
+  `dthExportAction.doExport(exportDir, characterName, referenceFrames, false)` — so
+  one script builds _and_ exports, no dialog. The reference frames are derived from
+  the ROM's reference-skeleton poses (the poses carrying a `referenceFbx`), passed
+  space-separated. The exporter creates its own `<characterName>` subfolder, so the
+  export directory should sit outside the project (the editor warns otherwise).
+  Adds `exportPath` to the character schema (→ `CHARACTER_SCHEMA_VERSION` 3).
+
+### Patch Changes
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Character editor tidy-up: the **Houdini projects** hint, the **Export directory**
+  section intro, and the **ROM** section intro now live in "i" info popups next to
+  their labels/headings instead of inline sub-lines, matching the Settings page.
+  The "Export" and "Special operations" headings are renamed to "Export directory"
+  and "Operations".
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - When a character has an export directory set, the generated PoseAsset CSV is now
+  also written into that folder — so it sits next to the exporter's output
+  (`<name>.fbx` / `.abc` / `.dth` / …) and the whole package ends up in one folder
+  for the next step. The CSV still lives in the character folder too; writing to
+  the export folder is best-effort and never fails generation.
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Drop the first-run "Set your DAZ 3D Library" gate on the projects home — the
+  app now opens straight to the projects list and lets you start working. The
+  DAZ 3D Library path is still set in Settings, and missing prerequisites are
+  surfaced where they matter (character detail / install steps) rather than via
+  an upfront prompt.
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Rename the generated PoseAsset CSV to DTH's convention: `<name>_pose_asset.csv`
+  (was `<name>_PoseAsset.csv`). The legacy-cased file is cleaned up from the
+  character folder and the export folder on the next generate.
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - **Refresh Assets** now also re-installs the bundled DTH runtime files (once, up
+  front) — so after a studio update that ships a newer runtime, one Refresh Assets
+  push it to the Daz library even when there are no characters to regenerate. The
+  result panel reports the runtime refresh (and any failure).
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Settings page tidy-up: per-field help text now lives in an info ("i") popup next
+  to its label instead of as an inline sub-line — `FolderField` shows one popup
+  (its rich `info`, falling back to `help`), the General tab's subfolder fields got
+  the same, and the General tab's section blurbs (Refresh assets, App data folder,
+  Network drives) moved into popups next to their headings. The DazToHue tab's
+  multi-step setup intros stay as visible subtitles. The Exporter install's "close
+  all Daz/Houdini apps and restart as administrator" guidance now shows only when
+  an install actually fails, styled as an error.
+- Updated dependencies [[`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8), [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8)]:
+  - @dth/rom@0.18.0
+
 ## 0.17.0
 
 ### Minor Changes

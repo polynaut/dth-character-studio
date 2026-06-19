@@ -1,5 +1,25 @@
 # @dth/rom
 
+## 0.18.0
+
+### Minor Changes
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Integrate the DTH Exporter Plugin's new scripting hook (v1.8.1+). A character now
+  has an **export directory** (editor → Export section); when set, the generated
+  Daz script runs the exporter automatically after building the ROM —
+  `dthExportAction.doExport(exportDir, characterName, referenceFrames, false)` — so
+  one script builds _and_ exports, no dialog. The reference frames are derived from
+  the ROM's reference-skeleton poses (the poses carrying a `referenceFbx`), passed
+  space-separated. The exporter creates its own `<characterName>` subfolder, so the
+  export directory should sit outside the project (the editor warns otherwise).
+  Adds `exportPath` to the character schema (→ `CHARACTER_SCHEMA_VERSION` 3).
+
+### Patch Changes
+
+- [#55](https://github.com/polynaut/dth-character-studio/pull/55) [`9c2bbf4`](https://github.com/polynaut/dth-character-studio/commit/9c2bbf4c633fe930d05b21b929fca548044f61f8) Thanks [@polynaut](https://github.com/polynaut)! - Rename the generated PoseAsset CSV to DTH's convention: `<name>_pose_asset.csv`
+  (was `<name>_PoseAsset.csv`). The legacy-cased file is cleaned up from the
+  character folder and the export folder on the next generate.
+
 ## 0.17.0
 
 ## 0.16.0
