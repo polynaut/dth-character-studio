@@ -97,6 +97,19 @@ export async function updateProject({ data }: { data: unknown }): Promise<storag
   return storage.updateProject(id, { name, path })
 }
 
+const moveProjectInput = z.object({ id: z.string().min(1), path: z.string().min(1) })
+
+/**
+ * Re-home a project to a different folder (the "Move" action). Moves all
+ * character data to the new location and repoints every character's in-folder
+ * references + provenance (see storage.moveProject). The name is unchanged —
+ * renaming is the lighter `updateProject`.
+ */
+export async function moveProject({ data }: { data: unknown }): Promise<storage.Project> {
+  const { id, path } = moveProjectInput.parse(data)
+  return storage.moveProject(id, path)
+}
+
 export async function deleteProject({ data }: { data: unknown }): Promise<void> {
   await storage.deleteProject(z.object({ id: z.string().min(1) }).parse(data).id)
 }

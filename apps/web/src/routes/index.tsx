@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { FolderOpen, FolderPlus, Settings as SettingsIcon } from 'lucide-react'
+import { FolderInput, FolderOpen, FolderPlus, Pencil, Settings as SettingsIcon } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { pathChipClass } from '#/components/path-code.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import { ProjectMoveDialog, ProjectRenameDialog } from '#/components/project-dialogs.tsx'
 import {
   SelectCheckbox,
   SelectionBar,
@@ -22,8 +23,11 @@ import {
   deleteProject,
   fetchProjects,
   fetchSettings,
+  moveProject,
   saveSettings,
+  updateProject,
 } from '#/lib/rom/api.ts'
+import type { Project } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
@@ -52,6 +56,11 @@ function ProjectsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  // Per-card rename ("easy") + move-folder ("meaty") dialogs.
+  const [renaming, setRenaming] = useState<Project | null>(null)
+  const [movingProject, setMovingProject] = useState<Project | null>(null)
+  const [opBusy, setOpBusy] = useState(false)
+  const [opError, setOpError] = useState('')
 
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
   const sorted = sortItems(projects, sort, { name: (p) => p.name, date: (p) => p.createdAt ?? '' })
@@ -96,6 +105,38 @@ function ProjectsPage() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function onRename(name: string) {
+    if (!renaming) return
+    setOpBusy(true)
+    setOpError('')
+    try {
+      await updateProject({ data: { id: renaming.id, name } })
+      setRenaming(null)
+      await router.invalidate()
+      toast.success(`Renamed to “${name}”`)
+    } catch (e) {
+      setOpError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setOpBusy(false)
+    }
+  }
+
+  async function onMove(path: string) {
+    if (!movingProject) return
+    setOpBusy(true)
+    setOpError('')
+    try {
+      const moved = await moveProject({ data: { id: movingProject.id, path } })
+      setMovingProject(null)
+      await router.invalidate()
+      toast.success(`Moved “${moved.name}” to its new folder`)
+    } catch (e) {
+      setOpError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setOpBusy(false)
     }
   }
 
@@ -236,7 +277,7 @@ function ProjectsPage() {
                             sel.toggle(project.id)
                           }
                         }}
-                        className={cn('block pr-12', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
+                        className={cn('block pr-24', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
                       >
                         {view === 'grid' ? (
                           <>
@@ -263,15 +304,47 @@ function ProjectsPage() {
                           </div>
                         )}
                       </Link>
-                      <SelectCheckbox
-                        checked={sel.isSelected(project.id)}
-                        selecting={sel.selecting}
-                        onChange={() => sel.toggle(project.id)}
+                      <div
                         className={cn(
-                          'absolute right-3',
-                          view === 'grid' ? 'top-3' : 'top-1/2 -translate-y-1/2',
+                          'absolute flex items-center gap-1',
+                          view === 'grid' ? 'top-2.5 right-2.5' : 'top-1/2 right-2.5 -translate-y-1/2',
                         )}
-                      />
+                      >
+                        {/* Rename ("easy") + move-folder ("meaty"); hidden while selecting. */}
+                        <button
+                          type="button"
+                          title="Rename project"
+                          onClick={() => {
+                            setOpError('')
+                            setRenaming(project)
+                          }}
+                          className={cn(
+                            'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
+                            sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
+                          )}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Move project to another folder"
+                          onClick={() => {
+                            setOpError('')
+                            setMovingProject(project)
+                          }}
+                          className={cn(
+                            'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
+                            sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
+                          )}
+                        >
+                          <FolderInput className="size-4" />
+                        </button>
+                        <SelectCheckbox
+                          checked={sel.isSelected(project.id)}
+                          selecting={sel.selecting}
+                          onChange={() => sel.toggle(project.id)}
+                        />
+                      </div>
                     </li>
                   )
                 })}
@@ -300,6 +373,26 @@ function ProjectsPage() {
           error={deleteError}
           onConfirm={onBulkDelete}
           onClose={() => setConfirmOpen(false)}
+        />
+      )}
+
+      {renaming && (
+        <ProjectRenameDialog
+          project={renaming}
+          busy={opBusy}
+          error={opError}
+          onSave={onRename}
+          onClose={() => setRenaming(null)}
+        />
+      )}
+
+      {movingProject && (
+        <ProjectMoveDialog
+          project={movingProject}
+          busy={opBusy}
+          error={opError}
+          onMove={onMove}
+          onClose={() => setMovingProject(null)}
         />
       )}
     </main>
