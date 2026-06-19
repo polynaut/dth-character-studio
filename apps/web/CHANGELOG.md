@@ -1,5 +1,22 @@
 # @dth/web
 
+## 0.19.0
+
+### Minor Changes
+
+- [#57](https://github.com/polynaut/dth-character-studio/pull/57) [`b4359a3`](https://github.com/polynaut/dth-character-studio/commit/b4359a3df854de73243a37d06ee8d53a4d469b94) Thanks [@polynaut](https://github.com/polynaut)! - Add a **"Generate subfolders based on Daz scenes"** toggle to the character
+  editor's Export directory panel. When on, the generated Daz script resolves the
+  open scene at run time via `Scene.getFilename()` and nests the export under a
+  subfolder named after it (the exporter's own `<characterName>` subfolder is
+  created inside that) — so a character's scene/outfit variants export side by
+  side. Falls back to the export root when no scene is saved. Adds
+  `exportSceneSubfolders` to the character schema (→ `CHARACTER_SCHEMA_VERSION` 4).
+
+### Patch Changes
+
+- Updated dependencies [[`b4359a3`](https://github.com/polynaut/dth-character-studio/commit/b4359a3df854de73243a37d06ee8d53a4d469b94)]:
+  - @dth/rom@0.19.0
+
 ## 0.18.0
 
 ### Minor Changes
