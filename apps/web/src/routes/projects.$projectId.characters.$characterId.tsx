@@ -33,6 +33,7 @@ import { RomSections } from '#/components/rom-sections.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import {
   Select,
   SelectContent,
@@ -1097,11 +1098,13 @@ function HoudiniProjectsField({
       label="Drop Houdini project(s) to link"
       className="rounded-lg"
     >
-      <Label className="mb-1 block">Houdini projects</Label>
-      <p className="mb-2 text-xs text-muted-foreground">
-        Linked in place (not copied) — a Houdini project keeps absolute import paths
-        that a copy would break. Drag <code>.hip</code> files here or use the button.
-      </p>
+      <Label className="mb-2 flex w-fit items-center gap-1">
+        Houdini projects
+        <InfoPopup label="Houdini projects — more information">
+          Linked in place (not copied) — a Houdini project keeps absolute import paths that a
+          copy would break. Drag <code>.hip</code> files here or use the button.
+        </InfoPopup>
+      </Label>
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
           {projects.map((hip, i) => (
@@ -1564,21 +1567,22 @@ function CharacterPage() {
       </section>
 
       <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-1 text-xl font-semibold">Export</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Set an export directory and the generated Daz script runs the DTH Exporter Plugin
-          (v1.8.1+) automatically after building the ROM — exporting{' '}
-          {character.exportPath ? (
-            <>
-              into a <code className="rounded bg-muted px-1 py-0.5 text-xs">{character.name}</code>{' '}
-              subfolder it creates there
-            </>
-          ) : (
-            'straight into the DTH pipeline'
-          )}
-          . Leave empty to skip auto-export. Reference frames are taken from the ROM's
-          reference-skeleton poses.
-        </p>
+        <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
+          Export directory
+          <InfoPopup label="Export directory — more information">
+            Set an export directory and the generated Daz script runs the DTH Exporter Plugin
+            (v1.8.1+) automatically after building the ROM — exporting{' '}
+            {character.exportPath ? (
+              <>
+                into a <code>{character.name}</code> subfolder it creates there
+              </>
+            ) : (
+              'straight into the DTH pipeline'
+            )}
+            . Leave empty to skip auto-export. Reference frames are taken from the ROM's
+            reference-skeleton poses.
+          </InfoPopup>
+        </h2>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" onClick={onPickExportDir}>
             <FolderOpen /> {character.exportPath ? 'Change…' : 'Choose folder…'}
@@ -1730,13 +1734,15 @@ function CharacterPage() {
       </details>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-xl font-semibold">ROM</h2>
-        <p className="mb-3 text-sm text-muted-foreground">
-          The eight pose asset categories in their canonical order. Pre-defined sections load the
-          DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
-          section, group and pose order — the generated Daz script and PoseAsset CSV share them
-          automatically.
-        </p>
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+          ROM
+          <InfoPopup label="ROM — more information">
+            The eight pose asset categories in their canonical order. Pre-defined sections load
+            the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
+            section, group and pose order — the generated Daz script and PoseAsset CSV share them
+            automatically.
+          </InfoPopup>
+        </h2>
         <RomSections
           sections={character.sections}
           genesis={character.genesis}
@@ -1829,7 +1835,7 @@ function CharacterPage() {
       </section>
 
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
-        <h2 className="mb-1 text-xl font-semibold">Special operations</h2>
+        <h2 className="mb-1 text-xl font-semibold">Operations</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Duplicate this character into a new copy, or delete it from the project.
         </p>
