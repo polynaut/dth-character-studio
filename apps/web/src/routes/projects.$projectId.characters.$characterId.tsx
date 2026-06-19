@@ -918,6 +918,9 @@ function DazSceneField({
           description="Unlink this Daz scene from the character."
           deleteFile={removeDeleteFile}
           onDeleteFileChange={setRemoveDeleteFile}
+          // A scene linked in place (outside the character folder) is the user's
+          // original — disable delete so it can only be unlinked, never removed.
+          deleteFileDisabled={!insideCharFolder(pendingRemove)}
           busy={busy}
           error={error}
           onConfirm={() => void confirmRemove()}
@@ -990,28 +993,22 @@ function HoudiniCard({
 function HoudiniProjectsField({
   projectId,
   character,
-  location,
   onChanged,
 }: {
   projectId: string
   character: Character
-  location: CharacterLocation
   onChanged: (character: Character) => void
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // A project pending the unlink confirm + whether to also delete it from disk.
+  // A project pending the unlink confirm. Houdini projects are only ever linked
+  // in place (absolute import paths forbid copying), so removing is unlink-only —
+  // never a file delete, which would hit the user's real .hip.
   const [pendingRemove, setPendingRemove] = useState('')
-  const [removeDeleteFile, setRemoveDeleteFile] = useState(false)
 
   const projects = character.houdiniProjects
   const hasProjects = projects.length > 0
-  const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-  const charFolder = norm(location.definitionAbs).replace(/\/[^/]*$/, '')
-  function insideCharFolder(p: string): boolean {
-    return norm(p).toLowerCase().startsWith(charFolder.toLowerCase() + '/')
-  }
 
   async function onOpen(hipPath: string) {
     setError('')
@@ -1054,11 +1051,8 @@ function HoudiniProjectsField({
     if (picked) await addProjects([picked])
   }
 
-  // Open the unlink confirm. Default "delete file" on when the project lives
-  // inside the character folder, off when it's linked in place outside.
   function askRemove(hip: string) {
     setError('')
-    setRemoveDeleteFile(insideCharFolder(hip))
     setPendingRemove(hip)
   }
 
@@ -1067,7 +1061,6 @@ function HoudiniProjectsField({
     setBusy(true)
     setError('')
     try {
-      if (removeDeleteFile) await deleteFiles({ data: { paths: [hip] } })
       const next: Character = {
         ...character,
         houdiniProjects: character.houdiniProjects.filter((p) => p !== hip),
@@ -1076,7 +1069,7 @@ function HoudiniProjectsField({
       onChanged(saved)
       setPendingRemove('')
       void router.invalidate()
-      toast.success(removeDeleteFile ? 'Deleted Houdini project' : 'Unlinked Houdini project')
+      toast.success('Unlinked Houdini project')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -1123,8 +1116,7 @@ function HoudiniProjectsField({
         <RemoveAssetDialog
           title="Remove Houdini project?"
           description="Unlink this Houdini project from the character."
-          deleteFile={removeDeleteFile}
-          onDeleteFileChange={setRemoveDeleteFile}
+          showDeleteFile={false}
           busy={busy}
           error={error}
           onConfirm={() => void confirmRemove()}
@@ -1529,7 +1521,6 @@ function CharacterPage() {
             <HoudiniProjectsField
               projectId={projectId}
               character={character}
-              location={location}
               onChanged={onSceneLinked}
             />
           </div>
