@@ -204,7 +204,7 @@ function ProjectsPage() {
             acceptFolders
             onDrop={onDropFolder}
             label="Drop a folder to use as the project"
-            className="mb-8 max-w-3xl"
+            className="mb-8 max-w-5xl"
           >
             <div className="space-y-4 rounded-lg border bg-card p-5">
             <div>

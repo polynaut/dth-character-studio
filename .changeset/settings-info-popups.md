@@ -2,8 +2,9 @@
 "@dth/web": patch
 ---
 
-Tidy the Settings page: the per-field/section help text now lives in an info ("i")
-popup next to each title instead of as inline sub-text. `FolderField` shows one
-popup (its rich `info`, falling back to `help`) and no longer renders a sub-line;
-the General tab's field hints and the Refresh assets / App data folder / Network
-drives section descriptions moved into popups beside their headings.
+Settings page tidy-up: per-**field** help text now lives in an info ("i") popup
+next to the field's label instead of as an inline sub-line — `FolderField` shows
+one popup (its rich `info`, falling back to `help`) and the General tab's
+subfolder fields got the same. Section intros stay as visible subtitles. The
+Exporter install's "close all Daz/Houdini apps and restart as administrator"
+guidance now shows only when an install actually fails, styled as an error.
