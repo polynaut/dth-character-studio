@@ -418,8 +418,10 @@ function RefreshAssetsSection() {
     try {
       const result = await refreshAllAssets()
       setSummary(result)
-      if (result.total === 0) {
-        toast('No characters to refresh yet')
+      if (result.runtime && !result.runtime.ok) {
+        toast.error(`Runtime refresh failed: ${result.runtime.detail ?? ''}`)
+      } else if (result.total === 0) {
+        toast(result.runtime?.ok ? 'DTH runtime refreshed — no characters to regenerate' : 'No characters to refresh yet')
       } else if (result.failed > 0) {
         toast.error(`Re-generated ${result.regenerated} of ${result.total} — ${result.failed} failed`)
       } else {
@@ -456,6 +458,13 @@ function RefreshAssetsSection() {
             )}
             .
           </p>
+          {summary.runtime && (
+            <p className={summary.runtime.ok ? 'text-muted-foreground' : 'text-destructive'}>
+              {summary.runtime.ok
+                ? 'DTH runtime files refreshed.'
+                : `DTH runtime refresh failed — ${summary.runtime.detail}`}
+            </p>
+          )}
           {failures.map((r, i) => (
             <p key={`f${i}`} className="flex items-start gap-2 text-destructive">
               <CircleX className="mt-0.5 size-4 shrink-0" />

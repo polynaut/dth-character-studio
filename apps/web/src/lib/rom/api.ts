@@ -1015,16 +1015,31 @@ export interface RefreshSummary {
   regenerated: number
   failed: number
   results: Array<RefreshResult>
+  /** Outcome of refreshing the bundled DTH runtime files (null = no DAZ library
+   *  set, so nothing to install into). */
+  runtime: { ok: boolean; detail?: string } | null
 }
 
 /**
- * Re-generate the derived artifacts (Daz scripts + PoseAsset CSVs) for every
- * character in every project — run after a studio update or a DTH-release switch
- * so all generated files match the current version. Character definition JSONs
- * are NOT touched (they self-migrate on open/save). Per-character failures are
- * collected, not thrown, so one bad character can't abort the whole sweep.
+ * Re-generate the derived artifacts for every character in every project — run
+ * after a studio update or a DTH-release switch so all generated files match the
+ * current version. Also re-installs the bundled DTH runtime files once (so an app
+ * update pushes the new runtime even with zero characters). Character definition
+ * JSONs are NOT touched (they self-migrate on open/save). Per-character failures
+ * are collected, not thrown, so one bad character can't abort the whole sweep.
  */
 export async function refreshAllAssets(): Promise<RefreshSummary> {
+  const settings = await storage.getSettings()
+  // Refresh the bundled runtime once, up front — independent of any characters.
+  let runtime: RefreshSummary['runtime'] = null
+  if (settings.dazLibraryFolder) {
+    try {
+      await storage.copyRuntimeFiles(storage.studioScriptsDir(settings.dazLibraryFolder))
+      runtime = { ok: true }
+    } catch (e) {
+      runtime = { ok: false, detail: e instanceof Error ? e.message : String(e) }
+    }
+  }
   const projects = await storage.listProjects()
   const results: Array<RefreshResult> = []
   for (const project of projects) {
@@ -1060,7 +1075,7 @@ export async function refreshAllAssets(): Promise<RefreshSummary> {
     }
   }
   const failed = results.filter((r) => !r.ok).length
-  return { total: results.length, regenerated: results.length - failed, failed, results }
+  return { total: results.length, regenerated: results.length - failed, failed, results, runtime }
 }
 
 /** Where a character's files live (absolute + library-relative), for the editor. */
