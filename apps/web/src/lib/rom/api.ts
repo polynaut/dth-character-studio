@@ -711,7 +711,6 @@ export async function listDthExporterReleases({
 
 const settingsInput = z.object({
   dazLibraryFolder: z.string(),
-  dazScriptsFolder: z.string(),
   dthPosesFolder: z.string(),
   // Tolerate older payloads that predate the field (kept = '' = not chosen).
   currentDthVersion: z.string().default(''),
@@ -974,7 +973,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     const root = storage.studioScriptsDir(settings.dazLibraryFolder)
     const charDir = storage.studioCharScriptsDir(settings.dazLibraryFolder, project.name, character.name)
     try {
-      await storage.copyRuntimeFiles(settings.dazScriptsFolder, root)
+      await storage.copyRuntimeFiles(root)
       await storage.writeFilesToFolder(charDir, dazFiles)
       // Migration: older versions wrote the script flat in the root — drop this
       // character's flat-layout script (current + previous name) if it lingers.

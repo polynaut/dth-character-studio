@@ -1,0 +1,602 @@
+// DAZ Studio version 4.22.0.16 filetype DAZ Script
+
+// DthUtils.dsa + DthOptions.dsa load relative to the INVOKING script's folder:
+// getScriptFileName() resolves to the top-level script being run, not this file,
+// so they must sit alongside whatever script includes this one.
+var dir_self = new DzDir (new DzFileInfo (getScriptFileName ()).path ());
+include (dir_self.filePath ("DthUtils.dsa"));
+include (dir_self.filePath ("DthOptions.dsa"));
+
+
+
+/*********************************************************************************
+ * Begin Tutorial Script
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */ 
+
+function ApplyDTHWorkflow(options){
+
+	beginUndo();	
+
+	Scene.setTime(0);
+
+	var aNodes = Scene.getSelectedNodeList();
+	var oNode = Scene.getPrimarySelection();
+	var oNodeRoot = getNodeRoot(oNode);
+	if(!oNodeRoot || !oNodeRoot.inherits("DzNode")){
+		print("Error: Node `Genesis 9` not found in scene");
+		return false; }
+	var oNodeMouth = oNodeRoot.findNodeChildByLabel("Genesis 9 Mouth");
+	if(!oNodeMouth && options.bIncludeJCM && options.bIncludeFAC){
+		print("Error: Node `Genesis 9 Mouth` not found in scene");
+		return false; }
+	var oNodeDk9 = oNodeRoot.findNodeChildByLabel("DicktatorG9");
+	if(!oNodeDk9 && options.bIncludeDK){
+		print("Error: Node `DicktatorG9` not found in scene");
+		return false; }
+	var oNodeGP = oNodeRoot.findNodeChildByLabel("GoldenPalace_G9");
+	if(!oNodeGP && options.bIncludeGP){
+		print("Error: Node `GoldenPalace_G9` not found in scene");
+		return false; }
+
+	/**       *****************************************************/
+	print("Applying initial values... ");
+	ApplyInitialValues(options, oNodeRoot)
+
+	// Memorize node transforms before any ROM loading overwrites them
+	memorizeNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
+
+	/**       *****************************************************/
+	if(options.bIncludeJCM)
+	{
+		print("Applying default ROMs...");
+		if(!ApplyDefaultROMs(options, oNodeRoot, oNodeMouth))
+			return false;
+
+		// Restore any morphs that should be preserved after ROM loading
+		restorePreservedMorphs(oNodeRoot, options.preserveMorphs);
+
+		// Apply JCM morph modifications based on bone rotation keyframes
+		applyJcmMorphMods(oNodeRoot, options.jcmMorphMods);
+	}
+
+	/**       *****************************************************/
+	if( options["bIncludeDK"] )
+	{
+		print("Applying DK9 ROMs...");
+		var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
+		ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame);
+	}
+
+	/**       *****************************************************/
+	if( options["bIncludeGP"] )
+	{
+		print("Applying GP9 ROMs...");
+		var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
+		if(!ApplyGP9(options, oNodeRoot, oNodeGP, startFrame))
+			return false;
+	}
+
+	/**       *****************************************************/
+	if( options["bIncludePhysics"] )
+	{
+		print("Applying Physics ROM...");
+		var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
+		if(!ApplyPhysics(options, oNodeRoot, startFrame))
+			return false;
+	}
+
+	// Restore node transforms that were overwritten by ROM loading (JCM, DK, GP, Physics)
+	restoreNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
+
+	/** ****************************************************************/
+	print("Creating FrameDatas from extraJSONs");
+	var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
+	// hack to enable loading only from CSV
+	startFrame = !options.bIncludeJCM ? 0 : startFrame;
+	var frameDatas = CreateFrameDatas(options, startFrame);
+	print("Framedatas length:", frameDatas.length);
+	if( options["bWriteDebugCSV"] ) printCSV(frameDatas, dir_self.filePath("OUT.csv"));
+
+	/** ****************************************************************/
+	// Resolve autoBase values by reading current morph values from the scene
+	// Must happen before reset so we know what value to restore
+	resolveAutoBaseValues(oNodeRoot, frameDatas);
+
+	/** ****************************************************************/
+	// IMPORTANT: Set FBM morphs at frame 0 to preserve base state
+	// Morphs with autoBase will be reset to their current scene value instead of 0
+	print("Setting FBM morphs at frame 0 to preserve base state");
+	resetFrameDatasAtFrame(oNodeRoot, frameDatas, 0);
+
+	/** ****************************************************************/
+	print("Applying FrameDatas from extraJSONs");
+	var successFrameDatas = [];
+	var failedFrameDatas = [];
+	applyFrameDatas(oNodeRoot, frameDatas, successFrameDatas, failedFrameDatas);
+
+	if( options["bWriteDebugCSV"] ){
+		printCSV(successFrameDatas, options["successCSV"]);
+		printCSV(failedFrameDatas, options["failCSV"]);
+
+		/** ****************************************************************/
+		print("Scanning nodes for FrameDatas after operation");
+		var scannedFrameDatas = [];
+		scanNodesForFrameDatas(aNodes, scannedFrameDatas);
+		printCSV(scannedFrameDatas, options["scannedCSV"]);
+	}
+
+	/** ****************************************************************/
+	print("Setting keys to linear interpolation");
+	setLinearInterp([oNodeRoot]);
+
+	// Reset timeline to frame 0 so character appears in base state
+	Scene.setFrame(0);
+
+	// Restore the user's initial selection — loading the ROM presets re-selected
+	// nodes along the way; on a clean finish, put the original selection back.
+	Scene.selectAllNodes(false);
+	if( aNodes ){
+		for( var iSel = 0; iSel < aNodes.length; iSel++ ){
+			if( aNodes[iSel] ) aNodes[iSel].select(true);
+		}
+	}
+	if( oNode ) Scene.setPrimarySelection(oNode);
+
+	acceptUndo("DTH Workflow");
+}
+
+
+function CreateFrameDatas(options, startFrame){
+	frameDatas = [];
+	var iOffset = startFrame;
+	// Inline frame data (DTH Character Studio's single-file script) takes priority
+	// over the legacy extraJSONs file list — no separate JSON files needed.
+	if(options.extraFrames){
+		print("Processing inline extraFrames starting at frame", iOffset);
+		processFrameDataJSON(options.extraFrames, frameDatas, iOffset, options.gpArtDirection, options.dkArtDirection);
+		return frameDatas;
+	}
+	print("Loading JSONs starting at frame", iOffset);
+	var extraJSONs = options.extraJSONs;
+	if(extraJSONs){
+		for(var i = 0; i < extraJSONs.length; i++){
+			var sFilename = extraJSONs[i];
+			print("attempting to read JSON file at:", sFilename);
+			// frameDatas is modified
+			readFrameDataJSON(sFilename, frameDatas, iOffset);
+			iOffset = frameDatas.length;
+			print(" - New frame count:", iOffset);
+		}
+	}
+	return frameDatas;
+}
+
+function ApplyInitialValues(options, oNodeRoot){
+	//var oContentMgr = App.getContentMgr();
+	// Set default to linear interpolation off the bat, so hopefully it doesn't need to be set later
+	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
+	if( options["FACsDetailStrength"] > 0 ) {
+		setPropertyByName(oNodeRoot, "facs_ctrl_FACSDetailStrength", options["FACsDetailStrength"], 0) }
+	if( options["FlexionStrength"] > 0 ) {
+		setPropertyByName(oNodeRoot, "body_ctrl_FlexionAutoStrength", options["FlexionStrength"], 0) }
+}
+
+
+function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
+
+	var ROMs = getRomPaths(options);
+	var sJcmROM = ROMs[0];
+	var sMouthROM = ROMs[1];
+	var iRomFrames = options["bDQS"] ? 328 : 617;
+
+	print("Loading JCM ROM: ", sJcmROM);
+	setTotalFrames(iRomFrames);
+	if( loadPreset(sJcmROM, oNodeRoot) ){
+		print("Successfully loaded pose preset.");
+
+		if( options["bIncludeFAC"] ){
+			print("Loading Mouth ROM: ", sMouthROM);
+			setTotalFrames(iRomFrames);
+			if(loadPreset(sMouthROM,  oNodeMouth) ){
+				print("Successfully loaded pose preset.");
+				return true;
+		} else {
+				print("Failed loading ROM:", sMouthROM);
+			}
+		}
+	} else {
+		print("Failed loading ROM:", sJcmROM);
+		print("This is a necessary step. Aborting script.");
+	}
+	return false;
+}
+
+
+function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
+	// ---------------------------------------------------------------------------
+	// FUNCTIONAL, NOT YET HARDENED: the DicktatorG9 path has been run end-to-end and
+	// the morphs come through in Unreal, but it hasn't had the byte-level validation
+	// the JCM/FAC/GP9 paths have. Notes:
+	//   - dk9FrameCount corrected from 55 to 54 (DK9.csv is frames 0-53). The old 55
+	//     reserved one frame past the last pose; because the next section derives its
+	//     start from the timeline end, that surfaced as an empty gap once a section
+	//     (e.g. Physics) was appended after DK.
+	//   - internal fences are intentionally NOT applied (only [startFrame] is fenced).
+	//     DK was tested working without them, consistent with mrpdean's note that
+	//     fences aren't strictly needed when the sawtooth is clean.
+	//   - shipped DK9_ArtDirection.json is circumcised-only; the uncircumcised foreskin
+	//     path (DK9.csv frames 34-45 + foreskin-anchored fences) is unmodeled.
+	// ---------------------------------------------------------------------------
+	// DK9 ROM is 54 frames (offsets 0-53)
+	var dk9FrameCount = 54;
+	var totalFrames = startFrame + dk9FrameCount;
+
+	print("Setting fence pose for", oNodeRoot.objectName, "from frame", 0, "to", startFrame);
+	setTotalFrames(totalFrames);
+	setFencePoses(oNodeRoot, 0, [startFrame]);
+
+	var sDk9ROM = options["dkRomPath"] ? options["dkRomPath"] : ROM_DK9;
+	print("Loading ROM: ", sDk9ROM, "at frame", startFrame);
+	if( !loadPreset(sDk9ROM, oNodeDk9, startFrame) ){
+		print("Failed loading ROM:", sDk9ROM);
+		return false;
+	}
+
+	var aFenceFrames = options["aDK9FenceOffsets"].map(function(x){ return x +  startFrame; })
+	print("Setting fence poses for", oNodeDk9.objectName, "from frame", 0, "to", aFenceFrames);
+	//setFencePoses(oNodeDk9, 0, [617, 650, 663, 664, 666, 669]);
+	//setFencePoses(oNodeDk9, 0, aFenceFrames);
+	setFencePoses(oNodeDk9, 0, [startFrame]);
+
+	// Apply DK9 art direction morphs (per-character). Inline data (from the
+	// single-file character script) wins over a file path.
+	if( options["dkArtDirection"] ){
+		applyArtDirectionData(options["dkArtDirection"], oNodeRoot, startFrame);
+	} else {
+		var dk9ArtDirectionPath = options["dkArtDirectionPath"] ? options["dkArtDirectionPath"] : dir_self.filePath("DK9_ArtDirection.json");
+		applyGPArtDirection(dk9ArtDirectionPath, oNodeRoot, startFrame);
+	}
+
+	print("Setting keys to linear interpolation");
+	setLinearInterp([oNodeDk9]);
+}
+
+
+function ApplyPhysics(options, oNodeRoot, startFrame){
+	// Physics example ROM has 43 frames (offsets 0-42)
+	var physFrameCount = 43;
+	setTotalFrames(startFrame + physFrameCount);
+
+	var sPhysROM = options["physRomPath"] ? options["physRomPath"] : ROM_PHYS;
+	print("Loading ROM: ", sPhysROM, "at frame", startFrame);
+	if( !loadPreset(sPhysROM, oNodeRoot, startFrame) ){
+		print("Failed loading ROM:", sPhysROM);
+		return false;
+	}
+
+	print("Setting keys to linear interpolation");
+	setLinearInterp([oNodeRoot]);
+	return true;
+}
+
+
+function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
+	// The GP ROM is 104 frames (rel 0-103). gpFrameCount = 104 reserves the whole
+	// block so the NEXT section starts at rel 104 - the frame after ClitorisErect -
+	// matching DK (dk9FrameCount = its full 54 frames). This is the 0-based Daz
+	// convention: timeline frame 0 is the first frame, and a section's frame 0 is its
+	// first frame, so a loadPreset ROM block (Physics) AND a 0-based extraJSONs
+	// section both land cleanly at rel 104. Verified against a real ElectraG9
+	// PoseAsset export: ClitorisErect at abs 431, FBM BodyTone at abs 432 (= 432 + 0).
+	// IMPORTANT: extraJSONs MUST be 0-based (first frame = 0). The older 103 handoff
+	// only worked because the JSONs were 1-based, which silently masked the overlap.
+	var gpFrameCount = 104;
+	var totalFrames = startFrame + gpFrameCount;
+
+	// Set total frames before loading preset
+	setTotalFrames(totalFrames);
+
+	var sGp9ROM = options["gpRomPath"] ? options["gpRomPath"] : ROM_GP9;
+	print("Loading ROM: ", sGp9ROM, "at frame", startFrame);
+	if( !loadPreset(sGp9ROM, oNodeGP, startFrame) ){
+		print("Failed loading ROM:", sGp9ROM);
+		return false;
+	}
+
+	// Apply GP art direction morphs (per-character). Inline data (from the
+	// single-file character script) wins over a file path.
+	if( options["gpArtDirection"] ){
+		applyArtDirectionData(options["gpArtDirection"], oNodeRoot, startFrame);
+	} else {
+		var gpArtDirectionPath = options["gpArtDirectionPath"] ? options["gpArtDirectionPath"] : dir_self.filePath("GP9_ArtDirection.json");
+		applyGPArtDirection(gpArtDirectionPath, oNodeRoot, startFrame);
+	}
+
+	var aFenceFrames = options["aGPFenceOffsets"].map(function(x){ return x + startFrame; });
+	print("Setting fence poses for", oNodeGP.objectName, "from frame", 0, "to", aFenceFrames);
+	setFencePoses(oNodeGP, 0, aFenceFrames);
+
+	print("Setting keys to linear interpolation");
+	setLinearInterp([oNodeGP]);
+
+	return true;
+}
+
+
+/*********************************************************************************
+ * Single-call entry for DTH Character Studio. The generated per-character script
+ * <CharacterName>_<Genesis>.dsa includes this file and makes ONE call:
+ *
+ *     ApplyDTHCharacter({ ...full config + all ROM morph definitions inline... });
+ *
+ * The config carries everything that used to live in separate files
+ * (extraJSONs / *_FBMs.json, GP9/DK9 art-direction JSONs): workflow flags, ROM
+ * paths, strengths, preserve lists, jcmMorphMods, the FBM/extra frames
+ * (config.extraFrames) and the GP/DK art direction (config.gpArtDirection /
+ * config.dkArtDirection). It maps onto the shared `options` and runs the normal
+ * workflow — no extra .json/.csv files are read from disk.
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+function ApplyDTHCharacter(config){
+	config = config || {};
+	// Override the shared defaults with whatever the character config supplies.
+	var keys = [
+		"bIncludeJCM", "bIncludeFAC", "bIncludeDK", "bIncludeGP", "bIncludePhysics", "bDQS",
+		"FACsDetailStrength", "FlexionStrength",
+		"jcmRomPath", "mouthRomPath", "gpRomPath", "dkRomPath", "physRomPath",
+		"aGPFenceOffsets", "aDK9FenceOffsets",
+		"preserveMorphs", "preserveNodeTransforms", "jcmMorphMods"
+	];
+	for(var i = 0; i < keys.length; i++){
+		if(config[keys[i]] !== undefined) options[keys[i]] = config[keys[i]];
+	}
+	// Inline ROM morph definitions + art direction replace the extra *.json files.
+	options.extraFrames = config.extraFrames ? config.extraFrames : null;
+	options.gpArtDirection = config.gpArtDirection ? config.gpArtDirection : null;
+	options.dkArtDirection = config.dkArtDirection ? config.dkArtDirection : null;
+	options.extraJSONs = [];
+	return ApplyDTHWorkflow(options);
+}
+
+
+/*********************************************************************************
+ * Keyframe scanning — merged in from ScanKeyFrames.dsa so the runtime ships as
+ * one fewer file. Only reached via the bWriteDebugCSV debug path.
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+function getProps(oNode)
+{
+	oNode.getPropertyList().forEach( function(oProp){
+		if (oProp.hasKeys()) {	
+			print(oProp.objectName, oProp.getValue());
+			for( var j = 1; j < oProp.getNumKeys(); j++) {			
+				print(oProp.objectName, j, oProp.getKeyTime(j).valueOf()/Scene.getTimeStep() );
+			}
+		}	
+	});	
+}
+
+var timeStep = Scene.getTimeStep().valueOf();
+
+/** sPropName - optional, used with morphs where the oProp doesn't have the correct name
+ * 
+ * */
+
+
+
+function addKeysFromProp(frameDatas, oNode, oProp, sPropName){
+	var j;
+	var timeStep = Scene.getTimeStep().valueOf();
+	// Don't get keys that only exist on the first frame 
+	if (oProp && oProp.inherits("DzFloatProperty") && oProp.getNumKeys() > 1) 
+	{	
+		var origValue = oProp.getRawValue(0);
+		if(oProp.isAlias()){
+			print ("property is alias, returning false.");
+			return false;
+		}
+		var keyTimes = [];
+		var numKeys = oProp.getNumKeys();j
+		// For each key on this oProp
+		for(j = 0; j < numKeys; j++) 
+		{
+			var keyTime = oProp.getKeyTime(j).valueOf();
+			var propValue = oProp.getRawValue(keyTime);
+			if (!approx_eq(propValue, oProp.getValue(keyTime)))
+				print("><- prop value diff from raw value", oProp.name, "key:", j, "frame:", keyTime/timeStep);
+			// only record a key if its value is different from the reference pose.
+			if( !approx_eq(propValue, origValue) )
+			{
+				var frameIdx = keyTime / timeStep;
+				var keyData = { frameIdx:  frameIdx,
+								nodeName:  oNode.objectName,
+								propName:  sPropName || oProp.name, // propPath:   getAncestors(childNode),
+								propValue: propValue };
+				keyTimes.push(frameIdx);
+				// verbose("  Adding framedata", keyData.propName, "at frame", frameIdx);
+				addFrameData(frameDatas, keyData);
+
+				//handle additive morphs: we lerp the value at each intermediate frame and put a key there
+				var nextTime = oProp.getKeyTime(j+1).valueOf(); 
+				var nextValue = oProp.getRawValue(nextTime);
+				var timeDiff = (nextTime-keyTime);
+				if( j > 0 && j < numKeys -1				// - not the first or last key 
+					&& !approx_eq(nextValue, origValue) // - next key is not original value
+					&& nextTime - keyTime > timeStep 	// - more than one frame between keys
+					&& timeDiff/timeStep < 20)			// - avoid noise
+				{
+					for(var t = keyTime + timeStep; t < nextTime; t += timeStep ){
+						frameIdx = t / timeStep;
+						keyData = { frameIdx:  frameIdx,
+									nodeName:  oNode.objectName,
+									propName:  sPropName || oProp.name, // propPath:   getAncestors(childNode),
+									propValue: ((propValue * (t - keyTime) / timeDiff)
+											   + (nextValue * (nextTime - t) / timeDiff))};
+						print(" * adding lerp key at frame", t/timeStep,":", keyData.propName, keyData.propValue);
+						addFrameData(frameDatas, keyData);
+					}
+				
+				}
+			}
+			else{
+				print("propValue ~= origValue", sPropName || oProp.name, origValue, propValue);
+			}
+		}
+		print(childNode.objectName, oProp.getLabel(), keyTimes);
+	}
+	else{
+		// print("WARNING: oProp is not a DzFloatProperty or has only one key:", oProp.getLabel());
+	}
+	//print("Property",oProp.objectName,"has one or fewer keys, not including");
+}
+
+
+function addKeysFromPropFigure(frameDatas, oNode, oProp, sPropName){
+	var j;
+	if (oProp && oProp.inherits("DzFloatProperty") ) 
+	{	
+		if(oProp.isAlias()){
+			//ve ("property is alias, returning false.");
+			return false;
+		}
+		if(!oProp.currentValueIsDefaultValue()){
+			print(oProp.name, oProp.currentValueIsDefaultValue());
+			var	keyData = { frameIdx:  0,
+							nodeName:  oNode.objectName,
+							propName:  sPropName || oProp.name, // propPath:   getAncestors(childNode),
+							propValue: oProp.getValue(0)};
+			print("  Adding framedata", keyData.propName, "at frame", 0);
+			addFrameData(frameDatas, keyData);
+		}
+	}
+	else{
+		// print("WARNING: oProp is not a DzFloatProperty or has only one key:", oProp.getLabel());
+	}
+	//print("Property",oProp.objectName,"has one or fewer keys, not including");
+}
+
+
+
+
+function scanNodesForFrameDatas(aNodes, frameDatas, fPropFunc){
+	fPropFunc = fPropFunc || addKeysFromProp;
+	var frameDatas = frameDatas || [];
+	if(aNodes.length > 0){
+		var oNodeRoot = getNodeRoot(aNodes[0]);
+		if(oNodeRoot && oNodeRoot.inherits("DzNode"))
+		{
+			scanNodeForProps(oNodeRoot, frameDatas, fPropFunc);
+		}
+	}
+	for (var i = 0; i < aNodes.length; i++)
+	{
+		var oNode = aNodes[i];
+		if(oNode){
+			verbose("scanning node", oNode.name, "for properties and morphs");
+			scanNodeForMorphs(oNode, frameDatas, fPropFunc);
+		}
+	}
+	return frameDatas;
+}
+
+function scanNodeForProps(oNode, frameDatas, fPropFunc){
+	var frameDatas = frameDatas || [];
+	if(oNode && oNode.inherits("DzNode"))
+	{	
+		var children = oNode.getNodeChildren(true);
+		children.push(oNode); // to get oNode's own properties
+		var i, j;
+		var timeStep = Scene.getTimeStep().valueOf();
+
+		// Check all normal properties
+		for (i = 0; i < children.length; i++){
+			childNode = children[i];		
+			if(childNode) // && childNode.inherits("DzNode")){
+			{
+				//print(i, childNode.objectName, getNodeParents(childNode));
+				childNode.getPropertyList().forEach( function(oProp)
+				{
+					// verbose("  Adding key from prop:", oProp.name);
+					fPropFunc(frameDatas, childNode, oProp);
+				});
+			}
+		}
+	}
+	else
+	{
+		print("ERROR: oNode ", oNode.name, "not found or not a DzNode");
+	}
+	return frameDatas;
+}
+
+function scanNodeForMorphs(oNode, frameDatas, fPropFunc){
+	var frameDatas = frameDatas || [];
+	if(oNode && oNode.inherits("DzNode"))
+	{	
+		// Check all morphs
+		var oObj = oNode.getObject();
+		if(oObj){
+			for(var i=0; i<oObj.getNumModifiers(); i++)
+			{
+				oMod = oObj.getModifier(i);
+				if(oMod && oMod.inherits("DzMorph"))
+				{
+					oProp = oMod.getValueControl();
+					if(oProp && oProp.getNumKeys() > 1)
+					{
+						verbose("modifier:", oMod.name, oMod.inherits("DzMorph"));
+						fPropFunc(frameDatas, oNode, oProp, oMod.name);
+					}
+				}
+				
+				
+			}
+		}	
+	}
+	else
+	{
+		print("ERROR: oNode ", oNode.name, "not found or not a DzNode");
+	}
+	return frameDatas;
+}
+
+function getAncestors(oNode){
+	var nextParent = oNode.getNodeParent();
+	var ancestors = [];
+	while(nextParent)
+	{
+		ancestors.push(nextParent.objectName);
+		nextParent = nextParent.getNodeParent();
+	}
+	return ancestors;
+}
+
+
+function getNodeParents(oNode){
+	parents = [];
+	if(oNode && oNode.inherits("DzNode"))
+	{
+		parent = oNode.getNodeParent();
+		while (parent){
+			parents.push(parent.objectName);
+			parent = parent.getNodeParent();	
+		}
+	}
+	return parents;
+}
+
+
+// function printFrameDatas(frameDatas){
+// 	for (i = 1; i < frameDatas.length; i++){
+// 		var frameData = frameDatas[i];
+// 		if(frameData !== undefined){	
+// 			print("Frame", i, "length:", frameData.length);	
+// 			if (frameData.length > 30) //A regular frame shouldn't have anywhere near this
+// 				continue;
+// 			for (j = 0; j < frameData.length; j++)
+// 			{
+// 				var keyData = frameData[j];
+// 				if(keyData.propValue != 0)
+// 					print("  ", keyData.nodeName, keyData.propName, keyData.propValue);
+// 			}
+// 		}
+// 	}
+// }

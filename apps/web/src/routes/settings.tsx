@@ -642,7 +642,6 @@ function SettingsPage() {
 
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
-    settings.dazScriptsFolder !== initial.dazScriptsFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder ||
     settings.currentDthVersion !== initial.currentDthVersion ||
     settings.dthExporterFolder !== initial.dthExporterFolder ||
@@ -755,18 +754,6 @@ function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
-          <FolderField
-            label="DazToHue-Scripts folder"
-            value={settings.dazScriptsFolder}
-            placeholder="D:\Development\DazToHue-Scripts"
-            onChange={(value) => setSettings((s) => ({ ...s, dazScriptsFolder: value }))}
-            help={
-              <>
-                Generated Daz workflow files are also written here, next to DthWorkflow.dsa, so they
-                are directly runnable from Daz Studio.
-              </>
-            }
-          />
           <div className="max-w-[20rem]">
             <Label className="mb-1">Default Daz scenes subfolder</Label>
             <Input
