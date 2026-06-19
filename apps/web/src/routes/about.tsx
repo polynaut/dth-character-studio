@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { open as openExternal } from '@tauri-apps/plugin-shell'
 
@@ -13,16 +13,25 @@ export const Route = createFileRoute('/about')({
 
 function AboutPage() {
   const version = Route.useLoaderData()
+  const router = useRouter()
+
+  // About is reachable from several places, so go back to wherever we came from
+  // (falling back to the projects home if there's no history to pop).
+  function goBack() {
+    if (router.history.canGoBack()) router.history.back()
+    else void router.navigate({ to: '/' })
+  }
 
   return (
     <main className="p-8">
       <div className="mb-6">
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={goBack}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> All projects
-        </Link>
+          <ArrowLeft className="size-4" /> Back
+        </button>
       </div>
 
       <div className="mx-auto flex max-w-xl flex-col items-center text-center">
