@@ -25,7 +25,25 @@ describe('character schema version', () => {
   })
 
   it('preserves an explicitly stored schemaVersion', () => {
-    const character = characterSchema.parse({ ...base, schemaVersion: 2 })
-    expect(character.schemaVersion).toBe(2)
+    const character = characterSchema.parse({ ...base, schemaVersion: 3 })
+    expect(character.schemaVersion).toBe(3)
+  })
+})
+
+describe('project provenance fields', () => {
+  it('default to empty when absent (pre-v2 JSONs)', () => {
+    const character = characterSchema.parse(base)
+    expect(character.projectName).toBe('')
+    expect(character.projectPath).toBe('')
+  })
+
+  it('preserve stored project name + path', () => {
+    const character = characterSchema.parse({
+      ...base,
+      projectName: 'Default',
+      projectPath: 'X:/_3d/dth-characters',
+    })
+    expect(character.projectName).toBe('Default')
+    expect(character.projectPath).toBe('X:/_3d/dth-characters')
   })
 })

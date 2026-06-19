@@ -280,7 +280,8 @@ export async function getCharacter(lib: string, id: string): Promise<Character |
   return (await findEntry(lib, id))?.character ?? null
 }
 
-export async function saveCharacter(lib: string, character: Character): Promise<Character> {
+export async function saveCharacter(project: Project, character: Character): Promise<Character> {
+  const lib = project.path
   if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
   const stamped = {
@@ -288,6 +289,8 @@ export async function saveCharacter(lib: string, character: Character): Promise<
     updatedAt: new Date().toISOString(),
     studioVersion: await studioVersion(),
     schemaVersion: CHARACTER_SCHEMA_VERSION,
+    projectName: project.name,
+    projectPath: project.path,
   }
   const existing = await findEntry(lib, character.id)
 
@@ -327,10 +330,11 @@ export async function saveCharacter(lib: string, character: Character): Promise<
  * character (`<Name>.json`).
  */
 export async function createCharacterAt(
-  lib: string,
+  project: Project,
   character: Character,
   relFolder: string,
 ): Promise<Character> {
+  const lib = project.path
   if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
   const stamped = {
@@ -338,6 +342,8 @@ export async function createCharacterAt(
     updatedAt: new Date().toISOString(),
     studioVersion: await studioVersion(),
     schemaVersion: CHARACTER_SCHEMA_VERSION,
+    projectName: project.name,
+    projectPath: project.path,
   }
   const fileName = definitionFileName(character.name)
   const clean = normalizeRelFolder(relFolder)
@@ -406,7 +412,8 @@ export async function deleteCharacter(
  * those files aren't copied — but the primary `scenePath` is kept as a reference.
  * Returns the new character; the caller copies the avatar + regenerates files.
  */
-export async function cloneCharacter(lib: string, id: string): Promise<Character> {
+export async function cloneCharacter(project: Project, id: string): Promise<Character> {
+  const lib = project.path
   if (!lib) throw new Error('No project library configured.')
   const source = await getCharacter(lib, id)
   if (!source) throw new Error(`Character ${id} not found`)
@@ -423,7 +430,7 @@ export async function cloneCharacter(lib: string, id: string): Promise<Character
     createdAt: now,
     updatedAt: now,
   }
-  return createCharacterAt(lib, clone, name)
+  return createCharacterAt(project, clone, name)
 }
 
 /** Absolute path to a character's folder (created if missing) — Generate's target. */
