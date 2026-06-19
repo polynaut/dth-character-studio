@@ -1602,6 +1602,23 @@ function CharacterPage() {
             own character subfolder.
           </p>
         )}
+        {character.exportPath && (
+          <div className="mt-4 flex items-center gap-3">
+            <Switch
+              checked={character.exportSceneSubfolders}
+              onCheckedChange={(exportSceneSubfolders) => patch({ exportSceneSubfolders })}
+            />
+            <span className="flex items-center gap-1 text-sm">
+              Generate subfolders based on Daz scenes
+              <InfoPopup label="Generate subfolders based on Daz scenes — more information">
+                When on, the export is nested under a subfolder named after the Daz scene open in
+                Daz when the script runs (resolved at run time) — so a character's scene/outfit
+                variants export side by side. The exporter's own <code>{character.name}</code>{' '}
+                subfolder is created inside that. Falls back to the export root if no scene is saved.
+              </InfoPopup>
+            </span>
+          </div>
+        )}
       </section>
 
       <details className="mb-8 rounded-lg border bg-card">

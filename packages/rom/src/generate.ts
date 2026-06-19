@@ -649,12 +649,24 @@ export function toCharacterScriptDsa(
   // Daz). The reference frames are the figure's reference-skeleton-pose frames.
   const exportDir = character.exportPath.trim()
   const refFrames = exportDir && frames ? referenceFrames(character, frames).join(' ') : ''
+  // Optionally nest the export under the open Daz scene's name, resolved at run
+  // time via Scene.getFilename() — so a character's scene/outfit variants export
+  // side by side. Falls back to the export root when no scene is saved.
+  const sceneSubfolderBlock = character.exportSceneSubfolders
+    ? `    var dthSceneFile = Scene.getFilename();
+    if (dthSceneFile != "") {
+        var dthSceneName = new DzFileInfo(dthSceneFile).completeBaseName();
+        if (dthSceneName != "") dthExportDir = dthExportDir + "/" + dthSceneName;
+    }
+`
+    : ''
   const exportBlock = exportDir
     ? `
 // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+) after the ROM build.
 var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 if (dthExportAction) {
-    dthExportAction.doExport(${JSON.stringify(exportDir.replace(/\\/g, '/'))}, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
+    var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
+${sceneSubfolderBlock}    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
 } else {
     print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
 }
