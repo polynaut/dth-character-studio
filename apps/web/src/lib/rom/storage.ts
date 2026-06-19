@@ -846,10 +846,12 @@ export async function updateProject(
 }
 
 /**
- * Remove a project. By default only its list entry is removed (files on disk are
- * kept). With `deleteFiles`, the project's library folder (all character data)
- * and its generated-scripts subfolder are deleted too. The folder is removed
- * before the record so a failure leaves the project visible to retry.
+ * Remove a project. Its generated-scripts subfolder in the Daz library is ALWAYS
+ * removed (a derived artifact that's orphaned once the project is gone). With
+ * `deleteFiles`, the project's library folder (all character data) is deleted
+ * too; otherwise only the list entry goes and the data stays on disk. The
+ * library folder is removed before the record so a failure leaves the project
+ * visible to retry.
  */
 export async function deleteProject(
   id: string,
@@ -857,11 +859,13 @@ export async function deleteProject(
 ): Promise<void> {
   const projects = await readProjects()
   const project = projects.find((p) => p.id === id)
-  if (opts.deleteFiles && project) {
-    const folder = join(project.path)
-    if (await exists(folder)) await remove(folder, { recursive: true })
-    // Generated scripts live in the shared DTH-Character-Studio root, keyed by
-    // project name — derived data, so best-effort (never fail the delete on it).
+  if (project) {
+    if (opts.deleteFiles) {
+      const folder = join(project.path)
+      if (await exists(folder)) await remove(folder, { recursive: true })
+    }
+    // Always drop the generated-scripts subfolder (keyed by project name) — it's
+    // derived data, so best-effort (never fail the delete on it).
     const { dazLibraryFolder } = await getSettings()
     if (dazLibraryFolder) {
       const scripts = join(studioScriptsDir(dazLibraryFolder), characterFolderName(project.name))

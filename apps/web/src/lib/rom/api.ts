@@ -373,15 +373,27 @@ const deleteCharacterInput = charScopeInput.extend({
 
 export async function deleteCharacter({ data }: { data: unknown }): Promise<void> {
   const { projectId, id, keepDaz } = deleteCharacterInput.parse(data)
+  const project = await resolveProject(projectId)
+  const lib = project.path
+  // Capture the name before deleting — it keys the generated script subfolder.
+  const character = await storage.getCharacter(lib, id)
+  const settings = await storage.getSettings()
   // Resolve the keep flag to the configured Daz subfolder name so the recursive
   // delete can spare it. (Houdini projects are only ever linked in place, never
   // copied into the character folder, so there's nothing Houdini-side to keep.)
   const keepFolders: Array<string> = []
-  if (keepDaz) {
-    const settings = await storage.getSettings()
-    if (settings.dazSubdir) keepFolders.push(settings.dazSubdir)
+  if (keepDaz && settings.dazSubdir) keepFolders.push(settings.dazSubdir)
+  await storage.deleteCharacter(lib, id, { keepFolders })
+  // Remove the character's generated Daz script subfolder (derived artifact,
+  // orphaned once the character is gone). Best-effort.
+  if (character && settings.dazLibraryFolder) {
+    try {
+      const dir = storage.studioCharScriptsDir(settings.dazLibraryFolder, project.name, character.name)
+      if (await exists(dir)) await remove(dir, { recursive: true })
+    } catch {
+      // leave an orphaned script folder rather than failing the delete
+    }
   }
-  await storage.deleteCharacter(await projectPath(projectId), id, { keepFolders })
 }
 
 const cloneInput = charScopeInput.extend({
