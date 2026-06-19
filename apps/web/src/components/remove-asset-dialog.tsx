@@ -14,8 +14,9 @@ import { Switch } from '#/components/ui/switch.tsx'
 export function RemoveAssetDialog({
   title,
   description,
-  deleteFile,
+  deleteFile = false,
   onDeleteFileChange,
+  showDeleteFile = true,
   busy,
   error,
   onConfirm,
@@ -23,8 +24,15 @@ export function RemoveAssetDialog({
 }: {
   title: string
   description: ReactNode
-  deleteFile: boolean
-  onDeleteFileChange: (value: boolean) => void
+  deleteFile?: boolean
+  onDeleteFileChange?: (value: boolean) => void
+  /**
+   * Show the "Delete file on disk" toggle. Turn it off for assets that are only
+   * ever linked in place (e.g. Houdini projects, whose absolute import paths
+   * forbid copying) — there, deleting would hit the user's real file, so the
+   * action is unlink-only.
+   */
+  showDeleteFile?: boolean
   busy: boolean
   error?: ReactNode
   onConfirm: () => void
@@ -49,10 +57,12 @@ export function RemoveAssetDialog({
       >
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
-        <div className="flex items-center gap-2">
-          <Switch checked={deleteFile} onCheckedChange={onDeleteFileChange} />
-          <span className="text-sm">Delete file on disk</span>
-        </div>
+        {showDeleteFile && onDeleteFileChange && (
+          <div className="flex items-center gap-2">
+            <Switch checked={deleteFile} onCheckedChange={onDeleteFileChange} />
+            <span className="text-sm">Delete file on disk</span>
+          </div>
+        )}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={onClose}>
