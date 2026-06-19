@@ -961,6 +961,22 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     }
   }
 
+  // When an export directory is set, also drop the PoseAsset CSV there so it sits
+  // alongside the exporter's output (Kira.fbx / .abc / .dth / …) — everything for
+  // the next step ends up in one folder. Best-effort: a missing/locked export
+  // folder must not fail generation (the CSV still lives in the character folder).
+  const exportDir = character.exportPath.trim()
+  if (exportDir) {
+    try {
+      await storage.writeFilesToFolder(
+        exportDir,
+        files.filter((file) => file.target === 'houdini'),
+      )
+    } catch {
+      // export folder not ready/writable yet — leave the CSV in the character folder
+    }
+  }
+
   // The character script goes in its own <project>/<character>/ subfolder of the
   // shared scripts folder; the runtime it imports is installed once in the root.
   const settings = await storage.getSettings()
