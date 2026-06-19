@@ -353,19 +353,17 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
 const deleteCharacterInput = charScopeInput.extend({
   /** Preserve the character's Daz-scenes subfolder (settings.dazSubdir). */
   keepDaz: z.boolean().optional(),
-  /** Preserve the character's Houdini subfolder (settings.houdiniSubdir). */
-  keepHoudini: z.boolean().optional(),
 })
 
 export async function deleteCharacter({ data }: { data: unknown }): Promise<void> {
-  const { projectId, id, keepDaz, keepHoudini } = deleteCharacterInput.parse(data)
-  // Resolve the keep flags to the configured top-level subfolder names so the
-  // recursive delete can spare them.
+  const { projectId, id, keepDaz } = deleteCharacterInput.parse(data)
+  // Resolve the keep flag to the configured Daz subfolder name so the recursive
+  // delete can spare it. (Houdini projects are only ever linked in place, never
+  // copied into the character folder, so there's nothing Houdini-side to keep.)
   const keepFolders: Array<string> = []
-  if (keepDaz || keepHoudini) {
+  if (keepDaz) {
     const settings = await storage.getSettings()
-    if (keepDaz && settings.dazSubdir) keepFolders.push(settings.dazSubdir)
-    if (keepHoudini && settings.houdiniSubdir) keepFolders.push(settings.houdiniSubdir)
+    if (settings.dazSubdir) keepFolders.push(settings.dazSubdir)
   }
   await storage.deleteCharacter(await projectPath(projectId), id, { keepFolders })
 }
