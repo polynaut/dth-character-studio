@@ -1255,7 +1255,7 @@ export function RomSections({
                       <Input
                         className="max-w-xl"
                         value={config.customAssetPath}
-                        placeholder="X:\…\My Custom JCM.duf"
+                        placeholder="C:\…\My Custom JCM.duf"
                         onChange={(e) => patchSection(section, { customAssetPath: e.target.value })}
                       />
                       <Button

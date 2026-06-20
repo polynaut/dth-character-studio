@@ -95,7 +95,7 @@ export function SceneCopyDialog({
             <Input
               className="flex-1"
               value={subfolder}
-              placeholder="e.g. Outfit_Summertide"
+              placeholder="e.g. Outfit_Casual"
               onChange={(e) => onSubfolderChange(e.target.value)}
             />
           </div>

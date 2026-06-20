@@ -35,6 +35,7 @@ import {
   copyDazScene,
   createCharacter,
   deleteCharacter,
+  fetchAllCharacters,
   fetchCharacters,
   fetchProject,
   fetchSettings,
@@ -84,18 +85,19 @@ export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
-    const [characters, settings] = await Promise.all([
+    const [characters, allCharacters, settings] = await Promise.all([
       fetchCharacters({ data: { projectId: params.projectId } }),
+      fetchAllCharacters(),
       fetchSettings(),
     ])
-    return { project, characters, settings }
+    return { project, characters, allCharacters, settings }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters, settings } = Route.useLoaderData()
+  const { project, characters, allCharacters, settings } = Route.useLoaderData()
   const router = useRouter()
   const [scenePath, setScenePath] = useState('')
   const [name, setName] = useState('')
@@ -136,8 +138,9 @@ function ProjectCharactersPage() {
   const nameTrimmed = name.trim()
   const nameError = /\.json$/i.test(nameTrimmed) ? 'A character name can’t end in “.json”.' : ''
   const canCreate = Boolean(nameTrimmed) && !nameError
-  // ROM-prefill candidates: existing characters that match the chosen G + gender.
-  const prefillChars = characters.filter((c) => c.genesis === genesis && c.gender === gender)
+  // ROM-prefill candidates: characters from every project that match the chosen
+  // G + gender (filtered for ROM compatibility; labelled with their project).
+  const prefillChars = allCharacters.filter((c) => c.genesis === genesis && c.gender === gender)
 
   function applyScene(picked: string) {
     setScenePath(picked)
@@ -348,7 +351,7 @@ function ProjectCharactersPage() {
                       </span>
                       <Input
                         className="min-w-0 flex-1"
-                        placeholder="KiraDefault_G9_GP"
+                        placeholder="Aria_G9"
                         value={name}
                         aria-invalid={nameError ? true : undefined}
                         onChange={(e) => setName(e.target.value)}
@@ -407,14 +410,14 @@ function ProjectCharactersPage() {
                       <SelectItem value="example">Example</SelectItem>
                       {prefillChars.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name}
+                          {c.projectName} - {c.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Copy the ROM definitions from the bundled example or an existing {genesis}{' '}
-                    {gender} character.
+                    {gender} character in any project.
                   </p>
                 </Field>
               </div>
@@ -480,7 +483,7 @@ function ProjectCharactersPage() {
                       'group relative transition-colors hover:border-primary',
                       view === 'grid'
                         ? 'overflow-hidden rounded-lg border bg-card'
-                        : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                        : 'flex items-center first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
                     )}
                   >
                     <Link
@@ -494,8 +497,8 @@ function ProjectCharactersPage() {
                         }
                       }}
                       className={cn(
-                        'flex items-center pr-12',
-                        view === 'grid' ? 'gap-4 p-4' : 'gap-3 px-3 py-2',
+                        'flex items-center',
+                        view === 'grid' ? 'gap-4 p-4 pr-12' : 'min-w-0 flex-1 gap-3 px-3 py-2',
                       )}
                     >
                       <Portrait
@@ -538,7 +541,7 @@ function ProjectCharactersPage() {
                       checked={sel.isSelected(character.id)}
                       selecting={sel.selecting}
                       onChange={() => sel.toggle(character.id)}
-                      className={cn('absolute right-3', view === 'grid' ? 'top-3' : 'top-1/2 -translate-y-1/2')}
+                      className={cn(view === 'grid' ? 'absolute right-3 top-3' : 'mr-3 shrink-0')}
                     />
                   </li>
                 )

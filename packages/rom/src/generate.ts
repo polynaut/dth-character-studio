@@ -668,12 +668,14 @@ export function toCharacterScriptDsa(
 `
     : ''
   // The PoseAsset CSV is written into the character folder at generation time;
-  // once the export dir is resolved at run time (scene subfolder included), move
-  // it there so it sits next to the exporter's <name>.abc/.dth output. Only when
-  // the source folder is known (the desktop app passes charFolderAbs).
-  const csvMoveBlock =
+  // at run time, once the export dir is resolved (scene subfolder included), copy
+  // it there next to the exporter's <name>.abc/.dth output. A copy, not a move,
+  // so exporting several scenes from one character each get their own CSV and the
+  // character folder keeps the canonical one. Only when the source folder is
+  // known (the desktop app passes charFolderAbs).
+  const csvCopyBlock =
     exportDir && charFolderAbs
-      ? `    // Move the generated PoseAsset CSV next to the exporter output.
+      ? `    // Copy the generated PoseAsset CSV next to the exporter output.
     var dthCsvName = ${JSON.stringify(poseAssetFileName(character))};
     var dthCsvSrcDir = new DzDir(${JSON.stringify(charFolderAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
@@ -682,10 +684,11 @@ export function toCharacterScriptDsa(
         var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
         var dthCsvOld = new DzFile(dthCsvDst);
         if (dthCsvOld.exists()) dthCsvOld.remove();
-        if (dthCsvSrcDir.move(dthCsvName, dthCsvDst)) print("Moved " + dthCsvName + " to " + dthCsvDst);
-        else print("Failed to move " + dthCsvName + " to " + dthCsvDst);
+        var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
+        if (dthCsvSrc.copy(dthCsvDst)) print("Copied " + dthCsvName + " to " + dthCsvDst);
+        else print("Failed to copy " + dthCsvName + " to " + dthCsvDst);
     } else {
-        print("PoseAsset CSV not found in the character folder — nothing to move.");
+        print("PoseAsset CSV not found in the character folder — nothing to copy.");
     }
 `
       : ''
@@ -696,7 +699,7 @@ var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterActi
 if (dthExportAction) {
     var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
-${csvMoveBlock}} else {
+${csvCopyBlock}} else {
     print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
 }
 `
