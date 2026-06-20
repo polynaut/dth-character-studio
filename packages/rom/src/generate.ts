@@ -597,6 +597,13 @@ export function toCharacterScriptDsa(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
+  /**
+   * Absolute path of the character's folder — where the PoseAsset CSV is written
+   * at generation time. When provided (the desktop app), the generated script
+   * moves that CSV into the resolved export dir at run time. Omitted in pure/web
+   * contexts, where the move block is skipped.
+   */
+  charFolderAbs?: string,
 ): GeneratedFile {
   const { sections } = character
   // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
@@ -660,6 +667,28 @@ export function toCharacterScriptDsa(
     }
 `
     : ''
+  // The PoseAsset CSV is written into the character folder at generation time;
+  // once the export dir is resolved at run time (scene subfolder included), move
+  // it there so it sits next to the exporter's <name>.abc/.dth output. Only when
+  // the source folder is known (the desktop app passes charFolderAbs).
+  const csvMoveBlock =
+    exportDir && charFolderAbs
+      ? `    // Move the generated PoseAsset CSV next to the exporter output.
+    var dthCsvName = ${JSON.stringify(poseAssetFileName(character))};
+    var dthCsvSrcDir = new DzDir(${JSON.stringify(charFolderAbs.replace(/\\/g, '/'))});
+    if (dthCsvSrcDir.exists(dthCsvName)) {
+        var dthCsvDstDir = new DzDir(dthExportDir);
+        if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
+        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
+        var dthCsvOld = new DzFile(dthCsvDst);
+        if (dthCsvOld.exists()) dthCsvOld.remove();
+        if (dthCsvSrcDir.move(dthCsvName, dthCsvDst)) print("Moved " + dthCsvName + " to " + dthCsvDst);
+        else print("Failed to move " + dthCsvName + " to " + dthCsvDst);
+    } else {
+        print("PoseAsset CSV not found in the character folder — nothing to move.");
+    }
+`
+      : ''
   const exportBlock = exportDir
     ? `
 // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+) after the ROM build.
@@ -667,7 +696,7 @@ var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterActi
 if (dthExportAction) {
     var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
-} else {
+${csvMoveBlock}} else {
     print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
 }
 `
@@ -699,6 +728,11 @@ export function generateAll(
   character: Character,
   romPaths: RomPaths,
   frames: PresetFrames,
+  /** Absolute character-folder path — see {@link toCharacterScriptDsa}. */
+  charFolderAbs?: string,
 ): Array<GeneratedFile> {
-  return [toCharacterScriptDsa(character, romPaths, frames), toPoseAssetCsv(character, frames)]
+  return [
+    toCharacterScriptDsa(character, romPaths, frames, charFolderAbs),
+    toPoseAssetCsv(character, frames),
+  ]
 }

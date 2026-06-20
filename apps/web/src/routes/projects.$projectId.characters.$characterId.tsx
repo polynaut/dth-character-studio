@@ -1278,6 +1278,29 @@ function CharacterPage() {
     }
   }
 
+  // Export settings only take effect once the script is regenerated (the export
+  // block is emitted at generation time), so persist + regenerate immediately —
+  // like the inline rename — instead of leaving them as dirty edits a manual
+  // Save might miss. Otherwise the on-disk script silently lags the chosen folder.
+  async function patchAndRegenerate(p: Partial<Character>, toastMsg?: string) {
+    const updated = { ...character, ...p }
+    setCharacter(updated)
+    try {
+      const saved = await saveCharacter({ data: { projectId, character: updated } })
+      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
+      setCharacter(saved)
+      setBaseline(saved)
+      setGenerated(result)
+      void router.invalidate()
+      if (toastMsg) toast.success(toastMsg)
+      if (result.scriptsError) {
+        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   function onDiscard() {
     setCharacter(baseline)
   }
@@ -1317,20 +1340,9 @@ function CharacterPage() {
 
   const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
 
-  // Warn if the export directory sits inside the project library — the exporter
-  // makes its own <characterName> subfolder, so it should be a separate place.
-  const exportInsideProject = (() => {
-    const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-    return Boolean(
-      character.exportPath &&
-        location &&
-        norm(character.exportPath).startsWith(norm(location.libraryFolder) + '/'),
-    )
-  })()
-
   async function onPickExportDir() {
     const picked = await pickFolder('Choose the export directory for the DTH Exporter')
-    if (picked) patch({ exportPath: picked })
+    if (picked) await patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
   }
 
   async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
@@ -1571,10 +1583,11 @@ function CharacterPage() {
           Export directory
           <InfoPopup label="Export directory — more information">
             Set an export directory and the generated Daz script runs the DTH Exporter Plugin
-            (v1.8.1+) automatically after building the ROM — exporting{' '}
+            (v1.8.1+) automatically after building the ROM — writing{' '}
             {character.exportPath ? (
               <>
-                into a <code>{character.name}</code> subfolder it creates there
+                <code>{character.name}</code>.abc / .dth and moving the PoseAsset CSV into that
+                folder
               </>
             ) : (
               'straight into the DTH pipeline'
@@ -1590,23 +1603,26 @@ function CharacterPage() {
           {character.exportPath && (
             <>
               <PathCode path={displayPath(character.exportPath)} />
-              <Button variant="ghost" size="sm" onClick={() => patch({ exportPath: '' })}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void patchAndRegenerate({ exportPath: '' }, 'Export folder cleared — script regenerated')}
+              >
                 <X /> Clear
               </Button>
             </>
           )}
         </div>
-        {exportInsideProject && (
-          <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
-            This folder is inside the project — pick one outside it, since the exporter creates its
-            own character subfolder.
-          </p>
-        )}
         <div className="mt-4 flex items-center gap-3">
           <Switch
             checked={character.exportSceneSubfolders}
             disabled={!character.exportPath}
-            onCheckedChange={(exportSceneSubfolders) => patch({ exportSceneSubfolders })}
+            onCheckedChange={(exportSceneSubfolders) =>
+              void patchAndRegenerate(
+                { exportSceneSubfolders },
+                `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated`,
+              )
+            }
           />
           <span
             className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
@@ -1615,8 +1631,8 @@ function CharacterPage() {
             <InfoPopup label="Generate subfolders based on Daz scenes — more information">
               When on, the export is nested under a subfolder named after the Daz scene open in Daz
               when the script runs (resolved at run time) — so a character's scene/outfit variants
-              export side by side. The exporter's own <code>{character.name}</code> subfolder is
-              created inside that. Falls back to the export root if no scene is saved.{' '}
+              export side by side. The exporter output and the PoseAsset CSV land directly in that
+              scene subfolder. Falls back to the export root if no scene is saved.{' '}
               {!character.exportPath && 'Set an export folder above to enable this.'}
             </InfoPopup>
           </span>
@@ -1810,7 +1826,11 @@ function CharacterPage() {
             <code className="rounded bg-muted px-1.5 py-0.5">not configured</code>
           )}
           {' — '}
-          <Link to="/settings" className="underline hover:text-foreground">
+          <Link
+            to="/settings"
+            search={{ from: character.name }}
+            className="underline hover:text-foreground"
+          >
             change in Settings
           </Link>
         </p>
