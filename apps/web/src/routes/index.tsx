@@ -236,7 +236,7 @@ function ProjectsPage() {
             className={cn(
               view === 'grid'
                 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                : 'grid grid-cols-[max-content_max-content_max-content_1fr] gap-x-4 divide-y rounded-lg border bg-card',
+                : 'grid grid-cols-[max-content_max-content_1fr] gap-x-4 divide-y rounded-lg border bg-card',
             )}
           >
             {sorted.map((project) => {
@@ -333,13 +333,9 @@ function ProjectsPage() {
                   >
                     {displayPath(project.path)}
                   </code>
-                  <span className="justify-self-end text-xs whitespace-nowrap text-muted-foreground">
-                    {count}
-                  </span>
-                  <div className="flex items-center justify-end gap-1 pr-2.5">
-                    {created && (
-                      <span className="hidden text-xs text-muted-foreground sm:inline">{created}</span>
-                    )}
+                  <div className="flex items-center justify-end gap-4 pr-2.5 text-xs text-muted-foreground">
+                    <span className="whitespace-nowrap">{count}</span>
+                    {created && <span className="hidden sm:inline">{created}</span>}
                     <div className="relative z-10 flex items-center gap-1">{controls}</div>
                   </div>
                 </li>
