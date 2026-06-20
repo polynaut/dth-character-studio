@@ -20,11 +20,11 @@
 
 ---
 
-## Stop building Range of Motion by hand
+## Where ROMs get hard
 
-Setting up a DazToHue character's Range of Motion the manual way takes **1.5–2 hours of frame-exact click-work** per character. One missed step doesn't fail loudly — it surfaces stages later as broken morphs in Unreal, and the only fix is to start over. A single character can eat a week.
+Building a Range of Motion from DTH's stock pose assets is the easy part. The work piles up when you add your own content — dozens of custom morphs across the **Full Body**, **Expressions**, and **Miscellaneous** sections. Each one has to sit on an exact frame, and Daz and Houdini have to agree on every one of those numbers. Miss a single frame and the morph quietly breaks in Unreal — stages later, with no clean fix but to redo the work.
 
-DTH Character Studio turns that ritual into a **declaration**. Describe your character once — Genesis version, ROM sections, full-body morphs — and the studio generates everything the pipeline needs.
+DTH Character Studio turns that bookkeeping into a **declaration**. List your morphs once — the studio places the frames and generates both sides, so they can't drift out of sync.
 
 ## One definition. Both sides. Always in sync.
 
