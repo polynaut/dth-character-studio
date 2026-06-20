@@ -1317,17 +1317,6 @@ function CharacterPage() {
 
   const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
 
-  // Warn if the export directory sits inside the project library — the exporter
-  // makes its own <characterName> subfolder, so it should be a separate place.
-  const exportInsideProject = (() => {
-    const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-    return Boolean(
-      character.exportPath &&
-        location &&
-        norm(character.exportPath).startsWith(norm(location.libraryFolder) + '/'),
-    )
-  })()
-
   async function onPickExportDir() {
     const picked = await pickFolder('Choose the export directory for the DTH Exporter')
     if (picked) patch({ exportPath: picked })
@@ -1596,12 +1585,6 @@ function CharacterPage() {
             </>
           )}
         </div>
-        {exportInsideProject && (
-          <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
-            This folder is inside the project — pick one outside it, since the exporter creates its
-            own character subfolder.
-          </p>
-        )}
         <div className="mt-4 flex items-center gap-3">
           <Switch
             checked={character.exportSceneSubfolders}
