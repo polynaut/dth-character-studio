@@ -333,7 +333,9 @@ function ProjectsPage() {
                   >
                     {displayPath(project.path)}
                   </code>
-                  <span className="text-xs whitespace-nowrap text-muted-foreground">{count}</span>
+                  <span className="justify-self-end text-xs whitespace-nowrap text-muted-foreground">
+                    {count}
+                  </span>
                   <div className="flex items-center justify-end gap-1 pr-2.5">
                     {created && (
                       <span className="hidden text-xs text-muted-foreground sm:inline">{created}</span>
