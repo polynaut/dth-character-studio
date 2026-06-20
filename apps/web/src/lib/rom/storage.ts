@@ -289,6 +289,18 @@ export async function getCharacter(lib: string, id: string): Promise<Character |
   return (await findEntry(lib, id))?.character ?? null
 }
 
+/**
+ * Find a character by id across every project's library (ids are globally
+ * unique). Used by ROM prefill, which can copy from a character in any project.
+ */
+export async function findCharacterAcrossProjects(id: string): Promise<Character | null> {
+  for (const project of await listProjects()) {
+    const found = await getCharacter(project.path, id)
+    if (found) return found
+  }
+  return null
+}
+
 export async function saveCharacter(project: Project, character: Character): Promise<Character> {
   const lib = project.path
   if (!lib) throw new Error('No project library configured.')
@@ -809,6 +821,22 @@ async function writeProjects(projects: Array<Project>): Promise<void> {
 
 export async function listProjects(): Promise<Array<Project>> {
   return (await readProjects()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * The folder's filesystem creation time as an ISO string — a fallback "created"
+ * date for projects added before `createdAt` was tracked. Falls back to the
+ * modified time, then `undefined` when the folder can't be stat'd.
+ */
+export async function folderCreatedAt(path: string): Promise<string | undefined> {
+  if (!path) return undefined
+  try {
+    const info = await stat(path)
+    const when = info.birthtime ?? info.mtime
+    return when ? new Date(when).toISOString() : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function getProject(id: string): Promise<Project | null> {

@@ -233,101 +233,113 @@ function ProjectsPage() {
             </div>
           </div>
           <ul
-            className={
+            className={cn(
               view === 'grid'
                 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                : 'divide-y rounded-lg border bg-card'
-            }
+                : 'grid grid-cols-[max-content_max-content_1fr_max-content_max-content] gap-x-4 divide-y rounded-lg border bg-card',
+            )}
           >
             {sorted.map((project) => {
               const created = formatDate(project.createdAt ?? '')
-              return (
+              const count = `${project.characterCount} character${project.characterCount === 1 ? '' : 's'}`
+              // Rename ("easy") + move-folder ("meaty") + selection toggle, shared
+              // by both views. In list view these sit above the stretched row link.
+              const controls = (
+                <>
+                  <button
+                    type="button"
+                    title="Rename project"
+                    onClick={() => {
+                      setOpError('')
+                      setRenaming(project)
+                    }}
+                    className={cn(
+                      'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
+                      sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
+                    )}
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Move project to another folder"
+                    onClick={() => {
+                      setOpError('')
+                      setMovingProject(project)
+                    }}
+                    className={cn(
+                      'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
+                      sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
+                    )}
+                  >
+                    <FolderInput className="size-4" />
+                  </button>
+                  <SelectCheckbox
+                    checked={sel.isSelected(project.id)}
+                    selecting={sel.selecting}
+                    onChange={() => sel.toggle(project.id)}
+                  />
+                </>
+              )
+              return view === 'grid' ? (
                 <li
                   key={project.id}
-                  className={cn(
-                    'group relative transition-colors hover:border-primary',
-                    view === 'grid'
-                      ? 'rounded-lg border bg-card'
-                      : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
-                  )}
+                  className="group relative rounded-lg border bg-card transition-colors hover:border-primary"
                 >
                   <Link
                     to="/projects/$projectId"
                     params={{ projectId: project.id }}
                     onClick={(e) => {
-                      // In selection mode a click toggles instead of navigating.
                       if (sel.selecting) {
                         e.preventDefault()
                         sel.toggle(project.id)
                       }
                     }}
-                    className={cn('block pr-24', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
+                    className="block p-4 pr-24"
                   >
-                    {view === 'grid' ? (
-                      <>
-                        <div className="font-semibold">{project.name}</div>
-                        <code
-                          className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
-                        >
-                          {displayPath(project.path)}
-                        </code>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-4">
-                        <span className="shrink-0 font-medium">{project.name}</span>
-                        <code
-                          className={`${pathChipClass()} min-w-0 flex-1 truncate text-xs`}
-                        >
-                          {displayPath(project.path)}
-                        </code>
-                        {created && (
-                          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
-                            {created}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    <div className="font-semibold">{project.name}</div>
+                    <code
+                      className={`${pathChipClass()} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+                    >
+                      {displayPath(project.path)}
+                    </code>
+                    <div className="mt-1 text-xs text-muted-foreground">{count}</div>
                   </Link>
-                  <div
-                    className={cn(
-                      'absolute flex items-center gap-1',
-                      view === 'grid' ? 'top-2.5 right-2.5' : 'top-1/2 right-2.5 -translate-y-1/2',
-                    )}
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1">{controls}</div>
+                </li>
+              ) : (
+                // List view: an aligned table. Columns size to the widest name /
+                // path / count across rows; a stretched link makes the whole row
+                // (except the controls) navigable.
+                <li
+                  key={project.id}
+                  className="group relative col-span-full grid grid-cols-subgrid items-center py-2.5 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40"
+                >
+                  <Link
+                    to="/projects/$projectId"
+                    params={{ projectId: project.id }}
+                    aria-label={project.name}
+                    onClick={(e) => {
+                      if (sel.selecting) {
+                        e.preventDefault()
+                        sel.toggle(project.id)
+                      }
+                    }}
+                    className="absolute inset-0 z-[1]"
+                  />
+                  <span className="truncate pl-4 font-medium">{project.name}</span>
+                  <code
+                    className={`${pathChipClass()} w-fit max-w-full justify-self-start truncate text-xs`}
                   >
-                    {/* Rename ("easy") + move-folder ("meaty"); hidden while selecting. */}
-                    <button
-                      type="button"
-                      title="Rename project"
-                      onClick={() => {
-                        setOpError('')
-                        setRenaming(project)
-                      }}
-                      className={cn(
-                        'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
-                        sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
-                      )}
-                    >
-                      <Pencil className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Move project to another folder"
-                      onClick={() => {
-                        setOpError('')
-                        setMovingProject(project)
-                      }}
-                      className={cn(
-                        'flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground',
-                        sel.selecting ? 'pointer-events-none' : 'group-hover:opacity-100',
-                      )}
-                    >
-                      <FolderInput className="size-4" />
-                    </button>
-                    <SelectCheckbox
-                      checked={sel.isSelected(project.id)}
-                      selecting={sel.selecting}
-                      onChange={() => sel.toggle(project.id)}
-                    />
+                    {displayPath(project.path)}
+                  </code>
+                  {/* Flexible spacer pushes the count + date + controls to the right,
+                      while the count stays a left-aligned column of its own. */}
+                  <span aria-hidden="true" />
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">{count}</span>
+                  <div className="flex items-center justify-end gap-4 pr-2.5 text-xs text-muted-foreground">
+                    {created && <span className="hidden sm:inline">{created}</span>}
+                    <div className="relative z-10 flex items-center gap-1">{controls}</div>
                   </div>
                 </li>
               )

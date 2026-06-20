@@ -411,7 +411,7 @@ function StorageLocation({
         <Field label="Character directory" error={subdirError} className="min-w-[9rem] flex-1">
           <Input
             value={subdir}
-            placeholder={displayPath('KiraDefault_G9')}
+            placeholder={displayPath('Aria_G9')}
             aria-invalid={subdirError ? true : undefined}
             onChange={(e) => setSubdir(e.target.value)}
             onKeyDown={onEnter}
@@ -1586,7 +1586,7 @@ function CharacterPage() {
             (v1.8.1+) automatically after building the ROM — writing{' '}
             {character.exportPath ? (
               <>
-                <code>{character.name}</code>.abc / .dth and moving the PoseAsset CSV into that
+                <code>{character.name}</code>.abc / .dth and copying the PoseAsset CSV into that
                 folder
               </>
             ) : (

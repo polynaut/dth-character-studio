@@ -71,8 +71,29 @@ async function projectPath(projectId: string): Promise<string> {
 
 const projectIdInput = z.object({ projectId: z.string().min(1) })
 
-export async function fetchProjects(): Promise<Array<storage.Project>> {
-  return storage.listProjects()
+/** A project plus its character count, for the projects overview. */
+export interface ProjectOverview extends storage.Project {
+  characterCount: number
+}
+
+export async function fetchProjects(): Promise<Array<ProjectOverview>> {
+  const projects = await storage.listProjects()
+  return Promise.all(
+    projects.map(async (project) => {
+      // Count is a library scan; the date fallback is a single stat. Both run
+      // per project — fine for a handful, scanned in parallel across projects.
+      const [characters, fallbackCreatedAt] = await Promise.all([
+        project.path ? storage.listCharacters(project.path) : Promise.resolve([]),
+        project.createdAt ? Promise.resolve(undefined) : storage.folderCreatedAt(project.path),
+      ])
+      const createdAt = project.createdAt ?? fallbackCreatedAt
+      return {
+        ...project,
+        characterCount: characters.length,
+        ...(createdAt ? { createdAt } : {}),
+      }
+    }),
+  )
 }
 
 export async function fetchProject({ data }: { data: unknown }): Promise<storage.Project | null> {
@@ -126,6 +147,24 @@ const generateInput = charScopeInput.extend({ previousName: z.string().optional(
 
 export async function fetchCharacters({ data }: { data: unknown }): Promise<Array<Character>> {
   return storage.listCharacters(await projectPath(projectIdInput.parse(data).projectId))
+}
+
+/** A character tagged with the project it belongs to — for cross-project pickers
+ *  like ROM prefill, which can copy from any project's character. */
+export type CharacterWithProject = Character & { projectId: string; projectName: string }
+
+export async function fetchAllCharacters(): Promise<Array<CharacterWithProject>> {
+  const projects = await storage.listProjects()
+  const lists = await Promise.all(
+    projects.map(async (project) =>
+      (await storage.listCharacters(project.path)).map((c) => ({
+        ...c,
+        projectId: project.id,
+        projectName: project.name,
+      })),
+    ),
+  )
+  return lists.flat()
 }
 
 export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
@@ -213,7 +252,8 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   if (input.prefill === 'example') {
     prefill = romFields(exampleCharacter as Record<string, unknown>)
   } else if (input.prefillFromId) {
-    const source = await storage.getCharacter(lib, input.prefillFromId)
+    // The source may live in any project (prefill lists characters globally).
+    const source = await storage.findCharacterAcrossProjects(input.prefillFromId)
     if (source) prefill = romFields(source as unknown as Record<string, unknown>)
   }
   const base: Record<string, unknown> = {
@@ -974,7 +1014,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   await storage.removeFilesFromFolder(outDir, [legacyPose])
 
   // The PoseAsset CSV is delivered to the export dir by the generated Daz script
-  // when it runs — it moves the CSV from the character folder into the resolved
+  // when it runs — it copies the CSV from the character folder into the resolved
   // export dir (scene subfolder included), next to the exporter's .abc/.dth. So
   // the studio no longer copies it to the export root here (the scene subfolder
   // isn't known until run time anyway).
