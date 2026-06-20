@@ -1826,7 +1826,11 @@ function CharacterPage() {
             <code className="rounded bg-muted px-1.5 py-0.5">not configured</code>
           )}
           {' — '}
-          <Link to="/settings" className="underline hover:text-foreground">
+          <Link
+            to="/settings"
+            search={{ from: character.name }}
+            className="underline hover:text-foreground"
+          >
             change in Settings
           </Link>
         </p>

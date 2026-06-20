@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import {
   ArrowLeft,
   CircleCheck,
@@ -104,6 +104,11 @@ function FolderField({
 }
 
 export const Route = createFileRoute('/settings')({
+  // Settings is reachable from several places; an optional `from` label lets the
+  // entry point name the back link (the navigation itself just pops history).
+  validateSearch: (search: Record<string, unknown>): { from?: string } => ({
+    from: typeof search.from === 'string' ? search.from : undefined,
+  }),
   loader: () => fetchSettings(),
   component: SettingsPage,
 })
@@ -523,6 +528,16 @@ function InstallReportList({ report }: { report: InstallReport }) {
 function SettingsPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
+  const { from } = Route.useSearch()
+  const backLabel = from ? `Back to ${from}` : 'Back'
+
+  // Reachable from several places, so return to wherever we came from (falling
+  // back to the projects home if there's no history to pop) — like the About page.
+  function goBack() {
+    if (router.history.canGoBack()) router.history.back()
+    else void router.navigate({ to: '/' })
+  }
+
   const [settings, setSettings] = useState(initial)
   const [busy, setBusy] = useState(false)
   const [scan, setScan] = useState<ScanResult | null>(null)
@@ -749,9 +764,13 @@ function SettingsPage() {
   return (
     <main className="p-8">
       <div className="mb-6">
-        <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> All projects
-        </Link>
+        <button
+          type="button"
+          onClick={goBack}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" /> {backLabel}
+        </button>
       </div>
       <header className="mb-8">
         <h1 className="text-3xl font-bold">Settings</h1>
