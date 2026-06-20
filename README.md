@@ -40,7 +40,6 @@ Because both come from the same source, the "hundreds of frames must match 100%"
 
 ## Why you'll want it
 
-- ⚡ **Hours → seconds.** A week-long setup ritual becomes edit-fields-and-click.
 - 🎯 **Frame-exact & validated.** The Genesis 9 path is verified byte-for-byte against hand-built artifacts on both sides.
 - 🖱️ **One-click everything.** Install the DTH runtime and exporter, generate, and apply — no manual file shuffling.
 - 🗂️ **Projects & character library.** Organize characters per game project, switch between them instantly, and keep your library wherever you back up.
