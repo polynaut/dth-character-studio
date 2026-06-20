@@ -480,7 +480,7 @@ function ProjectCharactersPage() {
                       'group relative transition-colors hover:border-primary',
                       view === 'grid'
                         ? 'overflow-hidden rounded-lg border bg-card'
-                        : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                        : 'flex items-center first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
                     )}
                   >
                     <Link
@@ -494,8 +494,8 @@ function ProjectCharactersPage() {
                         }
                       }}
                       className={cn(
-                        'flex items-center pr-12',
-                        view === 'grid' ? 'gap-4 p-4' : 'gap-3 px-3 py-2',
+                        'flex items-center',
+                        view === 'grid' ? 'gap-4 p-4 pr-12' : 'min-w-0 flex-1 gap-3 px-3 py-2',
                       )}
                     >
                       <Portrait
@@ -538,7 +538,7 @@ function ProjectCharactersPage() {
                       checked={sel.isSelected(character.id)}
                       selecting={sel.selecting}
                       onChange={() => sel.toggle(character.id)}
-                      className={cn('absolute right-3', view === 'grid' ? 'top-3' : 'top-1/2 -translate-y-1/2')}
+                      className={cn(view === 'grid' ? 'absolute right-3 top-3' : 'mr-3 shrink-0')}
                     />
                   </li>
                 )

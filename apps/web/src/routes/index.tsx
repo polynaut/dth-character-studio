@@ -248,7 +248,7 @@ function ProjectsPage() {
                     'group relative transition-colors hover:border-primary',
                     view === 'grid'
                       ? 'rounded-lg border bg-card'
-                      : 'first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
+                      : 'flex items-center first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40',
                   )}
                 >
                   <Link
@@ -261,7 +261,7 @@ function ProjectsPage() {
                         sel.toggle(project.id)
                       }
                     }}
-                    className={cn('block pr-24', view === 'grid' ? 'p-4' : 'px-4 py-2.5')}
+                    className={cn(view === 'grid' ? 'block p-4 pr-24' : 'min-w-0 flex-1 px-4 py-2.5')}
                   >
                     {view === 'grid' ? (
                       <>
@@ -290,8 +290,8 @@ function ProjectsPage() {
                   </Link>
                   <div
                     className={cn(
-                      'absolute flex items-center gap-1',
-                      view === 'grid' ? 'top-2.5 right-2.5' : 'top-1/2 right-2.5 -translate-y-1/2',
+                      'flex items-center gap-1',
+                      view === 'grid' ? 'absolute top-2.5 right-2.5' : 'shrink-0 pr-2.5',
                     )}
                   >
                     {/* Rename ("easy") + move-folder ("meaty"); hidden while selecting. */}
