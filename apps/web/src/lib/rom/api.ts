@@ -149,6 +149,24 @@ export async function fetchCharacters({ data }: { data: unknown }): Promise<Arra
   return storage.listCharacters(await projectPath(projectIdInput.parse(data).projectId))
 }
 
+/** A character tagged with the project it belongs to — for cross-project pickers
+ *  like ROM prefill, which can copy from any project's character. */
+export type CharacterWithProject = Character & { projectId: string; projectName: string }
+
+export async function fetchAllCharacters(): Promise<Array<CharacterWithProject>> {
+  const projects = await storage.listProjects()
+  const lists = await Promise.all(
+    projects.map(async (project) =>
+      (await storage.listCharacters(project.path)).map((c) => ({
+        ...c,
+        projectId: project.id,
+        projectName: project.name,
+      })),
+    ),
+  )
+  return lists.flat()
+}
+
 export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
   const { projectId, id } = charScopeInput.parse(data)
   return storage.getCharacter(await projectPath(projectId), id)
@@ -234,7 +252,8 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   if (input.prefill === 'example') {
     prefill = romFields(exampleCharacter as Record<string, unknown>)
   } else if (input.prefillFromId) {
-    const source = await storage.getCharacter(lib, input.prefillFromId)
+    // The source may live in any project (prefill lists characters globally).
+    const source = await storage.findCharacterAcrossProjects(input.prefillFromId)
     if (source) prefill = romFields(source as unknown as Record<string, unknown>)
   }
   const base: Record<string, unknown> = {

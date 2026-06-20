@@ -35,6 +35,7 @@ import {
   copyDazScene,
   createCharacter,
   deleteCharacter,
+  fetchAllCharacters,
   fetchCharacters,
   fetchProject,
   fetchSettings,
@@ -84,18 +85,19 @@ export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
-    const [characters, settings] = await Promise.all([
+    const [characters, allCharacters, settings] = await Promise.all([
       fetchCharacters({ data: { projectId: params.projectId } }),
+      fetchAllCharacters(),
       fetchSettings(),
     ])
-    return { project, characters, settings }
+    return { project, characters, allCharacters, settings }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters, settings } = Route.useLoaderData()
+  const { project, characters, allCharacters, settings } = Route.useLoaderData()
   const router = useRouter()
   const [scenePath, setScenePath] = useState('')
   const [name, setName] = useState('')
@@ -136,8 +138,9 @@ function ProjectCharactersPage() {
   const nameTrimmed = name.trim()
   const nameError = /\.json$/i.test(nameTrimmed) ? 'A character name can’t end in “.json”.' : ''
   const canCreate = Boolean(nameTrimmed) && !nameError
-  // ROM-prefill candidates: existing characters that match the chosen G + gender.
-  const prefillChars = characters.filter((c) => c.genesis === genesis && c.gender === gender)
+  // ROM-prefill candidates: characters from every project that match the chosen
+  // G + gender (filtered for ROM compatibility; labelled with their project).
+  const prefillChars = allCharacters.filter((c) => c.genesis === genesis && c.gender === gender)
 
   function applyScene(picked: string) {
     setScenePath(picked)
@@ -407,14 +410,14 @@ function ProjectCharactersPage() {
                       <SelectItem value="example">Example</SelectItem>
                       {prefillChars.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name}
+                          {c.projectName} - {c.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Copy the ROM definitions from the bundled example or an existing {genesis}{' '}
-                    {gender} character.
+                    {gender} character in any project.
                   </p>
                 </Field>
               </div>
