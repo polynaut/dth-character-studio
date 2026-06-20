@@ -633,4 +633,21 @@ describe('exporter integration', () => {
     const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
     expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain('Scene.getFilename()')
   })
+
+  it('moves the PoseAsset CSV from the character folder into the resolved export dir', () => {
+    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra').content
+    expect(content).toContain('var dthCsvName = "Electra_pose_asset.csv";')
+    expect(content).toContain('var dthCsvSrcDir = new DzDir("D:/lib/Electra");')
+    expect(content).toContain('dthCsvSrcDir.move(dthCsvName, dthCsvDst)')
+    // Destination is the resolved export dir (dthExportDir), so the scene
+    // subfolder is included when that option is on.
+    expect(content).toContain('dthCsvDstDir.absoluteFilePath(dthCsvName)')
+  })
+
+  it('omits the CSV move when the character folder is unknown', () => {
+    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    // No charFolderAbs (pure/web context): export runs, but no move block.
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain('dthCsvSrcDir')
+  })
 })

@@ -1583,10 +1583,11 @@ function CharacterPage() {
           Export directory
           <InfoPopup label="Export directory — more information">
             Set an export directory and the generated Daz script runs the DTH Exporter Plugin
-            (v1.8.1+) automatically after building the ROM — exporting{' '}
+            (v1.8.1+) automatically after building the ROM — writing{' '}
             {character.exportPath ? (
               <>
-                into a <code>{character.name}</code> subfolder it creates there
+                <code>{character.name}</code>.abc / .dth and moving the PoseAsset CSV into that
+                folder
               </>
             ) : (
               'straight into the DTH pipeline'
@@ -1630,8 +1631,8 @@ function CharacterPage() {
             <InfoPopup label="Generate subfolders based on Daz scenes — more information">
               When on, the export is nested under a subfolder named after the Daz scene open in Daz
               when the script runs (resolved at run time) — so a character's scene/outfit variants
-              export side by side. The exporter's own <code>{character.name}</code> subfolder is
-              created inside that. Falls back to the export root if no scene is saved.{' '}
+              export side by side. The exporter output and the PoseAsset CSV land directly in that
+              scene subfolder. Falls back to the export root if no scene is saved.{' '}
               {!character.exportPath && 'Set an export folder above to enable this.'}
             </InfoPopup>
           </span>
