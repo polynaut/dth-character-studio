@@ -1,137 +1,92 @@
-# DTH Character Studio
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo-on-black.png">
+    <img alt="DTH Character Studio" src="brand/logo-on-white.png" width="200">
+  </picture>
+</p>
 
-Declarative character & ROM administration for the
-[DazToHue (DTH)](https://www.artstation.com/marketplace/p/BLM5K/daztohue) character workflow — as a web app or
-a desktop app.
+<h1 align="center">DTH Character Studio</h1>
 
-You describe a character **once** — its Genesis version, gender, ROM sections,
-and full-body morphs — and the studio generates the two artifacts that
-otherwise cost hours of error-prone, frame-exact manual work:
+<p align="center">
+  <strong>Define your character once. Generate a flawless, frame-exact Range of Motion in seconds.</strong>
+</p>
 
-- **Daz side** — `<Name>_FBMs.json` + `DthWorkflow<Name>.dsa`, a one-click full
-  ROM apply through the [DazToHue-Scripts](#related-projects) framework
-  (replacing the hand-built per-character scripts).
-- **Houdini side** — the DazToHue **PoseAsset node** import CSV.
+<p align="center">
+  The companion app for the <a href="https://www.artstation.com/marketplace/p/BLM5K/daztohue">DazToHue</a> workflow — Daz&nbsp;Studio&nbsp;→&nbsp;Houdini&nbsp;→&nbsp;Unreal&nbsp;Engine.
+</p>
 
-Because both come from the same definition, the "650 frames must match 100%"
-problem disappears by construction — change the character, regenerate, and both
-sides stay in sync.
+<p align="center">
+  <a href="https://github.com/polynaut/dth-character-studio/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/polynaut/dth-character-studio?label=download&color=ff5a1f"></a>
+  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-blue">
+  <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/polynaut/dth-character-studio?color=green"></a>
+</p>
 
-## Why
+---
 
-Setting up a DTH character's Range of Motion by hand takes 1.5–2 hours of
-click-work per character, is extremely error-prone, and the mistakes only
-surface stages later as broken morphs in Unreal — with no fix but to redo the
-work. The studio turns that ritual into a declaration: edit fields, click
-generate, run the scripts. Reproducible in seconds instead of hours.
+## Stop building Range of Motion by hand
+
+Setting up a DazToHue character's Range of Motion the manual way takes **1.5–2 hours of frame-exact click-work** per character. One missed step doesn't fail loudly — it surfaces stages later as broken morphs in Unreal, and the only fix is to start over. A single character can eat a week.
+
+DTH Character Studio turns that ritual into a **declaration**. Describe your character once — Genesis version, ROM sections, full-body morphs — and the studio generates everything the pipeline needs.
+
+## One definition. Both sides. Always in sync.
+
+From a single character definition, the studio produces:
+
+- 🎬 **Daz side** — a one-click script that applies the *entire* ROM in Daz Studio, replacing the hand-built per-character setup.
+- 🌀 **Houdini side** — the DazToHue **PoseAsset** import CSV, ready to drop into your network.
+
+Because both come from the same source, the "hundreds of frames must match 100%" problem disappears **by construction**. Change the character, regenerate, and Daz and Houdini stay perfectly aligned.
+
+## Why you'll want it
+
+- 🎯 **Frame-exact & validated.** The Genesis 9 path is verified byte-for-byte against hand-built artifacts on both sides.
+- 🖱️ **One-click everything.** Install the DTH runtime and exporter, generate, and apply — no manual file shuffling.
+- 🗂️ **Projects & character library.** Organize characters per game project, switch between them instantly, and keep your library wherever you back up.
+- 🔄 **Always up to date.** The desktop app checks for updates on launch and installs them with a click.
+- 🤝 **Share recipes, not assets.** Definitions reference morphs by name and frame — freely shareable, with no licensed content baked in.
+
+## How it works
+
+1. **Describe** your character — pick the Genesis version, add ROM sections and body morphs.
+2. **Generate** — one click produces the Daz apply-script and the Houdini PoseAsset CSV.
+3. **Apply** — run the script in Daz Studio, import the CSV in Houdini.
+4. **Export** to Unreal Engine — with every frame already matching, by design.
+
+## Get it
+
+**[⬇️ Download the latest release](https://github.com/polynaut/dth-character-studio/releases/latest)** (Windows installer). The app self-updates from there.
+
+> Prefer to run it yourself or build from source? See the [Development guide](./docs/development.md).
 
 ## Status
 
-Early but functional. The **Genesis 9 female** path is feature-complete and
-validated byte-for-byte against hand-built artifacts on both the Daz and
-Houdini sides. Genesis 8/8.1 and the male (Dicktator) path are planned.
+The **Genesis 9 female** path is feature-complete and validated end-to-end — in
+Daz Studio, in Houdini, and byte-for-byte against hand-built artifacts. Genesis
+8/8.1 and the male (Dicktator) path are on the roadmap.
 
-## Repository layout
+## Share definitions, not assets
 
-A 2-layer pnpm-workspace monorepo:
+Character definitions and the files the studio generates are **recipes** — they
+reference Daz assets by morph name, frame number and bone, and contain no
+licensed content. That makes them freely shareable; bring your own licensed
+assets.
 
-```
-apps/
-  web/      React SPA (Vite + TanStack Router) — the studio UI. Runs standalone in a browser.
-  desktop/  Tauri 2 shell (Rust) — the shippable desktop app; loads apps/web and
-            provides native file / dialog / auto-update access.
-packages/
-  rom/      Pure ROM/CSV/DSA generation core (@dth/rom) — framework-agnostic, no I/O.
-```
-
-The generation core (`packages/rom`) is pure TypeScript and is where the value
-lives; the apps are thin shells around it.
-
-## Run — web
-
-```sh
-pnpm install
-pnpm dev          # http://localhost:4330  (also bound on the LAN)
-```
-
-Other scripts: `pnpm build`, `pnpm preview`, `pnpm -r test`, `pnpm -r typecheck`,
-`pnpm generate-routes`. (Run as a plain web build, the native file features
-no-op — they require the Tauri desktop app.)
-
-## Run — desktop
-
-Requires Rust ([rustup](https://rustup.rs)) and, on Windows, WebView2
-(preinstalled on Windows 11).
-
-```sh
-pnpm dev:desktop      # Tauri: starts the web dev server (HMR) + the native window
-pnpm build:desktop    # production build → NSIS installer under apps/desktop/target/release/bundle
-```
-
-On first launch you're asked to pick your **"My DAZ 3D Library"** folder. The
-home screen is then a list of **projects** — each game project is a name + a
-folder that acts as that project's character library (see
-[Data & sharing](#data--sharing--share-definitions-not-assets)). Add a project,
-open it, and manage its characters.
-
-Open **Settings** to point two more folders at:
-
-- your **DTH release or Poses folder** (scanned for the pre-defined pose preset
-  catalog — accepts a release root or the installed library Poses folder), and
-- (optional) your **DazToHue-Scripts** checkout (generated Daz files are also
-  written here, next to `DthWorkflow.dsa`, so they run straight from Daz Studio).
-
-All folder fields have a native **Browse…** picker.
-
-## How the desktop app works
-
-The Tauri shell loads the `apps/web` SPA and exposes native capabilities through
-Tauri plugins instead of a Node backend:
-
-- **File I/O** — characters, settings, generated output, and the Poses-folder
-  scan go through `@tauri-apps/plugin-fs`; the native file/folder pickers use
-  `@tauri-apps/plugin-dialog`. The generation itself (`packages/rom`) is pure
-  TypeScript and runs in the webview.
-- **Two storage roots:** app-owned data (settings, the projects list, avatars)
-  lives in the per-user app-data folder (`appLocalDataDir()`), so it survives app
-  updates; your **characters** live in each **project's folder**, which you
-  choose and back up.
-
-The native boundary is concentrated in `apps/web/src/lib/rom/{api,storage}.ts`
-and `lib/desktop.ts`, which keeps the SPA runnable in a plain browser (and lets
-web-only e2e tests mock that layer).
-
-### Releases & auto-update
-
-Versioning is [Changesets](.changeset/); merging the auto-generated "version
-packages" PR triggers a GitHub Release (NSIS installer + signed updater
-metadata) built by `.github/workflows/release.yml`. Installed apps check for an
-update on launch and self-update on the user's confirmation. Full pipeline,
-signing-key, and branch-policy setup: see `docs/devops.md` and `CONTRIBUTING.md`.
-
-## Data & sharing — share definitions, not assets
-
-Each **project** has its own folder (kept outside the app's private data, so you
-can put it wherever you back up). Each character is a folder there —
-`<project>/<Name>/` — holding its definition `<Name>.json` plus its generated
-files, all named after the character and organizable into subfolders. Those
-generated artifacts (`FBM` JSON/CSV, PoseAsset CSV, art-direction JSON) and the
-definitions are **recipes**: they reference Daz assets by morph name, frame
-number and bone — they do **not** contain any licensed content. That makes them
-freely shareable; bring your own licensed assets.
-
-> **Do not share full Houdini projects or export folders.** Those contain baked
+> **Don't share full Houdini projects or export folders.** Those contain baked
 > licensed content (Alembic/FBX geometry, copied textures) and redistributing
-> them violates the Daz / Renderotica asset licenses. Share the character
-> definition, not the assets.
+> them violates the Daz / Renderotica asset licenses. Share the definition, not
+> the assets.
 
-## Related projects
+## Built for the DazToHue workflow
 
-- **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** by *mrpdean* — the Houdini/UE toolset
-  this studio targets (the PoseAsset node, ROMs and pose presets).
-- **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)** by *Soltude*
-  and contributors — the Daz Studio scripting framework the generated workflow
-  files drive.
+- **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** by *mrpdean* — the Houdini/UE toolset this studio targets (the PoseAsset node, ROMs and pose presets).
+- **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)** by *Soltude* and contributors — the Daz Studio scripting framework the generated files drive.
+
+## Documentation
+
+- [Development guide](./docs/development.md) — run, build, and architecture
+- [DevOps](./docs/devops.md) — release pipeline, signing, branch policy
+- [Contributing](./CONTRIBUTING.md)
 
 ## License
 
