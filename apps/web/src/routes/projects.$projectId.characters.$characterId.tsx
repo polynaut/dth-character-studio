@@ -1586,7 +1586,7 @@ function CharacterPage() {
             (v1.8.1+) automatically after building the ROM — writing{' '}
             {character.exportPath ? (
               <>
-                <code>{character.name}</code>.abc / .dth and moving the PoseAsset CSV into that
+                <code>{character.name}</code>.abc / .dth and copying the PoseAsset CSV into that
                 folder
               </>
             ) : (

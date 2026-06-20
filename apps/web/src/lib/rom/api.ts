@@ -995,7 +995,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   await storage.removeFilesFromFolder(outDir, [legacyPose])
 
   // The PoseAsset CSV is delivered to the export dir by the generated Daz script
-  // when it runs — it moves the CSV from the character folder into the resolved
+  // when it runs — it copies the CSV from the character folder into the resolved
   // export dir (scene subfolder included), next to the exporter's .abc/.dth. So
   // the studio no longer copies it to the export root here (the scene subfolder
   // isn't known until run time anyway).
