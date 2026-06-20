@@ -947,12 +947,15 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // Frame lengths measured live from the actual .duf assets (hard-errors if an
   // included block can't be read — never a wrong-length ROM).
   const frames = await resolvePresetFrames(character, catalog)
+  // The character's own folder holds the canonical PoseAsset CSV. Its absolute
+  // path is baked into the generated script so the script can move the CSV into
+  // the resolved export dir (scene subfolder included) when it runs in Daz.
+  const outDir = await storage.getCharacterFolder(lib, id)
   // Stamp the generating studio version into the script header for traceability.
   const versioned = { ...character, studioVersion: await storage.studioVersion() }
-  const files = generateAll(versioned, romPaths, frames)
+  const files = generateAll(versioned, romPaths, frames, outDir)
 
-  // Houdini deliverable(s) — <Name>_PoseAsset.csv — live in the character's own folder.
-  const outDir = await storage.getCharacterFolder(lib, id)
+  // Houdini deliverable(s) — <Name>_pose_asset.csv — live in the character's own folder.
   await storage.writeFilesToFolder(
     outDir,
     files.filter((file) => file.target === 'houdini'),
@@ -970,22 +973,11 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
   await storage.removeFilesFromFolder(outDir, [legacyPose])
 
-  // When an export directory is set, also drop the PoseAsset CSV there so it sits
-  // alongside the exporter's output (Kira.fbx / .abc / .dth / …) — everything for
-  // the next step ends up in one folder. Best-effort: a missing/locked export
-  // folder must not fail generation (the CSV still lives in the character folder).
-  const exportDir = character.exportPath.trim()
-  if (exportDir) {
-    try {
-      await storage.writeFilesToFolder(
-        exportDir,
-        files.filter((file) => file.target === 'houdini'),
-      )
-      await storage.removeFilesFromFolder(exportDir, [legacyPose])
-    } catch {
-      // export folder not ready/writable yet — leave the CSV in the character folder
-    }
-  }
+  // The PoseAsset CSV is delivered to the export dir by the generated Daz script
+  // when it runs — it moves the CSV from the character folder into the resolved
+  // export dir (scene subfolder included), next to the exporter's .abc/.dth. So
+  // the studio no longer copies it to the export root here (the scene subfolder
+  // isn't known until run time anyway).
 
   // The character script goes in its own <project>/<character>/ subfolder of the
   // shared scripts folder; the runtime it imports is installed once in the root.
