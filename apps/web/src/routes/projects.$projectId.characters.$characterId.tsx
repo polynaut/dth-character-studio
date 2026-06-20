@@ -1278,6 +1278,29 @@ function CharacterPage() {
     }
   }
 
+  // Export settings only take effect once the script is regenerated (the export
+  // block is emitted at generation time), so persist + regenerate immediately —
+  // like the inline rename — instead of leaving them as dirty edits a manual
+  // Save might miss. Otherwise the on-disk script silently lags the chosen folder.
+  async function patchAndRegenerate(p: Partial<Character>, toastMsg?: string) {
+    const updated = { ...character, ...p }
+    setCharacter(updated)
+    try {
+      const saved = await saveCharacter({ data: { projectId, character: updated } })
+      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
+      setCharacter(saved)
+      setBaseline(saved)
+      setGenerated(result)
+      void router.invalidate()
+      if (toastMsg) toast.success(toastMsg)
+      if (result.scriptsError) {
+        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   function onDiscard() {
     setCharacter(baseline)
   }
@@ -1319,7 +1342,7 @@ function CharacterPage() {
 
   async function onPickExportDir() {
     const picked = await pickFolder('Choose the export directory for the DTH Exporter')
-    if (picked) patch({ exportPath: picked })
+    if (picked) await patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
   }
 
   async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
@@ -1579,7 +1602,11 @@ function CharacterPage() {
           {character.exportPath && (
             <>
               <PathCode path={displayPath(character.exportPath)} />
-              <Button variant="ghost" size="sm" onClick={() => patch({ exportPath: '' })}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void patchAndRegenerate({ exportPath: '' }, 'Export folder cleared — script regenerated')}
+              >
                 <X /> Clear
               </Button>
             </>
@@ -1589,7 +1616,7 @@ function CharacterPage() {
           <Switch
             checked={character.exportSceneSubfolders}
             disabled={!character.exportPath}
-            onCheckedChange={(exportSceneSubfolders) => patch({ exportSceneSubfolders })}
+            onCheckedChange={(exportSceneSubfolders) => void patchAndRegenerate({ exportSceneSubfolders })}
           />
           <span
             className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
