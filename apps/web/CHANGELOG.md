@@ -1,5 +1,20 @@
 # @dth/web
 
+## 0.19.2
+
+### Patch Changes
+
+- [#63](https://github.com/polynaut/dth-character-studio/pull/63) [`b14ebc2`](https://github.com/polynaut/dth-character-studio/commit/b14ebc21beec2d49d4ce75f2b0afe48016a748e2) Thanks [@polynaut](https://github.com/polynaut)! - Export directory fixes:
+
+  - Changing the export folder (set/clear) or the "Generate subfolders based on Daz scenes" toggle now regenerates the character script immediately, so the generated `.dsa` actually picks up the DTH Exporter auto-export block instead of silently lagging behind the saved setting.
+  - The generated script now **moves** the PoseAsset CSV into the resolved export dir at run time — next to the exporter's `<name>.abc`/`.dth`, and inside the scene subfolder when that option is on. Previously the studio dropped the CSV in the export root at generation time, where it couldn't account for the run-time scene subfolder (so it landed in the wrong place and was duplicated).
+  - Dropped the false "this folder is inside the project" warning — exporting into a folder inside the project (e.g. a Perforce-tracked `characters/<Name>/houdini`) is a valid setup; the exporter's own character subfolder nests there fine.
+
+- [#63](https://github.com/polynaut/dth-character-studio/pull/63) [`b14ebc2`](https://github.com/polynaut/dth-character-studio/commit/b14ebc21beec2d49d4ce75f2b0afe48016a748e2) Thanks [@polynaut](https://github.com/polynaut)! - Settings: the back link now returns you to wherever you opened Settings from (popping history, like the About page) instead of always jumping to the projects list — and names the destination (e.g. "Back to Kira") when you entered from a character page.
+
+- Updated dependencies []:
+  - @dth/rom@0.19.2
+
 ## 0.19.1
 
 ### Patch Changes
