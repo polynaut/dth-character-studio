@@ -411,7 +411,7 @@ function StorageLocation({
         <Field label="Character directory" error={subdirError} className="min-w-[9rem] flex-1">
           <Input
             value={subdir}
-            placeholder={displayPath('KiraDefault_G9')}
+            placeholder={displayPath('Aria_G9')}
             aria-invalid={subdirError ? true : undefined}
             onChange={(e) => setSubdir(e.target.value)}
             onKeyDown={onEnter}

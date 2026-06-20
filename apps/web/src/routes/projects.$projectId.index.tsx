@@ -351,7 +351,7 @@ function ProjectCharactersPage() {
                       </span>
                       <Input
                         className="min-w-0 flex-1"
-                        placeholder="KiraDefault_G9_GP"
+                        placeholder="Aria_G9"
                         value={name}
                         aria-invalid={nameError ? true : undefined}
                         onChange={(e) => setName(e.target.value)}

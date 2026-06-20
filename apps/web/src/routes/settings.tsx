@@ -869,7 +869,7 @@ function SettingsPage() {
               <FolderField
                 label="DTH release(s) folder"
                 value={settings.dthPosesFolder}
-                placeholder="X:\_3d\_resources\_DazToHue\Releases"
+                placeholder="D:\DazToHue\Releases"
                 onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
                 help={
                   <>
@@ -901,7 +901,7 @@ function SettingsPage() {
             <FolderField
               label="Houdini documents folder (optional)"
               value={settings.houdiniDocsFolder}
-              placeholder="D:\User Data\Documents\houdini20.5"
+              placeholder="C:\Users\you\Documents\houdini20.5"
               onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
               help={
                 <>
@@ -957,7 +957,7 @@ function SettingsPage() {
               <FolderField
                 label="DTH Exporter Plugin release(s) folder"
                 value={settings.dthExporterFolder}
-                placeholder="X:\_3d\_resources\_DazToHue\ExporterPlugin"
+                placeholder="D:\DazToHue\ExporterPlugin"
                 onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
                 info={
                   <>
