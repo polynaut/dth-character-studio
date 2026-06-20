@@ -1,5 +1,24 @@
 # @dth/web
 
+## 0.20.0
+
+### Minor Changes
+
+- [#66](https://github.com/polynaut/dth-character-studio/pull/66) [`4262113`](https://github.com/polynaut/dth-character-studio/commit/426211301ad5d33f7ee024e24c9581a987fb922f) Thanks [@polynaut](https://github.com/polynaut)! - ROM prefill (Create character) now lists matching characters from **all projects**, not just the current one — each labelled `ProjectName - CharacterName` — and copies the ROM from whichever you pick (the source is resolved across projects). Still filtered to the chosen Genesis + gender for ROM compatibility.
+
+- [#66](https://github.com/polynaut/dth-character-studio/pull/66) [`4262113`](https://github.com/polynaut/dth-character-studio/commit/426211301ad5d33f7ee024e24c9581a987fb922f) Thanks [@polynaut](https://github.com/polynaut)! - Projects list (list view) is now an aligned table: the name and path columns size to their widest entry across rows, the path chip hugs its own text instead of stretching, and each project shows its **character count**. Projects added before creation dates were tracked now fall back to the project folder's filesystem creation time, so they're no longer dateless.
+
+### Patch Changes
+
+- [#66](https://github.com/polynaut/dth-character-studio/pull/66) [`4262113`](https://github.com/polynaut/dth-character-studio/commit/426211301ad5d33f7ee024e24c9581a987fb922f) Thanks [@polynaut](https://github.com/polynaut)! - Replaced personal example paths in folder/name input placeholders (DTH release / exporter / Houdini folders, custom JCM path, character name & directory, scene subfolder) with generic ones, so they read sensibly for everyone.
+
+- [#66](https://github.com/polynaut/dth-character-studio/pull/66) [`4262113`](https://github.com/polynaut/dth-character-studio/commit/426211301ad5d33f7ee024e24c9581a987fb922f) Thanks [@polynaut](https://github.com/polynaut)! - List view: the row action controls (rename/move buttons, selection checkbox) no longer overlap the row content (date, metadata). In list view they're now laid out as a flex sibling that reserves its own space, instead of being absolutely positioned over a fixed-width padding gap. Grid view is unchanged.
+
+- [#66](https://github.com/polynaut/dth-character-studio/pull/66) [`4262113`](https://github.com/polynaut/dth-character-studio/commit/426211301ad5d33f7ee024e24c9581a987fb922f) Thanks [@polynaut](https://github.com/polynaut)! - PoseAsset CSV export now **copies** the CSV into the resolved export dir instead of moving it. A move consumed the source after the first scene, so exporting a second Daz scene from the same character (e.g. `KiraDefault` then `KiraSummertide`) left that scene without a CSV. With a copy, every scene's subfolder gets its own CSV and the character folder keeps the canonical one.
+
+- Updated dependencies []:
+  - @dth/rom@0.20.0
+
 ## 0.19.2
 
 ### Patch Changes
