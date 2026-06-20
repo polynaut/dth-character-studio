@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="brand/logo-on-black.png">
-    <img alt="DTH Character Studio" src="brand/logo-on-white.png" width="200">
+    <img alt="DTH Character Studio" src="brand/logo-transparent.png" width="200">
   </picture>
 </p>
 
