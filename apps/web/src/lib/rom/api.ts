@@ -71,8 +71,29 @@ async function projectPath(projectId: string): Promise<string> {
 
 const projectIdInput = z.object({ projectId: z.string().min(1) })
 
-export async function fetchProjects(): Promise<Array<storage.Project>> {
-  return storage.listProjects()
+/** A project plus its character count, for the projects overview. */
+export interface ProjectOverview extends storage.Project {
+  characterCount: number
+}
+
+export async function fetchProjects(): Promise<Array<ProjectOverview>> {
+  const projects = await storage.listProjects()
+  return Promise.all(
+    projects.map(async (project) => {
+      // Count is a library scan; the date fallback is a single stat. Both run
+      // per project — fine for a handful, scanned in parallel across projects.
+      const [characters, fallbackCreatedAt] = await Promise.all([
+        project.path ? storage.listCharacters(project.path) : Promise.resolve([]),
+        project.createdAt ? Promise.resolve(undefined) : storage.folderCreatedAt(project.path),
+      ])
+      const createdAt = project.createdAt ?? fallbackCreatedAt
+      return {
+        ...project,
+        characterCount: characters.length,
+        ...(createdAt ? { createdAt } : {}),
+      }
+    }),
+  )
 }
 
 export async function fetchProject({ data }: { data: unknown }): Promise<storage.Project | null> {

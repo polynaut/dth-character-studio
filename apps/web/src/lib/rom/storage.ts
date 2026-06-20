@@ -811,6 +811,22 @@ export async function listProjects(): Promise<Array<Project>> {
   return (await readProjects()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/**
+ * The folder's filesystem creation time as an ISO string — a fallback "created"
+ * date for projects added before `createdAt` was tracked. Falls back to the
+ * modified time, then `undefined` when the folder can't be stat'd.
+ */
+export async function folderCreatedAt(path: string): Promise<string | undefined> {
+  if (!path) return undefined
+  try {
+    const info = await stat(path)
+    const when = info.birthtime ?? info.mtime
+    return when ? new Date(when).toISOString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export async function getProject(id: string): Promise<Project | null> {
   return (await readProjects()).find((p) => p.id === id) ?? null
 }
