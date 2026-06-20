@@ -1616,7 +1616,12 @@ function CharacterPage() {
           <Switch
             checked={character.exportSceneSubfolders}
             disabled={!character.exportPath}
-            onCheckedChange={(exportSceneSubfolders) => void patchAndRegenerate({ exportSceneSubfolders })}
+            onCheckedChange={(exportSceneSubfolders) =>
+              void patchAndRegenerate(
+                { exportSceneSubfolders },
+                `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated`,
+              )
+            }
           />
           <span
             className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
