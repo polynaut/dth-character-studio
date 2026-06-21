@@ -5,7 +5,6 @@ import { z } from 'zod'
 import {
   ArrowLeft,
   Copy,
-  Download,
   ExternalLink,
   FolderInput,
   FolderOpen,
@@ -19,7 +18,6 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { ConfigError } from '#/components/config-error.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
 import { Field } from '#/components/field.tsx'
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
@@ -1166,7 +1164,6 @@ function CharacterPage() {
   // on router.invalidate() to complete in a second, separate render.
   const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
-  const [generated, setGenerated] = useState<GenerateResult | null>(null)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
@@ -1245,12 +1242,8 @@ function CharacterPage() {
     // Renaming moves the character folder + renames the generated script, so
     // regenerate at the new name and drop the old-named script in the shared folder.
     const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
-    setGenerated(result)
     void router.invalidate()
-    toast.success(`Renamed to “${next}”`)
-    if (result.scriptsError) {
-      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-    }
+    notifyGenerated(`Renamed to “${next}”`, result)
   }
 
   // Saving also (re)generates all DTH files in the same step.
@@ -1263,15 +1256,11 @@ function CharacterPage() {
       // (so it's no longer "dirty") and drop the saving flag together.
       setCharacter(saved)
       setBaseline(saved)
-      setGenerated(result)
       setSaving(false)
       // Refresh the loader for re-entry/navigation, but don't await it — the
       // buttons no longer depend on it, so it stays off the visible path.
       void router.invalidate()
-      toast.success(`Saved “${saved.name}” and generated ${result.files.length} files`)
-      if (result.scriptsError) {
-        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-      }
+      notifyGenerated(`Saved “${saved.name}” — ${result.files.length} files`, result)
     } catch (e) {
       setSaving(false)
       toast.error(e instanceof Error ? e.message : String(e))
@@ -1290,14 +1279,27 @@ function CharacterPage() {
       const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
       setCharacter(saved)
       setBaseline(saved)
-      setGenerated(result)
       void router.invalidate()
-      if (toastMsg) toast.success(toastMsg)
-      if (result.scriptsError) {
-        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-      }
+      notifyGenerated(toastMsg ?? `Saved “${saved.name}”`, result)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // The Generate panel was dissolved — generation feedback now lives in a longer
+  // toast that names where the files landed (and warns on a script-install error).
+  function notifyGenerated(title: string, result: GenerateResult) {
+    toast.success(title, {
+      duration: 10000,
+      description: (
+        <div className="space-y-0.5 text-xs">
+          <div>PoseAsset → {displayPath(result.outDir)}</div>
+          {result.scriptsDir && <div>Daz scripts → {displayPath(result.scriptsDir)}</div>}
+        </div>
+      ),
+    })
+    if (result.scriptsError) {
+      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
     }
   }
 
@@ -1318,16 +1320,6 @@ function CharacterPage() {
   function onCharacterMoved(moved: Character) {
     setCharacter((c) => ({ ...c, scenePath: moved.scenePath }))
     setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
-  }
-
-  function download(file: GeneratedFile) {
-    const blob = new Blob([file.content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = file.fileName
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   // --- Special operations (clone / delete) ---
@@ -1832,38 +1824,7 @@ function CharacterPage() {
         />
       </section>
 
-      <section className="rounded-lg border bg-card p-5">
-        <h2 className="mb-1 text-xl font-semibold">Generate</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          The PoseAsset CSV is written into this character's folder; the
-          self-contained Daz script{' '}
-          {settings.dazLibraryFolder ? (
-            <>
-              (plus the DTH runtime it imports) installs to{' '}
-              <PathCode
-                path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
-              />
-            </>
-          ) : (
-            'installs once you set "My DAZ 3D Library" in Settings'
-          )}
-          {' · '}preset catalog from{' '}
-          {displayPath(catalog.folder) ? (
-            <PathCode path={displayPath(catalog.folder)} />
-          ) : (
-            <code className="rounded bg-muted px-1.5 py-0.5">not configured</code>
-          )}
-          {' — '}
-          <Link
-            to="/settings"
-            search={{ from: character.name }}
-            className="underline hover:text-foreground"
-          >
-            change in Settings
-          </Link>
-        </p>
-
-        {imageDialogOpen && (
+      {imageDialogOpen && (
         <ImageDialog
           image={character.image}
           name={character.name}
@@ -1882,39 +1843,6 @@ function CharacterPage() {
           onClose={() => setImageDialogOpen(false)}
         />
       )}
-
-      {generated && (
-          <>
-            <p className="mb-1 text-sm text-muted-foreground">
-              PoseAsset written to <PathCode path={displayPath(generated.outDir)} />
-            </p>
-            {generated.scriptsDir && (
-              <p className="mb-1 text-sm text-muted-foreground">
-                Character script installed to{' '}
-                <PathCode path={displayPath(generated.scriptsDir)} />
-              </p>
-            )}
-            {generated.scriptsError && (
-              <ConfigError message={generated.scriptsError} className="mb-1" />
-            )}
-            <ul className="mt-4 space-y-2">
-              {generated.files.map((file) => (
-                <li key={file.fileName} className="flex items-center gap-3">
-                  <Button variant="outline" size="sm" onClick={() => download(file)}>
-                    <Download /> {file.fileName}
-                  </Button>
-                  <span className="text-xs text-muted-foreground uppercase">{file.target}</span>
-                  {file.experimental && (
-                    <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
-                      experimental — format pending confirmation
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
 
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Operations</h2>
