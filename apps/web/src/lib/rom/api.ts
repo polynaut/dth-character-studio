@@ -1033,6 +1033,16 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     try {
       await storage.copyRuntimeFiles(root)
       await storage.writeFilesToFolder(charDir, dazFiles)
+      // Drop the other script variant when the combined/split choice changed:
+      // keep only the .dsa names just written (<base>, ROM_<base>, Export_<base>).
+      const dazBase = characterScriptName(character)
+      const writtenDaz = dazFiles.map((file) => file.fileName)
+      await storage.removeFilesFromFolder(
+        charDir,
+        [`${dazBase}.dsa`, `ROM_${dazBase}.dsa`, `Export_${dazBase}.dsa`].filter(
+          (name) => !writtenDaz.includes(name),
+        ),
+      )
       // Migration: older versions wrote the script flat in the root — drop this
       // character's flat-layout script (current + previous name) if it lingers.
       await storage.removeFilesFromFolder(root, [

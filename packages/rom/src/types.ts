@@ -356,8 +356,9 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   2 — added `projectName` + `projectPath`.
  *   3 — added `exportPath`.
  *   4 — added `exportSceneSubfolders`.
+ *   5 — added `exportWithRomScript`.
  */
-export const CHARACTER_SCHEMA_VERSION = 4
+export const CHARACTER_SCHEMA_VERSION = 5
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -424,6 +425,15 @@ export const characterSchema = z.object({
    * export path, or when no scene is loaded/saved at run time.
    */
   exportSceneSubfolders: z.boolean().default(false),
+  /**
+   * When `exportPath` is set, whether the auto-export runs inside the ROM script
+   * (`true`, the default — one combined `<Name>_<Genesis>.dsa`) or is split into
+   * a separate `Export_<Name>_<Genesis>.dsa` that only runs the exporter +
+   * delivers the CSV, leaving `ROM_<Name>_<Genesis>.dsa` to build the ROM. Split
+   * lets you re-export without rebuilding the (slow) ROM. No effect without an
+   * export path.
+   */
+  exportWithRomScript: z.boolean().default(true),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —

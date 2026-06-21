@@ -1637,6 +1637,34 @@ function CharacterPage() {
             </InfoPopup>
           </span>
         </div>
+        <div className="mt-4 flex items-center gap-3">
+          <Switch
+            checked={character.exportWithRomScript}
+            disabled={!character.exportPath}
+            onCheckedChange={(exportWithRomScript) =>
+              void patchAndRegenerate(
+                { exportWithRomScript },
+                exportWithRomScript
+                  ? 'Combined ROM + export script'
+                  : 'Separate ROM and Export scripts',
+              )
+            }
+          />
+          <span
+            className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
+          >
+            Run the export with the ROM script
+            <InfoPopup label="Run the export with the ROM script — more information">
+              On: one <code>{character.name}_{character.genesis}.dsa</code> builds the ROM and runs
+              the export. Off: the ROM build (
+              <code>ROM_{character.name}_{character.genesis}.dsa</code>) and the export (
+              <code>Export_{character.name}_{character.genesis}.dsa</code>) split into two scripts, so
+              you can re-export — for another Daz scene, or after a failed export — without rebuilding
+              the ROM. Run the Export script after the ROM script in the same Daz session.{' '}
+              {!character.exportPath && 'Set an export folder above to enable this.'}
+            </InfoPopup>
+          </span>
+        </div>
       </section>
 
       <details className="mb-8 rounded-lg border bg-card">
