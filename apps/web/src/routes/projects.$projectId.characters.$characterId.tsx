@@ -493,12 +493,14 @@ function SceneCard({
             </code>
           )}
           {primary && (
-            <span
-              className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-              title="The character's original scene — it can't be unlinked"
-            >
-              primary
-            </span>
+            <div className="mt-1">
+              <span
+                className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                title="The character's original scene — it can't be unlinked"
+              >
+                primary
+              </span>
+            </div>
           )}
         </div>
         <ExternalLink className="size-4 shrink-0 self-end text-muted-foreground transition-colors group-hover:text-daz-green" />
