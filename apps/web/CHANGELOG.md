@@ -1,5 +1,24 @@
 # @dth/web
 
+## 0.21.0
+
+### Minor Changes
+
+- [#68](https://github.com/polynaut/dth-character-studio/pull/68) [`11c1766`](https://github.com/polynaut/dth-character-studio/commit/11c1766f85494b1c97ff34acb29eb7e1f43b56d3) Thanks [@polynaut](https://github.com/polynaut)! - Export: new **"Run the export with the ROM script"** toggle (in a character's Export directory section). On (default) keeps one combined `<Name>_<Genesis>.dsa` that builds the ROM and runs the export. Off splits it into `ROM_<Name>_<Genesis>.dsa` (builds the ROM) and `Export_<Name>_<Genesis>.dsa` (only runs the exporter + delivers the PoseAsset CSV) — so you can re-export, for another Daz scene or after a failed export, without rebuilding the slow ROM. Run the Export script after the ROM script in the same Daz session.
+
+### Patch Changes
+
+- [#68](https://github.com/polynaut/dth-character-studio/pull/68) [`11c1766`](https://github.com/polynaut/dth-character-studio/commit/11c1766f85494b1c97ff34acb29eb7e1f43b56d3) Thanks [@polynaut](https://github.com/polynaut)! - Removed the "Generate" results panel from the character page — generation feedback is now a concise toast. The character-script install location is shown in Settings under "My DAZ 3D Library".
+
+- [#68](https://github.com/polynaut/dth-character-studio/pull/68) [`11c1766`](https://github.com/polynaut/dth-character-studio/commit/11c1766f85494b1c97ff34acb29eb7e1f43b56d3) Thanks [@polynaut](https://github.com/polynaut)! - New characters created without a pre-filled ROM now start with the **FBM** (full-body morphs) section **disabled** — there's nothing to put there until you add morphs. Characters prefilled from the example or another character keep that source's sections.
+
+- [#68](https://github.com/polynaut/dth-character-studio/pull/68) [`11c1766`](https://github.com/polynaut/dth-character-studio/commit/11c1766f85494b1c97ff34acb29eb7e1f43b56d3) Thanks [@polynaut](https://github.com/polynaut)! - The character's original (primary) Daz scene — the one it was created from — can no longer be unlinked. Its card shows a "primary" badge instead of the unlink ✕; extra scenes stay removable.
+
+- [#68](https://github.com/polynaut/dth-character-studio/pull/68) [`11c1766`](https://github.com/polynaut/dth-character-studio/commit/11c1766f85494b1c97ff34acb29eb7e1f43b56d3) Thanks [@polynaut](https://github.com/polynaut)! - Removed the unused "Target skeleton" (UE5 / DTH) field. It was never read during generation — the PoseAsset CSV is always the UE5 template, and the DTH skeleton node doesn't support CSV import yet — so it was a choice that looked like it mattered but didn't. Dropped the dropdown, the list column, the schema field, and the prefill copy. Existing characters keep working (the stored value is simply ignored).
+
+- Updated dependencies []:
+  - @dth/rom@0.21.0
+
 ## 0.20.0
 
 ### Minor Changes
