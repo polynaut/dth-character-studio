@@ -10,6 +10,7 @@ import {
   writeFile,
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import { appLocalDataDir } from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 
@@ -1058,24 +1059,12 @@ async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
   return out
 }
 
-// --- Pose catalog (cached) ------------------------------------------------
-// Walking a DTH release folder is slow — and with many releases it made opening
-// a character take seconds. So scanning runs ONCE (explicitly, from Settings)
-// and the classified presets are cached in pose-catalog.json. Opening or
-// generating a character reads only that cache; it never walks the release.
-
-interface PoseCatalog {
-  /** The dthPosesFolder setting at scan time. */
-  sourceFolder: string
-  /** The release that was scanned (folder or zip name), e.g. "Release 2.4.3". */
-  releaseName: string
-  /** Dotted version of the scanned release, e.g. "2.4.3". */
-  version: string
-  /** The Poses folder (or the .zip path) that was scanned. */
-  posesFolder: string
-  scannedAt: string
-  assets: Array<DthPoseAsset>
-}
+// --- Pose asset scan ------------------------------------------------------
+// The active release's Poses folder is walked natively (Rust scan_duf_files) and
+// classified here on demand — there is no on-disk catalog to build or go stale.
+// The scan is tiny and fast (a handful of .duf files), so the frontend keeps the
+// result in memory for the session and re-scans when the release selection
+// changes (see api.fetchPoseAssets / rescanPoseAssets).
 
 /** Comparable version from a name: "Release 2.4.3" → [2,4,3] (last numeric run). */
 function parseVersion(name: string): Array<number> {
@@ -1359,22 +1348,21 @@ function classifyPose(relPath: string): DthPoseAsset {
   }
 }
 
-/** Walk + classify an extracted Poses folder into pose assets. */
-async function scanPosesFolder(posesFolder: string): Promise<Array<DthPoseAsset>> {
-  const entries = await walkFiles(posesFolder)
-  const assets = entries
-    .filter((entry) => entry.toLowerCase().endsWith('.duf'))
-    .map((entry) => classifyPose(entry))
-  assets.sort((a, b) => a.relPath.localeCompare(b.relPath))
-  return assets
+/** Recursively list `.duf` paths under a Poses folder via the native walk (one
+ *  IPC call; rel paths are '/'-separated, relative to `posesFolder`). */
+async function scanDufPaths(posesFolder: string): Promise<Array<string>> {
+  return invoke<Array<string>>('scan_duf_files', { folder: posesFolder })
 }
 
 /**
- * Explicitly (re)build the cached pose catalog from the configured DTH release
- * folder: resolve the latest release, scan + classify its presets, and write
- * pose-catalog.json into the app folder. Slow, but only runs from Settings.
+ * Scan + classify the active DTH release's pose presets, live. Resolves the
+ * selected release under the configured folder, walks its Poses folder natively,
+ * and classifies each `.duf`. Nothing is persisted — callers keep the result in
+ * memory for the session (see api.fetchPoseAssets / rescanPoseAssets). Returns a
+ * setup error (which ConfigError turns into a "change in Settings" link) when no
+ * release is configured or it's unreachable.
  */
-export async function buildPoseCatalog(): Promise<{
+export async function scanPoseAssets(): Promise<{
   folder: string
   releaseName: string
   version: string
@@ -1409,38 +1397,10 @@ export async function buildPoseCatalog(): Promise<{
       error: `Release "${resolved.releaseName}" has no Poses folder (expected at ${posesFolder})`,
     }
   }
-  const assets = await scanPosesFolder(posesFolder)
-  const catalog: PoseCatalog = {
-    sourceFolder: dthPosesFolder,
-    releaseName: resolved.releaseName,
-    version: resolved.version,
-    posesFolder,
-    scannedAt: new Date().toISOString(),
-    assets,
-  }
-  await ensureAppDir()
-  await writeTextFile(await dataPath('pose-catalog.json'), JSON.stringify(catalog, null, 2) + '\n')
+  const assets = (await scanDufPaths(posesFolder))
+    .map((relPath) => classifyPose(relPath))
+    .sort((a, b) => a.relPath.localeCompare(b.relPath))
   return { folder: posesFolder, releaseName: resolved.releaseName, version: resolved.version, assets, error: null }
-}
-
-/**
- * The cached pose catalog used wherever a character is opened or generated.
- * Reads pose-catalog.json — it NEVER walks the release folder (that only happens
- * in buildPoseCatalog, from Settings). Returns an error directing the user to
- * Settings when the catalog hasn't been built yet.
- */
-export async function listPoseAssets(): Promise<{
-  folder: string
-  assets: Array<DthPoseAsset>
-  error: string | null
-}> {
-  try {
-    const catalog = JSON.parse(await readTextFile(await dataPath('pose-catalog.json'))) as PoseCatalog
-    if (!Array.isArray(catalog.assets)) throw new Error('bad catalog')
-    return { folder: catalog.posesFolder, assets: catalog.assets, error: null }
-  } catch {
-    return { folder: '', assets: [], error: 'No pose catalog yet — scan a DTH release in Settings' }
-  }
 }
 
 // --- DTH install plan -----------------------------------------------------

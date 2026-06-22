@@ -917,6 +917,41 @@ fn pose_asset_frames(paths: Vec<String>) -> Vec<PoseAssetFrames> {
         .collect()
 }
 
+/// Recursively collect every `.duf` under `folder`, as paths relative to it
+/// ('/'-separated). The frontend classifies these into pose assets on each open /
+/// release change — there's no on-disk catalog to build or go stale. One native
+/// walk replaces the old per-directory JS round-trips (much faster on a network
+/// share). Unreadable subfolders (locked / permission / network) are skipped so
+/// one bad directory can't fail the whole scan.
+#[tauri::command]
+fn scan_duf_files(folder: String) -> Vec<String> {
+    let root = Path::new(&folder);
+    let mut out = Vec::new();
+    collect_duf(root, root, &mut out);
+    out
+}
+
+fn collect_duf(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if file_type.is_dir() {
+            collect_duf(root, &path, out);
+        } else if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("duf")) {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -943,7 +978,8 @@ pub fn run() {
             install_houdini_presets,
             unc_for_path,
             ensure_network_drives,
-            pose_asset_frames
+            pose_asset_frames,
+            scan_duf_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

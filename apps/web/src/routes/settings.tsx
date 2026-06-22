@@ -28,7 +28,6 @@ import {
   SelectValue,
 } from '#/components/ui/select.tsx'
 import {
-  buildPoseCatalog,
   ensureNetworkDrives,
   fetchAppDataFolder,
   fetchKnownDrives,
@@ -45,6 +44,7 @@ import {
   listDthExporterReleases,
   listDthReleases,
   refreshAllAssets,
+  rescanPoseAssets,
   saveSettings,
   uncForPath,
 } from '#/lib/rom/api.ts'
@@ -53,9 +53,7 @@ import { displayPath } from '#/lib/path.ts'
 import { cn } from '#/lib/utils.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
-import { ROM_SECTIONS, SECTION_LABELS } from '@dth/rom'
 
-import type { DthPoseAsset, GenesisVersion } from '@dth/rom'
 import type {
   DthExporterReleaseInfo,
   DthReleaseInfo,
@@ -120,14 +118,6 @@ export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 })
 
-interface ScanResult {
-  folder: string
-  releaseName: string
-  version: string
-  assets: Array<DthPoseAsset>
-  error: string | null
-}
-
 interface ReleasesState {
   mode: 'single' | 'multi' | 'none'
   version: string
@@ -141,8 +131,6 @@ interface ExporterReleasesState {
   releases: Array<DthExporterReleaseInfo>
   error: string | null
 }
-
-const GENESIS_ORDER: Array<GenesisVersion> = ['G3', 'G8', 'G8.1', 'G9']
 
 /**
  * Under the DTH folder field: nothing for an empty folder, the detected version
@@ -273,66 +261,6 @@ function ExporterReleasePicker({
     )
   }
   return null
-}
-
-function ScanSummary({ result }: { result: ScanResult }) {
-  if (result.error) {
-    return <p className="text-sm text-destructive">{result.error}</p>
-  }
-  const byGenesis = new Map<GenesisVersion, Array<DthPoseAsset>>()
-  let unclassified = 0
-  for (const asset of result.assets) {
-    if (!asset.genesis || !asset.section) {
-      unclassified++
-      continue
-    }
-    byGenesis.set(asset.genesis, [...(byGenesis.get(asset.genesis) ?? []), asset])
-  }
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Cached <strong className="text-foreground">{result.assets.length}</strong> pose presets
-        {result.releaseName && (
-          <>
-            {' '}from <strong className="text-foreground">{result.releaseName}</strong>
-            {result.version && <> (v{result.version})</>}
-          </>
-        )}
-        {result.folder && (
-          <>
-            {' '}in <PathCode path={displayPath(result.folder)} />
-          </>
-        )}
-        {unclassified > 0 && <> — {unclassified} could not be classified</>}
-      </p>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {GENESIS_ORDER.filter((genesis) => byGenesis.has(genesis)).map((genesis) => {
-          const assets = byGenesis.get(genesis)!
-          return (
-            <div key={genesis} className="rounded-lg border bg-card p-4">
-              <h3 className="mb-2 font-semibold">{genesis}</h3>
-              <ul className="space-y-1">
-                {ROM_SECTIONS.filter((section) =>
-                  assets.some((asset) => asset.section === section),
-                ).map((section) => (
-                  <li key={section} className="text-sm">
-                    <span className="font-mono text-xs font-semibold text-muted-foreground">
-                      {section}
-                    </span>{' '}
-                    <span className="text-muted-foreground">{SECTION_LABELS[section]}:</span>{' '}
-                    {assets
-                      .filter((asset) => asset.section === section)
-                      .map((asset) => asset.name)
-                      .join(', ')}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
 }
 
 /**
@@ -555,7 +483,6 @@ function SettingsPage() {
 
   const [settings, setSettings] = useState(initial)
   const [busy, setBusy] = useState(false)
-  const [scan, setScan] = useState<ScanResult | null>(null)
   const [releases, setReleases] = useState<ReleasesState>({
     mode: 'none',
     version: '',
@@ -707,19 +634,28 @@ function SettingsPage() {
     settings.houdiniPresetsSource !== initial.houdiniPresetsSource ||
     JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders)
 
-  // Saving also (re)builds the pose catalog for the active release — there's no
-  // separate scan step.
+  // Re-scan the active release's poses and refresh dependent routes. The studio
+  // keeps the pose list in memory (no on-disk cache), so this just re-runs the
+  // native scan and updates it — done whenever the release settings are applied:
+  // on Save and after installing a release. Returns the scan result so callers
+  // can tailor their own toast.
+  async function rebuildCatalog() {
+    const result = await rescanPoseAssets()
+    await router.invalidate()
+    return result
+  }
+
+  // Saving stores the settings and re-scans the active release's poses — there's
+  // no separate scan step.
   async function onSave() {
     setBusy(true)
     try {
       await saveSettings({ data: settings })
-      const result = await buildPoseCatalog()
-      setScan(result)
-      await router.invalidate()
+      const result = await rebuildCatalog()
       if (result.error) toast.error(result.error)
       else
         toast.success(
-          `Saved — cached ${result.assets.length} pose presets${
+          `Saved — scanned ${result.assets.length} pose presets${
             result.releaseName ? ` from ${result.releaseName}` : ''
           }`,
         )
@@ -765,6 +701,9 @@ function SettingsPage() {
     setBusyState: (value: boolean) => void,
     setReport: (report: InstallReport | null) => void,
     onComplete?: () => void,
+    // Runs only after a successful (real, error-free) install — e.g. the DTH
+    // release install re-scans the poses so the app works immediately.
+    afterSuccess?: () => Promise<void> | void,
   ) {
     setBusyState(true)
     setReport(null)
@@ -782,6 +721,7 @@ function SettingsPage() {
         toast.success(`Dry run — would copy ${report.totalFiles} file(s)`)
       } else {
         toast.success(`Installed ${report.totalFiles} file(s)`)
+        await afterSuccess?.()
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -901,7 +841,7 @@ function SettingsPage() {
             <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
               App data folder
               <InfoPopup label="App data folder — more information">
-                Where the app keeps its settings, project list, pose catalog and avatar images.
+                Where the app keeps its settings, project list and avatar images.
               </InfoPopup>
             </h2>
             {appDataFolder ? (
@@ -1010,7 +950,28 @@ function SettingsPage() {
                 {releaseInstalling ? 'Working…' : 'Dry run'}
               </Button>
               <Button
-                onClick={() => runInstall(installDthRelease, false, setReleaseInstalling, setReleaseReport)}
+                onClick={() =>
+                  runInstall(
+                    installDthRelease,
+                    false,
+                    setReleaseInstalling,
+                    setReleaseReport,
+                    undefined,
+                    // Re-scan poses from the just-installed release so the studio
+                    // can open/generate characters without a separate Save.
+                    async () => {
+                      const result = await rebuildCatalog()
+                      if (result.error)
+                        toast.error(`Installed, but the pose scan failed: ${result.error}`)
+                      else
+                        toast.success(
+                          `Scanned ${result.assets.length} pose presets${
+                            result.releaseName ? ` from ${result.releaseName}` : ''
+                          }`,
+                        )
+                    },
+                  )
+                }
                 disabled={!canInstallRelease || releaseInstalling}
               >
                 <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
@@ -1350,13 +1311,6 @@ function SettingsPage() {
           <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
         </Button>
       </div>
-
-      {scan && (
-        <section className="mt-8">
-          <h2 className="mb-3 text-xl font-semibold">Pose catalog</h2>
-          <ScanSummary result={scan} />
-        </section>
-      )}
     </main>
   )
 }

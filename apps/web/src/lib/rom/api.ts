@@ -711,26 +711,38 @@ export async function fetchAppVersion(): Promise<string> {
 }
 
 /**
- * The app's internal per-user data folder — where settings.json, projects.json,
- * the pose catalog and avatar images live. Surfaced in Settings so the user can
- * find (and back up) the app's state.
+ * The app's internal per-user data folder — where settings.json, projects.json
+ * and avatar images live. Surfaced in Settings so the user can find (and back
+ * up) the app's state.
  */
 export async function fetchAppDataFolder(): Promise<string> {
   return dataPath()
 }
 
-/** The cached DTH pose preset catalog (read from appdata; never walks the release). */
-export async function fetchPoseAssets(): Promise<ReturnType<typeof storage.listPoseAssets>> {
-  return storage.listPoseAssets()
+// In-memory pose catalog for the app session. The active DTH release's Poses
+// folder is scanned (natively, in Rust) on first use and re-scanned when the
+// release selection changes — there's no on-disk cache to build, miss, or go
+// stale. The scan is small and fast, so one session-lived value is plenty.
+// Failed scans (no release / unreachable) are NOT memoized, so fixing Settings
+// recovers on the next read without an explicit rescan.
+type PoseAssets = Awaited<ReturnType<typeof storage.scanPoseAssets>>
+let poseAssets: PoseAssets | null = null
+
+/** The DTH pose presets for the active release — scanned once, then kept in
+ *  memory for the session. */
+export async function fetchPoseAssets(): Promise<PoseAssets> {
+  if (poseAssets) return poseAssets
+  const result = await storage.scanPoseAssets()
+  if (!result.error) poseAssets = result
+  return result
 }
 
-/**
- * Rebuild the cached pose catalog: resolve the latest DTH release in the
- * configured folder, scan + classify its presets, and persist them. Slow —
- * invoked explicitly from Settings, not on every character open.
- */
-export async function buildPoseCatalog(): Promise<ReturnType<typeof storage.buildPoseCatalog>> {
-  return storage.buildPoseCatalog()
+/** Re-scan the active release now and refresh the in-memory catalog — call after
+ *  the release selection changes or its content is installed/updated. */
+export async function rescanPoseAssets(): Promise<PoseAssets> {
+  const result = await storage.scanPoseAssets()
+  poseAssets = result.error ? null : result
+  return result
 }
 
 /** Inspect a DTH folder: a single release, or a list of versioned releases. */
@@ -997,9 +1009,9 @@ async function measureFrames(paths: Array<string>): Promise<Map<string, Measured
  */
 export async function resolvePresetFrames(
   character: Character,
-  catalog?: Awaited<ReturnType<typeof storage.listPoseAssets>>,
+  catalog?: PoseAssets,
 ): Promise<PresetFrames> {
-  const cat = catalog ?? (await storage.listPoseAssets())
+  const cat = catalog ?? (await fetchPoseAssets())
   const romPaths = cat.error ? {} : resolveRomPaths(character, cat)
   const { sections, gender } = character
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
@@ -1030,7 +1042,7 @@ export async function resolvePresetFrames(
     if (!block.need) continue
     if (!block.path) {
       throw new Error(
-        `Couldn't locate the ${block.label} pose asset — re-scan the DTH release in Settings.`,
+        `Couldn't locate the ${block.label} pose asset — rescan the poses in Settings.`,
       )
     }
     const hit = measured.get(block.path)
@@ -1064,9 +1076,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const lib = project.path
   const character = await storage.getCharacter(lib, id)
   if (!character) throw new Error(`Character ${id} not found`)
-  // Exact ROM paths from the installed preset catalog; {} when the folder is
+  // Exact ROM paths from the active release's pose scan; {} when the folder is
   // unavailable — the script then falls back to DthOptions resolution.
-  const catalog = await storage.listPoseAssets()
+  const catalog = await fetchPoseAssets()
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
   // Frame lengths measured live from the actual .duf assets (hard-errors if an
   // included block can't be read — never a wrong-length ROM).
