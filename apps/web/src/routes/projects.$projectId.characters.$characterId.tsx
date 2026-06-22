@@ -5,7 +5,6 @@ import { z } from 'zod'
 import {
   ArrowLeft,
   Copy,
-  Download,
   ExternalLink,
   FolderInput,
   FolderOpen,
@@ -19,7 +18,6 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { ConfigError } from '#/components/config-error.tsx'
 import { EditableTitle } from '#/components/editable-title.tsx'
 import { Field } from '#/components/field.tsx'
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
@@ -67,11 +65,12 @@ import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
+import { cn } from '#/lib/utils.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
-import type { Character, GenesisVersion, TargetSkeleton } from '@dth/rom'
+import type { Character, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params }) => {
@@ -439,6 +438,7 @@ function SceneCard({
   charFolderAbs,
   onOpen,
   onRemove,
+  primary,
 }: {
   scenePath: string
   name: string
@@ -448,6 +448,9 @@ function SceneCard({
   onOpen: () => void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
+  /** The character's original creation scene — gets a "primary" badge and is not
+   *  unlinkable (the caller omits onRemove). */
+  primary?: boolean
 }) {
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
@@ -466,7 +469,12 @@ function SceneCard({
         type="button"
         onClick={onOpen}
         title="Open in Daz"
-        className="daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
+        className={cn(
+          'daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+          // Make room at the top-right for the always-on "primary" badge so it
+          // doesn't crowd the (w-fit) card's title.
+          primary && 'pr-16',
+        )}
       >
         <Portrait
           scenePath={scenePath}
@@ -503,6 +511,14 @@ function SceneCard({
         >
           <Trash2 className="size-3.5 text-destructive" />
         </Button>
+      )}
+      {primary && (
+        <span
+          className="absolute top-1.5 right-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+          title="The character's original scene — it can't be unlinked"
+        >
+          primary
+        </span>
       )}
     </div>
   )
@@ -821,7 +837,7 @@ function DazSceneField({
                   name={character.name}
                   charFolderAbs={charFolder}
                   onOpen={() => void onOpen(character.scenePath)}
-                  onRemove={() => askRemove(character.scenePath)}
+                  primary
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
@@ -1166,7 +1182,6 @@ function CharacterPage() {
   // on router.invalidate() to complete in a second, separate render.
   const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
-  const [generated, setGenerated] = useState<GenerateResult | null>(null)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
@@ -1245,12 +1260,8 @@ function CharacterPage() {
     // Renaming moves the character folder + renames the generated script, so
     // regenerate at the new name and drop the old-named script in the shared folder.
     const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
-    setGenerated(result)
     void router.invalidate()
-    toast.success(`Renamed to “${next}”`)
-    if (result.scriptsError) {
-      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-    }
+    notifyGenerated(`Renamed to “${next}”`, result)
   }
 
   // Saving also (re)generates all DTH files in the same step.
@@ -1263,15 +1274,11 @@ function CharacterPage() {
       // (so it's no longer "dirty") and drop the saving flag together.
       setCharacter(saved)
       setBaseline(saved)
-      setGenerated(result)
       setSaving(false)
       // Refresh the loader for re-entry/navigation, but don't await it — the
       // buttons no longer depend on it, so it stays off the visible path.
       void router.invalidate()
-      toast.success(`Saved “${saved.name}” and generated ${result.files.length} files`)
-      if (result.scriptsError) {
-        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-      }
+      notifyGenerated(`Saved “${saved.name}” — ${result.files.length} files`, result)
     } catch (e) {
       setSaving(false)
       toast.error(e instanceof Error ? e.message : String(e))
@@ -1290,14 +1297,19 @@ function CharacterPage() {
       const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
       setCharacter(saved)
       setBaseline(saved)
-      setGenerated(result)
       void router.invalidate()
-      if (toastMsg) toast.success(toastMsg)
-      if (result.scriptsError) {
-        toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-      }
+      notifyGenerated(toastMsg ?? `Saved “${saved.name}”`, result)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // The Generate panel was dissolved — generation feedback is a concise toast
+  // (the install location lives in Settings); a script-install error still warns.
+  function notifyGenerated(title: string, result: GenerateResult) {
+    toast.success(title)
+    if (result.scriptsError) {
+      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
     }
   }
 
@@ -1318,16 +1330,6 @@ function CharacterPage() {
   function onCharacterMoved(moved: Character) {
     setCharacter((c) => ({ ...c, scenePath: moved.scenePath }))
     setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
-  }
-
-  function download(file: GeneratedFile) {
-    const blob = new Blob([file.content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = file.fileName
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   // --- Special operations (clone / delete) ---
@@ -1506,21 +1508,6 @@ function CharacterPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="mb-1">Target skeleton</Label>
-                <Select
-                  value={character.targetSkeleton}
-                  onValueChange={(v) => patch({ targetSkeleton: v as TargetSkeleton })}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UE5">UE5 Mannequin</SelectItem>
-                    <SelectItem value="DTH">DTH native</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </div>
 
@@ -1633,6 +1620,34 @@ function CharacterPage() {
               when the script runs (resolved at run time) — so a character's scene/outfit variants
               export side by side. The exporter output and the PoseAsset CSV land directly in that
               scene subfolder. Falls back to the export root if no scene is saved.{' '}
+              {!character.exportPath && 'Set an export folder above to enable this.'}
+            </InfoPopup>
+          </span>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <Switch
+            checked={character.exportWithRomScript}
+            disabled={!character.exportPath}
+            onCheckedChange={(exportWithRomScript) =>
+              void patchAndRegenerate(
+                { exportWithRomScript },
+                exportWithRomScript
+                  ? 'Combined ROM + export script'
+                  : 'Separate ROM and Export scripts',
+              )
+            }
+          />
+          <span
+            className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
+          >
+            Run the export with the ROM script
+            <InfoPopup label="Run the export with the ROM script — more information">
+              On: one <code>{character.name}_{character.genesis}.dsa</code> builds the ROM and runs
+              the export. Off: the ROM build (
+              <code>ROM_{character.name}_{character.genesis}.dsa</code>) and the export (
+              <code>Export_{character.name}_{character.genesis}.dsa</code>) split into two scripts, so
+              you can re-export — for another Daz scene, or after a failed export — without rebuilding
+              the ROM. Run the Export script after the ROM script in the same Daz session.{' '}
               {!character.exportPath && 'Set an export folder above to enable this.'}
             </InfoPopup>
           </span>
@@ -1804,38 +1819,7 @@ function CharacterPage() {
         />
       </section>
 
-      <section className="rounded-lg border bg-card p-5">
-        <h2 className="mb-1 text-xl font-semibold">Generate</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          The PoseAsset CSV is written into this character's folder; the
-          self-contained Daz script{' '}
-          {settings.dazLibraryFolder ? (
-            <>
-              (plus the DTH runtime it imports) installs to{' '}
-              <PathCode
-                path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
-              />
-            </>
-          ) : (
-            'installs once you set "My DAZ 3D Library" in Settings'
-          )}
-          {' · '}preset catalog from{' '}
-          {displayPath(catalog.folder) ? (
-            <PathCode path={displayPath(catalog.folder)} />
-          ) : (
-            <code className="rounded bg-muted px-1.5 py-0.5">not configured</code>
-          )}
-          {' — '}
-          <Link
-            to="/settings"
-            search={{ from: character.name }}
-            className="underline hover:text-foreground"
-          >
-            change in Settings
-          </Link>
-        </p>
-
-        {imageDialogOpen && (
+      {imageDialogOpen && (
         <ImageDialog
           image={character.image}
           name={character.name}
@@ -1854,39 +1838,6 @@ function CharacterPage() {
           onClose={() => setImageDialogOpen(false)}
         />
       )}
-
-      {generated && (
-          <>
-            <p className="mb-1 text-sm text-muted-foreground">
-              PoseAsset written to <PathCode path={displayPath(generated.outDir)} />
-            </p>
-            {generated.scriptsDir && (
-              <p className="mb-1 text-sm text-muted-foreground">
-                Character script installed to{' '}
-                <PathCode path={displayPath(generated.scriptsDir)} />
-              </p>
-            )}
-            {generated.scriptsError && (
-              <ConfigError message={generated.scriptsError} className="mb-1" />
-            )}
-            <ul className="mt-4 space-y-2">
-              {generated.files.map((file) => (
-                <li key={file.fileName} className="flex items-center gap-3">
-                  <Button variant="outline" size="sm" onClick={() => download(file)}>
-                    <Download /> {file.fileName}
-                  </Button>
-                  <span className="text-xs text-muted-foreground uppercase">{file.target}</span>
-                  {file.experimental && (
-                    <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
-                      experimental — format pending confirmation
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
 
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Operations</h2>

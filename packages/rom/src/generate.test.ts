@@ -9,6 +9,7 @@ import {
   toCharacterScriptDsa,
   toDazFbmCsv,
   toDazFbmJson,
+  toExportScriptDsa,
   toPoseAssetCsv,
   toWorkflowDsa,
 } from './generate'
@@ -60,6 +61,7 @@ function fbmGroup(): RomGroup {
 
 function makeSections(patch: Partial<RomSections> = {}): RomSections {
   const sections = defaultSections()
+  sections.FBM.enabled = true
   sections.FBM.groups = [fbmGroup()]
   return { ...sections, ...patch }
 }
@@ -651,5 +653,49 @@ describe('exporter integration', () => {
     const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
     // No charFolderAbs (pure/web context): export runs, but no copy block.
     expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain('dthCsvSrcDir')
+  })
+
+  it('combined (default): one script that builds the ROM and exports', () => {
+    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    const rom = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra')
+    expect(rom.fileName).toBe('Electra_G9.dsa')
+    expect(rom.content).toContain('ApplyDTHCharacter(')
+    expect(rom.content).toContain('doExport')
+    const files = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra')
+    expect(files.map((f) => f.fileName)).toEqual(['Electra_G9.dsa', 'Electra_pose_asset.csv'])
+  })
+
+  it('split (exportWithRomScript off): ROM_ script builds, Export_ script exports', () => {
+    const character = withReferencePose({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+      exportWithRomScript: false,
+    })
+    const rom = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra')
+    expect(rom.fileName).toBe('ROM_Electra_G9.dsa')
+    expect(rom.content).toContain('ApplyDTHCharacter(')
+    expect(rom.content).not.toContain('doExport') // ROM only, no export
+
+    const exportScript = toExportScriptDsa(character, FRAMES, 'D:\\lib\\Electra')
+    expect(exportScript.fileName).toBe('Export_Electra_G9.dsa')
+    expect(exportScript.content).not.toContain('ApplyDTHCharacter(') // no ROM rebuild
+    expect(exportScript.content).toContain('doExport')
+    expect(exportScript.content).toContain('dthCsvSrc.copy(dthCsvDst)')
+
+    expect(generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      'Export_Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
+  })
+
+  it('split has no effect without an export path (stays one combined script)', () => {
+    const character = withReferencePose({ name: 'Electra', exportWithRomScript: false })
+    const rom = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra')
+    expect(rom.fileName).toBe('Electra_G9.dsa')
+    expect(generateAll(character, {}, FRAMES).map((f) => f.fileName)).toEqual([
+      'Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
   })
 })
