@@ -61,6 +61,7 @@ function fbmGroup(): RomGroup {
 
 function makeSections(patch: Partial<RomSections> = {}): RomSections {
   const sections = defaultSections()
+  sections.FBM.enabled = true
   sections.FBM.groups = [fbmGroup()]
   return { ...sections, ...patch }
 }

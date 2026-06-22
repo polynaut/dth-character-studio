@@ -9,6 +9,7 @@ import type { RomSections as RomSectionsModel } from '@dth/rom'
 
 function sectionsWithMultiMorphPose(): RomSectionsModel {
   const sections = defaultSections()
+  sections.FBM.enabled = true
   sections.FBM.groups = [
     {
       id: 'g1',

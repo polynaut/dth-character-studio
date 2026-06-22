@@ -253,7 +253,9 @@ export function defaultSections(): Record<RomSection, RomSectionConfig> {
     EXP: config(false, 'custom'),
     GEN: config(false, 'preset'),
     PHY: config(false, 'custom'),
-    FBM: config(true, 'custom'),
+    // FBM (custom full-body morphs) starts disabled — a new character without a
+    // pre-filled ROM has nothing to put there until the user adds morphs.
+    FBM: config(false, 'custom'),
     MISC: config(false, 'custom'),
   }
 }
