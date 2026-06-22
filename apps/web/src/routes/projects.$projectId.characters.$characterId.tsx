@@ -437,6 +437,7 @@ function SceneCard({
   charFolderAbs,
   onOpen,
   onRemove,
+  primary,
 }: {
   scenePath: string
   name: string
@@ -446,6 +447,9 @@ function SceneCard({
   onOpen: () => void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
+  /** The character's original creation scene — gets a "primary" badge and is not
+   *  unlinkable (the caller omits onRemove). */
+  primary?: boolean
 }) {
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
@@ -501,6 +505,14 @@ function SceneCard({
         >
           <Trash2 className="size-3.5 text-destructive" />
         </Button>
+      )}
+      {primary && (
+        <span
+          className="absolute top-1.5 right-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+          title="The character's original scene — it can't be unlinked"
+        >
+          primary
+        </span>
       )}
     </div>
   )
@@ -819,7 +831,7 @@ function DazSceneField({
                   name={character.name}
                   charFolderAbs={charFolder}
                   onOpen={() => void onOpen(character.scenePath)}
-                  onRemove={() => askRemove(character.scenePath)}
+                  primary
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
