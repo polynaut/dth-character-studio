@@ -65,7 +65,6 @@ import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
-import { cn } from '#/lib/utils.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -469,12 +468,7 @@ function SceneCard({
         type="button"
         onClick={onOpen}
         title="Open in Daz"
-        className={cn(
-          'daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
-          // Make room at the top-right for the always-on "primary" badge so it
-          // doesn't crowd the (w-fit) card's title.
-          primary && 'pr-16',
-        )}
+        className="daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
       >
         <Portrait
           scenePath={scenePath}
@@ -498,8 +492,16 @@ function SceneCard({
               {`${pathSeparator()}${displayPath(relSub)}${pathSeparator()}`}
             </code>
           )}
+          {primary && (
+            <span
+              className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title="The character's original scene — it can't be unlinked"
+            >
+              primary
+            </span>
+          )}
         </div>
-        <ExternalLink className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        <ExternalLink className="size-4 shrink-0 self-end text-muted-foreground transition-colors group-hover:text-daz-green" />
       </button>
       {onRemove && (
         <Button
@@ -511,14 +513,6 @@ function SceneCard({
         >
           <Trash2 className="size-3.5 text-destructive" />
         </Button>
-      )}
-      {primary && (
-        <span
-          className="absolute top-1.5 right-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-          title="The character's original scene — it can't be unlinked"
-        >
-          primary
-        </span>
       )}
     </div>
   )
