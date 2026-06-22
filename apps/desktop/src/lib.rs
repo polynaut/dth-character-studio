@@ -177,41 +177,42 @@ fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)>
     None
 }
 
-/// First file (recursively, name-sorted) under `dir`, relative to `base` — used as
-/// an "already installed?" marker for skip detection.
-fn first_file_rel(dir: &Path, base: &Path) -> Option<PathBuf> {
-    let mut entries: Vec<_> = fs::read_dir(dir).ok()?.flatten().collect();
-    entries.sort_by_key(|e| e.file_name());
-    for e in &entries {
-        let p = e.path();
-        if p.is_file() {
-            return p.strip_prefix(base).ok().map(|r| r.to_path_buf());
-        }
+/// Copy `src` → `dst` file-by-file, copying each only when the destination is
+/// missing or a *different size* (or always, with `force`). `dry` counts what
+/// would copy without writing. Returns (files copied / would-copy, files total) —
+/// so "already installed" is simply "0 to copy", read from the real filesystem
+/// rather than a fragile single-file marker.
+fn sync_dir(src: &Path, dst: &Path, dry: bool, force: bool) -> std::io::Result<(u64, u64)> {
+    if !dry {
+        fs::create_dir_all(dst)?;
     }
-    for e in &entries {
-        let p = e.path();
-        if p.is_dir() {
-            if let Some(m) = first_file_rel(&p, base) {
-                return Some(m);
+    let mut diff = 0u64;
+    let mut total = 0u64;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if from.is_dir() {
+            let (d, t) = sync_dir(&from, &to, dry, force)?;
+            diff += d;
+            total += t;
+        } else {
+            total += 1;
+            let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let needs = force
+                || match fs::metadata(&to) {
+                    Ok(m) => m.len() != src_len,
+                    Err(_) => true,
+                };
+            if needs {
+                diff += 1;
+                if !dry {
+                    fs::copy(&from, &to)?;
+                }
             }
         }
     }
-    None
-}
-
-/// "Already installed?" marker — the first file inside one of the asset's content
-/// folders, relative to the content root (so it matches `<dest>/<folder>/…`).
-/// Only files that actually get copied count, so an unrelated top-level folder
-/// (Camera Presets, Manifest.dsx, a readme…) can't make an installed asset look
-/// missing — the bug in searching the whole content root.
-fn install_marker(content_root: &Path, folders: &[String]) -> Option<PathBuf> {
-    for f in folders {
-        let folder_dir = content_root.join(f);
-        if let Some(rel) = first_file_rel(&folder_dir, &folder_dir) {
-            return Some(Path::new(f).join(rel));
-        }
-    }
-    None
+    Ok((diff, total))
 }
 
 /// Extract a `.zip` into a fresh temp dir (returned for the caller to clean up).
@@ -513,30 +514,34 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
             match level {
                 None => steps.push(step_skip(&name, "no Daz content found".into())),
                 Some((content_root, folders)) => {
-                    let marker = install_marker(&content_root, &folders);
-                    let already = !request.force
-                        && marker.as_ref().map_or(false, |m| dest.join(m).exists());
-                    if already {
-                        steps.push(step_skip(&name, "already installed".into()));
-                    } else if dry {
-                        let files: u64 =
-                            folders.iter().map(|f| count_files(&content_root.join(f))).sum();
-                        steps.push(step_ok(&name, files, format!("would install {}", folders.join(", "))));
-                    } else {
-                        let mut total = 0u64;
-                        let mut err: Option<String> = None;
-                        for f in &folders {
-                            match copy_dir(&content_root.join(f), &dest.join(f)) {
-                                Ok(n) => total += n,
-                                Err(e) => {
-                                    err = Some(io_detail(&format!("{} → {}", f, dest.join(f).display()), &e));
-                                    break;
-                                }
+                    // Per-file size-aware sync: copy only files missing or changed.
+                    let mut diff = 0u64;
+                    let mut total = 0u64;
+                    let mut err: Option<String> = None;
+                    for f in &folders {
+                        match sync_dir(&content_root.join(f), &dest.join(f), dry, request.force) {
+                            Ok((d, t)) => {
+                                diff += d;
+                                total += t;
+                            }
+                            Err(e) => {
+                                err = Some(io_detail(&format!("{} → {}", f, dest.join(f).display()), &e));
+                                break;
                             }
                         }
-                        match err {
-                            Some(m) => steps.push(step_err(&name, m)),
-                            None => steps.push(step_ok(&name, total, format!("installed {}", folders.join(", ")))),
+                    }
+                    match err {
+                        Some(m) => steps.push(step_err(&name, m)),
+                        None if diff == 0 => {
+                            steps.push(step_skip(&name, format!("already installed · {total} files")))
+                        }
+                        None => {
+                            let verb = if dry { "to copy" } else { "copied" };
+                            steps.push(step_ok(
+                                &name,
+                                diff,
+                                format!("{diff}/{total} files {verb} · {}", folders.join(", ")),
+                            ))
                         }
                     }
                 }
@@ -582,15 +587,23 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
             match level {
                 None => steps.push(step_skip(&name, "no Daz content".into())),
                 Some((content_root, folders)) => {
-                    let files: u64 = folders.iter().map(|f| count_files(&content_root.join(f))).sum();
-                    let installed = install_marker(&content_root, &folders)
-                        .map_or(false, |m| dest.join(m).exists());
-                    let detail = if installed {
-                        format!("{} · installed", folders.join(", "))
+                    let mut diff = 0u64;
+                    let mut total = 0u64;
+                    for f in &folders {
+                        if let Ok((d, t)) = sync_dir(&content_root.join(f), &dest.join(f), true, false) {
+                            diff += d;
+                            total += t;
+                        }
+                    }
+                    if diff == 0 {
+                        steps.push(step_skip(&name, format!("installed · {total} files")));
                     } else {
-                        folders.join(", ")
-                    };
-                    steps.push(step_ok(&name, files, detail));
+                        steps.push(step_ok(
+                            &name,
+                            diff,
+                            format!("{diff}/{total} files to copy · {}", folders.join(", ")),
+                        ));
+                    }
                 }
             }
             if let Some(t) = temp {
