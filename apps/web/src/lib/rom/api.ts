@@ -795,6 +795,8 @@ export interface InstallStep {
   files: number
   status: 'ok' | 'skipped' | 'error' | 'header'
   detail: string
+  /** For asset steps: the (capped) list of files an install would copy. */
+  filesList?: Array<string>
 }
 
 /** Outcome of a DTH install run (mirrors the Rust `InstallReport`). */

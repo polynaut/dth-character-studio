@@ -48,9 +48,11 @@ fn io_detail(prefix: &str, e: &std::io::Error) -> String {
 struct InstallStep {
     label: String,
     files: u64,
-    /// "ok" | "skipped" | "error".
+    /// "ok" | "skipped" | "error" | "header".
     status: String,
     detail: String,
+    /// Per-asset detail: the (capped) list of files an install would copy.
+    files_list: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -62,17 +64,17 @@ struct InstallReport {
 }
 
 fn step_ok(label: &str, files: u64, detail: String) -> InstallStep {
-    InstallStep { label: label.into(), files, status: "ok".into(), detail }
+    InstallStep { label: label.into(), files, status: "ok".into(), detail, files_list: Vec::new() }
 }
 fn step_skip(label: &str, reason: String) -> InstallStep {
-    InstallStep { label: label.into(), files: 0, status: "skipped".into(), detail: reason }
+    InstallStep { label: label.into(), files: 0, status: "skipped".into(), detail: reason, files_list: Vec::new() }
 }
 fn step_err(label: &str, msg: String) -> InstallStep {
-    InstallStep { label: label.into(), files: 0, status: "error".into(), detail: msg }
+    InstallStep { label: label.into(), files: 0, status: "error".into(), detail: msg, files_list: Vec::new() }
 }
 /// A group header row (a source folder) — rendered as a heading, not a step.
 fn step_header(label: &str) -> InstallStep {
-    InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new() }
+    InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new(), files_list: Vec::new() }
 }
 
 /// Number of files (recursively) under `dir`; 0 when it can't be read.
@@ -183,23 +185,30 @@ fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)>
 
 /// Copy `src` → `dst` file-by-file, copying each only when the destination is
 /// missing or a *different size* (or always, with `force`). `dry` counts what
-/// would copy without writing. Returns (files copied / would-copy, files total) —
-/// so "already installed" is simply "0 to copy", read from the real filesystem
-/// rather than a fragile single-file marker.
-fn sync_dir(src: &Path, dst: &Path, dry: bool, force: bool) -> std::io::Result<(u64, u64)> {
+/// would copy without writing. Pushes each changed file's path (relative to
+/// `rel`) into `out`, and returns the total file count — so "already installed"
+/// is simply "`out` empty", read from the real filesystem rather than a fragile
+/// single-file marker, and `out` powers the expandable per-asset list.
+fn sync_dir(
+    src: &Path,
+    dst: &Path,
+    dry: bool,
+    force: bool,
+    rel: &Path,
+    out: &mut Vec<String>,
+) -> std::io::Result<u64> {
     if !dry {
         fs::create_dir_all(dst)?;
     }
-    let mut diff = 0u64;
     let mut total = 0u64;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
+        let name = entry.file_name();
         let from = entry.path();
-        let to = dst.join(entry.file_name());
+        let to = dst.join(&name);
+        let rel_child = rel.join(&name);
         if from.is_dir() {
-            let (d, t) = sync_dir(&from, &to, dry, force)?;
-            diff += d;
-            total += t;
+            total += sync_dir(&from, &to, dry, force, &rel_child, out)?;
         } else {
             total += 1;
             let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -209,14 +218,14 @@ fn sync_dir(src: &Path, dst: &Path, dry: bool, force: bool) -> std::io::Result<(
                     Err(_) => true,
                 };
             if needs {
-                diff += 1;
+                out.push(rel_child.to_string_lossy().replace('\\', "/"));
                 if !dry {
                     fs::copy(&from, &to)?;
                 }
             }
         }
     }
-    Ok((diff, total))
+    Ok(total)
 }
 
 /// Extract a `.zip` into a fresh temp dir (returned for the caller to clean up).
@@ -519,22 +528,28 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
             match level {
                 None => steps.push(step_skip(&name, "no Daz content found".into())),
                 Some((content_root, folders)) => {
-                    // Per-file size-aware sync: copy only files missing or changed.
-                    let mut diff = 0u64;
+                    // Per-file size-aware sync: copy only files missing or changed,
+                    // collecting the changed paths for the expandable list.
+                    let mut diff_files: Vec<String> = Vec::new();
                     let mut total = 0u64;
                     let mut err: Option<String> = None;
                     for f in &folders {
-                        match sync_dir(&content_root.join(f), &dest.join(f), dry, request.force) {
-                            Ok((d, t)) => {
-                                diff += d;
-                                total += t;
-                            }
+                        match sync_dir(
+                            &content_root.join(f),
+                            &dest.join(f),
+                            dry,
+                            request.force,
+                            Path::new(f),
+                            &mut diff_files,
+                        ) {
+                            Ok(t) => total += t,
                             Err(e) => {
                                 err = Some(io_detail(&format!("{} → {}", f, dest.join(f).display()), &e));
                                 break;
                             }
                         }
                     }
+                    let diff = diff_files.len() as u64;
                     match err {
                         Some(m) => steps.push(step_err(&name, m)),
                         None if diff == 0 => {
@@ -542,11 +557,13 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
                         }
                         None => {
                             let verb = if dry { "to copy" } else { "copied" };
-                            steps.push(step_ok(
+                            let mut s = step_ok(
                                 &name,
                                 diff,
                                 format!("{diff}/{total} files {verb} · {}", folders.join(", ")),
-                            ))
+                            );
+                            s.files_list = diff_files.into_iter().take(200).collect();
+                            steps.push(s);
                         }
                     }
                 }
@@ -593,22 +610,26 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
             match level {
                 None => steps.push(step_skip(&name, "no Daz content".into())),
                 Some((content_root, folders)) => {
-                    let mut diff = 0u64;
+                    let mut diff_files: Vec<String> = Vec::new();
                     let mut total = 0u64;
                     for f in &folders {
-                        if let Ok((d, t)) = sync_dir(&content_root.join(f), &dest.join(f), true, false) {
-                            diff += d;
+                        if let Ok(t) =
+                            sync_dir(&content_root.join(f), &dest.join(f), true, false, Path::new(f), &mut diff_files)
+                        {
                             total += t;
                         }
                     }
+                    let diff = diff_files.len() as u64;
                     if diff == 0 {
                         steps.push(step_skip(&name, format!("installed · {total} files")));
                     } else {
-                        steps.push(step_ok(
+                        let mut s = step_ok(
                             &name,
                             diff,
                             format!("{diff}/{total} files to copy · {}", folders.join(", ")),
-                        ));
+                        );
+                        s.files_list = diff_files.into_iter().take(200).collect();
+                        steps.push(s);
                     }
                 }
             }

@@ -438,32 +438,67 @@ function RefreshAssetsSection() {
 function InstallReportList({ report }: { report: InstallReport }) {
   return (
     <ul className="space-y-1 border-t pt-3 text-sm">
-      {report.steps.map((step, i) =>
-        step.status === 'header' ? (
-          <li
-            key={i}
-            className="pt-3 font-mono text-xs font-semibold break-all text-foreground first:pt-0"
-          >
-            {displayPath(step.label)}
-          </li>
-        ) : (
-        <li key={i} className="flex items-start gap-2">
-          {step.status === 'ok' ? (
-            <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-          ) : step.status === 'error' ? (
-            <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
-          ) : (
-            <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          )}
-          <span className={step.status === 'error' ? 'text-destructive' : ''}>
-            <span className="font-medium">{step.label}</span>
-            {step.status === 'ok' && step.files > 0 && (
-              <span className="text-muted-foreground"> — {step.files} file(s)</span>
+      {report.steps.map((step, i) => {
+        if (step.status === 'header') {
+          return (
+            <li
+              key={i}
+              className="pt-3 font-mono text-xs font-semibold break-all text-foreground first:pt-0"
+            >
+              {displayPath(step.label)}
+            </li>
+          )
+        }
+        const row = (
+          <>
+            {step.status === 'ok' ? (
+              <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+            ) : step.status === 'error' ? (
+              <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
+            ) : (
+              <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             )}
-            {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
-          </span>
-        </li>
-      ))}
+            <span className={step.status === 'error' ? 'text-destructive' : ''}>
+              <span className="font-medium">{step.label}</span>
+              {step.status === 'ok' && step.files > 0 && (
+                <span className="text-muted-foreground"> — {step.files} file(s)</span>
+              )}
+              {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
+            </span>
+          </>
+        )
+        const files = step.filesList ?? []
+        if (files.length === 0) {
+          return (
+            <li key={i} className="flex items-start gap-2">
+              {row}
+            </li>
+          )
+        }
+        // Expandable: the per-asset list of files an install would copy (hidden
+        // by default — the report is already huge). Native <details> triangle.
+        return (
+          <li key={i}>
+            <details>
+              <summary className="cursor-pointer marker:text-muted-foreground">
+                <span className="ml-1 inline-flex items-start gap-2 align-top">{row}</span>
+              </summary>
+              <ul className="mt-1 ml-6 space-y-0.5">
+                {files.map((f) => (
+                  <li key={f} className="font-mono text-xs break-all text-muted-foreground">
+                    {f}
+                  </li>
+                ))}
+                {step.files > files.length && (
+                  <li className="text-xs text-muted-foreground">
+                    … and {step.files - files.length} more
+                  </li>
+                )}
+              </ul>
+            </details>
+          </li>
+        )
+      })}
     </ul>
   )
 }
