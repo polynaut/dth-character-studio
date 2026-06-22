@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.21.1
+
+### Patch Changes
+
+- [#70](https://github.com/polynaut/dth-character-studio/pull/70) [`303d850`](https://github.com/polynaut/dth-character-studio/commit/303d8504cb9afb3aa9791069686decec2bc82079) Thanks [@polynaut](https://github.com/polynaut)! - Morph values (and the optional base value) are now shown and edited as Daz-style percentages (0–100%) with a "%" suffix, while still stored internally as 0–1 — so a stored value of `1` shows as `100%`, `0.5` as `50%`, matching Daz Studio's UI.
+
+- [#70](https://github.com/polynaut/dth-character-studio/pull/70) [`303d850`](https://github.com/polynaut/dth-character-studio/commit/303d8504cb9afb3aa9791069686decec2bc82079) Thanks [@polynaut](https://github.com/polynaut)! - Scene card tidy-up: the "primary" indicator is now a left-aligned line under the path chip (instead of a top-right badge that crowded the title and widened the card), and the open-in-Daz icon sits bottom-right.
+
+- Updated dependencies []:
+  - @dth/rom@0.21.1
+
 ## 0.21.0
 
 ### Minor Changes
