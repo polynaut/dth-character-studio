@@ -468,7 +468,12 @@ function SceneCard({
         type="button"
         onClick={onOpen}
         title="Open in Daz"
-        className="daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
+        className={cn(
+          'daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+          // Make room at the top-right for the always-on "primary" badge so it
+          // doesn't crowd the (w-fit) card's title.
+          primary && 'pr-16',
+        )}
       >
         <Portrait
           scenePath={scenePath}
