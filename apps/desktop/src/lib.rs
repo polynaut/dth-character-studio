@@ -199,6 +199,21 @@ fn first_file_rel(dir: &Path, base: &Path) -> Option<PathBuf> {
     None
 }
 
+/// "Already installed?" marker — the first file inside one of the asset's content
+/// folders, relative to the content root (so it matches `<dest>/<folder>/…`).
+/// Only files that actually get copied count, so an unrelated top-level folder
+/// (Camera Presets, Manifest.dsx, a readme…) can't make an installed asset look
+/// missing — the bug in searching the whole content root.
+fn install_marker(content_root: &Path, folders: &[String]) -> Option<PathBuf> {
+    for f in folders {
+        let folder_dir = content_root.join(f);
+        if let Some(rel) = first_file_rel(&folder_dir, &folder_dir) {
+            return Some(Path::new(f).join(rel));
+        }
+    }
+    None
+}
+
 /// Extract a `.zip` into a fresh temp dir (returned for the caller to clean up).
 fn extract_zip(zip_path: &Path) -> std::io::Result<PathBuf> {
     let file = fs::File::open(zip_path)?;
@@ -498,7 +513,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
             match level {
                 None => steps.push(step_skip(&name, "no Daz content found".into())),
                 Some((content_root, folders)) => {
-                    let marker = first_file_rel(&content_root, &content_root);
+                    let marker = install_marker(&content_root, &folders);
                     let already = !request.force
                         && marker.as_ref().map_or(false, |m| dest.join(m).exists());
                     if already {
@@ -568,7 +583,7 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
                 None => steps.push(step_skip(&name, "no Daz content".into())),
                 Some((content_root, folders)) => {
                     let files: u64 = folders.iter().map(|f| count_files(&content_root.join(f))).sum();
-                    let installed = first_file_rel(&content_root, &content_root)
+                    let installed = install_marker(&content_root, &folders)
                         .map_or(false, |m| dest.join(m).exists());
                     let detail = if installed {
                         format!("{} · installed", folders.join(", "))
