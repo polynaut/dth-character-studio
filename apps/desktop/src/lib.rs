@@ -70,6 +70,10 @@ fn step_skip(label: &str, reason: String) -> InstallStep {
 fn step_err(label: &str, msg: String) -> InstallStep {
     InstallStep { label: label.into(), files: 0, status: "error".into(), detail: msg }
 }
+/// A group header row (a source folder) — rendered as a heading, not a step.
+fn step_header(label: &str) -> InstallStep {
+    InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new() }
+}
 
 /// Number of files (recursively) under `dir`; 0 when it can't be read.
 fn count_files(dir: &Path) -> u64 {
@@ -488,6 +492,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let mut steps: Vec<InstallStep> = Vec::new();
     for source in &request.sources {
+        steps.push(step_header(source));
         let src = Path::new(source);
         if !src.is_dir() {
             steps.push(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));
@@ -561,6 +566,7 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let mut steps: Vec<InstallStep> = Vec::new();
     for source in &request.sources {
+        steps.push(step_header(source));
         let src = Path::new(source);
         if !src.is_dir() {
             steps.push(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));

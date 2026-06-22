@@ -510,7 +510,15 @@ function RefreshAssetsSection() {
 function InstallReportList({ report }: { report: InstallReport }) {
   return (
     <ul className="space-y-1 border-t pt-3 text-sm">
-      {report.steps.map((step, i) => (
+      {report.steps.map((step, i) =>
+        step.status === 'header' ? (
+          <li
+            key={i}
+            className="pt-3 font-mono text-xs font-semibold break-all text-foreground first:pt-0"
+          >
+            {displayPath(step.label)}
+          </li>
+        ) : (
         <li key={i} className="flex items-start gap-2">
           {step.status === 'ok' ? (
             <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />

@@ -781,7 +781,7 @@ export async function saveSettings({ data }: { data: unknown }): Promise<StudioS
 export interface InstallStep {
   label: string
   files: number
-  status: 'ok' | 'skipped' | 'error'
+  status: 'ok' | 'skipped' | 'error' | 'header'
   detail: string
 }
 
