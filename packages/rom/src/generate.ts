@@ -587,6 +587,58 @@ export function poseAssetFileName(character: Character): string {
 }
 
 /**
+ * The DTH-Exporter run + PoseAsset-CSV delivery, as a Daz Script block. Pure
+ * native Daz API (no DTH runtime needed), so it works both appended to the ROM
+ * script and as the body of a standalone Export script. Empty when no export dir
+ * is set. The CSV copy is included only when the source folder is known
+ * (charFolderAbs); the export nests under the open scene's name when
+ * `exportSceneSubfolders` is on (resolved at run time).
+ */
+function buildExportBlock(
+  character: Character,
+  frames: PresetFrames | undefined,
+  charFolderAbs: string | undefined,
+): string {
+  const exportDir = character.exportPath.trim()
+  if (!exportDir) return ''
+  const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
+  const sceneSubfolderBlock = character.exportSceneSubfolders
+    ? `    var dthSceneFile = Scene.getFilename();
+    if (dthSceneFile != "") {
+        var dthSceneName = new DzFileInfo(dthSceneFile).completeBaseName();
+        if (dthSceneName != "") dthExportDir = dthExportDir + "/" + dthSceneName;
+    }
+`
+    : ''
+  const csvCopyBlock = charFolderAbs
+    ? `    // Copy the generated PoseAsset CSV next to the exporter output.
+    var dthCsvName = ${JSON.stringify(poseAssetFileName(character))};
+    var dthCsvSrcDir = new DzDir(${JSON.stringify(charFolderAbs.replace(/\\/g, '/'))});
+    if (dthCsvSrcDir.exists(dthCsvName)) {
+        var dthCsvDstDir = new DzDir(dthExportDir);
+        if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
+        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
+        var dthCsvOld = new DzFile(dthCsvDst);
+        if (dthCsvOld.exists()) dthCsvOld.remove();
+        var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
+        if (dthCsvSrc.copy(dthCsvDst)) print("Copied " + dthCsvName + " to " + dthCsvDst);
+        else print("Failed to copy " + dthCsvName + " to " + dthCsvDst);
+    } else {
+        print("PoseAsset CSV not found in the character folder — nothing to copy.");
+    }
+`
+    : ''
+  return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
+if (dthExportAction) {
+    var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
+${sceneSubfolderBlock}    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
+${csvCopyBlock}} else {
+    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
+}
+`
+}
+
+/**
  * The one self-contained Daz script for a character: `<Name>_<Genesis>.dsa`.
  * It includes the DTH runtime (DthWorkflow.dsa, installed alongside it) and
  * makes a single `ApplyDTHCharacter(config)` call whose argument carries the
@@ -650,60 +702,19 @@ export function toCharacterScriptDsa(
   if (gpArt) config.gpArtDirection = gpArt
   if (dkArt) config.dkArtDirection = dkArt
 
-  // Optional auto-export: when an export directory is set, append a DTH Exporter
-  // (v1.8.1+) doExport() call after the ROM build. The exporter creates its own
-  // <characterName> subfolder, so exportPath is passed as-is (forward-slashed for
-  // Daz). The reference frames are the figure's reference-skeleton-pose frames.
+  // Optional auto-export: when an export directory is set, the ROM build is
+  // followed by a DTH Exporter run. With `exportWithRomScript` (the default) that
+  // export block is appended here — one combined script. Otherwise it's split off
+  // into a standalone Export_ script (see toExportScriptDsa) and this ROM-only
+  // script is renamed ROM_ so the pair reads clearly.
   const exportDir = character.exportPath.trim()
-  const refFrames = exportDir && frames ? referenceFrames(character, frames).join(' ') : ''
-  // Optionally nest the export under the open Daz scene's name, resolved at run
-  // time via Scene.getFilename() — so a character's scene/outfit variants export
-  // side by side. Falls back to the export root when no scene is saved.
-  const sceneSubfolderBlock = character.exportSceneSubfolders
-    ? `    var dthSceneFile = Scene.getFilename();
-    if (dthSceneFile != "") {
-        var dthSceneName = new DzFileInfo(dthSceneFile).completeBaseName();
-        if (dthSceneName != "") dthExportDir = dthExportDir + "/" + dthSceneName;
-    }
-`
-    : ''
-  // The PoseAsset CSV is written into the character folder at generation time;
-  // at run time, once the export dir is resolved (scene subfolder included), copy
-  // it there next to the exporter's <name>.abc/.dth output. A copy, not a move,
-  // so exporting several scenes from one character each get their own CSV and the
-  // character folder keeps the canonical one. Only when the source folder is
-  // known (the desktop app passes charFolderAbs).
-  const csvCopyBlock =
-    exportDir && charFolderAbs
-      ? `    // Copy the generated PoseAsset CSV next to the exporter output.
-    var dthCsvName = ${JSON.stringify(poseAssetFileName(character))};
-    var dthCsvSrcDir = new DzDir(${JSON.stringify(charFolderAbs.replace(/\\/g, '/'))});
-    if (dthCsvSrcDir.exists(dthCsvName)) {
-        var dthCsvDstDir = new DzDir(dthExportDir);
-        if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
-        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
-        var dthCsvOld = new DzFile(dthCsvDst);
-        if (dthCsvOld.exists()) dthCsvOld.remove();
-        var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
-        if (dthCsvSrc.copy(dthCsvDst)) print("Copied " + dthCsvName + " to " + dthCsvDst);
-        else print("Failed to copy " + dthCsvName + " to " + dthCsvDst);
-    } else {
-        print("PoseAsset CSV not found in the character folder — nothing to copy.");
-    }
-`
-      : ''
-  const exportBlock = exportDir
-    ? `
+  const split = exportDir !== '' && character.exportWithRomScript === false
+  const exportBlock =
+    exportDir && character.exportWithRomScript !== false
+      ? `
 // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+) after the ROM build.
-var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
-if (dthExportAction) {
-    var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
-${sceneSubfolderBlock}    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
-${csvCopyBlock}} else {
-    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
-}
-`
-    : ''
+${buildExportBlock(character, frames, charFolderAbs)}`
+      : ''
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -719,7 +730,31 @@ include(dir_self.filePath("../../.DthWorkflow.dsa"));
 
 ApplyDTHCharacter(${JSON.stringify(config, null, 2)});
 ${exportBlock}`
-  return { fileName: `${characterScriptName(character)}.dsa`, content, target: 'daz' }
+  const baseName = characterScriptName(character)
+  return { fileName: `${split ? `ROM_${baseName}` : baseName}.dsa`, content, target: 'daz' }
+}
+
+/**
+ * The standalone Export script (`Export_<Name>_<Genesis>.dsa`) — runs the DTH
+ * Exporter on the ROM already built on the timeline and delivers the PoseAsset
+ * CSV, without rebuilding the (slow) ROM. Generated only when an export dir is
+ * set and `exportWithRomScript` is false. Native Daz API only — no runtime
+ * include — so it must run after the ROM_ script in the same Daz session.
+ */
+export function toExportScriptDsa(
+  character: Character,
+  frames?: PresetFrames,
+  charFolderAbs?: string,
+): GeneratedFile {
+  const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
+
+// DTH Export for ${character.name} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${character.studioVersion}` : ''}.
+// Runs the DTH Exporter on the ROM already built on the timeline and delivers
+// the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
+// (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
+
+${buildExportBlock(character, frames, charFolderAbs)}`
+  return { fileName: `Export_${characterScriptName(character)}.dsa`, content, target: 'daz' }
 }
 
 /**
@@ -734,8 +769,12 @@ export function generateAll(
   /** Absolute character-folder path — see {@link toCharacterScriptDsa}. */
   charFolderAbs?: string,
 ): Array<GeneratedFile> {
+  // With an export dir and exportWithRomScript off, the export is split into a
+  // standalone Export_ script alongside the ROM_ script.
+  const split = character.exportPath.trim() !== '' && character.exportWithRomScript === false
   return [
     toCharacterScriptDsa(character, romPaths, frames, charFolderAbs),
+    ...(split ? [toExportScriptDsa(character, frames, charFolderAbs)] : []),
     toPoseAssetCsv(character, frames),
   ]
 }

@@ -893,8 +893,17 @@ function SettingsPage() {
               onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
               help={
                 <>
-                  Your Daz content library — where the release's content is installed, and the output
-                  location for generated character scripts.
+                  Your Daz content library — where the release's content is installed.
+                  {settings.dazLibraryFolder && (
+                    <>
+                      {' '}
+                      Generated character scripts install to{' '}
+                      <PathCode
+                        path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                      />
+                      .
+                    </>
+                  )}
                 </>
               }
             />

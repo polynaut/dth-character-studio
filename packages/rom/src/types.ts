@@ -253,7 +253,9 @@ export function defaultSections(): Record<RomSection, RomSectionConfig> {
     EXP: config(false, 'custom'),
     GEN: config(false, 'preset'),
     PHY: config(false, 'custom'),
-    FBM: config(true, 'custom'),
+    // FBM (custom full-body morphs) starts disabled — a new character without a
+    // pre-filled ROM has nothing to put there until the user adds morphs.
+    FBM: config(false, 'custom'),
     MISC: config(false, 'custom'),
   }
 }
@@ -306,13 +308,6 @@ export function genRomIncludes(
   }
 }
 
-/**
- * Skeleton the PoseAsset targets — together with genesis + skinning this
- * selects the matching DTH preset (e.g. "G9 DQS UE5 JCM FAC").
- */
-export const targetSkeletonSchema = z.enum(['UE5', 'DTH'])
-export type TargetSkeleton = z.infer<typeof targetSkeletonSchema>
-
 export const preserveMorphSchema = z.object({
   name: z.string(),
   keepValue: z.number(),
@@ -356,8 +351,10 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   2 — added `projectName` + `projectPath`.
  *   3 — added `exportPath`.
  *   4 — added `exportSceneSubfolders`.
+ *   5 — added `exportWithRomScript`.
+ *   6 — removed `targetSkeleton` (was never used in generation).
  */
-export const CHARACTER_SCHEMA_VERSION = 4
+export const CHARACTER_SCHEMA_VERSION = 6
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -384,7 +381,6 @@ export const characterSchema = z.object({
   houdiniProjects: z.array(z.string()).default([]),
   genesis: genesisVersionSchema.default('G9'),
   gender: genderSchema.default('female'),
-  targetSkeleton: targetSkeletonSchema.default('UE5'),
   /** G9 detail strengths set at frame 0 (DthWorkflow.dsa applies them when > 0). */
   facsDetailStrength: z.number().default(1),
   flexionStrength: z.number().default(1),
@@ -424,6 +420,15 @@ export const characterSchema = z.object({
    * export path, or when no scene is loaded/saved at run time.
    */
   exportSceneSubfolders: z.boolean().default(false),
+  /**
+   * When `exportPath` is set, whether the auto-export runs inside the ROM script
+   * (`true`, the default — one combined `<Name>_<Genesis>.dsa`) or is split into
+   * a separate `Export_<Name>_<Genesis>.dsa` that only runs the exporter +
+   * delivers the CSV, leaving `ROM_<Name>_<Genesis>.dsa` to build the ROM. Split
+   * lets you re-export without rebuilding the (slow) ROM. No effect without an
+   * export path.
+   */
+  exportWithRomScript: z.boolean().default(true),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —
