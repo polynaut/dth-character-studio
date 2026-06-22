@@ -82,13 +82,6 @@ JCM,3,BallBD40          → pose at frame 3, name BallBD40
 JCM,4,BallBU60
 ```
 
-## Upstream HDA bugs found while reading the parser (report to mrpdean)
-
-1. `MIS` file column is written to `pose_asset_mis_file<FBM index>` — uses
-   `fbm_current_index` instead of `mis_current_index`.
-2. `CURVEGROUP` checks `1 < len(row)` but then also reads `row[2]` — a
-   two-column CURVEGROUP row raises IndexError.
-
 ## Physics example ROM layout (decoded from the .duf keyframes)
 
 `G9 Physics Example.duf` (43 frames, 23 channels — all `dth_phy_*` morphs):
@@ -113,10 +106,8 @@ block. 5 groups / 43 poses, all `PHYGROUP,0,<suffix>,<bone>,5.0,5.0`:
 
 `PHY` rows are `PHY,<frame>,<name>,<x>,<y>,<z>`, XYZ being the push direction —
 an 8-point circle of radius 5 in the bone's plane (Out `±5,0,0`, Up `0,5,0`, In,
-Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. **Fixed
-upstream (June 14 2026):** both glute groups originally mislabelled the *Up* pose
-(`0,5,0`) as `GluteOutUp`; mrpdean corrected it to `GluteUp` after we reported it,
-and the template now uses `GluteUp`.
+Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. The glute
+*Up* pose (`0,5,0`) is named `GluteUp`.
 
 ## Consequences for the studio model
 
