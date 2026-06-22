@@ -5,7 +5,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { Toaster, toast } from 'sonner'
 
-import { ensureNetworkDrives } from '#/lib/rom/api.ts'
+import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import type { QueryClient } from '@tanstack/react-query'
@@ -30,6 +30,10 @@ function RootComponent() {
       for (const f of failed) {
         toast.error(`Couldn't map ${f.drive} → ${f.unc}: ${f.detail}`)
       }
+      // Warm the in-memory pose catalog now that any network drives are mapped
+      // (the release often lives on a share) — so the first character open is
+      // instant. Fire-and-forget; a failed scan isn't cached and just retries.
+      void fetchPoseAssets()
     })()
   }, [])
 
