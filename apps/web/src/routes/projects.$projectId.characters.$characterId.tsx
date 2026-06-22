@@ -1286,18 +1286,10 @@ function CharacterPage() {
     }
   }
 
-  // The Generate panel was dissolved — generation feedback now lives in a longer
-  // toast that names where the files landed (and warns on a script-install error).
+  // The Generate panel was dissolved — generation feedback is a concise toast
+  // (the install location lives in Settings); a script-install error still warns.
   function notifyGenerated(title: string, result: GenerateResult) {
-    toast.success(title, {
-      duration: 10000,
-      description: (
-        <div className="space-y-0.5 text-xs">
-          <div>PoseAsset → {displayPath(result.outDir)}</div>
-          {result.scriptsDir && <div>Daz scripts → {displayPath(result.scriptsDir)}</div>}
-        </div>
-      ),
-    })
+    toast.success(title)
     if (result.scriptsError) {
       toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
     }
