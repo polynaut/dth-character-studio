@@ -468,7 +468,7 @@ function SceneCard({
         type="button"
         onClick={onOpen}
         title="Open in Daz"
-        className="daz-card group relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
+        className="daz-card group relative flex h-full w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
       >
         <Portrait
           scenePath={scenePath}
@@ -826,7 +826,7 @@ function DazSceneField({
           <>
             {/* Copyable path to the scenes' folder, above the cards. */}
             <p className="mb-2 text-xs">{sceneDirChip}</p>
-            <div className="flex flex-wrap items-start gap-3">
+            <div className="flex flex-wrap items-stretch gap-3">
               {ready ? (
                 <SceneCard
                   scenePath={character.scenePath}
