@@ -70,7 +70,7 @@ import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
-import type { Character, GenesisVersion, TargetSkeleton } from '@dth/rom'
+import type { Character, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params }) => {
@@ -1505,21 +1505,6 @@ function CharacterPage() {
                   <SelectContent>
                     <SelectItem value="female">Female</SelectItem>
                     <SelectItem value="male">Male</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="mb-1">Target skeleton</Label>
-                <Select
-                  value={character.targetSkeleton}
-                  onValueChange={(v) => patch({ targetSkeleton: v as TargetSkeleton })}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UE5">UE5 Mannequin</SelectItem>
-                    <SelectItem value="DTH">DTH native</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

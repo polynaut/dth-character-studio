@@ -529,7 +529,6 @@ function ProjectCharactersPage() {
                             </span>
                             <span className="w-14">{skinning}</span>
                             <span className="w-20">{frames} frames</span>
-                            <span className="hidden w-14 lg:inline">{character.targetSkeleton}</span>
                             {updated && (
                               <span className="hidden w-24 text-right xl:inline">{updated}</span>
                             )}

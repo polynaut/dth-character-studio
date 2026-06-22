@@ -308,13 +308,6 @@ export function genRomIncludes(
   }
 }
 
-/**
- * Skeleton the PoseAsset targets — together with genesis + skinning this
- * selects the matching DTH preset (e.g. "G9 DQS UE5 JCM FAC").
- */
-export const targetSkeletonSchema = z.enum(['UE5', 'DTH'])
-export type TargetSkeleton = z.infer<typeof targetSkeletonSchema>
-
 export const preserveMorphSchema = z.object({
   name: z.string(),
   keepValue: z.number(),
@@ -359,8 +352,9 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   3 — added `exportPath`.
  *   4 — added `exportSceneSubfolders`.
  *   5 — added `exportWithRomScript`.
+ *   6 — removed `targetSkeleton` (was never used in generation).
  */
-export const CHARACTER_SCHEMA_VERSION = 5
+export const CHARACTER_SCHEMA_VERSION = 6
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -387,7 +381,6 @@ export const characterSchema = z.object({
   houdiniProjects: z.array(z.string()).default([]),
   genesis: genesisVersionSchema.default('G9'),
   gender: genderSchema.default('female'),
-  targetSkeleton: targetSkeletonSchema.default('UE5'),
   /** G9 detail strengths set at frame 0 (DthWorkflow.dsa applies them when > 0). */
   facsDetailStrength: z.number().default(1),
   flexionStrength: z.number().default(1),

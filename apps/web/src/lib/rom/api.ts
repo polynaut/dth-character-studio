@@ -192,7 +192,6 @@ const createInput = z.object({
 function romFields(src: Record<string, unknown>): Record<string, unknown> {
   return {
     sections: src.sections,
-    targetSkeleton: src.targetSkeleton,
     facsDetailStrength: src.facsDetailStrength,
     flexionStrength: src.flexionStrength,
     resetGenBeforeApplying: src.resetGenBeforeApplying,
