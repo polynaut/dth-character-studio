@@ -65,6 +65,7 @@ import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
+import { cn } from '#/lib/utils.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
