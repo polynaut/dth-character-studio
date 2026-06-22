@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // Paths are resolved by the frontend (which release/plugin, where); the native
 // side only does the heavy recursive copy. Keys arrive camelCase from JS. The
@@ -104,6 +104,170 @@ fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<u64> {
         }
     }
     Ok(count)
+}
+
+/// Recursively copy `src` into `dst`, adding only files missing at the
+/// destination (never overwrites — preserves the user's edits). Returns files added.
+fn copy_dir_add_only(src: &Path, dst: &Path) -> std::io::Result<u64> {
+    fs::create_dir_all(dst)?;
+    let mut count = 0;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if from.is_dir() {
+            count += copy_dir_add_only(&from, &to)?;
+        } else if !to.exists() {
+            fs::copy(&from, &to)?;
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+// --- "Optional" installs: your own Daz/Houdini content (not DTH release) ----
+// Daz content folders an asset contributes to the library; Documentation is a
+// fallback when none of the real content folders are present.
+const CONTENT_FOLDERS: [&str; 3] = ["data", "People", "Runtime"];
+const META_FOLDERS: [&str; 1] = ["Documentation"];
+
+/// The display name of a path's final component.
+fn folder_name(p: &Path) -> String {
+    p.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| p.display().to_string())
+}
+
+/// Which content (or, failing that, metadata) folders sit directly in `dir`.
+fn content_folders_in(dir: &Path) -> Vec<String> {
+    let real: Vec<String> = CONTENT_FOLDERS
+        .iter()
+        .filter(|n| dir.join(n).is_dir())
+        .map(|n| (*n).to_string())
+        .collect();
+    if !real.is_empty() {
+        return real;
+    }
+    META_FOLDERS
+        .iter()
+        .filter(|n| dir.join(n).is_dir())
+        .map(|n| (*n).to_string())
+        .collect()
+}
+
+/// Find the directory under `root` (within `depth` levels) that holds Daz content
+/// folders, plus the folder names found. Daz assets keep these at the root or a
+/// folder or two down (esp. inside zips).
+fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)> {
+    let here = content_folders_in(root);
+    if !here.is_empty() {
+        return Some((root.to_path_buf(), here));
+    }
+    if depth == 0 {
+        return None;
+    }
+    for entry in fs::read_dir(root).into_iter().flatten().flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            if let Some(found) = find_content_level(&p, depth - 1) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// First file (recursively, name-sorted) under `dir`, relative to `base` — used as
+/// an "already installed?" marker for skip detection.
+fn first_file_rel(dir: &Path, base: &Path) -> Option<PathBuf> {
+    let mut entries: Vec<_> = fs::read_dir(dir).ok()?.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for e in &entries {
+        let p = e.path();
+        if p.is_file() {
+            return p.strip_prefix(base).ok().map(|r| r.to_path_buf());
+        }
+    }
+    for e in &entries {
+        let p = e.path();
+        if p.is_dir() {
+            if let Some(m) = first_file_rel(&p, base) {
+                return Some(m);
+            }
+        }
+    }
+    None
+}
+
+/// Extract a `.zip` into a fresh temp dir (returned for the caller to clean up).
+fn extract_zip(zip_path: &Path) -> std::io::Result<PathBuf> {
+    let file = fs::File::open(zip_path)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp = std::env::temp_dir().join(format!("dth-asset-{}-{}", std::process::id(), nanos));
+    archive
+        .extract(&temp)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    Ok(temp)
+}
+
+/// An asset resolved to its content level — a zipped asset carries a `temp` dir
+/// the caller must remove when done.
+enum AssetContent {
+    Found { temp: Option<PathBuf>, root: PathBuf, folders: Vec<String> },
+    None { temp: Option<PathBuf> },
+    Error(String),
+}
+
+/// Resolve an asset path (a folder or a `.zip`) to its Daz content level.
+fn resolve_asset(asset: &Path) -> AssetContent {
+    let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+    if is_zip {
+        match extract_zip(asset) {
+            Ok(t) => match find_content_level(&t, 5) {
+                Some((root, folders)) => AssetContent::Found { temp: Some(t), root, folders },
+                None => AssetContent::None { temp: Some(t) },
+            },
+            Err(e) => AssetContent::Error(format!("unzip failed: {e}")),
+        }
+    } else if asset.is_dir() {
+        match find_content_level(asset, 5) {
+            Some((root, folders)) => AssetContent::Found { temp: None, root, folders },
+            None => AssetContent::None { temp: None },
+        }
+    } else {
+        AssetContent::None { temp: None }
+    }
+}
+
+/// Append `SHARED_PRESETS` + `HOUDINI_PATH` to `<houdini_docs>/houdini.env` if not
+/// already present (idempotent). Returns whether it changed the file.
+fn wire_houdini_env(houdini_docs: &Path, presets_dir: &Path) -> std::io::Result<bool> {
+    let env_path = houdini_docs.join("houdini.env");
+    let presets_fwd = presets_dir.display().to_string().replace('\\', "/");
+    let existing = fs::read_to_string(&env_path).unwrap_or_default();
+    let lower = existing.to_lowercase();
+    let mut add = String::new();
+    if !lower.contains("shared_presets =") && !lower.contains("shared_presets=") {
+        add.push_str(&format!("SHARED_PRESETS = \"{presets_fwd}\"\n"));
+    }
+    if !lower.contains("$shared_presets") {
+        add.push_str("HOUDINI_PATH = $HOUDINI_PATH;$SHARED_PRESETS\n");
+    }
+    if add.is_empty() {
+        return Ok(false);
+    }
+    let mut content = existing;
+    if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(&add);
+    fs::write(&env_path, content)?;
+    Ok(true)
 }
 
 /// Copy a whole folder `src` → `dst` (e.g. `Daz Studio Content/data` → `<lib>/data`).
@@ -259,6 +423,240 @@ fn install_dth_plugin(request: PluginInstallRequest) -> InstallReport {
     );
     let total_files = step.files;
     InstallReport { dry_run: request.dry_run, steps: vec![step], total_files }
+}
+
+// --- "Optional" tab installs ----------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DazAssetsRequest {
+    /// Your asset source folders; each holds many assets (folders and/or `.zip`s).
+    sources: Vec<String>,
+    /// "My DAZ 3D Library" — where content folders are installed.
+    dest: String,
+    /// Re-install assets that already appear installed.
+    force: bool,
+    dry_run: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AssetScanRequest {
+    sources: Vec<String>,
+    dest: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MergeInstallRequest {
+    label: String,
+    source: String,
+    dest: String,
+    dry_run: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HoudiniPresetsRequest {
+    source: String,
+    houdini_docs: String,
+    dry_run: bool,
+}
+
+/// Install your own Daz assets (G3/G8/G9, `.zip`s extracted) from the source
+/// folders into the library — content-folder-aware, overwriting per asset, and
+/// skipping ones that already appear installed unless `force`.
+#[tauri::command]
+fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
+    let dry = request.dry_run;
+    let dest = Path::new(&request.dest);
+    let mut steps: Vec<InstallStep> = Vec::new();
+    for source in &request.sources {
+        let src = Path::new(source);
+        if !src.is_dir() {
+            steps.push(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));
+            continue;
+        }
+        let mut assets: Vec<PathBuf> = match fs::read_dir(src) {
+            Ok(e) => e.flatten().map(|x| x.path()).collect(),
+            Err(e) => {
+                steps.push(step_err(&folder_name(src), io_detail("read", &e)));
+                continue;
+            }
+        };
+        assets.sort();
+        for asset in &assets {
+            let name = folder_name(asset);
+            let (temp, level) = match resolve_asset(asset) {
+                AssetContent::Found { temp, root, folders } => (temp, Some((root, folders))),
+                AssetContent::None { temp } => (temp, None),
+                AssetContent::Error(msg) => {
+                    steps.push(step_err(&name, msg));
+                    continue;
+                }
+            };
+            match level {
+                None => steps.push(step_skip(&name, "no Daz content found".into())),
+                Some((content_root, folders)) => {
+                    let marker = first_file_rel(&content_root, &content_root);
+                    let already = !request.force
+                        && marker.as_ref().map_or(false, |m| dest.join(m).exists());
+                    if already {
+                        steps.push(step_skip(&name, "already installed".into()));
+                    } else if dry {
+                        let files: u64 =
+                            folders.iter().map(|f| count_files(&content_root.join(f))).sum();
+                        steps.push(step_ok(&name, files, format!("would install {}", folders.join(", "))));
+                    } else {
+                        let mut total = 0u64;
+                        let mut err: Option<String> = None;
+                        for f in &folders {
+                            match copy_dir(&content_root.join(f), &dest.join(f)) {
+                                Ok(n) => total += n,
+                                Err(e) => {
+                                    err = Some(io_detail(&format!("{} → {}", f, dest.join(f).display()), &e));
+                                    break;
+                                }
+                            }
+                        }
+                        match err {
+                            Some(m) => steps.push(step_err(&name, m)),
+                            None => steps.push(step_ok(&name, total, format!("installed {}", folders.join(", ")))),
+                        }
+                    }
+                }
+            }
+            if let Some(t) = temp {
+                let _ = fs::remove_dir_all(&t);
+            }
+        }
+    }
+    let total_files = steps.iter().map(|s| s.files).sum();
+    InstallReport { dry_run: dry, steps, total_files }
+}
+
+/// Read-only scan: what content each asset holds and whether it's already in the library.
+#[tauri::command]
+fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
+    let dest = Path::new(&request.dest);
+    let mut steps: Vec<InstallStep> = Vec::new();
+    for source in &request.sources {
+        let src = Path::new(source);
+        if !src.is_dir() {
+            steps.push(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));
+            continue;
+        }
+        let mut assets: Vec<PathBuf> = match fs::read_dir(src) {
+            Ok(e) => e.flatten().map(|x| x.path()).collect(),
+            Err(e) => {
+                steps.push(step_err(&folder_name(src), io_detail("read", &e)));
+                continue;
+            }
+        };
+        assets.sort();
+        for asset in &assets {
+            let name = folder_name(asset);
+            let (temp, level) = match resolve_asset(asset) {
+                AssetContent::Found { temp, root, folders } => (temp, Some((root, folders))),
+                AssetContent::None { temp } => (temp, None),
+                AssetContent::Error(msg) => {
+                    steps.push(step_err(&name, msg));
+                    continue;
+                }
+            };
+            match level {
+                None => steps.push(step_skip(&name, "no Daz content".into())),
+                Some((content_root, folders)) => {
+                    let files: u64 = folders.iter().map(|f| count_files(&content_root.join(f))).sum();
+                    let installed = first_file_rel(&content_root, &content_root)
+                        .map_or(false, |m| dest.join(m).exists());
+                    let detail = if installed {
+                        format!("{} · installed", folders.join(", "))
+                    } else {
+                        folders.join(", ")
+                    };
+                    steps.push(step_ok(&name, files, detail));
+                }
+            }
+            if let Some(t) = temp {
+                let _ = fs::remove_dir_all(&t);
+            }
+        }
+    }
+    let total_files = steps.iter().map(|s| s.files).sum();
+    InstallReport { dry_run: true, steps, total_files }
+}
+
+/// Merge-only install (adds new files, never overwrites) for custom morphs / presets.
+#[tauri::command]
+fn install_daz_merge(request: MergeInstallRequest) -> InstallReport {
+    let dry = request.dry_run;
+    let src = Path::new(&request.source);
+    let dst = Path::new(&request.dest);
+    let step = if !src.is_dir() {
+        step_skip(&request.label, format!("source not found ({})", src.display()))
+    } else if dry {
+        step_ok(
+            &request.label,
+            count_files(src),
+            format!("would add new files → {}", dst.display()),
+        )
+    } else {
+        match copy_dir_add_only(src, dst) {
+            Ok(n) => step_ok(&request.label, n, format!("{n} new file(s) → {}", dst.display())),
+            Err(e) => step_err(
+                &request.label,
+                io_detail(&format!("{} → {}", src.display(), dst.display()), &e),
+            ),
+        }
+    };
+    let total_files = step.files;
+    InstallReport { dry_run: dry, steps: vec![step], total_files }
+}
+
+/// Install your Houdini `my_presets` into the Houdini docs folder (overwriting)
+/// and wire it into that version's `houdini.env`.
+#[tauri::command]
+fn install_houdini_presets(request: HoudiniPresetsRequest) -> InstallReport {
+    let dry = request.dry_run;
+    let src = Path::new(&request.source);
+    let houdini_docs = Path::new(&request.houdini_docs);
+    let mut steps: Vec<InstallStep> = Vec::new();
+    if !src.is_dir() {
+        steps.push(step_skip("Houdini presets", format!("source not found ({})", src.display())));
+    } else {
+        let dest = houdini_docs.join(folder_name(src));
+        if dry {
+            steps.push(step_ok("Houdini presets", count_files(src), format!("would replace → {}", dest.display())));
+            steps.push(step_skip("houdini.env", "would wire SHARED_PRESETS + HOUDINI_PATH".into()));
+        } else {
+            let mut failed = false;
+            if dest.exists() {
+                if let Err(e) = fs::remove_dir_all(&dest) {
+                    steps.push(step_err("Houdini presets", io_detail(&format!("clear {}", dest.display()), &e)));
+                    failed = true;
+                }
+            }
+            if !failed {
+                match copy_dir(src, &dest) {
+                    Ok(n) => steps.push(step_ok("Houdini presets", n, format!("→ {}", dest.display()))),
+                    Err(e) => {
+                        steps.push(step_err("Houdini presets", io_detail(&format!("{} → {}", src.display(), dest.display()), &e)));
+                        failed = true;
+                    }
+                }
+            }
+            if !failed {
+                match wire_houdini_env(houdini_docs, &dest) {
+                    Ok(true) => steps.push(step_ok("houdini.env", 0, "wired SHARED_PRESETS + HOUDINI_PATH".into())),
+                    Ok(false) => steps.push(step_skip("houdini.env", "already wired".into())),
+                    Err(e) => steps.push(step_err("houdini.env", io_detail("update houdini.env", &e))),
+                }
+            }
+        }
+    }
+    let total_files = steps.iter().map(|s| s.files).sum();
+    InstallReport { dry_run: dry, steps, total_files }
 }
 
 // --- Network drives -------------------------------------------------------
@@ -505,6 +903,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             install_dth_release,
             install_dth_plugin,
+            install_daz_assets,
+            list_daz_assets,
+            install_daz_merge,
+            install_houdini_presets,
             unc_for_path,
             ensure_network_drives,
             pose_asset_frames

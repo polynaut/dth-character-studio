@@ -765,6 +765,12 @@ const settingsInput = z.object({
   dazSubdir: z.string().default('daz3d'),
   houdiniSubdir: z.string().default('houdini'),
   createHoudiniSubdir: z.boolean().default(true),
+  dazAssetsFolders: z.array(z.string()).default([]),
+  dazMorphsSource: z.string().default(''),
+  dazMorphsDest: z.string().default(''),
+  dazPresetsSource: z.string().default(''),
+  dazPresetsDest: z.string().default(''),
+  houdiniPresetsSource: z.string().default(''),
 })
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
@@ -820,6 +826,85 @@ export async function installDthPlugin({ data }: { data: unknown }): Promise<Ins
     request: {
       exporterFolder: plan.exporterFolder,
       dazInstallFolder: plan.dazInstallFolder,
+      dryRun: dryRun ?? false,
+    },
+  })
+}
+
+// --- "Optional" tab: install your own Daz/Houdini content -----------------
+// Ports of the dth-cli install-daz-assets / -morphs / -presets / -houdini-presets
+// (and list-daz-assets) commands. Paths come from settings; the copy + scan run
+// in native Rust. `dryRun` previews; assets/list also report what's already there.
+
+const installOptions = z.object({ dryRun: z.boolean().optional(), force: z.boolean().optional() })
+
+/** Install your own Daz assets (G3/G8/G9, .zip extracted) from the configured
+ *  asset folders into "My DAZ 3D Library" — content-folder-aware, overwriting per
+ *  asset, skipping ones already installed unless `force`. */
+export async function installDazAssets({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun, force } = installOptions.parse(data ?? {})
+  const s = await storage.getSettings()
+  const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
+  const errors: Array<string> = []
+  if (!sources.length) errors.push('Add at least one Daz assets folder')
+  if (!s.dazLibraryFolder.trim()) errors.push('Set “My DAZ 3D Library”')
+  if (errors.length) throw new Error(errors.join('\n'))
+  return invoke<InstallReport>('install_daz_assets', {
+    request: { sources, dest: s.dazLibraryFolder.trim(), force: force ?? false, dryRun: dryRun ?? false },
+  })
+}
+
+/** Read-only scan of the asset folders — what content each holds and whether it's
+ *  already installed in the library. */
+export async function listDazAssets(): Promise<InstallReport> {
+  const s = await storage.getSettings()
+  const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
+  if (!sources.length) throw new Error('Add at least one Daz assets folder')
+  return invoke<InstallReport>('list_daz_assets', {
+    request: { sources, dest: s.dazLibraryFolder.trim() },
+  })
+}
+
+/** Merge-only install (adds new files, never overwrites) used for custom morphs
+ *  and presets — `which` picks the source/dest pair from settings. */
+async function installMerge(
+  which: 'morphs' | 'presets',
+  dryRun: boolean,
+): Promise<InstallReport> {
+  const s = await storage.getSettings()
+  const label = which === 'morphs' ? 'Custom morphs' : 'Daz presets'
+  const source = which === 'morphs' ? s.dazMorphsSource.trim() : s.dazPresetsSource.trim()
+  const dest = which === 'morphs' ? s.dazMorphsDest.trim() : s.dazPresetsDest.trim()
+  const errors: Array<string> = []
+  if (!source) errors.push(`Set the ${label.toLowerCase()} source folder`)
+  if (!dest) errors.push(`Set the ${label.toLowerCase()} destination folder`)
+  if (errors.length) throw new Error(errors.join('\n'))
+  return invoke<InstallReport>('install_daz_merge', {
+    request: { label, source, dest, dryRun },
+  })
+}
+
+export async function installDazMorphs({ data }: { data: unknown }): Promise<InstallReport> {
+  return installMerge('morphs', installOptions.parse(data ?? {}).dryRun ?? false)
+}
+
+export async function installDazPresets({ data }: { data: unknown }): Promise<InstallReport> {
+  return installMerge('presets', installOptions.parse(data ?? {}).dryRun ?? false)
+}
+
+/** Install your Houdini `my_presets` into the Houdini docs folder (overwriting)
+ *  and wire it into that version's `houdini.env`. */
+export async function installHoudiniPresets({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun } = installOptions.parse(data ?? {})
+  const s = await storage.getSettings()
+  const errors: Array<string> = []
+  if (!s.houdiniPresetsSource.trim()) errors.push('Set the Houdini presets source folder')
+  if (!s.houdiniDocsFolder.trim()) errors.push('Set the Houdini documents folder')
+  if (errors.length) throw new Error(errors.join('\n'))
+  return invoke<InstallReport>('install_houdini_presets', {
+    request: {
+      source: s.houdiniPresetsSource.trim(),
+      houdiniDocs: s.houdiniDocsFolder.trim(),
       dryRun: dryRun ?? false,
     },
   })

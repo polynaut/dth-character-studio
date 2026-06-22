@@ -706,6 +706,23 @@ export interface StudioSettings {
   houdiniSubdir: string
   /** Whether to seed the empty Houdini folder when a character is created. */
   createHoudiniSubdir: boolean
+  // --- "Optional" tab: install your own Daz/Houdini content (not DTH release) ---
+  /**
+   * Your Daz asset source folders. Each is scanned for content folders
+   * (`data`/`People`/`Runtime`/`Documentation`, `.zip` assets extracted) and
+   * installed into `dazLibraryFolder`. A flat list — generation is auto-detected.
+   */
+  dazAssetsFolders: Array<string>
+  /** Custom morphs (Daz Transfer Shape Utility output): source folder + its
+   *  destination (your personal "…/Studio/My Library/data/Daz 3D"). */
+  dazMorphsSource: string
+  dazMorphsDest: string
+  /** Daz presets: source folder + destination ("…/Studio/My Library/Presets"). */
+  dazPresetsSource: string
+  dazPresetsDest: string
+  /** Houdini `my_presets` source — copied into the Houdini docs folder and wired
+   *  into its `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`). */
+  houdiniPresetsSource: string
 }
 
 async function isDir(path: string): Promise<boolean> {
@@ -729,6 +746,12 @@ function defaultSettings(): StudioSettings {
     dazSubdir: 'daz3d',
     houdiniSubdir: 'houdini',
     createHoudiniSubdir: true,
+    dazAssetsFolders: [],
+    dazMorphsSource: '',
+    dazMorphsDest: '',
+    dazPresetsSource: '',
+    dazPresetsDest: '',
+    houdiniPresetsSource: '',
   }
 }
 
@@ -773,6 +796,21 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.createHoudiniSubdir === 'boolean'
           ? raw.createHoudiniSubdir
           : defaults.createHoudiniSubdir,
+      dazAssetsFolders: Array.isArray(raw.dazAssetsFolders)
+        ? raw.dazAssetsFolders.filter((f: unknown): f is string => typeof f === 'string')
+        : defaults.dazAssetsFolders,
+      dazMorphsSource:
+        typeof raw.dazMorphsSource === 'string' ? raw.dazMorphsSource : defaults.dazMorphsSource,
+      dazMorphsDest:
+        typeof raw.dazMorphsDest === 'string' ? raw.dazMorphsDest : defaults.dazMorphsDest,
+      dazPresetsSource:
+        typeof raw.dazPresetsSource === 'string' ? raw.dazPresetsSource : defaults.dazPresetsSource,
+      dazPresetsDest:
+        typeof raw.dazPresetsDest === 'string' ? raw.dazPresetsDest : defaults.dazPresetsDest,
+      houdiniPresetsSource:
+        typeof raw.houdiniPresetsSource === 'string'
+          ? raw.houdiniPresetsSource
+          : defaults.houdiniPresetsSource,
     }
   } catch {
     return defaults

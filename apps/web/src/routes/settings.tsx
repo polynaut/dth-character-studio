@@ -8,8 +8,10 @@ import {
   CircleX,
   Download,
   FolderOpen,
+  Plus,
   RefreshCw,
   Save,
+  X,
 } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
@@ -32,9 +34,14 @@ import {
   fetchKnownDrives,
   fetchSettings,
   forgetNetworkDrive,
+  installDazAssets,
+  installDazMorphs,
+  installDazPresets,
   installDthPlugin,
   installDthRelease,
+  installHoudiniPresets,
   installedExporterVersion,
+  listDazAssets,
   listDthExporterReleases,
   listDthReleases,
   refreshAllAssets,
@@ -559,6 +566,15 @@ function SettingsPage() {
   const [releaseReport, setReleaseReport] = useState<InstallReport | null>(null)
   const [pluginInstalling, setPluginInstalling] = useState(false)
   const [pluginReport, setPluginReport] = useState<InstallReport | null>(null)
+  // Optional-tab install state (one busy flag + report per section).
+  const [assetsBusy, setAssetsBusy] = useState(false)
+  const [assetsReport, setAssetsReport] = useState<InstallReport | null>(null)
+  const [morphsBusy, setMorphsBusy] = useState(false)
+  const [morphsReport, setMorphsReport] = useState<InstallReport | null>(null)
+  const [presetsBusy, setPresetsBusy] = useState(false)
+  const [presetsReport, setPresetsReport] = useState<InstallReport | null>(null)
+  const [houdiniBusy, setHoudiniBusy] = useState(false)
+  const [houdiniReport, setHoudiniReport] = useState<InstallReport | null>(null)
   // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
   // checked / no install folder; '' = folder set but plugin not installed there.
   const [installedExporter, setInstalledExporter] = useState<string | null>(null)
@@ -675,7 +691,13 @@ function SettingsPage() {
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.dazSubdir !== initial.dazSubdir ||
     settings.houdiniSubdir !== initial.houdiniSubdir ||
-    settings.createHoudiniSubdir !== initial.createHoudiniSubdir
+    settings.createHoudiniSubdir !== initial.createHoudiniSubdir ||
+    settings.dazMorphsSource !== initial.dazMorphsSource ||
+    settings.dazMorphsDest !== initial.dazMorphsDest ||
+    settings.dazPresetsSource !== initial.dazPresetsSource ||
+    settings.dazPresetsDest !== initial.dazPresetsDest ||
+    settings.houdiniPresetsSource !== initial.houdiniPresetsSource ||
+    JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders)
 
   // Saving also (re)builds the pose catalog for the active release — there's no
   // separate scan step.
@@ -761,6 +783,42 @@ function SettingsPage() {
     }
   }
 
+  // --- Optional tab: asset-folder list editor + read-only scan ---
+  function setAssetFolders(folders: Array<string>) {
+    setSettings((s) => ({ ...s, dazAssetsFolders: folders }))
+  }
+  function addAssetFolder() {
+    setAssetFolders([...settings.dazAssetsFolders, ''])
+  }
+  function updateAssetFolder(i: number, value: string) {
+    setAssetFolders(settings.dazAssetsFolders.map((f, j) => (j === i ? value : f)))
+  }
+  function removeAssetFolder(i: number) {
+    setAssetFolders(settings.dazAssetsFolders.filter((_, j) => j !== i))
+  }
+  async function browseAssetFolder(i: number) {
+    const picked = await pickFolder('Daz assets folder')
+    if (picked) updateAssetFolder(i, picked)
+  }
+  /** Read-only scan — no dryRun arg, so it can't go through runInstall. */
+  async function runScan() {
+    setAssetsBusy(true)
+    setAssetsReport(null)
+    try {
+      if (dirty) {
+        await saveSettings({ data: settings })
+        await router.invalidate()
+      }
+      const report = await listDazAssets()
+      setAssetsReport(report)
+      toast.success(`Scanned ${report.steps.length} asset(s)`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAssetsBusy(false)
+    }
+  }
+
   return (
     <main className="p-8">
       <div className="mb-6">
@@ -780,6 +838,7 @@ function SettingsPage() {
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="daztohue">DazToHue</TabsTrigger>
+          <TabsTrigger value="optional">Optional</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
@@ -1079,6 +1138,201 @@ function SettingsPage() {
                 administrator, then try again.
               </p>
             )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="optional" className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            Install your <em>own</em> Daz / Houdini content (not DTH release data). Folders are
+            saved with your settings; each section installs from them on demand.
+          </p>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Daz assets</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your own asset source folders (Genesis 3/8/9; <span className="font-mono">.zip</span>s
+                are extracted). Each asset's content (<span className="font-mono">data</span>/
+                <span className="font-mono">People</span>/<span className="font-mono">Runtime</span>/
+                <span className="font-mono">Documentation</span>) installs into “My DAZ 3D Library”,
+                skipping ones already there.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {settings.dazAssetsFolders.length === 0 && (
+                <p className="text-sm text-muted-foreground">No asset folders yet.</p>
+              )}
+              {settings.dazAssetsFolders.map((folder, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    value={displayPath(folder)}
+                    placeholder="X:\…\daz assets"
+                    onChange={(e) => updateAssetFolder(i, e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => void browseAssetFolder(i)}
+                  >
+                    <FolderOpen /> Browse
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    title="Remove folder"
+                    onClick={() => removeAssetFolder(i)}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addAssetFolder}>
+                <Plus /> Add folder
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void runScan()} disabled={assetsBusy}>
+                {assetsBusy ? 'Working…' : 'Scan'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDazAssets, true, setAssetsBusy, setAssetsReport)}
+                disabled={assetsBusy}
+              >
+                Dry run
+              </Button>
+              <Button
+                onClick={() => runInstall(installDazAssets, false, setAssetsBusy, setAssetsReport)}
+                disabled={assetsBusy}
+              >
+                <Download /> Install assets
+              </Button>
+            </div>
+            {assetsReport && <InstallReportList report={assetsReport} />}
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Custom morphs</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Morphs you made with Daz's Transfer Shape Utility. Merge-only — adds new files,
+                never overwrites your edits.
+              </p>
+            </div>
+            <FolderField
+              label="Morphs source"
+              value={settings.dazMorphsSource}
+              placeholder="X:\…\_morphs"
+              help={<>Your custom-morphs source folder.</>}
+              onChange={(value) => setSettings((s) => ({ ...s, dazMorphsSource: value }))}
+            />
+            <FolderField
+              label="Morphs destination"
+              value={settings.dazMorphsDest}
+              placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library\data\Daz 3D"
+              help={
+                <>
+                  Your personal library's <span className="font-mono">data/Daz 3D</span> folder.
+                </>
+              }
+              onChange={(value) => setSettings((s) => ({ ...s, dazMorphsDest: value }))}
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDazMorphs, true, setMorphsBusy, setMorphsReport)}
+                disabled={morphsBusy}
+              >
+                Dry run
+              </Button>
+              <Button
+                onClick={() => runInstall(installDazMorphs, false, setMorphsBusy, setMorphsReport)}
+                disabled={morphsBusy}
+              >
+                <Download /> Install morphs
+              </Button>
+            </div>
+            {morphsReport && <InstallReportList report={morphsReport} />}
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Daz presets</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your Daz presets. Merge-only — adds new files, never overwrites.
+              </p>
+            </div>
+            <FolderField
+              label="Presets source"
+              value={settings.dazPresetsSource}
+              placeholder="X:\…\_presets"
+              help={<>Your presets source folder.</>}
+              onChange={(value) => setSettings((s) => ({ ...s, dazPresetsSource: value }))}
+            />
+            <FolderField
+              label="Presets destination"
+              value={settings.dazPresetsDest}
+              placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library\Presets"
+              help={
+                <>
+                  Your personal library's <span className="font-mono">Presets</span> folder.
+                </>
+              }
+              onChange={(value) => setSettings((s) => ({ ...s, dazPresetsDest: value }))}
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDazPresets, true, setPresetsBusy, setPresetsReport)}
+                disabled={presetsBusy}
+              >
+                Dry run
+              </Button>
+              <Button
+                onClick={() => runInstall(installDazPresets, false, setPresetsBusy, setPresetsReport)}
+                disabled={presetsBusy}
+              >
+                <Download /> Install presets
+              </Button>
+            </div>
+            {presetsReport && <InstallReportList report={presetsReport} />}
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Houdini presets</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your Houdini <span className="font-mono">my_presets</span>. Replaces the folder in
+                your Houdini documents folder (set in the DazToHue tab) and wires it into{' '}
+                <span className="font-mono">houdini.env</span> (SHARED_PRESETS + HOUDINI_PATH).
+              </p>
+            </div>
+            <FolderField
+              label="Houdini presets source"
+              value={settings.houdiniPresetsSource}
+              placeholder="X:\…\houdini\my_presets"
+              help={<>Your Houdini presets source folder.</>}
+              onChange={(value) => setSettings((s) => ({ ...s, houdiniPresetsSource: value }))}
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installHoudiniPresets, true, setHoudiniBusy, setHoudiniReport)}
+                disabled={houdiniBusy}
+              >
+                Dry run
+              </Button>
+              <Button
+                onClick={() => runInstall(installHoudiniPresets, false, setHoudiniBusy, setHoudiniReport)}
+                disabled={houdiniBusy}
+              >
+                <Download /> Install Houdini presets
+              </Button>
+            </div>
+            {houdiniReport && <InstallReportList report={houdiniReport} />}
           </section>
         </TabsContent>
       </Tabs>
