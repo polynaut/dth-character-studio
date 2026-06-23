@@ -1453,19 +1453,6 @@ function CharacterPage() {
               </PathCode>
             </p>
           )}
-          {scriptsAbs ? (
-            <p className="mt-1 text-xs">
-              <span className="mr-1.5 text-muted-foreground/60">Daz scripts</span>
-              <PathCode path={scriptsAbs}>
-                <span className="text-muted-foreground/60">{scriptsLib}</span>
-                <span className="text-foreground/80">{scriptsSuffix}</span>
-              </PathCode>
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-muted-foreground/60">
-              Daz scripts — set “My DAZ 3D Library” in Settings to install the character script
-            </p>
-          )}
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
@@ -1584,6 +1571,27 @@ function CharacterPage() {
               onChanged={onSceneLinked}
             />
           </div>
+        )}
+      </section>
+
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+          Daz scripts generated
+          <InfoPopup label="Daz scripts generated — more information">
+            Where the generated <code>{character.name}_{character.genesis}.dsa</code> ROM script is
+            installed in your DAZ library on Save — open it from Daz to build the ROM. The folder is
+            created the first time the script is generated.
+          </InfoPopup>
+        </h2>
+        {scriptsAbs ? (
+          <PathCode path={scriptsAbs}>
+            <span className="text-muted-foreground/60">{scriptsLib}</span>
+            <span className="text-foreground/80">{scriptsSuffix}</span>
+          </PathCode>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Set “My DAZ 3D Library” in Settings to install the character script.
+          </p>
         )}
       </section>
 
