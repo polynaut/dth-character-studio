@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
   closestCorners,
+  getFirstCollision,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
@@ -22,7 +25,7 @@ import { toast } from 'sonner'
 import { pickCsvPath, pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
+import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
@@ -955,6 +958,20 @@ function PoseGroupsEditor({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [activePose, setActivePose] = useState<RomPose | null>(null)
+  // While dragging we work on a local copy so the groups "make space" live as a
+  // pose moves between them, without rewriting the character on every frame —
+  // the result is committed once on drop.
+  const [dragGroups, setDragGroups] = useState<Array<RomGroup> | null>(null)
+  const display = dragGroups ?? groups
+  // Hold the resolved drop target for the frame right after a pose hops into a
+  // new group, so collision detection doesn't bounce it back at the boundary.
+  const lastOverId = useRef<string | null>(null)
+  const justMoved = useRef(false)
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      justMoved.current = false
+    })
+  }, [display])
 
   const toggleExpanded = (poseId: string) =>
     setExpandedIds((ids) => {
@@ -964,78 +981,126 @@ function PoseGroupsEditor({
       return next
     })
 
-  // The group index owning a draggable id: a pose id (search each group's poses)
-  // or a group's own id (an empty group's container droppable).
-  function groupIndexOf(id: string): number {
-    const asContainer = groups.findIndex((g) => g.id === id)
+  // The group index owning a draggable id within `list`: a pose id (search each
+  // group's poses) or a group's own id (its container droppable).
+  function groupIndexOf(list: Array<RomGroup>, id: string): number {
+    const asContainer = list.findIndex((g) => g.id === id)
     if (asContainer >= 0) return asContainer
-    return groups.findIndex((g) => g.poses.some((p) => p.id === id))
+    return list.findIndex((g) => g.poses.some((p) => p.id === id))
   }
+
+  // Pointer-first detection that drills from a hovered group into its closest
+  // pose, and holds the last target across the reflow after a cross-group hop —
+  // the dnd-kit "multiple containers" recipe, which stops boundary flicker.
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      const pointer = pointerWithin(args)
+      const hits = pointer.length > 0 ? pointer : rectIntersection(args)
+      let overId = getFirstCollision(hits, 'id')
+      if (overId != null) {
+        const overGroup = display.find((g) => g.id === String(overId))
+        if (overGroup && overGroup.poses.length > 0) {
+          const ids = new Set(overGroup.poses.map((p) => p.id))
+          const inner = closestCorners({
+            ...args,
+            droppableContainers: args.droppableContainers.filter(
+              (c) => c.id !== overId && ids.has(String(c.id)),
+            ),
+          })
+          overId = getFirstCollision(inner, 'id') ?? overId
+        }
+        lastOverId.current = String(overId)
+        return [{ id: overId }]
+      }
+      if (justMoved.current && activePose) lastOverId.current = activePose.id
+      return lastOverId.current ? [{ id: lastOverId.current }] : []
+    },
+    [display, activePose],
+  )
 
   function handleDragStart(event: DragStartEvent) {
     setExpandedIds(new Set()) // a tall expanded row makes a clumsy drag
     const id = String(event.active.id)
-    for (const g of groups) {
-      const pose = g.poses.find((p) => p.id === id)
-      if (pose) {
-        setActivePose(pose)
-        return
-      }
-    }
+    setActivePose(groups.flatMap((g) => g.poses).find((p) => p.id === id) ?? null)
+    setDragGroups(groups)
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    setActivePose(null)
+  // Live cross-group move: pull the dragged pose into the hovered group so both
+  // groups animate (the source closes up, the target opens a slot). Same-group
+  // hovering is left to the sortable strategy; the exact slot settles on drop.
+  function handleDragOver(event: DragOverEvent) {
     const { active, over } = event
     if (!over) return
     const activeId = String(active.id)
     const overId = String(over.id)
-    const from = groupIndexOf(activeId)
-    const to = groupIndexOf(overId)
-    if (from < 0 || to < 0) return
-    const fromIndex = groups[from].poses.findIndex((p) => p.id === activeId)
-    if (fromIndex < 0) return
-
-    if (from === to) {
-      if (activeId === overId) return
-      const toIndex = groups[from].poses.findIndex((p) => p.id === overId)
-      if (toIndex < 0) return
-      onGroupsChange(
-        groups.map((g, i) => (i === from ? { ...g, poses: arrayMove(g.poses, fromIndex, toIndex) } : g)),
-      )
-      return
-    }
-
-    // Cross-group: pull the pose from the source and drop it into the target at
-    // the hovered pose's slot (or the end when over the group's body).
-    const pose = groups[from].poses[fromIndex]
-    const targetPoses = groups[to].poses
-    const overIndex =
-      groups[to].id === overId ? targetPoses.length : targetPoses.findIndex((p) => p.id === overId)
-    const insertAt = overIndex < 0 ? targetPoses.length : overIndex
-    onGroupsChange(
-      groups.map((g, i) => {
-        if (i === from) return { ...g, poses: g.poses.filter((_, idx) => idx !== fromIndex) }
+    setDragGroups((prev) => {
+      const list = prev ?? groups
+      const from = groupIndexOf(list, activeId)
+      const to = groupIndexOf(list, overId)
+      if (from < 0 || to < 0 || from === to) return list
+      const fromPoses = list[from].poses
+      const toPoses = list[to].poses
+      const activeIndex = fromPoses.findIndex((p) => p.id === activeId)
+      if (activeIndex < 0) return list
+      const moved = fromPoses[activeIndex]
+      const overIndex =
+        list[to].id === overId ? toPoses.length : toPoses.findIndex((p) => p.id === overId)
+      const insertAt = overIndex < 0 ? toPoses.length : overIndex
+      justMoved.current = true
+      return list.map((g, i) => {
+        if (i === from) return { ...g, poses: fromPoses.filter((_, idx) => idx !== activeIndex) }
         if (i === to) {
-          const next = [...g.poses]
-          next.splice(insertAt, 0, pose)
+          const next = [...toPoses]
+          next.splice(insertAt, 0, moved)
           return { ...g, poses: next }
         }
         return g
-      }),
-    )
+      })
+    })
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    const list = dragGroups ?? groups
+    let result = list
+    if (over) {
+      const activeId = String(active.id)
+      const overId = String(over.id)
+      const idx = groupIndexOf(list, activeId)
+      // The cross-group hop already happened in onDragOver; settle the exact
+      // position within the resolved group.
+      if (idx >= 0 && groupIndexOf(list, overId) === idx && activeId !== overId) {
+        const poses = list[idx].poses
+        const oldIndex = poses.findIndex((p) => p.id === activeId)
+        const newIndex = poses.findIndex((p) => p.id === overId)
+        if (oldIndex >= 0 && newIndex >= 0 && oldIndex !== newIndex) {
+          result = list.map((g, i) =>
+            i === idx ? { ...g, poses: arrayMove(poses, oldIndex, newIndex) } : g,
+          )
+        }
+      }
+    }
+    onGroupsChange(result)
+    setDragGroups(null)
+    setActivePose(null)
+  }
+
+  function handleDragCancel() {
+    setDragGroups(null)
+    setActivePose(null)
   }
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActivePose(null)}
+      onDragCancel={handleDragCancel}
     >
       <div className="space-y-3">
-        {groups.map((group, index) => (
+        {display.map((group) => (
           <GroupCard
             key={group.id}
             section={section}
@@ -1045,18 +1110,17 @@ function PoseGroupsEditor({
             removable={removable}
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
-            onChange={(updated) => onGroupsChange(groups.map((g, i) => (i === index ? updated : g)))}
-            onRemove={() => onGroupsChange(groups.filter((_, i) => i !== index))}
-            onMirror={() =>
-              onGroupsChange([
-                ...groups.slice(0, index + 1),
-                mirrorGroup(group),
-                ...groups.slice(index + 1),
-              ])
+            onChange={(updated) =>
+              onGroupsChange(groups.map((g) => (g.id === group.id ? updated : g)))
             }
+            onRemove={() => onGroupsChange(groups.filter((g) => g.id !== group.id))}
+            onMirror={() => {
+              const i = groups.findIndex((g) => g.id === group.id)
+              onGroupsChange([...groups.slice(0, i + 1), mirrorGroup(group), ...groups.slice(i + 1)])
+            }}
           />
         ))}
-        {groups.length === 0 && (
+        {display.length === 0 && (
           <p className="rounded-lg border border-dashed px-4 py-4 text-center text-sm text-muted-foreground">
             No groups yet — e.g. one group per driver bone, or left/right/centre groups for
             mirrored poses.
