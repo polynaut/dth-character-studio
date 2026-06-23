@@ -1,5 +1,14 @@
 # @dth/web
 
+## 0.22.1
+
+### Patch Changes
+
+- [#78](https://github.com/polynaut/dth-character-studio/pull/78) [`b8c270c`](https://github.com/polynaut/dth-character-studio/commit/b8c270c6909e0ee58785956395f17d912c32dbeb) Thanks [@polynaut](https://github.com/polynaut)! - Move the **Daz scripts** write-path out of the character header into its own pane, **Daz scripts generated**, sitting just below the first pane. The header goes back to showing only the character-definition path, and the scripts location reads as a labelled card (with a short info note) — the same chip, now easier to find and less crowded in the header.
+
+- Updated dependencies []:
+  - @dth/rom@0.22.1
+
 ## 0.22.0
 
 ### Minor Changes
