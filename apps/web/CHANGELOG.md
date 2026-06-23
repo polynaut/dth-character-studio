@@ -1,5 +1,20 @@
 # @dth/web
 
+## 0.22.0
+
+### Minor Changes
+
+- [#76](https://github.com/polynaut/dth-character-studio/pull/76) [`4c3a1d6`](https://github.com/polynaut/dth-character-studio/commit/4c3a1d6342335ca648d1024b2240fc677ab9f180) Thanks [@polynaut](https://github.com/polynaut)! - Drag morphs between groups. The pose drag-and-drop now spans a whole section instead of being locked to one group, so you can move a morph (pose) from one group into another — drop it on a pose to insert at that spot, or on an empty group's body to append — not just reorder within a group. A drag overlay shows the morph you're moving. Handy after a CSV import to redistribute morphs across groups.
+
+- [#76](https://github.com/polynaut/dth-character-studio/pull/76) [`4c3a1d6`](https://github.com/polynaut/dth-character-studio/commit/4c3a1d6342335ca648d1024b2240fc677ab9f180) Thanks [@polynaut](https://github.com/polynaut)! - Import custom morphs from a DAZ-exported CSV. Every section that holds custom morphs (FBM, MISC, EXP, FAC, GEN, PHY) gets an **Import from CSV** button that parses a DAZ morph dump (`frame, , , node, prop, value …`) into poses — one per row, named from a cleaned form of the morph property (`xMusc_body_bs_AnconeusL_B_HD2` → `AnconeusL`, with the raw property kept on the morph) — so you no longer hand-enter long lists of individual morphs (muscles, veins, nails, expressions). Grouped sections get a new group; the flat FBM/MISC list appends to it.
+
+- [#75](https://github.com/polynaut/dth-character-studio/pull/75) [`47c3935`](https://github.com/polynaut/dth-character-studio/commit/47c3935e1f8c2680f6d23dd8844286f765ddcbab) Thanks [@polynaut](https://github.com/polynaut)! - Show the **Daz scripts write-path** as a chip at the top of the character page, so you can see at a glance where the generated `<Name>_<Genesis>.dsa` lands in your DAZ library (`…/Scripts/DTH-Character-Studio/<project>/<character>/`) — i.e. where to find and run it in Daz. Falls back to a hint when "My DAZ 3D Library" isn't set yet.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.22.0
+
 ## 0.21.2
 
 ### Patch Changes
