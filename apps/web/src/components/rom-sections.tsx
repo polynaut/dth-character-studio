@@ -14,9 +14,11 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 
-import { pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
+import { pickCsvPath, pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
+import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
 import type { DragEndEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
@@ -1167,6 +1169,52 @@ export function RomSections({
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })
   }
 
+  // Bulk-import a DAZ morph CSV into a section: each row becomes a pose (a
+  // cleaned name + its morphs). Grouped sections get a new group; the flat
+  // FBM/MISC list appends to its single group. The section is enabled + custom.
+  async function importCsv(section: RomSection) {
+    const filePath = await pickCsvPath('Select a DAZ morph CSV')
+    if (!filePath) return
+    let imported: Awaited<ReturnType<typeof importPosesFromCsv>>
+    try {
+      imported = await importPosesFromCsv({ data: { filePath } })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+      return
+    }
+    if (imported.length === 0) {
+      toast.error('No morphs found in that CSV')
+      return
+    }
+    const poses: Array<RomPose> = imported.map((pose) => ({
+      id: newId(),
+      name: pose.name,
+      morphs: pose.morphs,
+      referenceFbx: '',
+    }))
+    const config = sections[section]
+    const newGroup = (): RomGroup => ({
+      id: newId(),
+      label: '',
+      suffix: 'centre',
+      method: 'default',
+      calculateFrom: 'default',
+      poses,
+    })
+    const groups: Array<RomGroup> = GROUPED_SECTIONS.includes(section)
+      ? [...config.groups, newGroup()]
+      : [
+          config.groups[0]
+            ? { ...config.groups[0], poses: [...config.groups[0].poses, ...poses] }
+            : newGroup(),
+          ...config.groups.slice(1),
+        ]
+    patchSection(section, { enabled: true, mode: 'custom', groups })
+    toast.success(
+      `Imported ${imported.length} morph${imported.length === 1 ? '' : 's'} into ${SECTION_LABELS[section]}`,
+    )
+  }
+
   return (
     <div className="space-y-2">
       {!presetFrames && (
@@ -1301,27 +1349,32 @@ export function RomSections({
                 ) : !GROUPED_SECTIONS.includes(section) ? (
                   // FBM/MISC are flat lists in the PoseAsset node — exactly
                   // one implicit group, no group management.
-                  <GroupCard
-                    section={section}
-                    group={
-                      config.groups[0] ?? {
-                        id: `flat-${section}`,
-                        label: '',
-                        suffix: 'centre',
-                        method: 'default',
-                        calculateFrom: 'default',
-                        poses: [],
+                  <div className="space-y-3">
+                    <GroupCard
+                      section={section}
+                      group={
+                        config.groups[0] ?? {
+                          id: `flat-${section}`,
+                          label: '',
+                          suffix: 'centre',
+                          method: 'default',
+                          calculateFrom: 'default',
+                          poses: [],
+                        }
                       }
-                    }
-                    gender={gender}
-                    startFrame={startFrames.get(config.groups[0]?.id ?? '') ?? 1}
-                    removable={false}
-                    onChange={(updated) =>
-                      patchSection(section, { groups: [updated, ...config.groups.slice(1)] })
-                    }
-                    onRemove={() => {}}
-                    onMirror={() => {}}
-                  />
+                      gender={gender}
+                      startFrame={startFrames.get(config.groups[0]?.id ?? '') ?? 1}
+                      removable={false}
+                      onChange={(updated) =>
+                        patchSection(section, { groups: [updated, ...config.groups.slice(1)] })
+                      }
+                      onRemove={() => {}}
+                      onMirror={() => {}}
+                    />
+                    <Button variant="outline" size="sm" onClick={() => void importCsv(section)}>
+                      <Upload /> Import from CSV
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {config.groups.map((group, index) => (
@@ -1358,27 +1411,32 @@ export function RomSections({
                         groups for mirrored poses.
                       </p>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        patchSection(section, {
-                          groups: [
-                            ...config.groups,
-                            {
-                              id: newId(),
-                              label: '',
-                              suffix: 'centre',
-                              method: 'default',
-                              calculateFrom: 'default',
-                              poses: [],
-                            },
-                          ],
-                        })
-                      }
-                    >
-                      <Plus /> Add group
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          patchSection(section, {
+                            groups: [
+                              ...config.groups,
+                              {
+                                id: newId(),
+                                label: '',
+                                suffix: 'centre',
+                                method: 'default',
+                                calculateFrom: 'default',
+                                poses: [],
+                              },
+                            ],
+                          })
+                        }
+                      >
+                        <Plus /> Add group
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => void importCsv(section)}>
+                        <Upload /> Import from CSV
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
