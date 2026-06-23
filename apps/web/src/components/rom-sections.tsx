@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
-  closestCenter,
+  closestCorners,
+  getFirstCollision,
+  pointerWithin,
+  rectIntersection,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
@@ -14,11 +20,13 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 
-import { pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
+import { pickCsvPath, pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
+import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
-import type { DragEndEvent } from '@dnd-kit/core'
+import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core'
 import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
@@ -683,6 +691,8 @@ function GroupCard({
   gender,
   startFrame,
   removable = true,
+  expandedIds,
+  onToggleExpanded,
   onChange,
   onRemove,
   onMirror,
@@ -692,6 +702,8 @@ function GroupCard({
   gender: Gender
   startFrame: number
   removable?: boolean
+  expandedIds: Set<string>
+  onToggleExpanded: (poseId: string) => void
   onChange: (group: RomGroup) => void
   onRemove: () => void
   onMirror: () => void
@@ -701,8 +713,10 @@ function GroupCard({
   const showSuffix = GROUPED_SECTIONS.includes(section)
   const showMethod = METHOD_SECTIONS.includes(section)
   const showCalcFrom = CALC_FROM_SECTIONS.includes(section)
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  // The group's own id is its container droppable, so a pose can be dropped onto
+  // an empty group's body. The DndContext spanning all groups lives in the parent
+  // (PoseGroupsEditor), enabling drags between groups, not just within one.
+  const { setNodeRef: setDropRef } = useDroppable({ id: group.id })
 
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
     onChange({
@@ -715,13 +729,7 @@ function GroupCard({
     startFrame,
     showReferenceFbx,
     expandedIds,
-    toggleExpanded: (poseId) =>
-      setExpandedIds((ids) => {
-        const next = new Set(ids)
-        if (next.has(poseId)) next.delete(poseId)
-        else next.add(poseId)
-        return next
-      }),
+    toggleExpanded: onToggleExpanded,
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
       const pose = group.poses[rowIndex]
@@ -743,15 +751,6 @@ function GroupCard({
     },
     remove: (rowIndex) =>
       onChange({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) }),
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = group.poses.findIndex((pose) => pose.id === active.id)
-    const newIndex = group.poses.findIndex((pose) => pose.id === over.id)
-    if (oldIndex < 0 || newIndex < 0) return
-    onChange({ ...group, poses: arrayMove(group.poses, oldIndex, newIndex) })
   }
 
   const table = useReactTable({
@@ -888,12 +887,7 @@ function GroupCard({
           </Button>
         )}
       </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={() => setExpandedIds(new Set())}
-        onDragEnd={handleDragEnd}
-      >
+      <div ref={setDropRef}>
         <table className="w-full border-collapse text-sm">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -930,7 +924,7 @@ function GroupCard({
             </tbody>
           </SortableContext>
         </table>
-      </DndContext>
+      </div>
       <div className="border-t p-1.5">
         <Button variant="outline" size="sm" onClick={addPose}>
           <Plus /> Add morph
@@ -938,6 +932,232 @@ function GroupCard({
       </div>
     </div>
   )
+}
+
+/**
+ * Cross-group drag-and-drop for a section's pose groups: one DndContext spans
+ * every group so a morph (pose) can be dragged *between* groups, not just
+ * reordered within one. The move resolves on drag end — dropped onto a pose it
+ * inserts at that position; dropped on an empty group's body it appends. Also
+ * used for the flat FBM/MISC list (a single group → reorder only).
+ */
+function PoseGroupsEditor({
+  section,
+  groups,
+  gender,
+  startFrames,
+  removable,
+  onGroupsChange,
+}: {
+  section: RomSection
+  groups: Array<RomGroup>
+  gender: Gender
+  startFrames: Map<string, number>
+  removable: boolean
+  onGroupsChange: (groups: Array<RomGroup>) => void
+}) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [activePose, setActivePose] = useState<RomPose | null>(null)
+  // While dragging we work on a local copy so the groups "make space" live as a
+  // pose moves between them, without rewriting the character on every frame —
+  // the result is committed once on drop.
+  const [dragGroups, setDragGroups] = useState<Array<RomGroup> | null>(null)
+  const display = dragGroups ?? groups
+  // Hold the resolved drop target for the frame right after a pose hops into a
+  // new group, so collision detection doesn't bounce it back at the boundary.
+  const lastOverId = useRef<string | null>(null)
+  const justMoved = useRef(false)
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      justMoved.current = false
+    })
+  }, [display])
+
+  const toggleExpanded = (poseId: string) =>
+    setExpandedIds((ids) => {
+      const next = new Set(ids)
+      if (next.has(poseId)) next.delete(poseId)
+      else next.add(poseId)
+      return next
+    })
+
+  // The group index owning a draggable id within `list`: a pose id (search each
+  // group's poses) or a group's own id (its container droppable).
+  function groupIndexOf(list: Array<RomGroup>, id: string): number {
+    const asContainer = list.findIndex((g) => g.id === id)
+    if (asContainer >= 0) return asContainer
+    return list.findIndex((g) => g.poses.some((p) => p.id === id))
+  }
+
+  // Pointer-first detection that drills from a hovered group into its closest
+  // pose, and holds the last target across the reflow after a cross-group hop —
+  // the dnd-kit "multiple containers" recipe, which stops boundary flicker.
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      const pointer = pointerWithin(args)
+      const hits = pointer.length > 0 ? pointer : rectIntersection(args)
+      let overId = getFirstCollision(hits, 'id')
+      if (overId != null) {
+        const overGroup = display.find((g) => g.id === String(overId))
+        if (overGroup && overGroup.poses.length > 0) {
+          const ids = new Set(overGroup.poses.map((p) => p.id))
+          const inner = closestCorners({
+            ...args,
+            droppableContainers: args.droppableContainers.filter(
+              (c) => c.id !== overId && ids.has(String(c.id)),
+            ),
+          })
+          overId = getFirstCollision(inner, 'id') ?? overId
+        }
+        lastOverId.current = String(overId)
+        return [{ id: overId }]
+      }
+      if (justMoved.current && activePose) lastOverId.current = activePose.id
+      return lastOverId.current ? [{ id: lastOverId.current }] : []
+    },
+    [display, activePose],
+  )
+
+  function handleDragStart(event: DragStartEvent) {
+    setExpandedIds(new Set()) // a tall expanded row makes a clumsy drag
+    const id = String(event.active.id)
+    setActivePose(groups.flatMap((g) => g.poses).find((p) => p.id === id) ?? null)
+    setDragGroups(groups)
+  }
+
+  // Live cross-group move: pull the dragged pose into the hovered group so both
+  // groups animate (the source closes up, the target opens a slot). Same-group
+  // hovering is left to the sortable strategy; the exact slot settles on drop.
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event
+    if (!over) return
+    const activeId = String(active.id)
+    const overId = String(over.id)
+    setDragGroups((prev) => {
+      const list = prev ?? groups
+      const from = groupIndexOf(list, activeId)
+      const to = groupIndexOf(list, overId)
+      if (from < 0 || to < 0 || from === to) return list
+      const fromPoses = list[from].poses
+      const toPoses = list[to].poses
+      const activeIndex = fromPoses.findIndex((p) => p.id === activeId)
+      if (activeIndex < 0) return list
+      const moved = fromPoses[activeIndex]
+      const overIndex =
+        list[to].id === overId ? toPoses.length : toPoses.findIndex((p) => p.id === overId)
+      const insertAt = overIndex < 0 ? toPoses.length : overIndex
+      justMoved.current = true
+      return list.map((g, i) => {
+        if (i === from) return { ...g, poses: fromPoses.filter((_, idx) => idx !== activeIndex) }
+        if (i === to) {
+          const next = [...toPoses]
+          next.splice(insertAt, 0, moved)
+          return { ...g, poses: next }
+        }
+        return g
+      })
+    })
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    const list = dragGroups ?? groups
+    let result = list
+    if (over) {
+      const activeId = String(active.id)
+      const overId = String(over.id)
+      const idx = groupIndexOf(list, activeId)
+      // The cross-group hop already happened in onDragOver; settle the exact
+      // position within the resolved group.
+      if (idx >= 0 && groupIndexOf(list, overId) === idx && activeId !== overId) {
+        const poses = list[idx].poses
+        const oldIndex = poses.findIndex((p) => p.id === activeId)
+        const newIndex = poses.findIndex((p) => p.id === overId)
+        if (oldIndex >= 0 && newIndex >= 0 && oldIndex !== newIndex) {
+          result = list.map((g, i) =>
+            i === idx ? { ...g, poses: arrayMove(poses, oldIndex, newIndex) } : g,
+          )
+        }
+      }
+    }
+    onGroupsChange(result)
+    setDragGroups(null)
+    setActivePose(null)
+  }
+
+  function handleDragCancel() {
+    setDragGroups(null)
+    setActivePose(null)
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collisionDetection}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="space-y-3">
+        {display.map((group) => (
+          <GroupCard
+            key={group.id}
+            section={section}
+            group={group}
+            gender={gender}
+            startFrame={startFrames.get(group.id) ?? 1}
+            removable={removable}
+            expandedIds={expandedIds}
+            onToggleExpanded={toggleExpanded}
+            onChange={(updated) =>
+              onGroupsChange(groups.map((g) => (g.id === group.id ? updated : g)))
+            }
+            onRemove={() => onGroupsChange(groups.filter((g) => g.id !== group.id))}
+            onMirror={() => {
+              const i = groups.findIndex((g) => g.id === group.id)
+              onGroupsChange([...groups.slice(0, i + 1), mirrorGroup(group), ...groups.slice(i + 1)])
+            }}
+          />
+        ))}
+        {display.length === 0 && (
+          <p className="rounded-lg border border-dashed px-4 py-4 text-center text-sm text-muted-foreground">
+            No groups yet — e.g. one group per driver bone, or left/right/centre groups for
+            mirrored poses.
+          </p>
+        )}
+      </div>
+      {createPortal(
+        // Portalled to <body> so no transformed/clipping ancestor (the accordion,
+        // the sticky header) can hide the position:fixed overlay.
+        <DragOverlay dropAnimation={null}>
+          {activePose ? (
+            <div className="flex cursor-grabbing items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm text-card-foreground shadow-xl ring-1 ring-primary/50">
+              <GripVertical className="size-3.5 text-muted-foreground" />
+              <span className="font-medium">{activePose.name || '(unnamed morph)'}</span>
+              <span className="text-xs text-muted-foreground">
+                {activePose.morphs.length} morph{activePose.morphs.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          ) : null}
+        </DragOverlay>,
+        document.body,
+      )}
+    </DndContext>
+  )
+}
+
+/** The implicit single group of a flat FBM/MISC section (no group management). */
+function flatGroup(section: RomSection): RomGroup {
+  return {
+    id: `flat-${section}`,
+    label: '',
+    suffix: 'centre',
+    method: 'default',
+    calculateFrom: 'default',
+    poses: [],
+  }
 }
 
 /**
@@ -1167,6 +1387,52 @@ export function RomSections({
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })
   }
 
+  // Bulk-import a DAZ morph CSV into a section: each row becomes a pose (a
+  // cleaned name + its morphs). Grouped sections get a new group; the flat
+  // FBM/MISC list appends to its single group. The section is enabled + custom.
+  async function importCsv(section: RomSection) {
+    const filePath = await pickCsvPath('Select a DAZ morph CSV')
+    if (!filePath) return
+    let imported: Awaited<ReturnType<typeof importPosesFromCsv>>
+    try {
+      imported = await importPosesFromCsv({ data: { filePath } })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+      return
+    }
+    if (imported.length === 0) {
+      toast.error('No morphs found in that CSV')
+      return
+    }
+    const poses: Array<RomPose> = imported.map((pose) => ({
+      id: newId(),
+      name: pose.name,
+      morphs: pose.morphs,
+      referenceFbx: '',
+    }))
+    const config = sections[section]
+    const newGroup = (): RomGroup => ({
+      id: newId(),
+      label: '',
+      suffix: 'centre',
+      method: 'default',
+      calculateFrom: 'default',
+      poses,
+    })
+    const groups: Array<RomGroup> = GROUPED_SECTIONS.includes(section)
+      ? [...config.groups, newGroup()]
+      : [
+          config.groups[0]
+            ? { ...config.groups[0], poses: [...config.groups[0].poses, ...poses] }
+            : newGroup(),
+          ...config.groups.slice(1),
+        ]
+    patchSection(section, { enabled: true, mode: 'custom', groups })
+    toast.success(
+      `Imported ${imported.length} morph${imported.length === 1 ? '' : 's'} into ${SECTION_LABELS[section]}`,
+    )
+  }
+
   return (
     <div className="space-y-2">
       {!presetFrames && (
@@ -1301,84 +1567,55 @@ export function RomSections({
                 ) : !GROUPED_SECTIONS.includes(section) ? (
                   // FBM/MISC are flat lists in the PoseAsset node — exactly
                   // one implicit group, no group management.
-                  <GroupCard
-                    section={section}
-                    group={
-                      config.groups[0] ?? {
-                        id: `flat-${section}`,
-                        label: '',
-                        suffix: 'centre',
-                        method: 'default',
-                        calculateFrom: 'default',
-                        poses: [],
-                      }
-                    }
-                    gender={gender}
-                    startFrame={startFrames.get(config.groups[0]?.id ?? '') ?? 1}
-                    removable={false}
-                    onChange={(updated) =>
-                      patchSection(section, { groups: [updated, ...config.groups.slice(1)] })
-                    }
-                    onRemove={() => {}}
-                    onMirror={() => {}}
-                  />
+                  <div className="space-y-3">
+                    <PoseGroupsEditor
+                      section={section}
+                      groups={config.groups.length > 0 ? config.groups : [flatGroup(section)]}
+                      gender={gender}
+                      startFrames={startFrames}
+                      removable={false}
+                      onGroupsChange={(groups) => patchSection(section, { groups })}
+                    />
+                    <Button variant="outline" size="sm" onClick={() => void importCsv(section)}>
+                      <Upload /> Import from CSV
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {config.groups.map((group, index) => (
-                      <GroupCard
-                        key={group.id}
-                        section={section}
-                        group={group}
-                        gender={gender}
-                        startFrame={startFrames.get(group.id) ?? 1}
-                        onChange={(updated) =>
-                          patchSection(section, {
-                            groups: config.groups.map((g, i) => (i === index ? updated : g)),
-                          })
-                        }
-                        onRemove={() =>
-                          patchSection(section, {
-                            groups: config.groups.filter((_, i) => i !== index),
-                          })
-                        }
-                        onMirror={() =>
+                    <PoseGroupsEditor
+                      section={section}
+                      groups={config.groups}
+                      gender={gender}
+                      startFrames={startFrames}
+                      removable
+                      onGroupsChange={(groups) => patchSection(section, { groups })}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
                           patchSection(section, {
                             groups: [
-                              ...config.groups.slice(0, index + 1),
-                              mirrorGroup(group),
-                              ...config.groups.slice(index + 1),
+                              ...config.groups,
+                              {
+                                id: newId(),
+                                label: '',
+                                suffix: 'centre',
+                                method: 'default',
+                                calculateFrom: 'default',
+                                poses: [],
+                              },
                             ],
                           })
                         }
-                      />
-                    ))}
-                    {config.groups.length === 0 && (
-                      <p className="rounded-lg border border-dashed px-4 py-4 text-center text-sm text-muted-foreground">
-                        No groups yet — e.g. one group per driver bone, or left/right/centre
-                        groups for mirrored poses.
-                      </p>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        patchSection(section, {
-                          groups: [
-                            ...config.groups,
-                            {
-                              id: newId(),
-                              label: '',
-                              suffix: 'centre',
-                              method: 'default',
-                              calculateFrom: 'default',
-                              poses: [],
-                            },
-                          ],
-                        })
-                      }
-                    >
-                      <Plus /> Add group
-                    </Button>
+                      >
+                        <Plus /> Add group
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => void importCsv(section)}>
+                        <Upload /> Import from CSV
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
