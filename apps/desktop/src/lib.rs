@@ -516,6 +516,12 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
         };
         assets.sort();
         for asset in &assets {
+            // Loose files at the folder root (.DS_Store, a readme, …) aren't
+            // assets — only folders and .zip archives are.
+            let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+            if !asset.is_dir() && !is_zip {
+                continue;
+            }
             let name = folder_name(asset);
             let (temp, level) = match resolve_asset(asset) {
                 AssetContent::Found { temp, root, folders } => (temp, Some((root, folders))),
@@ -598,6 +604,12 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
         };
         assets.sort();
         for asset in &assets {
+            // Loose files at the folder root (.DS_Store, a readme, …) aren't
+            // assets — only folders and .zip archives are.
+            let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+            if !asset.is_dir() && !is_zip {
+                continue;
+            }
             let name = folder_name(asset);
             let (temp, level) = match resolve_asset(asset) {
                 AssetContent::Found { temp, root, folders } => (temp, Some((root, folders))),

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import {
   ArrowLeft,
+  ChevronRight,
   CircleCheck,
   CircleSlash,
   CircleX,
@@ -468,22 +469,26 @@ function InstallReportList({ report }: { report: InstallReport }) {
           </>
         )
         const files = step.filesList ?? []
+        // A fixed-width leading slot (chevron when expandable, empty spacer
+        // otherwise) keeps every row's content aligned.
         if (files.length === 0) {
           return (
             <li key={i} className="flex items-start gap-2">
+              <span className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               {row}
             </li>
           )
         }
         // Expandable: the per-asset list of files an install would copy (hidden
-        // by default — the report is already huge). Native <details> triangle.
+        // by default — the report is already huge).
         return (
           <li key={i}>
             <details>
-              <summary className="cursor-pointer marker:text-muted-foreground">
-                <span className="ml-1 inline-flex items-start gap-2 align-top">{row}</span>
+              <summary className="flex cursor-pointer items-start gap-2 [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform in-[[open]]:rotate-90" />
+                {row}
               </summary>
-              <ul className="mt-1 ml-6 space-y-0.5">
+              <ul className="mt-1 ml-[1.625rem] space-y-0.5">
                 {files.map((f) => (
                   <li key={f} className="font-mono text-xs break-all text-muted-foreground">
                     {f}
