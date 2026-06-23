@@ -1252,6 +1252,12 @@ function CharacterPage() {
   const scriptsSuffix = scriptsAbs.startsWith(scriptsLib)
     ? scriptsAbs.slice(scriptsLib.length)
     : scriptsAbs
+  // With an export folder set and the export NOT combined with the ROM script,
+  // generation splits into a ROM_ build script + a standalone Export_ script
+  // (see generate.ts toRomScriptDsa / toExportScriptDsa). Otherwise it's one
+  // self-contained <Name>_<Genesis>.dsa. Drives the scripts-pane info note.
+  const exportSet = character.exportPath.trim() !== ''
+  const exportSplit = exportSet && character.exportWithRomScript === false
 
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
@@ -1453,19 +1459,6 @@ function CharacterPage() {
               </PathCode>
             </p>
           )}
-          {scriptsAbs ? (
-            <p className="mt-1 text-xs">
-              <span className="mr-1.5 text-muted-foreground/60">Daz scripts</span>
-              <PathCode path={scriptsAbs}>
-                <span className="text-muted-foreground/60">{scriptsLib}</span>
-                <span className="text-foreground/80">{scriptsSuffix}</span>
-              </PathCode>
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-muted-foreground/60">
-              Daz scripts — set “My DAZ 3D Library” in Settings to install the character script
-            </p>
-          )}
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
             box so the scale below anchors on that line). They ride the sticky
@@ -1584,6 +1577,39 @@ function CharacterPage() {
               onChanged={onSceneLinked}
             />
           </div>
+        )}
+      </section>
+
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+          Daz scripts generated
+          <InfoPopup label="Daz scripts generated — more information">
+            {exportSplit ? (
+              <>
+                Where the generated <code>ROM_{character.name}_{character.genesis}.dsa</code> (builds
+                the ROM) and <code>Export_{character.name}_{character.genesis}.dsa</code> (runs the
+                exporter) scripts are installed in your DAZ library on Save — run the ROM script
+                first, then the Export script in the same Daz session.
+              </>
+            ) : (
+              <>
+                Where the generated <code>{character.name}_{character.genesis}.dsa</code> script is
+                installed in your DAZ library on Save — open it from Daz to build the ROM
+                {exportSet ? ' and run the export' : ''}.
+              </>
+            )}{' '}
+            The folder is created the first time a script is generated.
+          </InfoPopup>
+        </h2>
+        {scriptsAbs ? (
+          <PathCode path={scriptsAbs}>
+            <span className="text-muted-foreground/60">{scriptsLib}</span>
+            <span className="text-foreground/80">{scriptsSuffix}</span>
+          </PathCode>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Set “My DAZ 3D Library” in Settings to install the character script.
+          </p>
         )}
       </section>
 
