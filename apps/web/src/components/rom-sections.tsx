@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
@@ -1127,17 +1128,22 @@ function PoseGroupsEditor({
           </p>
         )}
       </div>
-      <DragOverlay>
-        {activePose ? (
-          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm shadow-lg">
-            <GripVertical className="size-3.5 text-muted-foreground" />
-            <span className="font-medium">{activePose.name || '(unnamed pose)'}</span>
-            <span className="text-xs text-muted-foreground">
-              {activePose.morphs.length} morph{activePose.morphs.length === 1 ? '' : 's'}
-            </span>
-          </div>
-        ) : null}
-      </DragOverlay>
+      {createPortal(
+        // Portalled to <body> so no transformed/clipping ancestor (the accordion,
+        // the sticky header) can hide the position:fixed overlay.
+        <DragOverlay dropAnimation={null}>
+          {activePose ? (
+            <div className="flex cursor-grabbing items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm text-card-foreground shadow-xl ring-1 ring-primary/50">
+              <GripVertical className="size-3.5 text-muted-foreground" />
+              <span className="font-medium">{activePose.name || '(unnamed morph)'}</span>
+              <span className="text-xs text-muted-foreground">
+                {activePose.morphs.length} morph{activePose.morphs.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          ) : null}
+        </DragOverlay>,
+        document.body,
+      )}
     </DndContext>
   )
 }
