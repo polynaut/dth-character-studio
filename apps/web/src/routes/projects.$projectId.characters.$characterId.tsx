@@ -1252,6 +1252,12 @@ function CharacterPage() {
   const scriptsSuffix = scriptsAbs.startsWith(scriptsLib)
     ? scriptsAbs.slice(scriptsLib.length)
     : scriptsAbs
+  // With an export folder set and the export NOT combined with the ROM script,
+  // generation splits into a ROM_ build script + a standalone Export_ script
+  // (see generate.ts toRomScriptDsa / toExportScriptDsa). Otherwise it's one
+  // self-contained <Name>_<Genesis>.dsa. Drives the scripts-pane info note.
+  const exportSet = character.exportPath.trim() !== ''
+  const exportSplit = exportSet && character.exportWithRomScript === false
 
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
@@ -1578,9 +1584,21 @@ function CharacterPage() {
         <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Daz scripts generated
           <InfoPopup label="Daz scripts generated — more information">
-            Where the generated <code>{character.name}_{character.genesis}.dsa</code> ROM script is
-            installed in your DAZ library on Save — open it from Daz to build the ROM. The folder is
-            created the first time the script is generated.
+            {exportSplit ? (
+              <>
+                Where the generated <code>ROM_{character.name}_{character.genesis}.dsa</code> (builds
+                the ROM) and <code>Export_{character.name}_{character.genesis}.dsa</code> (runs the
+                exporter) scripts are installed in your DAZ library on Save — run the ROM script
+                first, then the Export script in the same Daz session.
+              </>
+            ) : (
+              <>
+                Where the generated <code>{character.name}_{character.genesis}.dsa</code> script is
+                installed in your DAZ library on Save — open it from Daz to build the ROM
+                {exportSet ? ' and run the export' : ''}.
+              </>
+            )}{' '}
+            The folder is created the first time a script is generated.
           </InfoPopup>
         </h2>
         {scriptsAbs ? (
