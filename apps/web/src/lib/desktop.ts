@@ -41,6 +41,20 @@ export async function pickDufPath(title: string): Promise<string> {
 }
 
 /**
+ * Native CSV picker (DAZ morph export) via the Tauri dialog plugin. Returns the
+ * picked absolute path, or '' if the user cancelled.
+ */
+export async function pickCsvPath(title: string): Promise<string> {
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title,
+    filters: [{ name: 'CSV files', extensions: ['csv'] }],
+  })
+  return notePick(typeof selected === 'string' ? selected : '')
+}
+
+/**
  * Native Houdini project picker via the Tauri dialog plugin. Returns the picked
  * absolute path, or '' if the user cancelled.
  */
