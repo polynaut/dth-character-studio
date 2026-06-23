@@ -64,6 +64,7 @@ import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
+import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
 
@@ -1239,6 +1240,18 @@ function CharacterPage() {
   const defSep = Math.max(defAbs.lastIndexOf('\\'), defAbs.lastIndexOf('/'))
   const defDir = defSep >= 0 ? defAbs.slice(0, defSep) : defAbs
   const defSuffix = defDir.startsWith(libRoot) ? defDir.slice(libRoot.length) : defDir
+  // Where the generated <Name>_<Genesis>.dsa lands in the Daz library, so the
+  // user knows where to find/run it in Daz. Empty until the DAZ library is set.
+  const scriptsLib = displayPath(settings.dazLibraryFolder)
+  const scriptsAbs =
+    settings.dazLibraryFolder && character.projectName
+      ? displayPath(
+          studioCharScriptsDir(settings.dazLibraryFolder, character.projectName, character.name),
+        )
+      : ''
+  const scriptsSuffix = scriptsAbs.startsWith(scriptsLib)
+    ? scriptsAbs.slice(scriptsLib.length)
+    : scriptsAbs
 
   function patch(p: Partial<Character>) {
     setCharacter((c) => ({ ...c, ...p }))
@@ -1438,6 +1451,19 @@ function CharacterPage() {
                 <span className="text-muted-foreground/60">{libRoot}</span>
                 <span className="text-foreground/80">{defSuffix}</span>
               </PathCode>
+            </p>
+          )}
+          {scriptsAbs ? (
+            <p className="mt-1 text-xs">
+              <span className="mr-1.5 text-muted-foreground/60">Daz scripts</span>
+              <PathCode path={scriptsAbs}>
+                <span className="text-muted-foreground/60">{scriptsLib}</span>
+                <span className="text-foreground/80">{scriptsSuffix}</span>
+              </PathCode>
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground/60">
+              Daz scripts — set “My DAZ 3D Library” in Settings to install the character script
             </p>
           )}
         </div>

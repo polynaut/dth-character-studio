@@ -22,10 +22,11 @@ import {
   genesisVersionSchema,
   morphSchema,
   newId,
+  posesFromDazCsv,
   sectionsFromFlatFrames,
 } from '@dth/rom'
 
-import type { Character, PresetFrames } from '@dth/rom'
+import type { Character, ImportedPose, PresetFrames } from '@dth/rom'
 import type { StudioSettings } from './storage'
 
 export type {
@@ -586,6 +587,18 @@ export async function importCharacterFromJson({ data }: { data: unknown }): Prom
     character.resetGenBeforeApplying = importedReset
   }
   return storage.saveCharacter(await resolveProject(input.projectId), character)
+}
+
+const csvImportInput = z.object({ filePath: z.string().min(1) })
+
+/**
+ * Read a DAZ-exported morph CSV and parse it into poses (a cleaned name + the
+ * `(node, prop, value)` morphs of each frame). Used by the per-section "Import
+ * from CSV" action so users don't hand-enter long custom-morph lists.
+ */
+export async function importPosesFromCsv({ data }: { data: unknown }): Promise<Array<ImportedPose>> {
+  const { filePath } = csvImportInput.parse(data)
+  return posesFromDazCsv(await readTextFile(filePath))
 }
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
