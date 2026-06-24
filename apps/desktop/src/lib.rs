@@ -1377,6 +1377,71 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     }
 }
 
+// --- "Danger zone": clean up leftover Daz folders after uninstalling Daz -----
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UninstallDefaultsRequest {
+    daz_lib_folder: String,
+}
+
+/// The default leftover-folder list (ported from the dth-cli `uninstall-daz`): the
+/// library root (parent of "My DAZ 3D Library"), the common Documents / Public
+/// library spots, and the APPDATA `DAZ 3D` + Start-Menu folders.
+#[tauri::command]
+fn default_daz_uninstall_folders(request: UninstallDefaultsRequest) -> Vec<String> {
+    let mut folders: Vec<String> = Vec::new();
+    let lib = request.daz_lib_folder.trim();
+    if !lib.is_empty() {
+        if let Some(parent) = Path::new(lib).parent() {
+            folders.push(parent.display().to_string());
+        }
+    }
+    folders.push("D:\\User Data\\Documents\\DAZ 3D".into());
+    folders.push("E:\\User Data\\Documents\\DAZ 3D".into());
+    folders.push("C:\\Users\\Public\\Documents\\My DAZ 3D Library".into());
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        folders.push(format!("{appdata}\\DAZ 3D"));
+        folders.push(format!("{appdata}\\Microsoft\\Windows\\Start Menu\\Programs\\DAZ 3D"));
+    }
+    folders
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UninstallDazRequest {
+    folders: Vec<String>,
+    dry_run: bool,
+}
+
+/// Delete the listed leftover Daz folders (run after removing Daz Studio / DIM via
+/// Add or Remove Programs). Recursive — these are whole folders. Each step reports
+/// deleted / not found / error; `dry_run` only counts what would be removed.
+#[tauri::command]
+fn uninstall_daz(request: UninstallDazRequest) -> InstallReport {
+    let dry = request.dry_run;
+    let mut steps: Vec<InstallStep> = Vec::new();
+    for folder in &request.folders {
+        let trimmed = folder.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let p = Path::new(trimmed);
+        if !p.exists() {
+            steps.push(step_skip(trimmed, "not found".into()));
+        } else if dry {
+            steps.push(step_ok(trimmed, count_files(p), "would delete".into()));
+        } else {
+            match fs::remove_dir_all(p) {
+                Ok(_) => steps.push(step_ok(trimmed, 0, "deleted".into())),
+                Err(e) => steps.push(step_err(trimmed, io_detail("delete", &e))),
+            }
+        }
+    }
+    let total_files = steps.iter().map(|s| s.files).sum();
+    InstallReport { dry_run: dry, steps, total_files }
+}
+
 /// Merge-only install (adds new files, never overwrites) for custom morphs / presets.
 #[tauri::command]
 fn install_daz_merge(request: MergeInstallRequest) -> InstallReport {
@@ -1731,6 +1796,8 @@ pub fn run() {
             install_daz_assets,
             list_daz_assets,
             dedup_daz_assets,
+            default_daz_uninstall_folders,
+            uninstall_daz,
             install_daz_merge,
             install_houdini_presets,
             unc_for_path,

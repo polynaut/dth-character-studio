@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Trash2,
   X,
 } from 'lucide-react'
 
@@ -30,6 +31,7 @@ import {
 } from '#/components/ui/select.tsx'
 import {
   dedupDazAssets,
+  defaultDazUninstallFolders,
   ensureNetworkDrives,
   fetchAppDataFolder,
   fetchKnownDrives,
@@ -49,6 +51,7 @@ import {
   rescanPoseAssets,
   saveSettings,
   uncForPath,
+  uninstallDaz,
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
@@ -785,6 +788,10 @@ function SettingsPage() {
   const [presetsReport, setPresetsReport] = useState<InstallReport | null>(null)
   const [houdiniBusy, setHoudiniBusy] = useState(false)
   const [houdiniReport, setHoudiniReport] = useState<InstallReport | null>(null)
+  // "Danger zone" — Daz uninstall cleanup.
+  const [uninstallBusy, setUninstallBusy] = useState(false)
+  const [uninstallReport, setUninstallReport] = useState<InstallReport | null>(null)
+  const [uninstallConfirm, setUninstallConfirm] = useState(false)
   // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
   // checked / no install folder; '' = folder set but plugin not installed there.
   const [installedExporter, setInstalledExporter] = useState<string | null>(null)
@@ -908,7 +915,8 @@ function SettingsPage() {
     settings.dazPresetsDest !== initial.dazPresetsDest ||
     settings.houdiniPresetsSource !== initial.houdiniPresetsSource ||
     settings.dedupQuarantineFolder !== initial.dedupQuarantineFolder ||
-    JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders)
+    JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders) ||
+    JSON.stringify(settings.dazUninstallFolders) !== JSON.stringify(initial.dazUninstallFolders)
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
@@ -1027,6 +1035,67 @@ function SettingsPage() {
     const picked = await pickFolder('Daz assets folder')
     if (picked) updateAssetFolder(i, picked)
   }
+
+  // --- "Danger zone": Daz uninstall cleanup folder list ---
+  function setUninstallFolders(folders: Array<string>) {
+    setSettings((s) => ({ ...s, dazUninstallFolders: folders }))
+    setUninstallReport(null)
+    setUninstallConfirm(false)
+  }
+  function updateUninstallFolder(i: number, value: string) {
+    setUninstallFolders(settings.dazUninstallFolders.map((f, j) => (j === i ? value : f)))
+  }
+  function addUninstallFolder() {
+    setUninstallFolders([...settings.dazUninstallFolders, ''])
+  }
+  function removeUninstallFolder(i: number) {
+    setUninstallFolders(settings.dazUninstallFolders.filter((_, j) => j !== i))
+  }
+  async function browseUninstallFolder(i: number) {
+    const picked = await pickFolder('Folder to delete on uninstall')
+    if (picked) updateUninstallFolder(i, picked)
+  }
+  async function loadUninstallDefaults() {
+    try {
+      setUninstallFolders(await defaultDazUninstallFolders())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+  // Pre-fill the list from the cli defaults the first time it's empty.
+  useEffect(() => {
+    if (settings.dazUninstallFolders.length === 0) {
+      void defaultDazUninstallFolders()
+        .then((d) =>
+          setSettings((s) => (s.dazUninstallFolders.length === 0 ? { ...s, dazUninstallFolders: d } : s)),
+        )
+        .catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Dry run (preview) or real delete. The real delete needs the inline confirm.
+  async function runUninstall(dryRun: boolean) {
+    setUninstallBusy(true)
+    setUninstallReport(null)
+    try {
+      if (dirty) {
+        await saveSettings({ data: settings })
+        await router.invalidate()
+      }
+      const report = await uninstallDaz({ data: { dryRun } })
+      setUninstallReport(report)
+      setUninstallConfirm(false)
+      const errs = report.steps.filter((s) => s.status === 'error').length
+      if (dryRun) toast.success(`Dry run — ${report.totalFiles} file(s) in the folders that exist`)
+      else if (errs) toast.warning(`Deleted with ${errs} error(s) — see the report`)
+      else toast.success('Daz folders cleaned up')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUninstallBusy(false)
+    }
+  }
+
   /** Read-only scan — no dryRun arg, so it can't go through runInstall. */
   async function runScan() {
     setAssetsBusy(true)
@@ -1741,6 +1810,105 @@ function SettingsPage() {
             </div>
             {houdiniReport && (
               <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
+            )}
+          </section>
+
+          <section className="space-y-4 rounded-lg border border-destructive/40 bg-card p-5">
+            <div>
+              <h2 className="flex w-fit items-center gap-1 font-semibold text-destructive">
+                Danger zone
+                <InfoPopup label="Danger zone — more information">
+                  After uninstalling Daz Studio and DAZ Install Manager through Windows “Add or remove
+                  programs”, these leftover folders usually remain. This button{' '}
+                  <strong>permanently deletes</strong> each folder below and everything inside it
+                  (recursively). The list is pre-filled with the dth-cli defaults — the library root
+                  (parent of “My DAZ 3D Library”), the Documents/Public library spots, and the APPDATA
+                  DAZ 3D + Start-Menu folders — and you can edit it. Always Dry run first.
+                </InfoPopup>
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Clean up leftover Daz folders after removing Daz via Windows “Add or remove programs”.{' '}
+                <strong className="text-destructive">
+                  Each folder below is permanently deleted with everything in it.
+                </strong>{' '}
+                Dry run first.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {settings.dazUninstallFolders.length === 0 && (
+                <p className="text-sm text-muted-foreground">No folders.</p>
+              )}
+              {settings.dazUninstallFolders.map((folder, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    value={displayPath(folder)}
+                    placeholder="D:\…\DAZ 3D"
+                    onChange={(e) => updateUninstallFolder(i, e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => void browseUninstallFolder(i)}
+                  >
+                    <FolderOpen /> Browse
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    title="Remove folder"
+                    onClick={() => removeUninstallFolder(i)}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={addUninstallFolder}>
+                  <Plus /> Add folder
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => void loadUninstallDefaults()}>
+                  Reset to defaults
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => void runUninstall(true)} disabled={uninstallBusy}>
+                {uninstallBusy ? 'Working…' : 'Dry run'}
+              </Button>
+              {uninstallConfirm ? (
+                <>
+                  <span className="text-sm font-medium text-destructive">
+                    Permanently delete {settings.dazUninstallFolders.filter((f) => f.trim()).length}{' '}
+                    folder(s) and all their contents?
+                  </span>
+                  <Button
+                    variant="destructive"
+                    onClick={() => void runUninstall(false)}
+                    disabled={uninstallBusy}
+                  >
+                    Yes, delete
+                  </Button>
+                  <Button variant="outline" onClick={() => setUninstallConfirm(false)} disabled={uninstallBusy}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="destructive"
+                  onClick={() => setUninstallConfirm(true)}
+                  disabled={
+                    uninstallBusy || settings.dazUninstallFolders.filter((f) => f.trim()).length === 0
+                  }
+                >
+                  <Trash2 /> Uninstall Daz
+                </Button>
+              )}
+            </div>
+            {uninstallReport && (
+              <InstallReportList report={uninstallReport} onClose={() => setUninstallReport(null)} />
             )}
           </section>
         </TabsContent>

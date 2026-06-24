@@ -798,6 +798,7 @@ const settingsInput = z.object({
   houdiniPresetsSource: z.string().default(''),
   acceptedConflicts: z.array(z.string()).default([]),
   dedupQuarantineFolder: z.string().default(''),
+  dazUninstallFolders: z.array(z.string()).default([]),
 })
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
@@ -987,6 +988,25 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
       quarantine: s.dedupQuarantineFolder.trim(),
     },
   })
+}
+
+/** The default leftover-Daz-folder list (dth-cli `uninstall-daz` defaults: the
+ *  library root, common Documents/Public spots, APPDATA DAZ 3D + Start Menu). */
+export async function defaultDazUninstallFolders(): Promise<Array<string>> {
+  const s = await storage.getSettings()
+  return invoke<Array<string>>('default_daz_uninstall_folders', {
+    request: { dazLibFolder: s.dazLibraryFolder.trim() },
+  })
+}
+
+/** DANGER: recursively delete the configured leftover Daz folders (run after
+ *  removing Daz Studio / DIM via Add or Remove Programs). `dryRun` only previews. */
+export async function uninstallDaz({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const s = await storage.getSettings()
+  const folders = s.dazUninstallFolders.map((f) => f.trim()).filter(Boolean)
+  if (!folders.length) throw new Error('No folders to clean up')
+  return invoke<InstallReport>('uninstall_daz', { request: { folders, dryRun: dryRun ?? false } })
 }
 
 /** Merge-only install (adds new files, never overwrites) used for custom morphs

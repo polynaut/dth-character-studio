@@ -732,6 +732,9 @@ export interface StudioSettings {
   /** Where the dedup moves redundant duplicate copies. Required to run Apply —
    *  nothing is quarantined until this is set. */
   dedupQuarantineFolder: string
+  /** "Danger zone" — folders the Daz uninstall cleanup deletes (pre-filled from
+   *  the dth-cli defaults, then user-editable). */
+  dazUninstallFolders: Array<string>
 }
 
 async function isDir(path: string): Promise<boolean> {
@@ -763,6 +766,7 @@ function defaultSettings(): StudioSettings {
     houdiniPresetsSource: '',
     acceptedConflicts: [],
     dedupQuarantineFolder: '',
+    dazUninstallFolders: [],
   }
 }
 
@@ -829,6 +833,9 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.dedupQuarantineFolder === 'string'
           ? raw.dedupQuarantineFolder
           : defaults.dedupQuarantineFolder,
+      dazUninstallFolders: Array.isArray(raw.dazUninstallFolders)
+        ? raw.dazUninstallFolders.filter((f: unknown): f is string => typeof f === 'string')
+        : defaults.dazUninstallFolders,
     }
   } catch {
     return defaults
