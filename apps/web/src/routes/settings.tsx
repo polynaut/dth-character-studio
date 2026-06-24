@@ -526,16 +526,22 @@ function DedupReportList({ report }: { report: DedupReport }) {
 
       {report.duplicates.length > 0 && (
         <div>
-          <p className="mb-1 font-medium">Duplicate assets ({report.duplicates.length})</p>
+          <p className="mb-1 font-medium">Duplicate &amp; version assets ({report.duplicates.length})</p>
           <ul className="space-y-1">
             {report.duplicates.map((d) => (
               <li key={d.keeper} className="flex items-start gap-2">
                 <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <span>
+                  {d.kind === 'version' && (
+                    <span className="mr-1 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500">
+                      version
+                    </span>
+                  )}
                   keep <span className="font-medium">{d.keeper}</span>
                   <span className="text-muted-foreground">
                     {' '}· {report.dryRun ? 'quarantine' : d.fixed ? 'quarantined' : 'failed'}{' '}
                     {d.redundant.join(', ')} · {d.fileCount} files
+                    {d.kind === 'version' && ' · same product, different version'}
                   </span>
                 </span>
               </li>

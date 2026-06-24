@@ -922,11 +922,13 @@ export interface FileConflict {
   blockedByZip: boolean
   fixed: boolean
 }
-/** A set of assets with identical destination files (a whole-asset duplicate). */
+/** A set of assets that are the same content — identical ('exact') or the same
+ *  product at a different version ('version', e.g. a …UD vs …UPDATE). */
 export interface AssetDup {
   keeper: string
   redundant: Array<string>
   fileCount: number
+  kind: 'exact' | 'version'
   fixed: boolean
 }
 /** Result of the dedup scan/apply (mirrors Rust `DedupReport`). */

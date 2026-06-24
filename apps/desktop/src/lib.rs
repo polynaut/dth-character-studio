@@ -880,8 +880,25 @@ struct AssetDup {
     keeper: String,
     redundant: Vec<String>,
     file_count: u64,
+    /// "exact" (identical files) or "version" (same product, different version —
+    /// high file overlap with differing sizes, e.g. a `…UD` vs `…UPDATE`).
+    kind: String,
     /// Set after apply: the redundant copies were quarantined.
     fixed: bool,
+}
+
+fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
+    while parent[x] != x {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    x
+}
+fn uf_union(parent: &mut [usize], a: usize, b: usize) {
+    let (ra, rb) = (uf_find(parent, a), uf_find(parent, b));
+    if ra != rb {
+        parent[ra] = rb;
+    }
 }
 
 #[derive(Serialize)]
@@ -1058,17 +1075,94 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         assets.append(&mut found);
     }
 
-    // --- conflicting shared files: same dest path, different sizes across assets ---
+    let n = assets.len();
+    let filecount: Vec<usize> = assets.iter().map(|a| a.files.len()).collect();
+    let totalbytes: Vec<u64> = assets.iter().map(|a| a.files.iter().map(|(_, s)| *s).sum()).collect();
+
+    // path → which assets ship it.
     let mut byrel: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, af) in assets.iter().enumerate() {
         for (rel, _sz) in &af.files {
             byrel.entry(rel.clone()).or_default().push(i);
         }
     }
+    // Fingerprint each asset by its path set (exact-duplicate detection).
+    let mut fp_of: Vec<u64> = vec![0; n];
+    for (i, af) in assets.iter().enumerate() {
+        let mut fp = 0u64;
+        for (rel, _s) in &af.files {
+            fp_add(&mut fp, rel);
+        }
+        fp_of[i] = fp;
+    }
+
+    // Group assets that are the same content: exact (identical path set) OR a
+    // near-duplicate version pair (they share ≥60% of *each other's* files — same
+    // product, different version — e.g. a "…UD" and a "…UPDATE"). This collapses
+    // a version pair's 80+ differing files into one asset-level decision instead
+    // of one conflict row each.
+    let mut parent: Vec<usize> = (0..n).collect();
+    let mut first_fp: HashMap<u64, usize> = HashMap::new();
+    for i in 0..n {
+        if assets[i].files.is_empty() {
+            continue;
+        }
+        match first_fp.get(&fp_of[i]) {
+            Some(&j) => uf_union(&mut parent, i, j),
+            None => {
+                first_fp.insert(fp_of[i], i);
+            }
+        }
+    }
+    let mut shared_pairs: HashMap<(usize, usize), u32> = HashMap::new();
+    for idxs in byrel.values() {
+        // Files in a great many assets are common base files, not pairing signal.
+        if idxs.len() < 2 || idxs.len() > 10 {
+            continue;
+        }
+        for a in 0..idxs.len() {
+            for b in (a + 1)..idxs.len() {
+                let key = (idxs[a].min(idxs[b]), idxs[a].max(idxs[b]));
+                *shared_pairs.entry(key).or_default() += 1;
+            }
+        }
+    }
+    for (&(i, j), &c) in &shared_pairs {
+        let ri = c as f64 / filecount[i].max(1) as f64;
+        let rj = c as f64 / filecount[j].max(1) as f64;
+        if c >= 4 && ri >= 0.6 && rj >= 0.6 {
+            uf_union(&mut parent, i, j);
+        }
+    }
+    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
+    for i in 0..n {
+        if !assets[i].files.is_empty() {
+            let r = uf_find(&mut parent, i);
+            groups.entry(r).or_default().push(i);
+        }
+    }
+    // asset → its group root, only for assets in a 2+ group.
+    let mut group_of: Vec<Option<usize>> = vec![None; n];
+    for members in groups.values() {
+        if members.len() >= 2 {
+            let root = members[0];
+            for &m in members {
+                group_of[m] = Some(uf_find(&mut parent, root));
+            }
+        }
+    }
+
+    // --- conflicting shared files: same dest path, different sizes across assets.
+    // Files entirely inside one duplicate/version group are skipped — the
+    // asset-level quarantine below covers them.
     let mut conflicts: Vec<FileConflict> = Vec::new();
     let mut files_changed = 0u64;
     for (rel, idxs) in &byrel {
         if idxs.len() < 2 {
+            continue;
+        }
+        let g0 = group_of[idxs[0]];
+        if g0.is_some() && idxs.iter().all(|&i| group_of[i] == g0) {
             continue;
         }
         let sized: Vec<(usize, u64)> = idxs
@@ -1122,30 +1216,26 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     }
     conflicts.sort_by(|a, b| a.rel.cmp(&b.rel));
 
-    // --- duplicate assets: identical destination file set (same fingerprint) ---
-    let mut byfp: HashMap<u64, Vec<usize>> = HashMap::new();
-    for (i, af) in assets.iter().enumerate() {
-        if af.files.is_empty() {
-            continue;
-        }
-        let mut fp = 0u64;
-        for (rel, _s) in &af.files {
-            fp_add(&mut fp, rel);
-        }
-        byfp.entry(fp).or_default().push(i);
-    }
+    // --- duplicate / version asset groups: keep one, quarantine the rest ---
     let mut duplicates: Vec<AssetDup> = Vec::new();
     let mut assets_quarantined = 0u64;
-    for idxs in byfp.values() {
-        if idxs.len() < 2 {
+    for members in groups.values() {
+        if members.len() < 2 {
             continue;
         }
-        // keeper: prefer a folder over a zip, then the shortest label.
-        let keeper = *idxs
+        // keeper: largest total bytes (newest version), then a folder over a zip,
+        // then the shortest label.
+        let keeper = *members
             .iter()
-            .min_by_key(|&&i| (assets[i].is_zip, assets[i].label.len()))
+            .max_by(|&&a, &&b| {
+                totalbytes[a]
+                    .cmp(&totalbytes[b])
+                    .then((!assets[a].is_zip).cmp(&!assets[b].is_zip))
+                    .then(assets[b].label.len().cmp(&assets[a].label.len()))
+            })
             .unwrap();
-        let redundant: Vec<usize> = idxs.iter().cloned().filter(|&i| i != keeper).collect();
+        let redundant: Vec<usize> = members.iter().cloned().filter(|&i| i != keeper).collect();
+        let exact = members.iter().all(|&m| fp_of[m] == fp_of[keeper]);
         let mut fixed = false;
         if !dry {
             let qdir = backup_root.join("quarantine");
@@ -1161,7 +1251,8 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         duplicates.push(AssetDup {
             keeper: assets[keeper].label.clone(),
             redundant: redundant.iter().map(|&i| assets[i].label.clone()).collect(),
-            file_count: assets[keeper].files.len() as u64,
+            file_count: filecount[keeper] as u64,
+            kind: if exact { "exact".into() } else { "version".into() },
             fixed,
         });
     }
