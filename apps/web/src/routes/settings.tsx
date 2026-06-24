@@ -646,27 +646,29 @@ function DedupReportList({
               for (const c of g.items) for (const cp of c.copies) sourceOf.set(cp.label, cp.source)
               return (
                 <li key={g.labels.join('|')} className="rounded-md border bg-background/40 p-2">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-medium break-all">
-                      {g.labels.map((l, idx) => (
-                        <span key={l}>
-                          {idx > 0 && <span className="text-muted-foreground"> ↔ </span>}
-                          {l}
-                          <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">
-                            {sourceOf.get(l)}
+                  <div className="flex items-end gap-2">
+                    <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-medium break-all">
+                        {g.labels.map((l, idx) => (
+                          <span key={l}>
+                            {idx > 0 && <span className="text-muted-foreground"> ↔ </span>}
+                            {l}
+                            <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">
+                              {sourceOf.get(l)}
+                            </span>
                           </span>
-                        </span>
-                      ))}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
-                      {anyZip ? ' · ⚠ involves a .zip' : ''}
-                    </span>
+                        ))}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
+                        {anyZip ? ' · ⚠ involves a .zip' : ''}
+                      </span>
+                    </div>
                     {report.dryRun && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="ml-auto h-7"
+                        className="h-7 shrink-0"
                         disabled={busy}
                         onClick={() => onAccept(rels)}
                         title="Mark these as legitimately shared — they stop showing as conflicts and as 'to copy'"
