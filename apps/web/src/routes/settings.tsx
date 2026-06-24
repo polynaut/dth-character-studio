@@ -48,7 +48,6 @@ import {
   refreshAllAssets,
   rescanPoseAssets,
   saveSettings,
-  setAcceptedConflicts,
   uncForPath,
 } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
@@ -58,6 +57,7 @@ import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 
 import type {
+  ConflictCopy,
   DedupReport,
   DthExporterReleaseInfo,
   DthReleaseInfo,
@@ -517,30 +517,38 @@ function InstallReportList({ report }: { report: InstallReport }) {
   )
 }
 
-/** Result of the dedup scan/apply: conflicting shared files + duplicate assets.
- *  Conflicts are grouped by the set of products that share them, each with an
- *  "Accept" that marks those files as legitimately shared (hidden from then on). */
+/** Parse the Genesis number from a source folder name ("_genesis 9" → 9) — mirrors
+ *  the Rust `genesis_rank` so the UI can show which copy the install picks. */
+function genesisRank(source: string): number {
+  const nums = source.match(/\d+/g)
+  return nums ? Number(nums[nums.length - 1]) : 0
+}
+/** The copy the install keeps for a shared file: newer Genesis, then bigger. */
+function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
+  return copies.reduce((best, cp) => {
+    const better =
+      genesisRank(cp.source) > genesisRank(best.source) ||
+      (genesisRank(cp.source) === genesisRank(best.source) && cp.size > best.size)
+    return better ? cp : best
+  })
+}
+
+/** Result of the dedup scan/apply: shared files + duplicate assets. Shared files
+ *  are read-only here — the install auto-resolves them (newer genesis, then bigger);
+ *  duplicate/version groups are the only thing Apply acts on (quarantine). */
 function DedupReportList({
   report,
-  acceptedCount,
-  busy,
   keeperOverrides,
   onChooseKeeper,
-  onAccept,
-  onReset,
 }: {
   report: DedupReport
-  acceptedCount: number
-  busy: boolean
   keeperOverrides: Set<string>
   onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
-  onAccept: (rels: Array<string>) => void
-  onReset: () => void
 }) {
   const clean = report.conflicts.length === 0 && report.duplicates.length === 0
 
-  // Collapse conflicts shipped by the same set of products into one group — e.g.
-  // 8 shared Headlights textures become a single "A ↔ B" row with one Accept.
+  // Collapse shared files by the set of products that ship them — e.g. 8 shared
+  // Headlights textures become one "A ↔ B" group.
   const byProducts = new Map<string, { labels: Array<string>; items: Array<FileConflict> }>()
   for (const c of report.conflicts) {
     const labels = c.copies.map((cp) => cp.label).sort()
@@ -553,12 +561,7 @@ function DedupReportList({
 
   return (
     <div className="space-y-4 border-t pt-3 text-sm">
-      {clean && (
-        <p className="text-muted-foreground">
-          No duplicate assets or file conflicts found
-          {acceptedCount > 0 ? ` (${acceptedCount} accepted as shared).` : '.'}
-        </p>
-      )}
+      {clean && <p className="text-muted-foreground">No duplicate assets or shared files found.</p>}
 
       {report.duplicates.length > 0 && (
         <div>
@@ -634,13 +637,18 @@ function DedupReportList({
 
       {groups.length > 0 && (
         <div>
-          <p className="mb-1 font-medium">
-            Conflicting shared files ({report.conflicts.length} across {groups.length} product group
+          <p className="mb-1 flex w-fit items-center gap-1 font-medium">
+            Shared files ({report.conflicts.length} across {groups.length} product group
             {groups.length === 1 ? '' : 's'})
+            <InfoPopup label="Shared files — more information">
+              Files shipped by two different products at different sizes. The install resolves these
+              automatically — <strong>newer Genesis wins</strong>, then the <strong>bigger</strong>{' '}
+              file — installs the winner and leaves the rest, so they never show as “to copy”.
+              Nothing to do here; this just shows what gets picked (<span className="text-emerald-600 dark:text-emerald-500">◀ keeps</span>).
+            </InfoPopup>
           </p>
           <ul className="space-y-2">
             {groups.map((g) => {
-              const rels = g.items.map((i) => i.rel)
               const sourceOf = new Map<string, string>()
               for (const c of g.items) for (const cp of c.copies) sourceOf.set(cp.label, cp.source)
               return (
@@ -661,57 +669,40 @@ function DedupReportList({
                       {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
                     </span>
                   </div>
-                  <div className="mt-1 flex items-start justify-between gap-2">
-                    <details className="min-w-0">
-                      <summary className="cursor-pointer text-xs text-muted-foreground select-none">
-                        Show files
-                      </summary>
-                      <ul className="mt-1 space-y-0.5">
-                        {g.items.map((c) => (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+                      Show files
+                    </summary>
+                    <ul className="mt-1 space-y-0.5">
+                      {g.items.map((c) => {
+                        const winner = conflictWinner(c.copies)
+                        return (
                           <li key={c.rel} className="font-mono text-xs break-all">
                             {c.rel}
                             <span className="font-sans text-muted-foreground">
                               {' '}—{' '}
-                              {c.copies
-                                .map((cp) => `${cp.size}B${cp.inZip ? ' (zip)' : ''}`)
-                                .join(' vs ')}
+                              {c.copies.map((cp, k) => (
+                                <span key={cp.label}>
+                                  {k > 0 && ' vs '}
+                                  {cp.size}B{cp.inZip ? ' (zip)' : ''}
+                                  {cp === winner && (
+                                    <span className="text-emerald-600 dark:text-emerald-500">
+                                      {' '}◀ keeps
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
                             </span>
                           </li>
-                        ))}
-                      </ul>
-                    </details>
-                    {report.dryRun && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 shrink-0"
-                        disabled={busy}
-                        onClick={() => onAccept(rels)}
-                        title="Mark these as legitimately shared — they stop showing as conflicts and as 'to copy'"
-                      >
-                        Accept (leave as-is)
-                      </Button>
-                    )}
-                  </div>
+                        )
+                      })}
+                    </ul>
+                  </details>
                 </li>
               )
             })}
           </ul>
         </div>
-      )}
-
-      {acceptedCount > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {acceptedCount} file{acceptedCount === 1 ? '' : 's'} accepted as shared (hidden).{' '}
-          <button
-            type="button"
-            className="underline hover:text-foreground disabled:opacity-50"
-            disabled={busy}
-            onClick={onReset}
-          >
-            Reset accepted
-          </button>
-        </p>
       )}
 
       {!report.dryRun && (
@@ -1073,21 +1064,6 @@ function SettingsPage() {
       next.add(keep)
       return next
     })
-  }
-
-  // Accept (or, with clear, un-accept) shared files as legitimate, then re-scan so
-  // they drop out of the conflict list. Accepted files are also skipped by the
-  // asset scan/install, so they stop showing as "to copy".
-  async function acceptRels(rels: Array<string>, clear = false) {
-    if (rels.length === 0) return
-    try {
-      const updated = await setAcceptedConflicts(rels, clear)
-      setSettings((s) => ({ ...s, acceptedConflicts: updated }))
-      toast.success(clear ? 'Reset accepted files' : `Accepted ${rels.length} shared file(s)`)
-      await runDedup(true)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
   }
 
   // After a dry-run/scan, "Install" reuses its verdict: only the assets it flagged
@@ -1573,12 +1549,8 @@ function SettingsPage() {
             {dedupReport && (
               <DedupReportList
                 report={dedupReport}
-                acceptedCount={settings.acceptedConflicts.length}
-                busy={dedupBusy}
                 keeperOverrides={keeperOverrides}
                 onChooseKeeper={chooseKeeper}
-                onAccept={(rels) => void acceptRels(rels)}
-                onReset={() => void acceptRels(settings.acceptedConflicts, true)}
               />
             )}
           </section>
