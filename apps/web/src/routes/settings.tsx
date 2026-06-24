@@ -439,10 +439,29 @@ function RefreshAssetsSection() {
   )
 }
 
-/** Per-step result list shared by both install panes. */
-function InstallReportList({ report }: { report: InstallReport }) {
+/** A dismiss "×" at the top-right of a report block. */
+function ReportClose({ onClose }: { onClose?: () => void }) {
+  if (!onClose) return null
   return (
-    <ul className="space-y-1 border-t pt-3 text-sm">
+    <div className="mb-1 flex justify-end">
+      <button
+        type="button"
+        onClick={onClose}
+        title="Hide"
+        className="text-muted-foreground hover:text-foreground"
+      >
+        <X className="size-4" />
+      </button>
+    </div>
+  )
+}
+
+/** Per-step result list shared by both install panes. */
+function InstallReportList({ report, onClose }: { report: InstallReport; onClose?: () => void }) {
+  return (
+    <div className="border-t pt-2">
+      <ReportClose onClose={onClose} />
+      <ul className="space-y-1 text-sm">
       {report.steps.map((step, i) => {
         if (step.status === 'header') {
           return (
@@ -513,7 +532,8 @@ function InstallReportList({ report }: { report: InstallReport }) {
           </li>
         )
       })}
-    </ul>
+      </ul>
+    </div>
   )
 }
 
@@ -540,10 +560,12 @@ function DedupReportList({
   report,
   keeperOverrides,
   onChooseKeeper,
+  onClose,
 }: {
   report: DedupReport
   keeperOverrides: Set<string>
   onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
+  onClose?: () => void
 }) {
   const clean = report.conflicts.length === 0 && report.duplicates.length === 0
 
@@ -560,7 +582,8 @@ function DedupReportList({
   const groups = [...byProducts.values()].sort((a, b) => b.items.length - a.items.length)
 
   return (
-    <div className="space-y-4 border-t pt-3 text-sm">
+    <div className="space-y-4 border-t pt-2 text-sm">
+      <ReportClose onClose={onClose} />
       {clean && <p className="text-muted-foreground">No duplicate assets or shared files found.</p>}
 
       {report.duplicates.length > 0 && (
@@ -1292,7 +1315,9 @@ function SettingsPage() {
               </Button>
             </div>
 
-            {releaseReport && <InstallReportList report={releaseReport} />}
+            {releaseReport && (
+              <InstallReportList report={releaseReport} onClose={() => setReleaseReport(null)} />
+            )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -1413,7 +1438,9 @@ function SettingsPage() {
               </Button>
             </div>
 
-            {pluginReport && <InstallReportList report={pluginReport} />}
+            {pluginReport && (
+              <InstallReportList report={pluginReport} onClose={() => setPluginReport(null)} />
+            )}
 
             {pluginReport?.steps.some((step) => step.status === 'error') && (
               <p className="text-sm text-destructive">
@@ -1514,7 +1541,9 @@ function SettingsPage() {
                 {changedAssets.length ? `Install ${changedAssets.length} changed` : 'Install assets'}
               </Button>
             </div>
-            {assetsReport && <InstallReportList report={assetsReport} />}
+            {assetsReport && (
+              <InstallReportList report={assetsReport} onClose={() => setAssetsReport(null)} />
+            )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -1583,6 +1612,7 @@ function SettingsPage() {
                 report={dedupReport}
                 keeperOverrides={keeperOverrides}
                 onChooseKeeper={chooseKeeper}
+                onClose={() => setDedupReport(null)}
               />
             )}
           </section>
@@ -1628,7 +1658,9 @@ function SettingsPage() {
                 <Download /> Install morphs
               </Button>
             </div>
-            {morphsReport && <InstallReportList report={morphsReport} />}
+            {morphsReport && (
+              <InstallReportList report={morphsReport} onClose={() => setMorphsReport(null)} />
+            )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -1671,7 +1703,9 @@ function SettingsPage() {
                 <Download /> Install presets
               </Button>
             </div>
-            {presetsReport && <InstallReportList report={presetsReport} />}
+            {presetsReport && (
+              <InstallReportList report={presetsReport} onClose={() => setPresetsReport(null)} />
+            )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -1705,7 +1739,9 @@ function SettingsPage() {
                 <Download /> Install Houdini presets
               </Button>
             </div>
-            {houdiniReport && <InstallReportList report={houdiniReport} />}
+            {houdiniReport && (
+              <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
+            )}
           </section>
         </TabsContent>
       </Tabs>
