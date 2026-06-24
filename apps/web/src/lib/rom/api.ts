@@ -934,15 +934,12 @@ export interface ConflictCopy {
   source: string
   size: number
   inZip: boolean
-  isWinner: boolean
 }
-/** A file shipped by 2+ assets at different sizes — the install ping-pong cause. */
+/** A file shipped by 2+ different products at different sizes. Informational —
+ *  resolved by Accept (never rewritten). */
 export interface FileConflict {
   rel: string
   copies: Array<ConflictCopy>
-  /** A non-winning copy is inside a .zip and can't be rewritten in place. */
-  blockedByZip: boolean
-  fixed: boolean
 }
 /** One copy in a duplicate group. */
 export interface DupMember {
@@ -966,7 +963,6 @@ export interface DedupReport {
   dryRun: boolean
   conflicts: Array<FileConflict>
   duplicates: Array<AssetDup>
-  filesChanged: number
   assetsQuarantined: number
   backupDir: string
 }

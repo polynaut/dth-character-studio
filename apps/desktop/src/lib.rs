@@ -903,7 +903,6 @@ struct ConflictCopy {
     source: String,
     size: u64,
     in_zip: bool,
-    is_winner: bool,
 }
 
 #[derive(Serialize)]
@@ -911,10 +910,6 @@ struct ConflictCopy {
 struct FileConflict {
     rel: String,
     copies: Vec<ConflictCopy>,
-    /// A non-winning copy sits inside a .zip and can't be rewritten in place.
-    blocked_by_zip: bool,
-    /// Set after apply: this conflict's losers were rewritten to the winner.
-    fixed: bool,
 }
 
 #[derive(Serialize)]
@@ -961,12 +956,11 @@ struct DedupReport {
     dry_run: bool,
     conflicts: Vec<FileConflict>,
     duplicates: Vec<AssetDup>,
-    files_changed: u64,
     assets_quarantined: u64,
     backup_dir: String,
 }
 
-/// One asset's content files, plus what's needed to rewrite/quarantine it.
+/// One asset's content files, plus what's needed to quarantine it.
 struct AssetFiles {
     label: String,
     /// The source folder this asset lives in (e.g. "_genesis 9"). Set by the caller.
@@ -974,10 +968,6 @@ struct AssetFiles {
     is_zip: bool,
     /// The top-level entry (folder or `.zip`) — moved on quarantine.
     asset_path: PathBuf,
-    /// Content root (folder) or the zip path — base for reading a file's bytes.
-    source: PathBuf,
-    /// Content prefix inside the zip ("" for folders / root-level zips).
-    zip_prefix: String,
     files: Vec<(String, u64)>,
 }
 
@@ -1037,8 +1027,6 @@ fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
             source_root: String::new(),
             is_zip: true,
             asset_path: asset.to_path_buf(),
-            source: asset.to_path_buf(),
-            zip_prefix: prefix,
             files,
         })
     } else {
@@ -1052,64 +1040,20 @@ fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
             source_root: String::new(),
             is_zip: false,
             asset_path: asset.to_path_buf(),
-            source: content_root,
-            zip_prefix: String::new(),
             files,
         })
     }
 }
 
-/// The winning copy's bytes for a file (read from its folder, or extracted from its zip).
-fn winner_bytes(af: &AssetFiles, rel: &str) -> std::io::Result<Vec<u8>> {
-    if af.is_zip {
-        let file = fs::File::open(&af.source)?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-        // Match by the same sanitized name used to index `files`, so a path the
-        // central directory stores oddly still resolves.
-        let want = format!("{}{}", af.zip_prefix, rel);
-        for i in 0..archive.len() {
-            let mut e = match archive.by_index(i) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            let name = match e.enclosed_name() {
-                Some(p) => p.to_string_lossy().replace('\\', "/"),
-                None => continue,
-            };
-            if name == want {
-                let mut buf = Vec::new();
-                std::io::copy(&mut e, &mut buf)?;
-                return Ok(buf);
-            }
-        }
-        Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("zip entry not found: {want}")))
-    } else {
-        fs::read(join_rel(&af.source, rel))
-    }
-}
-
-/// Back up `file` under the dedup backup tree (keeps the first original). Best-effort.
-fn dedup_backup(root: &Path, label: &str, rel: &str, file: &Path) {
-    let dest = join_rel(&root.join("files").join(label), rel);
-    if dest.exists() || !file.exists() {
-        return;
-    }
-    if let Some(p) = dest.parent() {
-        let _ = fs::create_dir_all(p);
-    }
-    let _ = fs::copy(file, &dest);
-}
-
 /// Find duplicate assets + conflicting shared files across the source folders, and
-/// (unless `dry_run`) resolve them: rewrite every smaller copy of a conflicting file
-/// — and the library copy — to the LARGEST version, and quarantine redundant
-/// duplicate assets. Reversible: originals are backed up under
-/// `<sources' parent>/_dth_dedup_backup`. Copies inside a `.zip` can't be rewritten.
+/// (unless `dry_run`) QUARANTINE the redundant copies of each duplicate/version
+/// group — keeping the chosen/auto keeper, moving the rest under
+/// `<sources' parent>/_dth_dedup_backup/quarantine` (reversible). Shared-file
+/// conflicts are reported only — never rewritten (that would mutate an author's
+/// downloaded asset); they're resolved by Accept.
 #[tauri::command]
 fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let dry = request.dry_run;
-    let dest = Path::new(&request.dest);
     let accepted: HashSet<String> = request.accepted.into_iter().collect();
     let chosen_keepers: HashSet<String> = request.keepers.into_iter().collect();
     let backup_root = request
@@ -1220,7 +1164,6 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     // Files entirely inside one duplicate/version group are skipped — the
     // asset-level quarantine below covers them.
     let mut conflicts: Vec<FileConflict> = Vec::new();
-    let mut files_changed = 0u64;
     for (rel, idxs) in &byrel {
         if idxs.len() < 2 {
             continue;
@@ -1244,8 +1187,11 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         if distinct.len() < 2 {
             continue;
         }
-        let (win_i, win_sz) = *sized.iter().max_by_key(|(_, s)| *s).unwrap();
-        let blocked_by_zip = sized.iter().any(|&(i, _)| i != win_i && assets[i].is_zip);
+        // Conflicts are informational only: shared files between different products
+        // that differ. We NEVER rewrite them — that would mutate an author's
+        // downloaded asset. The only resolution is Accept (leave as-is), which makes
+        // the scan/install treat them as in-sync (whatever's installed wins, exactly
+        // like installing both and overwriting).
         let copies = sized
             .iter()
             .map(|&(i, s)| ConflictCopy {
@@ -1253,35 +1199,9 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                 source: assets[i].source_root.clone(),
                 size: s,
                 in_zip: assets[i].is_zip,
-                is_winner: i == win_i,
             })
             .collect();
-        let mut fixed = false;
-        if !dry {
-            if let Ok(bytes) = winner_bytes(&assets[win_i], rel) {
-                for &(i, s) in &sized {
-                    if i == win_i || s == win_sz || assets[i].is_zip {
-                        continue; // winner, already-matching, or unrewritable zip
-                    }
-                    let target = join_rel(&assets[i].source, rel);
-                    dedup_backup(&backup_root, &assets[i].label, rel, &target);
-                    if fs::write(&target, &bytes).is_ok() {
-                        files_changed += 1;
-                        fixed = true;
-                    }
-                }
-                // bring the installed library copy up to the winner too
-                let lib = join_rel(dest, rel);
-                if lib.exists() && fs::metadata(&lib).map(|m| m.len()).unwrap_or(0) != win_sz {
-                    dedup_backup(&backup_root, "__library__", rel, &lib);
-                    if fs::write(&lib, &bytes).is_ok() {
-                        files_changed += 1;
-                        fixed = true;
-                    }
-                }
-            }
-        }
-        conflicts.push(FileConflict { rel: rel.clone(), copies, blocked_by_zip, fixed });
+        conflicts.push(FileConflict { rel: rel.clone(), copies });
     }
     conflicts.sort_by(|a, b| a.rel.cmp(&b.rel));
 
@@ -1349,7 +1269,6 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         dry_run: dry,
         conflicts,
         duplicates,
-        files_changed,
         assets_quarantined,
         backup_dir: backup_root.display().to_string(),
     }

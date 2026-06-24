@@ -641,7 +641,6 @@ function DedupReportList({
           <ul className="space-y-2">
             {groups.map((g) => {
               const rels = g.items.map((i) => i.rel)
-              const anyZip = g.items.some((i) => i.blockedByZip)
               const sourceOf = new Map<string, string>()
               for (const c of g.items) for (const cp of c.copies) sourceOf.set(cp.label, cp.source)
               return (
@@ -660,7 +659,6 @@ function DedupReportList({
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
-                      {anyZip ? ' · ⚠ involves a .zip' : ''}
                     </span>
                   </div>
                   <div className="mt-1 flex items-start justify-between gap-2">
@@ -675,12 +673,8 @@ function DedupReportList({
                             <span className="font-sans text-muted-foreground">
                               {' '}—{' '}
                               {c.copies
-                                .map(
-                                  (cp) =>
-                                    `${cp.size}B${cp.isWinner ? ' ◀ keep' : ''}${cp.inZip ? ' (zip)' : ''}`,
-                                )
+                                .map((cp) => `${cp.size}B${cp.inZip ? ' (zip)' : ''}`)
                                 .join(' vs ')}
-                              {!report.dryRun && c.fixed && ' · fixed'}
                             </span>
                           </li>
                         ))}
@@ -722,9 +716,9 @@ function DedupReportList({
 
       {!report.dryRun && (
         <p className="text-xs text-muted-foreground">
-          Rewrote {report.filesChanged} file(s), quarantined {report.assetsQuarantined} asset(s).
-          Originals backed up to <PathCode path={displayPath(report.backupDir)} />. Re-scan to
-          confirm, then delete the backup when satisfied.
+          Quarantined {report.assetsQuarantined} asset(s) — moved to{' '}
+          <PathCode path={displayPath(report.backupDir)} />. Your downloaded files were not edited.
+          Re-scan to confirm, then delete that folder when satisfied.
         </p>
       )}
     </div>
@@ -1059,9 +1053,7 @@ function SettingsPage() {
             : `Found ${report.conflicts.length} file conflict(s) and ${report.duplicates.length} duplicate asset(s)`,
         )
       } else {
-        toast.success(
-          `Rewrote ${report.filesChanged} file(s), quarantined ${report.assetsQuarantined} asset(s)`,
-        )
+        toast.success(`Quarantined ${report.assetsQuarantined} duplicate asset(s)`)
         // The asset listing changed — drop the stale scan report.
         setAssetsReport(null)
       }
@@ -1544,13 +1536,15 @@ function SettingsPage() {
               <h2 className="flex w-fit items-center gap-1 font-semibold">
                 Deduplicate
                 <InfoPopup label="Deduplicate — more information">
-                  Finds <strong>duplicate assets</strong> (a folder and its identical .zip) and
-                  <strong> conflicting shared files</strong> — the same file shipped by two assets at
-                  different sizes, which makes both perpetually show “to copy” (e.g. the G8 and G9
-                  versions of a product sharing textures). <strong>Apply</strong> rewrites every
-                  smaller copy — and the installed library copy — to the <strong>largest</strong>{' '}
-                  version, and quarantines redundant duplicate assets. Reversible: originals are
-                  backed up. Copies inside a .zip can't be rewritten — extract them to resolve fully.
+                  Finds <strong>duplicate assets</strong> (a folder and its identical .zip, or the
+                  same product at two versions) and <strong>conflicting shared files</strong> — the
+                  same file shipped by two different products at different sizes (e.g. the G8 and G9
+                  versions of a product sharing textures), which makes both perpetually show “to
+                  copy”. <strong>Apply</strong> only <strong>quarantines</strong> the redundant
+                  duplicate copies (a move — reversible). Shared-file conflicts are{' '}
+                  <strong>never rewritten</strong> — that would edit an author's downloaded asset;
+                  instead you <strong>Accept</strong> them, which tells the scan/install they're
+                  legitimately shared (whatever's installed stays).
                 </InfoPopup>
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -1564,12 +1558,8 @@ function SettingsPage() {
               <Button
                 variant="destructive"
                 onClick={() => void runDedup(false)}
-                disabled={
-                  dedupBusy ||
-                  !dedupReport?.dryRun ||
-                  (dedupReport.conflicts.length === 0 && dedupReport.duplicates.length === 0)
-                }
-                title="Rewrite smaller copies to the largest and quarantine duplicates (reversible)"
+                disabled={dedupBusy || !dedupReport?.dryRun || dedupReport.duplicates.length === 0}
+                title="Move the redundant duplicate copies to the quarantine folder (reversible; files are never edited)"
               >
                 Apply dedup
               </Button>
