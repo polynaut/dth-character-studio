@@ -889,7 +889,6 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
 #[serde(rename_all = "camelCase")]
 struct DedupRequest {
     sources: Vec<String>,
-    dest: String,
     dry_run: bool,
     /// Dest-relative paths the user accepted as legitimately shared — hidden from
     /// the conflict list (and left untouched on apply).
@@ -954,6 +953,27 @@ fn uf_union(parent: &mut [usize], a: usize, b: usize) {
     if ra != rb {
         parent[ra] = rb;
     }
+}
+
+/// Rank a source folder by its Genesis number so newer wins (e.g. "_genesis 9" →
+/// 9, "_genesis 8" → 8). The last run of digits; 0 when none is found.
+fn genesis_rank(source_root: &str) -> u32 {
+    let mut best = 0u32;
+    let mut cur = String::new();
+    for ch in source_root.chars() {
+        if ch.is_ascii_digit() {
+            cur.push(ch);
+        } else {
+            if let Ok(v) = cur.parse() {
+                best = v;
+            }
+            cur.clear();
+        }
+    }
+    if let Ok(v) = cur.parse() {
+        best = v;
+    }
+    best
 }
 
 #[derive(Serialize)]
@@ -1218,13 +1238,14 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         if members.len() < 2 {
             continue;
         }
-        // keeper: the user's explicit choice if any, else auto — largest total
-        // bytes (newest version), then a folder over a zip, then the shortest label.
+        // keeper: the user's explicit choice if any, else auto — newer Genesis
+        // first, then bigger total bytes, then a folder over a zip, then shorter label.
         let auto = *members
             .iter()
             .max_by(|&&a, &&b| {
-                totalbytes[a]
-                    .cmp(&totalbytes[b])
+                genesis_rank(&assets[a].source_root)
+                    .cmp(&genesis_rank(&assets[b].source_root))
+                    .then(totalbytes[a].cmp(&totalbytes[b]))
                     .then((!assets[a].is_zip).cmp(&!assets[b].is_zip))
                     .then(assets[b].label.len().cmp(&assets[a].label.len()))
             })
