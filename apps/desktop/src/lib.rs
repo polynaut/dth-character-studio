@@ -653,6 +653,11 @@ struct DazAssetsRequest {
     /// Re-install assets that already appear installed.
     force: bool,
     dry_run: bool,
+    /// When non-empty, install only the assets whose name is listed — the set a
+    /// prior dry-run/scan flagged as changed — so the many already-installed
+    /// assets aren't walked again. Empty installs every asset (a full pass).
+    #[serde(default)]
+    only: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -687,12 +692,23 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dry = request.dry_run;
     let force = request.force;
     let dest = Path::new(&request.dest);
+    let only = request.only;
     let mut steps: Vec<InstallStep> = Vec::new();
     for source in &request.sources {
-        steps.push(step_header(source));
         match collect_assets(source) {
-            Err(step) => steps.push(step),
-            Ok(assets) => steps.extend(process_assets(&assets, dest, dry, force)),
+            Err(step) => {
+                steps.push(step_header(source));
+                steps.push(step);
+            }
+            Ok(assets) => {
+                let asset_steps = process_assets(&assets, dest, dry, force, &only);
+                // When filtering to a changed-asset set, skip a header whose whole
+                // source contributed nothing (every asset already installed).
+                if !asset_steps.is_empty() {
+                    steps.push(step_header(source));
+                    steps.extend(asset_steps);
+                }
+            }
         }
     }
     let total_files = steps.iter().map(|s| s.files).sum();
@@ -719,8 +735,21 @@ fn collect_assets(source: &str) -> Result<Vec<PathBuf>, InstallStep> {
 /// Process a source folder's assets in parallel — each is independent (I/O-bound
 /// folder walks / zip reads), and `collect` preserves order so they stay sorted
 /// under their header. Loose files are filtered out (process_asset returns None).
-fn process_assets(assets: &[PathBuf], dest: &Path, dry: bool, force: bool) -> Vec<InstallStep> {
-    assets.par_iter().filter_map(|asset| process_asset(asset, dest, dry, force)).collect()
+/// When `only` is non-empty, only assets whose name is listed are processed (the
+/// changed-asset set from a prior dry-run — matched by name; a name shared across
+/// two sources installs in both, which is harmless: the other is already in sync).
+fn process_assets(
+    assets: &[PathBuf],
+    dest: &Path,
+    dry: bool,
+    force: bool,
+    only: &[String],
+) -> Vec<InstallStep> {
+    assets
+        .par_iter()
+        .filter(|asset| only.is_empty() || only.iter().any(|n| *n == folder_name(asset)))
+        .filter_map(|asset| process_asset(asset, dest, dry, force))
+        .collect()
 }
 
 /// Read-only scan: what content each asset holds and whether it's already in the library.
@@ -732,7 +761,7 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
         steps.push(step_header(source));
         match collect_assets(source) {
             Err(step) => steps.push(step),
-            Ok(assets) => steps.extend(process_assets(&assets, dest, true, false)),
+            Ok(assets) => steps.extend(process_assets(&assets, dest, true, false, &[])),
         }
     }
     let total_files = steps.iter().map(|s| s.files).sum();

@@ -774,6 +774,9 @@ function SettingsPage() {
   // --- Optional tab: asset-folder list editor + read-only scan ---
   function setAssetFolders(folders: Array<string>) {
     setSettings((s) => ({ ...s, dazAssetsFolders: folders }))
+    // The scan/dry-run report is keyed to the old folder set — drop it so a stale
+    // verdict can't drive the changed-only install below.
+    setAssetsReport(null)
   }
   function addAssetFolder() {
     setAssetFolders([...settings.dazAssetsFolders, ''])
@@ -806,6 +809,17 @@ function SettingsPage() {
       setAssetsBusy(false)
     }
   }
+
+  // After a dry-run/scan, "Install" reuses its verdict: only the assets it flagged
+  // as changed (status 'ok', with files to copy) are re-processed — the rest were
+  // just confirmed installed, so the big already-installed assets aren't walked
+  // again. A real-install report (dryRun false) doesn't prime this, so a plain
+  // Install with no prior scan still does a full pass. Changed assets are still
+  // re-walked when installed, so what's copied reflects the disk now, not the scan.
+  const changedAssets =
+    assetsReport?.dryRun === true
+      ? assetsReport.steps.filter((s) => s.status === 'ok' && s.files > 0).map((s) => s.label)
+      : []
 
   return (
     <main className="p-8">
@@ -1214,10 +1228,24 @@ function SettingsPage() {
                 Dry run
               </Button>
               <Button
-                onClick={() => runInstall(installDazAssets, false, setAssetsBusy, setAssetsReport)}
+                onClick={() =>
+                  runInstall(
+                    ({ data }) =>
+                      installDazAssets({ data: { ...data, only: changedAssets } }),
+                    false,
+                    setAssetsBusy,
+                    setAssetsReport,
+                  )
+                }
                 disabled={assetsBusy}
+                title={
+                  changedAssets.length
+                    ? 'Installs only the assets the last scan/dry-run flagged as changed'
+                    : undefined
+                }
               >
-                <Download /> Install assets
+                <Download />{' '}
+                {changedAssets.length ? `Install ${changedAssets.length} changed` : 'Install assets'}
               </Button>
             </div>
             {assetsReport && <InstallReportList report={assetsReport} />}

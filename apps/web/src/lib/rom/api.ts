@@ -863,13 +863,19 @@ export async function installDthPlugin({ data }: { data: unknown }): Promise<Ins
 // (and list-daz-assets) commands. Paths come from settings; the copy + scan run
 // in native Rust. `dryRun` previews; assets/list also report what's already there.
 
-const installOptions = z.object({ dryRun: z.boolean().optional(), force: z.boolean().optional() })
+const installOptions = z.object({
+  dryRun: z.boolean().optional(),
+  force: z.boolean().optional(),
+  // The changed-asset names from a prior dry-run/scan — install only those,
+  // skipping a re-walk of every already-installed asset. Empty installs all.
+  only: z.array(z.string()).optional(),
+})
 
 /** Install your own Daz assets (G3/G8/G9, .zip extracted) from the configured
  *  asset folders into "My DAZ 3D Library" — content-folder-aware, overwriting per
  *  asset, skipping ones already installed unless `force`. */
 export async function installDazAssets({ data }: { data: unknown }): Promise<InstallReport> {
-  const { dryRun, force } = installOptions.parse(data ?? {})
+  const { dryRun, force, only } = installOptions.parse(data ?? {})
   const s = await storage.getSettings()
   const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
   const errors: Array<string> = []
@@ -877,7 +883,13 @@ export async function installDazAssets({ data }: { data: unknown }): Promise<Ins
   if (!s.dazLibraryFolder.trim()) errors.push('Set “My DAZ 3D Library”')
   if (errors.length) throw new Error(errors.join('\n'))
   return invoke<InstallReport>('install_daz_assets', {
-    request: { sources, dest: s.dazLibraryFolder.trim(), force: force ?? false, dryRun: dryRun ?? false },
+    request: {
+      sources,
+      dest: s.dazLibraryFolder.trim(),
+      force: force ?? false,
+      dryRun: dryRun ?? false,
+      only: only ?? [],
+    },
   })
 }
 
