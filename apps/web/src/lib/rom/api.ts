@@ -942,12 +942,18 @@ export interface FileConflict {
   blockedByZip: boolean
   fixed: boolean
 }
+/** One copy in a duplicate group. */
+export interface DupMember {
+  label: string
+  fileCount: number
+  isZip: boolean
+  /** The copy kept (others are quarantined) — auto-picked, user-overridable. */
+  isKeeper: boolean
+}
 /** A set of assets that are the same content — identical ('exact') or the same
  *  product at a different version ('version', e.g. a …UD vs …UPDATE). */
 export interface AssetDup {
-  keeper: string
-  redundant: Array<string>
-  fileCount: number
+  members: Array<DupMember>
   kind: 'exact' | 'version'
   fixed: boolean
 }
@@ -965,7 +971,9 @@ export interface DedupReport {
  *  rewrites every smaller copy — and the library copy — to the largest version,
  *  and quarantines redundant duplicate assets. Reversible (originals backed up). */
 export async function dedupDazAssets({ data }: { data: unknown }): Promise<DedupReport> {
-  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const { dryRun, keepers } = z
+    .object({ dryRun: z.boolean().optional(), keepers: z.array(z.string()).optional() })
+    .parse(data ?? {})
   const s = await storage.getSettings()
   const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
   if (!sources.length) throw new Error('Add at least one Daz assets folder')
@@ -975,6 +983,7 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
       dest: s.dazLibraryFolder.trim(),
       dryRun: dryRun ?? false,
       accepted: s.acceptedConflicts,
+      keepers: keepers ?? [],
     },
   })
 }

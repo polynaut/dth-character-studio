@@ -524,12 +524,16 @@ function DedupReportList({
   report,
   acceptedCount,
   busy,
+  keeperOverrides,
+  onChooseKeeper,
   onAccept,
   onReset,
 }: {
   report: DedupReport
   acceptedCount: number
   busy: boolean
+  keeperOverrides: Set<string>
+  onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
   onAccept: (rels: Array<string>) => void
   onReset: () => void
 }) {
@@ -559,25 +563,60 @@ function DedupReportList({
       {report.duplicates.length > 0 && (
         <div>
           <p className="mb-1 font-medium">Duplicate &amp; version assets ({report.duplicates.length})</p>
-          <ul className="space-y-1">
-            {report.duplicates.map((d) => (
-              <li key={d.keeper} className="flex items-start gap-2">
-                <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <span>
-                  {d.kind === 'version' && (
-                    <span className="mr-1 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500">
-                      version
-                    </span>
-                  )}
-                  keep <span className="font-medium">{d.keeper}</span>
-                  <span className="text-muted-foreground">
-                    {' '}· {report.dryRun ? 'quarantine' : d.fixed ? 'quarantined' : 'failed'}{' '}
-                    {d.redundant.join(', ')} · {d.fileCount} files
-                    {d.kind === 'version' && ' · same product, different version'}
-                  </span>
-                </span>
-              </li>
-            ))}
+          <ul className="space-y-2">
+            {report.duplicates.map((d) => {
+              const labels = d.members.map((m) => m.label)
+              const keeperLabel =
+                d.members.find((m) => keeperOverrides.has(m.label))?.label ??
+                d.members.find((m) => m.isKeeper)?.label
+              return (
+                <li key={labels.join('|')} className="rounded-md border bg-background/40 p-2">
+                  <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    {d.kind === 'version' && (
+                      <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500">
+                        version
+                      </span>
+                    )}
+                    {d.kind === 'version' ? 'same product, different version' : 'duplicate'}
+                    {report.dryRun && ' — pick which copy to keep'}
+                  </div>
+                  <ul>
+                    {d.members.map((m) => {
+                      const isKeep = m.label === keeperLabel
+                      return (
+                        <li key={m.label}>
+                          <button
+                            type="button"
+                            disabled={!report.dryRun || isKeep}
+                            onClick={() => onChooseKeeper(labels, m.label)}
+                            className={`flex w-full items-center gap-2 rounded px-1 py-0.5 text-left ${isKeep ? '' : 'hover:bg-muted/60'} disabled:cursor-default`}
+                          >
+                            <span
+                              className={`flex size-3.5 shrink-0 items-center justify-center rounded-full border ${isKeep ? 'border-emerald-500' : 'border-muted-foreground/40'}`}
+                            >
+                              {isKeep && <span className="size-1.5 rounded-full bg-emerald-500" />}
+                            </span>
+                            <span className={`break-all ${isKeep ? 'font-medium' : 'text-muted-foreground'}`}>
+                              {m.label}
+                            </span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              · {m.fileCount} files{m.isZip ? ' · zip' : ''}
+                              {isKeep
+                                ? ' · keep'
+                                : report.dryRun
+                                  ? ' · quarantine'
+                                  : d.fixed
+                                    ? ' · quarantined'
+                                    : ''}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
@@ -705,6 +744,8 @@ function SettingsPage() {
   const [assetsReport, setAssetsReport] = useState<InstallReport | null>(null)
   const [dedupBusy, setDedupBusy] = useState(false)
   const [dedupReport, setDedupReport] = useState<DedupReport | null>(null)
+  // Asset labels the user picked to keep, overriding the auto-pick per dup group.
+  const [keeperOverrides, setKeeperOverrides] = useState<Set<string>>(new Set())
   const [morphsBusy, setMorphsBusy] = useState(false)
   const [morphsReport, setMorphsReport] = useState<InstallReport | null>(null)
   const [presetsBusy, setPresetsBusy] = useState(false)
@@ -981,7 +1022,9 @@ function SettingsPage() {
         await saveSettings({ data: settings })
         await router.invalidate()
       }
-      const report = await dedupDazAssets({ data: { dryRun } })
+      const report = await dedupDazAssets({
+        data: { dryRun, keepers: dryRun ? [] : [...keeperOverrides] },
+      })
       setDedupReport(report)
       const issues = report.conflicts.length + report.duplicates.length
       if (dryRun) {
@@ -1002,6 +1045,17 @@ function SettingsPage() {
     } finally {
       setDedupBusy(false)
     }
+  }
+
+  // Override which copy of a duplicate group to keep — local only (no re-scan);
+  // passed to Apply. Clears the group's other members so exactly one is chosen.
+  function chooseKeeper(groupLabels: Array<string>, keep: string) {
+    setKeeperOverrides((prev) => {
+      const next = new Set(prev)
+      groupLabels.forEach((l) => next.delete(l))
+      next.add(keep)
+      return next
+    })
   }
 
   // Accept (or, with clear, un-accept) shared files as legitimate, then re-scan so
@@ -1500,6 +1554,8 @@ function SettingsPage() {
                 report={dedupReport}
                 acceptedCount={settings.acceptedConflicts.length}
                 busy={dedupBusy}
+                keeperOverrides={keeperOverrides}
+                onChooseKeeper={chooseKeeper}
                 onAccept={(rels) => void acceptRels(rels)}
                 onReset={() => void acceptRels(settings.acceptedConflicts, true)}
               />

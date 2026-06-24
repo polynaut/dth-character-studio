@@ -889,6 +889,10 @@ struct DedupRequest {
     /// the conflict list (and left untouched on apply).
     #[serde(default)]
     accepted: Vec<String>,
+    /// Asset labels the user explicitly chose to keep in their duplicate group
+    /// (overriding the auto-pick). The rest of that group is quarantined.
+    #[serde(default)]
+    keepers: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -913,10 +917,19 @@ struct FileConflict {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AssetDup {
-    keeper: String,
-    redundant: Vec<String>,
+struct DupMember {
+    label: String,
     file_count: u64,
+    is_zip: bool,
+    /// The copy kept (others are quarantined). The default is auto-picked but the
+    /// user can override it via the request's `keepers`.
+    is_keeper: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AssetDup {
+    members: Vec<DupMember>,
     /// "exact" (identical files) or "version" (same product, different version —
     /// high file overlap with differing sizes, e.g. a `…UD` vs `…UPDATE`).
     kind: String,
@@ -1090,6 +1103,7 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let dry = request.dry_run;
     let dest = Path::new(&request.dest);
     let accepted: HashSet<String> = request.accepted.into_iter().collect();
+    let chosen_keepers: HashSet<String> = request.keepers.into_iter().collect();
     let backup_root = request
         .sources
         .first()
@@ -1265,9 +1279,9 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         if members.len() < 2 {
             continue;
         }
-        // keeper: largest total bytes (newest version), then a folder over a zip,
-        // then the shortest label.
-        let keeper = *members
+        // keeper: the user's explicit choice if any, else auto — largest total
+        // bytes (newest version), then a folder over a zip, then the shortest label.
+        let auto = *members
             .iter()
             .max_by(|&&a, &&b| {
                 totalbytes[a]
@@ -1276,6 +1290,11 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                     .then(assets[b].label.len().cmp(&assets[a].label.len()))
             })
             .unwrap();
+        let keeper = members
+            .iter()
+            .copied()
+            .find(|&i| chosen_keepers.contains(&assets[i].label))
+            .unwrap_or(auto);
         let redundant: Vec<usize> = members.iter().cloned().filter(|&i| i != keeper).collect();
         let exact = members.iter().all(|&m| fp_of[m] == fp_of[keeper]);
         let mut fixed = false;
@@ -1290,15 +1309,27 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                 }
             }
         }
+        let mut sorted = members.clone();
+        sorted.sort_by(|&a, &b| assets[a].label.cmp(&assets[b].label));
         duplicates.push(AssetDup {
-            keeper: assets[keeper].label.clone(),
-            redundant: redundant.iter().map(|&i| assets[i].label.clone()).collect(),
-            file_count: filecount[keeper] as u64,
+            members: sorted
+                .iter()
+                .map(|&i| DupMember {
+                    label: assets[i].label.clone(),
+                    file_count: filecount[i] as u64,
+                    is_zip: assets[i].is_zip,
+                    is_keeper: i == keeper,
+                })
+                .collect(),
             kind: if exact { "exact".into() } else { "version".into() },
             fixed,
         });
     }
-    duplicates.sort_by(|a, b| a.keeper.cmp(&b.keeper));
+    duplicates.sort_by(|a, b| {
+        let ka = a.members.iter().find(|m| m.is_keeper).map(|m| &m.label);
+        let kb = b.members.iter().find(|m| m.is_keeper).map(|m| &m.label);
+        ka.cmp(&kb)
+    });
 
     DedupReport {
         dry_run: dry,
