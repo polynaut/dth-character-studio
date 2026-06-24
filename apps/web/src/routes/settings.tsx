@@ -562,23 +562,34 @@ function DedupReportList({
 
       {report.duplicates.length > 0 && (
         <div>
-          <p className="mb-1 font-medium">Duplicate &amp; version assets ({report.duplicates.length})</p>
+          <p className="mb-1 flex w-fit items-center gap-1 font-medium">
+            Duplicate &amp; version assets ({report.duplicates.length})
+            <InfoPopup label="Duplicate & version assets — more information">
+              Each group is the same content found more than once — an{' '}
+              <strong>exact duplicate</strong> (a folder and its identical .zip) or the{' '}
+              <strong>same product at a different version</strong> (high file overlap with differing
+              sizes, e.g. a <code>…UD</code> vs <code>…UPDATE</code>, marked “version”).{' '}
+              <strong>Pick which copy to keep</strong> (the radio) — the rest are moved to the
+              quarantine folder on Apply. The chip shows which asset folder (e.g.{' '}
+              <code>_genesis 9</code>) the group lives in.
+            </InfoPopup>
+          </p>
           <ul className="space-y-2">
             {report.duplicates.map((d) => {
               const labels = d.members.map((m) => m.label)
+              const sources = [...new Set(d.members.map((m) => m.source))].join(', ')
               const keeperLabel =
                 d.members.find((m) => keeperOverrides.has(m.label))?.label ??
                 d.members.find((m) => m.isKeeper)?.label
               return (
                 <li key={labels.join('|')} className="rounded-md border bg-background/40 p-2">
                   <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="rounded bg-muted px-1 py-0.5 text-[10px]">{sources}</span>
                     {d.kind === 'version' && (
                       <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500">
-                        version
+                        version · same product, different version
                       </span>
                     )}
-                    {d.kind === 'version' ? 'same product, different version' : 'duplicate'}
-                    {report.dryRun && ' — pick which copy to keep'}
                   </div>
                   <ul>
                     {d.members.map((m) => {
@@ -598,9 +609,6 @@ function DedupReportList({
                             </span>
                             <span className={`break-all ${isKeep ? 'font-medium' : 'text-muted-foreground'}`}>
                               {m.label}
-                            </span>
-                            <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                              {m.source}
                             </span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               · {m.fileCount} files{m.isZip ? ' · zip' : ''}
