@@ -566,7 +566,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
                             let mut s = step_ok(
                                 &name,
                                 diff,
-                                format!("{diff}/{total} files {verb} · {}", folders.join(", ")),
+                                format!("{diff}/{total} files {verb}"),
                             );
                             s.files_list = diff_files.into_iter().take(200).collect();
                             steps.push(s);
@@ -638,7 +638,7 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
                         let mut s = step_ok(
                             &name,
                             diff,
-                            format!("{diff}/{total} files to copy · {}", folders.join(", ")),
+                            format!("{diff}/{total} files to copy"),
                         );
                         s.files_list = diff_files.into_iter().take(200).collect();
                         steps.push(s);
