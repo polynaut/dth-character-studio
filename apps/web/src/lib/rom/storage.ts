@@ -724,6 +724,11 @@ export interface StudioSettings {
   /** Houdini `my_presets` source — copied into the Houdini docs folder and wired
    *  into its `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`). */
   houdiniPresetsSource: string
+  /** Destination-relative file paths the user has "accepted" as legitimately
+   *  shared between products (e.g. a vendor icon, cross-product textures). Both
+   *  the asset scan/install and the dedup skip these, so they stop showing as
+   *  "to copy" / as a conflict — the file stays whatever is installed. */
+  acceptedConflicts: Array<string>
 }
 
 async function isDir(path: string): Promise<boolean> {
@@ -753,6 +758,7 @@ function defaultSettings(): StudioSettings {
     dazPresetsSource: '',
     dazPresetsDest: '',
     houdiniPresetsSource: '',
+    acceptedConflicts: [],
   }
 }
 
@@ -812,6 +818,9 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.houdiniPresetsSource === 'string'
           ? raw.houdiniPresetsSource
           : defaults.houdiniPresetsSource,
+      acceptedConflicts: Array.isArray(raw.acceptedConflicts)
+        ? raw.acceptedConflicts.filter((f: unknown): f is string => typeof f === 'string')
+        : defaults.acceptedConflicts,
     }
   } catch {
     return defaults

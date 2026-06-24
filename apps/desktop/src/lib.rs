@@ -1,7 +1,7 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -231,6 +231,7 @@ fn sync_dir(
     rel: &Path,
     out: &mut Vec<String>,
     fp: &mut u64,
+    accepted: &HashSet<String>,
 ) -> std::io::Result<u64> {
     if !dry {
         fs::create_dir_all(dst)?;
@@ -248,17 +249,19 @@ fn sync_dir(
         let to = dst.join(&name);
         let rel_child = rel.join(&name);
         if from.is_dir() {
-            total += sync_dir(&from, &to, dry, force, &rel_child, out, fp)?;
+            total += sync_dir(&from, &to, dry, force, &rel_child, out, fp, accepted)?;
         } else {
             total += 1;
             let rel_str = rel_child.to_string_lossy().replace('\\', "/");
             fp_add(fp, &rel_str);
             let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            let needs = force
-                || match dst_sizes.get(&name) {
-                    Some(&len) => len != src_len,
-                    None => true,
-                };
+            // An accepted (legitimately-shared) file is treated as already in sync.
+            let needs = !accepted.contains(&rel_str)
+                && (force
+                    || match dst_sizes.get(&name) {
+                        Some(&len) => len != src_len,
+                        None => true,
+                    });
             if needs {
                 out.push(rel_str);
                 if !dry {
@@ -385,7 +388,14 @@ fn finish_step(name: &str, diff_files: Vec<String>, total: u64, dry: bool) -> In
 type AssetStep = (InstallStep, Option<u64>);
 
 /// Diff (and, unless `dry`, install) one asset *folder* against the library.
-fn process_folder_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> AssetStep {
+fn process_folder_asset(
+    asset: &Path,
+    name: &str,
+    dest: &Path,
+    dry: bool,
+    force: bool,
+    accepted: &HashSet<String>,
+) -> AssetStep {
     let (content_root, folders) = match find_content_level(asset, 5) {
         Some(found) => found,
         None => return (step_skip(name, "no Daz content".into()), None),
@@ -394,7 +404,7 @@ fn process_folder_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force:
     let mut total = 0u64;
     let mut fp = 0u64;
     for f in &folders {
-        match sync_dir(&content_root.join(f), &dest.join(f), dry, force, Path::new(f), &mut diff_files, &mut fp) {
+        match sync_dir(&content_root.join(f), &dest.join(f), dry, force, Path::new(f), &mut diff_files, &mut fp, accepted) {
             Ok(t) => total += t,
             Err(e) => return (step_err(name, io_detail(&format!("{} → {}", f, dest.join(f).display()), &e)), None),
         }
@@ -424,7 +434,14 @@ fn extract_zip_entry(
 /// Diff (and, unless `dry`, install) one `.zip` asset — read straight from the
 /// archive's central directory (uncompressed sizes), never extracting the whole
 /// thing. For a real install only the entries that differ are inflated.
-fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> AssetStep {
+fn process_zip_asset(
+    asset: &Path,
+    name: &str,
+    dest: &Path,
+    dry: bool,
+    force: bool,
+    accepted: &HashSet<String>,
+) -> AssetStep {
     let file = match fs::File::open(asset) {
         Ok(f) => f,
         Err(e) => return (step_err(name, io_detail("open zip", &e)), None),
@@ -474,7 +491,8 @@ fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bo
         }
         total += 1;
         fp_add(&mut fp, sub);
-        let needs = force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size);
+        let needs = !accepted.contains(sub)
+            && (force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size));
         if needs {
             diff_files.push(sub.to_string());
             needed.push((*idx, sub.to_string()));
@@ -493,16 +511,22 @@ fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bo
 
 /// Diff/install one asset (folder or `.zip`). Loose files at the source root
 /// (`.DS_Store`, readmes) aren't assets — they return None and are skipped.
-fn process_asset(asset: &Path, dest: &Path, dry: bool, force: bool) -> Option<AssetStep> {
+fn process_asset(
+    asset: &Path,
+    dest: &Path,
+    dry: bool,
+    force: bool,
+    accepted: &HashSet<String>,
+) -> Option<AssetStep> {
     let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
     if !asset.is_dir() && !is_zip {
         return None;
     }
     let name = folder_name(asset);
     Some(if is_zip {
-        process_zip_asset(asset, &name, dest, dry, force)
+        process_zip_asset(asset, &name, dest, dry, force, accepted)
     } else {
-        process_folder_asset(asset, &name, dest, dry, force)
+        process_folder_asset(asset, &name, dest, dry, force, accepted)
     })
 }
 
@@ -732,6 +756,10 @@ struct DazAssetsRequest {
     /// assets aren't walked again. Empty installs every asset (a full pass).
     #[serde(default)]
     only: Vec<String>,
+    /// Dest-relative paths the user accepted as legitimately shared — never
+    /// counted as "to copy" nor copied (left as whatever is installed).
+    #[serde(default)]
+    accepted: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -739,6 +767,8 @@ struct DazAssetsRequest {
 struct AssetScanRequest {
     sources: Vec<String>,
     dest: String,
+    #[serde(default)]
+    accepted: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -767,6 +797,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let force = request.force;
     let dest = Path::new(&request.dest);
     let only = request.only;
+    let accepted: HashSet<String> = request.accepted.into_iter().collect();
     let mut items: Vec<AssetStep> = Vec::new();
     for source in &request.sources {
         match collect_assets(source) {
@@ -775,7 +806,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
                 items.push((step, None));
             }
             Ok(assets) => {
-                let asset_items = process_assets(&assets, dest, dry, force, &only);
+                let asset_items = process_assets(&assets, dest, dry, force, &only, &accepted);
                 // When filtering to a changed-asset set, skip a header whose whole
                 // source contributed nothing (every asset already installed).
                 if !asset_items.is_empty() {
@@ -819,11 +850,12 @@ fn process_assets(
     dry: bool,
     force: bool,
     only: &[String],
+    accepted: &HashSet<String>,
 ) -> Vec<AssetStep> {
     assets
         .par_iter()
         .filter(|asset| only.is_empty() || only.iter().any(|n| *n == folder_name(asset)))
-        .filter_map(|asset| process_asset(asset, dest, dry, force))
+        .filter_map(|asset| process_asset(asset, dest, dry, force, accepted))
         .collect()
 }
 
@@ -831,12 +863,13 @@ fn process_assets(
 #[tauri::command]
 fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
+    let accepted: HashSet<String> = request.accepted.into_iter().collect();
     let mut items: Vec<AssetStep> = Vec::new();
     for source in &request.sources {
         items.push((step_header(source), None));
         match collect_assets(source) {
             Err(step) => items.push((step, None)),
-            Ok(assets) => items.extend(process_assets(&assets, dest, true, false, &[])),
+            Ok(assets) => items.extend(process_assets(&assets, dest, true, false, &[], &accepted)),
         }
     }
     let steps = annotate_duplicates(items);
@@ -852,6 +885,10 @@ struct DedupRequest {
     sources: Vec<String>,
     dest: String,
     dry_run: bool,
+    /// Dest-relative paths the user accepted as legitimately shared — hidden from
+    /// the conflict list (and left untouched on apply).
+    #[serde(default)]
+    accepted: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1052,6 +1089,7 @@ fn dedup_backup(root: &Path, label: &str, rel: &str, file: &Path) {
 fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let dry = request.dry_run;
     let dest = Path::new(&request.dest);
+    let accepted: HashSet<String> = request.accepted.into_iter().collect();
     let backup_root = request
         .sources
         .first()
@@ -1159,6 +1197,10 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let mut files_changed = 0u64;
     for (rel, idxs) in &byrel {
         if idxs.len() < 2 {
+            continue;
+        }
+        // The user accepted this file as legitimately shared — leave it be.
+        if accepted.contains(rel) {
             continue;
         }
         let g0 = group_of[idxs[0]];

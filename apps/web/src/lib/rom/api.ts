@@ -796,6 +796,7 @@ const settingsInput = z.object({
   dazPresetsSource: z.string().default(''),
   dazPresetsDest: z.string().default(''),
   houdiniPresetsSource: z.string().default(''),
+  acceptedConflicts: z.array(z.string()).default([]),
 })
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
@@ -892,6 +893,7 @@ export async function installDazAssets({ data }: { data: unknown }): Promise<Ins
       force: force ?? false,
       dryRun: dryRun ?? false,
       only: only ?? [],
+      accepted: s.acceptedConflicts,
     },
   })
 }
@@ -903,8 +905,26 @@ export async function listDazAssets(): Promise<InstallReport> {
   const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
   if (!sources.length) throw new Error('Add at least one Daz assets folder')
   return invoke<InstallReport>('list_daz_assets', {
-    request: { sources, dest: s.dazLibraryFolder.trim() },
+    request: { sources, dest: s.dazLibraryFolder.trim(), accepted: s.acceptedConflicts },
   })
+}
+
+/** Accept files as legitimately shared between products — they stop showing as
+ *  "to copy" / as a conflict (left as whatever is installed). Returns the updated
+ *  accepted list. Pass `clear: true` with the same paths to un-accept them. */
+export async function setAcceptedConflicts(
+  rels: Array<string>,
+  clear = false,
+): Promise<Array<string>> {
+  const s = await storage.getSettings()
+  const set = new Set(s.acceptedConflicts)
+  for (const r of rels) {
+    if (clear) set.delete(r)
+    else set.add(r)
+  }
+  const acceptedConflicts = [...set].sort()
+  await storage.saveSettings({ ...s, acceptedConflicts })
+  return acceptedConflicts
 }
 
 /** One copy of a conflicting shared file (mirrors Rust `ConflictCopy`). */
@@ -950,7 +970,12 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
   const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
   if (!sources.length) throw new Error('Add at least one Daz assets folder')
   return invoke<DedupReport>('dedup_daz_assets', {
-    request: { sources, dest: s.dazLibraryFolder.trim(), dryRun: dryRun ?? false },
+    request: {
+      sources,
+      dest: s.dazLibraryFolder.trim(),
+      dryRun: dryRun ?? false,
+      accepted: s.acceptedConflicts,
+    },
   })
 }
 
