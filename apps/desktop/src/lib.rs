@@ -516,17 +516,21 @@ fn process_asset(
     dest: &Path,
     dry: bool,
     force: bool,
-    accepted: &HashSet<String>,
+    skip_map: &HashMap<PathBuf, HashSet<String>>,
 ) -> Option<AssetStep> {
     let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
     if !asset.is_dir() && !is_zip {
         return None;
     }
     let name = folder_name(asset);
+    // Files to leave alone: accepted ∪ the ones this asset loses to a newer-genesis
+    // / bigger copy (per winner_skip_map). Empty if this asset wasn't resolved.
+    let empty = HashSet::new();
+    let skip = skip_map.get(asset).unwrap_or(&empty);
     Some(if is_zip {
-        process_zip_asset(asset, &name, dest, dry, force, accepted)
+        process_zip_asset(asset, &name, dest, dry, force, skip)
     } else {
-        process_folder_asset(asset, &name, dest, dry, force, accepted)
+        process_folder_asset(asset, &name, dest, dry, force, skip)
     })
 }
 
@@ -788,15 +792,61 @@ struct HoudiniPresetsRequest {
     dry_run: bool,
 }
 
+/// Resolve, across ALL source folders, the winner of every shared library file by
+/// (newer Genesis, then bigger size), and return per-asset the set of dest-relative
+/// paths to treat as already in-sync — `accepted` plus every file where this asset
+/// is NOT the winner. The install then writes only the winning copy of a shared
+/// file and never flags the losing copies, so the result is deterministic and
+/// independent of folder order ("newer genesis wins, then bigger wins").
+fn winner_skip_map(
+    sources: &[String],
+    accepted: &HashSet<String>,
+) -> HashMap<PathBuf, HashSet<String>> {
+    // Collect every asset's files, tagged with its source folder's Genesis rank.
+    let mut all: Vec<(u32, AssetFiles)> = Vec::new();
+    for source in sources {
+        let src = Path::new(source);
+        if !src.is_dir() {
+            continue;
+        }
+        let genesis = genesis_rank(&folder_name(src));
+        let entries: Vec<PathBuf> = match fs::read_dir(src) {
+            Ok(e) => e.flatten().map(|x| x.path()).collect(),
+            Err(_) => continue,
+        };
+        let collected: Vec<AssetFiles> =
+            entries.par_iter().filter_map(|a| collect_asset_files(a)).collect();
+        for af in collected {
+            all.push((genesis, af));
+        }
+    }
+    // Winner per dest path = the max (genesis, size) tuple across all copies.
+    let mut winners: HashMap<String, (u32, u64)> = HashMap::new();
+    for (g, af) in &all {
+        for (rel, size) in &af.files {
+            let cand = (*g, *size);
+            winners.entry(rel.clone()).and_modify(|w| *w = (*w).max(cand)).or_insert(cand);
+        }
+    }
+    // Per-asset skip set: accepted ∪ files where this asset isn't the winner.
+    let mut skip_map: HashMap<PathBuf, HashSet<String>> = HashMap::new();
+    for (g, af) in &all {
+        let mut skip = accepted.clone();
+        for (rel, size) in &af.files {
+            if winners.get(rel).is_some_and(|&w| (*g, *size) != w) {
+                skip.insert(rel.clone());
+            }
+        }
+        skip_map.insert(af.asset_path.clone(), skip);
+    }
+    skip_map
+}
+
 /// Install your own Daz assets (G3/G8/G9, `.zip`s extracted) from the source
 /// folders into the library — content-folder-aware, overwriting per asset, and
-/// skipping ones that already appear installed unless `force`.
-///
-/// Source folders are installed STRICTLY IN ORDER (each `process_assets` blocks
-/// before the next folder starts), so when two products in different folders ship
-/// the same library file the LATER folder wins — this is the user-facing "install
-/// order" guarantee (assets within one folder still install in parallel). Don't
-/// parallelize across folders without preserving last-folder-wins.
+/// skipping ones that already appear installed unless `force`. Shared files are
+/// resolved by `winner_skip_map` (newer genesis, then bigger), so only the winning
+/// copy is installed and the losers are never flagged.
 #[tauri::command]
 fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dry = request.dry_run;
@@ -804,6 +854,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let only = request.only;
     let accepted: HashSet<String> = request.accepted.into_iter().collect();
+    let skip_map = winner_skip_map(&request.sources, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
     for source in &request.sources {
         match collect_assets(source) {
@@ -812,7 +863,7 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
                 items.push((step, None));
             }
             Ok(assets) => {
-                let asset_items = process_assets(&assets, dest, dry, force, &only, &accepted);
+                let asset_items = process_assets(&assets, dest, dry, force, &only, &skip_map);
                 // When filtering to a changed-asset set, skip a header whose whole
                 // source contributed nothing (every asset already installed).
                 if !asset_items.is_empty() {
@@ -856,12 +907,12 @@ fn process_assets(
     dry: bool,
     force: bool,
     only: &[String],
-    accepted: &HashSet<String>,
+    skip_map: &HashMap<PathBuf, HashSet<String>>,
 ) -> Vec<AssetStep> {
     assets
         .par_iter()
         .filter(|asset| only.is_empty() || only.iter().any(|n| *n == folder_name(asset)))
-        .filter_map(|asset| process_asset(asset, dest, dry, force, accepted))
+        .filter_map(|asset| process_asset(asset, dest, dry, force, skip_map))
         .collect()
 }
 
@@ -870,12 +921,13 @@ fn process_assets(
 fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let accepted: HashSet<String> = request.accepted.into_iter().collect();
+    let skip_map = winner_skip_map(&request.sources, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
     for source in &request.sources {
         items.push((step_header(source), None));
         match collect_assets(source) {
             Err(step) => items.push((step, None)),
-            Ok(assets) => items.extend(process_assets(&assets, dest, true, false, &[], &accepted)),
+            Ok(assets) => items.extend(process_assets(&assets, dest, true, false, &[], &skip_map)),
         }
     }
     let steps = annotate_duplicates(items);
@@ -1711,6 +1763,15 @@ mod tests {
     fn join_rel_uses_components() {
         let joined = join_rel(Path::new("base"), "data/foo/bar.dsf");
         assert_eq!(joined, Path::new("base").join("data").join("foo").join("bar.dsf"));
+    }
+
+    #[test]
+    fn genesis_rank_reads_the_number() {
+        assert_eq!(genesis_rank("_genesis 9"), 9);
+        assert_eq!(genesis_rank("_genesis 8"), 8);
+        assert_eq!(genesis_rank("_genesis 3"), 3);
+        assert_eq!(genesis_rank("my daz assets"), 0); // no number → unranked
+        assert!(genesis_rank("_genesis 9") > genesis_rank("_genesis 8"));
     }
 
     #[test]

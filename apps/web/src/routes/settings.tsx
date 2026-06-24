@@ -3,9 +3,7 @@ import type { ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import {
   ArrowLeft,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
   CircleCheck,
   CircleSlash,
   CircleX,
@@ -1010,15 +1008,6 @@ function SettingsPage() {
   function removeAssetFolder(i: number) {
     setAssetFolders(settings.dazAssetsFolders.filter((_, j) => j !== i))
   }
-  // Reorder: folders install top-to-bottom, so a lower folder's files overwrite an
-  // upper folder's where two products share a file (last-installed wins).
-  function moveAssetFolder(i: number, delta: number) {
-    const j = i + delta
-    const folders = [...settings.dazAssetsFolders]
-    if (j < 0 || j >= folders.length) return
-    ;[folders[i], folders[j]] = [folders[j], folders[i]]
-    setAssetFolders(folders)
-  }
   async function browseAssetFolder(i: number) {
     const picked = await pickFolder('Daz assets folder')
     if (picked) updateAssetFolder(i, picked)
@@ -1472,9 +1461,10 @@ function SettingsPage() {
                 skipping ones already there.
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                <strong>Install order matters:</strong> folders install top-to-bottom, so where two
-                products share a file the <strong>lower folder wins</strong> (installed last) — put
-                the generation you prefer (e.g. Genesis 9) at the bottom.
+                When two products share a file, the winner is chosen automatically:{' '}
+                <strong>newer Genesis wins</strong> (by folder name, e.g. <code>_genesis 9</code> over{' '}
+                <code>_genesis 8</code>), then the <strong>bigger file</strong> wins — so only the
+                winning copy installs and the losers are never re-flagged. Folder order doesn't matter.
               </p>
             </div>
             <div className="space-y-2">
@@ -1483,30 +1473,6 @@ function SettingsPage() {
               )}
               {settings.dazAssetsFolders.map((folder, i) => (
                 <div key={i} className="flex gap-2">
-                  <div className="flex shrink-0 flex-col">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-4"
-                      title="Move up (installs earlier)"
-                      disabled={i === 0}
-                      onClick={() => moveAssetFolder(i, -1)}
-                    >
-                      <ChevronUp className="size-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-4"
-                      title="Move down (installs later — wins shared files)"
-                      disabled={i === settings.dazAssetsFolders.length - 1}
-                      onClick={() => moveAssetFolder(i, 1)}
-                    >
-                      <ChevronDown className="size-3.5" />
-                    </Button>
-                  </div>
                   <Input
                     value={displayPath(folder)}
                     placeholder="X:\…\daz assets"
