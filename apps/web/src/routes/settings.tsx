@@ -1035,18 +1035,21 @@ function SettingsPage() {
       const report = await dedupDazAssets({
         data: { dryRun, keepers: dryRun ? [] : [...keeperOverrides] },
       })
-      setDedupReport(report)
-      const issues = report.conflicts.length + report.duplicates.length
       if (dryRun) {
+        setDedupReport(report)
+        const issues = report.conflicts.length + report.duplicates.length
         toast.success(
           issues === 0
-            ? 'No duplicates or file conflicts found'
-            : `Found ${report.conflicts.length} file conflict(s) and ${report.duplicates.length} duplicate asset(s)`,
+            ? 'No duplicates or shared files found'
+            : `Found ${report.duplicates.length} duplicate asset(s) and ${report.conflicts.length} shared file(s)`,
         )
       } else {
         toast.success(`Quarantined ${report.assetsQuarantined} duplicate asset(s)`)
-        // The asset listing changed — drop the stale scan report.
+        // The listing changed on disk — drop the stale asset scan, clear keeper
+        // picks, and re-scan so the panel reflects what's now there.
         setAssetsReport(null)
+        setKeeperOverrides(new Set())
+        setDedupReport(await dedupDazAssets({ data: { dryRun: true } }))
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
