@@ -1,9 +1,12 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 // Paths are resolved by the frontend (which release/plugin, where); the native
 // side only does the heavy recursive copy. Keys arrive camelCase from JS. The
@@ -56,6 +59,9 @@ struct InstallStep {
     detail: String,
     /// Per-asset detail: the (capped) list of files an install would copy.
     files_list: Vec<String>,
+    /// A hint shown beside the row — set when this asset writes the same library
+    /// files as another in the report (e.g. a folder and its `.zip`). Empty otherwise.
+    note: String,
 }
 
 #[derive(Serialize)]
@@ -67,17 +73,17 @@ struct InstallReport {
 }
 
 fn step_ok(label: &str, files: u64, detail: String) -> InstallStep {
-    InstallStep { label: label.into(), files, status: "ok".into(), detail, files_list: Vec::new() }
+    InstallStep { label: label.into(), files, status: "ok".into(), detail, files_list: Vec::new(), note: String::new() }
 }
 fn step_skip(label: &str, reason: String) -> InstallStep {
-    InstallStep { label: label.into(), files: 0, status: "skipped".into(), detail: reason, files_list: Vec::new() }
+    InstallStep { label: label.into(), files: 0, status: "skipped".into(), detail: reason, files_list: Vec::new(), note: String::new() }
 }
 fn step_err(label: &str, msg: String) -> InstallStep {
-    InstallStep { label: label.into(), files: 0, status: "error".into(), detail: msg, files_list: Vec::new() }
+    InstallStep { label: label.into(), files: 0, status: "error".into(), detail: msg, files_list: Vec::new(), note: String::new() }
 }
 /// A group header row (a source folder) — rendered as a heading, not a step.
 fn step_header(label: &str) -> InstallStep {
-    InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new(), files_list: Vec::new() }
+    InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new(), files_list: Vec::new(), note: String::new() }
 }
 
 /// Number of files (recursively) under `dir`; 0 when it can't be read.
@@ -186,6 +192,31 @@ fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)>
     None
 }
 
+/// Striped locks keyed by destination path: assets install in parallel, and two
+/// that map to the SAME library file (e.g. a folder and its `.zip`) must not write
+/// it at once. Same path → same stripe → serialized; different paths almost always
+/// take different stripes → still parallel. 64 stripes comfortably covers the pool.
+const DEST_LOCK_STRIPES: usize = 64;
+fn lock_dest(path: &Path) -> MutexGuard<'static, ()> {
+    static LOCKS: OnceLock<Vec<Mutex<()>>> = OnceLock::new();
+    let locks = LOCKS.get_or_init(|| (0..DEST_LOCK_STRIPES).map(|_| Mutex::new(())).collect());
+    let mut h = DefaultHasher::new();
+    path.hash(&mut h);
+    let idx = (h.finish() as usize) % DEST_LOCK_STRIPES;
+    // Recover from a poisoned lock — the guarded data is `()`, so there's nothing
+    // to corrupt; a peer thread panicking shouldn't wedge the rest of the install.
+    locks[idx].lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Fold one destination-relative path into an order-independent fingerprint of an
+/// asset's destination file set (XOR of per-path hashes). Two assets that install
+/// the same set of files share a fingerprint even if a few files' contents differ.
+fn fp_add(fp: &mut u64, rel: &str) {
+    let mut h = DefaultHasher::new();
+    rel.hash(&mut h);
+    *fp ^= h.finish();
+}
+
 /// Copy `src` → `dst` file-by-file, copying each only when the destination is
 /// missing or a *different size* (or always, with `force`). `dry` counts what
 /// would copy without writing. Pushes each changed file's path (relative to
@@ -199,6 +230,7 @@ fn sync_dir(
     force: bool,
     rel: &Path,
     out: &mut Vec<String>,
+    fp: &mut u64,
 ) -> std::io::Result<u64> {
     if !dry {
         fs::create_dir_all(dst)?;
@@ -216,9 +248,11 @@ fn sync_dir(
         let to = dst.join(&name);
         let rel_child = rel.join(&name);
         if from.is_dir() {
-            total += sync_dir(&from, &to, dry, force, &rel_child, out)?;
+            total += sync_dir(&from, &to, dry, force, &rel_child, out, fp)?;
         } else {
             total += 1;
+            let rel_str = rel_child.to_string_lossy().replace('\\', "/");
+            fp_add(fp, &rel_str);
             let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
             let needs = force
                 || match dst_sizes.get(&name) {
@@ -226,8 +260,10 @@ fn sync_dir(
                     None => true,
                 };
             if needs {
-                out.push(rel_child.to_string_lossy().replace('\\', "/"));
+                out.push(rel_str);
                 if !dry {
+                    // Serialize writes to the same library file across assets.
+                    let _guard = lock_dest(&to);
                     fs::copy(&from, &to)?;
                 }
             }
@@ -343,21 +379,27 @@ fn finish_step(name: &str, diff_files: Vec<String>, total: u64, dry: bool) -> In
     s
 }
 
+/// An asset's report step plus the fingerprint of its destination file set (None
+/// when it resolved to no content / errored) — the fingerprint powers the
+/// "same files as …" duplicate hint.
+type AssetStep = (InstallStep, Option<u64>);
+
 /// Diff (and, unless `dry`, install) one asset *folder* against the library.
-fn process_folder_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> InstallStep {
+fn process_folder_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> AssetStep {
     let (content_root, folders) = match find_content_level(asset, 5) {
         Some(found) => found,
-        None => return step_skip(name, "no Daz content".into()),
+        None => return (step_skip(name, "no Daz content".into()), None),
     };
     let mut diff_files: Vec<String> = Vec::new();
     let mut total = 0u64;
+    let mut fp = 0u64;
     for f in &folders {
-        match sync_dir(&content_root.join(f), &dest.join(f), dry, force, Path::new(f), &mut diff_files) {
+        match sync_dir(&content_root.join(f), &dest.join(f), dry, force, Path::new(f), &mut diff_files, &mut fp) {
             Ok(t) => total += t,
-            Err(e) => return step_err(name, io_detail(&format!("{} → {}", f, dest.join(f).display()), &e)),
+            Err(e) => return (step_err(name, io_detail(&format!("{} → {}", f, dest.join(f).display()), &e)), None),
         }
     }
-    finish_step(name, diff_files, total, dry)
+    (finish_step(name, diff_files, total, dry), Some(fp))
 }
 
 /// Inflate one archive entry to `dest_path` (creating parent dirs as needed).
@@ -372,6 +414,8 @@ fn extract_zip_entry(
     if let Some(parent) = dest_path.parent() {
         fs::create_dir_all(parent)?;
     }
+    // Serialize writes to the same library file across assets (see lock_dest).
+    let _guard = lock_dest(dest_path);
     let mut out = fs::File::create(dest_path)?;
     std::io::copy(&mut entry, &mut out)?;
     Ok(())
@@ -380,14 +424,14 @@ fn extract_zip_entry(
 /// Diff (and, unless `dry`, install) one `.zip` asset — read straight from the
 /// archive's central directory (uncompressed sizes), never extracting the whole
 /// thing. For a real install only the entries that differ are inflated.
-fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> InstallStep {
+fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> AssetStep {
     let file = match fs::File::open(asset) {
         Ok(f) => f,
-        Err(e) => return step_err(name, io_detail("open zip", &e)),
+        Err(e) => return (step_err(name, io_detail("open zip", &e)), None),
     };
     let mut archive = match zip::ZipArchive::new(file) {
         Ok(a) => a,
-        Err(e) => return step_err(name, format!("unzip failed: {e}")),
+        Err(e) => return (step_err(name, format!("unzip failed: {e}")), None),
     };
     // Central-directory pass: each file entry's path + uncompressed size. Setting
     // up `by_index` reads only the local header — no decompression happens here.
@@ -410,13 +454,14 @@ fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bo
     let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
     let (root, folders) = match find_zip_content_level(&paths) {
         Some(found) => found,
-        None => return step_skip(name, "no Daz content".into()),
+        None => return (step_skip(name, "no Daz content".into()), None),
     };
     let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
     let mut dest_sizes = DestSizes::new();
     let mut diff_files: Vec<String> = Vec::new();
     let mut needed: Vec<(usize, String)> = Vec::new();
     let mut total = 0u64;
+    let mut fp = 0u64;
     for (idx, path, size) in &entries {
         // Keep only entries under <content-root>/<one of the chosen folders>.
         let sub = match path.strip_prefix(&prefix) {
@@ -428,6 +473,7 @@ fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bo
             continue;
         }
         total += 1;
+        fp_add(&mut fp, sub);
         let needs = force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size);
         if needs {
             diff_files.push(sub.to_string());
@@ -438,16 +484,16 @@ fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bo
     if !dry {
         for (idx, sub) in &needed {
             if let Err(e) = extract_zip_entry(&mut archive, *idx, &join_rel(dest, sub)) {
-                return step_err(name, io_detail(&format!("extract {sub}"), &e));
+                return (step_err(name, io_detail(&format!("extract {sub}"), &e)), None);
             }
         }
     }
-    finish_step(name, diff_files, total, dry)
+    (finish_step(name, diff_files, total, dry), Some(fp))
 }
 
 /// Diff/install one asset (folder or `.zip`). Loose files at the source root
 /// (`.DS_Store`, readmes) aren't assets — they return None and are skipped.
-fn process_asset(asset: &Path, dest: &Path, dry: bool, force: bool) -> Option<InstallStep> {
+fn process_asset(asset: &Path, dest: &Path, dry: bool, force: bool) -> Option<AssetStep> {
     let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
     if !asset.is_dir() && !is_zip {
         return None;
@@ -458,6 +504,34 @@ fn process_asset(asset: &Path, dest: &Path, dry: bool, force: bool) -> Option<In
     } else {
         process_folder_asset(asset, &name, dest, dry, force)
     })
+}
+
+/// Set the duplicate hint on any assets that share a destination fingerprint —
+/// two copies of the same content (e.g. a folder and its `.zip`) that would write
+/// the same library files. Returns the steps with notes applied, fingerprints dropped.
+fn annotate_duplicates(mut items: Vec<AssetStep>) -> Vec<InstallStep> {
+    let mut groups: HashMap<u64, Vec<usize>> = HashMap::new();
+    for (i, (_, fp)) in items.iter().enumerate() {
+        if let Some(fp) = fp {
+            groups.entry(*fp).or_default().push(i);
+        }
+    }
+    for idxs in groups.values() {
+        if idxs.len() < 2 {
+            continue;
+        }
+        let names: Vec<String> = idxs.iter().map(|&i| items[i].0.label.clone()).collect();
+        for (pos, &i) in idxs.iter().enumerate() {
+            let others: Vec<&str> =
+                names.iter().enumerate().filter(|(j, _)| *j != pos).map(|(_, n)| n.as_str()).collect();
+            items[i].0.note = if others.len() == 1 {
+                format!("same files as “{}”", others[0])
+            } else {
+                format!("same files as {} other copies", others.len())
+            };
+        }
+    }
+    items.into_iter().map(|(s, _)| s).collect()
 }
 
 /// Append `SHARED_PRESETS` + `HOUDINI_PATH` to `<houdini_docs>/houdini.env` if not
@@ -693,24 +767,25 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let force = request.force;
     let dest = Path::new(&request.dest);
     let only = request.only;
-    let mut steps: Vec<InstallStep> = Vec::new();
+    let mut items: Vec<AssetStep> = Vec::new();
     for source in &request.sources {
         match collect_assets(source) {
             Err(step) => {
-                steps.push(step_header(source));
-                steps.push(step);
+                items.push((step_header(source), None));
+                items.push((step, None));
             }
             Ok(assets) => {
-                let asset_steps = process_assets(&assets, dest, dry, force, &only);
+                let asset_items = process_assets(&assets, dest, dry, force, &only);
                 // When filtering to a changed-asset set, skip a header whose whole
                 // source contributed nothing (every asset already installed).
-                if !asset_steps.is_empty() {
-                    steps.push(step_header(source));
-                    steps.extend(asset_steps);
+                if !asset_items.is_empty() {
+                    items.push((step_header(source), None));
+                    items.extend(asset_items);
                 }
             }
         }
     }
+    let steps = annotate_duplicates(items);
     let total_files = steps.iter().map(|s| s.files).sum();
     InstallReport { dry_run: dry, steps, total_files }
 }
@@ -744,7 +819,7 @@ fn process_assets(
     dry: bool,
     force: bool,
     only: &[String],
-) -> Vec<InstallStep> {
+) -> Vec<AssetStep> {
     assets
         .par_iter()
         .filter(|asset| only.is_empty() || only.iter().any(|n| *n == folder_name(asset)))
@@ -756,14 +831,15 @@ fn process_assets(
 #[tauri::command]
 fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
-    let mut steps: Vec<InstallStep> = Vec::new();
+    let mut items: Vec<AssetStep> = Vec::new();
     for source in &request.sources {
-        steps.push(step_header(source));
+        items.push((step_header(source), None));
         match collect_assets(source) {
-            Err(step) => steps.push(step),
-            Ok(assets) => steps.extend(process_assets(&assets, dest, true, false, &[])),
+            Err(step) => items.push((step, None)),
+            Ok(assets) => items.extend(process_assets(&assets, dest, true, false, &[])),
         }
     }
+    let steps = annotate_duplicates(items);
     let total_files = steps.iter().map(|s| s.files).sum();
     InstallReport { dry_run: true, steps, total_files }
 }
@@ -1177,5 +1253,35 @@ mod tests {
     fn join_rel_uses_components() {
         let joined = join_rel(Path::new("base"), "data/foo/bar.dsf");
         assert_eq!(joined, Path::new("base").join("data").join("foo").join("bar.dsf"));
+    }
+
+    #[test]
+    fn fingerprint_is_order_independent_and_set_based() {
+        let (mut a, mut b) = (0u64, 0u64);
+        fp_add(&mut a, "data/x");
+        fp_add(&mut a, "People/y");
+        fp_add(&mut b, "People/y");
+        fp_add(&mut b, "data/x");
+        assert_eq!(a, b, "order must not matter");
+        let mut c = 0u64;
+        fp_add(&mut c, "data/x");
+        assert_ne!(a, c, "a different file set must differ");
+    }
+
+    #[test]
+    fn annotate_flags_same_fingerprint() {
+        // A folder and its .zip share a destination fingerprint (42); a third asset
+        // is on its own (7).
+        let items = vec![
+            (step_header("src"), None),
+            (step_skip("foo.zip", "already installed · 3 files".into()), Some(42)),
+            (step_ok("foo", 1, "1/3 files to copy".into()), Some(42)),
+            (step_skip("bar", "already installed · 9 files".into()), Some(7)),
+        ];
+        let steps = annotate_duplicates(items);
+        let note = |label: &str| steps.iter().find(|s| s.label == label).unwrap().note.clone();
+        assert!(note("foo.zip").contains("foo"), "zip points at the folder");
+        assert!(note("foo").contains("foo.zip"), "folder points at the zip");
+        assert_eq!(note("bar"), "", "a unique asset gets no hint");
     }
 }

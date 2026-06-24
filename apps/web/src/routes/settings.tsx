@@ -465,6 +465,11 @@ function InstallReportList({ report }: { report: InstallReport }) {
                 <span className="text-muted-foreground"> — {step.files} file(s)</span>
               )}
               {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
+              {step.note && (
+                <span className="text-amber-600 dark:text-amber-500" title="Another asset installs these same files">
+                  {' '}· ⧉ {step.note}
+                </span>
+              )}
             </span>
           </>
         )

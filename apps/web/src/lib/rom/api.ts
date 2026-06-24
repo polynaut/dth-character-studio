@@ -810,6 +810,9 @@ export interface InstallStep {
   detail: string
   /** For asset steps: the (capped) list of files an install would copy. */
   filesList?: Array<string>
+  /** Set when this asset writes the same library files as another in the report
+   *  (e.g. a folder and its .zip) — a "same files as …" duplicate hint. */
+  note?: string
 }
 
 /** Outcome of a DTH install run (mirrors the Rust `InstallReport`). */
