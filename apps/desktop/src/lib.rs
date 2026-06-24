@@ -1,4 +1,7 @@
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -200,6 +203,11 @@ fn sync_dir(
     if !dry {
         fs::create_dir_all(dst)?;
     }
+    // Enumerate the destination directory ONCE into a name→size map rather than
+    // an individual `fs::metadata` syscall per source file — the slow part on
+    // large/networked libraries. A missing dest dir yields an empty map, so every
+    // source file is (correctly) seen as needing a copy.
+    let dst_sizes = dir_file_sizes(dst);
     let mut total = 0u64;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -213,9 +221,9 @@ fn sync_dir(
             total += 1;
             let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
             let needs = force
-                || match fs::metadata(&to) {
-                    Ok(m) => m.len() != src_len,
-                    Err(_) => true,
+                || match dst_sizes.get(&name) {
+                    Some(&len) => len != src_len,
+                    None => true,
                 };
             if needs {
                 out.push(rel_child.to_string_lossy().replace('\\', "/"));
@@ -228,49 +236,228 @@ fn sync_dir(
     Ok(total)
 }
 
-/// Extract a `.zip` into a fresh temp dir (returned for the caller to clean up).
-fn extract_zip(zip_path: &Path) -> std::io::Result<PathBuf> {
-    let file = fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let temp = std::env::temp_dir().join(format!("dth-asset-{}-{}", std::process::id(), nanos));
-    archive
-        .extract(&temp)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-    Ok(temp)
-}
-
-/// An asset resolved to its content level — a zipped asset carries a `temp` dir
-/// the caller must remove when done.
-enum AssetContent {
-    Found { temp: Option<PathBuf>, root: PathBuf, folders: Vec<String> },
-    None { temp: Option<PathBuf> },
-    Error(String),
-}
-
-/// Resolve an asset path (a folder or a `.zip`) to its Daz content level.
-fn resolve_asset(asset: &Path) -> AssetContent {
-    let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
-    if is_zip {
-        match extract_zip(asset) {
-            Ok(t) => match find_content_level(&t, 5) {
-                Some((root, folders)) => AssetContent::Found { temp: Some(t), root, folders },
-                None => AssetContent::None { temp: Some(t) },
-            },
-            Err(e) => AssetContent::Error(format!("unzip failed: {e}")),
+/// Enumerate a directory once into a map of file name → byte size (files only).
+/// Empty when the directory is missing or unreadable.
+fn dir_file_sizes(dir: &Path) -> HashMap<OsString, u64> {
+    let mut map = HashMap::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(md) = entry.metadata() {
+                if md.is_file() {
+                    map.insert(entry.file_name(), md.len());
+                }
+            }
         }
-    } else if asset.is_dir() {
-        match find_content_level(asset, 5) {
-            Some((root, folders)) => AssetContent::Found { temp: None, root, folders },
-            None => AssetContent::None { temp: None },
-        }
-    } else {
-        AssetContent::None { temp: None }
     }
+    map
+}
+
+/// Join a `/`-separated relative path onto `base`, component by component (so the
+/// separator is normalized to the OS one rather than relying on `/` passthrough).
+fn join_rel(base: &Path, rel: &str) -> PathBuf {
+    let mut p = base.to_path_buf();
+    for c in rel.split('/').filter(|s| !s.is_empty()) {
+        p.push(c);
+    }
+    p
+}
+
+/// A small cache of destination directory listings (file name → size), so many
+/// scattered lookups (e.g. zip entries) read each dest directory only once.
+struct DestSizes {
+    cache: HashMap<PathBuf, HashMap<OsString, u64>>,
+}
+impl DestSizes {
+    fn new() -> Self {
+        Self { cache: HashMap::new() }
+    }
+    /// The installed size of `file` at the destination, or None if it isn't there.
+    fn len_of(&mut self, file: &Path) -> Option<u64> {
+        let dir = file.parent()?;
+        let name = file.file_name()?;
+        let map = self.cache.entry(dir.to_path_buf()).or_insert_with(|| dir_file_sizes(dir));
+        map.get(name).copied()
+    }
+}
+
+/// Find the directory *inside a zip* (within 5 levels) that holds Daz content
+/// folders, plus the folder names — the archive equivalent of `find_content_level`,
+/// computed purely from the central-directory entry paths (no extraction).
+fn find_zip_content_level(paths: &[&str]) -> Option<(String, Vec<String>)> {
+    // Map each directory in the archive to its immediate child directory names.
+    let mut children: HashMap<String, BTreeSet<String>> = HashMap::new();
+    for p in paths {
+        let comps: Vec<&str> = p.split('/').filter(|c| !c.is_empty()).collect();
+        // The last component is the file name; the rest are directories.
+        for i in 0..comps.len().saturating_sub(1) {
+            let parent = comps[..i].join("/");
+            children.entry(parent).or_default().insert(comps[i].to_string());
+        }
+    }
+    fn folders_in(dir: &str, children: &HashMap<String, BTreeSet<String>>) -> Vec<String> {
+        let kids = match children.get(dir) {
+            Some(k) => k,
+            None => return Vec::new(),
+        };
+        let real: Vec<String> =
+            CONTENT_FOLDERS.iter().filter(|f| kids.contains(**f)).map(|f| (*f).to_string()).collect();
+        if !real.is_empty() {
+            return real;
+        }
+        META_FOLDERS.iter().filter(|f| kids.contains(**f)).map(|f| (*f).to_string()).collect()
+    }
+    fn rec(
+        dir: String,
+        depth: u32,
+        children: &HashMap<String, BTreeSet<String>>,
+    ) -> Option<(String, Vec<String>)> {
+        let here = folders_in(&dir, children);
+        if !here.is_empty() {
+            return Some((dir, here));
+        }
+        if depth == 0 {
+            return None;
+        }
+        if let Some(kids) = children.get(&dir) {
+            for k in kids {
+                let sub = if dir.is_empty() { k.clone() } else { format!("{dir}/{k}") };
+                if let Some(found) = rec(sub, depth - 1, children) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    rec(String::new(), 5, &children)
+}
+
+/// Format the final step for an asset once its diff is known.
+fn finish_step(name: &str, diff_files: Vec<String>, total: u64, dry: bool) -> InstallStep {
+    if diff_files.is_empty() {
+        return step_skip(name, format!("already installed · {total} files"));
+    }
+    let verb = if dry { "to copy" } else { "copied" };
+    let diff = diff_files.len() as u64;
+    let mut s = step_ok(name, diff, format!("{diff}/{total} files {verb}"));
+    s.files_list = diff_files.into_iter().take(200).collect();
+    s
+}
+
+/// Diff (and, unless `dry`, install) one asset *folder* against the library.
+fn process_folder_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> InstallStep {
+    let (content_root, folders) = match find_content_level(asset, 5) {
+        Some(found) => found,
+        None => return step_skip(name, "no Daz content".into()),
+    };
+    let mut diff_files: Vec<String> = Vec::new();
+    let mut total = 0u64;
+    for f in &folders {
+        match sync_dir(&content_root.join(f), &dest.join(f), dry, force, Path::new(f), &mut diff_files) {
+            Ok(t) => total += t,
+            Err(e) => return step_err(name, io_detail(&format!("{} → {}", f, dest.join(f).display()), &e)),
+        }
+    }
+    finish_step(name, diff_files, total, dry)
+}
+
+/// Inflate one archive entry to `dest_path` (creating parent dirs as needed).
+fn extract_zip_entry(
+    archive: &mut zip::ZipArchive<fs::File>,
+    idx: usize,
+    dest_path: &Path,
+) -> std::io::Result<()> {
+    let mut entry = archive
+        .by_index(idx)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    if let Some(parent) = dest_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut out = fs::File::create(dest_path)?;
+    std::io::copy(&mut entry, &mut out)?;
+    Ok(())
+}
+
+/// Diff (and, unless `dry`, install) one `.zip` asset — read straight from the
+/// archive's central directory (uncompressed sizes), never extracting the whole
+/// thing. For a real install only the entries that differ are inflated.
+fn process_zip_asset(asset: &Path, name: &str, dest: &Path, dry: bool, force: bool) -> InstallStep {
+    let file = match fs::File::open(asset) {
+        Ok(f) => f,
+        Err(e) => return step_err(name, io_detail("open zip", &e)),
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(e) => return step_err(name, format!("unzip failed: {e}")),
+    };
+    // Central-directory pass: each file entry's path + uncompressed size. Setting
+    // up `by_index` reads only the local header — no decompression happens here.
+    let mut entries: Vec<(usize, String, u64)> = Vec::new();
+    for i in 0..archive.len() {
+        let entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.is_dir() {
+            continue;
+        }
+        // enclosed_name rejects absolute / `..` paths (zip-slip).
+        let rel = match entry.enclosed_name() {
+            Some(p) => p.to_string_lossy().replace('\\', "/"),
+            None => continue,
+        };
+        entries.push((i, rel, entry.size()));
+    }
+    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
+    let (root, folders) = match find_zip_content_level(&paths) {
+        Some(found) => found,
+        None => return step_skip(name, "no Daz content".into()),
+    };
+    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
+    let mut dest_sizes = DestSizes::new();
+    let mut diff_files: Vec<String> = Vec::new();
+    let mut needed: Vec<(usize, String)> = Vec::new();
+    let mut total = 0u64;
+    for (idx, path, size) in &entries {
+        // Keep only entries under <content-root>/<one of the chosen folders>.
+        let sub = match path.strip_prefix(&prefix) {
+            Some(s) => s,
+            None => continue,
+        };
+        let first = sub.split('/').next().unwrap_or("");
+        if !folders.iter().any(|f| f == first) {
+            continue;
+        }
+        total += 1;
+        let needs = force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size);
+        if needs {
+            diff_files.push(sub.to_string());
+            needed.push((*idx, sub.to_string()));
+        }
+    }
+    // Inflate only the differing entries on a real install.
+    if !dry {
+        for (idx, sub) in &needed {
+            if let Err(e) = extract_zip_entry(&mut archive, *idx, &join_rel(dest, sub)) {
+                return step_err(name, io_detail(&format!("extract {sub}"), &e));
+            }
+        }
+    }
+    finish_step(name, diff_files, total, dry)
+}
+
+/// Diff/install one asset (folder or `.zip`). Loose files at the source root
+/// (`.DS_Store`, readmes) aren't assets — they return None and are skipped.
+fn process_asset(asset: &Path, dest: &Path, dry: bool, force: bool) -> Option<InstallStep> {
+    let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+    if !asset.is_dir() && !is_zip {
+        return None;
+    }
+    let name = folder_name(asset);
+    Some(if is_zip {
+        process_zip_asset(asset, &name, dest, dry, force)
+    } else {
+        process_folder_asset(asset, &name, dest, dry, force)
+    })
 }
 
 /// Append `SHARED_PRESETS` + `HOUDINI_PATH` to `<houdini_docs>/houdini.env` if not
@@ -498,89 +685,42 @@ struct HoudiniPresetsRequest {
 #[tauri::command]
 fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dry = request.dry_run;
+    let force = request.force;
     let dest = Path::new(&request.dest);
     let mut steps: Vec<InstallStep> = Vec::new();
     for source in &request.sources {
         steps.push(step_header(source));
-        let src = Path::new(source);
-        if !src.is_dir() {
-            steps.push(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));
-            continue;
-        }
-        let mut assets: Vec<PathBuf> = match fs::read_dir(src) {
-            Ok(e) => e.flatten().map(|x| x.path()).collect(),
-            Err(e) => {
-                steps.push(step_err(&folder_name(src), io_detail("read", &e)));
-                continue;
-            }
-        };
-        assets.sort();
-        for asset in &assets {
-            // Loose files at the folder root (.DS_Store, a readme, …) aren't
-            // assets — only folders and .zip archives are.
-            let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
-            if !asset.is_dir() && !is_zip {
-                continue;
-            }
-            let name = folder_name(asset);
-            let (temp, level) = match resolve_asset(asset) {
-                AssetContent::Found { temp, root, folders } => (temp, Some((root, folders))),
-                AssetContent::None { temp } => (temp, None),
-                AssetContent::Error(msg) => {
-                    steps.push(step_err(&name, msg));
-                    continue;
-                }
-            };
-            match level {
-                None => steps.push(step_skip(&name, "no Daz content found".into())),
-                Some((content_root, folders)) => {
-                    // Per-file size-aware sync: copy only files missing or changed,
-                    // collecting the changed paths for the expandable list.
-                    let mut diff_files: Vec<String> = Vec::new();
-                    let mut total = 0u64;
-                    let mut err: Option<String> = None;
-                    for f in &folders {
-                        match sync_dir(
-                            &content_root.join(f),
-                            &dest.join(f),
-                            dry,
-                            request.force,
-                            Path::new(f),
-                            &mut diff_files,
-                        ) {
-                            Ok(t) => total += t,
-                            Err(e) => {
-                                err = Some(io_detail(&format!("{} → {}", f, dest.join(f).display()), &e));
-                                break;
-                            }
-                        }
-                    }
-                    let diff = diff_files.len() as u64;
-                    match err {
-                        Some(m) => steps.push(step_err(&name, m)),
-                        None if diff == 0 => {
-                            steps.push(step_skip(&name, format!("already installed · {total} files")))
-                        }
-                        None => {
-                            let verb = if dry { "to copy" } else { "copied" };
-                            let mut s = step_ok(
-                                &name,
-                                diff,
-                                format!("{diff}/{total} files {verb}"),
-                            );
-                            s.files_list = diff_files.into_iter().take(200).collect();
-                            steps.push(s);
-                        }
-                    }
-                }
-            }
-            if let Some(t) = temp {
-                let _ = fs::remove_dir_all(&t);
-            }
+        match collect_assets(source) {
+            Err(step) => steps.push(step),
+            Ok(assets) => steps.extend(process_assets(&assets, dest, dry, force)),
         }
     }
     let total_files = steps.iter().map(|s| s.files).sum();
     InstallReport { dry_run: dry, steps, total_files }
+}
+
+/// Read a source folder's immediate children, sorted. On failure returns a single
+/// step (folder-missing skip or read error) for the caller to surface.
+fn collect_assets(source: &str) -> Result<Vec<PathBuf>, InstallStep> {
+    let src = Path::new(source);
+    if !src.is_dir() {
+        return Err(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));
+    }
+    match fs::read_dir(src) {
+        Ok(e) => {
+            let mut assets: Vec<PathBuf> = e.flatten().map(|x| x.path()).collect();
+            assets.sort();
+            Ok(assets)
+        }
+        Err(e) => Err(step_err(&folder_name(src), io_detail("read", &e))),
+    }
+}
+
+/// Process a source folder's assets in parallel — each is independent (I/O-bound
+/// folder walks / zip reads), and `collect` preserves order so they stay sorted
+/// under their header. Loose files are filtered out (process_asset returns None).
+fn process_assets(assets: &[PathBuf], dest: &Path, dry: bool, force: bool) -> Vec<InstallStep> {
+    assets.par_iter().filter_map(|asset| process_asset(asset, dest, dry, force)).collect()
 }
 
 /// Read-only scan: what content each asset holds and whether it's already in the library.
@@ -590,64 +730,9 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let mut steps: Vec<InstallStep> = Vec::new();
     for source in &request.sources {
         steps.push(step_header(source));
-        let src = Path::new(source);
-        if !src.is_dir() {
-            steps.push(step_skip(&folder_name(src), format!("folder not found ({})", src.display())));
-            continue;
-        }
-        let mut assets: Vec<PathBuf> = match fs::read_dir(src) {
-            Ok(e) => e.flatten().map(|x| x.path()).collect(),
-            Err(e) => {
-                steps.push(step_err(&folder_name(src), io_detail("read", &e)));
-                continue;
-            }
-        };
-        assets.sort();
-        for asset in &assets {
-            // Loose files at the folder root (.DS_Store, a readme, …) aren't
-            // assets — only folders and .zip archives are.
-            let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
-            if !asset.is_dir() && !is_zip {
-                continue;
-            }
-            let name = folder_name(asset);
-            let (temp, level) = match resolve_asset(asset) {
-                AssetContent::Found { temp, root, folders } => (temp, Some((root, folders))),
-                AssetContent::None { temp } => (temp, None),
-                AssetContent::Error(msg) => {
-                    steps.push(step_err(&name, msg));
-                    continue;
-                }
-            };
-            match level {
-                None => steps.push(step_skip(&name, "no Daz content".into())),
-                Some((content_root, folders)) => {
-                    let mut diff_files: Vec<String> = Vec::new();
-                    let mut total = 0u64;
-                    for f in &folders {
-                        if let Ok(t) =
-                            sync_dir(&content_root.join(f), &dest.join(f), true, false, Path::new(f), &mut diff_files)
-                        {
-                            total += t;
-                        }
-                    }
-                    let diff = diff_files.len() as u64;
-                    if diff == 0 {
-                        steps.push(step_skip(&name, format!("installed · {total} files")));
-                    } else {
-                        let mut s = step_ok(
-                            &name,
-                            diff,
-                            format!("{diff}/{total} files to copy"),
-                        );
-                        s.files_list = diff_files.into_iter().take(200).collect();
-                        steps.push(s);
-                    }
-                }
-            }
-            if let Some(t) = temp {
-                let _ = fs::remove_dir_all(&t);
-            }
+        match collect_assets(source) {
+            Err(step) => steps.push(step),
+            Ok(assets) => steps.extend(process_assets(&assets, dest, true, false)),
         }
     }
     let total_files = steps.iter().map(|s| s.files).sum();
@@ -1016,4 +1101,52 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zip_content_level_at_root() {
+        let paths = vec!["data/foo.dsf", "Runtime/Textures/x.png", "readme.txt"];
+        let (root, mut folders) = find_zip_content_level(&paths).unwrap();
+        folders.sort();
+        assert_eq!(root, "");
+        assert_eq!(folders, vec!["Runtime".to_string(), "data".to_string()]);
+    }
+
+    #[test]
+    fn zip_content_level_nested() {
+        let paths = vec![
+            "My Asset/Documentation/read.pdf",
+            "My Asset/data/people/g9/morph.dsf",
+            "My Asset/People/Genesis 9/x.duf",
+        ];
+        let (root, mut folders) = find_zip_content_level(&paths).unwrap();
+        folders.sort();
+        assert_eq!(root, "My Asset");
+        // Real content folders (data/People) win over the Documentation meta-folder.
+        assert_eq!(folders, vec!["People".to_string(), "data".to_string()]);
+    }
+
+    #[test]
+    fn zip_content_level_meta_only() {
+        let paths = vec!["Pkg/Documentation/read.pdf", "Pkg/notes.txt"];
+        let (root, folders) = find_zip_content_level(&paths).unwrap();
+        assert_eq!(root, "Pkg");
+        assert_eq!(folders, vec!["Documentation".to_string()]);
+    }
+
+    #[test]
+    fn zip_content_level_none() {
+        let paths = vec!["random/file.txt", "other.bin"];
+        assert!(find_zip_content_level(&paths).is_none());
+    }
+
+    #[test]
+    fn join_rel_uses_components() {
+        let joined = join_rel(Path::new("base"), "data/foo/bar.dsf");
+        assert_eq!(joined, Path::new("base").join("data").join("foo").join("bar.dsf"));
+    }
 }
