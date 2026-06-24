@@ -899,6 +899,8 @@ struct DedupRequest {
 #[serde(rename_all = "camelCase")]
 struct ConflictCopy {
     label: String,
+    /// The source folder this copy lives in (e.g. "_genesis 9").
+    source: String,
     size: u64,
     in_zip: bool,
     is_winner: bool,
@@ -919,6 +921,8 @@ struct FileConflict {
 #[serde(rename_all = "camelCase")]
 struct DupMember {
     label: String,
+    /// The source folder this copy lives in (e.g. "_genesis 9").
+    source: String,
     file_count: u64,
     is_zip: bool,
     /// The copy kept (others are quarantined). The default is auto-picked but the
@@ -965,6 +969,8 @@ struct DedupReport {
 /// One asset's content files, plus what's needed to rewrite/quarantine it.
 struct AssetFiles {
     label: String,
+    /// The source folder this asset lives in (e.g. "_genesis 9"). Set by the caller.
+    source_root: String,
     is_zip: bool,
     /// The top-level entry (folder or `.zip`) — moved on quarantine.
     asset_path: PathBuf,
@@ -1028,6 +1034,7 @@ fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
         }
         Some(AssetFiles {
             label,
+            source_root: String::new(),
             is_zip: true,
             asset_path: asset.to_path_buf(),
             source: asset.to_path_buf(),
@@ -1042,6 +1049,7 @@ fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
         }
         Some(AssetFiles {
             label,
+            source_root: String::new(),
             is_zip: false,
             asset_path: asset.to_path_buf(),
             source: content_root,
@@ -1122,8 +1130,12 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
             Err(_) => continue,
         };
         entries.sort();
+        let root_label = folder_name(src);
         let mut found: Vec<AssetFiles> =
             entries.par_iter().filter_map(|a| collect_asset_files(a)).collect();
+        for af in &mut found {
+            af.source_root = root_label.clone();
+        }
         assets.append(&mut found);
     }
 
@@ -1238,6 +1250,7 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
             .iter()
             .map(|&(i, s)| ConflictCopy {
                 label: assets[i].label.clone(),
+                source: assets[i].source_root.clone(),
                 size: s,
                 in_zip: assets[i].is_zip,
                 is_winner: i == win_i,
@@ -1316,6 +1329,7 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                 .iter()
                 .map(|&i| DupMember {
                     label: assets[i].label.clone(),
+                    source: assets[i].source_root.clone(),
                     file_count: filecount[i] as u64,
                     is_zip: assets[i].is_zip,
                     is_keeper: i == keeper,

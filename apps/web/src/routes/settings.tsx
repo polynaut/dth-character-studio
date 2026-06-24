@@ -599,6 +599,9 @@ function DedupReportList({
                             <span className={`break-all ${isKeep ? 'font-medium' : 'text-muted-foreground'}`}>
                               {m.label}
                             </span>
+                            <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                              {m.source}
+                            </span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               · {m.fileCount} files{m.isZip ? ' · zip' : ''}
                               {isKeep
@@ -631,10 +634,22 @@ function DedupReportList({
             {groups.map((g) => {
               const rels = g.items.map((i) => i.rel)
               const anyZip = g.items.some((i) => i.blockedByZip)
+              const sourceOf = new Map<string, string>()
+              for (const c of g.items) for (const cp of c.copies) sourceOf.set(cp.label, cp.source)
               return (
                 <li key={g.labels.join('|')} className="rounded-md border bg-background/40 p-2">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-medium break-all">{g.labels.join('  ↔  ')}</span>
+                    <span className="font-medium break-all">
+                      {g.labels.map((l, idx) => (
+                        <span key={l}>
+                          {idx > 0 && <span className="text-muted-foreground"> ↔ </span>}
+                          {l}
+                          <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">
+                            {sourceOf.get(l)}
+                          </span>
+                        </span>
+                      ))}
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
                       {anyZip ? ' · ⚠ involves a .zip' : ''}

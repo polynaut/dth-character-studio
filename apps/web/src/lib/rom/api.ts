@@ -930,6 +930,8 @@ export async function setAcceptedConflicts(
 /** One copy of a conflicting shared file (mirrors Rust `ConflictCopy`). */
 export interface ConflictCopy {
   label: string
+  /** Source folder the copy lives in (e.g. "_genesis 9"). */
+  source: string
   size: number
   inZip: boolean
   isWinner: boolean
@@ -945,6 +947,8 @@ export interface FileConflict {
 /** One copy in a duplicate group. */
 export interface DupMember {
   label: string
+  /** Source folder the copy lives in (e.g. "_genesis 9"). */
+  source: string
   fileCount: number
   isZip: boolean
   /** The copy kept (others are quarantined) — auto-picked, user-overridable. */
