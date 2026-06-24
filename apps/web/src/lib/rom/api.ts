@@ -907,6 +907,51 @@ export async function listDazAssets(): Promise<InstallReport> {
   })
 }
 
+/** One copy of a conflicting shared file (mirrors Rust `ConflictCopy`). */
+export interface ConflictCopy {
+  label: string
+  size: number
+  inZip: boolean
+  isWinner: boolean
+}
+/** A file shipped by 2+ assets at different sizes — the install ping-pong cause. */
+export interface FileConflict {
+  rel: string
+  copies: Array<ConflictCopy>
+  /** A non-winning copy is inside a .zip and can't be rewritten in place. */
+  blockedByZip: boolean
+  fixed: boolean
+}
+/** A set of assets with identical destination files (a whole-asset duplicate). */
+export interface AssetDup {
+  keeper: string
+  redundant: Array<string>
+  fileCount: number
+  fixed: boolean
+}
+/** Result of the dedup scan/apply (mirrors Rust `DedupReport`). */
+export interface DedupReport {
+  dryRun: boolean
+  conflicts: Array<FileConflict>
+  duplicates: Array<AssetDup>
+  filesChanged: number
+  assetsQuarantined: number
+  backupDir: string
+}
+
+/** Find (dry run) or resolve duplicate assets + conflicting shared files. Apply
+ *  rewrites every smaller copy — and the library copy — to the largest version,
+ *  and quarantines redundant duplicate assets. Reversible (originals backed up). */
+export async function dedupDazAssets({ data }: { data: unknown }): Promise<DedupReport> {
+  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const s = await storage.getSettings()
+  const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
+  if (!sources.length) throw new Error('Add at least one Daz assets folder')
+  return invoke<DedupReport>('dedup_daz_assets', {
+    request: { sources, dest: s.dazLibraryFolder.trim(), dryRun: dryRun ?? false },
+  })
+}
+
 /** Merge-only install (adds new files, never overwrites) used for custom morphs
  *  and presets — `which` picks the source/dest pair from settings. */
 async function installMerge(

@@ -844,6 +844,339 @@ fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     InstallReport { dry_run: true, steps, total_files }
 }
 
+// --- "Dedup" action: resolve duplicate assets + conflicting shared files ------
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DedupRequest {
+    sources: Vec<String>,
+    dest: String,
+    dry_run: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConflictCopy {
+    label: String,
+    size: u64,
+    in_zip: bool,
+    is_winner: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileConflict {
+    rel: String,
+    copies: Vec<ConflictCopy>,
+    /// A non-winning copy sits inside a .zip and can't be rewritten in place.
+    blocked_by_zip: bool,
+    /// Set after apply: this conflict's losers were rewritten to the winner.
+    fixed: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AssetDup {
+    keeper: String,
+    redundant: Vec<String>,
+    file_count: u64,
+    /// Set after apply: the redundant copies were quarantined.
+    fixed: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DedupReport {
+    dry_run: bool,
+    conflicts: Vec<FileConflict>,
+    duplicates: Vec<AssetDup>,
+    files_changed: u64,
+    assets_quarantined: u64,
+    backup_dir: String,
+}
+
+/// One asset's content files, plus what's needed to rewrite/quarantine it.
+struct AssetFiles {
+    label: String,
+    is_zip: bool,
+    /// The top-level entry (folder or `.zip`) — moved on quarantine.
+    asset_path: PathBuf,
+    /// Content root (folder) or the zip path — base for reading a file's bytes.
+    source: PathBuf,
+    /// Content prefix inside the zip ("" for folders / root-level zips).
+    zip_prefix: String,
+    files: Vec<(String, u64)>,
+}
+
+fn collect_folder_files(dir: &Path, rel: &Path, out: &mut Vec<(String, u64)>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            let rc = rel.join(e.file_name());
+            if p.is_dir() {
+                collect_folder_files(&p, &rc, out);
+            } else if let Ok(md) = e.metadata() {
+                out.push((rc.to_string_lossy().replace('\\', "/"), md.len()));
+            }
+        }
+    }
+}
+
+/// Resolve an asset to its full content-file list (rel path → size). None for
+/// loose files / assets with no Daz content.
+fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
+    let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+    if !asset.is_dir() && !is_zip {
+        return None;
+    }
+    let label = folder_name(asset);
+    if is_zip {
+        let file = fs::File::open(asset).ok()?;
+        let mut archive = zip::ZipArchive::new(file).ok()?;
+        let mut entries: Vec<(String, u64)> = Vec::new();
+        for i in 0..archive.len() {
+            let e = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            if e.is_dir() {
+                continue;
+            }
+            let rel = match e.enclosed_name() {
+                Some(p) => p.to_string_lossy().replace('\\', "/"),
+                None => continue,
+            };
+            entries.push((rel, e.size()));
+        }
+        let paths: Vec<&str> = entries.iter().map(|(p, _)| p.as_str()).collect();
+        let (root, folders) = find_zip_content_level(&paths)?;
+        let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
+        let mut files = Vec::new();
+        for (p, sz) in &entries {
+            if let Some(sub) = p.strip_prefix(&prefix) {
+                if folders.iter().any(|f| f == sub.split('/').next().unwrap_or("")) {
+                    files.push((sub.to_string(), *sz));
+                }
+            }
+        }
+        Some(AssetFiles {
+            label,
+            is_zip: true,
+            asset_path: asset.to_path_buf(),
+            source: asset.to_path_buf(),
+            zip_prefix: prefix,
+            files,
+        })
+    } else {
+        let (content_root, folders) = find_content_level(asset, 5)?;
+        let mut files = Vec::new();
+        for f in &folders {
+            collect_folder_files(&content_root.join(f), Path::new(f), &mut files);
+        }
+        Some(AssetFiles {
+            label,
+            is_zip: false,
+            asset_path: asset.to_path_buf(),
+            source: content_root,
+            zip_prefix: String::new(),
+            files,
+        })
+    }
+}
+
+/// The winning copy's bytes for a file (read from its folder, or extracted from its zip).
+fn winner_bytes(af: &AssetFiles, rel: &str) -> std::io::Result<Vec<u8>> {
+    if af.is_zip {
+        let file = fs::File::open(&af.source)?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        // Match by the same sanitized name used to index `files`, so a path the
+        // central directory stores oddly still resolves.
+        let want = format!("{}{}", af.zip_prefix, rel);
+        for i in 0..archive.len() {
+            let mut e = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let name = match e.enclosed_name() {
+                Some(p) => p.to_string_lossy().replace('\\', "/"),
+                None => continue,
+            };
+            if name == want {
+                let mut buf = Vec::new();
+                std::io::copy(&mut e, &mut buf)?;
+                return Ok(buf);
+            }
+        }
+        Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("zip entry not found: {want}")))
+    } else {
+        fs::read(join_rel(&af.source, rel))
+    }
+}
+
+/// Back up `file` under the dedup backup tree (keeps the first original). Best-effort.
+fn dedup_backup(root: &Path, label: &str, rel: &str, file: &Path) {
+    let dest = join_rel(&root.join("files").join(label), rel);
+    if dest.exists() || !file.exists() {
+        return;
+    }
+    if let Some(p) = dest.parent() {
+        let _ = fs::create_dir_all(p);
+    }
+    let _ = fs::copy(file, &dest);
+}
+
+/// Find duplicate assets + conflicting shared files across the source folders, and
+/// (unless `dry_run`) resolve them: rewrite every smaller copy of a conflicting file
+/// — and the library copy — to the LARGEST version, and quarantine redundant
+/// duplicate assets. Reversible: originals are backed up under
+/// `<sources' parent>/_dth_dedup_backup`. Copies inside a `.zip` can't be rewritten.
+#[tauri::command]
+fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
+    let dry = request.dry_run;
+    let dest = Path::new(&request.dest);
+    let backup_root = request
+        .sources
+        .first()
+        .and_then(|s| Path::new(s).parent().map(|p| p.join("_dth_dedup_backup")))
+        .unwrap_or_else(|| PathBuf::from("_dth_dedup_backup"));
+
+    // Gather every asset's content files (independent reads → parallel).
+    let mut assets: Vec<AssetFiles> = Vec::new();
+    for source in &request.sources {
+        let src = Path::new(source);
+        if !src.is_dir() {
+            continue;
+        }
+        let mut entries: Vec<PathBuf> = match fs::read_dir(src) {
+            Ok(e) => e.flatten().map(|x| x.path()).collect(),
+            Err(_) => continue,
+        };
+        entries.sort();
+        let mut found: Vec<AssetFiles> =
+            entries.par_iter().filter_map(|a| collect_asset_files(a)).collect();
+        assets.append(&mut found);
+    }
+
+    // --- conflicting shared files: same dest path, different sizes across assets ---
+    let mut byrel: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, af) in assets.iter().enumerate() {
+        for (rel, _sz) in &af.files {
+            byrel.entry(rel.clone()).or_default().push(i);
+        }
+    }
+    let mut conflicts: Vec<FileConflict> = Vec::new();
+    let mut files_changed = 0u64;
+    for (rel, idxs) in &byrel {
+        if idxs.len() < 2 {
+            continue;
+        }
+        let sized: Vec<(usize, u64)> = idxs
+            .iter()
+            .map(|&i| {
+                let s = assets[i].files.iter().find(|(r, _)| r == rel).map(|(_, s)| *s).unwrap_or(0);
+                (i, s)
+            })
+            .collect();
+        let distinct: std::collections::HashSet<u64> = sized.iter().map(|(_, s)| *s).collect();
+        if distinct.len() < 2 {
+            continue;
+        }
+        let (win_i, win_sz) = *sized.iter().max_by_key(|(_, s)| *s).unwrap();
+        let blocked_by_zip = sized.iter().any(|&(i, _)| i != win_i && assets[i].is_zip);
+        let copies = sized
+            .iter()
+            .map(|&(i, s)| ConflictCopy {
+                label: assets[i].label.clone(),
+                size: s,
+                in_zip: assets[i].is_zip,
+                is_winner: i == win_i,
+            })
+            .collect();
+        let mut fixed = false;
+        if !dry {
+            if let Ok(bytes) = winner_bytes(&assets[win_i], rel) {
+                for &(i, s) in &sized {
+                    if i == win_i || s == win_sz || assets[i].is_zip {
+                        continue; // winner, already-matching, or unrewritable zip
+                    }
+                    let target = join_rel(&assets[i].source, rel);
+                    dedup_backup(&backup_root, &assets[i].label, rel, &target);
+                    if fs::write(&target, &bytes).is_ok() {
+                        files_changed += 1;
+                        fixed = true;
+                    }
+                }
+                // bring the installed library copy up to the winner too
+                let lib = join_rel(dest, rel);
+                if lib.exists() && fs::metadata(&lib).map(|m| m.len()).unwrap_or(0) != win_sz {
+                    dedup_backup(&backup_root, "__library__", rel, &lib);
+                    if fs::write(&lib, &bytes).is_ok() {
+                        files_changed += 1;
+                        fixed = true;
+                    }
+                }
+            }
+        }
+        conflicts.push(FileConflict { rel: rel.clone(), copies, blocked_by_zip, fixed });
+    }
+    conflicts.sort_by(|a, b| a.rel.cmp(&b.rel));
+
+    // --- duplicate assets: identical destination file set (same fingerprint) ---
+    let mut byfp: HashMap<u64, Vec<usize>> = HashMap::new();
+    for (i, af) in assets.iter().enumerate() {
+        if af.files.is_empty() {
+            continue;
+        }
+        let mut fp = 0u64;
+        for (rel, _s) in &af.files {
+            fp_add(&mut fp, rel);
+        }
+        byfp.entry(fp).or_default().push(i);
+    }
+    let mut duplicates: Vec<AssetDup> = Vec::new();
+    let mut assets_quarantined = 0u64;
+    for idxs in byfp.values() {
+        if idxs.len() < 2 {
+            continue;
+        }
+        // keeper: prefer a folder over a zip, then the shortest label.
+        let keeper = *idxs
+            .iter()
+            .min_by_key(|&&i| (assets[i].is_zip, assets[i].label.len()))
+            .unwrap();
+        let redundant: Vec<usize> = idxs.iter().cloned().filter(|&i| i != keeper).collect();
+        let mut fixed = false;
+        if !dry {
+            let qdir = backup_root.join("quarantine");
+            let _ = fs::create_dir_all(&qdir);
+            for &i in &redundant {
+                let target = qdir.join(&assets[i].label);
+                if !target.exists() && fs::rename(&assets[i].asset_path, &target).is_ok() {
+                    assets_quarantined += 1;
+                    fixed = true;
+                }
+            }
+        }
+        duplicates.push(AssetDup {
+            keeper: assets[keeper].label.clone(),
+            redundant: redundant.iter().map(|&i| assets[i].label.clone()).collect(),
+            file_count: assets[keeper].files.len() as u64,
+            fixed,
+        });
+    }
+    duplicates.sort_by(|a, b| a.keeper.cmp(&b.keeper));
+
+    DedupReport {
+        dry_run: dry,
+        conflicts,
+        duplicates,
+        files_changed,
+        assets_quarantined,
+        backup_dir: backup_root.display().to_string(),
+    }
+}
+
 /// Merge-only install (adds new files, never overwrites) for custom morphs / presets.
 #[tauri::command]
 fn install_daz_merge(request: MergeInstallRequest) -> InstallReport {
@@ -1197,6 +1530,7 @@ pub fn run() {
             install_dth_plugin,
             install_daz_assets,
             list_daz_assets,
+            dedup_daz_assets,
             install_daz_merge,
             install_houdini_presets,
             unc_for_path,

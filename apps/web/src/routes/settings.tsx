@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '#/components/ui/select.tsx'
 import {
+  dedupDazAssets,
   ensureNetworkDrives,
   fetchAppDataFolder,
   fetchKnownDrives,
@@ -56,6 +57,7 @@ import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 
 import type {
+  DedupReport,
   DthExporterReleaseInfo,
   DthReleaseInfo,
   InstallReport,
@@ -513,6 +515,82 @@ function InstallReportList({ report }: { report: InstallReport }) {
   )
 }
 
+/** Result of the dedup scan/apply: conflicting shared files + duplicate assets. */
+function DedupReportList({ report }: { report: DedupReport }) {
+  const clean = report.conflicts.length === 0 && report.duplicates.length === 0
+  return (
+    <div className="space-y-4 border-t pt-3 text-sm">
+      {clean && (
+        <p className="text-muted-foreground">No duplicate assets or file conflicts found.</p>
+      )}
+
+      {report.duplicates.length > 0 && (
+        <div>
+          <p className="mb-1 font-medium">Duplicate assets ({report.duplicates.length})</p>
+          <ul className="space-y-1">
+            {report.duplicates.map((d) => (
+              <li key={d.keeper} className="flex items-start gap-2">
+                <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <span>
+                  keep <span className="font-medium">{d.keeper}</span>
+                  <span className="text-muted-foreground">
+                    {' '}· {report.dryRun ? 'quarantine' : d.fixed ? 'quarantined' : 'failed'}{' '}
+                    {d.redundant.join(', ')} · {d.fileCount} files
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {report.conflicts.length > 0 && (
+        <div>
+          <p className="mb-1 font-medium">Conflicting shared files ({report.conflicts.length})</p>
+          <ul className="space-y-1">
+            {report.conflicts.map((c) => (
+              <li key={c.rel} className="flex items-start gap-2">
+                {report.dryRun ? (
+                  <CircleSlash className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                ) : c.fixed ? (
+                  <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                ) : (
+                  <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
+                )}
+                <span>
+                  <span className="font-mono text-xs break-all">{c.rel}</span>
+                  <span className="text-muted-foreground">
+                    {' '}—{' '}
+                    {c.copies
+                      .map(
+                        (cp) =>
+                          `${cp.label}: ${cp.size}B${cp.isWinner ? ' ◀ keep' : ''}${cp.inZip ? ' (zip)' : ''}`,
+                      )
+                      .join('  vs  ')}
+                  </span>
+                  {c.blockedByZip && (
+                    <span className="text-amber-600 dark:text-amber-500">
+                      {' '}· ⚠ a copy is inside a .zip — extract it to fully resolve
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {!report.dryRun && (
+        <p className="text-xs text-muted-foreground">
+          Rewrote {report.filesChanged} file(s), quarantined {report.assetsQuarantined} asset(s).
+          Originals backed up to <PathCode path={displayPath(report.backupDir)} />. Re-scan to
+          confirm, then delete the backup when satisfied.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function SettingsPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
@@ -549,6 +627,8 @@ function SettingsPage() {
   // Optional-tab install state (one busy flag + report per section).
   const [assetsBusy, setAssetsBusy] = useState(false)
   const [assetsReport, setAssetsReport] = useState<InstallReport | null>(null)
+  const [dedupBusy, setDedupBusy] = useState(false)
+  const [dedupReport, setDedupReport] = useState<DedupReport | null>(null)
   const [morphsBusy, setMorphsBusy] = useState(false)
   const [morphsReport, setMorphsReport] = useState<InstallReport | null>(null)
   const [presetsBusy, setPresetsBusy] = useState(false)
@@ -812,6 +892,39 @@ function SettingsPage() {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setAssetsBusy(false)
+    }
+  }
+
+  // Dedup: scan (dry run) finds conflicting shared files + duplicate assets; apply
+  // rewrites every smaller copy to the largest and quarantines redundant assets.
+  async function runDedup(dryRun: boolean) {
+    setDedupBusy(true)
+    if (dryRun) setDedupReport(null)
+    try {
+      if (dirty) {
+        await saveSettings({ data: settings })
+        await router.invalidate()
+      }
+      const report = await dedupDazAssets({ data: { dryRun } })
+      setDedupReport(report)
+      const issues = report.conflicts.length + report.duplicates.length
+      if (dryRun) {
+        toast.success(
+          issues === 0
+            ? 'No duplicates or file conflicts found'
+            : `Found ${report.conflicts.length} file conflict(s) and ${report.duplicates.length} duplicate asset(s)`,
+        )
+      } else {
+        toast.success(
+          `Rewrote ${report.filesChanged} file(s), quarantined ${report.assetsQuarantined} asset(s)`,
+        )
+        // The asset listing changed — drop the stale scan report.
+        setAssetsReport(null)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDedupBusy(false)
     }
   }
 
@@ -1254,6 +1367,44 @@ function SettingsPage() {
               </Button>
             </div>
             {assetsReport && <InstallReportList report={assetsReport} />}
+          </section>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="flex w-fit items-center gap-1 font-semibold">
+                Deduplicate
+                <InfoPopup label="Deduplicate — more information">
+                  Finds <strong>duplicate assets</strong> (a folder and its identical .zip) and
+                  <strong> conflicting shared files</strong> — the same file shipped by two assets at
+                  different sizes, which makes both perpetually show “to copy” (e.g. the G8 and G9
+                  versions of a product sharing textures). <strong>Apply</strong> rewrites every
+                  smaller copy — and the installed library copy — to the <strong>largest</strong>{' '}
+                  version, and quarantines redundant duplicate assets. Reversible: originals are
+                  backed up. Copies inside a .zip can't be rewritten — extract them to resolve fully.
+                </InfoPopup>
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Scan first to preview; nothing is changed until you Apply.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void runDedup(true)} disabled={dedupBusy}>
+                {dedupBusy ? 'Working…' : 'Scan for duplicates'}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => void runDedup(false)}
+                disabled={
+                  dedupBusy ||
+                  !dedupReport?.dryRun ||
+                  (dedupReport.conflicts.length === 0 && dedupReport.duplicates.length === 0)
+                }
+                title="Rewrite smaller copies to the largest and quarantine duplicates (reversible)"
+              >
+                Apply dedup
+              </Button>
+            </div>
+            {dedupReport && <DedupReportList report={dedupReport} />}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
