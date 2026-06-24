@@ -646,24 +646,46 @@ function DedupReportList({
               for (const c of g.items) for (const cp of c.copies) sourceOf.set(cp.label, cp.source)
               return (
                 <li key={g.labels.join('|')} className="rounded-md border bg-background/40 p-2">
-                  <div className="flex items-end gap-2">
-                    <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-medium break-all">
-                        {g.labels.map((l, idx) => (
-                          <span key={l}>
-                            {idx > 0 && <span className="text-muted-foreground"> ↔ </span>}
-                            {l}
-                            <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">
-                              {sourceOf.get(l)}
-                            </span>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium break-all">
+                      {g.labels.map((l, idx) => (
+                        <span key={l}>
+                          {idx > 0 && <span className="text-muted-foreground"> ↔ </span>}
+                          {l}
+                          <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">
+                            {sourceOf.get(l)}
                           </span>
+                        </span>
+                      ))}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
+                      {anyZip ? ' · ⚠ involves a .zip' : ''}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-start justify-between gap-2">
+                    <details className="min-w-0">
+                      <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+                        Show files
+                      </summary>
+                      <ul className="mt-1 space-y-0.5">
+                        {g.items.map((c) => (
+                          <li key={c.rel} className="font-mono text-xs break-all">
+                            {c.rel}
+                            <span className="font-sans text-muted-foreground">
+                              {' '}—{' '}
+                              {c.copies
+                                .map(
+                                  (cp) =>
+                                    `${cp.size}B${cp.isWinner ? ' ◀ keep' : ''}${cp.inZip ? ' (zip)' : ''}`,
+                                )
+                                .join(' vs ')}
+                              {!report.dryRun && c.fixed && ' · fixed'}
+                            </span>
+                          </li>
                         ))}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
-                        {anyZip ? ' · ⚠ involves a .zip' : ''}
-                      </span>
-                    </div>
+                      </ul>
+                    </details>
                     {report.dryRun && (
                       <Button
                         variant="outline"
@@ -677,28 +699,6 @@ function DedupReportList({
                       </Button>
                     )}
                   </div>
-                  <details className="mt-1">
-                    <summary className="cursor-pointer text-xs text-muted-foreground select-none">
-                      Show files
-                    </summary>
-                    <ul className="mt-1 space-y-0.5">
-                      {g.items.map((c) => (
-                        <li key={c.rel} className="font-mono text-xs break-all">
-                          {c.rel}
-                          <span className="font-sans text-muted-foreground">
-                            {' '}—{' '}
-                            {c.copies
-                              .map(
-                                (cp) =>
-                                  `${cp.size}B${cp.isWinner ? ' ◀ keep' : ''}${cp.inZip ? ' (zip)' : ''}`,
-                              )
-                              .join(' vs ')}
-                            {!report.dryRun && c.fixed && ' · fixed'}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
                 </li>
               )
             })}
