@@ -791,6 +791,12 @@ struct HoudiniPresetsRequest {
 /// Install your own Daz assets (G3/G8/G9, `.zip`s extracted) from the source
 /// folders into the library — content-folder-aware, overwriting per asset, and
 /// skipping ones that already appear installed unless `force`.
+///
+/// Source folders are installed STRICTLY IN ORDER (each `process_assets` blocks
+/// before the next folder starts), so when two products in different folders ship
+/// the same library file the LATER folder wins — this is the user-facing "install
+/// order" guarantee (assets within one folder still install in parallel). Don't
+/// parallelize across folders without preserving last-folder-wins.
 #[tauri::command]
 fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dry = request.dry_run;
