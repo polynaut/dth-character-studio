@@ -1482,7 +1482,7 @@ function SettingsPage() {
                 <div key={i} className="flex gap-2">
                   <Input
                     value={displayPath(folder)}
-                    placeholder="X:\…\daz assets"
+                    placeholder="D:\…\daz assets"
                     onChange={(e) => updateAssetFolder(i, e.target.value)}
                   />
                   <Button
@@ -1569,7 +1569,7 @@ function SettingsPage() {
             <FolderField
               label="Quarantine folder"
               value={settings.dedupQuarantineFolder}
-              placeholder="X:\…\_quarantine"
+              placeholder="D:\…\_quarantine"
               info={
                 <>
                   Where Apply moves the redundant duplicate copies. Required to run Apply — nothing is
@@ -1628,7 +1628,7 @@ function SettingsPage() {
             <FolderField
               label="Morphs source"
               value={settings.dazMorphsSource}
-              placeholder="X:\…\_morphs"
+              placeholder="D:\…\_morphs"
               help={<>Your custom-morphs source folder.</>}
               onChange={(value) => setSettings((s) => ({ ...s, dazMorphsSource: value }))}
             />
@@ -1673,7 +1673,7 @@ function SettingsPage() {
             <FolderField
               label="Presets source"
               value={settings.dazPresetsSource}
-              placeholder="X:\…\_presets"
+              placeholder="D:\…\_presets"
               help={<>Your presets source folder.</>}
               onChange={(value) => setSettings((s) => ({ ...s, dazPresetsSource: value }))}
             />
@@ -1720,7 +1720,7 @@ function SettingsPage() {
             <FolderField
               label="Houdini presets source"
               value={settings.houdiniPresetsSource}
-              placeholder="X:\…\houdini\my_presets"
+              placeholder="D:\…\houdini\my_presets"
               help={<>Your Houdini presets source folder.</>}
               onChange={(value) => setSettings((s) => ({ ...s, houdiniPresetsSource: value }))}
             />
