@@ -587,7 +587,7 @@ function DedupReportList({
                     <span className="rounded bg-muted px-1 py-0.5 text-[10px]">{sources}</span>
                     {d.kind === 'version' && (
                       <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500">
-                        version · same product, different version
+                        same product, different version
                       </span>
                     )}
                   </div>
