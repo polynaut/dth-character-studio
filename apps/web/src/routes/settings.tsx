@@ -1533,6 +1533,20 @@ function SettingsPage() {
                 Scan first to preview; nothing is changed until you Apply.
               </p>
             </div>
+            <FolderField
+              label="Quarantine folder"
+              value={settings.dedupQuarantineFolder}
+              placeholder="X:\…\_quarantine"
+              info={
+                <>
+                  Where Apply moves the redundant duplicate copies. Required to run Apply — nothing is
+                  moved until it's set. Pick a folder <strong>outside</strong> your asset source
+                  folders (so it isn't re-scanned); same drive is fastest. The move is reversible.
+                </>
+              }
+              help={<>Where redundant duplicate copies are moved.</>}
+              onChange={(value) => setSettings((s) => ({ ...s, dedupQuarantineFolder: value }))}
+            />
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void runDedup(true)} disabled={dedupBusy}>
                 {dedupBusy ? 'Working…' : 'Scan for duplicates'}
@@ -1540,11 +1554,25 @@ function SettingsPage() {
               <Button
                 variant="destructive"
                 onClick={() => void runDedup(false)}
-                disabled={dedupBusy || !dedupReport?.dryRun || dedupReport.duplicates.length === 0}
-                title="Move the redundant duplicate copies to the quarantine folder (reversible; files are never edited)"
+                disabled={
+                  dedupBusy ||
+                  !dedupReport?.dryRun ||
+                  dedupReport.duplicates.length === 0 ||
+                  !settings.dedupQuarantineFolder.trim()
+                }
+                title={
+                  settings.dedupQuarantineFolder.trim()
+                    ? 'Move the redundant duplicate copies to the quarantine folder (reversible; files are never edited)'
+                    : 'Set a quarantine folder first'
+                }
               >
                 Apply dedup
               </Button>
+              {dedupReport?.duplicates.length && !settings.dedupQuarantineFolder.trim() ? (
+                <span className="self-center text-xs text-muted-foreground">
+                  Set a quarantine folder to enable Apply.
+                </span>
+              ) : null}
             </div>
             {dedupReport && (
               <DedupReportList

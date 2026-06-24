@@ -797,6 +797,7 @@ const settingsInput = z.object({
   dazPresetsDest: z.string().default(''),
   houdiniPresetsSource: z.string().default(''),
   acceptedConflicts: z.array(z.string()).default([]),
+  dedupQuarantineFolder: z.string().default(''),
 })
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
@@ -980,10 +981,10 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
   return invoke<DedupReport>('dedup_daz_assets', {
     request: {
       sources,
-      dest: s.dazLibraryFolder.trim(),
       dryRun: dryRun ?? false,
       accepted: s.acceptedConflicts,
       keepers: keepers ?? [],
+      quarantine: s.dedupQuarantineFolder.trim(),
     },
   })
 }

@@ -950,6 +950,10 @@ struct DedupRequest {
     /// (overriding the auto-pick). The rest of that group is quarantined.
     #[serde(default)]
     keepers: Vec<String>,
+    /// Folder the redundant duplicate copies are moved into. Required to apply —
+    /// nothing is moved when empty.
+    #[serde(default)]
+    quarantine: String,
 }
 
 #[derive(Serialize)]
@@ -1004,6 +1008,30 @@ fn uf_union(parent: &mut [usize], a: usize, b: usize) {
     let (ra, rb) = (uf_find(parent, a), uf_find(parent, b));
     if ra != rb {
         parent[ra] = rb;
+    }
+}
+
+/// Move `src` to `dst`, falling back to copy-then-delete when a plain rename fails
+/// (e.g. the quarantine folder is on a different drive). Returns success.
+fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
+    if let Some(p) = dst.parent() {
+        let _ = fs::create_dir_all(p);
+    }
+    if fs::rename(src, dst).is_ok() {
+        return true;
+    }
+    let copied = if src.is_dir() {
+        copy_dir(src, dst).is_ok()
+    } else {
+        fs::copy(src, dst).is_ok()
+    };
+    if !copied {
+        return false;
+    }
+    if src.is_dir() {
+        fs::remove_dir_all(src).is_ok()
+    } else {
+        fs::remove_file(src).is_ok()
     }
 }
 
@@ -1134,11 +1162,8 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let dry = request.dry_run;
     let accepted: HashSet<String> = request.accepted.into_iter().collect();
     let chosen_keepers: HashSet<String> = request.keepers.into_iter().collect();
-    let backup_root = request
-        .sources
-        .first()
-        .and_then(|s| Path::new(s).parent().map(|p| p.join("_dth_dedup_backup")))
-        .unwrap_or_else(|| PathBuf::from("_dth_dedup_backup"));
+    // Where redundant copies are moved. Empty (e.g. on a dry run) → nothing moves.
+    let quarantine = request.quarantine.clone();
 
     // Gather every asset's content files (independent reads → parallel).
     let mut assets: Vec<AssetFiles> = Vec::new();
@@ -1310,12 +1335,11 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         let redundant: Vec<usize> = members.iter().cloned().filter(|&i| i != keeper).collect();
         let exact = members.iter().all(|&m| fp_of[m] == fp_of[keeper]);
         let mut fixed = false;
-        if !dry {
-            let qdir = backup_root.join("quarantine");
-            let _ = fs::create_dir_all(&qdir);
+        if !dry && !quarantine.is_empty() {
+            let qdir = Path::new(&quarantine);
             for &i in &redundant {
                 let target = qdir.join(&assets[i].label);
-                if !target.exists() && fs::rename(&assets[i].asset_path, &target).is_ok() {
+                if !target.exists() && move_to_quarantine(&assets[i].asset_path, &target) {
                     assets_quarantined += 1;
                     fixed = true;
                 }
@@ -1349,7 +1373,7 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         conflicts,
         duplicates,
         assets_quarantined,
-        backup_dir: backup_root.display().to_string(),
+        backup_dir: quarantine,
     }
 }
 

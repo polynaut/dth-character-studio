@@ -729,6 +729,9 @@ export interface StudioSettings {
    *  the asset scan/install and the dedup skip these, so they stop showing as
    *  "to copy" / as a conflict — the file stays whatever is installed. */
   acceptedConflicts: Array<string>
+  /** Where the dedup moves redundant duplicate copies. Required to run Apply —
+   *  nothing is quarantined until this is set. */
+  dedupQuarantineFolder: string
 }
 
 async function isDir(path: string): Promise<boolean> {
@@ -759,6 +762,7 @@ function defaultSettings(): StudioSettings {
     dazPresetsDest: '',
     houdiniPresetsSource: '',
     acceptedConflicts: [],
+    dedupQuarantineFolder: '',
   }
 }
 
@@ -821,6 +825,10 @@ export async function getSettings(): Promise<StudioSettings> {
       acceptedConflicts: Array.isArray(raw.acceptedConflicts)
         ? raw.acceptedConflicts.filter((f: unknown): f is string => typeof f === 'string')
         : defaults.acceptedConflicts,
+      dedupQuarantineFolder:
+        typeof raw.dedupQuarantineFolder === 'string'
+          ? raw.dedupQuarantineFolder
+          : defaults.dedupQuarantineFolder,
     }
   } catch {
     return defaults
