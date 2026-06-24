@@ -884,6 +884,7 @@ function SettingsPage() {
     settings.dazPresetsSource !== initial.dazPresetsSource ||
     settings.dazPresetsDest !== initial.dazPresetsDest ||
     settings.houdiniPresetsSource !== initial.houdiniPresetsSource ||
+    settings.dedupQuarantineFolder !== initial.dedupQuarantineFolder ||
     JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders)
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
