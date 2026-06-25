@@ -1055,24 +1055,24 @@ function SettingsPage() {
     const picked = await pickFolder('Folder to delete on uninstall')
     if (picked) updateUninstallFolder(i, picked)
   }
-  async function loadUninstallDefaults() {
+  // "Prefill folder paths" — add the standard Daz folders that currently EXIST
+  // (the Rust filters by existence), merged with whatever's already in the list.
+  async function prefillUninstallFolders() {
     try {
-      setUninstallFolders(await defaultDazUninstallFolders())
+      const found = await defaultDazUninstallFolders()
+      const existing = settings.dazUninstallFolders.map((f) => f.trim()).filter(Boolean)
+      const merged = [...existing]
+      for (const f of found) if (!merged.includes(f)) merged.push(f)
+      if (merged.length === existing.length) {
+        toast('No standard Daz folders found — is Daz installed?')
+      } else {
+        setUninstallFolders(merged)
+        toast.success(`Added ${merged.length - existing.length} folder(s)`)
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
-  // Pre-fill the list from the cli defaults the first time it's empty.
-  useEffect(() => {
-    if (settings.dazUninstallFolders.length === 0) {
-      void defaultDazUninstallFolders()
-        .then((d) =>
-          setSettings((s) => (s.dazUninstallFolders.length === 0 ? { ...s, dazUninstallFolders: d } : s)),
-        )
-        .catch(() => {})
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   // Dry run (preview) or real delete. The real delete needs the inline confirm.
   async function runUninstall(dryRun: boolean) {
     setUninstallBusy(true)
@@ -1820,10 +1820,10 @@ function SettingsPage() {
                 <InfoPopup label="Danger zone — more information">
                   After uninstalling Daz Studio and DAZ Install Manager through Windows “Add or remove
                   programs”, these leftover folders usually remain. This button{' '}
-                  <strong>permanently deletes</strong> each folder below and everything inside it
-                  (recursively). The list is pre-filled with the dth-cli defaults — the library root
-                  (parent of “My DAZ 3D Library”), the Documents/Public library spots, and the APPDATA
-                  DAZ 3D + Start-Menu folders — and you can edit it. Always Dry run first.
+                  <strong>permanently deletes</strong> each listed folder and everything inside it
+                  (recursively). Use <strong>Prefill folder paths</strong> (while Daz is still
+                  installed) to add the standard Daz locations, edit the list as needed, then always
+                  Dry run first.
                 </InfoPopup>
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -1836,7 +1836,9 @@ function SettingsPage() {
             </div>
             <div className="space-y-2">
               {settings.dazUninstallFolders.length === 0 && (
-                <p className="text-sm text-muted-foreground">No folders.</p>
+                <p className="text-sm text-muted-foreground">
+                  No folders yet — use “Prefill folder paths” (with Daz installed) or add them manually.
+                </p>
               )}
               {settings.dazUninstallFolders.map((folder, i) => (
                 <div key={i} className="flex gap-2">
@@ -1865,13 +1867,25 @@ function SettingsPage() {
                   </Button>
                 </div>
               ))}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={addUninstallFolder}>
                   <Plus /> Add folder
                 </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => void loadUninstallDefaults()}>
-                  Reset to defaults
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void prefillUninstallFolders()}
+                >
+                  Prefill folder paths
                 </Button>
+                <InfoPopup label="Prefill folder paths — more information">
+                  Run this <strong>while Daz Studio is still fully installed</strong> — it adds the
+                  standard Daz folders that currently exist on this machine (the library root, the
+                  Documents/Public library spots, and the APPDATA <code>DAZ 3D</code> + Start-Menu
+                  folders). Folders that don't exist are skipped, since they aren't Daz locations
+                  here. If Daz is already removed, add the folders manually.
+                </InfoPopup>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
