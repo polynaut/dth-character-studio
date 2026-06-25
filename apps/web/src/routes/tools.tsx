@@ -518,7 +518,7 @@ function ToolsPage() {
 
       <Tabs defaultValue="install" className="max-w-3xl">
         <TabsList>
-          <TabsTrigger value="install">Install</TabsTrigger>
+          <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
         </TabsList>
 
         <TabsContent value="install" className="space-y-5">
