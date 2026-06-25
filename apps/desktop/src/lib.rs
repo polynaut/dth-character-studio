@@ -1519,6 +1519,171 @@ fn install_houdini_presets(request: HoudiniPresetsRequest) -> InstallReport {
     InstallReport { dry_run: dry, steps, total_files }
 }
 
+// --- Tools: download + install the soltude/DazToHue-Scripts repo --------------
+// The companion DazToHue-Scripts repo (the runtime the studio co-owns) is fetched
+// straight from GitHub and unpacked into `<My DAZ 3D Library>/Scripts/DazToHue-Scripts`.
+// The download runs natively (the webview can't — codeload's CORS only allows
+// render.githubusercontent.com); reqwest follows the github→codeload redirect.
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ScriptsInstallRequest {
+    /// `<My DAZ 3D Library>/Scripts/DazToHue-Scripts` — where the repo content lands.
+    dest: String,
+    /// Download + count only, writing nothing into the library.
+    dry_run: bool,
+}
+
+/// The repo zip — the default branch (`main`) HEAD. GitHub 302-redirects this to
+/// codeload; reqwest follows it by default.
+#[cfg(desktop)]
+const DAZTOHUE_SCRIPTS_ZIP: &str =
+    "https://github.com/soltude/DazToHue-Scripts/archive/refs/heads/main.zip";
+
+/// Wrap a single step into a one-step report (mirrors the other installers).
+fn one_step_report(dry: bool, step: InstallStep) -> InstallReport {
+    let total = step.files;
+    InstallReport { dry_run: dry, steps: vec![step], total_files: total }
+}
+
+/// Extract every file entry of `archive` into `dest`, preserving its tree. Skips
+/// zip-slip paths (`enclosed_name`); directory entries are created lazily.
+fn extract_archive<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    dest: &Path,
+) -> std::io::Result<()> {
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let rel = match entry.enclosed_name() {
+            Some(p) => p,
+            None => continue,
+        };
+        let out = dest.join(&rel);
+        if entry.is_dir() {
+            fs::create_dir_all(&out)?;
+            continue;
+        }
+        if let Some(parent) = out.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut f = fs::File::create(&out)?;
+        std::io::copy(&mut entry, &mut f)?;
+    }
+    Ok(())
+}
+
+/// If `dir` holds exactly one entry and it's a folder, return it — GitHub wraps a
+/// repo archive in a single `<repo>-<ref>/` folder whose *contents* are installed.
+fn single_child_dir(dir: &Path) -> Option<PathBuf> {
+    let mut entries = fs::read_dir(dir).ok()?.flatten();
+    let first = entries.next()?.path();
+    if entries.next().is_some() {
+        return None;
+    }
+    first.is_dir().then_some(first)
+}
+
+/// Install ring as the process-default rustls crypto provider, once. reqwest's
+/// default Client needs one but the unified build only has rustls' `no-provider`
+/// variant (the updater configures its own client), so without this `reqwest::get`
+/// panics with "No rustls crypto provider is configured".
+#[cfg(desktop)]
+fn ensure_crypto_provider() {
+    static INIT: OnceLock<()> = OnceLock::new();
+    INIT.get_or_init(|| {
+        // Err just means another provider was already installed — fine either way.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
+/// Fetch a URL server-side (following redirects) and return the body bytes.
+#[cfg(desktop)]
+async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
+    ensure_crypto_provider();
+    let resp = reqwest::get(url).await.map_err(|e| format!("download failed: {e}"))?;
+    let resp = resp.error_for_status().map_err(|e| format!("download failed: {e}"))?;
+    let bytes = resp.bytes().await.map_err(|e| format!("reading the download failed: {e}"))?;
+    Ok(bytes.to_vec())
+}
+
+/// Download the soltude/DazToHue-Scripts repo as a zip and install its contents
+/// into `dest`. The archive is fetched in memory, unpacked into a temp folder
+/// beside `dest`, then swapped in — so a failed download/extract never leaves a
+/// half-written install. GitHub's top-level wrapper folder is stripped so the repo
+/// files land directly in `dest`. `dry_run` downloads + counts only.
+#[cfg(desktop)]
+#[tauri::command]
+async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallReport {
+    let dry = request.dry_run;
+    let dest = PathBuf::from(&request.dest);
+    let label = "DazToHue-Scripts";
+
+    let bytes = match download_bytes(DAZTOHUE_SCRIPTS_ZIP).await {
+        Ok(b) => b,
+        Err(msg) => return one_step_report(dry, step_err(label, msg)),
+    };
+    let mut archive = match zip::ZipArchive::new(std::io::Cursor::new(bytes)) {
+        Ok(a) => a,
+        Err(e) => return one_step_report(dry, step_err(label, format!("unzip failed: {e}"))),
+    };
+    // Count file entries (drop each ZipFile before the next borrow — see process_zip_asset).
+    let mut file_count = 0u64;
+    for i in 0..archive.len() {
+        if let Ok(entry) = archive.by_index(i) {
+            if !entry.is_dir() {
+                file_count += 1;
+            }
+        }
+    }
+
+    if dry {
+        return one_step_report(
+            dry,
+            step_ok(label, file_count, format!("would install {file_count} file(s) → {}", dest.display())),
+        );
+    }
+
+    // Unpack into a temp folder beside dest (same drive → instant final move).
+    let parent = dest.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+    let tmp = parent.join(".DazToHue-Scripts.download");
+    let _ = fs::remove_dir_all(&tmp);
+    if let Err(e) = fs::create_dir_all(&tmp) {
+        return one_step_report(dry, step_err(label, io_detail("create temp folder", &e)));
+    }
+    if let Err(e) = extract_archive(&mut archive, &tmp) {
+        let _ = fs::remove_dir_all(&tmp);
+        return one_step_report(dry, step_err(label, io_detail("extract", &e)));
+    }
+    let content_root = single_child_dir(&tmp).unwrap_or_else(|| tmp.clone());
+
+    // Replace any previous install, then move the fresh content into place.
+    if dest.exists() {
+        if let Err(e) = fs::remove_dir_all(&dest) {
+            let _ = fs::remove_dir_all(&tmp);
+            return one_step_report(dry, step_err(label, io_detail("clear previous install", &e)));
+        }
+    }
+    if let Some(p) = dest.parent() {
+        let _ = fs::create_dir_all(p);
+    }
+    let moved = fs::rename(&content_root, &dest).is_ok() || copy_dir(&content_root, &dest).is_ok();
+    let _ = fs::remove_dir_all(&tmp);
+    if moved {
+        one_step_report(dry, step_ok(label, file_count, format!("→ {}", dest.display())))
+    } else {
+        one_step_report(dry, step_err(label, format!("couldn't move files into {}", dest.display())))
+    }
+}
+
+/// Web/mobile builds have no native download (reqwest is desktop-only).
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn install_daztohue_scripts(_request: ScriptsInstallRequest) -> InstallReport {
+    one_step_report(false, step_err("DazToHue-Scripts", "only available on the desktop app".into()))
+}
+
 // --- Network drives -------------------------------------------------------
 // Mapped network drives (e.g. X: → \\jebpot\devs) live in the user's *logon
 // session*. When the app is relaunched elevated (to write into an admin-only Daz
@@ -1803,6 +1968,7 @@ pub fn run() {
             dedup_daz_assets,
             default_daz_uninstall_folders,
             uninstall_daz,
+            install_daztohue_scripts,
             install_daz_merge,
             install_houdini_presets,
             unc_for_path,

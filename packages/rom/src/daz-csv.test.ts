@@ -31,6 +31,7 @@ describe('posesFromDazCsv', () => {
     expect(posesFromDazCsv(csv)).toEqual([
       // sorted by frame: 382 before 384
       {
+        frame: 382,
         name: 'Head',
         morphs: [
           { node: 'Genesis9', prop: 'Lycan9_head_bs_Head_HD4', value: -1 },
@@ -38,6 +39,7 @@ describe('posesFromDazCsv', () => {
         ],
       },
       {
+        frame: 384,
         name: 'AnconeusL',
         morphs: [{ node: 'Genesis9', prop: 'xMusc_body_bs_AnconeusL_B_HD2', value: 1 }],
       },
