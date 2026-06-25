@@ -1,5 +1,35 @@
 # @dth/web
 
+## 0.24.0
+
+### Minor Changes
+
+- [#83](https://github.com/polynaut/dth-character-studio/pull/83) [`a51a795`](https://github.com/polynaut/dth-character-studio/commit/a51a795db9bbbac2a12190226b3417904cbfb480) Thanks [@polynaut](https://github.com/polynaut)! - Character editor: **Import from CSV** now opens a frame-range dialog after you pick
+  the file, so a full-scene morph scan (from `DthScanFrames.dsa`) can be sliced to
+  just the frames that belong to the section you're importing into. The dialog shows
+  the CSV's frame extent and a live in-range morph count, defaulting to the full
+  range. Each "Import from CSV" button also gained an info popup explaining how to
+  produce the CSV, with a link straight to the DazToHue-Scripts installer in Tools.
+
+- [#83](https://github.com/polynaut/dth-character-studio/pull/83) [`a51a795`](https://github.com/polynaut/dth-character-studio/commit/a51a795db9bbbac2a12190226b3417904cbfb480) Thanks [@polynaut](https://github.com/polynaut)! - Tools: add a **DazToHue-Scripts** tab that downloads the companion
+  [soltude/DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts) repo — the
+  Daz Studio scripts behind DTH Character Studio — straight from GitHub and installs
+  it into `<My DAZ 3D Library>/Scripts/DazToHue-Scripts`. It delivers
+  `DthScanFrames.dsa`, which exports the full morph list of an open Daz scene as a CSV
+  you can pull into a character's ROM section via a section's **Import from CSV**.
+
+  The download + unpack run natively (the webview can't fetch the archive — codeload's
+  CORS only allows render.githubusercontent.com); GitHub's top-level wrapper folder is
+  stripped, the zip is unpacked beside the destination and swapped in (so a failed
+  download never leaves a half-written install), and re-installing replaces the folder
+  with the latest version. Reuses the reqwest/rustls (ring) stack already in the build
+  via the updater, so no new dependencies.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @dth/rom@0.24.0
+
 ## 0.23.1
 
 ### Patch Changes
