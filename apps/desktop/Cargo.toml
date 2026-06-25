@@ -31,6 +31,13 @@ serde_json = "1"
 # Pose-asset .duf files are JSON, sometimes gzip-compressed — flate2 1.1.9 is
 # already in the tree (transitive), so this adds no new version.
 flate2 = "1"
+# Extracting zipped Daz assets (Optional tab installs). deflate-only (via flate2,
+# already in tree) — no bzip2/zstd/aes backends, so no heavy/native deps and it
+# leaves the alloc-stdlib/brotli pins above untouched.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# Parallelize the per-asset Optional-tab scan/install (independent I/O-bound
+# folder walks + zip central-directory reads).
+rayon = "1"
 
 # Desktop-only plugins (updater + relaunch).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

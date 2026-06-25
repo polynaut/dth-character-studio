@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import {
   ArrowLeft,
-  CircleCheck,
   CircleSlash,
   CircleX,
   Download,
-  FolderOpen,
   RefreshCw,
   Save,
 } from 'lucide-react'
@@ -41,10 +38,10 @@ import {
   saveSettings,
   uncForPath,
 } from '#/lib/rom/api.ts'
-import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { cn } from '#/lib/utils.ts'
 import { PathCode } from '#/components/path-code.tsx'
+import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 import { toast } from 'sonner'
 
 import type {
@@ -53,53 +50,6 @@ import type {
   InstallReport,
   RefreshSummary,
 } from '#/lib/rom/api.ts'
-
-/** A folder-path text field with a native "Browse…" picker button. */
-function FolderField({
-  label,
-  value,
-  placeholder,
-  help,
-  onChange,
-  info,
-}: {
-  label: string
-  value: string
-  placeholder: string
-  help: ReactNode
-  onChange: (value: string) => void
-  /** Optional rich text shown in an "i" info popup next to the label. */
-  info?: ReactNode
-}) {
-  // Prefer the richer `info` text in the popup, falling back to `help`.
-  const popup = info ?? help
-  return (
-    <div>
-      <Label className="mb-1 flex w-fit items-center gap-1">
-        {label}
-        {popup ? <InfoPopup label={`${label} — more information`}>{popup}</InfoPopup> : null}
-      </Label>
-      <div className="flex gap-2">
-        <Input
-          value={displayPath(value)}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="shrink-0"
-          onClick={async () => {
-            const picked = await pickFolder(label)
-            if (picked) onChange(picked)
-          }}
-        >
-          <FolderOpen /> Browse
-        </Button>
-      </div>
-    </div>
-  )
-}
 
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
@@ -427,32 +377,6 @@ function RefreshAssetsSection() {
   )
 }
 
-/** Per-step result list shared by both install panes. */
-function InstallReportList({ report }: { report: InstallReport }) {
-  return (
-    <ul className="space-y-1 border-t pt-3 text-sm">
-      {report.steps.map((step, i) => (
-        <li key={i} className="flex items-start gap-2">
-          {step.status === 'ok' ? (
-            <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-          ) : step.status === 'error' ? (
-            <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />
-          ) : (
-            <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          )}
-          <span className={step.status === 'error' ? 'text-destructive' : ''}>
-            <span className="font-medium">{step.label}</span>
-            {step.status === 'ok' && step.files > 0 && (
-              <span className="text-muted-foreground"> — {step.files} file(s)</span>
-            )}
-            {step.detail && <span className="text-muted-foreground"> · {step.detail}</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 function SettingsPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
@@ -592,6 +516,9 @@ function SettingsPage() {
     return () => clearTimeout(timer)
   }, [loadInstalledExporter])
 
+  // Scoped to the fields THIS page edits (General + DazToHue). Save still writes the
+  // full settings object, but the Tools-page fields are untouched here so they never
+  // flip this dirty — the button reflects only this page's changes.
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder ||
@@ -911,7 +838,9 @@ function SettingsPage() {
               </Button>
             </div>
 
-            {releaseReport && <InstallReportList report={releaseReport} />}
+            {releaseReport && (
+              <InstallReportList report={releaseReport} onClose={() => setReleaseReport(null)} />
+            )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -1032,7 +961,9 @@ function SettingsPage() {
               </Button>
             </div>
 
-            {pluginReport && <InstallReportList report={pluginReport} />}
+            {pluginReport && (
+              <InstallReportList report={pluginReport} onClose={() => setPluginReport(null)} />
+            )}
 
             {pluginReport?.steps.some((step) => step.status === 'error') && (
               <p className="text-sm text-destructive">
