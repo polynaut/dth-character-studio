@@ -1,0 +1,113 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+DTH Character Studio: a declarative tool for the **DazToHue** (Daz Studio → Houdini → Unreal)
+workflow. From one character definition it generates **both** sides of a Range of Motion (ROM):
+a Daz Studio apply-script (`.dsa`) and the Houdini **PoseAsset** import CSV. Ships as a Tauri 2
+desktop app on Windows; the frontend also runs standalone in a browser.
+
+## Commands
+
+Package manager is **pnpm** (workspace monorepo). Run from the repo root:
+
+```sh
+pnpm install
+pnpm dev                 # web SPA only → http://localhost:4330 (native features no-op in a browser)
+pnpm dev:desktop         # Tauri app: web dev server (HMR) + native window. Needs Rust (rustup) + WebView2
+pnpm build               # web production build
+pnpm build:desktop       # NSIS installer → apps/desktop/target/release/bundle
+pnpm -r test             # all JS tests (vitest)
+pnpm -r typecheck        # tsc --noEmit across packages
+pnpm generate-routes     # regenerate apps/web/src/routeTree.gen.ts (tsr generate)
+pnpm changeset           # add a changeset (required on every feature PR; see Releases)
+```
+
+Per-package / single test (vitest):
+
+```sh
+pnpm --filter @dth/web test                         # one package's tests
+pnpm --filter @dth/rom test src/daz-csv.test.ts     # a single test file
+pnpm --filter @dth/rom test -t "<test name>"        # filter by test name
+```
+
+Rust (desktop crate, `apps/desktop`): `cargo check`, `cargo test`. The shell here is **PowerShell**
+(a Bash tool is also available); use the right syntax for each.
+
+## Architecture
+
+Three workspace packages, two layers — the generation core is pure TypeScript and is where the
+value lives; the apps are thin shells.
+
+- **`packages/rom` (`@dth/rom`)** — framework-agnostic, **no I/O**. The full pipeline: a `Character`
+  definition (`types.ts`, zod-validated) → `generateAll()` (`generate.ts`) → the Daz `.dsa` script
+  text + the Houdini PoseAsset CSV. Ground-truth CSV/`.dsa` templates live in `src/templates`. Also
+  parses DAZ-exported morph CSVs into poses (`daz-csv.ts`).
+- **`apps/web` (`@dth/web`)** — React SPA (Vite + TanStack **file-based** Router). Routes in
+  `src/routes`; UI runs the pure `@dth/rom` generation in the webview.
+- **`apps/desktop` (`@dth/desktop`)** — Tauri 2 shell (Rust, `src/lib.rs`). Loads `apps/web` and
+  provides native file/dialog/updater access instead of a Node backend.
+
+### The core invariant (do not break)
+
+**Frame numbers are never stored.** They are computed from section/group/pose order at generation
+time, so the Daz and Houdini outputs cannot drift out of sync — that synchronization *is* the
+product. A ROM is a fixed sequence of eight sections in canonical order:
+`RET, JCM, FAC, EXP, GEN, PHY, FBM, MISC` (`ROM_SECTIONS` in `types.ts`). Each section is enabled or
+not and runs in `preset` or `custom` mode. When changing generation, preserve the property that the
+two artifacts are derived from the same source and stay frame-aligned.
+
+### The native boundary
+
+All native access is concentrated in **`apps/web/src/lib/rom/{api,storage}.ts`** and
+**`lib/desktop.ts`** — this keeps the SPA runnable in a plain browser (web-only e2e mocks this layer).
+`api.ts` is the only bridge between the React UI and the filesystem; it keeps the `{ data }` call
+convention the routes use, validates input with zod, and `invoke()`s Rust commands. When adding a
+native capability, follow the existing pattern: **resolve paths in TS, do heavy file work in Rust**.
+
+Rust commands (`apps/desktop/src/lib.rs`) take camelCase serde structs (`#[serde(rename_all = "camelCase")]`),
+must be registered in the `generate_handler!` list, and are gated `#[cfg(desktop)]` when they use
+desktop-only deps (updater/process/reqwest live under the non-android/ios target block in `Cargo.toml`).
+
+### Two storage roots
+
+- **App-owned data** (settings.json, the projects list, avatars) → the per-user app-data folder
+  (`appLocalDataDir()`), so it survives app updates.
+- **Characters** → each **project's folder**, chosen by the user and backed up by them.
+
+A character's generated Daz script goes to `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`;
+the shared DTH runtime files it `include()`s are installed once at that root (`storage.ts`:
+`studioScriptsDir` / `copyRuntimeFiles`).
+
+### Settings flow
+
+Settings are persisted to settings.json and validated by the zod `settingsInput` schema in `api.ts`.
+Adding a setting requires changes in three places: `storage.ts` (the `StudioSettings` type, its
+defaults, and the parse), `api.ts` (the `settingsInput` schema), and the route. The Settings/Tools
+routes gate "save before action" on a `dirty` flag — a new field must be included in that comparison
+or its value never reaches disk.
+
+## Conventions & gotchas
+
+- **Import alias:** `#/*` → `apps/web/src/*` (see `imports` in `apps/web/package.json`).
+- **Routing:** routes are file-based; `routeTree.gen.ts` is generated. Adding/removing a route **file**
+  requires `pnpm generate-routes` (adding a tab inside an existing route does not).
+- **Versioning:** Changesets. `@dth/web` / `@dth/desktop` / `@dth/rom` are a **fixed group** — one
+  product version, bumped in lockstep. Every feature PR needs a changeset.
+- **Releases are automated** (don't tag/publish by hand): feature PR + changeset → `main` → the
+  **Version** workflow opens a "version packages" PR → merging it triggers the **Release** workflow
+  (NSIS installer + signed updater `latest.json`). The Tauri version is read from
+  `apps/desktop/package.json`. See `docs/devops.md`.
+- **`main` is PR-only** — branch off `main` (`feature/…`, `fix/…`); no direct pushes.
+- **Cargo.lock pins** `alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4` (newer breaks brotli 8 via
+  Tauri's asset compression). Don't `cargo update` them back; re-pin if reverted (see `docs/devops.md`).
+- **Don't rewrite users' downloaded Daz assets.** The dedup/install features may only *move* redundant
+  copies (quarantine) or choose which version installs — never edit the contents of a downloaded asset.
+
+## Key docs
+
+- `docs/development.md` — run/build/architecture
+- `docs/devops.md` — release pipeline, signing keys, branch policy
+- `apps/web/docs/poseasset-csv-spec.md` — the DazToHue PoseAsset CSV format (reverse-engineered from the HDA)

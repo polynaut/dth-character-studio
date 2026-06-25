@@ -1,23 +1,26 @@
 import { useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, Download, FolderOpen, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, FolderOpen, Plus, Save, Trash2, X } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
+  DAZTOHUE_SCRIPTS_REPO,
   dedupDazAssets,
   defaultDazUninstallFolders,
   fetchSettings,
   installDazAssets,
   installDazMorphs,
   installDazPresets,
+  installDazToHueScripts,
   installHoudiniPresets,
   listDazAssets,
   saveSettings,
   uninstallDaz,
 } from '#/lib/rom/api.ts'
+import { daztohueScriptsDir } from '#/lib/rom/storage.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -31,7 +34,14 @@ import type {
   InstallReport,
 } from '#/lib/rom/api.ts'
 
+/** The morph-scanning script the install is mainly there to deliver. */
+const DTH_SCAN_FRAMES_URL = `${DAZTOHUE_SCRIPTS_REPO}/blob/main/DthScanFrames.dsa`
+
 export const Route = createFileRoute('/tools')({
+  // Optional `?tab=` deep-link — the character editor's "Import from CSV" info
+  // popup points here at the DazToHue-Scripts installer (`?tab=daztohue`).
+  validateSearch: (search: Record<string, unknown>): { tab?: string } =>
+    typeof search.tab === 'string' ? { tab: search.tab } : {},
   loader: () => fetchSettings(),
   component: ToolsPage,
 })
@@ -240,6 +250,7 @@ function DedupReportList({
 
 function ToolsPage() {
   const initial = Route.useLoaderData()
+  const { tab } = Route.useSearch()
   const router = useRouter()
 
   // Reachable from several places, so return to wherever we came from (falling
@@ -264,6 +275,9 @@ function ToolsPage() {
   const [presetsReport, setPresetsReport] = useState<InstallReport | null>(null)
   const [houdiniBusy, setHoudiniBusy] = useState(false)
   const [houdiniReport, setHoudiniReport] = useState<InstallReport | null>(null)
+  // "DazToHue-Scripts" tab — download + install the companion repo.
+  const [scriptsBusy, setScriptsBusy] = useState(false)
+  const [scriptsReport, setScriptsReport] = useState<InstallReport | null>(null)
   // "Danger zone" — Daz uninstall cleanup.
   const [uninstallBusy, setUninstallBusy] = useState(false)
   const [uninstallReport, setUninstallReport] = useState<InstallReport | null>(null)
@@ -510,9 +524,10 @@ function ToolsPage() {
         <h1 className="text-3xl font-bold">Tools</h1>
       </header>
 
-      <Tabs defaultValue="install" className="max-w-3xl">
+      <Tabs defaultValue={tab === 'daztohue' ? 'daztohue' : 'install'} className="max-w-3xl">
         <TabsList>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
+          <TabsTrigger value="daztohue">DazToHue-Scripts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="install" className="space-y-5">
@@ -911,6 +926,71 @@ function ToolsPage() {
             </div>
             {uninstallReport && (
               <InstallReportList report={uninstallReport} onClose={() => setUninstallReport(null)} />
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="daztohue" className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            Install the companion <strong>DazToHue-Scripts</strong> repo — the Daz Studio scripts
+            behind DTH Character Studio. It includes <strong>DthScanFrames.dsa</strong>, which exports
+            the full morph list of an existing Daz scene as a CSV you can import into a character's ROM
+            section.
+          </p>
+
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="flex w-fit items-center gap-1 font-semibold">
+                DazToHue-Scripts
+                <InfoPopup label="DazToHue-Scripts — more information">
+                  Downloads{' '}
+                  <a
+                    href={DAZTOHUE_SCRIPTS_REPO}
+                    className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
+                  >
+                    soltude/DazToHue-Scripts <ExternalLink className="size-3.5" />
+                  </a>{' '}
+                  and installs it into “My DAZ 3D Library”. Then, inside Daz Studio, run{' '}
+                  <a
+                    href={DTH_SCAN_FRAMES_URL}
+                    className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
+                  >
+                    DthScanFrames.dsa <ExternalLink className="size-3.5" />
+                  </a>{' '}
+                  on an open scene to write a CSV of every morph on it — then use a section's{' '}
+                  <strong>Import from CSV</strong> to pull that morph list into a character's ROM.
+                </InfoPopup>
+              </h2>
+            </div>
+
+            {settings.dazLibraryFolder.trim() ? (
+              <p className="text-sm text-muted-foreground">
+                Installs into{' '}
+                <PathCode path={displayPath(daztohueScriptsDir(settings.dazLibraryFolder.trim()))} />.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-600 dark:text-amber-500">
+                Set “My DAZ 3D Library” in Settings first — that's where the scripts are installed.
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDazToHueScripts, true, setScriptsBusy, setScriptsReport)}
+                disabled={scriptsBusy || !settings.dazLibraryFolder.trim()}
+              >
+                {scriptsBusy ? 'Working…' : 'Dry run'}
+              </Button>
+              <Button
+                onClick={() => runInstall(installDazToHueScripts, false, setScriptsBusy, setScriptsReport)}
+                disabled={scriptsBusy || !settings.dazLibraryFolder.trim()}
+              >
+                <Download /> {scriptsBusy ? 'Downloading…' : 'Download & install'}
+              </Button>
+            </div>
+            {scriptsReport && (
+              <InstallReportList report={scriptsReport} onClose={() => setScriptsReport(null)} />
             )}
           </section>
         </TabsContent>

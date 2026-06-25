@@ -1009,6 +1009,27 @@ export async function uninstallDaz({ data }: { data: unknown }): Promise<Install
   return invoke<InstallReport>('uninstall_daz', { request: { folders, dryRun: dryRun ?? false } })
 }
 
+/** The companion DazToHue-Scripts repo (the runtime the studio co-owns). */
+export const DAZTOHUE_SCRIPTS_REPO = 'https://github.com/soltude/DazToHue-Scripts'
+
+/**
+ * Download the soltude/DazToHue-Scripts repo as a zip and install it into
+ * `<My DAZ 3D Library>/Scripts/DazToHue-Scripts`. The download + unpack run
+ * natively in Rust (the webview can't fetch the archive — codeload's CORS only
+ * allows render.githubusercontent.com); GitHub's top-level wrapper folder is
+ * stripped so the repo files land directly in the folder. `dryRun` downloads +
+ * counts only. Throws when "My DAZ 3D Library" isn't set.
+ */
+export async function installDazToHueScripts({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const s = await storage.getSettings()
+  const lib = s.dazLibraryFolder.trim()
+  if (!lib) throw new Error('Set “My DAZ 3D Library” first')
+  return invoke<InstallReport>('install_daztohue_scripts', {
+    request: { dest: storage.daztohueScriptsDir(lib), dryRun: dryRun ?? false },
+  })
+}
+
 /** Merge-only install (adds new files, never overwrites) used for custom morphs
  *  and presets — `which` picks the source/dest pair from settings. */
 async function installMerge(

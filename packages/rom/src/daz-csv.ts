@@ -2,6 +2,8 @@ import type { Morph } from './types'
 
 /** A pose parsed from a DAZ morph CSV: a display name + its morph applications. */
 export interface ImportedPose {
+  /** Source frame number (CSV first column) — lets the import filter by range. */
+  frame: number
   /** Cleaned, human-readable label (the full property stays on the morph). */
   name: string
   morphs: Array<Morph>
@@ -34,14 +36,14 @@ export function cleanMorphName(prop: string): string {
  *
  *   frame, , , node, prop, value [, node, prop, value …]
  *
- * a frame index (used only for ordering) then one or more `(node, prop, value)`
+ * a frame index (kept for ordering + the import's range filter) then one or more `(node, prop, value)`
  * triplets (columns 1–2 are unused in the export). Rows without a numeric first
  * column or any complete triplet are skipped — blank lines, headers, and the
  * studio's own section-keyword rows (`RET,0,RestPose`) all fall away. The pose
  * name is the cleaned first property; the raw property is preserved on the morph.
  */
 export function posesFromDazCsv(text: string): Array<ImportedPose> {
-  const rows: Array<{ frame: number; pose: ImportedPose }> = []
+  const poses: Array<ImportedPose> = []
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue
     const cols = line.split(',')
@@ -58,8 +60,8 @@ export function posesFromDazCsv(text: string): Array<ImportedPose> {
       morphs.push({ node, prop, value })
     }
     if (morphs.length === 0) continue
-    rows.push({ frame, pose: { name: cleanMorphName(morphs[0].prop), morphs } })
+    poses.push({ frame, name: cleanMorphName(morphs[0].prop), morphs })
   }
-  rows.sort((a, b) => a.frame - b.frame)
-  return rows.map((r) => r.pose)
+  poses.sort((a, b) => a.frame - b.frame)
+  return poses
 }

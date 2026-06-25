@@ -610,6 +610,13 @@ export function studioScriptsDir(dazLibraryFolder: string): string {
   return join(dazLibraryFolder, 'Scripts', 'DTH-Character-Studio')
 }
 
+/** `<My DAZ 3D Library>/Scripts/DazToHue-Scripts` — where the soltude/DazToHue-Scripts
+ *  repo is downloaded + unpacked (Tools installer). Separate from the studio's own
+ *  bundled DTH-Character-Studio runtime root above. */
+export function daztohueScriptsDir(dazLibraryFolder: string): string {
+  return join(dazLibraryFolder, 'Scripts', 'DazToHue-Scripts')
+}
+
 /**
  * Per-character script folder: `<root>/<project>/<character>/`. The generated
  * `<Name>_<Genesis>.dsa` lives here and imports the runtime from the root two

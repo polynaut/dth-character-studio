@@ -43,6 +43,21 @@ rayon = "1"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Server-side download of the soltude/DazToHue-Scripts repo zip (Tools installer) —
+# the webview can't fetch it (codeload's CORS only allows render.githubusercontent.com),
+# but Rust has no CORS. reqwest 0.13 is ALREADY in the tree via tauri-plugin-updater
+# (built with its rustls stack — see Cargo.lock: hyper-rustls/tokio-rustls/ring). We
+# request NO features here: Cargo unifies features for the same crate version in the
+# same target, so this reqwest builds with the updater's already-enabled rustls and
+# HTTPS works — pulling in NO new HTTP/TLS crates and leaving the brotli/alloc-stdlib
+# pins above untouched. Desktop-only, like the updater.
+reqwest = { version = "0.13", default-features = false }
+# The unified reqwest build only has rustls' `no-provider` variant (the updater
+# configures its own client, leaving NO process-default crypto provider), so a plain
+# `reqwest::get` panics. We install ring's provider as the default ourselves before
+# downloading. rustls 0.23 + ring is already in the lock — `ring` only, no defaults,
+# so this adds no crates (and avoids pulling aws-lc-rs).
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Windows-only: resolving / re-mapping network drives via the WNet API. 0.59 is
 # already in the tree (via tauri), so this pulls in no new windows-sys version.
