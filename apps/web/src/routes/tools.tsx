@@ -376,20 +376,21 @@ function ToolsPage() {
     const picked = await pickFolder('Folder to delete on uninstall')
     if (picked) updateUninstallFolder(i, picked)
   }
-  // "Prefill folder paths" — add the standard Daz folders that currently EXIST
-  // (the Rust filters by existence), merged with whatever's already in the list.
+  // "Prefill folder paths" — add the standard Daz locations, merged with whatever's
+  // already in the list. Not filtered by existence; missing ones are simply reported
+  // as "not found" when deleting.
   async function prefillUninstallFolders() {
     try {
       const found = await defaultDazUninstallFolders()
       const existing = settings.dazUninstallFolders.map((f) => f.trim()).filter(Boolean)
       const merged = [...existing]
       for (const f of found) if (!merged.includes(f)) merged.push(f)
-      if (merged.length === existing.length) {
-        toast('No standard Daz folders found — is Daz installed?')
-      } else {
-        setUninstallFolders(merged)
-        toast.success(`Added ${merged.length - existing.length} folder(s)`)
-      }
+      setUninstallFolders(merged)
+      toast.success(
+        merged.length > existing.length
+          ? `Added ${merged.length - existing.length} folder(s)`
+          : 'Standard Daz folders already in the list',
+      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
@@ -815,9 +816,9 @@ function ToolsPage() {
                   After uninstalling Daz Studio and DAZ Install Manager through Windows “Add or remove
                   programs”, these leftover folders usually remain. This button{' '}
                   <strong>permanently deletes</strong> each listed folder and everything inside it
-                  (recursively). Use <strong>Prefill folder paths</strong> (while Daz is still
-                  installed) to add the standard Daz locations, edit the list as needed, then always
-                  Dry run first.
+                  (recursively). Use <strong>Prefill folder paths</strong> to add the standard Daz
+                  locations, edit the list as needed, then always Dry run first. Folders that don't
+                  exist are skipped when deleting.
                 </InfoPopup>
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -873,13 +874,6 @@ function ToolsPage() {
                 >
                   Prefill folder paths
                 </Button>
-                <InfoPopup label="Prefill folder paths — more information">
-                  Run this <strong>while Daz Studio is still fully installed</strong> — it adds the
-                  standard Daz folders that currently exist on this machine (the library root, the
-                  Documents/Public library spots, and the APPDATA <code>DAZ 3D</code> + Start-Menu
-                  folders). Folders that don't exist are skipped, since they aren't Daz locations
-                  here.
-                </InfoPopup>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
