@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Settings as SettingsIcon, Wrench } from 'lucide-react'
+import { Settings as SettingsIcon } from 'lucide-react'
 
 /**
  * The About + Tools + Settings links shown at the top-right of the projects home
@@ -18,9 +18,9 @@ export function HeaderNav() {
       </Link>
       <Link
         to="/tools"
-        className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="text-sm text-muted-foreground! underline-offset-4 hover:text-foreground! hover:underline"
       >
-        <Wrench className="size-4" /> Tools
+        Tools
       </Link>
       <Link
         to="/settings"
