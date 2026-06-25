@@ -1400,6 +1400,8 @@ fn default_daz_uninstall_folders(request: UninstallDefaultsRequest) -> Vec<Strin
     folders.push("D:\\User Data\\Documents\\DAZ 3D".into());
     folders.push("E:\\User Data\\Documents\\DAZ 3D".into());
     folders.push("C:\\Users\\Public\\Documents\\My DAZ 3D Library".into());
+    folders.push("C:\\Program Files\\DAZ 3D\\DAZStudio6".into());
+    folders.push("C:\\Program Files\\DAZ 3D\\DAZStudio4".into());
     if let Ok(appdata) = std::env::var("APPDATA") {
         folders.push(format!("{appdata}\\DAZ 3D"));
         folders.push(format!("{appdata}\\Microsoft\\Windows\\Start Menu\\Programs\\DAZ 3D"));
