@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { open as openExternal } from '@tauri-apps/plugin-shell'
 
@@ -50,6 +50,19 @@ function AboutPage() {
           poses once, then generate the Daz scripts and PoseAsset data that drive a clean
           Daz&nbsp;→&nbsp;Houdini&nbsp;→&nbsp;Unreal character-ROM pipeline — so every character
           exports the same way, every time.
+        </p>
+        <p className="mt-6 max-w-prose leading-relaxed text-muted-foreground">
+          It builds on <strong>DazToHue-Scripts</strong> by Soltude — a set of Daz Studio scripts.
+          They aren't needed to make the app's features work, but give you additional features; you can
+          install them from{' '}
+          <Link
+            to="/tools"
+            search={{ tab: 'daztohue' }}
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            Tools&nbsp;→&nbsp;DazToHue-Scripts
+          </Link>
+          .
         </p>
         <p className="mt-12 max-w-prose leading-relaxed text-muted-foreground">
           Find the source, releases and issues on{' '}

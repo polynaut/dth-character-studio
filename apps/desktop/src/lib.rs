@@ -1951,12 +1951,48 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init());
 
-    // Updater + relaunch are desktop-only.
+    // Updater + relaunch + the native app menu are desktop-only.
     #[cfg(desktop)]
     {
+        use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+        use tauri::Emitter;
+
         builder = builder
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_process::init());
+            .plugin(tauri_plugin_process::init())
+            // Main → Refresh assets / Exit; Help → About / Check for Updates. The
+            // frontend-driven items emit an event the webview listens for (see
+            // __root.tsx); Exit is the predefined Quit.
+            .menu(|handle| {
+                let refresh =
+                    MenuItemBuilder::with_id("refresh_assets", "Refresh assets").build(handle)?;
+                let exit = PredefinedMenuItem::quit(handle, Some("Exit"))?;
+                let main = SubmenuBuilder::new(handle, "Main")
+                    .item(&refresh)
+                    .separator()
+                    .item(&exit)
+                    .build()?;
+                let about = MenuItemBuilder::with_id("about", "About").build(handle)?;
+                let updates =
+                    MenuItemBuilder::with_id("check_updates", "Check for Updates").build(handle)?;
+                let help = SubmenuBuilder::new(handle, "Help")
+                    .item(&about)
+                    .item(&updates)
+                    .build()?;
+                MenuBuilder::new(handle).item(&main).item(&help).build()
+            })
+            .on_menu_event(|app, event| match event.id().as_ref() {
+                "refresh_assets" => {
+                    let _ = app.emit("menu-refresh-assets", ());
+                }
+                "about" => {
+                    let _ = app.emit("menu-about", ());
+                }
+                "check_updates" => {
+                    let _ = app.emit("menu-check-updates", ());
+                }
+                _ => {}
+            });
     }
 
     builder

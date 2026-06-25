@@ -220,25 +220,41 @@ async function findTipImage(scenePath: string): Promise<string> {
 }
 
 /**
+ * Write a character's avatar bytes under a content-versioned filename
+ * (`<id>-<ts>.<ext>`), removing any previous avatar for that id first. The version
+ * in the name makes the stored reference change whenever the image does, so every
+ * `<Avatar>` keyed on it re-resolves — a fixed `<id>.png` would look unchanged and
+ * keep showing the cached old image (e.g. switching the avatar between two scenes).
+ * Returns the stored filename.
+ */
+async function writeAvatarBytes(
+  characterId: string,
+  bytes: Uint8Array,
+  ext: string,
+): Promise<string> {
+  const dir = await dataPath('images')
+  await mkdir(dir, { recursive: true })
+  const id = basename(characterId)
+  // One avatar per character — drop any previous variant (old fixed name or version).
+  for (const entry of await readDir(dir)) {
+    if (entry.isFile && (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))) {
+      await remove(joinPath(dir, entry.name))
+    }
+  }
+  const fileName = `${id}-${Date.now()}.${ext}`
+  await writeFile(joinPath(dir, fileName), bytes)
+  return fileName
+}
+
+/**
  * Copy a Daz scene's tip thumbnail into the app's images folder as the
- * character's avatar (`<id>.png`). Returns the canonical filename, or '' when
- * no tip image exists next to the scene.
+ * character's avatar. Returns the stored filename, or '' when no tip image exists
+ * next to the scene.
  */
 async function copyTipImage(characterId: string, scenePath: string): Promise<string> {
   const tipPath = await findTipImage(scenePath)
   if (!tipPath) return ''
-  const bytes = await readFile(tipPath)
-  const dir = await dataPath('images')
-  await mkdir(dir, { recursive: true })
-  const id = basename(characterId)
-  for (const entry of await readDir(dir)) {
-    if (entry.isFile && entry.name.startsWith(id) && !entry.name.endsWith('.png')) {
-      await remove(joinPath(dir, entry.name))
-    }
-  }
-  const fileName = `${id}.png`
-  await writeFile(joinPath(dir, fileName), bytes)
-  return fileName
+  return writeAvatarBytes(characterId, await readFile(tipPath), 'png')
 }
 
 export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
@@ -363,6 +379,25 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
   const image = await copyTipImage(parsed.id, scenePath)
   if (image) next.image = image
   return storage.saveCharacter(await resolveProject(projectId), next)
+}
+
+const sceneAvatarInput = z.object({
+  characterId: z.string().min(1),
+  scenePath: z.string().min(1),
+})
+
+/**
+ * Set a character's avatar to a Daz scene's tip thumbnail — copies the scene's
+ * `.tip.png` into the app images folder as `<id>.png` and returns the stored
+ * filename (the portable reference saved on the character). Throws when the scene
+ * has no thumbnail. Powers the avatar dialog's scene-thumbnail picker, so the user
+ * can switch the avatar to any linked scene's image.
+ */
+export async function setAvatarFromScene({ data }: { data: unknown }): Promise<string> {
+  const { characterId, scenePath } = sceneAvatarInput.parse(data)
+  const fileName = await copyTipImage(characterId, scenePath)
+  if (!fileName) throw new Error('That scene has no thumbnail (.tip.png) to use.')
+  return fileName
 }
 
 /** Open a file with its OS-default application (a `.duf` opens in Daz Studio). */
@@ -624,19 +659,9 @@ export async function uploadCharacterImage({ data }: { data: unknown }): Promise
   const input = uploadImageInput.parse(data)
   const extension = IMAGE_EXTENSIONS[input.mimeType]
   if (!extension) throw new Error(`Unsupported image type: ${input.mimeType}`)
-  const dir = await dataPath('images')
-  await mkdir(dir, { recursive: true })
-  const id = basename(input.characterId)
-  // One avatar per character — drop stale variants with other extensions.
-  for (const entry of await readDir(dir)) {
-    if (entry.isFile && entry.name.startsWith(id) && !entry.name.endsWith(extension)) {
-      await remove(joinPath(dir, entry.name))
-    }
-  }
-  const fileName = `${id}${extension}`
   const bytes = Uint8Array.from(atob(input.dataBase64), (c) => c.charCodeAt(0))
-  await writeFile(joinPath(dir, fileName), bytes)
-  return fileName
+  // extension is like ".png"; writeAvatarBytes wants the bare "png".
+  return writeAvatarBytes(input.characterId, bytes, extension.slice(1))
 }
 
 /** Extension → MIME for avatar images dropped as a file path (native drag-drop). */

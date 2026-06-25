@@ -1,11 +1,14 @@
 import type { CSSProperties } from 'react'
 import { useEffect } from 'react'
-import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
+import { Outlet, createRootRouteWithContext, useNavigate } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { Toaster, toast } from 'sonner'
+import { isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
-import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
+import { ensureNetworkDrives, fetchPoseAssets, refreshAllAssets } from '#/lib/rom/api.ts'
+import { checkForUpdates } from '#/lib/updater.ts'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import type { QueryClient } from '@tanstack/react-query'
@@ -18,7 +21,37 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   component: RootComponent,
 })
 
+/** Main → "Refresh assets" menu action: regenerate every character's artifacts,
+ *  mirroring the Settings button's toast feedback. */
+async function runMenuRefresh() {
+  const id = toast.loading('Refreshing assets…')
+  try {
+    const result = await refreshAllAssets()
+    toast.dismiss(id)
+    if (result.runtime && !result.runtime.ok) {
+      toast.error(`Runtime refresh failed: ${result.runtime.detail ?? ''}`)
+    } else if (result.total === 0) {
+      toast(
+        result.runtime?.ok
+          ? 'DTH runtime refreshed — no characters to regenerate'
+          : 'No characters to refresh yet',
+      )
+    } else if (result.failed > 0) {
+      toast.error(`Re-generated ${result.regenerated} of ${result.total} — ${result.failed} failed`)
+    } else {
+      toast.success(
+        `Re-generated assets for ${result.regenerated} character${result.regenerated === 1 ? '' : 's'}`,
+      )
+    }
+  } catch (e) {
+    toast.dismiss(id)
+    toast.error(e instanceof Error ? e.message : String(e))
+  }
+}
+
 function RootComponent() {
+  const navigate = useNavigate()
+
   // On launch, re-map any known network drives that aren't currently available
   // (an elevated relaunch doesn't inherit the user's interactive mappings).
   useEffect(() => {
@@ -36,6 +69,19 @@ function RootComponent() {
       void fetchPoseAssets()
     })()
   }, [])
+
+  // Native app-menu actions (built in Rust — see lib.rs). Main → Refresh assets /
+  // Exit; Help → About / Check for Updates. Exit quits natively; the rest emit an
+  // event handled here. No-op in the plain web build (no Tauri).
+  useEffect(() => {
+    if (!isTauri()) return
+    const unlisten: Array<() => void> = []
+    const add = (p: Promise<() => void>) => void p.then((u) => unlisten.push(u))
+    add(listen('menu-about', () => void navigate({ to: '/about' })))
+    add(listen('menu-refresh-assets', () => void runMenuRefresh()))
+    add(listen('menu-check-updates', () => void checkForUpdates({ manual: true })))
+    return () => unlisten.forEach((u) => u())
+  }, [navigate])
 
   return (
     <>
