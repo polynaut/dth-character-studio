@@ -1400,13 +1400,16 @@ fn default_daz_uninstall_folders(request: UninstallDefaultsRequest) -> Vec<Strin
     folders.push("D:\\User Data\\Documents\\DAZ 3D".into());
     folders.push("E:\\User Data\\Documents\\DAZ 3D".into());
     folders.push("C:\\Users\\Public\\Documents\\My DAZ 3D Library".into());
+    folders.push("C:\\Program Files\\DAZ 3D\\DAZStudio6".into());
+    folders.push("C:\\Program Files\\DAZ 3D\\DAZStudio4".into());
     if let Ok(appdata) = std::env::var("APPDATA") {
         folders.push(format!("{appdata}\\DAZ 3D"));
         folders.push(format!("{appdata}\\Microsoft\\Windows\\Start Menu\\Programs\\DAZ 3D"));
     }
-    // Prefill is a deliberate action the user runs while Daz is still installed, so a
-    // folder that doesn't exist genuinely isn't a Daz location on this machine — drop it.
-    folders.into_iter().filter(|f| Path::new(f).exists()).collect()
+    // The full candidate list — NOT filtered by existence. Whether a folder is there
+    // is checked at delete time (the uninstall reports missing ones as "not found"),
+    // so the list stays complete regardless of Daz's install state when prefilled.
+    folders
 }
 
 #[derive(Deserialize)]
