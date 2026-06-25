@@ -23,6 +23,8 @@ import {
 import { ChevronDown, ChevronRight, Copy, FolderOpen, GripVertical, Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { useNavigate } from '@tanstack/react-router'
+
 import { pickCsvPath, pickDufPath, pickFbxPath } from '#/lib/desktop.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
@@ -31,6 +33,8 @@ import type { Row } from '@tanstack/react-table'
 
 import { Button } from '#/components/ui/button.tsx'
 import { ConfigError } from '#/components/config-error.tsx'
+import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
+import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import {
   Select,
@@ -77,6 +81,38 @@ import type {
   RomSections as RomSectionsModel,
   SectionMode,
 } from '@dth/rom'
+
+/**
+ * "Import from CSV" plus an info popup explaining where the CSV comes from:
+ * DthScanFrames.dsa from the DazToHue-Scripts repo (installable in Tools), which
+ * exports the full morph list of an open Daz scene as a CSV importable here.
+ */
+function ImportCsvButton({ onImport }: { onImport: () => void }) {
+  const navigate = useNavigate()
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button variant="outline" size="sm" onClick={onImport}>
+        <Upload /> Import from CSV
+      </Button>
+      <InfoPopup label="Import from CSV — how to produce the CSV">
+        Import a DAZ morph CSV — each row becomes a pose. Generate it with{' '}
+        <strong>DthScanFrames.dsa</strong>, which exports the full morph list of an open Daz scene.
+        Install it from{' '}
+        <a
+          href="/tools"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void navigate({ to: '/tools', search: { tab: 'daztohue' } })
+          }}
+        >
+          Tools → DazToHue-Scripts
+        </a>
+        , run it in Daz Studio on your scene, then import the CSV here.
+      </InfoPopup>
+    </span>
+  )
+}
 
 /**
  * Accordion over the eight pose asset categories — all collapsed initially
@@ -1365,6 +1401,11 @@ export function RomSections({
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
+  // A picked CSV awaiting its frame-range dialog (null = no import in progress).
+  const [pendingCsv, setPendingCsv] = useState<{
+    section: RomSection
+    poses: Awaited<ReturnType<typeof importPosesFromCsv>>
+  } | null>(null)
 
   // Absolute timeline frame of each custom group's first pose: the measured
   // preset ROM blocks (base, GP/DK, Physics) come first, then the custom
@@ -1387,9 +1428,9 @@ export function RomSections({
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })
   }
 
-  // Bulk-import a DAZ morph CSV into a section: each row becomes a pose (a
-  // cleaned name + its morphs). Grouped sections get a new group; the flat
-  // FBM/MISC list appends to its single group. The section is enabled + custom.
+  // Bulk-import a DAZ morph CSV into a section. A full scene scan covers the whole
+  // ROM, so after picking the file we open the frame-range dialog; applyCsvImport
+  // commits the chosen slice.
   async function importCsv(section: RomSection) {
     const filePath = await pickCsvPath('Select a DAZ morph CSV')
     if (!filePath) return
@@ -1404,7 +1445,22 @@ export function RomSections({
       toast.error('No morphs found in that CSV')
       return
     }
-    const poses: Array<RomPose> = imported.map((pose) => ({
+    setPendingCsv({ section, poses: imported })
+  }
+
+  // Commit the chosen frame range: each selected row becomes a pose (a cleaned
+  // name + its morphs). Grouped sections get a new group; the flat FBM/MISC list
+  // appends to its single group. The section is enabled + custom.
+  function applyCsvImport(start: number, end: number) {
+    if (!pendingCsv) return
+    const { section, poses: source } = pendingCsv
+    setPendingCsv(null)
+    const inRange = source.filter((pose) => pose.frame >= start && pose.frame <= end)
+    if (inRange.length === 0) {
+      toast.error('No morphs in that frame range')
+      return
+    }
+    const poses: Array<RomPose> = inRange.map((pose) => ({
       id: newId(),
       name: pose.name,
       morphs: pose.morphs,
@@ -1429,7 +1485,7 @@ export function RomSections({
         ]
     patchSection(section, { enabled: true, mode: 'custom', groups })
     toast.success(
-      `Imported ${imported.length} morph${imported.length === 1 ? '' : 's'} into ${SECTION_LABELS[section]}`,
+      `Imported ${inRange.length} morph${inRange.length === 1 ? '' : 's'} into ${SECTION_LABELS[section]}`,
     )
   }
 
@@ -1576,9 +1632,7 @@ export function RomSections({
                       removable={false}
                       onGroupsChange={(groups) => patchSection(section, { groups })}
                     />
-                    <Button variant="outline" size="sm" onClick={() => void importCsv(section)}>
-                      <Upload /> Import from CSV
-                    </Button>
+                    <ImportCsvButton onImport={() => void importCsv(section)} />
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1612,9 +1666,7 @@ export function RomSections({
                       >
                         <Plus /> Add group
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => void importCsv(section)}>
-                        <Upload /> Import from CSV
-                      </Button>
+                      <ImportCsvButton onImport={() => void importCsv(section)} />
                     </div>
                   </div>
                 )}
@@ -1623,6 +1675,14 @@ export function RomSections({
           </div>
         )
       })}
+      {pendingCsv && (
+        <CsvImportDialog
+          sectionLabel={SECTION_LABELS[pendingCsv.section]}
+          frames={pendingCsv.poses.map((pose) => pose.frame)}
+          onConfirm={applyCsvImport}
+          onClose={() => setPendingCsv(null)}
+        />
+      )}
     </div>
   )
 }
