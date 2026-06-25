@@ -52,6 +52,7 @@ export function Portrait({
   className,
   imgClassName,
   fallbackClassName,
+  src: srcOverride,
 }: {
   image?: string
   scenePath?: string
@@ -60,8 +61,13 @@ export function Portrait({
   className?: string
   imgClassName?: string
   fallbackClassName?: string
+  /** A ready-to-use image URL (e.g. a static placeholder) — bypasses the
+   *  image/scenePath resolution so a non-character avatar renders in the same
+   *  frame (background, border, crop) as a real portrait. */
+  src?: string
 }) {
-  const src = usePortraitSrc({ image, scenePath })
+  const resolvedSrc = usePortraitSrc({ image, scenePath })
+  const src = srcOverride ?? resolvedSrc
   return (
     <div className={cn('overflow-hidden border-2 border-neutral-500 bg-neutral-500', className)}>
       {src ? (
