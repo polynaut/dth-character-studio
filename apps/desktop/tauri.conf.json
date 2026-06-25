@@ -43,7 +43,7 @@
   },
   "plugins": {
     "shell": {
-      "open": "(https?://.+)|(.+\\.([Dd][Uu][Ff]|[Hh][Ii][Pp]))"
+      "open": "(https?://.+)|(.+\\.([Dd][Uu][Ff]|[Hh][Ii][Pp]([Nn][Cc]|[Ll][Cc])?))"
     },
     "updater": {
       "endpoints": [
