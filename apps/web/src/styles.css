@@ -34,6 +34,7 @@
   --input: #4a4a4a; /* input field borders */
   --ring: #ee7027; /* orange focus ring */
   --daz-green: #3fae6b; /* Daz brand leaf-green — the linked-scene card accent */
+  --houdini-orange: #ff6a13; /* Houdini brand orange — the linked-project card accent */
   --chart-1: #fe5c01;
   --chart-2: #5aa9e6;
   --chart-3: #e6b85a;
@@ -72,6 +73,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-daz-green: var(--daz-green);
+  --color-houdini-orange: var(--houdini-orange);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -318,6 +320,17 @@ a {
   border-color: color-mix(in oklab, var(--daz-green) 38%, var(--border));
   &:hover {
     border-color: color-mix(in oklab, var(--daz-green) 70%, var(--border));
+  }
+}
+
+/* The linked-project "Houdini card": a very light orange tint — the Houdini brand
+   orange mixed faintly into the dark card — with an orange border that brightens
+   on hover. Mirrors `daz-card` (lighter fill, since the ask was "very light"). */
+@utility houdini-card {
+  background-color: color-mix(in oklab, var(--houdini-orange) 8%, var(--card));
+  border-color: color-mix(in oklab, var(--houdini-orange) 38%, var(--border));
+  &:hover {
+    border-color: color-mix(in oklab, var(--houdini-orange) 70%, var(--border));
   }
 }
 

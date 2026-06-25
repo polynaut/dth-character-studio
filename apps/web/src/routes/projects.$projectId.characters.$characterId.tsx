@@ -443,7 +443,7 @@ function SceneCard({
   scenePath: string
   name: string
   /** The character's folder; the scene's path relative to it (incl. the daz
-   *  scenes folder) is shown as a chip, e.g. "\daz3d\Outfit_Summertide\". */
+   *  scenes folder) is shown as a chip, e.g. "%CHAR%\daz3d\Outfit_Summertide\". */
   charFolderAbs: string
   onOpen: () => void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
@@ -453,6 +453,8 @@ function SceneCard({
   primary?: boolean
 }) {
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
+  // The heading shows the scene name without its extension (e.g. ".duf").
+  const displayName = fileName.replace(/\.[^./\\]+$/, '')
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
   // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
   // nested. Empty for a scene linked outside the character folder.
@@ -464,12 +466,12 @@ function SceneCard({
       ? sceneDir.slice(base.length + 1)
       : ''
   return (
-    <div className="group/card relative w-fit max-w-sm">
+    <div className="group/card relative w-80">
       <button
         type="button"
         onClick={onOpen}
         title="Open in Daz"
-        className="daz-card group relative flex h-full w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
+        className="daz-card group relative flex h-full w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors"
       >
         <Portrait
           scenePath={scenePath}
@@ -484,13 +486,13 @@ function SceneCard({
           aria-hidden
           className="pointer-events-none absolute bottom-1 left-1 size-8 object-contain drop-shadow-md"
         />
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{fileName}</div>
+        <div className="min-w-0 text-xs">
+          <div className="truncate text-sm font-medium">{displayName}</div>
           {relSub && (
             <code
-              className={`${pathChipClass('secondary')} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+              className={`${pathChipClass('secondary')} mt-1 inline-block max-w-full truncate align-middle`}
             >
-              {`${pathSeparator()}${displayPath(relSub)}${pathSeparator()}`}
+              {`%CHAR%${pathSeparator()}${displayPath(relSub)}${pathSeparator()}`}
             </code>
           )}
           {primary && (
@@ -504,7 +506,7 @@ function SceneCard({
             </div>
           )}
         </div>
-        <ExternalLink className="size-4 shrink-0 self-end text-muted-foreground transition-colors group-hover:text-daz-green" />
+        <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
       </button>
       {onRemove && (
         <Button
@@ -963,38 +965,68 @@ function DazSceneField({
  *  linked in place (never copied), so the folder is shown in full. */
 function HoudiniCard({
   hipPath,
+  charFolderAbs,
+  avatarSrc,
   onOpen,
   onRemove,
 }: {
   hipPath: string
+  /** The character's folder; when the project sits inside it, the chip shows
+   *  "%CHAR%" in place of that prefix. */
+  charFolderAbs: string
+  /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
+  avatarSrc: string
   onOpen: () => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
 }) {
   const fileName = hipPath.split(/[\\/]/).pop() ?? hipPath
-  const dir = displayPath(hipPath.replace(/[\\/][^\\/]*$/, ''))
+  // The heading shows the project name without its extension (e.g. ".hiplc").
+  const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  // The chip shows the project's folder; when it sits inside the character's own
+  // folder, collapse that prefix to "%CHAR%" (like the Daz scene cards).
+  const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+  const hipDir = norm(hipPath).replace(/\/[^/]*$/, '')
+  const base = norm(charFolderAbs)
+  const inChar =
+    !!base &&
+    (hipDir.toLowerCase() === base.toLowerCase() ||
+      hipDir.toLowerCase().startsWith(base.toLowerCase() + '/'))
+  const dir = inChar
+    ? '%CHAR%' + hipDir.slice(base.length).split('/').join(pathSeparator())
+    : displayPath(hipDir)
   return (
-    <div className="group/card relative w-fit max-w-sm">
+    <div className="group/card relative w-80">
       <button
         type="button"
         onClick={onOpen}
         title="Open in Houdini"
-        className="group relative flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary"
+        className="houdini-card group relative flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors"
       >
-        <div className="flex aspect-[3/4] w-14 shrink-0 items-center justify-center rounded-md bg-black">
-          <img src={houdiniLogo} alt="" className="size-9 object-contain" />
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{fileName}</div>
+        <Portrait
+          src={avatarSrc}
+          name={displayName}
+          className="aspect-[3/4] w-14 shrink-0 rounded-md"
+          fallbackClassName="text-xl"
+        />
+        {/* Houdini brand mark, floating bottom-left as a badge on the avatar. */}
+        <img
+          src={houdiniLogo}
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute bottom-1 left-1 size-8 object-contain drop-shadow-md"
+        />
+        <div className="min-w-0 text-xs">
+          <div className="truncate text-sm font-medium">{displayName}</div>
           {dir && (
             <code
-              className={`${pathChipClass('secondary')} mt-1 inline-block max-w-full truncate align-middle text-xs`}
+              className={`${pathChipClass('secondary')} mt-1 inline-block max-w-full truncate align-middle`}
             >
               {dir}
             </code>
           )}
         </div>
-        <ExternalLink className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+        <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
       </button>
       {onRemove && (
         <Button
@@ -1020,10 +1052,12 @@ function HoudiniCard({
 function HoudiniProjectsField({
   projectId,
   character,
+  location,
   onChanged,
 }: {
   projectId: string
   character: Character
+  location: CharacterLocation
   onChanged: (character: Character) => void
 }) {
   const router = useRouter()
@@ -1036,6 +1070,32 @@ function HoudiniProjectsField({
 
   const projects = character.houdiniProjects
   const hasProjects = projects.length > 0
+  // The character's own folder — projects linked inside it show a "%CHAR%" prefix.
+  const charFolder = location.definitionAbs
+    .replace(/[\\/]+/g, '/')
+    .replace(/\/+$/, '')
+    .replace(/\/[^/]*$/, '')
+  // A Houdini project has no thumbnail — use a gender-based placeholder avatar.
+  const placeholderSrc =
+    character.gender === 'male' ? '/charPlaceholderMale.png' : '/charPlaceholderFemale.png'
+
+  // Folder chip for the linked projects (the first project's directory), with the
+  // project-root prefix dimmed and the rest emphasized — matching the Daz scenes chip.
+  const projectRoot = displayPath(location.libraryFolder)
+  const firstHipAbs = displayPath(projects[0] ?? '')
+  const hipLastSep = Math.max(firstHipAbs.lastIndexOf('\\'), firstHipAbs.lastIndexOf('/'))
+  const projectDir = hipLastSep >= 0 ? firstHipAbs.slice(0, hipLastSep) : ''
+  const projectRootLen = projectDir.toLowerCase().startsWith(projectRoot.toLowerCase())
+    ? projectRoot.length
+    : 0
+  const projectDirChip = (
+    <PathCode path={projectDir}>
+      {projectRootLen > 0 && (
+        <span className="text-muted-foreground/60">{projectDir.slice(0, projectRootLen)}</span>
+      )}
+      <span className="text-foreground/80">{projectDir.slice(projectRootLen)}</span>
+    </PathCode>
+  )
 
   async function onOpen(hipPath: string) {
     setError('')
@@ -1111,19 +1171,22 @@ function HoudiniProjectsField({
       label="Drop Houdini project(s) to link"
       className="rounded-lg"
     >
-      <Label className="mb-2 flex w-fit items-center gap-1">
+      <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1`}>
         Houdini projects
         <InfoPopup label="Houdini projects — more information">
           Linked in place (not copied) — a Houdini project keeps absolute import paths that a
           copy would break. Drag <code>.hip</code> files here or use the button.
         </InfoPopup>
       </Label>
+      {hasProjects && <p className="mb-2 text-xs">{projectDirChip}</p>}
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
           {projects.map((hip, i) => (
             <HoudiniCard
               key={`${hip}-${i}`}
               hipPath={hip}
+              charFolderAbs={charFolder}
+              avatarSrc={placeholderSrc}
               onOpen={() => void onOpen(hip)}
               onRemove={() => askRemove(hip)}
             />
@@ -1574,6 +1637,7 @@ function CharacterPage() {
             <HoudiniProjectsField
               projectId={projectId}
               character={character}
+              location={location}
               onChanged={onSceneLinked}
             />
           </div>
