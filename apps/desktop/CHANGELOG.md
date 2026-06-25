@@ -1,5 +1,29 @@
 # @dth/desktop
 
+## 0.24.0
+
+### Minor Changes
+
+- [#83](https://github.com/polynaut/dth-character-studio/pull/83) [`a51a795`](https://github.com/polynaut/dth-character-studio/commit/a51a795db9bbbac2a12190226b3417904cbfb480) Thanks [@polynaut](https://github.com/polynaut)! - Tools: add a **DazToHue-Scripts** tab that downloads the companion
+  [soltude/DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts) repo — the
+  Daz Studio scripts behind DTH Character Studio — straight from GitHub and installs
+  it into `<My DAZ 3D Library>/Scripts/DazToHue-Scripts`. It delivers
+  `DthScanFrames.dsa`, which exports the full morph list of an open Daz scene as a CSV
+  you can pull into a character's ROM section via a section's **Import from CSV**.
+
+  The download + unpack run natively (the webview can't fetch the archive — codeload's
+  CORS only allows render.githubusercontent.com); GitHub's top-level wrapper folder is
+  stripped, the zip is unpacked beside the destination and swapped in (so a failed
+  download never leaves a half-written install), and re-installing replaces the folder
+  with the latest version. Reuses the reqwest/rustls (ring) stack already in the build
+  via the updater, so no new dependencies.
+
+### Patch Changes
+
+- [#83](https://github.com/polynaut/dth-character-studio/pull/83) [`a51a795`](https://github.com/polynaut/dth-character-studio/commit/a51a795db9bbbac2a12190226b3417904cbfb480) Thanks [@polynaut](https://github.com/polynaut)! - Fix: external links — the About page's GitHub link and links inside info popups —
+  now open in the system browser. The shell `open` scope was limited to `.duf` /
+  `.hip` paths, which silently rejected `https://` URLs; it now also allows http/https.
+
 ## 0.23.1
 
 ### Patch Changes
