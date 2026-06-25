@@ -707,6 +707,34 @@ export interface StudioSettings {
   houdiniSubdir: string
   /** Whether to seed the empty Houdini folder when a character is created. */
   createHoudiniSubdir: boolean
+  // --- "Optional" tab: install your own Daz/Houdini content (not DTH release) ---
+  /**
+   * Your Daz asset source folders. Each is scanned for content folders
+   * (`data`/`People`/`Runtime`/`Documentation`, `.zip` assets extracted) and
+   * installed into `dazLibraryFolder`. A flat list — generation is auto-detected.
+   */
+  dazAssetsFolders: Array<string>
+  /** Custom morphs (Daz Transfer Shape Utility output): source folder + its
+   *  destination (your personal "…/Studio/My Library/data/Daz 3D"). */
+  dazMorphsSource: string
+  dazMorphsDest: string
+  /** Daz presets: source folder + destination ("…/Studio/My Library/Presets"). */
+  dazPresetsSource: string
+  dazPresetsDest: string
+  /** Houdini `my_presets` source — copied into the Houdini docs folder and wired
+   *  into its `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`). */
+  houdiniPresetsSource: string
+  /** Destination-relative file paths the user has "accepted" as legitimately
+   *  shared between products (e.g. a vendor icon, cross-product textures). Both
+   *  the asset scan/install and the dedup skip these, so they stop showing as
+   *  "to copy" / as a conflict — the file stays whatever is installed. */
+  acceptedConflicts: Array<string>
+  /** Where the dedup moves redundant duplicate copies. Required to run Apply —
+   *  nothing is quarantined until this is set. */
+  dedupQuarantineFolder: string
+  /** "Danger zone" — folders the Daz uninstall cleanup deletes (pre-filled from
+   *  the dth-cli defaults, then user-editable). */
+  dazUninstallFolders: Array<string>
 }
 
 async function isDir(path: string): Promise<boolean> {
@@ -730,6 +758,15 @@ function defaultSettings(): StudioSettings {
     dazSubdir: 'daz3d',
     houdiniSubdir: 'houdini',
     createHoudiniSubdir: true,
+    dazAssetsFolders: [],
+    dazMorphsSource: '',
+    dazMorphsDest: '',
+    dazPresetsSource: '',
+    dazPresetsDest: '',
+    houdiniPresetsSource: '',
+    acceptedConflicts: [],
+    dedupQuarantineFolder: '',
+    dazUninstallFolders: [],
   }
 }
 
@@ -774,6 +811,31 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.createHoudiniSubdir === 'boolean'
           ? raw.createHoudiniSubdir
           : defaults.createHoudiniSubdir,
+      dazAssetsFolders: Array.isArray(raw.dazAssetsFolders)
+        ? raw.dazAssetsFolders.filter((f: unknown): f is string => typeof f === 'string')
+        : defaults.dazAssetsFolders,
+      dazMorphsSource:
+        typeof raw.dazMorphsSource === 'string' ? raw.dazMorphsSource : defaults.dazMorphsSource,
+      dazMorphsDest:
+        typeof raw.dazMorphsDest === 'string' ? raw.dazMorphsDest : defaults.dazMorphsDest,
+      dazPresetsSource:
+        typeof raw.dazPresetsSource === 'string' ? raw.dazPresetsSource : defaults.dazPresetsSource,
+      dazPresetsDest:
+        typeof raw.dazPresetsDest === 'string' ? raw.dazPresetsDest : defaults.dazPresetsDest,
+      houdiniPresetsSource:
+        typeof raw.houdiniPresetsSource === 'string'
+          ? raw.houdiniPresetsSource
+          : defaults.houdiniPresetsSource,
+      acceptedConflicts: Array.isArray(raw.acceptedConflicts)
+        ? raw.acceptedConflicts.filter((f: unknown): f is string => typeof f === 'string')
+        : defaults.acceptedConflicts,
+      dedupQuarantineFolder:
+        typeof raw.dedupQuarantineFolder === 'string'
+          ? raw.dedupQuarantineFolder
+          : defaults.dedupQuarantineFolder,
+      dazUninstallFolders: Array.isArray(raw.dazUninstallFolders)
+        ? raw.dazUninstallFolders.filter((f: unknown): f is string => typeof f === 'string')
+        : defaults.dazUninstallFolders,
     }
   } catch {
     return defaults
