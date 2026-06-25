@@ -57,6 +57,7 @@ import {
   relinkScene,
   resolvePresetFrames,
   saveCharacter,
+  setAvatarFromScene,
   uploadCharacterImage,
   uploadCharacterImageFromPath,
 } from '#/lib/rom/api.ts'
@@ -204,12 +205,15 @@ function ImageDialog({
   image,
   name,
   characterId,
+  scenes,
   onApply,
   onClose,
 }: {
   image: string
   name: string
   characterId: string
+  /** Linked Daz scene paths — each offers its `.tip.png` as a pickable avatar. */
+  scenes: Array<string>
   onApply: (image: string) => void | Promise<void>
   onClose: () => void
 }) {
@@ -267,6 +271,22 @@ function ImageDialog({
     }
   }
 
+  // Switch the avatar to a linked scene's tip thumbnail (copied into the app's
+  // images folder). Mirrors the upload handlers — updates the preview + persists.
+  async function applyScene(scenePath: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const served = await setAvatarFromScene({ data: { characterId, scenePath } })
+      setUrl(served)
+      await onApply(served)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Portaled to <body> so the editor body can use CSS containment without this
   // fixed overlay resolving against the contained box instead of the viewport.
   return createPortal(
@@ -307,6 +327,33 @@ function ImageDialog({
             {busy ? 'Uploading…' : 'Drop an image here, or click to pick one'}
           </div>
         </FileDropZone>
+
+        {scenes.length >= 2 && (
+          <div>
+            <p className="mb-1.5 text-sm text-muted-foreground">
+              Or use a linked Daz scene's image:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {scenes.map((scene) => (
+                <button
+                  key={scene}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void applyScene(scene)}
+                  title={scene.split(/[\\/]/).pop()}
+                  className="rounded-md ring-2 ring-transparent transition hover:ring-primary focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50"
+                >
+                  <Portrait
+                    scenePath={scene}
+                    name={name}
+                    className="aspect-[3/4] w-16 rounded-md"
+                    fallbackClassName="text-lg"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <Input
@@ -1936,6 +1983,7 @@ function CharacterPage() {
           image={character.image}
           name={character.name}
           characterId={character.id}
+          scenes={[...new Set([character.scenePath, ...character.extraScenes].filter(Boolean))]}
           onApply={async (image) => {
             // Persist the avatar immediately — it's a deliberate change and
             // should survive a reload without needing the Save button.
