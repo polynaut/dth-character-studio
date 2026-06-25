@@ -1,5 +1,15 @@
 # @dth/desktop
 
+## 0.24.1
+
+### Patch Changes
+
+- [#85](https://github.com/polynaut/dth-character-studio/pull/85) [`0612d1f`](https://github.com/polynaut/dth-character-studio/commit/0612d1f87b81d39f1d34f17f05f652fd85a668ce) Thanks [@polynaut](https://github.com/polynaut)! - Fix: opening a linked Houdini project failed for `.hiplc` / `.hipnc` files with
+  "Scoped command argument … failed regex validation". The shell `open` scope only
+  matched `.hip` (anchored at the end), so the indie/non-commercial Houdini
+  extensions were rejected. It now accepts `.hip`, `.hipnc`, and `.hiplc` (alongside
+  `.duf` and http/https links).
+
 ## 0.24.0
 
 ### Minor Changes
