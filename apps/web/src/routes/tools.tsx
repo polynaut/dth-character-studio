@@ -269,17 +269,10 @@ function ToolsPage() {
   const [uninstallReport, setUninstallReport] = useState<InstallReport | null>(null)
   const [uninstallConfirm, setUninstallConfirm] = useState(false)
 
+  // Scoped to the fields THIS page edits (assets / morphs / presets / dedup /
+  // uninstall). Save still writes the full settings object, but the Settings-page
+  // fields are untouched here so they never flip this dirty.
   const dirty =
-    settings.dazLibraryFolder !== initial.dazLibraryFolder ||
-    settings.dthPosesFolder !== initial.dthPosesFolder ||
-    settings.currentDthVersion !== initial.currentDthVersion ||
-    settings.dthExporterFolder !== initial.dthExporterFolder ||
-    settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
-    settings.dazInstallFolder !== initial.dazInstallFolder ||
-    settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
-    settings.dazSubdir !== initial.dazSubdir ||
-    settings.houdiniSubdir !== initial.houdiniSubdir ||
-    settings.createHoudiniSubdir !== initial.createHoudiniSubdir ||
     settings.dazMorphsSource !== initial.dazMorphsSource ||
     settings.dazMorphsDest !== initial.dazMorphsDest ||
     settings.dazPresetsSource !== initial.dazPresetsSource ||

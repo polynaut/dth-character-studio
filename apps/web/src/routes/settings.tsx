@@ -516,6 +516,9 @@ function SettingsPage() {
     return () => clearTimeout(timer)
   }, [loadInstalledExporter])
 
+  // Scoped to the fields THIS page edits (General + DazToHue). Save still writes the
+  // full settings object, but the Tools-page fields are untouched here so they never
+  // flip this dirty — the button reflects only this page's changes.
   const dirty =
     settings.dazLibraryFolder !== initial.dazLibraryFolder ||
     settings.dthPosesFolder !== initial.dthPosesFolder ||
@@ -526,15 +529,7 @@ function SettingsPage() {
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.dazSubdir !== initial.dazSubdir ||
     settings.houdiniSubdir !== initial.houdiniSubdir ||
-    settings.createHoudiniSubdir !== initial.createHoudiniSubdir ||
-    settings.dazMorphsSource !== initial.dazMorphsSource ||
-    settings.dazMorphsDest !== initial.dazMorphsDest ||
-    settings.dazPresetsSource !== initial.dazPresetsSource ||
-    settings.dazPresetsDest !== initial.dazPresetsDest ||
-    settings.houdiniPresetsSource !== initial.houdiniPresetsSource ||
-    settings.dedupQuarantineFolder !== initial.dedupQuarantineFolder ||
-    JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders) ||
-    JSON.stringify(settings.dazUninstallFolders) !== JSON.stringify(initial.dazUninstallFolders)
+    settings.createHoudiniSubdir !== initial.createHoudiniSubdir
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
