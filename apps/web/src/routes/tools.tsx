@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, Download, ExternalLink, FolderOpen, Plus, Save, Trash2, X } from 'lucide-react'
+import { open as openExternal } from '@tauri-apps/plugin-shell'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
@@ -524,10 +525,10 @@ function ToolsPage() {
         <h1 className="text-3xl font-bold">Tools</h1>
       </header>
 
-      <Tabs defaultValue={tab === 'daztohue' ? 'daztohue' : 'install'} className="max-w-3xl">
+      <Tabs defaultValue={tab === 'install' ? 'install' : 'daztohue'} className="max-w-3xl">
         <TabsList>
-          <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
           <TabsTrigger value="daztohue">DazToHue-Scripts</TabsTrigger>
+          <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
         </TabsList>
 
         <TabsContent value="install" className="space-y-5">
@@ -928,14 +929,30 @@ function ToolsPage() {
               <InstallReportList report={uninstallReport} onClose={() => setUninstallReport(null)} />
             )}
           </section>
+
+          <div>
+            <Button onClick={onSave} disabled={busy || !dirty}>
+              <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="daztohue" className="space-y-5">
           <p className="text-sm text-muted-foreground">
-            Install the companion <strong>DazToHue-Scripts</strong> repo — the Daz Studio scripts
-            behind DTH Character Studio. It includes <strong>DthScanFrames.dsa</strong>, which exports
-            the full morph list of an existing Daz scene as a CSV you can import into a character's ROM
-            section.
+            Install the companion{' '}
+            <a
+              href={DAZTOHUE_SCRIPTS_REPO}
+              onClick={(e) => {
+                e.preventDefault()
+                void openExternal(DAZTOHUE_SCRIPTS_REPO)
+              }}
+              className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
+            >
+              DazToHue-Scripts repo <ExternalLink className="size-3.5" />
+            </a>{' '}
+            — the Daz Studio scripts behind DTH Character Studio. It includes{' '}
+            <strong>DthScanFrames.dsa</strong>, which exports the full morph list of an existing Daz
+            scene as a CSV you can import into a character's ROM section.
           </p>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -969,8 +986,12 @@ function ToolsPage() {
                 <PathCode path={displayPath(daztohueScriptsDir(settings.dazLibraryFolder.trim()))} />.
               </p>
             ) : (
-              <p className="text-sm text-amber-600 dark:text-amber-500">
-                Set “My DAZ 3D Library” in Settings first — that's where the scripts are installed.
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                “My DAZ 3D Library” isn't set — the scripts have nowhere to install. Set it in{' '}
+                <Link to="/settings" className="font-medium underline underline-offset-2">
+                  Settings
+                </Link>{' '}
+                first.
               </p>
             )}
 
@@ -995,12 +1016,6 @@ function ToolsPage() {
           </section>
         </TabsContent>
       </Tabs>
-
-      <div className="mt-6 max-w-3xl">
-        <Button onClick={onSave} disabled={busy || !dirty}>
-          <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-        </Button>
-      </div>
     </main>
   )
 }
