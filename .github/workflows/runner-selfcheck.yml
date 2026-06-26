@@ -1,0 +1,79 @@
+name: Runner self-check
+
+# Manual-only readiness probe for the self-hosted Certum signer runner.
+# Confirms the runner picks up jobs and has the signing toolchain + a reachable
+# p11-kit socket — WITHOUT signing anything. Touches no secrets, can't release.
+# Until the Certum cert is issued and SimplySign is logged in, the token listing
+# is expected to be empty/unavailable — that's the one thing this can't verify
+# yet. Run it from the Actions tab once the runner is up.
+
+on:
+  workflow_dispatch:
+    inputs:
+      socket:
+        description: "p11-kit socket path as seen inside the runner"
+        required: false
+        default: "/run/user/1000/p11-kit/p11kit.sock"
+
+jobs:
+  check:
+    runs-on: [self-hosted, linux, certum-signer]
+    steps:
+      - name: Runner + OS
+        shell: bash
+        run: |
+          echo "Runner : ${RUNNER_NAME:-?} (${RUNNER_OS:-?}/${RUNNER_ARCH:-?})"
+          uname -a || true
+
+      - name: Signing toolchain
+        shell: bash
+        run: |
+          check() {
+            printf '%-16s ' "$1"
+            if command -v "$1" >/dev/null 2>&1; then
+              "$1" --version 2>&1 | head -n1
+            else
+              echo "MISSING"
+            fi
+          }
+          check osslsigncode   # the Authenticode signer
+          check node           # for `tauri signer sign` (updater .sig regen)
+          check gh             # to publish the release
+          check pnpm
+          check p11tool
+          check pkcs11-tool
+
+      - name: p11-kit client module
+        shell: bash
+        run: |
+          found=
+          for p in \
+            /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so \
+            /usr/lib64/pkcs11/p11-kit-client.so \
+            /usr/lib/pkcs11/p11-kit-client.so; do
+            if [ -e "$p" ]; then echo "found: $p"; found=1; fi
+          done
+          [ -n "$found" ] || echo "p11-kit-client.so NOT found in the usual paths"
+
+      - name: SimplySign socket + token (cert presence)
+        shell: bash
+        env:
+          SOCK: ${{ inputs.socket }}
+        run: |
+          echo "socket: $SOCK"
+          if [ -S "$SOCK" ]; then
+            echo "socket EXISTS ✓"
+            export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
+            echo "--- tokens visible via the socket (empty until cert + login) ---"
+            if command -v p11tool >/dev/null 2>&1; then
+              p11tool --list-tokens 2>&1 | head -n 40 || true
+            else
+              echo "p11tool not installed — skipping token listing"
+            fi
+          else
+            echo "socket MISSING ✗ — certum-container not running, or its p11-kit"
+            echo "socket isn't shared into this runner. Fix the volume/path before the"
+            echo "first signed release. (Override the path via the workflow input.)"
+          fi
+          echo "Note: an empty/unavailable token here is EXPECTED before the Certum"
+          echo "cert is issued and SimplySign is logged in. This probe does not sign."
