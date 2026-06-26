@@ -6,6 +6,9 @@ name: Runner self-check
 # Until the Certum cert is issued and SimplySign is logged in, the token listing
 # is expected to be empty/unavailable — that's the one thing this can't verify
 # yet. Run it from the Actions tab once the runner is up.
+#
+# Every step is a best-effort probe: it reports findings and always exits 0, so
+# one missing/odd tool never hides the rest (notably the socket check).
 
 on:
   workflow_dispatch:
@@ -26,12 +29,19 @@ jobs:
           uname -a || true
 
       - name: Signing toolchain
+        if: ${{ always() }}
         shell: bash
         run: |
+          set +e   # probe only — never fail the step on a tool quirk
           check() {
             printf '%-16s ' "$1"
-            if command -v "$1" >/dev/null 2>&1; then
-              "$1" --version 2>&1 | head -n1
+            local p
+            if p=$(command -v "$1" 2>/dev/null); then
+              # --version is unreliable across tools (e.g. pkcs11-tool rejects it);
+              # discard its stderr/exit and fall back to just reporting presence.
+              local v
+              v=$("$1" --version 2>/dev/null | head -n1)
+              echo "${v:-present} ($p)"
             else
               echo "MISSING"
             fi
@@ -39,13 +49,15 @@ jobs:
           check osslsigncode   # the Authenticode signer
           check node           # for `tauri signer sign` (updater .sig regen)
           check gh             # to publish the release
-          check pnpm
-          check p11tool
-          check pkcs11-tool
+          check p11tool        # to list the SimplySign token
+          check pkcs11-tool    # optional, alternative token lister
+          true
 
       - name: p11-kit client module
+        if: ${{ always() }}
         shell: bash
         run: |
+          set +e
           found=
           for p in \
             /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so \
@@ -54,19 +66,22 @@ jobs:
             if [ -e "$p" ]; then echo "found: $p"; found=1; fi
           done
           [ -n "$found" ] || echo "p11-kit-client.so NOT found in the usual paths"
+          true
 
       - name: SimplySign socket + token (cert presence)
+        if: ${{ always() }}
         shell: bash
         env:
           SOCK: ${{ inputs.socket }}
         run: |
+          set +e
           echo "socket: $SOCK"
           if [ -S "$SOCK" ]; then
             echo "socket EXISTS ✓"
             export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
             echo "--- tokens visible via the socket (empty until cert + login) ---"
             if command -v p11tool >/dev/null 2>&1; then
-              p11tool --list-tokens 2>&1 | head -n 40 || true
+              p11tool --list-tokens 2>&1 | head -n 40
             else
               echo "p11tool not installed — skipping token listing"
             fi
@@ -77,3 +92,4 @@ jobs:
           fi
           echo "Note: an empty/unavailable token here is EXPECTED before the Certum"
           echo "cert is issued and SimplySign is logged in. This probe does not sign."
+          true
