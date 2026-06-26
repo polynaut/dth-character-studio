@@ -45,7 +45,8 @@ import {
   updateProject,
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
-import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import { useFileDrop } from '#/lib/file-drop.ts'
+import { SidePanel } from '#/components/ui/side-panel.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
@@ -107,6 +108,8 @@ function ProjectCharactersPage() {
   const [prefill, setPrefill] = useState<string>('empty')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // The create-character form lives in a slide-in side panel now.
+  const [panelOpen, setPanelOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   // When the picked scene is outside the project, the create flow pauses on this
   // modal to ask whether to copy the scene into the character folder.
@@ -152,6 +155,26 @@ function ProjectCharactersPage() {
     const picked = await pickDufPath('Select the Daz character scene (.duf)')
     if (picked) applyScene(picked)
   }
+
+  // Open the create panel fresh — the "Add character" button.
+  function openCreatePanel() {
+    setError('')
+    setScenePath('')
+    setName('')
+    setPrefill('empty')
+    setPanelOpen(true)
+  }
+
+  // A Daz scene dropped anywhere on the page opens the panel, prefilled.
+  function onDropScene(paths: Array<string>) {
+    const dropped = paths[0]
+    if (!dropped) return
+    applyScene(dropped)
+    setPanelOpen(true)
+  }
+
+  // The whole page is a .duf drop target — `data-filedrop-id` goes on <main>.
+  const { id: dropId, isOver: dropOver } = useFileDrop({ accept: ['duf'], onDrop: onDropScene })
 
   /** Is the picked scene located inside the project folder? */
   function sceneInsideProject(): boolean {
@@ -221,6 +244,7 @@ function ProjectCharactersPage() {
       setScenePath('')
       setName('')
       setPrefill('empty')
+      setPanelOpen(false)
       await router.invalidate()
       toast.success(`Created “${character.name}”`)
       await router.navigate({
@@ -270,7 +294,12 @@ function ProjectCharactersPage() {
   }
 
   return (
-    <main className="p-8">
+    <main data-filedrop-id={dropId} className="relative min-h-screen p-8">
+      {dropOver && (
+        <div className="pointer-events-none fixed inset-4 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
+          Drop a Daz scene (.duf) to create a character
+        </div>
+      )}
       <div className="mb-6">
         <Link
           to="/"
@@ -310,21 +339,14 @@ function ProjectCharactersPage() {
         <HeaderNav />
       </header>
 
-      <FileDropZone
-        accept={['duf']}
-        onDrop={(paths) => paths[0] && applyScene(paths[0])}
-        label="Drop a Daz scene (.duf)"
-        className="mb-8 max-w-5xl space-y-4 rounded-lg border bg-card p-5"
-      >
-        <div>
-          <h2 className="text-lg font-semibold">Create character</h2>
-          <p className="text-sm text-muted-foreground">
-            Create a character by choosing — or dragging in — its Daz scene file.{' '}
-            <InfoPopup label="Daz scene requirements">
-              It must not contain an existing animation — only the character itself.
-            </InfoPopup>
-          </p>
-        </div>
+      <SidePanel open={panelOpen} title="Create character" onClose={() => setPanelOpen(false)}>
+        <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Choose its Daz scene (.duf) — or drop one anywhere on the page.{' '}
+          <InfoPopup label="Daz scene requirements">
+            It must not contain an existing animation — only the character itself.
+          </InfoPopup>
+        </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
             <FolderOpen /> {scenePath.trim() ? 'Choose another…' : 'Choose Daz scene…'}
@@ -432,10 +454,18 @@ function ProjectCharactersPage() {
             </div>
           </>
         )}
-      </FileDropZone>
+        </div>
+      </SidePanel>
 
       {characters.length === 0 ? (
-        <p className="text-muted-foreground">No characters yet — create the first one above.</p>
+        <div className="flex flex-col items-start gap-4">
+          <p className="text-muted-foreground">
+            No characters yet — drop a Daz scene anywhere, or add one.
+          </p>
+          <Button onClick={openCreatePanel}>
+            <UserPlus /> Add character
+          </Button>
+        </div>
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -445,6 +475,9 @@ function ProjectCharactersPage() {
                 : `${visible.length} of ${characters.length}`}
             </span>
             <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={openCreatePanel}>
+                <UserPlus /> Add character
+              </Button>
               <FilterSelect
                 label="Genesis"
                 value={genesisFilter}
