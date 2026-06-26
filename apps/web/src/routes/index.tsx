@@ -28,7 +28,8 @@ import {
   updateProject,
 } from '#/lib/rom/api.ts'
 import type { Project } from '#/lib/rom/api.ts'
-import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import { useFileDrop } from '#/lib/file-drop.ts'
+import { SidePanel } from '#/components/ui/side-panel.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
@@ -47,6 +48,8 @@ function ProjectsPage() {
   const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // The create-project form lives in a slide-in side panel now.
+  const [panelOpen, setPanelOpen] = useState(false)
 
   const [view, setView] = usePersistentState<ViewMode>('dth.projects.view', 'list')
   const [sort, setSort] = usePersistentState<SortKey>('dth.projects.sort', 'alpha')
@@ -74,13 +77,26 @@ function ProjectsPage() {
     if (picked) applyFolder(picked)
   }
 
+  // Open the create panel fresh (no folder picked yet) — the "Add project" button.
+  function openCreatePanel() {
+    setError('')
+    setName('')
+    setPath('')
+    setPanelOpen(true)
+  }
+
   async function onDropFolder(paths: Array<string>) {
     const dropped = paths[0]
     if (!dropped) return
     setError('')
     // A dropped folder is used as-is; a dropped file resolves to its folder.
     applyFolder((await isDirectory(dropped)) ? dropped : dropped.replace(/[\\/][^\\/]*$/, ''))
+    // Surface the panel, prefilled with the dropped folder + suggested name.
+    setPanelOpen(true)
   }
+
+  // The whole page is a folder drop target — `data-filedrop-id` goes on <main>.
+  const { id: dropId, isOver: dropOver } = useFileDrop({ acceptFolders: true, onDrop: onDropFolder })
 
   async function onCreate() {
     if (!path || !name.trim()) return
@@ -90,6 +106,7 @@ function ProjectsPage() {
       const project = await createProject({ data: { name: name.trim(), path } })
       setName('')
       setPath('')
+      setPanelOpen(false)
       await router.invalidate()
       toast.success(`Project “${project.name}” created`)
       await router.navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
@@ -152,7 +169,12 @@ function ProjectsPage() {
   }
 
   return (
-    <main className="p-8">
+    <main data-filedrop-id={dropId} className="relative min-h-screen p-8">
+      {dropOver && (
+        <div className="pointer-events-none fixed inset-4 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
+          Drop a folder to create a project
+        </div>
+      )}
       {/* Reserve the height of a project's "← All projects" nav row (text-sm +
           mb-6) so entering/leaving a project doesn't shift the layout. */}
       <div className="mb-6 h-5" aria-hidden />
@@ -167,60 +189,15 @@ function ProjectsPage() {
         <HeaderNav />
       </header>
 
-      <FileDropZone
-        acceptFolders
-        onDrop={onDropFolder}
-        label="Drop a folder to use as the project"
-        className="mb-8 max-w-5xl"
-      >
-        <div className="space-y-4 rounded-lg border bg-card p-5">
-        <div>
-          <h2 className="text-lg font-semibold">Create project</h2>
-          <p className="text-sm text-muted-foreground">
-            Create a project by choosing — or dragging in — its folder. Each project has its own
-            character library.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0"
-            onClick={onChooseFolder}
-            disabled={busy}
-          >
-            <FolderOpen /> {path ? 'Choose another…' : 'Choose folder…'}
-          </Button>
-          {path && (
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {displayPath(path)}
-            </span>
-          )}
-        </div>
-        {path && (
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[12rem] flex-1">
-              <label className="mb-1 block text-sm font-medium">Project name</label>
-              <Input
-                placeholder="e.g. Project Nova"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-              />
-            </div>
-            <Button onClick={onCreate} disabled={busy || !name.trim()}>
-              <FolderPlus /> Create
-            </Button>
-          </div>
-        )}
-        </div>
-      </FileDropZone>
-      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-
       {projects.length === 0 ? (
-        <p className="text-muted-foreground">
-          No projects yet — choose a folder above to add one.
-        </p>
+        <div className="flex flex-col items-start gap-4">
+          <p className="text-muted-foreground">
+            No projects yet — drop a folder anywhere, or add one.
+          </p>
+          <Button onClick={openCreatePanel}>
+            <FolderPlus /> Add project
+          </Button>
+        </div>
       ) : (
         <>
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -228,6 +205,9 @@ function ProjectsPage() {
               {projects.length} project{projects.length === 1 ? '' : 's'}
             </span>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={openCreatePanel}>
+                <FolderPlus /> Add project
+              </Button>
               <SortSelect value={sort} onChange={setSort} />
               <ViewToggle value={view} onChange={setView} />
             </div>
@@ -392,6 +372,49 @@ function ProjectsPage() {
           onClose={() => setMovingProject(null)}
         />
       )}
+
+      <SidePanel open={panelOpen} title="Create project" onClose={() => setPanelOpen(false)}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Choose the project's folder (or drop one anywhere on the page). Each project has its own
+            character library.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={onChooseFolder}
+              disabled={busy}
+            >
+              <FolderOpen /> {path ? 'Choose another…' : 'Choose folder…'}
+            </Button>
+            {path && (
+              <span className="truncate font-mono text-xs text-muted-foreground">
+                {displayPath(path)}
+              </span>
+            )}
+          </div>
+          {path && (
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Project name</label>
+                <Input
+                  autoFocus
+                  placeholder="e.g. Project Nova"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                />
+              </div>
+              <Button onClick={onCreate} disabled={busy || !name.trim()}>
+                <FolderPlus /> Create
+              </Button>
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      </SidePanel>
     </main>
   )
 }
