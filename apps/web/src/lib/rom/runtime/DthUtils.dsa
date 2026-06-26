@@ -35,10 +35,10 @@ function setLinearInterp(oNodes, startFrame, endFrame){
 		if(oObj){
 			for(var i=0; i<oObj.getNumModifiers(); i++)
 			{
-				oMod = oObj.getModifier(i);
+				var oMod = oObj.getModifier(i);
 				if(oMod && oMod.inherits("DzMorph"))
 				{
-					oProp = oMod.getValueControl();
+					var oProp = oMod.getValueControl();
 					if(oProp && oProp.getNumKeys() > 1)
 					{
 						props.push(oProp);
@@ -50,7 +50,7 @@ function setLinearInterp(oNodes, startFrame, endFrame){
 	}
 	print("Morph props to set linear interp:", props.length)
 	for( var i = 0; i < props.length; i++){
-		var oProp = props[i];
+		oProp = props[i];
 		for( var j = 0; j < oProp.getNumKeys(); j++) {
 			// Only set interpolation type - do NOT call setValue as it can modify values
 			oProp.setKeyInterpolationType(j, DzFloatProperty.LINEAR_INTERP);
@@ -64,7 +64,7 @@ function setLinearInterp(oNodes, startFrame, endFrame){
 function loadPreset(sFilename, oTarget, startFrame)
 {
  	startFrame = typeof startFrame !== 'undefined' ? startFrame : 0;
- 	oContentMgr = App.getContentMgr();
+ 	var oContentMgr = App.getContentMgr();
 	print("Loading", sFilename, "to", oTarget.getLabel(), "at frame", startFrame);
 	var newTime = Scene.getTimeStep() * startFrame;
 	Scene.selectAllNodes(false);
@@ -103,8 +103,11 @@ function setFencePoses(oNode, iSourceFrame, aTargetFrames){
 	Scene.setPrimarySelection(oNode);
 	Scene.setTime(iSourceFrame * timeStep);
 	print("Memorizing figure for:", oNode.getLabel(), "at frame", iSourceFrame);
-	triggerAction("DzMemorizeFigureAction");	
-	for( var i in aTargetFrames){
+	triggerAction("DzMemorizeFigureAction");
+	// Indexed loop, NOT for-in: DAZ's engine exposes enumerable Array.prototype
+	// extensions (map/forEach/…), so for-in over an array also yields those —
+	// restoring the figure at frame `function f(){…}` (NaN time) and "".
+	for( var i = 0; i < aTargetFrames.length; i++){
 		var frame = aTargetFrames[i];
 		Scene.setTime(frame * timeStep);
 		print("Restoring figure for:", oNode.getLabel(), "at frame", frame);
@@ -120,15 +123,22 @@ function setFencePoses(oNode, iSourceFrame, aTargetFrames){
 function setPropertyByName(oNode, sPropName, fValue, iFrame){
  	iFrame = typeof iFrame !== 'undefined' ? iFrame : 0;
  	print("Setting property", sPropName, "to", fValue, "at frame", iFrame, "...");
-	oProp = oNode.findProperty(sPropName);
-	if (oProp && oProp.setValue(iFrame * Scene.getTimeStep(), fValue, DzProperty.Linear)){
-		print("Succesfully set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
-		return true;
-	} else {
-		print("Failed to set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
+	var oProp = oNode.findProperty(sPropName);
+	if (!oProp){
+		print("Failed to set property", sPropName, "- not found on node", oNode.getLabel());
 		return false;
 	}
-
+	var tFrame = iFrame * Scene.getTimeStep();
+	// setValue returns false when the value is ALREADY fValue (nothing to change),
+	// so don't gate success on its return — verify by reading the value back. This
+	// stops a no-op (e.g. FACS Detail Strength already at 1) logging a false "Failed".
+	oProp.setValue(tFrame, fValue, DzProperty.Linear);
+	if (approx_eq(oProp.getValue(tFrame), fValue)){
+		print("Set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
+		return true;
+	}
+	print("Failed to set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
+	return false;
 }
 
 
@@ -157,9 +167,11 @@ function getMorphPropFromNode(oNode, sMorphName){
 	var oObj = oNode.getObject();
 	if(oObj)
 	{
-		oMorph = oObj.findModifier(sMorphName);
+		var oMorph = oObj.findModifier(sMorphName);
 		if(oMorph){
-			oProp = oMorph.getValueChannel(0);
+			// getValueChannel() takes no args — passing 0 logs "Too many
+			// arguments, ignoring 1" on every morph (this is the hot path).
+			var oProp = oMorph.getValueChannel();
 			return oProp;
 		}
 	}
@@ -547,7 +559,7 @@ function resetFrameDatasAtFrame(oNodeRoot, frameDatas, resetFrame){
 							for(var m = 0; m < oObj.getNumModifiers(); m++){
 								var mod = oObj.getModifier(m);
 								if(mod.getLabel() === keyData.propName || mod.getName() === keyData.propName){
-									if(mod.getValueChannel) oProp = mod.getValueChannel(0);
+									if(mod.getValueChannel) oProp = mod.getValueChannel();
 									if(!oProp && mod.getValueControl) oProp = mod.getValueControl();
 									if(oProp) break;
 								}
@@ -598,7 +610,7 @@ function resolveAutoBaseValues(oNodeRoot, frameDatas){
 							for(var m = 0; m < oObj.getNumModifiers(); m++){
 								var mod = oObj.getModifier(m);
 								if(mod.getLabel() === keyData.propName || mod.getName() === keyData.propName){
-									if(mod.getValueChannel) oProp = mod.getValueChannel(0);
+									if(mod.getValueChannel) oProp = mod.getValueChannel();
 									if(!oProp && mod.getValueControl) oProp = mod.getValueControl();
 									if(oProp) break;
 								}
@@ -685,7 +697,7 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
 					if(mod.getLabel() === keyData.propName || mod.getName() === keyData.propName){
 						// Try different methods to get the value property
 						if(mod.getValueChannel){
-							oProp = mod.getValueChannel(0);
+							oProp = mod.getValueChannel();
 						}
 						if(!oProp && mod.getValueControl){
 							oProp = mod.getValueControl();
@@ -1082,7 +1094,7 @@ function resolveMorphProps(oNodeRoot, morphEntries) {
                         var mod = oObj.getModifier(m);
                         if (mod.getLabel() === name || mod.getName() === name) {
                             if (mod.getValueChannel) {
-                                oProp = mod.getValueChannel(0);
+                                oProp = mod.getValueChannel();
                             }
                             if (!oProp && mod.getValueControl) {
                                 oProp = mod.getValueControl();
@@ -1466,12 +1478,25 @@ function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
                     for (var m = 0; m < oObj.getNumModifiers(); m++) {
                         var mod = oObj.getModifier(m);
                         if (mod.getLabel() === morph.prop || mod.getName() === morph.prop) {
-                            if (mod.getValueChannel) oProp = mod.getValueChannel(0);
+                            if (mod.getValueChannel) oProp = mod.getValueChannel();
                             if (!oProp && mod.getValueControl) oProp = mod.getValueControl();
                             if (oProp) break;
                         }
                     }
                 }
+            }
+
+            // LAST RESORT: node property lookup. Geo-graft "preset" morphs (e.g.
+            // Golden Palace GP_PR_*) are exposed on the figure as alias PROPERTIES,
+            // not as modifiers on its object — so findModifier/getModifier miss
+            // them. findProperty catches them, same as the FBM path (applyKeyData).
+            if (!oProp) {
+                oProp = oNode.findProperty(morph.prop);
+                if (oProp) print("  Found via findProperty (fallback)");
+            }
+            if (!oProp) {
+                oProp = oNode.findPropertyByLabel(morph.prop);
+                if (oProp) print("  Found via findPropertyByLabel (fallback)");
             }
 
             if (!oProp) {
