@@ -72,12 +72,54 @@ jobs:
             node scripts/release-notes.mjs "${{ needs.check.outputs.version }}"
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
+      # --- Authenticode code signing via Azure Trusted/Artifact Signing ---
+      # Gated on the AZURE_CLIENT_ID secret. If it's unset (Azure not configured
+      # yet) the release still builds, just UNSIGNED — exactly as before. Once the
+      # secrets/variables in docs/devops.md are in place, the installer + app .exe
+      # are Authenticode-signed during the build, so the updater .sig is computed
+      # over the signed binary (correct order). See docs/devops.md → "Code signing".
+      - id: signing
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -n "$AZURE_CLIENT_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Azure signing not configured — publishing an UNSIGNED build (SmartScreen/Defender may flag it). See docs/devops.md."
+          fi
+      - name: Install Azure signer
+        if: steps.signing.outputs.enabled == 'true'
+        run: cargo install artifact-signing-cli --locked
+      - name: Enable Authenticode signing
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        env:
+          TS_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          TS_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          TS_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
+        run: |
+          # Inject signCommand into the checked-out config in CI only (never
+          # committed) so local/dev builds stay signing-free. Tauri replaces %1
+          # with each artifact path. Description is a single token (Tauri splits
+          # the command on whitespace), so no quotes/spaces here.
+          cfg=apps/desktop/tauri.conf.json
+          cmd="artifact-signing-cli -e $TS_ENDPOINT -a $TS_ACCOUNT -c $TS_PROFILE -d DTH_Character_Studio %1"
+          tmp=$(mktemp)
+          jq --arg cmd "$cmd" '.bundle.windows.signCommand = $cmd' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+          echo "signCommand → $(jq -r '.bundle.windows.signCommand' "$cfg")"
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater artifact signing (generate with `pnpm --filter @dth/desktop tauri signer generate`)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Azure Trusted/Artifact Signing — consumed by artifact-signing-cli via
+          # the signCommand injected above. Empty (no-op) until the secrets exist.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         with:
           projectPath: apps/desktop
           tagName: v${{ needs.check.outputs.version }}

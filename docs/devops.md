@@ -54,7 +54,64 @@ pnpm --filter @dth/desktop tauri signer generate -w ./dth-updater.key
 
 `GITHUB_TOKEN` is provided automatically — no secret needed.
 
-### 3. Branch protection (main is PR-only)
+### 3. Code signing (Azure Trusted/Artifact Signing)
+
+Unsigned, zero-reputation, self-updating installers get false-flagged by Windows
+SmartScreen and Defender (Wacatac/Sabsik/`!ml` heuristics) — which blocks the
+in-app updater. Authenticode-signing the installer + app `.exe` fixes this. We use
+**Azure Trusted Signing** (recently rebranded **Azure Artifact Signing**) — cloud
+signing, ~**$9.99/mo** (Basic, 5 000 signatures/mo), no HSM/USB token, certs chain
+to Microsoft roots already in the Windows trust store (so reputation is immediate).
+
+Signing is **gated on the `AZURE_CLIENT_ID` secret** in `release.yml`: with it
+unset the release still builds (unsigned, as before); set it and the build signs.
+Nothing Azure-specific is committed — the `signCommand` is injected into
+`tauri.conf.json` in CI only, so `pnpm build:desktop` locally needs no Azure.
+
+**One-time Azure portal setup** (do this under the account that will pay):
+
+1. **Subscription** — a pay-as-you-go Azure subscription.
+2. **Trusted Signing account** — create resource *"Trusted Signing Account"* (search
+   may also show *"Artifact Signing"*) in a supported region. Note its **endpoint**
+   URI, e.g. `https://eus.codesigning.azure.net/` (region-specific — copy the exact
+   one shown on the account's Overview).
+3. **Identity validation** — account → *Identity validations* → **+ New** →
+   **Individual** → **Public**. Fill in your legal name/address. This is now
+   automated (~20 min, no documents for individuals) and renews yearly.
+4. **Certificate profile** — account → *Certificate profiles* → **+ Create** →
+   type **Public Trust**, pick the validated identity. Note the **profile name** and
+   the **account name**.
+5. **App registration (service principal)** — Microsoft Entra ID → *App
+   registrations* → **+ New**. Then *Certificates & secrets* → **+ New client
+   secret**. Record **Tenant ID**, **Client ID**, **Client secret value**.
+6. **Grant the signer role** — on the Trusted Signing **account** → *Access control
+   (IAM)* → **+ Add role assignment** → role **"Trusted Signing Certificate Profile
+   Signer"** → assign to the app registration from step 5. (Role on the account, not
+   the subscription — without it signing returns 403.)
+
+**GitHub configuration** (repo → Settings → Secrets and variables → Actions):
+
+| Secret | Holds |
+|---|---|
+| `AZURE_TENANT_ID` | Entra tenant ID (step 5) |
+| `AZURE_CLIENT_ID` | app registration client ID — also the on/off gate |
+| `AZURE_CLIENT_SECRET` | client secret **value** (not the ID) |
+
+| Variable | Holds |
+|---|---|
+| `AZURE_ARTIFACT_SIGNING_ENDPOINT` | region endpoint, e.g. `https://eus.codesigning.azure.net/` |
+| `AZURE_ARTIFACT_SIGNING_ACCOUNT` | Trusted Signing account name |
+| `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE` | certificate profile name |
+
+The release job then `cargo install`s [`artifact-signing-cli`](https://crates.io/crates/artifact-signing-cli)
+(the renamed `trusted-signing-cli`; client-secret auth, OIDC not supported) and
+runs it as Tauri's `signCommand`. **First signed release — verify:** the `cargo
+install` adds a few minutes to the build, and the run log should print the injected
+`signCommand`; if signing 403s, re-check the IAM role (step 6) and the endpoint
+region. Interim while Azure validates: submit the flagged installer to Microsoft at
+<https://www.microsoft.com/wdsi/filesubmission> as a false positive.
+
+### 4. Branch protection (main is PR-only)
 
 ⚠️ This repo's `gh` is authenticated as **`rvetere` (READ-only here)** — branch
 protection + releases require the **`polynaut`** admin identity (the SSH/1Password
