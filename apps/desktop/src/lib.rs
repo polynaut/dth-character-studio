@@ -1943,31 +1943,204 @@ fn collect_duf(root: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
+// --- Multi-window: one project (.dcsp) per window -------------------------
+// Each window is pinned to the `.dcsp` it was opened with. The map (window label →
+// `.dcsp` path) is the source of truth the frontend reads via `active_project_file`;
+// the Home window simply has no entry. Opening a project (the file association, a
+// second launch, or the Home "Open") creates — or focuses — its own window.
+
+#[derive(Default)]
+struct WindowProjects(Mutex<HashMap<String, String>>);
+
+/// The `.dcsp` path passed on the command line (the OS hands a double-clicked file
+/// to the app as an argument), '/'-normalised. None when launched without one.
+fn dcsp_from_args(args: &[String]) -> Option<String> {
+    args.iter()
+        .skip(1)
+        .find(|a| a.to_lowercase().ends_with(".dcsp"))
+        .map(|a| a.replace('\\', "/"))
+}
+
+#[cfg(desktop)]
+fn unique_window_label(app: &tauri::AppHandle, prefix: &str) -> String {
+    use tauri::Manager;
+    for i in 1.. {
+        let label = format!("{prefix}-{i}");
+        if app.get_webview_window(&label).is_none() {
+            return label;
+        }
+    }
+    unreachable!()
+}
+
+/// Open a project in its own window — or focus the one already showing it.
+#[cfg(desktop)]
+fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let norm = path.replace('\\', "/");
+    let projects = app.state::<WindowProjects>();
+    let existing = projects
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(_, p)| p.eq_ignore_ascii_case(&norm))
+        .map(|(label, _)| label.clone());
+    if let Some(label) = existing {
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+    }
+    let label = unique_window_label(app, "project");
+    projects.0.lock().unwrap().insert(label.clone(), norm.clone());
+    let stem = Path::new(&norm)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title(format!("{stem} — DTH Character Studio"))
+        .inner_size(1440.0, 920.0)
+        .min_inner_size(960.0, 640.0)
+        // The app UI is dark; force it so tao applies dark-mode theming to the native
+        // menu bar too (runtime windows otherwise render a light menu strip).
+        .theme(Some(tauri::Theme::Dark))
+        .build()?;
+    Ok(())
+}
+
+/// Open — or focus — the Home (launcher) window (a window with no project mapping).
+#[cfg(desktop)]
+fn open_home_window_impl(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let with_project: HashSet<String> = app
+        .state::<WindowProjects>()
+        .0
+        .lock()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    for (label, w) in app.webview_windows() {
+        if !with_project.contains(&label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+    }
+    let label = unique_window_label(app, "home");
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title("DTH Character Studio")
+        .inner_size(1440.0, 920.0)
+        .min_inner_size(960.0, 640.0)
+        .theme(Some(tauri::Theme::Dark))
+        .build()?;
+    Ok(())
+}
+
+/// The `.dcsp` this window was opened with ('' for the Home window).
+#[tauri::command]
+fn active_project_file(window: tauri::Window, projects: tauri::State<WindowProjects>) -> String {
+    projects
+        .0
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .cloned()
+        .unwrap_or_default()
+}
+
+// `(async)` runs this on a worker thread, not the main thread. Building a webview
+// window synchronously on the main thread deadlocks (build() waits for the WebView2
+// controller, which needs the very event loop the command is blocking) — the window
+// shows white and frozen. Off-thread, build() dispatches creation to a free main
+// thread and returns normally.
+#[tauri::command(async)]
+fn open_project_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        return open_project_window_impl(&app, &path).map_err(|e| e.to_string());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, path);
+        Ok(())
+    }
+}
+
+#[tauri::command(async)]
+fn open_home_window(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        return open_home_window_impl(&app).map_err(|e| e.to_string());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
+        // Window label → the `.dcsp` it's showing; read by `active_project_file`.
+        .manage(WindowProjects::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_os::init());
+        .plugin(tauri_plugin_os::init())
+        // If launched by double-clicking a `.dcsp` (the file association), pin it to
+        // the startup ("main") window so its frontend opens that project.
+        .setup(|app| {
+            use tauri::Manager;
+            if let Some(dcsp) = dcsp_from_args(&std::env::args().collect::<Vec<_>>()) {
+                app.state::<WindowProjects>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .insert("main".into(), dcsp);
+            }
+            Ok(())
+        });
 
-    // Updater + relaunch + the native app menu are desktop-only.
+    // Updater + relaunch + single-instance + the native app menu are desktop-only.
     #[cfg(desktop)]
     {
         use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
         use tauri::Emitter;
 
         builder = builder
+            // A second launch (e.g. opening another `.dcsp` from Explorer) is routed
+            // here: open it in its own window, or the Home window when it carries none.
+            .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+                // This callback runs on the main thread; build the window off it (see
+                // open_project_window) so creating the webview doesn't deadlock.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    match dcsp_from_args(&argv) {
+                        Some(dcsp) => {
+                            let _ = open_project_window_impl(&app, &dcsp);
+                        }
+                        None => {
+                            let _ = open_home_window_impl(&app);
+                        }
+                    }
+                });
+            }))
             .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_process::init())
-            // Main → Refresh assets / Exit; Help → About / Check for Updates. The
+            // Main → New Project / Refresh assets / Exit; Help → About / Check for
+            // Updates. New Project opens the Home window natively; the other
             // frontend-driven items emit an event the webview listens for (see
             // __root.tsx); Exit is the predefined Quit.
             .menu(|handle| {
+                let new_project =
+                    MenuItemBuilder::with_id("new_project", "New Project").build(handle)?;
                 let refresh =
                     MenuItemBuilder::with_id("refresh_assets", "Refresh assets").build(handle)?;
                 let exit = PredefinedMenuItem::quit(handle, Some("Exit"))?;
                 let main = SubmenuBuilder::new(handle, "Main")
+                    .item(&new_project)
                     .item(&refresh)
                     .separator()
                     .item(&exit)
@@ -1982,6 +2155,9 @@ pub fn run() {
                 MenuBuilder::new(handle).item(&main).item(&help).build()
             })
             .on_menu_event(|app, event| match event.id().as_ref() {
+                "new_project" => {
+                    let _ = open_home_window_impl(app);
+                }
                 "refresh_assets" => {
                     let _ = app.emit("menu-refresh-assets", ());
                 }
@@ -2010,7 +2186,10 @@ pub fn run() {
             unc_for_path,
             ensure_network_drives,
             pose_asset_frames,
-            scan_duf_files
+            scan_duf_files,
+            active_project_file,
+            open_project_window,
+            open_home_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
