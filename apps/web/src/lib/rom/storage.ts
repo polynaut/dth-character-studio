@@ -625,6 +625,19 @@ export async function readDazToHueScriptsCommit(dazLibraryFolder: string): Promi
   }
 }
 
+/** Whether a DazToHue-Scripts install exists on disk at all, regardless of whether
+ *  it carries a version marker — lets the UI tell a pre-versioning install (files
+ *  present, installed before we tracked commits) apart from no install at all. */
+export async function daztohueScriptsPresent(dazLibraryFolder: string): Promise<boolean> {
+  const lib = dazLibraryFolder.trim()
+  if (!lib) return false
+  try {
+    return await exists(daztohueScriptsDir(lib))
+  } catch {
+    return false
+  }
+}
+
 /**
  * Per-character script folder: `<root>/<project>/<character>/`. The generated
  * `<Name>_<Genesis>.dsa` lives here and imports the runtime from the root two

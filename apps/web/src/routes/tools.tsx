@@ -1058,10 +1058,12 @@ function ToolsPage() {
               >
                 <Download />{' '}
                 {scriptsBusy
-                  ? 'Downloading…'
+                  ? 'Installing…'
                   : scriptsStatus?.state === 'outdated'
-                    ? 'Update to latest'
-                    : 'Download & install'}
+                    ? 'Update'
+                    : scriptsStatus && scriptsStatus.state !== 'notinstalled'
+                      ? 'Reinstall'
+                      : 'Install'}
               </Button>
             </div>
             {scriptsReport && (
@@ -1084,42 +1086,42 @@ function shortSha(sha: string): string {
 }
 
 /**
- * Installed-vs-latest line for the DazToHue-Scripts install: a green check when the
- * local commit matches GitHub's HEAD, an amber warning when a newer commit exists,
- * and muted text when nothing is installed or the remote check couldn't run. Hidden
- * until the first check resolves.
+ * Installed-vs-latest line for the DazToHue-Scripts install — phrased to match the
+ * DTH Exporter Plugin status in Settings: an emerald "Already installed (X) — up to
+ * date." when the local commit matches GitHub's HEAD, an "Installed: X → updating to
+ * Y." line when a newer commit exists, and small muted text otherwise. Hidden until
+ * the first check resolves.
  */
 function ScriptsVersionStatus({ status }: { status: DazToHueScriptsStatus | null }) {
   if (!status) return null
-  if (status.state === 'uptodate') {
-    return (
-      <p className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-        <CircleCheck className="size-4 shrink-0" />
-        Up to date — installed{' '}
-        <code className="font-mono text-xs">{shortSha(status.installed ?? '')}</code>
-      </p>
-    )
+  switch (status.state) {
+    case 'uptodate':
+      return (
+        <p className="text-emerald-500">
+          Already installed ({shortSha(status.installed ?? '')}) — up to date.
+        </p>
+      )
+    case 'outdated':
+      return (
+        <p className="text-xs">
+          Installed: <strong className="text-foreground">{shortSha(status.installed ?? '')}</strong> →
+          updating to <strong className="text-foreground">{shortSha(status.latest ?? '')}</strong>.
+        </p>
+      )
+    case 'unknown':
+      return (
+        <p className="text-xs">
+          Installed: <strong className="text-foreground">{shortSha(status.installed ?? '')}</strong> —
+          couldn't check for the latest version.
+        </p>
+      )
+    case 'unversioned':
+      return (
+        <p className="text-xs">Installed, but its version isn't tracked yet — reinstall to record it.</p>
+      )
+    default:
+      return <p className="text-xs">Not installed yet.</p>
   }
-  if (status.state === 'outdated') {
-    return (
-      <p className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-500">
-        <TriangleAlert className="size-4 shrink-0" />
-        Update available — installed{' '}
-        <code className="font-mono text-xs">{shortSha(status.installed ?? '')}</code>, latest{' '}
-        <code className="font-mono text-xs">{shortSha(status.latest ?? '')}</code>
-      </p>
-    )
-  }
-  if (status.state === 'unknown') {
-    return (
-      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <CircleAlert className="size-4 shrink-0" />
-        Installed <code className="font-mono text-xs">{shortSha(status.installed ?? '')}</code> —
-        couldn't check for the latest version.
-      </p>
-    )
-  }
-  return <p className="text-sm text-muted-foreground">Not installed yet.</p>
 }
 
 /**

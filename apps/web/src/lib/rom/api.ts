@@ -1255,10 +1255,17 @@ export async function latestDazToHueCommit(): Promise<string> {
   return invoke<string>('latest_daztohue_commit')
 }
 
-export type DazToHueScriptsState = 'uptodate' | 'outdated' | 'notinstalled' | 'unknown'
+export type DazToHueScriptsState =
+  | 'uptodate'
+  | 'outdated'
+  /** Files present but no version marker — installed before we tracked commits. */
+  | 'unversioned'
+  | 'notinstalled'
+  /** Installed (have a local commit) but the remote check couldn't run. */
+  | 'unknown'
 
 export interface DazToHueScriptsStatus {
-  /** Commit recorded in the local install's marker ('' → not installed). */
+  /** Commit recorded in the local install's marker (null → no marker). */
   installed: string | null
   /** Latest commit on GitHub (null → the remote check failed). */
   latest: string | null
@@ -1273,20 +1280,21 @@ export interface DazToHueScriptsStatus {
  */
 export async function dazToHueScriptsStatus(): Promise<DazToHueScriptsStatus> {
   const s = await storage.getSettings()
-  const installed = await storage.readDazToHueScriptsCommit(s.dazLibraryFolder)
+  const lib = s.dazLibraryFolder.trim()
+  const installed = await storage.readDazToHueScriptsCommit(lib)
   let latest: string | null = null
   try {
     latest = await latestDazToHueCommit()
   } catch {
     latest = null // offline / rate-limited / web build — surfaced as "unknown"
   }
-  const state: DazToHueScriptsState = !installed
-    ? 'notinstalled'
-    : !latest
-      ? 'unknown'
-      : installed === latest
-        ? 'uptodate'
-        : 'outdated'
+  let state: DazToHueScriptsState
+  if (installed) {
+    state = !latest ? 'unknown' : installed === latest ? 'uptodate' : 'outdated'
+  } else {
+    // No marker: a pre-versioning install (files present) vs no install at all.
+    state = (lib && (await storage.daztohueScriptsPresent(lib))) ? 'unversioned' : 'notinstalled'
+  }
   return { installed, latest, state }
 }
 
