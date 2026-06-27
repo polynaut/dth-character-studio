@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, Download, Save } from 'lucide-react'
+import { ArrowLeft, CircleCheck, Download, Save } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
@@ -785,14 +785,15 @@ function SettingsPage() {
                   </p>
                 )}
                 {installedExporter === '' ? (
-                  <p className="text-xs">Not installed in this Daz Studio yet.</p>
+                  <p>Not installed in this Daz Studio yet.</p>
                 ) : installedExporter ? (
                   exporterUpToDate ? (
-                    <p className="text-emerald-500">
+                    <p className="flex items-center gap-1.5 text-emerald-500">
+                      <CircleCheck className="size-4 shrink-0" />
                       Already installed ({installedExporter}) — up to date.
                     </p>
                   ) : (
-                    <p className="text-xs">
+                    <p>
                       Installed: <strong className="text-foreground">{installedExporter}</strong> →
                       updating to <strong className="text-foreground">{sourceExporterVer || '?'}</strong>.
                     </p>
