@@ -4,7 +4,6 @@ import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-rout
 import { z } from 'zod'
 import {
   ArrowLeft,
-  Copy,
   ExternalLink,
   FolderInput,
   FolderOpen,
@@ -22,6 +21,7 @@ import { EditableTitle } from '#/components/editable-title.tsx'
 import { Field } from '#/components/field.tsx'
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
+import { Tag } from '#/components/tag.tsx'
 import { RemoveAssetDialog } from '#/components/remove-asset-dialog.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import dazLogo from '#/assets/daz-logo.png'
@@ -42,17 +42,19 @@ import {
 import { Switch } from '#/components/ui/switch.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import {
-  cloneCharacter,
+  characterKeepFolders,
   copyDazScene,
   deleteCharacter,
   deleteFiles,
   fetchCharacter,
   fetchPoseAssets,
+  fetchProject,
   fetchSettings,
   fileExists,
   generateCharacterFiles,
   getCharacterPath,
   moveCharacter,
+  setActiveProjectDir,
   openScene,
   relinkScene,
   resolvePresetFrames,
@@ -62,7 +64,6 @@ import {
   uploadCharacterImageFromPath,
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
-import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
@@ -76,6 +77,8 @@ import type { Character, GenesisVersion } from '@dth/rom'
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params }) => {
     const { projectId, characterId: id } = params
+    // The route param IS the project's folder — pin it so avatars resolve.
+    setActiveProjectDir(projectId)
     const character = await fetchCharacter({ data: { projectId, id } })
     if (!character) throw notFound()
     // The Daz scenes folder = the directory holding the primary scene. Tracking
@@ -84,21 +87,25 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
     const sceneFolder = character.scenePath
       ? character.scenePath.replace(/[\\/][^\\/]*$/, '')
       : ''
-    const [settings, catalog, location, sceneExists, sceneFolderExists] = await Promise.all([
-      fetchSettings(),
-      fetchPoseAssets(),
-      getCharacterPath({ data: { projectId, id } }),
-      character.scenePath
-        ? fileExists({ data: { path: character.scenePath } })
-        : Promise.resolve(false),
-      sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
-    ])
+    const [project, settings, catalog, location, sceneExists, sceneFolderExists] = await Promise.all(
+      [
+        fetchProject({ data: { projectId } }),
+        fetchSettings(),
+        fetchPoseAssets(),
+        getCharacterPath({ data: { projectId, id } }),
+        character.scenePath
+          ? fileExists({ data: { path: character.scenePath } })
+          : Promise.resolve(false),
+        sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
+      ],
+    )
     // Preset ROM block lengths, measured live from the actual .duf assets. Null
     // (best-effort) when an included asset can't be read — the editor then shows
     // a notice and generation hard-errors; opening the character never fails.
     const presetFrames = await resolvePresetFrames(character, catalog).catch(() => null)
     return {
       character,
+      project,
       settings,
       catalog,
       location,
@@ -328,10 +335,13 @@ function ImageDialog({
           </div>
         </FileDropZone>
 
-        {scenes.length >= 2 && (
+        {/* Offer the linked scenes' thumbnails whenever there's at least one — the
+            current avatar may have come from a scene since unlinked, so even a
+            single remaining scene needs to be selectable to switch back to it. */}
+        {scenes.length > 0 && (
           <div>
             <p className="mb-1.5 text-sm text-muted-foreground">
-              Or use a linked Daz scene's image:
+              {scenes.length === 1 ? "Or use the linked Daz scene's image:" : "Or use a linked Daz scene's image:"}
             </p>
             <div className="flex flex-wrap gap-2">
               {scenes.map((scene) => (
@@ -544,12 +554,9 @@ function SceneCard({
           )}
           {primary && (
             <div className="mt-1">
-              <span
-                className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-                title="The character's original scene — it can't be unlinked"
-              >
+              <Tag tone="green" title="The character's original scene — it can't be unlinked">
                 primary
-              </span>
+              </Tag>
             </div>
           )}
         </div>
@@ -639,6 +646,13 @@ function DazSceneField({
   function insideCharFolder(p: string): boolean {
     return norm(p).toLowerCase().startsWith(charFolder.toLowerCase() + '/')
   }
+  // Every scene already attached to this character (primary + extras). A scene is
+  // linked at most once, so a pick/drop that repeats one is rejected up front.
+  const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  function isAlreadyLinked(p: string): boolean {
+    const target = norm(p).toLowerCase()
+    return linkedScenes.some((s) => norm(s).toLowerCase() === target)
+  }
   const primaryDir = character.scenePath ? norm(character.scenePath).replace(/\/[^/]*$/, '') : ''
   const baseDazRel =
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
@@ -703,6 +717,19 @@ function DazSceneField({
   }
 
   async function applyAdd(scene: string, copyInto: boolean) {
+    const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    const subfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
+    // Reject a scene that's already attached, before any copy runs. An in-place add
+    // compares the picked path itself; a copy compares its destination inside the
+    // character folder — which catches re-copying the same external scene (its source
+    // path differs from the in-folder copy, but the destination collides, which would
+    // otherwise overwrite the existing copy and add a duplicate card). Checking up
+    // front also means a `deleteOriginal` move never deletes the source then bails.
+    const dest = copyInto ? [charFolder, subfolder, sceneName].filter(Boolean).join('/') : scene
+    if (isAlreadyLinked(dest)) {
+      toast.error(`“${sceneName}” is already linked to this character.`)
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -712,7 +739,7 @@ function DazSceneField({
               projectId,
               characterId: character.id,
               scenePath: scene,
-              subfolder: [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/'),
+              subfolder,
               deleteOriginal,
             },
           })
@@ -1270,6 +1297,7 @@ function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
     character: initial,
+    project,
     settings,
     catalog,
     location,
@@ -1457,45 +1485,36 @@ function CharacterPage() {
     setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
   }
 
-  // --- Special operations (clone / delete) ---
-  const [cloneOpen, setCloneOpen] = useState(false)
-  const [cloning, setCloning] = useState(false)
-  const [cloneError, setCloneError] = useState('')
+  // --- Special operations (delete) ---
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-
-  const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
+  // Whether the character has a Houdini subfolder on disk — gates the delete
+  // dialog's "keep Houdini files" toggle (checked when the dialog opens).
+  const [keepHoudiniAvailable, setKeepHoudiniAvailable] = useState(false)
+  useEffect(() => {
+    if (!deleteOpen) return
+    let cancelled = false
+    void characterKeepFolders({ data: { projectId, id: character.id } })
+      .then((f) => !cancelled && setKeepHoudiniAvailable(f.houdini))
+      .catch(() => !cancelled && setKeepHoudiniAvailable(false))
+    return () => {
+      cancelled = true
+    }
+  }, [deleteOpen, projectId, character.id])
 
   async function onPickExportDir() {
     const picked = await pickFolder('Choose the export directory for the DTH Exporter')
     if (picked) await patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
   }
 
-  async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
-    setCloning(true)
-    setCloneError('')
-    try {
-      const clone = await cloneCharacter({ data: { projectId, id: character.id, name, copyScenes } })
-      setCloneOpen(false)
-      toast.success(`Cloned to “${clone.name}”`)
-      // Navigation remounts the editor (keyed by id) onto the copy — see the
-      // route wrapper — so the busy flag doesn't need resetting on success.
-      await router.navigate({
-        to: '/projects/$projectId/characters/$characterId',
-        params: { projectId, characterId: clone.id },
-      })
-    } catch (e) {
-      setCloneError(e instanceof Error ? e.message : String(e))
-      setCloning(false)
-    }
-  }
-
-  async function onDeleteCharacter({ keep }: { keep: boolean }) {
+  async function onDeleteCharacter({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
-      await deleteCharacter({ data: { projectId, id: character.id, keepDaz: keep } })
+      await deleteCharacter({
+        data: { projectId, id: character.id, keepDaz: keep, keepHoudini: keep2 },
+      })
       toast.success(`Deleted “${character.name}”`)
       // Navigation unmounts this editor — no need to reset the busy flag.
       await router.navigate({ to: '/projects/$projectId', params: { projectId } })
@@ -1522,7 +1541,7 @@ function CharacterPage() {
           }}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> Back to project
+          <ArrowLeft className="size-4" /> Back to overview
         </Link>
       </div>
 
@@ -1678,7 +1697,7 @@ function CharacterPage() {
               location={location}
               sceneExists={sceneExists}
               sceneFolderExists={sceneFolderExists}
-              defaultSubdir={settings.dazSubdir}
+              defaultSubdir={project?.dazSubdir ?? 'daz3d'}
               onLinked={onSceneLinked}
             />
             <HoudiniProjectsField
@@ -2002,40 +2021,15 @@ function CharacterPage() {
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Operations</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Duplicate this character into a new copy, or delete it from the project.
+          Delete this character from the project.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setCloneError('')
-              setCloneOpen(true)
-            }}
-            disabled={cloning || deleting}
-          >
-            <Copy /> {cloning ? 'Cloning…' : 'Clone'}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => setDeleteOpen(true)}
-            disabled={cloning || deleting}
-          >
+          <Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={deleting}>
             <Trash2 /> Delete
           </Button>
         </div>
       </section>
       </div>
-
-      {cloneOpen && (
-        <CloneCharacterDialog
-          defaultName={`${character.name} copy`}
-          hasScenes={hasScenes}
-          busy={cloning}
-          error={cloneError}
-          onConfirm={doClone}
-          onClose={() => setCloneOpen(false)}
-        />
-      )}
 
       {deleteOpen && (
         <BulkDeleteDialog
@@ -2045,8 +2039,20 @@ function CharacterPage() {
           keepLabel={
             <>
               Keep the Daz files folder{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">{settings.dazSubdir}</code>
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                {project?.dazSubdir ?? 'daz3d'}
+              </code>
             </>
+          }
+          keep2Label={
+            keepHoudiniAvailable ? (
+              <>
+                Keep the Houdini files folder{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {project?.houdiniSubdir ?? 'houdini'}
+                </code>
+              </>
+            ) : undefined
           }
           busy={deleting}
           error={deleteError}

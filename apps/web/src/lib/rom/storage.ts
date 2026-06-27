@@ -7,7 +7,6 @@ import {
   remove,
   rename,
   stat,
-  writeFile,
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
@@ -16,11 +15,9 @@ import { getVersion } from '@tauri-apps/api/app'
 
 import {
   CHARACTER_SCHEMA_VERSION,
-  ROM_SECTIONS,
   characterSchema,
-  defaultSections,
+  migrateCharacterData,
   newId,
-  sectionsFromFlatFrames,
 } from '@dth/rom'
 
 import { canonicalImage } from './image'
@@ -33,27 +30,29 @@ import {
 // The DTH runtime (DazToHue-Scripts) is bundled into the app so the studio is
 // self-contained — no external checkout to configure. copyRuntimeFiles installs
 // these (rewritten + dot-prefixed). Keep them in sync with the DazToHue-Scripts
-// source; a future runtime-version constant will flag when a studio update needs
-// to refresh them.
+// source; bump RUNTIME_VERSION (@dth/rom) when they change so Refresh assets flags
+// characters whose generated scripts need regenerating.
 import dthUtilsRuntime from './runtime/DthUtils.dsa?raw'
 import dthOptionsRuntime from './runtime/DthOptions.dsa?raw'
 import dthWorkflowRuntime from './runtime/DthWorkflow.dsa?raw'
 
+import { characterScriptName } from '@dth/rom'
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
 /**
  * Storage, backed by the Tauri fs plugin, split across two roots:
  *
  *  - **App folder** = the per-user app-local data dir (e.g.
- *    %LOCALAPPDATA%/com.polynaut.dthcharacterstudio). Holds app-owned data:
- *    `settings.json`, `projects.json`, and `images/` (avatars). Created on first
- *    run.
- *  - **Project library** = each project's user-chosen folder (`Project.path`),
- *    kept OUTSIDE the app folder so the user can back it up. Each character is a
- *    folder named after it (`<library>/<Name>/`) holding the definition
- *    `<Name>.json` plus its generated artifacts. Discovery is a recursive scan —
- *    no registry — so a folder's location simply *is* the character's location.
- *    The character functions below all take the active project's `libraryPath`.
+ *    %LOCALAPPDATA%/com.polynaut.dthcharacterstudio). Holds only *volatile /
+ *    machine-specific* data: `settings.json` (machine/tool paths), `recents.json`
+ *    (the recently-opened-projects list) and `network-drives.json`. Created on
+ *    first run.
+ *  - **Project** = a user-chosen folder marked by a single `.dcsp` manifest file,
+ *    scattered anywhere on disk and backed up by the user. Beside the manifest live
+ *    the character folders (`<dir>/<Name>/` holding `<Name>.json` + generated
+ *    artifacts) and a hidden `.dcsmeta/` of app-managed meta (avatars). Discovery
+ *    is a recursive scan — no registry — so a folder's location simply *is* the
+ *    project's location. The character functions below take the project's folder.
  */
 
 /**
@@ -125,79 +124,17 @@ async function ensureAppDir(): Promise<void> {
 }
 
 /**
- * Migrates older data files to the sections model:
- *  v1: flat `entries`  v2: `groups` (with section field) + `options` flags.
+ * Read a stored definition into a current-shape Character: run the core migration
+ * framework ({@link migrateCharacterData}) on the raw JSON to bring any older
+ * shape forward, normalise the avatar ref, then validate against the schema. The
+ * stored `schemaVersion` is preserved (so a migrated-on-read definition still
+ * reads as below current) — it's bumped only when the character is written back.
  */
 function parseCharacter(raw: unknown): Character {
-  const data = raw as Record<string, any>
-  if (data.sections) {
-    // v3 stored a GEN presetVariant instead of selected preset asset files.
-    const gen = data.sections.GEN
-    if (gen?.presetVariant && !gen.presetAssets) {
-      gen.presetAssets =
-        gen.presetVariant === 'both'
-          ? ['GP9 - Golden Palace.duf', 'DK9 - Dicktator.duf']
-          : gen.presetVariant === 'dk'
-            ? ['DK9 - Dicktator.duf']
-            : ['GP9 - Golden Palace.duf']
-    }
-  }
-  if (!data.sections) {
-    const sections = Array.isArray(data.entries)
-      ? sectionsFromFlatFrames(data.entries)
-      : defaultSections()
-    if (Array.isArray(data.groups)) {
-      for (const group of data.groups) {
-        const section: RomSection = (ROM_SECTIONS as ReadonlyArray<string>).includes(group.section)
-          ? group.section
-          : 'MISC'
-        const { section: _ignored, ...rest } = group
-        sections[section].enabled = true
-        sections[section].mode = 'custom'
-        sections[section].groups.push(rest)
-      }
-    }
-    const options = data.options ?? {}
-    if (options.includeJCM === false) {
-      sections.RET.enabled = false
-      if (sections.JCM.mode === 'preset') sections.JCM.enabled = false
-    }
-    if (options.includeFAC === false && sections.FAC.mode === 'preset') {
-      sections.FAC.enabled = false
-    }
-    if ((options.includeGP || options.includeDK) && sections.GEN.mode === 'preset') {
-      sections.GEN.enabled = true
-      sections.GEN.presetAssets = [
-        ...(options.includeGP ? ['GP9 - Golden Palace.duf'] : []),
-        ...(options.includeDK ? ['DK9 - Dicktator.duf'] : []),
-      ]
-    }
-    if (typeof options.resetGPBeforeApplying === 'boolean') {
-      data.resetGenBeforeApplying = options.resetGPBeforeApplying
-    }
-    data.sections = sections
-    delete data.entries
-    delete data.groups
-    delete data.options
-  }
-  // Field renamed resetGPBeforeApplying → resetGenBeforeApplying (now generic
-  // over GP/DK); carry forward characters saved under the old name.
-  if (data.resetGPBeforeApplying !== undefined && data.resetGenBeforeApplying === undefined) {
-    data.resetGenBeforeApplying = data.resetGPBeforeApplying
-  }
-  delete data.resetGPBeforeApplying
-  // The PoseAsset node knows no "none" suffix — older data migrates to centre.
-  for (const config of Object.values(data.sections as Record<string, any>)) {
-    for (const group of config?.groups ?? []) {
-      if (group.suffix === 'none') group.suffix = 'centre'
-    }
-  }
-  // Normalise avatar refs to the portable canonical form (filename or external
-  // URL) — drops machine-specific asset/convertFileSrc URLs persisted earlier.
+  const data = migrateCharacterData(raw)
+  // Avatar canonicalization stays here — it's web/storage-specific (it drops
+  // machine-specific asset/convertFileSrc URLs the pure core knows nothing about).
   data.image = canonicalImage(data.image)
-  // Future migration framework: branch on `data.schemaVersion` (absent → 1) to
-  // upgrade older shapes to CHARACTER_SCHEMA_VERSION before the parse below. The
-  // shape fix-ups above are the implicit "pre-versioning → v1" migration.
   return characterSchema.parse(data)
 }
 
@@ -295,15 +232,24 @@ export async function getCharacter(lib: string, id: string): Promise<Character |
  * unique). Used by ROM prefill, which can copy from a character in any project.
  */
 export async function findCharacterAcrossProjects(id: string): Promise<Character | null> {
-  for (const project of await listProjects()) {
-    const found = await getCharacter(project.path, id)
+  for (const recent of await listRecents()) {
+    const dir = dirname(recent.path)
+    const manifest = await readManifest(dir)
+    const root = manifest.charactersSubdir ? join(dir, manifest.charactersSubdir) : dir
+    const found = await getCharacter(root, id)
     if (found) return found
   }
   return null
 }
 
-export async function saveCharacter(project: Project, character: Character): Promise<Character> {
-  const lib = project.path
+export async function saveCharacter(
+  project: Project,
+  character: Character,
+  charactersRoot?: string,
+): Promise<Character> {
+  // `charactersRoot` is where character folders live (the project's charactersSubdir
+  // applied); falls back to the project root. Provenance stamps still use project.path.
+  const lib = charactersRoot || project.path
   if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
   const stamped = {
@@ -373,8 +319,9 @@ export async function createCharacterAt(
   project: Project,
   character: Character,
   relFolder: string,
+  charactersRoot?: string,
 ): Promise<Character> {
-  const lib = project.path
+  const lib = charactersRoot || project.path
   if (!lib) throw new Error('No project library configured.')
   await mkdir(lib, { recursive: true })
   const stamped = {
@@ -446,35 +393,60 @@ export async function deleteCharacter(
 }
 
 /**
- * Duplicate a character within the same library: a fresh id + a unique name
- * a new folder, and a copy of the ROM definition under the given `name`. ALL
- * asset references (primary + extra Daz scenes, Houdini projects) are cleared
- * here — the caller decides which to bring across (copying local Daz scenes,
- * keeping linked ones). Returns the new character; the caller copies the avatar,
- * links/copies scenes, and regenerates files.
+ * Relocate every character from `oldRoot` to `newRoot`, keeping each character's
+ * folder name (and any sub-nesting) and repointing the scene / Houdini paths that
+ * lived inside a moved folder so links don't break (mirrors a rename). Used when a
+ * project's `charactersSubdir` changes — the character folders must follow it.
+ * Only character folders / loose definitions move; other project files (the
+ * `.dcsp`, `.dcsmeta`, `.assets`) are untouched. Returns how many moved.
  */
-export async function cloneCharacter(
-  project: Project,
-  id: string,
-  name: string,
-): Promise<Character> {
-  const lib = project.path
-  if (!lib) throw new Error('No project library configured.')
-  const source = await getCharacter(lib, id)
-  if (!source) throw new Error(`Character ${id} not found`)
-  const cloneName = name.trim() || `${source.name} copy`
-  const now = new Date().toISOString()
-  const clone: Character = {
-    ...source,
-    id: newId(),
-    name: cloneName,
-    scenePath: '',
-    extraScenes: [],
-    houdiniProjects: [],
-    createdAt: now,
-    updatedAt: now,
+export async function moveCharactersRoot(oldRoot: string, newRoot: string): Promise<number> {
+  const norm = (s: string) => s.replace(/\\/g, '/').replace(/\/+$/g, '')
+  const from = norm(oldRoot)
+  const to = norm(newRoot)
+  if (!from || !to || from === to || !(await isDir(from))) return 0
+  // When the new root nests inside the old one, leave characters already under it
+  // alone (moving them by their old-relative path would double-nest them).
+  const newInsideOld = (to + '/').startsWith(from + '/')
+  await mkdir(to, { recursive: true })
+  let moved = 0
+  for (const entry of await scanLibrary(from)) {
+    // A folder-backed character moves its folder; a loose root-level definition
+    // moves just its `.json` (its "folder" IS the root — never move that).
+    const src = norm(entry.relFolder ? entry.folderAbs : entry.definitionAbs)
+    if (newInsideOld && (src + '/').startsWith(to + '/')) continue
+    const dest = entry.relFolder
+      ? join(to, entry.relFolder)
+      : join(to, basename(entry.definitionAbs))
+    if (norm(dest) === src) continue
+    if (await isTaken(dest)) {
+      throw new Error(`Can't move character to "${dest}" — something already exists there.`)
+    }
+    await mkdir(dirname(dest), { recursive: true })
+    await rename(src, dest)
+    moved += 1
+    // Repoint scenes / Houdini projects that travelled inside the moved folder.
+    if (entry.relFolder) {
+      try {
+        const defAbs = join(dest, basename(entry.definitionAbs))
+        const c = parseCharacter(JSON.parse(await readTextFile(defAbs)))
+        const repoint = (p: string): string => {
+          const rel = relativeInside(entry.folderAbs, p)
+          return rel ? join(dest, rel) : p
+        }
+        const updated: Character = {
+          ...c,
+          scenePath: repoint(c.scenePath),
+          extraScenes: c.extraScenes.map(repoint),
+          houdiniProjects: c.houdiniProjects.map(repoint),
+        }
+        await writeTextFile(defAbs, JSON.stringify(updated, null, 2) + '\n')
+      } catch {
+        // best-effort — a parse/write hiccup leaves the moved paths as-is
+      }
+    }
   }
-  return createCharacterAt(project, clone, cloneName)
+  return moved
 }
 
 /** Absolute path to a character's folder (created if missing) — Generate's target. */
@@ -494,6 +466,25 @@ export async function getCharacterPath(lib: string, id: string): Promise<Charact
     relFolder: entry.relFolder,
     libraryFolder: lib,
   }
+}
+
+/**
+ * Which of the given subfolder names exist (as directories) inside a character's
+ * folder — e.g. the configured Daz / Houdini subdirs, so the delete dialog only
+ * offers to keep folders that are actually there. Returns the subset that exist.
+ */
+export async function existingCharacterSubfolders(
+  lib: string,
+  id: string,
+  names: Array<string>,
+): Promise<Array<string>> {
+  const entry = await findEntry(lib, id)
+  if (!entry) return []
+  const found: Array<string> = []
+  for (const name of names) {
+    if (name && (await isDir(join(entry.folderAbs, name)))) found.push(name)
+  }
+  return found
 }
 
 /**
@@ -617,6 +608,36 @@ export function daztohueScriptsDir(dazLibraryFolder: string): string {
   return join(dazLibraryFolder, 'Scripts', 'DazToHue-Scripts')
 }
 
+/** The commit SHA recorded in the installed DazToHue-Scripts version marker
+ *  (`<daztohueScriptsDir>/.dth-version.json`, written by the Rust installer), or
+ *  null when the scripts aren't installed / the marker is missing or unreadable.
+ *  Living inside the install folder makes it the ground truth: delete the install
+ *  and the marker goes with it, so we never claim something stale is installed. */
+export async function readDazToHueScriptsCommit(dazLibraryFolder: string): Promise<string | null> {
+  const lib = dazLibraryFolder.trim()
+  if (!lib) return null
+  try {
+    const raw = await readTextFile(join(daztohueScriptsDir(lib), '.dth-version.json'))
+    const parsed = JSON.parse(raw) as { commit?: unknown }
+    return typeof parsed.commit === 'string' && parsed.commit ? parsed.commit : null
+  } catch {
+    return null // not installed, no marker, or unreadable — all "unknown locally"
+  }
+}
+
+/** Whether a DazToHue-Scripts install exists on disk at all, regardless of whether
+ *  it carries a version marker — lets the UI tell a pre-versioning install (files
+ *  present, installed before we tracked commits) apart from no install at all. */
+export async function daztohueScriptsPresent(dazLibraryFolder: string): Promise<boolean> {
+  const lib = dazLibraryFolder.trim()
+  if (!lib) return false
+  try {
+    return await exists(daztohueScriptsDir(lib))
+  } catch {
+    return false
+  }
+}
+
 /**
  * Per-character script folder: `<root>/<project>/<character>/`. The generated
  * `<Name>_<Genesis>.dsa` lives here and imports the runtime from the root two
@@ -665,6 +686,58 @@ export async function copyRuntimeFiles(destDir: string): Promise<void> {
   }
 }
 
+/**
+ * Read the `// DTH-Runtime: vN` marker from a character's generated Daz script to
+ * learn which runtime produced the scripts on disk: the integer `N`; `0` when a
+ * script exists but predates the marker (an older runtime); `null` when no script
+ * exists yet. The DTH release is no longer stamped here — the scripts are
+ * release-independent (tied to RUNTIME_VERSION only); the release the PoseAsset
+ * CSV was generated for lives in the character JSON's `generatedDthVersion`.
+ */
+export async function readScriptRuntimeVersion(
+  dazLibraryFolder: string,
+  projectName: string,
+  character: Character,
+): Promise<number | null> {
+  const dir = studioCharScriptsDir(dazLibraryFolder, projectName, character.name)
+  const base = characterScriptName(character)
+  // The main ROM script is either combined (`<base>.dsa`) or, when the export is
+  // split out, `ROM_<base>.dsa`. Either carries the runtime marker in its header.
+  for (const name of [`${base}.dsa`, `ROM_${base}.dsa`]) {
+    const path = join(dir, name)
+    if (await exists(path)) {
+      const runtime = /DTH-Runtime:\s*v(\d+)/.exec(await readTextFile(path))
+      return runtime ? Number(runtime[1]) : 0
+    }
+  }
+  return null
+}
+
+/**
+ * Stamp the DTH release a character's PoseAsset CSV was just generated for into
+ * its definition JSON (the `generatedDthVersion` provenance). Writes the RAW
+ * stored JSON back with only that one field updated — it never migrates / re-stamps
+ * the rest — so generating the CSV records its era without disturbing anything
+ * else. No-op when the character can't be found or the value is unchanged.
+ */
+export async function setGeneratedDthVersion(
+  lib: string,
+  id: string,
+  version: string,
+): Promise<void> {
+  const entry = await findEntry(lib, id)
+  if (!entry) return
+  let raw: Record<string, unknown>
+  try {
+    raw = JSON.parse(await readTextFile(entry.definitionAbs))
+  } catch {
+    return
+  }
+  if (raw.generatedDthVersion === version) return
+  raw.generatedDthVersion = version
+  await writeTextFile(entry.definitionAbs, JSON.stringify(raw, null, 2) + '\n')
+}
+
 export interface StudioSettings {
   /**
    * "My DAZ 3D Library" — the user's Daz content library path. Asked on first
@@ -707,13 +780,9 @@ export interface StudioSettings {
    * (otls/presets/toolbar) into it.
    */
   houdiniDocsFolder: string
-  /** Default subfolder a copied Daz scene lands in, under the character folder. */
-  dazSubdir: string
-  /** Name of the empty Houdini folder seeded into each new character (a nudge to
-   *  create the character's Houdini project there). Gated by `createHoudiniSubdir`. */
-  houdiniSubdir: string
-  /** Whether to seed the empty Houdini folder when a character is created. */
-  createHoudiniSubdir: boolean
+  // Per-project behaviour defaults (dazSubdir / houdiniSubdir / createHoudiniSubdir)
+  // now live in each project's .dcsp manifest (see DcspManifest), not in app-global
+  // settings — they describe a project, not the machine.
   // --- "Optional" tab: install your own Daz/Houdini content (not DTH release) ---
   /**
    * Your Daz asset source folders. Each is scanned for content folders
@@ -762,9 +831,6 @@ function defaultSettings(): StudioSettings {
     currentDthExporterVersion: '',
     dazInstallFolder: '',
     houdiniDocsFolder: '',
-    dazSubdir: 'daz3d',
-    houdiniSubdir: 'houdini',
-    createHoudiniSubdir: true,
     dazAssetsFolders: [],
     dazMorphsSource: '',
     dazMorphsDest: '',
@@ -808,16 +874,6 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.houdiniDocsFolder === 'string'
           ? raw.houdiniDocsFolder
           : defaults.houdiniDocsFolder,
-      dazSubdir:
-        typeof raw.dazSubdir === 'string' && raw.dazSubdir ? raw.dazSubdir : defaults.dazSubdir,
-      houdiniSubdir:
-        typeof raw.houdiniSubdir === 'string' && raw.houdiniSubdir
-          ? raw.houdiniSubdir
-          : defaults.houdiniSubdir,
-      createHoudiniSubdir:
-        typeof raw.createHoudiniSubdir === 'boolean'
-          ? raw.createHoudiniSubdir
-          : defaults.createHoudiniSubdir,
       dazAssetsFolders: Array.isArray(raw.dazAssetsFolders)
         ? raw.dazAssetsFolders.filter((f: unknown): f is string => typeof f === 'string')
         : defaults.dazAssetsFolders,
@@ -856,213 +912,309 @@ export async function saveSettings(settings: StudioSettings): Promise<StudioSett
 }
 
 // --- Projects -------------------------------------------------------------
-// Each game project is { id, name, path }; the path is that project's character
-// library. The list is app-folder metadata (projects.json). Deleting a project
-// removes only its record — never the user's files on disk.
+// A project is a folder on disk marked by a single `.dcsp` manifest file. The
+// folder's location simply *is* the project — there's no global registry. A
+// `{ id, name, path }` is assembled on demand from the manifest (path = the
+// folder). Per-project behaviour defaults + app-managed meta (avatars under
+// `.dcsmeta/`) live beside the manifest. The app keeps only a volatile recents list.
 
 export interface Project {
   id: string
   name: string
   path: string
-  /** ISO timestamp the project was added; absent for projects created before
-   *  this was tracked (those sort oldest under "by date"). */
+  /** ISO timestamp the project was created (from the manifest). */
   createdAt?: string
 }
 
-async function readProjects(): Promise<Array<Project>> {
+// --- Project manifest (.dcsp) + per-project meta (.dcsmeta) ---------------
+
+export const DCSP_EXT = 'dcsp'
+export const DCSP_SCHEMA_VERSION = 2
+
+export interface DcspManifest {
+  schemaVersion: number
+  id: string
+  name: string
+  createdAt: string
+  /** Default subfolder a copied Daz scene lands in, under the character folder. */
+  dazSubdir: string
+  /** Empty Houdini folder seeded into each new character. Gated by createHoudiniSubdir. */
+  houdiniSubdir: string
+  /** Whether to seed the empty Houdini folder when a character is created. */
+  createHoudiniSubdir: boolean
+  /** Whether the project shows the reusable Daz-scene "assets" feature (off = characters only). */
+  assetsEnabled: boolean
+  /** Relative folder the character folders live in, under the project root. '' = the
+   *  project root itself (e.g. 'assets/characters' → <project>/assets/characters/<char>). */
+  charactersSubdir: string
+}
+
+function manifestDefaults(dir: string): DcspManifest {
+  return {
+    schemaVersion: DCSP_SCHEMA_VERSION,
+    id: '',
+    name: basename(dir),
+    createdAt: '',
+    dazSubdir: 'daz3d',
+    houdiniSubdir: 'houdini',
+    createHoudiniSubdir: true,
+    assetsEnabled: false,
+    charactersSubdir: '',
+  }
+}
+
+/** Filesystem-safe `.dcsp` file name from a project's display name. */
+function dcspFileName(name: string): string {
+  return `${characterFolderName(name.trim()) || 'project'}.${DCSP_EXT}`
+}
+
+/** Absolute path to the single `.dcsp` file in a project folder, or null. */
+export async function findManifestPath(dir: string): Promise<string | null> {
+  if (!dir) return null
   try {
-    const raw = JSON.parse(await readTextFile(await dataPath('projects.json')))
+    for (const entry of await readDir(dir)) {
+      if (entry.isFile && entry.name.toLowerCase().endsWith(`.${DCSP_EXT}`)) {
+        return join(dir, entry.name)
+      }
+    }
+  } catch {
+    // unreadable folder — treat as no manifest
+  }
+  return null
+}
+
+/** Read a project's `.dcsp` manifest (filling defaults for missing/old fields). */
+export async function readManifest(dir: string): Promise<DcspManifest> {
+  const defaults = manifestDefaults(dir)
+  const path = await findManifestPath(dir)
+  if (!path) return defaults
+  try {
+    const raw = JSON.parse(await readTextFile(path))
+    return {
+      schemaVersion:
+        typeof raw.schemaVersion === 'number' ? raw.schemaVersion : DCSP_SCHEMA_VERSION,
+      id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
+      name: typeof raw.name === 'string' && raw.name ? raw.name : defaults.name,
+      createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : '',
+      dazSubdir:
+        typeof raw.dazSubdir === 'string' && raw.dazSubdir ? raw.dazSubdir : defaults.dazSubdir,
+      houdiniSubdir:
+        typeof raw.houdiniSubdir === 'string' && raw.houdiniSubdir
+          ? raw.houdiniSubdir
+          : defaults.houdiniSubdir,
+      createHoudiniSubdir:
+        typeof raw.createHoudiniSubdir === 'boolean'
+          ? raw.createHoudiniSubdir
+          : defaults.createHoudiniSubdir,
+      assetsEnabled:
+        typeof raw.assetsEnabled === 'boolean' ? raw.assetsEnabled : defaults.assetsEnabled,
+      charactersSubdir:
+        typeof raw.charactersSubdir === 'string'
+          ? raw.charactersSubdir
+          : defaults.charactersSubdir,
+    }
+  } catch {
+    return defaults
+  }
+}
+
+/** Write a project's manifest, reusing the existing `.dcsp` file name if present. */
+export async function writeManifest(dir: string, manifest: DcspManifest): Promise<DcspManifest> {
+  await mkdir(dir, { recursive: true })
+  const existing = await findManifestPath(dir)
+  const path = existing ?? join(dir, dcspFileName(manifest.name))
+  await writeTextFile(path, JSON.stringify(manifest, null, 2) + '\n')
+  return manifest
+}
+
+/**
+ * Create a brand-new project: ensure `dir` exists, write a fresh `.dcsp` manifest
+ * (named after the project) plus the `.dcsmeta/images` folder. Returns the absolute
+ * path of the created `.dcsp` file (what gets opened / remembered).
+ */
+export async function createProjectManifest(dir: string, name: string): Promise<string> {
+  if (!name.trim()) throw new Error('Project name is required.')
+  if (!dir.trim()) throw new Error('Project folder is required.')
+  await mkdir(dir, { recursive: true })
+  const manifest: DcspManifest = {
+    ...manifestDefaults(dir),
+    id: newId(),
+    name: name.trim(),
+    createdAt: new Date().toISOString(),
+  }
+  const path = join(dir, dcspFileName(name))
+  await writeTextFile(path, JSON.stringify(manifest, null, 2) + '\n')
+  await mkdir(metaImagesDir(dir), { recursive: true })
+  return path
+}
+
+/** Hidden per-project meta folder (avatars + app-managed data), beside the .dcsp. */
+export function dcsmetaDir(projectDir: string): string {
+  return join(projectDir, '.dcsmeta')
+}
+
+/** Where a project's character avatar images live (under `.dcsmeta`). */
+export function metaImagesDir(projectDir: string): string {
+  return join(dcsmetaDir(projectDir), 'images')
+}
+
+// --- Recent projects (volatile app-data) ---------------------------------
+// The only project state the app keeps: a capped, newest-first list of recently
+// opened `.dcsp` files, for the Home screen. Non-important — losing it just empties
+// the list; the projects themselves are the `.dcsp` files scattered on disk.
+
+export interface RecentProject {
+  /** Absolute path to the project's `.dcsp` file. */
+  path: string
+  name: string
+  lastOpenedAt: string
+}
+
+const RECENTS_CAP = 12
+
+async function readRecents(): Promise<Array<RecentProject>> {
+  try {
+    const raw = JSON.parse(await readTextFile(await dataPath('recents.json')))
     if (!Array.isArray(raw)) return []
-    return raw
-      .filter(
-        (p): p is Project =>
-          p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.path === 'string',
-      )
-      .map((p) => ({ ...p, ...(typeof p.createdAt === 'string' ? { createdAt: p.createdAt } : {}) }))
+    return raw.filter(
+      (r): r is RecentProject => r && typeof r.path === 'string' && typeof r.name === 'string',
+    )
   } catch {
     return []
   }
 }
 
-async function writeProjects(projects: Array<Project>): Promise<void> {
+async function writeRecents(recents: Array<RecentProject>): Promise<void> {
   await ensureAppDir()
-  await writeTextFile(await dataPath('projects.json'), JSON.stringify(projects, null, 2) + '\n')
+  await writeTextFile(await dataPath('recents.json'), JSON.stringify(recents, null, 2) + '\n')
 }
 
-export async function listProjects(): Promise<Array<Project>> {
-  return (await readProjects()).sort((a, b) => a.name.localeCompare(b.name))
+/** Recently opened projects, newest-first. */
+export async function listRecents(): Promise<Array<RecentProject>> {
+  return readRecents()
 }
 
-/**
- * The folder's filesystem creation time as an ISO string — a fallback "created"
- * date for projects added before `createdAt` was tracked. Falls back to the
- * modified time, then `undefined` when the folder can't be stat'd.
- */
-export async function folderCreatedAt(path: string): Promise<string | undefined> {
-  if (!path) return undefined
+/** Record (or bump to the top) a project in the recents list. */
+export async function rememberRecent(path: string, name: string): Promise<void> {
+  const key = path.toLowerCase()
+  const rest = (await readRecents()).filter((r) => r.path.toLowerCase() !== key)
+  rest.unshift({ path, name, lastOpenedAt: new Date().toISOString() })
+  await writeRecents(rest.slice(0, RECENTS_CAP))
+}
+
+/** Drop a project from the recents list (never touches files on disk). */
+export async function forgetRecent(path: string): Promise<void> {
+  const key = path.toLowerCase()
+  await writeRecents((await readRecents()).filter((r) => r.path.toLowerCase() !== key))
+}
+
+// --- Assets ---------------------------------------------------------------
+// A library of reusable Daz scenes ("assets") — starting points to build
+// characters on. They live per level: globally in the app-data folder, or inside
+// a project's folder, both under a hidden `.assets/` directory holding a small
+// `assets.json` registry plus, for copied assets, the scene files themselves. A
+// linked asset keeps its scene where it is and just records the path.
+
+export interface DazAsset {
+  id: string
+  /** Display name (defaults to the scene's file name; user-editable). */
+  name: string
+  /** Absolute path to the asset's Daz scene (.duf) — inside `.assets` when copied,
+   *  wherever the user picked it when linked. */
+  scenePath: string
+  description: string
+  /** Subfolder under `.assets` the scene was copied into ('' = directly in
+   *  `.assets`; unused for a linked asset). */
+  subfolder: string
+  /** true = scene lives outside `.assets` (linked in place); false = copied in. */
+  linked: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** The hidden `.assets` folder under a level root (the app-data dir, or a project). */
+export function assetsDir(base: string): string {
+  return join(base, '.assets')
+}
+
+async function readAssetRegistry(base: string): Promise<Array<DazAsset>> {
   try {
-    const info = await stat(path)
-    const when = info.birthtime ?? info.mtime
-    return when ? new Date(when).toISOString() : undefined
+    const raw = JSON.parse(await readTextFile(join(assetsDir(base), 'assets.json')))
+    if (!Array.isArray(raw)) return []
+    return raw
+      .filter(
+        (a): a is Partial<DazAsset> & Pick<DazAsset, 'id' | 'scenePath'> =>
+          a && typeof a.id === 'string' && typeof a.scenePath === 'string',
+      )
+      .map((a) => ({
+        id: a.id,
+        name: a.name ?? '',
+        scenePath: a.scenePath,
+        description: a.description ?? '',
+        subfolder: a.subfolder ?? '',
+        linked: a.linked ?? true,
+        createdAt: a.createdAt ?? '',
+        updatedAt: a.updatedAt ?? '',
+      }))
   } catch {
-    return undefined
+    return []
   }
 }
 
-export async function getProject(id: string): Promise<Project | null> {
-  return (await readProjects()).find((p) => p.id === id) ?? null
+async function writeAssetRegistry(base: string, assets: Array<DazAsset>): Promise<void> {
+  await mkdir(assetsDir(base), { recursive: true })
+  await writeTextFile(join(assetsDir(base), 'assets.json'), JSON.stringify(assets, null, 2) + '\n')
 }
 
-export async function createProject(name: string, path: string): Promise<Project> {
-  if (!name.trim()) throw new Error('Project name is required.')
-  if (!path.trim()) throw new Error('Project folder is required.')
-  const projects = await readProjects()
-  const project: Project = {
-    id: newId(),
-    name: name.trim(),
-    path: path.trim(),
-    createdAt: new Date().toISOString(),
-  }
-  projects.push(project)
-  await writeProjects(projects)
-  await mkdir(project.path, { recursive: true })
-  return project
+export async function listAssets(base: string): Promise<Array<DazAsset>> {
+  return (await readAssetRegistry(base)).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function updateProject(
+export async function addAsset(base: string, asset: DazAsset): Promise<DazAsset> {
+  const assets = await readAssetRegistry(base)
+  assets.push(asset)
+  await writeAssetRegistry(base, assets)
+  return asset
+}
+
+export async function updateAsset(base: string, asset: DazAsset): Promise<DazAsset> {
+  const assets = await readAssetRegistry(base)
+  const idx = assets.findIndex((a) => a.id === asset.id)
+  if (idx < 0) throw new Error(`Asset ${asset.id} not found`)
+  const updated = { ...asset, updatedAt: new Date().toISOString() }
+  assets[idx] = updated
+  await writeAssetRegistry(base, assets)
+  return updated
+}
+
+export async function removeAsset(
+  base: string,
   id: string,
-  patch: { name?: string; path?: string },
-): Promise<Project> {
-  const projects = await readProjects()
-  const idx = projects.findIndex((p) => p.id === id)
-  if (idx < 0) throw new Error(`Project ${id} not found`)
-  projects[idx] = {
-    ...projects[idx],
-    ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
-    ...(patch.path !== undefined ? { path: patch.path.trim() } : {}),
-  }
-  await writeProjects(projects)
-  return projects[idx]
-}
-
-/**
- * Remove a project. Its generated-scripts subfolder in the Daz library is ALWAYS
- * removed (a derived artifact that's orphaned once the project is gone). With
- * `deleteFiles`, the project's library folder (all character data) is deleted
- * too; otherwise only the list entry goes and the data stays on disk. The
- * library folder is removed before the record so a failure leaves the project
- * visible to retry.
- */
-export async function deleteProject(
-  id: string,
-  opts: { deleteFiles?: boolean } = {},
+  opts: { keepFiles?: boolean } = {},
 ): Promise<void> {
-  const projects = await readProjects()
-  const project = projects.find((p) => p.id === id)
-  if (project) {
-    if (opts.deleteFiles) {
-      const folder = join(project.path)
-      if (await exists(folder)) await remove(folder, { recursive: true })
-    }
-    // Always drop the generated-scripts subfolder (keyed by project name) — it's
-    // derived data, so best-effort (never fail the delete on it).
-    const { dazLibraryFolder } = await getSettings()
-    if (dazLibraryFolder) {
-      const scripts = join(studioScriptsDir(dazLibraryFolder), characterFolderName(project.name))
+  const assets = await readAssetRegistry(base)
+  const asset = assets.find((a) => a.id === id)
+  if (!asset) return
+  // A copied asset owns its scene files under `.assets` — remove them unless the
+  // caller opts to keep them. A linked asset points outside `.assets`, so its
+  // source is never touched.
+  if (!asset.linked && !opts.keepFiles) {
+    const dir = asset.subfolder ? join(assetsDir(base), asset.subfolder) : assetsDir(base)
+    const duf = basename(asset.scenePath)
+    const stem = duf.replace(/\.duf$/i, '')
+    for (const sidecar of [duf, `${duf}.png`, `${duf}.tip.png`, `${stem}.tip.png`, `${stem}.png`]) {
+      const p = join(dir, sidecar)
       try {
-        if (await exists(scripts)) await remove(scripts, { recursive: true })
+        if (await exists(p)) await remove(p)
       } catch {
-        // leave orphaned generated scripts rather than failing the delete
+        // leave a stray file rather than failing the delete
       }
     }
   }
-  await writeProjects(projects.filter((p) => p.id !== id))
-}
-
-/**
- * Move a filesystem entry (file or directory) from `src` to `dst`: a fast rename
- * first, falling back to a recursive copy + delete when rename can't apply (e.g.
- * across drives).
- */
-async function moveEntry(src: string, dst: string): Promise<void> {
-  try {
-    await rename(src, dst)
-    return
-  } catch {
-    // cross-volume / un-renamable — copy then remove the source below.
-  }
-  if (await isDir(src)) {
-    await mkdir(dst, { recursive: true })
-    for (const rel of await walkFiles(src)) {
-      const target = join(dst, rel)
-      await mkdir(dirname(target), { recursive: true })
-      await writeFile(target, await readFile(join(src, rel)))
-    }
-  } else {
-    await mkdir(dirname(dst), { recursive: true })
-    await writeFile(dst, await readFile(src))
-  }
-  await remove(src, { recursive: true })
-}
-
-/**
- * Re-home a project to a different folder, keeping all of its characters' data
- * and references intact (the project's name is unchanged — that's `updateProject`).
- * Every top-level entry of the old library is moved into the new one, then each
- * character JSON has its in-folder asset paths (Daz scenes / Houdini projects
- * stored inside the character folder) repointed to the new location and its
- * `projectPath` provenance refreshed. Scenes linked in place outside the project
- * folder are left untouched.
- */
-export async function moveProject(id: string, newPath: string): Promise<Project> {
-  const projects = await readProjects()
-  const idx = projects.findIndex((p) => p.id === id)
-  if (idx < 0) throw new Error(`Project ${id} not found`)
-  if (!newPath.trim()) throw new Error('Project folder is required.')
-  const name = projects[idx].name
-
-  const from = join(projects[idx].path) // normalise separators / trailing slash
-  const to = join(newPath)
-  if (from.toLowerCase() === to.toLowerCase()) return projects[idx] // same folder — no-op
-
-  // Never move a folder into itself or its own subtree.
-  const a = (from + '/').toLowerCase()
-  const b = (to + '/').toLowerCase()
-  if (b.startsWith(a) || a.startsWith(b)) {
-    throw new Error('Choose a folder outside the current project folder.')
-  }
-  await mkdir(to, { recursive: true })
-  if (await isDir(from)) {
-    for (const entry of await readDir(from)) {
-      const src = join(from, entry.name)
-      const dst = join(to, entry.name)
-      if (await exists(dst)) {
-        throw new Error(`"${entry.name}" already exists in the target folder.`)
-      }
-      await moveEntry(src, dst)
-    }
-  }
-  // Repoint each moved character's in-folder paths + provenance.
-  for (const entry of await scanLibrary(to)) {
-    const c = entry.character
-    const repoint = (p: string): string => {
-      const rel = relativeInside(from, p)
-      return rel ? join(to, rel) : p
-    }
-    const updated: Character = {
-      ...c,
-      scenePath: repoint(c.scenePath),
-      extraScenes: c.extraScenes.map(repoint),
-      houdiniProjects: c.houdiniProjects.map(repoint),
-      projectName: name,
-      projectPath: to,
-    }
-    await writeTextFile(entry.definitionAbs, JSON.stringify(updated, null, 2) + '\n')
-  }
-
-  projects[idx] = { ...projects[idx], path: to }
-  await writeProjects(projects)
-  return projects[idx]
+  await writeAssetRegistry(
+    base,
+    assets.filter((a) => a.id !== id),
+  )
 }
 
 /** Recursively collect file paths (relative to `root`, '/'-separated). */

@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  CircleSlash,
-  CircleX,
-  Download,
-  RefreshCw,
-  Save,
-} from 'lucide-react'
+import { ArrowLeft, CircleCheck, Download, Save } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { Input } from '#/components/ui/input.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
+import { Field } from '#/components/field.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
@@ -24,6 +18,7 @@ import {
 } from '#/components/ui/select.tsx'
 import {
   ensureNetworkDrives,
+  fetchActiveProject,
   fetchAppDataFolder,
   fetchKnownDrives,
   fetchSettings,
@@ -33,8 +28,8 @@ import {
   installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
-  refreshAllAssets,
   rescanPoseAssets,
+  saveProjectSettings,
   saveSettings,
   uncForPath,
 } from '#/lib/rom/api.ts'
@@ -48,7 +43,6 @@ import type {
   DthExporterReleaseInfo,
   DthReleaseInfo,
   InstallReport,
-  RefreshSummary,
 } from '#/lib/rom/api.ts'
 
 export const Route = createFileRoute('/settings')({
@@ -57,7 +51,9 @@ export const Route = createFileRoute('/settings')({
   validateSearch: (search: Record<string, unknown>): { from?: string } => ({
     from: typeof search.from === 'string' ? search.from : undefined,
   }),
-  loader: () => fetchSettings(),
+  // Machine settings + (when this window is on a project) that project's record, so
+  // the Project tab can edit the per-project `.dcsp` defaults.
+  loader: async () => ({ settings: await fetchSettings(), project: await fetchActiveProject() }),
   component: SettingsPage,
 })
 
@@ -286,99 +282,8 @@ function NetworkDrivesSection() {
   )
 }
 
-/**
- * "Refresh Assets" — re-generate the Daz scripts + PoseAsset CSVs for every
- * character in every project (e.g. after a studio update or a DTH-release
- * switch). Character definition JSONs aren't touched. Shows a per-run summary
- * with any failures/warnings.
- */
-function RefreshAssetsSection() {
-  const [refreshing, setRefreshing] = useState(false)
-  const [summary, setSummary] = useState<RefreshSummary | null>(null)
-
-  async function onRefresh() {
-    setRefreshing(true)
-    setSummary(null)
-    try {
-      const result = await refreshAllAssets()
-      setSummary(result)
-      if (result.runtime && !result.runtime.ok) {
-        toast.error(`Runtime refresh failed: ${result.runtime.detail ?? ''}`)
-      } else if (result.total === 0) {
-        toast(result.runtime?.ok ? 'DTH runtime refreshed — no characters to regenerate' : 'No characters to refresh yet')
-      } else if (result.failed > 0) {
-        toast.error(`Re-generated ${result.regenerated} of ${result.total} — ${result.failed} failed`)
-      } else {
-        toast.success(
-          `Re-generated assets for ${result.regenerated} character${result.regenerated === 1 ? '' : 's'}`,
-        )
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  const failures = summary?.results.filter((r) => !r.ok) ?? []
-  const warnings = summary?.results.filter((r) => r.ok && r.detail) ?? []
-
-  return (
-    <div className="space-y-3">
-      <Button variant="outline" onClick={() => void onRefresh()} disabled={refreshing}>
-        <RefreshCw className={refreshing ? 'animate-spin' : ''} />
-        {refreshing ? 'Refreshing…' : 'Refresh Assets'}
-      </Button>
-      {summary && (
-        <div className="space-y-2 text-sm">
-          <p className="text-muted-foreground">
-            Re-generated <strong className="text-foreground">{summary.regenerated}</strong> of{' '}
-            {summary.total} character{summary.total === 1 ? '' : 's'}
-            {summary.failed > 0 && (
-              <>
-                {' · '}
-                <span className="text-destructive">{summary.failed} failed</span>
-              </>
-            )}
-            .
-          </p>
-          {summary.runtime && (
-            <p className={summary.runtime.ok ? 'text-muted-foreground' : 'text-destructive'}>
-              {summary.runtime.ok
-                ? 'DTH runtime files refreshed.'
-                : `DTH runtime refresh failed — ${summary.runtime.detail}`}
-            </p>
-          )}
-          {failures.map((r, i) => (
-            <p key={`f${i}`} className="flex items-start gap-2 text-destructive">
-              <CircleX className="mt-0.5 size-4 shrink-0" />
-              <span>
-                <span className="font-medium">
-                  {r.project} · {r.character}
-                </span>
-                {r.detail && <span className="text-muted-foreground"> — {r.detail}</span>}
-              </span>
-            </p>
-          ))}
-          {warnings.map((r, i) => (
-            <p key={`w${i}`} className="flex items-start gap-2 text-muted-foreground">
-              <CircleSlash className="mt-0.5 size-4 shrink-0" />
-              <span>
-                <span className="font-medium">
-                  {r.project} · {r.character}
-                </span>{' '}
-                — {r.detail}
-              </span>
-            </p>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function SettingsPage() {
-  const initial = Route.useLoaderData()
+  const { settings: initial, project } = Route.useLoaderData()
   const router = useRouter()
   const { from } = Route.useSearch()
   const backLabel = from ? `Back to ${from}` : 'Back'
@@ -413,9 +318,48 @@ function SettingsPage() {
   // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
   // checked / no install folder; '' = folder set but plugin not installed there.
   const [installedExporter, setInstalledExporter] = useState<string | null>(null)
-  // The app's internal data folder (settings.json, projects.json, images/, …),
-  // resolved once for display in the General tab.
+  // The app's internal data folder (settings.json, recents.json, network-drives.json,
+  // …), resolved once for display in the General tab.
   const [appDataFolder, setAppDataFolder] = useState('')
+
+  // Project tab — per-project `.dcsp` behaviour defaults (only present when this
+  // window is on a project). Saved independently of the machine settings below.
+  const [pDazSubdir, setPDazSubdir] = useState(project?.dazSubdir ?? 'daz3d')
+  const [pHoudiniSubdir, setPHoudiniSubdir] = useState(project?.houdiniSubdir ?? 'houdini')
+  const [pCreateHoudini, setPCreateHoudini] = useState(project?.createHoudiniSubdir ?? true)
+  const [pAssetsEnabled, setPAssetsEnabled] = useState(project?.assetsEnabled ?? false)
+  const [pCharactersSubdir, setPCharactersSubdir] = useState(project?.charactersSubdir ?? '')
+  const [savingProject, setSavingProject] = useState(false)
+  const projectDirty =
+    !!project &&
+    (pDazSubdir !== project.dazSubdir ||
+      pHoudiniSubdir !== project.houdiniSubdir ||
+      pCreateHoudini !== project.createHoudiniSubdir ||
+      pAssetsEnabled !== project.assetsEnabled ||
+      pCharactersSubdir !== project.charactersSubdir)
+
+  async function onSaveProjectSettings() {
+    if (!project) return
+    setSavingProject(true)
+    try {
+      await saveProjectSettings({
+        data: {
+          projectId: project.path,
+          dazSubdir: pDazSubdir.trim() || 'daz3d',
+          houdiniSubdir: pHoudiniSubdir.trim() || 'houdini',
+          createHoudiniSubdir: pCreateHoudini,
+          assetsEnabled: pAssetsEnabled,
+          charactersSubdir: pCharactersSubdir.trim(),
+        },
+      })
+      await router.invalidate()
+      toast.success('Project settings saved')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingProject(false)
+    }
+  }
 
   useEffect(() => {
     void fetchAppDataFolder().then(setAppDataFolder)
@@ -516,7 +460,7 @@ function SettingsPage() {
     return () => clearTimeout(timer)
   }, [loadInstalledExporter])
 
-  // Scoped to the fields THIS page edits (General + DazToHue). Save still writes the
+  // Scoped to the machine-setting fields the General tab edits. Save still writes the
   // full settings object, but the Tools-page fields are untouched here so they never
   // flip this dirty — the button reflects only this page's changes.
   const dirty =
@@ -526,10 +470,7 @@ function SettingsPage() {
     settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
-    settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
-    settings.dazSubdir !== initial.dazSubdir ||
-    settings.houdiniSubdir !== initial.houdiniSubdir ||
-    settings.createHoudiniSubdir !== initial.createHoudiniSubdir
+    settings.houdiniDocsFolder !== initial.houdiniDocsFolder
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
@@ -646,83 +587,10 @@ function SettingsPage() {
       <Tabs defaultValue="general" className="max-w-3xl">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="daztohue">DazToHue</TabsTrigger>
+          {project && <TabsTrigger value="project">Project</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="general" className="space-y-5 rounded-lg border bg-card p-5">
-          <div className="max-w-[20rem]">
-            <Label className="mb-1 flex w-fit items-center gap-1">
-              Default Daz scenes subfolder
-              <InfoPopup label="Default Daz scenes subfolder — more information">
-                Pre-fills the subfolder when copying a Daz scene into a character.
-              </InfoPopup>
-            </Label>
-            <Input
-              value={settings.dazSubdir}
-              placeholder="daz3d"
-              onChange={(e) => setSettings((s) => ({ ...s, dazSubdir: e.target.value }))}
-            />
-          </div>
-          <div className="max-w-[20rem]">
-            <Label className="mb-1 flex w-fit items-center gap-1">
-              Default Houdini projects subfolder
-              <InfoPopup label="Default Houdini projects subfolder — more information">
-                Seeded empty in each new character so you can drop its Houdini project there.
-              </InfoPopup>
-            </Label>
-            <Input
-              value={settings.houdiniSubdir}
-              placeholder="houdini"
-              disabled={!settings.createHoudiniSubdir}
-              onChange={(e) => setSettings((s) => ({ ...s, houdiniSubdir: e.target.value }))}
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <Switch
-              checked={settings.createHoudiniSubdir}
-              onCheckedChange={(createHoudiniSubdir) =>
-                setSettings((s) => ({ ...s, createHoudiniSubdir }))
-              }
-            />
-            <span className="text-sm">Create Houdini project subfolder in new characters</span>
-          </div>
-          <div className="border-t pt-5">
-            <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
-              Refresh assets
-              <InfoPopup label="Refresh assets — more information">
-                Re-generate the Daz scripts and PoseAsset CSVs for every character in every project —
-                run this after updating the studio or switching DTH release so all generated files
-                match the current version. Character definitions aren't changed.
-              </InfoPopup>
-            </h2>
-            <RefreshAssetsSection />
-          </div>
-          <div className="border-t pt-5">
-            <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
-              App data folder
-              <InfoPopup label="App data folder — more information">
-                Where the app keeps its settings, project list and avatar images.
-              </InfoPopup>
-            </h2>
-            {appDataFolder ? (
-              <PathCode path={displayPath(appDataFolder)} />
-            ) : (
-              <p className="text-xs text-muted-foreground">Resolving…</p>
-            )}
-          </div>
-          <div className="border-t pt-5">
-            <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
-              Network drives
-              <InfoPopup label="Network drives — more information">
-                Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
-                keeps working after relaunching as administrator.
-              </InfoPopup>
-            </h2>
-            <NetworkDrivesSection />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="daztohue" className="space-y-5">
+        <TabsContent value="general" className="space-y-5">
           <section className="space-y-4 rounded-lg border bg-card p-5">
             <div>
               <h2 className="font-semibold">Setup DTH Release</h2>
@@ -917,14 +785,15 @@ function SettingsPage() {
                   </p>
                 )}
                 {installedExporter === '' ? (
-                  <p className="text-xs">Not installed in this Daz Studio yet.</p>
+                  <p>Not installed in this Daz Studio yet.</p>
                 ) : installedExporter ? (
                   exporterUpToDate ? (
-                    <p className="text-emerald-500">
+                    <p className="flex items-center gap-1.5 text-emerald-500">
+                      <CircleCheck className="size-4 shrink-0" />
                       Already installed ({installedExporter}) — up to date.
                     </p>
                   ) : (
-                    <p className="text-xs">
+                    <p>
                       Installed: <strong className="text-foreground">{installedExporter}</strong> →
                       updating to <strong className="text-foreground">{sourceExporterVer || '?'}</strong>.
                     </p>
@@ -972,14 +841,111 @@ function SettingsPage() {
               </p>
             )}
           </section>
-        </TabsContent>
-      </Tabs>
 
-      <div className="mt-6 max-w-3xl">
-        <Button onClick={onSave} disabled={busy || !dirty}>
-          <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-        </Button>
-      </div>
+          {/* Read-only — informational locations the app manages itself. */}
+          <section className="space-y-5 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
+                App data folder
+                <InfoPopup label="App data folder — more information">
+                  Where the app keeps its machine settings, the recent-projects list and
+                  network-drive mappings. Project data (characters, avatars) lives in each
+                  project's own folder.
+                </InfoPopup>
+              </h2>
+              {appDataFolder ? (
+                <PathCode path={displayPath(appDataFolder)} />
+              ) : (
+                <p className="text-xs text-muted-foreground">Resolving…</p>
+              )}
+            </div>
+            <div className="border-t pt-5">
+              <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
+                Network drives
+                <InfoPopup label="Network drives — more information">
+                  Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
+                  keeps working after relaunching as administrator.
+                </InfoPopup>
+              </h2>
+              <NetworkDrivesSection />
+            </div>
+          </section>
+
+          <div className="pt-1">
+            <Button onClick={onSave} disabled={busy || !dirty}>
+              <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {project && (
+          <TabsContent value="project" className="space-y-5">
+            <section className="space-y-4 rounded-lg border bg-card p-5">
+              <div>
+                <h2 className="font-semibold">{project.name}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  These settings are part of this project (stored in its{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">.dcsp</code> file).
+                </p>
+              </div>
+              <div>
+                <Label className="mb-1 flex w-fit items-center gap-1">
+                  Characters subfolder
+                  <InfoPopup label="Characters subfolder — more information">
+                    Where character folders are stored, relative to the project — e.g.{' '}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">assets/characters</code>{' '}
+                    stores them at{' '}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      {'<project>/assets/characters/<Character>'}
+                    </code>
+                    . Empty keeps them directly in the project root. Changing this{' '}
+                    <strong>moves the existing character folders</strong> to the new location (the
+                    scene / Houdini links inside them are repointed).
+                  </InfoPopup>
+                </Label>
+                <Input
+                  value={pCharactersSubdir}
+                  placeholder="(project root)"
+                  onChange={(e) => setPCharactersSubdir(e.target.value)}
+                />
+              </div>
+              <Field label="Daz scenes subfolder">
+                <Input
+                  value={pDazSubdir}
+                  placeholder="daz3d"
+                  onChange={(e) => setPDazSubdir(e.target.value)}
+                />
+              </Field>
+              <Field label="Houdini projects subfolder">
+                <Input
+                  value={pHoudiniSubdir}
+                  placeholder="houdini"
+                  disabled={!pCreateHoudini}
+                  onChange={(e) => setPHoudiniSubdir(e.target.value)}
+                />
+              </Field>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Create the Houdini subfolder in new characters</span>
+                <Switch checked={pCreateHoudini} onCheckedChange={setPCreateHoudini} />
+              </label>
+              <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
+                <span className="flex items-center gap-1 font-medium">
+                  Enable assets
+                  <InfoPopup label="Enable assets — more information">
+                    Adds an <strong>Assets</strong> tab for reusable Daz scenes (bases to build
+                    characters on), stored in this project. Off by default — the project then has
+                    characters only.
+                  </InfoPopup>
+                </span>
+                <Switch checked={pAssetsEnabled} onCheckedChange={setPAssetsEnabled} />
+              </div>
+              <Button onClick={onSaveProjectSettings} disabled={savingProject || !projectDirty}>
+                <Save /> {savingProject ? 'Saving…' : projectDirty ? 'Save' : 'Saved'}
+              </Button>
+            </section>
+          </TabsContent>
+        )}
+      </Tabs>
     </main>
   )
 }
