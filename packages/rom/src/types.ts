@@ -344,7 +344,14 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  * Stamped onto every saved character as `schemaVersion`. A stored value below
  * this means the JSON predates a schema change and is a migration candidate;
  * above it means the JSON came from a newer build. The migration framework that
- * acts on the difference is a later addition — this constant is its groundwork.
+ * acts on the difference is `migrateCharacterData` (see `migrate.ts`).
+ *
+ * To bump it: (1) edit `characterSchema`; (2) bump this constant + add a History
+ * line below; (3) add a `migrate.test.ts` case. Add a `characterMigrations` step
+ * in `migrate.ts` ONLY for a rename/restructure or a computed value — an additive
+ * field with a zod default and a removed field need none (zod fills/strips them),
+ * and a value needing host context resolves in web `parseCharacter`, not the core.
+ * The full decision tree + copy-paste templates live atop `migrate.ts`.
  *
  * History:
  *   1 — initial versioned schema (the shape as of its introduction).
@@ -353,8 +360,77 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   4 — added `exportSceneSubfolders`.
  *   5 — added `exportWithRomScript`.
  *   6 — removed `targetSkeleton` (was never used in generation).
+ *   7 — added `generatedDthVersion` (the DTH release the PoseAsset CSV was last
+ *       generated for; additive with a '' default — no migration step needed).
  */
-export const CHARACTER_SCHEMA_VERSION = 6
+export const CHARACTER_SCHEMA_VERSION = 7
+
+/**
+ * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
+ * plus the shape of the scripts the studio emits. Independent of the app version
+ * and of {@link CHARACTER_SCHEMA_VERSION}. Bump this whenever a studio update
+ * changes the runtime files or the generated-script output in a way that means
+ * already-generated scripts on disk should be regenerated. Pure app/UI changes
+ * that don't alter generated output must NOT bump it.
+ *
+ * Stamped into every generated Daz script header as `// DTH-Runtime: v<N>`, so a
+ * script on disk can be read back to learn which runtime produced it. A value
+ * below this — or no marker at all (a script generated before this existed) —
+ * means the script is stale and "Refresh assets" should regenerate it.
+ *
+ * History:
+ *   1 — initial runtime version (the runtime + generated-script shape as of its
+ *       introduction; earlier scripts carry no marker and read as out-of-date).
+ */
+export const RUNTIME_VERSION = 1
+
+/**
+ * DTH releases at which the generated **PoseAsset CSV** format changed in a
+ * breaking way, ascending. A release's CSV *era* is the highest entry that is
+ * `<=` it (see {@link poseAssetCsvEra}); two releases in the same era produce
+ * interchangeable CSVs, so a character generated under one is NOT stale under the
+ * other. A character's CSV needs regenerating only when its era differs from the
+ * active release's era.
+ *
+ *   2.4.3 — first DTH release with CSV import/export; today's baseline.
+ *
+ * When a future release changes the CSV, add its version here AND teach
+ * {@link toPoseAssetCsv} to emit the matching variant for that era — both shipped
+ * in the same studio update, so a user switching to that release is flagged for a
+ * refresh while everyone on an earlier release stays "all good".
+ */
+export const POSEASSET_CSV_BREAKING_VERSIONS = ['2.4.3'] as const
+
+/**
+ * Compare two dotted version strings numerically (segment-wise; missing segments
+ * count as 0; '' sorts below everything). Returns >0 when `a` > `b`, <0 when
+ * `a` < `b`, 0 when equal. e.g. `compareDthVersions('2.4.10', '2.4.3') > 0`.
+ */
+export function compareDthVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
+}
+
+/**
+ * The CSV era of a DTH release: the highest {@link POSEASSET_CSV_BREAKING_VERSIONS}
+ * entry that is `<=` `release`, or '' when the release predates the first baseline
+ * (or no release is given). Two releases with the same era have interchangeable
+ * PoseAsset CSVs — the studio uses this to decide both which CSV variant to emit
+ * and whether an already-generated CSV is out of date.
+ */
+export function poseAssetCsvEra(release: string): string {
+  if (!release) return ''
+  let era = ''
+  for (const v of POSEASSET_CSV_BREAKING_VERSIONS) {
+    if (compareDthVersions(release, v) >= 0) era = v
+  }
+  return era
+}
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -429,6 +505,15 @@ export const characterSchema = z.object({
    * export path.
    */
   exportWithRomScript: z.boolean().default(true),
+  /**
+   * The DTH release the PoseAsset CSV was last generated for (e.g. "2.4.3"); ''
+   * when never generated, or generated with no DTH release configured. The CSV is
+   * the only artifact tied to the DTH release, so its provenance lives here in the
+   * app-owned JSON (the CSV itself can't carry a version — the Houdini HDA parser
+   * reads every row's first column as a type). Detection compares its
+   * {@link poseAssetCsvEra} to the active release's; Refresh re-stamps it.
+   */
+  generatedDthVersion: z.string().default(''),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —
