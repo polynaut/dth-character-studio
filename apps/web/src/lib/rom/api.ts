@@ -1247,6 +1247,49 @@ export async function installDazToHueScripts({ data }: { data: unknown }): Promi
   })
 }
 
+/** The latest available DazToHue-Scripts commit (HEAD of `main` on GitHub),
+ *  fetched natively (the webview can't hit the GitHub API — CORS). Desktop-only;
+ *  throws on web/offline/rate-limit, which {@link dazToHueScriptsStatus} treats as
+ *  "couldn't check". */
+export async function latestDazToHueCommit(): Promise<string> {
+  return invoke<string>('latest_daztohue_commit')
+}
+
+export type DazToHueScriptsState = 'uptodate' | 'outdated' | 'notinstalled' | 'unknown'
+
+export interface DazToHueScriptsStatus {
+  /** Commit recorded in the local install's marker ('' → not installed). */
+  installed: string | null
+  /** Latest commit on GitHub (null → the remote check failed). */
+  latest: string | null
+  state: DazToHueScriptsState
+}
+
+/**
+ * Whether the locally installed DazToHue-Scripts are up to date: compares the
+ * commit the installer recorded against the current HEAD on GitHub. Never throws —
+ * a failed remote check reports `unknown` (so the UI still shows what's installed),
+ * and nothing installed reports `notinstalled`.
+ */
+export async function dazToHueScriptsStatus(): Promise<DazToHueScriptsStatus> {
+  const s = await storage.getSettings()
+  const installed = await storage.readDazToHueScriptsCommit(s.dazLibraryFolder)
+  let latest: string | null = null
+  try {
+    latest = await latestDazToHueCommit()
+  } catch {
+    latest = null // offline / rate-limited / web build — surfaced as "unknown"
+  }
+  const state: DazToHueScriptsState = !installed
+    ? 'notinstalled'
+    : !latest
+      ? 'unknown'
+      : installed === latest
+        ? 'uptodate'
+        : 'outdated'
+  return { installed, latest, state }
+}
+
 /** Merge-only install (adds new files, never overwrites) used for custom morphs
  *  and presets — `which` picks the source/dest pair from settings. */
 async function installMerge(

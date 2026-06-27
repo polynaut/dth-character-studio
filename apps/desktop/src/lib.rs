@@ -1534,11 +1534,19 @@ struct ScriptsInstallRequest {
     dry_run: bool,
 }
 
-/// The repo zip — the default branch (`main`) HEAD. GitHub 302-redirects this to
-/// codeload; reqwest follows it by default.
+/// GitHub API for the HEAD commit of `main`. With the `.sha` media type the
+/// response body IS the 40-char commit SHA (no JSON parsing). Unauthenticated
+/// calls are rate-limited to 60/hr per IP — fine for the occasional install/check.
 #[cfg(desktop)]
-const DAZTOHUE_SCRIPTS_ZIP: &str =
-    "https://github.com/soltude/DazToHue-Scripts/archive/refs/heads/main.zip";
+const DAZTOHUE_SCRIPTS_COMMITS_API: &str =
+    "https://api.github.com/repos/soltude/DazToHue-Scripts/commits/main";
+
+/// Base for the per-commit source zip: `<base><sha>.zip` downloads exactly that
+/// commit's tree, so the installed files always match the SHA we record in the
+/// marker. GitHub 302-redirects to codeload; reqwest follows it by default.
+#[cfg(desktop)]
+const DAZTOHUE_SCRIPTS_ARCHIVE_BASE: &str =
+    "https://github.com/soltude/DazToHue-Scripts/archive/";
 
 /// Wrap a single step into a one-step report (mirrors the other installers).
 fn one_step_report(dry: bool, step: InstallStep) -> InstallReport {
@@ -1608,6 +1616,55 @@ async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes.to_vec())
 }
 
+/// The HEAD commit SHA of soltude/DazToHue-Scripts `main`, via the GitHub API. The
+/// `.sha` Accept type returns the bare SHA; GitHub requires a User-Agent. Errors
+/// (offline, 404, rate-limited) surface as a message the caller can show.
+#[cfg(desktop)]
+async fn fetch_daztohue_head_sha() -> Result<String, String> {
+    ensure_crypto_provider();
+    let client = reqwest::Client::builder()
+        .user_agent("DTH-Character-Studio")
+        .build()
+        .map_err(|e| format!("http client failed: {e}"))?;
+    let resp = client
+        .get(DAZTOHUE_SCRIPTS_COMMITS_API)
+        .header("Accept", "application/vnd.github.sha")
+        .send()
+        .await
+        .map_err(|e| format!("checking the latest version failed: {e}"))?;
+    let resp = resp
+        .error_for_status()
+        .map_err(|e| format!("checking the latest version failed: {e}"))?;
+    let sha = resp
+        .text()
+        .await
+        .map_err(|e| format!("reading the version failed: {e}"))?
+        .trim()
+        .to_string();
+    // A valid response is a hex SHA; anything else (an HTML error page, a JSON blob)
+    // would poison the marker, so reject it.
+    if sha.len() < 7 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("unexpected version response: {sha}"));
+    }
+    Ok(sha)
+}
+
+/// The latest available DazToHue-Scripts commit SHA — for the "is my install
+/// outdated?" check. Compared against the `.dth-version.json` marker the installer
+/// writes. Returns an error message (not a panic) when the check can't run.
+#[cfg(desktop)]
+#[tauri::command]
+async fn latest_daztohue_commit() -> Result<String, String> {
+    fetch_daztohue_head_sha().await
+}
+
+/// Web/mobile builds have no native HTTP (reqwest is desktop-only).
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn latest_daztohue_commit() -> Result<String, String> {
+    Err("only available on the desktop app".into())
+}
+
 /// Download the soltude/DazToHue-Scripts repo as a zip and install its contents
 /// into `dest`. The archive is fetched in memory, unpacked into a temp folder
 /// beside `dest`, then swapped in — so a failed download/extract never leaves a
@@ -1620,7 +1677,16 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     let dest = PathBuf::from(&request.dest);
     let label = "DazToHue-Scripts";
 
-    let bytes = match download_bytes(DAZTOHUE_SCRIPTS_ZIP).await {
+    // Resolve the exact HEAD commit first, then download that commit's tree — so the
+    // installed files always match the SHA we record (no branch-moved-under-us race).
+    let sha = match fetch_daztohue_head_sha().await {
+        Ok(s) => s,
+        Err(msg) => return one_step_report(dry, step_err(label, msg)),
+    };
+    let zip_url = format!("{DAZTOHUE_SCRIPTS_ARCHIVE_BASE}{sha}.zip");
+    let short = &sha[..7.min(sha.len())];
+
+    let bytes = match download_bytes(&zip_url).await {
         Ok(b) => b,
         Err(msg) => return one_step_report(dry, step_err(label, msg)),
     };
@@ -1641,7 +1707,11 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     if dry {
         return one_step_report(
             dry,
-            step_ok(label, file_count, format!("would install {file_count} file(s) → {}", dest.display())),
+            step_ok(
+                label,
+                file_count,
+                format!("would install {file_count} file(s) at {short} → {}", dest.display()),
+            ),
         );
     }
 
@@ -1671,7 +1741,12 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     let moved = fs::rename(&content_root, &dest).is_ok() || copy_dir(&content_root, &dest).is_ok();
     let _ = fs::remove_dir_all(&tmp);
     if moved {
-        one_step_report(dry, step_ok(label, file_count, format!("→ {}", dest.display())))
+        // Record the installed commit so the Tools tab can flag when it's outdated.
+        // `sha` is validated hex + `ref` is a literal, so hand-formatting the JSON is
+        // safe (no escaping needed) and avoids a serde_json dependency here.
+        let marker = dest.join(".dth-version.json");
+        let _ = fs::write(&marker, format!("{{\"commit\":\"{sha}\",\"ref\":\"main\"}}"));
+        one_step_report(dry, step_ok(label, file_count, format!("{short} → {}", dest.display())))
     } else {
         one_step_report(dry, step_err(label, format!("couldn't move files into {}", dest.display())))
     }
@@ -2181,6 +2256,7 @@ pub fn run() {
             default_daz_uninstall_folders,
             uninstall_daz,
             install_daztohue_scripts,
+            latest_daztohue_commit,
             install_daz_merge,
             install_houdini_presets,
             unc_for_path,

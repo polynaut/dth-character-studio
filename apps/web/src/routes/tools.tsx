@@ -23,6 +23,7 @@ import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
   DAZTOHUE_SCRIPTS_REPO,
+  dazToHueScriptsStatus,
   dedupDazAssets,
   defaultDazUninstallFolders,
   detectAssetVersions,
@@ -47,6 +48,7 @@ import { toast } from 'sonner'
 import type {
   AssetVersionReport,
   ConflictCopy,
+  DazToHueScriptsStatus,
   DedupReport,
   FileConflict,
   InstallReport,
@@ -297,10 +299,24 @@ function ToolsPage() {
   // "DazToHue-Scripts" tab — download + install the companion repo.
   const [scriptsBusy, setScriptsBusy] = useState(false)
   const [scriptsReport, setScriptsReport] = useState<InstallReport | null>(null)
+  // Installed-vs-latest DazToHue-Scripts commit. null until the first check; the
+  // check never throws (a failed remote lookup → state 'unknown').
+  const [scriptsStatus, setScriptsStatus] = useState<DazToHueScriptsStatus | null>(null)
+  async function loadScriptsStatus() {
+    setScriptsStatus(await dazToHueScriptsStatus())
+  }
   // "Danger zone" — Daz uninstall cleanup.
   const [uninstallBusy, setUninstallBusy] = useState(false)
   const [uninstallReport, setUninstallReport] = useState<InstallReport | null>(null)
   const [uninstallConfirm, setUninstallConfirm] = useState(false)
+
+  // Check the installed-vs-latest scripts commit once on open (also re-checked
+  // after a successful install). Fire-and-forget — the check swallows its own
+  // errors, so there's nothing to catch here.
+  useEffect(() => {
+    void loadScriptsStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Scoped to the fields THIS page edits (assets / morphs / presets / dedup /
   // uninstall). Save still writes the full settings object, but the Settings-page
@@ -1017,6 +1033,8 @@ function ToolsPage() {
               </p>
             )}
 
+            <ScriptsVersionStatus status={scriptsStatus} />
+
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -1026,10 +1044,24 @@ function ToolsPage() {
                 {scriptsBusy ? 'Working…' : 'Dry run'}
               </Button>
               <Button
-                onClick={() => runInstall(installDazToHueScripts, false, setScriptsBusy, setScriptsReport)}
+                onClick={() =>
+                  runInstall(
+                    installDazToHueScripts,
+                    false,
+                    setScriptsBusy,
+                    setScriptsReport,
+                    undefined,
+                    loadScriptsStatus, // re-check the installed-vs-latest commit
+                  )
+                }
                 disabled={scriptsBusy || !settings.dazLibraryFolder.trim()}
               >
-                <Download /> {scriptsBusy ? 'Downloading…' : 'Download & install'}
+                <Download />{' '}
+                {scriptsBusy
+                  ? 'Downloading…'
+                  : scriptsStatus?.state === 'outdated'
+                    ? 'Update to latest'
+                    : 'Download & install'}
               </Button>
             </div>
             {scriptsReport && (
@@ -1044,6 +1076,50 @@ function ToolsPage() {
       </Tabs>
     </main>
   )
+}
+
+/** First 7 chars of a commit SHA — the familiar short form. */
+function shortSha(sha: string): string {
+  return sha.slice(0, 7)
+}
+
+/**
+ * Installed-vs-latest line for the DazToHue-Scripts install: a green check when the
+ * local commit matches GitHub's HEAD, an amber warning when a newer commit exists,
+ * and muted text when nothing is installed or the remote check couldn't run. Hidden
+ * until the first check resolves.
+ */
+function ScriptsVersionStatus({ status }: { status: DazToHueScriptsStatus | null }) {
+  if (!status) return null
+  if (status.state === 'uptodate') {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
+        <CircleCheck className="size-4 shrink-0" />
+        Up to date — installed{' '}
+        <code className="font-mono text-xs">{shortSha(status.installed ?? '')}</code>
+      </p>
+    )
+  }
+  if (status.state === 'outdated') {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-500">
+        <TriangleAlert className="size-4 shrink-0" />
+        Update available — installed{' '}
+        <code className="font-mono text-xs">{shortSha(status.installed ?? '')}</code>, latest{' '}
+        <code className="font-mono text-xs">{shortSha(status.latest ?? '')}</code>
+      </p>
+    )
+  }
+  if (status.state === 'unknown') {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <CircleAlert className="size-4 shrink-0" />
+        Installed <code className="font-mono text-xs">{shortSha(status.installed ?? '')}</code> —
+        couldn't check for the latest version.
+      </p>
+    )
+  }
+  return <p className="text-sm text-muted-foreground">Not installed yet.</p>
 }
 
 /**

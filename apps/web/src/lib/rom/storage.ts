@@ -608,6 +608,23 @@ export function daztohueScriptsDir(dazLibraryFolder: string): string {
   return join(dazLibraryFolder, 'Scripts', 'DazToHue-Scripts')
 }
 
+/** The commit SHA recorded in the installed DazToHue-Scripts version marker
+ *  (`<daztohueScriptsDir>/.dth-version.json`, written by the Rust installer), or
+ *  null when the scripts aren't installed / the marker is missing or unreadable.
+ *  Living inside the install folder makes it the ground truth: delete the install
+ *  and the marker goes with it, so we never claim something stale is installed. */
+export async function readDazToHueScriptsCommit(dazLibraryFolder: string): Promise<string | null> {
+  const lib = dazLibraryFolder.trim()
+  if (!lib) return null
+  try {
+    const raw = await readTextFile(join(daztohueScriptsDir(lib), '.dth-version.json'))
+    const parsed = JSON.parse(raw) as { commit?: unknown }
+    return typeof parsed.commit === 'string' && parsed.commit ? parsed.commit : null
+  } catch {
+    return null // not installed, no marker, or unreadable — all "unknown locally"
+  }
+}
+
 /**
  * Per-character script folder: `<root>/<project>/<character>/`. The generated
  * `<Name>_<Genesis>.dsa` lives here and imports the runtime from the root two
