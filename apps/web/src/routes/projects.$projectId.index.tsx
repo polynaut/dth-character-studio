@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, FolderOpen, UserPlus } from 'lucide-react'
+import { FolderOpen, UserPlus } from 'lucide-react'
 
 import { Field } from '#/components/field.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
+import { AssetsGrid } from '#/components/assets-grid.tsx'
+import { AssetForm } from '#/components/asset-form.tsx'
 import {
   FilterSelect,
   SelectCheckbox,
@@ -32,23 +35,25 @@ import {
   SelectValue,
 } from '#/components/ui/select.tsx'
 import {
+  characterKeepFolders,
   copyDazScene,
   createCharacter,
   deleteCharacter,
   fetchAllCharacters,
   fetchCharacters,
   fetchProject,
-  fetchSettings,
   generateCharacterFiles,
+  renameProject,
   resolveScenePreview,
   saveCharacter,
-  updateProject,
+  setActiveProjectDir,
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { SidePanel } from '#/components/ui/side-panel.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
+import { Tag } from '#/components/tag.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
@@ -84,21 +89,26 @@ function ScenePreview({ scenePath }: { scenePath: string }) {
 
 export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params }) => {
+    // The route param IS the project's folder path. Pin it as the active project so
+    // avatars (in its `.dcsmeta`) resolve for this window.
+    setActiveProjectDir(params.projectId)
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
-    const [characters, allCharacters, settings] = await Promise.all([
+    const [characters, allCharacters] = await Promise.all([
       fetchCharacters({ data: { projectId: params.projectId } }),
       fetchAllCharacters(),
-      fetchSettings(),
     ])
-    return { project, characters, allCharacters, settings }
+    return { project, characters, allCharacters }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters, allCharacters, settings } = Route.useLoaderData()
+  const { project, characters, allCharacters } = Route.useLoaderData()
+  // The reusable Daz-scene "assets" feature is opt-in per project (its manifest).
+  // Off → the project shows characters only (no Assets tab).
+  const assetsEnabled = project.assetsEnabled
   const router = useRouter()
   const [scenePath, setScenePath] = useState('')
   const [name, setName] = useState('')
@@ -108,18 +118,21 @@ function ProjectCharactersPage() {
   const [prefill, setPrefill] = useState<string>('empty')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // The create-character form lives in a slide-in side panel now.
+  // The create-character form lives in a slide-in side panel now. The panel and the
+  // listing each carry a tab — "characters" (the existing flow) vs "assets" (reusable
+  // Daz scenes scoped to this project). `assetRefresh` reloads the grid after an add.
   const [panelOpen, setPanelOpen] = useState(false)
-  const [editingTitle, setEditingTitle] = useState(false)
+  const [panelTab, setPanelTab] = useState<'character' | 'asset'>('character')
+  const [listTab, setListTab] = useState<'characters' | 'assets'>('characters')
+  const [assetRefresh, setAssetRefresh] = useState(0)
   // When the picked scene is outside the project, the create flow pauses on this
   // modal to ask whether to copy the scene into the character folder.
   const [copyPrompt, setCopyPrompt] = useState(false)
   // The scenes folder for a new character is editable (default from Settings);
   // the subfolder is the optional nested path inside it (empty = the base root).
-  const [copyBase, setCopyBase] = useState(settings.dazSubdir)
+  const [copyBase, setCopyBase] = useState(project.dazSubdir)
   const [copySubfolder, setCopySubfolder] = useState('')
   const [copyDeleteOriginal, setCopyDeleteOriginal] = useState(false)
-  const swallowNavRef = useRef(false)
 
   // Overview view / sort (persisted) + transient Genesis & Gender filters.
   const [view, setView] = usePersistentState<ViewMode>('dth.characters.view', 'grid')
@@ -130,6 +143,9 @@ function ProjectCharactersPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  // Whether any character about to be deleted has a Houdini subfolder on disk —
+  // gates the bulk-delete dialog's "keep Houdini files" toggle.
+  const [keepHoudiniAvailable, setKeepHoudiniAvailable] = useState(false)
 
   /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
   function sceneBaseName(p: string): string {
@@ -162,6 +178,14 @@ function ProjectCharactersPage() {
     setScenePath('')
     setName('')
     setPrefill('empty')
+    setPanelTab('character')
+    setPanelOpen(true)
+  }
+
+  // Open the create panel straight on its Asset tab — the Assets grid's "Add".
+  function openAssetPanel() {
+    setError('')
+    setPanelTab('asset')
     setPanelOpen(true)
   }
 
@@ -170,6 +194,7 @@ function ProjectCharactersPage() {
     const dropped = paths[0]
     if (!dropped) return
     applyScene(dropped)
+    setPanelTab('character')
     setPanelOpen(true)
   }
 
@@ -186,7 +211,7 @@ function ProjectCharactersPage() {
     if (!scenePath.trim() || !canCreate) return
     // Scene outside the project → ask whether to copy it into the character folder.
     if (!sceneInsideProject()) {
-      setCopyBase(settings.dazSubdir)
+      setCopyBase(project.dazSubdir)
       setCopySubfolder('')
       setCopyDeleteOriginal(false)
       setCopyPrompt(true)
@@ -274,12 +299,34 @@ function ProjectCharactersPage() {
   )
   const selectedChars = visible.filter((c) => sel.isSelected(c.id))
 
-  async function onBulkDelete({ keep }: { keep: boolean }) {
+  // When the confirm opens, check whether any selected character has a Houdini
+  // subfolder on disk, so the dialog can offer to keep it (like the Daz folder).
+  const selectedIds = selectedChars.map((c) => c.id).join(',')
+  useEffect(() => {
+    if (!confirmOpen) {
+      setKeepHoudiniAvailable(false)
+      return
+    }
+    const ids = selectedIds ? selectedIds.split(',') : []
+    let cancelled = false
+    void Promise.all(
+      ids.map((id) =>
+        characterKeepFolders({ data: { projectId, id } }).catch(() => ({ daz: false, houdini: false })),
+      ),
+    ).then((flags) => !cancelled && setKeepHoudiniAvailable(flags.some((f) => f.houdini)))
+    return () => {
+      cancelled = true
+    }
+  }, [confirmOpen, projectId, selectedIds])
+
+  async function onBulkDelete({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
       for (const character of selectedChars) {
-        await deleteCharacter({ data: { projectId, id: character.id, keepDaz: keep } })
+        await deleteCharacter({
+          data: { projectId, id: character.id, keepDaz: keep, keepHoudini: keep2 },
+        })
       }
       const n = selectedChars.length
       sel.clear()
@@ -296,56 +343,53 @@ function ProjectCharactersPage() {
   return (
     <main data-filedrop-id={dropId} className="relative min-h-screen p-8">
       {dropOver && (
-        <div className="pointer-events-none fixed inset-4 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
+        <div className="pointer-events-none fixed inset-4 z-[60] flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
           Drop a Daz scene (.duf) to create a character
         </div>
       )}
-      <div className="mb-6">
-        <Link
-          to="/"
-          onMouseDown={() => {
-            // While the title is being edited, the first click here just commits
-            // and closes the edit (via the input's blur) — it must not navigate.
-            swallowNavRef.current = editingTitle
-          }}
-          onClick={(e) => {
-            if (swallowNavRef.current) {
-              e.preventDefault()
-              swallowNavRef.current = false
-            }
-          }}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" /> All projects
-        </Link>
-      </div>
-
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <EditableTitle
             name={project.name}
             ariaLabel="Project name"
-            onEditingChange={setEditingTitle}
             onSave={async (next) => {
-              await updateProject({ data: { id: projectId, name: next } })
+              await renameProject({ data: { projectId, name: next } })
               await router.invalidate()
               toast.success('Project renamed')
             }}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            <Tag>Project</Tag>
             <PathCode path={displayPath(project.path)} />
-          </p>
+          </div>
         </div>
         <HeaderNav />
       </header>
 
-      <SidePanel open={panelOpen} title="Create character" onClose={() => setPanelOpen(false)}>
-        <div className="space-y-4">
+      <SidePanel
+        open={panelOpen}
+        title={assetsEnabled && panelTab === 'asset' ? 'Add asset' : 'Create character'}
+        onClose={() => setPanelOpen(false)}
+      >
+        <Tabs
+          value={assetsEnabled ? panelTab : 'character'}
+          onValueChange={(v) => setPanelTab(v as 'character' | 'asset')}
+          className="gap-6"
+        >
+          {assetsEnabled && (
+            <TabsList className="w-full">
+              <TabsTrigger value="character">Character</TabsTrigger>
+              <TabsTrigger value="asset">Asset</TabsTrigger>
+            </TabsList>
+          )}
+          <TabsContent value="character">
+            <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Choose its Daz scene (.duf) — or drop one anywhere on the page.{' '}
-          <InfoPopup label="Daz scene requirements">
+          Choose its Daz scene (.duf) — or drop one anywhere on the page.
+          <br />
+          <strong className="font-semibold text-foreground">
             It must not contain an existing animation — only the character itself.
-          </InfoPopup>
+          </strong>
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
@@ -363,24 +407,27 @@ function ProjectCharactersPage() {
             <div className="flex flex-wrap items-start gap-4">
               <ScenePreview scenePath={scenePath} />
               <div className="min-w-[20rem] flex-1 space-y-4">
+                {/* Row 1: character name on its own line. */}
+                <Field label="Character name" error={nameError}>
+                  {/* The folder is created from the name, so it carries the
+                      project-path prefix. */}
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
+                      {displayPath('/project/')}
+                    </span>
+                    <Input
+                      className="min-w-0 flex-1"
+                      placeholder="Aria_G9"
+                      value={name}
+                      aria-invalid={nameError ? true : undefined}
+                      onChange={(e) => setName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                    />
+                  </div>
+                </Field>
+
+                {/* Row 2: Genesis, Gender and ROM prefill together. */}
                 <div className="flex flex-wrap items-start gap-3">
-                  <Field label="Character name" error={nameError} className="min-w-[14rem] flex-1">
-                    {/* The folder is created from the name, so it carries the
-                        project-path prefix. */}
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
-                        {displayPath('/project/')}
-                      </span>
-                      <Input
-                        className="min-w-0 flex-1"
-                        placeholder="Aria_G9"
-                        value={name}
-                        aria-invalid={nameError ? true : undefined}
-                        onChange={(e) => setName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-                      />
-                    </div>
-                  </Field>
                   <Field label="Genesis" className="shrink-0">
                     <Select
                       value={genesis}
@@ -420,28 +467,36 @@ function ProjectCharactersPage() {
                       </SelectContent>
                     </Select>
                   </Field>
+                  <Field
+                    label={
+                      <span className="flex items-center gap-1">
+                        ROM prefill
+                        {/* -my-1.5 keeps the 24px "i" from inflating the label line,
+                            so this control stays bottom-aligned with Genesis/Gender. */}
+                        <InfoPopup label="ROM prefill — more information" className="-my-1.5">
+                          Copy the ROM definitions from the bundled example or an existing{' '}
+                          {genesis} {gender} character in any project.
+                        </InfoPopup>
+                      </span>
+                    }
+                    className="min-w-[12rem] flex-1"
+                  >
+                    <Select value={prefill} onValueChange={setPrefill}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="empty">Empty</SelectItem>
+                        <SelectItem value="example">Example</SelectItem>
+                        {prefillChars.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.projectName} - {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
                 </div>
-
-                <Field label="ROM prefill" className="w-72">
-                  <Select value={prefill} onValueChange={setPrefill}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="empty">Empty</SelectItem>
-                      <SelectItem value="example">Example</SelectItem>
-                      {prefillChars.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.projectName} - {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Copy the ROM definitions from the bundled example or an existing {genesis}{' '}
-                    {gender} character in any project.
-                  </p>
-                </Field>
               </div>
             </div>
 
@@ -454,30 +509,57 @@ function ProjectCharactersPage() {
             </div>
           </>
         )}
-        </div>
+            </div>
+          </TabsContent>
+          {assetsEnabled && (
+            <TabsContent value="asset">
+              <AssetForm
+                projectId={projectId}
+                onCreated={() => {
+                  setPanelOpen(false)
+                  setAssetRefresh((k) => k + 1)
+                  setListTab('assets')
+                }}
+              />
+            </TabsContent>
+          )}
+        </Tabs>
       </SidePanel>
 
-      {characters.length === 0 ? (
-        <div className="flex flex-col items-start gap-4">
-          <p className="text-muted-foreground">
-            No characters yet — drop a Daz scene anywhere, or add one.
-          </p>
-          <Button onClick={openCreatePanel}>
-            <UserPlus /> Add character
-          </Button>
-        </div>
-      ) : (
-        <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">
-              {visible.length === characters.length
-                ? `${characters.length} character${characters.length === 1 ? '' : 's'}`
-                : `${visible.length} of ${characters.length}`}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={openCreatePanel}>
+      <Tabs
+        value={assetsEnabled ? listTab : 'characters'}
+        onValueChange={(v) => setListTab(v as 'characters' | 'assets')}
+      >
+        {assetsEnabled && (
+          <TabsList className="mb-6">
+            <TabsTrigger value="characters">Characters</TabsTrigger>
+            <TabsTrigger value="assets">Assets</TabsTrigger>
+          </TabsList>
+        )}
+        <TabsContent value="characters">
+          {characters.length === 0 ? (
+            <div className="flex flex-col items-start gap-4">
+              <p className="text-muted-foreground">
+                No characters yet — drop a Daz scene anywhere, or add one.
+              </p>
+              <Button onClick={openCreatePanel}>
                 <UserPlus /> Add character
               </Button>
+            </div>
+          ) : (
+            <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={openCreatePanel}>
+                <UserPlus /> Add
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {visible.length === characters.length
+                  ? `${characters.length} character${characters.length === 1 ? '' : 's'}`
+                  : `${visible.length} of ${characters.length}`}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <FilterSelect
                 label="Genesis"
                 value={genesisFilter}
@@ -579,9 +661,16 @@ function ProjectCharactersPage() {
                 )
               })}
             </ul>
+              )}
+            </>
           )}
-        </>
-      )}
+        </TabsContent>
+        {assetsEnabled && (
+          <TabsContent value="assets">
+            <AssetsGrid projectId={projectId} refreshKey={assetRefresh} onAdd={openAssetPanel} />
+          </TabsContent>
+        )}
+      </Tabs>
 
       {copyPrompt && (
         <SceneCopyDialog
@@ -622,8 +711,16 @@ function ProjectCharactersPage() {
           keepLabel={
             <>
               Keep the Daz files folder{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">{settings.dazSubdir}</code>
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">{project.dazSubdir}</code>
             </>
+          }
+          keep2Label={
+            keepHoudiniAvailable ? (
+              <>
+                Keep the Houdini files folder{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">{project.houdiniSubdir}</code>
+              </>
+            ) : undefined
           }
           busy={deleting}
           error={deleteError}
