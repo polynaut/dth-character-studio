@@ -110,6 +110,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 
 import { characterSchema, newId } from '@dth/rom'
 import * as storage from './storage'
+import * as api from './api'
 import { migrateProjects } from './migrate-projects'
 
 beforeEach(() => {
@@ -289,5 +290,50 @@ describe('migrateProjects', () => {
   it('does nothing without a legacy projects.json', async () => {
     await migrateProjects()
     expect(await storage.listRecents()).toEqual([])
+  })
+})
+
+describe('refresh / detection scope (per window)', () => {
+  // Two known projects, each with one character. Characters parsed by
+  // characterSchema carry the current schema, so they're never "stale"; we assert
+  // on which projects the sweep covers, not on staleness. detectAssetVersions and
+  // refreshAllAssets share the same projectsForSweep() enumeration, so detection
+  // stands in for both.
+  async function seedProject(dir: string, name: string): Promise<void> {
+    await storage.createProjectManifest(dir, name)
+    await storage.rememberRecent(`${dir}/${name}.dcsp`, name)
+    const c = characterSchema.parse({
+      id: newId(),
+      name: `${name}Char`,
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    addDir(`${dir}/${name}Char`)
+    files.set(`${dir}/${name}Char/${name}Char.json`, JSON.stringify(c))
+  }
+
+  beforeEach(() => {
+    api.setActiveProjectDir('') // reset the module-level active project between cases
+  })
+
+  it('Home window (no active project) spans every known project', async () => {
+    await seedProject('/games/Alpha', 'Alpha')
+    await seedProject('/games/Beta', 'Beta')
+
+    const report = await api.detectAssetVersions()
+    expect(report.total).toBe(2)
+    expect(report.characters.map((c) => c.project).sort()).toEqual(['Alpha', 'Beta'])
+  })
+
+  it('project window scopes to the active project only', async () => {
+    await seedProject('/games/Alpha', 'Alpha')
+    await seedProject('/games/Beta', 'Beta')
+    api.setActiveProjectDir('/games/Alpha')
+
+    const report = await api.detectAssetVersions()
+    expect(report.total).toBe(1)
+    expect(report.characters.map((c) => c.project)).toEqual(['Alpha'])
   })
 })

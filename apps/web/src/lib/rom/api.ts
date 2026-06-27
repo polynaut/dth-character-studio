@@ -137,6 +137,39 @@ async function getActiveProjectDir(): Promise<string> {
   return activeProjectDirValue
 }
 
+/**
+ * The projects a cross-project sweep — Refresh assets and version detection —
+ * should act on, decided by the window it runs in:
+ *  - In a **project window** (an active project is pinned) → just that project.
+ *    We're working on one project, so refresh/detection stay scoped to it.
+ *  - In the **Home / main window** (no active project) → every **known** project,
+ *    i.e. the recents list. There's no global registry now, so recents is the set
+ *    of projects the app knows about; entries dedupe by normalised folder path.
+ * Unreachable folders (a moved/deleted project, an unreadable `.dcsp`) are skipped
+ * — they simply contribute nothing to the sweep.
+ */
+async function projectsForSweep(): Promise<Array<ProjectInfo>> {
+  const activeDir = await getActiveProjectDir()
+  if (activeDir) {
+    try {
+      return [await resolveProject(activeDir)]
+    } catch {
+      return [] // the pinned project is unreadable — nothing to sweep
+    }
+  }
+  const recents = await storage.listRecents()
+  const dirs = new Set(recents.map((r) => joinPath(dirname(r.path))))
+  const projects: Array<ProjectInfo> = []
+  for (const dir of dirs) {
+    try {
+      projects.push(await resolveProject(dir))
+    } catch {
+      // a moved/deleted recent — skip it
+    }
+  }
+  return projects
+}
+
 // --- Projects (.dcsp files) -----------------------------------------------
 // Projects are folders marked by a `.dcsp` manifest, opened one-per-window. The
 // app keeps only a volatile recents list; opening/creating a project opens (or
@@ -1547,7 +1580,9 @@ export interface RefreshSummary {
 }
 
 /**
- * Re-generate the derived artifacts across every project, **selectively**:
+ * Re-generate the derived artifacts across the in-scope projects (this window's
+ * active project, or every known project from Home — see {@link projectsForSweep}),
+ * **selectively**:
  *  - If anything is out of date, each character regenerates only its affected
  *    artifact(s) — `runtime` → the bundled runtime files + that character's Daz
  *    scripts (their call API may have changed); `csv` → the PoseAsset CSV (its DTH
@@ -1570,9 +1605,9 @@ export async function refreshAllAssets(): Promise<RefreshSummary> {
   // Pass 1 — gather every character with its staleness, so we can tell a targeted
   // refresh (some mismatch → regenerate only what's affected) from a forced full
   // refresh (nothing stale, the user clicked anyway → regenerate everything).
-  // Refresh acts on this window's active project only.
-  const activeDir = await getActiveProjectDir()
-  const projects: Array<ProjectInfo> = activeDir ? [await resolveProject(activeDir)] : []
+  // Scope follows the window: the active project in a project window, every known
+  // project (recents) from the Home window — see projectsForSweep.
+  const projects = await projectsForSweep()
   const results: Array<RefreshResult> = []
   const items: Array<{ project: ProjectInfo; character: Character; targets: StaleTargets }> = []
   for (const project of projects) {
@@ -1760,9 +1795,10 @@ export function isCharacterStale(
 }
 
 /**
- * Detect, across every project, which character-JSON **schema**, generated
- * **script runtime**, and **PoseAsset-CSV DTH release** each character is on
- * locally, versus what the current app produces. Schema + CSV release come from
+ * Detect, across the in-scope projects (this window's active project, or every
+ * known project from Home — see {@link projectsForSweep}), which character-JSON
+ * **schema**, generated **script runtime**, and **PoseAsset-CSV DTH release** each
+ * character is on locally, versus what the current app produces. Schema + CSV come from
  * each JSON (the CSV's release is its `generatedDthVersion` provenance); the
  * runtime is read back from each character's generated Daz script header. Feeds the
  * Refresh assets page, the About summary, and the startup "refresh needed?" check.
@@ -1776,9 +1812,9 @@ export async function detectAssetVersions(): Promise<AssetVersionReport> {
   const app = { schema: CHARACTER_SCHEMA_VERSION, runtime: RUNTIME_VERSION, dthRelease: activeRelease }
 
   const characters: Array<CharacterAssetStatus> = []
-  // Detection acts on this window's active project only (no global registry).
-  const activeDir = await getActiveProjectDir()
-  const projects: Array<ProjectInfo> = activeDir ? [await resolveProject(activeDir)] : []
+  // Scope follows the window: the active project in a project window, every known
+  // project (recents) from the Home window — see projectsForSweep.
+  const projects = await projectsForSweep()
   for (const project of projects) {
     let chars: Array<Character>
     try {

@@ -1047,8 +1047,9 @@ function ToolsPage() {
 }
 
 /**
- * "Refresh assets" tab — re-generate the Daz scripts + PoseAsset CSVs for every
- * character in every project (e.g. after a studio update or a DTH-release switch).
+ * "Refresh assets" tab — re-generate the Daz scripts + PoseAsset CSVs (e.g. after a
+ * studio update or a DTH-release switch). Scope follows the window: the current
+ * project in a project window, every known (recent) project from the Home window.
  * Shows a compact local-vs-app version table (DTH release, character schema, script
  * runtime), then offers the one-click Refresh with a per-run summary. Refresh
  * migrates stale definitions (re-stamping the schema version) and regenerates them.
@@ -1131,9 +1132,10 @@ function RefreshAssetsTab() {
         <h2 className="flex w-fit items-center gap-1 font-semibold">
           Refresh assets
           <InfoPopup label="Refresh assets — more information">
-            Re-generates the Daz scripts and PoseAsset CSVs for every character in every project —
-            run this after updating the studio or switching DTH release so all generated files match
-            the current version. Character definitions aren't changed.
+            Re-generates the Daz scripts and PoseAsset CSVs so all generated files match the current
+            version — run this after updating the studio or switching DTH release. From a project
+            window it covers that project; from the Home window it covers every known (recent)
+            project. Character definitions aren't changed.
           </InfoPopup>
         </h2>
         {/* The action sits up top so it's visible at a glance, above the table; it's

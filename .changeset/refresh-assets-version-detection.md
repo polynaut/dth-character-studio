@@ -12,4 +12,6 @@ The result is a compact **local-vs-app table** (DTH version, character schema, s
 
 **Refresh is now selective:** when something is out of date, each character regenerates only its affected artifact(s); characters that are current are skipped. With nothing out of date, clicking Refresh still force-regenerates everything.
 
+Refresh and its version table are **scoped to the window**: from a **project window** they cover that project; from the **Home window** they cover every **known** project (the recents list). With no global registry, recents is the set of projects the app knows about, so refreshing from Home brings everything up to date in one pass.
+
 Also adds a **character-schema migration framework** in `@dth/rom` (`migrateCharacterData` + the `characterMigrations` registry). The pre-versioning shape fix-ups move into it from the web storage layer, and future breaking schema changes register one idempotent step each (additive fields like v7's `generatedDthVersion` need none).
