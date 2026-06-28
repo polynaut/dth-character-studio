@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { migrateCharacterData, normalizeLegacyCharacter } from './migrate'
-import { CHARACTER_SCHEMA_VERSION } from './types'
+import { CHARACTER_SCHEMA_VERSION, characterSchema } from './types'
 
 describe('migrateCharacterData — pre-versioning normalization', () => {
   it('expands a GEN presetVariant into the selected preset assets', () => {
@@ -70,6 +70,35 @@ describe('migrateCharacterData — version handling', () => {
     const once = migrateCharacterData({ groups: [{ section: 'FAC', label: 'a' }], resetGPBeforeApplying: true })
     const twice = migrateCharacterData(structuredClone(once))
     expect(twice).toEqual(once)
+  })
+})
+
+// v8 added `products` / `productsUnmatched` / `productsScannedAt` — additive with
+// [] / '' defaults, so there is no migrate step; zod fills them when reading an
+// older (v7-shaped) definition. This is the "ritual" test for that change.
+describe('characterSchema — v8 product fields (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('fills product fields with defaults for a v7-shaped definition', () => {
+    // A v7 JSON has none of the v8 keys; zod supplies the defaults on read.
+    const parsed = characterSchema.parse({ ...base, schemaVersion: 7 })
+    expect(parsed.products).toEqual([])
+    expect(parsed.productsUnmatched).toEqual([])
+    expect(parsed.productsScannedAt).toBe('')
+  })
+
+  it('round-trips stored product + unmatched records', () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      products: [
+        { name: 'Golden Palace', sku: '2254-1', artist: 'Meipe', version: '1.0', productType: 'Anatomy', matchMethod: 'SKU Match' },
+      ],
+      productsUnmatched: [{ name: 'Some Prop', technicalName: 'someProp_1234', assetType: 'Node' }],
+      productsScannedAt: '2026-06-28T00:00:00.000Z',
+    })
+    expect(parsed.products[0].sku).toBe('2254-1')
+    expect(parsed.productsUnmatched[0].assetType).toBe('Node')
+    expect(parsed.productsScannedAt).toBe('2026-06-28T00:00:00.000Z')
   })
 })
 

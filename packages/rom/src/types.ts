@@ -362,8 +362,10 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   6 — removed `targetSkeleton` (was never used in generation).
  *   7 — added `generatedDthVersion` (the DTH release the PoseAsset CSV was last
  *       generated for; additive with a '' default — no migration step needed).
+ *   8 — added `products` / `productsUnmatched` / `productsScannedAt` (the Daz
+ *       Products scan; additive with [] / '' defaults — no migration step needed).
  */
-export const CHARACTER_SCHEMA_VERSION = 7
+export const CHARACTER_SCHEMA_VERSION = 8
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -381,8 +383,13 @@ export const CHARACTER_SCHEMA_VERSION = 7
  * History:
  *   1 — initial runtime version (the runtime + generated-script shape as of its
  *       introduction; earlier scripts carry no marker and read as out-of-date).
+ *   2 — added the DthProducts.dsa runtime + the generated Scan_Products_<Name>.dsa
+ *       script (the Daz Products scan feature).
+ *   3 — product scan keys its output by the open Daz scene (per-scene CSVs in a
+ *       per-character folder) and reads texture-based matching, so existing scan
+ *       scripts must be regenerated to write the new per-scene layout.
  */
-export const RUNTIME_VERSION = 1
+export const RUNTIME_VERSION = 3
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -431,6 +438,60 @@ export function poseAssetCsvEra(release: string): string {
   }
   return era
 }
+
+/**
+ * One installed Daz product a product scan matched to an asset used in the
+ * character's scene. Written by the generated `Scan_Products_<Name>.dsa` to the
+ * scan CSV, then stored onto the character when the user accepts the results.
+ * All fields but `name` default to '' so a sparse manifest still parses.
+ */
+export const productRecordSchema = z.object({
+  name: z.string(),
+  sku: z.string().default(''),
+  artist: z.string().default(''),
+  version: z.string().default(''),
+  productType: z.string().default(''),
+  /** How the scan tied this product to a scene asset, e.g. "SKU Match",
+   *  "Direct Match", "Keyword Match", "Third-Party Match", "Genesis Base Match". */
+  matchMethod: z.string().default(''),
+  /** What the product appears to be used for in the scene — distinct roles of the
+   *  matched assets, joined (e.g. "Clothing; Geograft"). Heuristic; '' when unknown. */
+  usage: z.string().default(''),
+  /** The specific scene assets that matched this product (labels, capped + joined),
+   *  so you can see exactly why it's in the scene. */
+  usedBy: z.string().default(''),
+  /** The Daz scene(s)/outfit(s) this product was found in — basenames of the open
+   *  scene file(s) that were scanned (e.g. "KiraDefault_G9_GP"). A character can
+   *  have several scenes; the studio merges per-scene scans and lists every scene a
+   *  product appears in here. Empty for scans that captured no saved scene. */
+  scenes: z.array(z.string()).default([]),
+})
+export type ProductRecord = z.infer<typeof productRecordSchema>
+
+/**
+ * A scene asset (a node or a non-zero morph) a product scan could NOT tie to an
+ * installed product — surfaced alongside the matched products so the user can
+ * attribute it manually.
+ */
+export const unmatchedAssetSchema = z.object({
+  name: z.string(),
+  technicalName: z.string().default(''),
+  /** "Node" or "Morph". */
+  assetType: z.string().default(''),
+  /** Native source file the asset loaded from (the `.duf`/`.dsf` path Daz reports
+   *  for it), or '' when unknown. Provenance the scan captures without the DIM
+   *  manifests — the folder segments often name the vendor/product. */
+  sourceFile: z.string().default(''),
+  /** Author + revision read from the source file's own `asset_info` block (DSON),
+   *  '' when unreadable. This is how unofficial products (absent from DIM, hence
+   *  unmatched) still surface an artist and a real version. */
+  artist: z.string().default(''),
+  version: z.string().default(''),
+  /** The Daz scene(s)/outfit(s) this asset was found unmatched in (scene-file
+   *  basenames). Same per-scene attribution as {@link productRecordSchema.scenes}. */
+  scenes: z.array(z.string()).default([]),
+})
+export type UnmatchedAsset = z.infer<typeof unmatchedAssetSchema>
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -514,6 +575,18 @@ export const characterSchema = z.object({
    * {@link poseAssetCsvEra} to the active release's; Refresh re-stamps it.
    */
   generatedDthVersion: z.string().default(''),
+  /**
+   * Daz products this character uses, as stored from the most recent product
+   * scan (the generated `Scan_Products_<Name>.dsa` analyses the open scene and
+   * writes a CSV; the user reviews + stores it from the character page). Empty
+   * until a scan is stored. Provenance only — does NOT affect generation.
+   */
+  products: z.array(productRecordSchema).default([]),
+  /** Scene assets the last stored scan could not match to a product — kept for
+   *  manual review next to {@link products}. */
+  productsUnmatched: z.array(unmatchedAssetSchema).default([]),
+  /** ISO timestamp the products above were last stored from a scan; '' = never. */
+  productsScannedAt: z.string().default(''),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —

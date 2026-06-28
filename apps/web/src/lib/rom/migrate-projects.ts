@@ -76,8 +76,10 @@ export async function migrateProjects(): Promise<void> {
         createdAt: project.createdAt ?? new Date().toISOString(),
         ...oldSubs,
         // New per-project fields (defaults preserve today's behaviour): the assets
-        // feature is off and characters stay directly under the project root.
+        // and Daz-products features are off and characters stay directly under the
+        // project root.
         assetsEnabled: false,
+        dazProductsEnabled: false,
         charactersSubdir: '',
       }
       await writeManifest(dir, manifest)

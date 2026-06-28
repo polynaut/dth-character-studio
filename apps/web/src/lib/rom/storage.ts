@@ -35,6 +35,7 @@ import {
 import dthUtilsRuntime from './runtime/DthUtils.dsa?raw'
 import dthOptionsRuntime from './runtime/DthOptions.dsa?raw'
 import dthWorkflowRuntime from './runtime/DthWorkflow.dsa?raw'
+import dthProductsRuntime from './runtime/DthProducts.dsa?raw'
 
 import { characterScriptName } from '@dth/rom'
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
@@ -107,6 +108,21 @@ async function dataDir(): Promise<string> {
 /** Resolve a path inside the per-user data directory. */
 export async function dataPath(...parts: Array<string>): Promise<string> {
   return join(await dataDir(), ...parts)
+}
+
+/**
+ * The FOLDER a character's product-scan CSVs are written into and read back from,
+ * under app-local-data: `product-scans/<projectId>/<characterId>/`. Keyed by the
+ * stable `.dcsp` manifest id + character UUID (not names), so it survives renames
+ * and folder moves. The generated `Scan_Products_<Name>.dsa` writes one CSV per
+ * Daz scene into here (named after the open scene); the character page reads every
+ * CSV and merges them. Both sides MUST resolve it through here so they agree.
+ */
+export async function productScanDir(
+  projectId: string,
+  characterId: string,
+): Promise<string> {
+  return dataPath('product-scans', projectId, characterId)
 }
 
 let versionPromise: Promise<string> | null = null
@@ -593,6 +609,9 @@ const RUNTIME_FILES: Record<string, string> = {
   'DthUtils.dsa': dthUtilsRuntime,
   'DthOptions.dsa': dthOptionsRuntime,
   'DthWorkflow.dsa': dthWorkflowRuntime,
+  // Product-scan runtime — used only by the generated Scan_Products_<Name>.dsa
+  // (the Daz Products feature), but installed for every project (harmless when off).
+  'DthProducts.dsa': dthProductsRuntime,
 }
 
 /** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install root,
@@ -780,6 +799,13 @@ export interface StudioSettings {
    * (otls/presets/toolbar) into it.
    */
   houdiniDocsFolder: string
+  /**
+   * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
+   * by the Daz Products scan to resolve scene assets to installed products
+   * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs
+   * but reports every asset as unmatched).
+   */
+  dimManifestsFolder: string
   // Per-project behaviour defaults (dazSubdir / houdiniSubdir / createHoudiniSubdir)
   // now live in each project's .dcsp manifest (see DcspManifest), not in app-global
   // settings — they describe a project, not the machine.
@@ -831,6 +857,7 @@ function defaultSettings(): StudioSettings {
     currentDthExporterVersion: '',
     dazInstallFolder: '',
     houdiniDocsFolder: '',
+    dimManifestsFolder: '',
     dazAssetsFolders: [],
     dazMorphsSource: '',
     dazMorphsDest: '',
@@ -874,6 +901,10 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.houdiniDocsFolder === 'string'
           ? raw.houdiniDocsFolder
           : defaults.houdiniDocsFolder,
+      dimManifestsFolder:
+        typeof raw.dimManifestsFolder === 'string'
+          ? raw.dimManifestsFolder
+          : defaults.dimManifestsFolder,
       dazAssetsFolders: Array.isArray(raw.dazAssetsFolders)
         ? raw.dazAssetsFolders.filter((f: unknown): f is string => typeof f === 'string')
         : defaults.dazAssetsFolders,
@@ -944,6 +975,9 @@ export interface DcspManifest {
   createHoudiniSubdir: boolean
   /** Whether the project shows the reusable Daz-scene "assets" feature (off = characters only). */
   assetsEnabled: boolean
+  /** Whether the project generates a per-character `Scan_Products_<Name>.dsa` that
+   *  analyses the open Daz scene for used products (off by default). */
+  dazProductsEnabled: boolean
   /** Relative folder the character folders live in, under the project root. '' = the
    *  project root itself (e.g. 'assets/characters' → <project>/assets/characters/<char>). */
   charactersSubdir: string
@@ -959,6 +993,7 @@ function manifestDefaults(dir: string): DcspManifest {
     houdiniSubdir: 'houdini',
     createHoudiniSubdir: true,
     assetsEnabled: false,
+    dazProductsEnabled: false,
     charactersSubdir: '',
   }
 }
@@ -1008,6 +1043,10 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
           : defaults.createHoudiniSubdir,
       assetsEnabled:
         typeof raw.assetsEnabled === 'boolean' ? raw.assetsEnabled : defaults.assetsEnabled,
+      dazProductsEnabled:
+        typeof raw.dazProductsEnabled === 'boolean'
+          ? raw.dazProductsEnabled
+          : defaults.dazProductsEnabled,
       charactersSubdir:
         typeof raw.charactersSubdir === 'string'
           ? raw.charactersSubdir

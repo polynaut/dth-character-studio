@@ -133,6 +133,7 @@ describe('project manifest (.dcsp)', () => {
     expect(m.createHoudiniSubdir).toBe(true)
     // New per-project fields default to "characters only, at the project root".
     expect(m.assetsEnabled).toBe(false)
+    expect(m.dazProductsEnabled).toBe(false)
     expect(m.charactersSubdir).toBe('')
   })
 

@@ -1,9 +1,17 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { z } from 'zod'
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   FolderInput,
   FolderOpen,
@@ -48,6 +56,7 @@ import {
   deleteFiles,
   fetchCharacter,
   fetchPoseAssets,
+  fetchProductScan,
   fetchProject,
   fetchSettings,
   fileExists,
@@ -66,9 +75,21 @@ import {
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
+import { open as openExternal } from '@tauri-apps/plugin-shell'
+
+/**
+ * Daz readme page for a DIM product SKU ("86958-1" → store id `86958`). It resolves
+ * by SKU, names the product, and links to its store page — the only SKU-keyed Daz
+ * URL that reliably maps to a product. Returns '' when the SKU isn't a numeric DIM
+ * store id (LOCAL_USER / third-party products carry none → no link).
+ */
+function dazProductUrl(sku: string): string {
+  const id = (sku || '').split('-')[0]?.trim() ?? ''
+  return /^\d+$/.test(id) ? `https://docs.daz3d.com/doku.php/public/read_me/index/${id}/start` : ''
+}
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
-import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
+import { characterSkinning, characterSlug, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
@@ -87,8 +108,8 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
     const sceneFolder = character.scenePath
       ? character.scenePath.replace(/[\\/][^\\/]*$/, '')
       : ''
-    const [project, settings, catalog, location, sceneExists, sceneFolderExists] = await Promise.all(
-      [
+    const [project, settings, catalog, location, sceneExists, sceneFolderExists, productScan] =
+      await Promise.all([
         fetchProject({ data: { projectId } }),
         fetchSettings(),
         fetchPoseAssets(),
@@ -97,8 +118,11 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
           ? fileExists({ data: { path: character.scenePath } })
           : Promise.resolve(false),
         sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
-      ],
-    )
+        // Best-effort: a scan CSV exists only after the user runs the generated
+        // Scan_Products script in Daz. Harmless when the feature is off (the UI
+        // section that consumes it is gated on project.dazProductsEnabled).
+        fetchProductScan({ data: { projectId, id } }),
+      ])
     // Preset ROM block lengths, measured live from the actual .duf assets. Null
     // (best-effort) when an included asset can't be read — the editor then shows
     // a notice and generation hard-errors; opening the character never fails.
@@ -112,6 +136,7 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
       sceneExists,
       sceneFolderExists,
       presetFrames,
+      productScan,
     }
   },
   component: CharacterPageRoute,
@@ -1304,6 +1329,7 @@ function CharacterPage() {
     sceneExists,
     sceneFolderExists,
     presetFrames: initialFrames,
+    productScan,
   } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
@@ -1317,6 +1343,8 @@ function CharacterPage() {
   // on router.invalidate() to complete in a second, separate render.
   const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
+  const [storingProducts, setStoringProducts] = useState(false)
+  const [expandedProducts, setExpandedProducts] = useState<Set<number>>(() => new Set())
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
@@ -1454,6 +1482,33 @@ function CharacterPage() {
       notifyGenerated(toastMsg ?? `Saved “${saved.name}”`, result)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // Store the most recent product scan onto the character. Products don't affect
+  // generated scripts, so this just persists the draft + the scan fields — no
+  // regeneration. Merges into the current draft so any in-progress edits are kept.
+  async function storeProducts() {
+    if (!productScan?.scan) return
+    setStoringProducts(true)
+    try {
+      const next: Character = {
+        ...character,
+        products: productScan.scan.products,
+        productsUnmatched: productScan.scan.unmatched,
+        productsScannedAt: new Date().toISOString(),
+      }
+      const saved = await saveCharacter({ data: { projectId, character: next } })
+      setCharacter(saved)
+      setBaseline(saved)
+      void router.invalidate()
+      toast.success(
+        `Stored ${saved.products.length} product${saved.products.length === 1 ? '' : 's'} on “${saved.name}”`,
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setStoringProducts(false)
     }
   }
 
@@ -1742,6 +1797,229 @@ function CharacterPage() {
           </p>
         )}
       </section>
+
+      {project?.dazProductsEnabled && (
+        <section className="mb-8 rounded-lg border bg-card p-5">
+          <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+            Daz Products
+            <InfoPopup label="Daz Products — more information">
+              Open this character's scene in Daz and run the generated{' '}
+              <code>Scan_Products_{characterSlug(character)}.dsa</code>. It analyses the open scene,
+              matches the used assets to your installed products, and writes a CSV the studio reads
+              back here — review the results below and store them on the character.
+            </InfoPopup>
+          </h2>
+
+          {!settings.dimManifestsFolder.trim() && (
+            <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
+              No DAZ Install Manager manifests folder is set, so a scan can list used assets but
+              can't name products.{' '}
+              <Link to="/settings" className="underline">
+                Set it in Settings → General
+              </Link>
+              .
+            </p>
+          )}
+
+          <p className="mb-2 text-sm text-muted-foreground">
+            Run <code>Scan_Products_{characterSlug(character)}.dsa</code> with this character's scene
+            open in Daz, then check for results. Results are kept per scene — open each outfit/look
+            variant and run it again to map products to every scene.
+          </p>
+          {scriptsAbs && (
+            <PathCode path={scriptsAbs}>
+              <span className="text-muted-foreground/60">{scriptsLib}</span>
+              <span className="text-foreground/80">{scriptsSuffix}</span>
+            </PathCode>
+          )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void router.invalidate()}>
+              Check for scan results
+            </Button>
+            {character.products.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                Stored: {character.products.length} product
+                {character.products.length === 1 ? '' : 's'}
+                {character.productsScannedAt
+                  ? ` (${new Date(character.productsScannedAt).toLocaleString()})`
+                  : ''}
+              </span>
+            )}
+          </div>
+
+          {productScan?.exists && productScan.scan ? (
+            <div className="mt-4 rounded-md border p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <span className="font-medium">
+                  Scan results — {productScan.scan.products.length} product
+                  {productScan.scan.products.length === 1 ? '' : 's'}
+                  {productScan.scan.unmatched.length
+                    ? `, ${productScan.scan.unmatched.length} unmatched`
+                    : ''}
+                  {productScan.scan.scenes.length > 1
+                    ? ` · across ${productScan.scan.scenes.length} scenes`
+                    : productScan.scan.scenes.length === 1
+                      ? ` · ${productScan.scan.scenes[0]}`
+                      : ''}
+                </span>
+                <Button onClick={storeProducts} disabled={storingProducts}>
+                  <Save />{' '}
+                  {storingProducts
+                    ? 'Storing…'
+                    : character.products.length
+                      ? 'Update stored products'
+                      : 'Store on character'}
+                </Button>
+              </div>
+
+              {productScan.scan.products.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="pr-3 pb-1 font-medium">Product</th>
+                        <th className="pr-3 pb-1 font-medium">Used as</th>
+                        <th className="pr-3 pb-1 font-medium">SKU</th>
+                        <th className="pr-3 pb-1 font-medium">Artist</th>
+                        <th className="pr-3 pb-1 font-medium">Version</th>
+                        <th className="pr-3 pb-1 font-medium">Match</th>
+                        {productScan.scan.scenes.length > 1 && (
+                          <th className="pr-3 pb-1 font-medium">Scene(s)</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productScan.scan.products.map((p, i) => {
+                        const url = dazProductUrl(p.sku)
+                        const multiScene = productScan.scan!.scenes.length > 1
+                        const colCount = multiScene ? 7 : 6
+                        const open = expandedProducts.has(i)
+                        const assets = p.usedBy ? p.usedBy.split('; ').filter(Boolean) : []
+                        return (
+                          <Fragment key={`${p.sku}-${p.name}-${i}`}>
+                            <tr className="border-t">
+                              <td className="py-1 pr-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedProducts((prev) => {
+                                      const next = new Set(prev)
+                                      if (next.has(i)) next.delete(i)
+                                      else next.add(i)
+                                      return next
+                                    })
+                                  }
+                                  className="mr-1 inline-flex align-middle text-muted-foreground hover:text-foreground"
+                                  aria-label={open ? 'Hide matched assets' : 'Show matched assets'}
+                                >
+                                  {open ? (
+                                    <ChevronDown className="size-3.5" />
+                                  ) : (
+                                    <ChevronRight className="size-3.5" />
+                                  )}
+                                </button>
+                                {url ? (
+                                  <a
+                                    href={url}
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      void openExternal(url)
+                                    }}
+                                    className="inline-flex items-center gap-1 text-primary underline underline-offset-2"
+                                    title="Open the Daz product page"
+                                  >
+                                    {p.name}
+                                    <ExternalLink className="size-3.5 shrink-0" />
+                                  </a>
+                                ) : (
+                                  p.name
+                                )}
+                              </td>
+                              <td
+                                className="py-1 pr-3 text-muted-foreground"
+                                title={p.usedBy ? `Used by: ${p.usedBy}` : undefined}
+                              >
+                                {p.usage || '—'}
+                              </td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.sku}</td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.artist}</td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.version}</td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.matchMethod}</td>
+                              {multiScene && (
+                                <td className="py-1 pr-3 text-muted-foreground">
+                                  {p.scenes.join(', ')}
+                                </td>
+                              )}
+                            </tr>
+                            {open && (
+                              <tr className="bg-muted/20">
+                                <td colSpan={colCount} className="px-3 py-2 pl-7">
+                                  <div className="mb-1 text-xs text-muted-foreground">
+                                    Found by {assets.length} scene asset
+                                    {assets.length === 1 ? '' : 's'}
+                                    {multiScene ? ` · in ${p.scenes.join(', ')}` : ''}
+                                  </div>
+                                  {assets.length ? (
+                                    <ul className="space-y-0.5 text-sm">
+                                      {assets.map((a, j) => (
+                                        <li key={`${a}-${j}`} className="text-foreground/80">
+                                          {a}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">
+                                      No specific scene assets were recorded for this product.
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No products matched. The assets below are what the scan found in the scene.
+                </p>
+              )}
+
+              {productScan.scan.unmatched.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">
+                    {productScan.scan.unmatched.length} unmatched asset
+                    {productScan.scan.unmatched.length === 1 ? '' : 's'} (no product match)
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {productScan.scan.unmatched.map((a, i) => (
+                      <li key={`${a.technicalName}-${a.name}-${i}`}>
+                        <span className="text-foreground/80">{a.name}</span>{' '}
+                        <span className="text-muted-foreground">
+                          ({a.assetType}
+                          {a.artist ? ` — ${a.artist}` : ''}
+                          {a.version ? ` v${a.version}` : ''}
+                          {a.sourceFile ? ` — ${displayPath(a.sourceFile)}` : ''})
+                          {productScan.scan!.scenes.length > 1 && a.scenes.length
+                            ? ` · ${a.scenes.join(', ')}`
+                            : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No scan results found yet. Run the script in Daz, then click “Check for scan results”.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">

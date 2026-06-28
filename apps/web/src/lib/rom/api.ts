@@ -5,9 +5,12 @@ import { z } from 'zod'
 
 import {
   characterScriptName,
+  characterSlug,
   generateAll,
   genRomIncludes,
   jcmIsBaseRom,
+  mergeProductScans,
+  parseProductScanCsv,
   poseAssetFileName,
   resolveRomPaths,
 } from '@dth/rom'
@@ -29,7 +32,13 @@ import {
   sectionsFromFlatFrames,
 } from '@dth/rom'
 
-import type { Character, ImportedPose, PresetFrames } from '@dth/rom'
+import type {
+  Character,
+  ImportedPose,
+  MergedProductScan,
+  PresetFrames,
+  ProductScan,
+} from '@dth/rom'
 import type { StudioSettings } from './storage'
 
 export type {
@@ -78,6 +87,7 @@ export interface ProjectInfo extends storage.Project {
   houdiniSubdir: string
   createHoudiniSubdir: boolean
   assetsEnabled: boolean
+  dazProductsEnabled: boolean
   charactersSubdir: string
 }
 
@@ -93,6 +103,7 @@ async function resolveProject(projectDir: string): Promise<ProjectInfo> {
     houdiniSubdir: m.houdiniSubdir,
     createHoudiniSubdir: m.createHoudiniSubdir,
     assetsEnabled: m.assetsEnabled,
+    dazProductsEnabled: m.dazProductsEnabled,
     charactersSubdir: m.charactersSubdir,
     ...(m.createdAt ? { createdAt: m.createdAt } : {}),
   }
@@ -262,11 +273,19 @@ const projectSettingsInput = z.object({
   houdiniSubdir: z.string().default('houdini'),
   createHoudiniSubdir: z.boolean().default(true),
   assetsEnabled: z.boolean().default(false),
+  dazProductsEnabled: z.boolean().default(false),
   charactersSubdir: z.string().default(''),
 })
 export async function saveProjectSettings({ data }: { data: unknown }): Promise<ProjectInfo> {
-  const { projectId, dazSubdir, houdiniSubdir, createHoudiniSubdir, assetsEnabled, charactersSubdir } =
-    projectSettingsInput.parse(data)
+  const {
+    projectId,
+    dazSubdir,
+    houdiniSubdir,
+    createHoudiniSubdir,
+    assetsEnabled,
+    dazProductsEnabled,
+    charactersSubdir,
+  } = projectSettingsInput.parse(data)
   const dir = await projectPath(projectId)
   const manifest = await storage.readManifest(dir)
   // Validate + normalise the relative folder (throws on absolute paths / `..`); '' = project root.
@@ -286,9 +305,32 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     houdiniSubdir,
     createHoudiniSubdir,
     assetsEnabled,
+    dazProductsEnabled,
     charactersSubdir: nextCharactersSubdir,
   })
-  return resolveProject(dir)
+  const project = await resolveProject(dir)
+  // Toggling Daz Products on/off changes which Daz scripts each character emits, so
+  // regenerate the project's Daz scripts to add (or clean up) the per-character
+  // Scan_Products_<Name>.dsa right away — otherwise it wouldn't appear until the
+  // next per-character Save or a Tools → Refresh. Daz target only (the Houdini CSV
+  // is unaffected); per-character failures are swallowed so the save still succeeds.
+  if (dazProductsEnabled !== manifest.dazProductsEnabled) {
+    try {
+      const characters = await storage.listCharacters(charsRoot(project))
+      for (const character of characters) {
+        try {
+          await generateCharacterFiles({
+            data: { projectId: project.path, id: character.id, targets: { daz: true, houdini: false } },
+          })
+        } catch {
+          // one bad character shouldn't block the others or the settings save
+        }
+      }
+    } catch {
+      // unreadable characters root — nothing to regenerate
+    }
+  }
+  return project
 }
 
 // --- Characters (scoped to a project) -------------------------------------
@@ -686,6 +728,63 @@ export async function fileExists({ data }: { data: unknown }): Promise<boolean> 
   }
 }
 
+/**
+ * Best-effort auto-detect of the DAZ Install Manager `ManifestFiles` folder (the
+ * Daz Products scan's product database). DIM's location is user-configured and
+ * isn't reliably derivable, so we probe the standard layout across drive letters
+ * plus the Public Documents fallback and return the first that exists, or '' when
+ * none match (the user then sets it by hand). ~30 cheap `exists()` probes.
+ */
+export async function detectDimManifestsFolder(): Promise<string> {
+  if (!isTauri()) return ''
+  const candidates: Array<string> = []
+  for (let c = 'C'.charCodeAt(0); c <= 'Z'.charCodeAt(0); c++) {
+    candidates.push(`${String.fromCharCode(c)}:/DAZ 3D/Install Manager/ManifestFiles`)
+  }
+  candidates.push('C:/Users/Public/Documents/DAZ 3D/InstallManager/ManifestFiles')
+  for (const path of candidates) {
+    try {
+      if (await exists(path)) return path
+    } catch {
+      // unprobeable drive — skip
+    }
+  }
+  return ''
+}
+
+/**
+ * Read back a character's product scans (written from Daz by the generated
+ * `Scan_Products_<Name>.dsa`). The script writes one CSV per Daz scene into the
+ * character's scan folder; this reads every CSV and merges them so each product /
+ * unmatched asset is attributed to the scene(s) it was found in. Best-effort —
+ * returns `{ exists: false }` when no scan has been run or the folder is unreadable.
+ */
+export async function fetchProductScan({
+  data,
+}: {
+  data: unknown
+}): Promise<{ exists: boolean; scan: MergedProductScan | null; dir: string }> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const project = await resolveProject(projectId)
+  const dir = await storage.productScanDir(project.id, id)
+  try {
+    if (!(await exists(dir))) return { exists: false, scan: null, dir }
+    const scans: Array<ProductScan> = []
+    for (const entry of await readDir(dir)) {
+      if (!entry.isFile || !entry.name.toLowerCase().endsWith('.csv')) continue
+      try {
+        scans.push(parseProductScanCsv(await readTextFile(joinPath(dir, entry.name))))
+      } catch {
+        // skip an individual unreadable CSV
+      }
+    }
+    if (scans.length === 0) return { exists: false, scan: null, dir }
+    return { exists: true, scan: mergeProductScans(scans), dir }
+  } catch {
+    return { exists: false, scan: null, dir }
+  }
+}
+
 /** Whether `path` is a directory (false, never throws, when it can't be probed).
  *  Used to resolve a dropped folder vs file in the create-project drop zone. */
 export async function isDirectory(path: string): Promise<boolean> {
@@ -1007,6 +1106,7 @@ const settingsInput = z.object({
   currentDthExporterVersion: z.string().default(''),
   dazInstallFolder: z.string().default(''),
   houdiniDocsFolder: z.string().default(''),
+  dimManifestsFolder: z.string().default(''),
   dazAssetsFolders: z.array(z.string()).default([]),
   dazMorphsSource: z.string().default(''),
   dazMorphsDest: z.string().default(''),
@@ -1517,7 +1617,18 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // The active DTH release selects the PoseAsset CSV era/variant (the Daz scripts
   // are release-independent — tied to RUNTIME_VERSION only).
   const activeRelease = catalog.error ? '' : catalog.version
-  const files = generateAll(versioned, romPaths, frames, outDir, activeRelease)
+  const settings = await storage.getSettings()
+  // When the project enables Daz Products, also emit the per-character product-scan
+  // script. The "on" flag + the DIM folder + the derived per-scene output folder
+  // reach the pure core only here, as the trailing generateAll argument.
+  const scanProducts = project.dazProductsEnabled
+    ? {
+        dimManifestPath: settings.dimManifestsFolder,
+        outputDir: await storage.productScanDir(project.id, character.id),
+        dazLibraryFolder: settings.dazLibraryFolder,
+      }
+    : undefined
+  const files = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
 
   // Houdini deliverable(s) — <Name>_pose_asset.csv — live in the character's own folder.
   if (writeHoudini) {
@@ -1549,7 +1660,6 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
 
   // The character script goes in its own <project>/<character>/ subfolder of the
   // shared scripts folder; the runtime it imports is installed once in the root.
-  const settings = await storage.getSettings()
   const dazFiles = files.filter((file) => file.target === 'daz')
   let scriptsDir: string | null = null
   let scriptsError: string | null = null
@@ -1561,15 +1671,19 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     try {
       await storage.copyRuntimeFiles(root)
       await storage.writeFilesToFolder(charDir, dazFiles)
-      // Drop the other script variant when the combined/split choice changed:
-      // keep only the .dsa names just written (<base>, ROM_<base>, Export_<base>).
+      // Drop the other script variant when the combined/split choice changed, and
+      // the scan script when Daz Products is turned off: keep only the .dsa names
+      // just written (<base>, ROM_<base>, Export_<base>, Scan_Products_<slug>).
       const dazBase = characterScriptName(character)
       const writtenDaz = dazFiles.map((file) => file.fileName)
       await storage.removeFilesFromFolder(
         charDir,
-        [`${dazBase}.dsa`, `ROM_${dazBase}.dsa`, `Export_${dazBase}.dsa`].filter(
-          (name) => !writtenDaz.includes(name),
-        ),
+        [
+          `${dazBase}.dsa`,
+          `ROM_${dazBase}.dsa`,
+          `Export_${dazBase}.dsa`,
+          `Scan_Products_${characterSlug(character)}.dsa`,
+        ].filter((name) => !writtenDaz.includes(name)),
       )
       // Migration: older versions wrote the script flat in the root — drop this
       // character's flat-layout script (current + previous name) if it lingers.

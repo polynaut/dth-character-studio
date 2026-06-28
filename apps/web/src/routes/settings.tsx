@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '#/components/ui/select.tsx'
 import {
+  detectDimManifestsFolder,
   ensureNetworkDrives,
   fetchActiveProject,
   fetchAppDataFolder,
@@ -328,14 +329,34 @@ function SettingsPage() {
   const [pHoudiniSubdir, setPHoudiniSubdir] = useState(project?.houdiniSubdir ?? 'houdini')
   const [pCreateHoudini, setPCreateHoudini] = useState(project?.createHoudiniSubdir ?? true)
   const [pAssetsEnabled, setPAssetsEnabled] = useState(project?.assetsEnabled ?? false)
+  const [pDazProductsEnabled, setPDazProductsEnabled] = useState(
+    project?.dazProductsEnabled ?? false,
+  )
   const [pCharactersSubdir, setPCharactersSubdir] = useState(project?.charactersSubdir ?? '')
   const [savingProject, setSavingProject] = useState(false)
+  const [detectingDim, setDetectingDim] = useState(false)
+
+  async function onDetectDimFolder() {
+    setDetectingDim(true)
+    try {
+      const found = await detectDimManifestsFolder()
+      if (found) {
+        setSettings((s) => ({ ...s, dimManifestsFolder: found }))
+        toast.success(`Found DIM manifests at ${displayPath(found)}`)
+      } else {
+        toast.error("Couldn't auto-detect the DIM manifests folder — set it manually.")
+      }
+    } finally {
+      setDetectingDim(false)
+    }
+  }
   const projectDirty =
     !!project &&
     (pDazSubdir !== project.dazSubdir ||
       pHoudiniSubdir !== project.houdiniSubdir ||
       pCreateHoudini !== project.createHoudiniSubdir ||
       pAssetsEnabled !== project.assetsEnabled ||
+      pDazProductsEnabled !== project.dazProductsEnabled ||
       pCharactersSubdir !== project.charactersSubdir)
 
   async function onSaveProjectSettings() {
@@ -349,6 +370,7 @@ function SettingsPage() {
           houdiniSubdir: pHoudiniSubdir.trim() || 'houdini',
           createHoudiniSubdir: pCreateHoudini,
           assetsEnabled: pAssetsEnabled,
+          dazProductsEnabled: pDazProductsEnabled,
           charactersSubdir: pCharactersSubdir.trim(),
         },
       })
@@ -470,7 +492,8 @@ function SettingsPage() {
     settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
-    settings.houdiniDocsFolder !== initial.houdiniDocsFolder
+    settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
+    settings.dimManifestsFolder !== initial.dimManifestsFolder
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
@@ -654,6 +677,38 @@ function SettingsPage() {
                 </>
               }
             />
+            <div>
+              <FolderField
+                label="DAZ Install Manager manifests folder (optional)"
+                value={settings.dimManifestsFolder}
+                placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
+                onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
+                info={
+                  <>
+                    The <strong>ManifestFiles</strong> folder DAZ Install Manager writes (a folder
+                    of <code>.dsx</code> files) — see DIM → Advanced Settings → “Download/Install”.
+                    The <strong>Daz Products</strong> scan reads it to resolve scene assets to
+                    product names, SKUs and artists. Leave empty to skip product naming (the scan
+                    still lists used assets).
+                  </>
+                }
+                help={
+                  <>
+                    Read by the per-character product scan to identify installed products.
+                  </>
+                }
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={onDetectDimFolder}
+                disabled={detectingDim}
+              >
+                {detectingDim ? 'Detecting…' : 'Detect installed location'}
+              </Button>
+            </div>
 
             {canInstallRelease ? (
               <p className="text-sm text-muted-foreground">
@@ -938,6 +993,20 @@ function SettingsPage() {
                   </InfoPopup>
                 </span>
                 <Switch checked={pAssetsEnabled} onCheckedChange={setPAssetsEnabled} />
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
+                <span className="flex items-center gap-1 font-medium">
+                  Enable Daz Products
+                  <InfoPopup label="Enable Daz Products — more information">
+                    Generates a <strong>Scan_Products_&lt;Character&gt;.dsa</strong> for each
+                    character. Open the character's scene in Daz and run it: it analyses the scene
+                    for used products and writes a CSV the character page reads back, so you can
+                    review and store the found products. Set the{' '}
+                    <strong>DAZ Install Manager manifests folder</strong> in the General tab for
+                    product names &amp; SKUs. Off by default.
+                  </InfoPopup>
+                </span>
+                <Switch checked={pDazProductsEnabled} onCheckedChange={setPDazProductsEnabled} />
               </div>
               <Button onClick={onSaveProjectSettings} disabled={savingProject || !projectDirty}>
                 <Save /> {savingProject ? 'Saving…' : projectDirty ? 'Save' : 'Saved'}

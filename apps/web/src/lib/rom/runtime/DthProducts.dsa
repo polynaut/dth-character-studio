@@ -1,0 +1,1556 @@
+// DAZ Studio version 4.22.0.16 filetype DAZ Script
+
+// DTH Product Scan runtime — bundled into DTH Character Studio.
+//
+// Vendored from DazToHue-Scripts (feature/product-analyzer, products/*.dsa):
+// getUsedAssets.dsa + getInstalledProducts.dsa + createListing.dsa, collapsed
+// into one functions-only runtime. Differences from the source:
+//   - NO top-level execution and NO hardcoded DIM path — the studio's generated
+//     Scan_Products_<Name>.dsa calls DthScanProducts(config), passing the DIM
+//     manifests folder and the output CSV path.
+//   - The .txt licensing report is replaced by a CSV writer (writeProductsCsv).
+//   - Adds exact source-file → product matching (from the manifest file lists) and
+//     resolves content-relative source paths under the library to read versions.
+// Keep in sync with the DazToHue-Scripts source; bump RUNTIME_VERSION (@dth/rom)
+// when this changes so "Refresh assets" regenerates the scan scripts.
+//
+// Like the other runtime files, this loads DthUtils.dsa relative to the INVOKING
+// (top-level) script's folder — getScriptFileName() resolves to that script, not
+// this file. The studio rewrites the bare "DthUtils.dsa" include to the hidden
+// "../../.DthUtils.dsa" at install time.
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+if (typeof verbose !== "function")
+  include(dir_self.filePath("DthUtils.dsa"));
+
+// ── Scene walk (from getUsedAssets.dsa) ──────────────────────────────────────
+
+// Strip the '#fragment' from a Daz asset id/URI and URL-decode it, leaving the
+// source file path (e.g. ".../data/Vendor/Product/Thing.dsf").
+function stripAssetIdFragment(s) {
+  var str = String(s);
+  var hash = str.indexOf("#");
+  var path = hash !== -1 ? str.substring(0, hash) : str;
+  try {
+    path = decodeURIComponent(path);
+  } catch (e) {
+    // leave encoded if it isn't valid percent-encoding
+  }
+  return path;
+}
+
+// Pull a source-file path off a single DzElement (node, object, shape, geometry or
+// modifier). Tries the asset URI, the asset file-info, then the asset id — but only
+// accepts values that actually look like a file path (contain a '/'), so a bare
+// in-file id ("Genesis9") isn't mistaken for a path. '' when nothing usable.
+function elementAssetPath(element) {
+  if (!element) return "";
+  try {
+    if (typeof element.getAssetUri === "function") {
+      var uri = element.getAssetUri();
+      if (uri) {
+        if (typeof uri.getFilePath === "function") {
+          var fp = String(uri.getFilePath());
+          if (fp) return fp;
+        }
+        var us = String(uri);
+        if (us && us.indexOf("/") !== -1) return stripAssetIdFragment(us);
+      }
+    }
+  } catch (e) {}
+  try {
+    if (typeof element.getAssetFileInfo === "function") {
+      var afi = element.getAssetFileInfo();
+      if (afi) {
+        if (typeof afi.getFilePath === "function") {
+          var p = String(afi.getFilePath());
+          if (p) return p;
+        }
+        if (typeof afi.getUri === "function") {
+          var u2 = afi.getUri();
+          if (u2) {
+            if (typeof u2.getFilePath === "function") {
+              var p2 = String(u2.getFilePath());
+              if (p2) return p2;
+            }
+            var us2 = String(u2);
+            if (us2 && us2.indexOf("/") !== -1) return stripAssetIdFragment(us2);
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  try {
+    if (typeof element.getAssetId === "function") {
+      var id = String(element.getAssetId());
+      if (id && id.indexOf("/") !== -1) return stripAssetIdFragment(id);
+    }
+  } catch (e) {}
+  return "";
+}
+
+// Best-effort native source file for a node or morph modifier — the .duf/.dsf it
+// loaded from. For a node the provenance usually isn't on the node itself but on
+// its geometry (object → current shape → geometry), so fall through to those.
+// Never throws; '' when Daz can't tell us (provenance is a bonus, not required).
+function assetSourceFile(element) {
+  if (!element) return "";
+  var p = elementAssetPath(element);
+  if (p) return p;
+
+  // Nodes: the source .dsf rides on the object / shape / geometry, not the node.
+  try {
+    if (typeof element.getObject === "function") {
+      var obj = element.getObject();
+      if (obj) {
+        p = elementAssetPath(obj);
+        if (p) return p;
+        if (typeof obj.getCurrentShape === "function") {
+          var shape = obj.getCurrentShape();
+          if (shape) {
+            p = elementAssetPath(shape);
+            if (p) return p;
+            if (typeof shape.getGeometry === "function") {
+              var geom = shape.getGeometry();
+              if (geom) {
+                p = elementAssetPath(geom);
+                if (p) return p;
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return "";
+}
+
+// Normalise a content path — a DIM manifest VALUE ("Content/data/.../X.dsf") or a
+// node's native source file ("/data/.../X.dsf", or an absolute install path) — to a
+// comparable key: lowercase, forward slashes, anchored at the content tree
+// ("data/…" or "runtime/…"). Lets a used asset's source file be matched back to the
+// exact product whose manifest installed that file.
+function normalizeContentPath(p) {
+  if (!p) return "";
+  var s = String(p).replace(/\\/g, "/").toLowerCase();
+  s = s.replace(/^\/?content\//, ""); // DIM manifests prefix "Content/"
+  var di = s.indexOf("/data/");
+  if (di !== -1) return s.substring(di + 1); // → "data/…"
+  if (s.indexOf("data/") === 0) return s;
+  var ri = s.indexOf("/runtime/");
+  if (ri !== -1) return s.substring(ri + 1); // → "runtime/…"
+  if (s.indexOf("runtime/") === 0) return s;
+  return s.replace(/^\/+/, "");
+}
+
+// Reduce a content/texture path to its product-identifying "vendor/product" folder
+// — the two path segments after "data/" or "Textures/". DAZ keeps a product's data
+// and texture files under the same "<Vendor>/<Product>" root, so a node's texture
+// path ("…/Textures/Luthbellina/Adventure Clothes/x.jpg") and the product's manifest
+// data path ("Content/data/Luthbellina/Adventure Clothes/…") yield the same key.
+// Returns '' for generic base roots (DAZ official) that aren't product-specific.
+function productFolderKey(p) {
+  var s = String(p || "").toLowerCase().replace(/\\/g, "/");
+  var seg = "";
+  var ti = s.indexOf("/textures/");
+  if (ti !== -1) seg = s.substring(ti + 10);
+  else if (s.indexOf("textures/") === 0) seg = s.substring(9);
+  else {
+    var di = s.indexOf("/data/");
+    if (di !== -1) seg = s.substring(di + 6);
+    else if (s.indexOf("data/") === 0) seg = s.substring(5);
+  }
+  if (!seg) return "";
+  var parts = seg.split("/");
+  if (parts.length < 2 || !parts[0] || !parts[1]) return "";
+  var vendor = parts[0];
+  if (vendor === "daz 3d" || vendor === "daz" || vendor === "daz3d") return ""; // base, not product-specific
+  return vendor + "/" + parts[1];
+}
+
+// Turn a possibly content-relative source path ("/data/…") into an absolute
+// filesystem path under the DAZ content library so DzFile can open it. Paths that
+// are already absolute (drive letter) are returned unchanged.
+function resolveContentPath(dazLibraryFolder, sourceFile) {
+  var s = String(sourceFile || "").replace(/\\/g, "/");
+  if (!s) return "";
+  if (/^[a-z]:\//i.test(s)) return s; // already absolute (C:/…)
+  if (!dazLibraryFolder) return s;
+  var root = String(dazLibraryFolder).replace(/\\/g, "/").replace(/\/+$/g, "");
+  return root + "/" + s.replace(/^\/+/, "");
+}
+
+function getUsedAssets() {
+  print("=== Getting Used Assets ===");
+
+  var assetList = [];
+
+  var nodes = Scene.getNodeList();
+  print("Found " + nodes.length + " nodes in scene");
+
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+
+    // Scene render-setting singletons (Tonemapper Options, Environment Options) are
+    // not products — skip them so they don't land in the "unmatched" list.
+    if (isSceneOptionNode(node)) continue;
+
+    var nodeLabel = String(node.getLabel());
+    var nodeName = String(node.getName());
+
+    // The parent node's technical name, so an unmatched sub-part (a zipper, a flower
+    // trim, a dForce layer) can inherit the product its parent garment matched.
+    var parentNode = node.getNodeParent();
+    var parentName = parentNode ? String(parentNode.getName()) : "";
+
+    assetList.push({
+      type: "Node",
+      name: nodeLabel,
+      technicalName: nodeName,
+      details: getNodeType(node),
+      value: null,
+      sourceFile: assetSourceFile(node),
+      parentName: parentName,
+      // Texture-map file paths — the ONLY reliable file reference Daz exposes for a
+      // node (it has no asset-URI API). Their vendor/product folder identifies the
+      // product (e.g. ".../Textures/Luthbellina/Adventure Clothes/…").
+      textures: getNodeTextureFiles(node),
+    });
+
+    var obj = node.getObject();
+    if (obj) {
+      var numMods = obj.getNumModifiers();
+      for (var m = 0; m < numMods; m++) {
+        var modifier = obj.getModifier(m);
+
+        if (modifier && modifier.inherits("DzMorph")) {
+          var channel = modifier.getValueChannel();
+          var value = channel ? channel.getValue() : 0;
+
+          // Only include morphs that are actually being used (non-zero)
+          if (Math.abs(value) > 0.001) {
+            var morphName = String(modifier.getName());
+            var morphLabel = String(modifier.getLabel());
+
+            verbose("used morph:", morphLabel, "=", value.toFixed(3));
+            assetList.push({
+              type: "Morph",
+              name: morphLabel,
+              technicalName: morphName,
+              details: "Value: " + value.toFixed(3),
+              value: value,
+              sourceFile: assetSourceFile(modifier),
+              textures: [],
+            });
+          }
+        }
+      }
+    }
+  }
+
+  print("Found " + assetList.length + " used assets");
+  return assetList;
+}
+
+// Collect a node's material texture-map file paths (absolute). This is the only
+// file reference Daz reliably gives for a node — its asset URI/id APIs don't exist —
+// and the texture's vendor/product folder is product-identifying. Cheap: bones and
+// option nodes have no object/materials and return []. Limited to the diffuse/base
+// maps of the first handful of materials, which is enough to name the product.
+function getNodeTextureFiles(node) {
+  var files = [];
+  try {
+    if (!node || typeof node.getObject !== "function") return files;
+    var obj = node.getObject();
+    if (!obj || typeof obj.getCurrentShape !== "function") return files;
+    var shape = obj.getCurrentShape();
+    if (!shape || typeof shape.getNumMaterials !== "function") return files;
+    var nm = shape.getNumMaterials();
+    var limit = nm < 8 ? nm : 8;
+    for (var i = 0; i < limit; i++) {
+      var mat = shape.getMaterial(i);
+      if (!mat) continue;
+      var maps = [];
+      if (typeof mat.getColorMap === "function") maps.push(mat.getColorMap());
+      if (typeof mat.getBaseColorMap === "function") maps.push(mat.getBaseColorMap());
+      for (var x = 0; x < maps.length; x++) {
+        var tex = maps[x];
+        if (tex && typeof tex.getFilename === "function") {
+          var fn = String(tex.getFilename());
+          if (fn && files.indexOf(fn) === -1) files.push(fn);
+        }
+      }
+    }
+  } catch (e) {}
+  return files;
+}
+
+// Render/scene-setting singletons that are never products: the Tonemapper and
+// Environment "Options" nodes Daz always puts in a scene.
+function isSceneOptionNode(node) {
+  var cls = String(node.className());
+  return cls.indexOf("Tonemapper") !== -1 || cls.indexOf("Environment") !== -1;
+}
+
+function getNodeType(node) {
+  var label = String(node.getLabel()).toLowerCase();
+  var nodeType = String(node.className());
+
+  if (nodeType.indexOf("Light") !== -1) return "Light";
+  if (nodeType.indexOf("Camera") !== -1) return "Camera";
+
+  if (node.getSkeleton && node.getSkeleton()) {
+    if (label.match(/genesis|figure/)) return "Figure";
+    return "Rigged Item";
+  }
+
+  var parent = node.getNodeParent();
+  if (parent) {
+    var parentLabel = String(parent.getLabel()).toLowerCase();
+    if (parentLabel.match(/genesis|figure/)) {
+      return "Attachment";
+    }
+  }
+
+  if (label.match(/genesis.*figure/)) return "Figure";
+  if (label.match(/palace|genital|anatomy/)) return "Anatomy";
+
+  return "Unknown";
+}
+
+function getAssetsByType(assets, type) {
+  var filtered = [];
+  for (var i = 0; i < assets.length; i++) {
+    if (assets[i].type === type) {
+      filtered.push(assets[i]);
+    }
+  }
+  return filtered;
+}
+
+// ── Installed products from DIM manifests (from getInstalledProducts.dsa) ─────
+
+function extractXMLTag(xmlContent, tagName) {
+  try {
+    var patterns = [
+      new RegExp("<" + tagName + '\\s+VALUE="([^"]*)"/?>', "i"),
+      new RegExp("<" + tagName + "[^>]*>([^<]+)</" + tagName + ">", "i"),
+      new RegExp("<" + tagName + ">([^<]+)</" + tagName + ">", "i"),
+    ];
+
+    for (var i = 0; i < patterns.length; i++) {
+      var match = String(xmlContent).match(patterns[i]);
+      if (match && match[1]) {
+        return String(match[1]).trim();
+      }
+    }
+  } catch (e) {
+    // Silent fail for XML parsing errors
+  }
+
+  return null;
+}
+
+// The DIM install manifest lists the product's files; one is its content-metadata
+// .dsx under Runtime/Support (carries the artist). Grab that path so we can read
+// it later (only for matched products), via the DAZ content library root.
+function extractSupportFile(xmlContent) {
+  var m = String(xmlContent).match(
+    /(?:Content[\\\/])?Runtime[\\\/]Support[\\\/][^"<>]+\.dsx/i
+  );
+  return m ? String(m[0]) : "";
+}
+
+function parseManifestFile(manifestPath) {
+  try {
+    var file = new DzFile(manifestPath);
+    if (!file.open(DzFile.ReadOnly)) {
+      return null;
+    }
+
+    var content = file.read();
+    file.close();
+
+    var productName = extractXMLTag(content, "ProductName");
+    var sku =
+      extractXMLTag(content, "ProductStoreIDX") ||
+      extractXMLTag(content, "ProductID");
+    // Artist/version are NOT in the DIM install manifest — they live in the
+    // content-metadata .dsx (enrichMatchedProducts fills them for matched products).
+    var artist = extractXMLTag(content, "ArtistName");
+    var version = extractXMLTag(content, "ProductVersion");
+    var installDate = extractXMLTag(content, "InstallDate");
+    var productType = extractXMLTag(content, "ProductType");
+    var description = extractXMLTag(content, "ProductDescription");
+
+    // DAZ stores no product semver locally, but the DIM package BUILD number is in
+    // the manifest filename (IM<storeid>-<build>_<name>.dsx). That's the revision DIM
+    // tracks for updates, so use it as the version when nothing better is present.
+    if (!version) {
+      var buildMatch = String(manifestPath).match(/IM\d+-(\d+)_/i);
+      if (buildMatch) version = String(parseInt(buildMatch[1], 10));
+    }
+
+    // Index this product's content data files (the .dsf/.duf it installs) so a used
+    // asset's native source file can be matched back to its exact product — the most
+    // reliable signal (e.g. "ACGloves.dsf" → "Adventurer Clothes"). Capped so a giant
+    // morph pack doesn't bloat the index; those match by keyword/SKU anyway.
+    var dataFiles = [];
+    var fileTokens = String(content).match(/VALUE="[^"]*\.(?:dsf|duf)"/gi);
+    if (fileTokens) {
+      for (var fT = 0; fT < fileTokens.length && dataFiles.length < 60; fT++) {
+        var vm = fileTokens[fT].match(/VALUE="([^"]+)"/i);
+        if (vm) {
+          var norm = normalizeContentPath(vm[1]);
+          if (norm) dataFiles.push(norm);
+        }
+      }
+    }
+
+    // Distinct "vendor/product" folders this product installs under — the key a
+    // used node's texture path can be matched against (the node API gives us no
+    // .dsf, only texture paths, but both share the vendor/product folder).
+    var folders = [];
+    var folderSeen = {};
+    for (var dF = 0; dF < dataFiles.length; dF++) {
+      var fk = productFolderKey(dataFiles[dF]);
+      if (fk && !folderSeen[fk]) {
+        folderSeen[fk] = true;
+        folders.push(fk);
+      }
+    }
+
+    if (productName) {
+      return {
+        name: String(productName).trim(),
+        sku: String(sku || "Unknown").trim(),
+        artist: String(artist || "Unknown").trim(),
+        version: String(version || "Unknown").trim(),
+        installDate: String(installDate || "Unknown").trim(),
+        productType: String(productType || "Unknown").trim(),
+        description: String(description || "").trim(),
+        manifestFile: manifestPath,
+        supportFile: extractSupportFile(content),
+        files: dataFiles,
+        folders: folders,
+      };
+    }
+  } catch (e) {
+    print("Error parsing manifest: " + manifestPath + " - " + e.message);
+  }
+
+  return null;
+}
+
+// Read an asset's own source file (.dsf/.duf) header to recover the vendor's
+// embedded author + revision (the real version) from its "asset_info" block.
+// DSON files are plain JSON here; gzipped ones can't be read, so we bail. Only the
+// first lines are scanned (asset_info sits at the top), so this stays cheap even
+// for big morph files. Never throws — returns { author, revision } with '' missing.
+function readAssetInfoFromFile(sourceFile) {
+  var result = { author: "", revision: "" };
+  if (!sourceFile) return result;
+  try {
+    var file = new DzFile(sourceFile);
+    if (!file.open(DzFile.ReadOnly)) return result;
+    var buf = "";
+    if (typeof file.readLine === "function") {
+      for (var n = 0; n < 120; n++) {
+        var line = file.readLine();
+        if (line === null || line === undefined) break;
+        buf += line + "\n";
+        // asset_info is first; stop once we have what we need or pass it.
+        if (buf.indexOf('"revision"') !== -1 && buf.indexOf('"author"') !== -1) break;
+        if (buf.indexOf("geometry_library") !== -1 || buf.indexOf("modifier_library") !== -1) break;
+      }
+    } else {
+      buf = String(file.read());
+    }
+    file.close();
+    // Plain-JSON DSON only (gzipped files start with a non-'{' byte).
+    if (buf.charAt(0) !== "{" && buf.indexOf('"asset_info"') === -1) return result;
+    var rev = buf.match(/"revision"\s*:\s*"([^"]*)"/);
+    if (rev) result.revision = String(rev[1]).trim();
+    var auth = buf.match(/"author"\s*:\s*"([^"]*)"/);
+    if (auth) result.author = String(auth[1]).trim();
+  } catch (e) {
+    // unreadable / compressed — leave blank
+  }
+  return result;
+}
+
+// Read asset_info trying the path as given, then resolved under the content library.
+// Node/morph source files are usually content-relative ("/data/…"), which DzFile
+// can't open directly — resolving them under the library is what actually recovers
+// the vendor's real author + revision. Returns { author, revision }, '' for missing.
+function readAssetInfo(dazLibraryFolder, sourceFile) {
+  var result = readAssetInfoFromFile(sourceFile);
+  if ((!result.author || !result.revision) && dazLibraryFolder) {
+    var resolved = resolveContentPath(dazLibraryFolder, sourceFile);
+    if (resolved && resolved !== sourceFile) {
+      var alt = readAssetInfoFromFile(resolved);
+      if (!result.author) result.author = alt.author;
+      if (!result.revision) result.revision = alt.revision;
+    }
+  }
+  return result;
+}
+
+// Read a product's content-metadata .dsx (e.g. Runtime/Support/<vendor>_<n>_<name>.dsx)
+// under the DAZ content library to recover the artist (and version when present).
+// Returns { artist, version } with '' for whatever isn't available.
+function readSupportMetadata(dazLibraryFolder, supportFile) {
+  var result = { artist: "", version: "" };
+  if (!dazLibraryFolder || !supportFile) return result;
+  // The manifest path is "Content/Runtime/Support/…"; "Content/" maps onto the
+  // library root, so strip it and normalise separators.
+  var rel = String(supportFile).replace(/\\/g, "/").replace(/^Content\//i, "");
+  var path = String(dazLibraryFolder).replace(/\\/g, "/").replace(/\/+$/g, "") + "/" + rel;
+  try {
+    var file = new DzFile(path);
+    if (!file.open(DzFile.ReadOnly)) return result;
+    var content = file.read();
+    file.close();
+    // Content metadata uses <Artist VALUE="…"/> (often several inside <Artists>);
+    // extractXMLTag returns the first.
+    var artist = extractXMLTag(content, "Artist");
+    if (artist) result.artist = artist;
+    var version =
+      extractXMLTag(content, "ProductVersion") || extractXMLTag(content, "Version");
+    if (version) result.version = version;
+  } catch (e) {
+    // unreadable / missing metadata — leave blank
+  }
+  return result;
+}
+
+// Fill in artist/version for the MATCHED products (a handful of extra file reads,
+// not thousands). Primary source is the matched asset's OWN file metadata (author
+// + revision) — that's the real vendor version and works for unofficial products
+// too; the DIM content-metadata .dsx is a fallback for the artist. Mutates the
+// shared product objects in place; each product enriched once.
+function enrichMatchedProducts(matches, dazLibraryFolder) {
+  var enriched = {};
+  for (var i = 0; i < matches.length; i++) {
+    var product = matches[i].product;
+    var asset = matches[i].asset;
+    if (!product || enriched[product.name]) continue;
+
+    // 1) The asset's embedded metadata (most reliable; covers unofficial products).
+    var info = readAssetInfo(dazLibraryFolder, asset ? asset.sourceFile : "");
+    // 1b) If the matched asset gave nothing (e.g. a geograft node with no readable
+    // source file), read a representative data file from the product's own manifest
+    // file list — recovers the real author/revision for DIM products regardless.
+    if ((!info.author || !info.revision) && product.files && product.files.length) {
+      for (var fIdx = 0; fIdx < product.files.length && fIdx < 5; fIdx++) {
+        var pInfo = readAssetInfo(dazLibraryFolder, product.files[fIdx]);
+        if (!info.author && pInfo.author) info.author = pInfo.author;
+        if (!info.revision && pInfo.revision) info.revision = pInfo.revision;
+        if (info.author && info.revision) break;
+      }
+    }
+    if (info.author && (product.artist === "Unknown" || !product.artist)) {
+      product.artist = info.author;
+    }
+    if (info.revision) {
+      product.version = info.revision; // a real content revision beats the DIM build
+    }
+
+    // 2) Fall back to the DIM content metadata for the artist if still unknown.
+    if ((product.artist === "Unknown" || !product.artist) && dazLibraryFolder && product.supportFile) {
+      var meta = readSupportMetadata(dazLibraryFolder, product.supportFile);
+      if (meta.artist) product.artist = meta.artist;
+      if (meta.version && (product.version === "Unknown" || !product.version)) {
+        product.version = meta.version;
+      }
+    }
+
+    enriched[product.name] = true;
+  }
+}
+
+// Recover author + revision for the UNMATCHED assets from their own source files,
+// so unofficial products (not in DIM, hence unmatched) still show an artist and
+// version. Mutates each asset, adding `artist` and `version`.
+function enrichUnmatchedAssets(unmatched, dazLibraryFolder) {
+  for (var i = 0; i < unmatched.length; i++) {
+    var a = unmatched[i];
+    a.artist = "";
+    a.version = "";
+    if (!a.sourceFile) continue;
+    var info = readAssetInfo(dazLibraryFolder, a.sourceFile);
+    a.artist = info.author;
+    a.version = info.revision;
+  }
+}
+
+// dimManifestPath is supplied by the studio (an app-global setting). May be '':
+// the scan then warns and reports every asset as unmatched.
+function getInstalledProducts(dimManifestPath) {
+  print("=== DAZ Install Manager Product Lister ===");
+
+  var products = [];
+
+  if (!dimManifestPath) {
+    print("ERROR: no DIM manifest folder configured.");
+    MessageBox.information(
+      "No DAZ Install Manager manifests folder is configured.\n\nSet it in DTH " +
+        "Character Studio: Settings → General → “DAZ Install Manager " +
+        "manifests folder”, then regenerate this character's scripts.\n\nThe " +
+        "scan will run, but every asset will be reported as unmatched.",
+      "DIM Manifests Folder Not Set",
+      "&OK"
+    );
+    return [];
+  }
+
+  var dimDir = new DzDir(dimManifestPath);
+  if (!dimDir.exists()) {
+    print("ERROR: DIM manifest directory not found at: " + dimManifestPath);
+    MessageBox.information(
+      "DIM manifest directory not found:\n" +
+        dimManifestPath +
+        "\n\nFix the path in DTH Character Studio: Settings → General → " +
+        "“DAZ Install Manager manifests folder”, then regenerate this " +
+        "character's scripts.",
+      "Directory Not Found",
+      "&OK"
+    );
+    return [];
+  }
+
+  print("Reading manifest files from: " + dimManifestPath);
+
+  var allEntries = dimDir.entryList();
+  var files = [];
+  for (var e = 0; e < allEntries.length; e++) {
+    var entry = String(allEntries[e]);
+    if (entry.toLowerCase().indexOf(".dsx") !== -1) {
+      files.push(entry);
+    }
+  }
+  print("Found " + files.length + " .dsx manifest files");
+
+  var manifestCount = 0;
+
+  for (var i = 0; i < files.length; i++) {
+    var fileName = String(files[i]);
+    var manifestPath = dimManifestPath + "/" + fileName;
+    var product = parseManifestFile(manifestPath);
+
+    if (product) {
+      products.push(product);
+      manifestCount++;
+
+      if (manifestCount % 100 === 0) {
+        verbose("Processed " + manifestCount + " manifests...");
+      }
+    }
+  }
+
+  print("Processed " + manifestCount + " manifest files");
+  print("Found " + products.length + " products");
+
+  products.sort(function (a, b) {
+    return a.name.localeCompare(b.name);
+  });
+
+  return products;
+}
+
+// Manually-installed products (not via DIM) leave a Smart-Content metadata file
+// Runtime/Support/LOCAL_USER_<name>.dsx. DIM only knows its own installs, so those
+// products are otherwise invisible — read them here so e.g. a manually-installed
+// Golden Palace can match instead of landing in "unmatched". DIM products already
+// covered by ManifestFiles are skipped (we only take LOCAL_USER_*).
+function parseLocalUserMetadata(path, fileName) {
+  try {
+    var file = new DzFile(path);
+    if (!file.open(DzFile.ReadOnly)) return null;
+    var content = file.read();
+    file.close();
+    var name = extractXMLTag(content, "Product");
+    if (!name) return null;
+    var artist = extractXMLTag(content, "Artist");
+    // Version sometimes encoded in the file name (LOCAL_USER_..._v2.dsx).
+    var version = "";
+    var vm = String(fileName).match(/_v(\d+(?:\.\d+)*)\.dsx$/i);
+    if (vm) version = vm[1];
+
+    // The ContentDBInstall metadata has no artist/version, but it lists the product's
+    // own .duf/.dsf files — DSON with an asset_info block carrying the vendor's real
+    // author + revision. Capture a handful so enrichMatchedProducts can read one and
+    // recover the version for a manual install (e.g. Golden Palace → meipex 1.0).
+    var localFiles = [];
+    var assetTokens = String(content).match(/<Asset VALUE="[^"]*\.(?:duf|dsf)"/gi);
+    if (assetTokens) {
+      for (var aT = 0; aT < assetTokens.length && localFiles.length < 8; aT++) {
+        var am = assetTokens[aT].match(/VALUE="([^"]+)"/i);
+        if (am) localFiles.push(String(am[1]).replace(/\\/g, "/")); // keep case for opening
+      }
+    }
+
+    return {
+      name: String(name).trim(),
+      sku: "",
+      artist: String(artist || "Unknown").trim(),
+      version: String(version || "Unknown").trim(),
+      installDate: "Unknown",
+      productType: "Local install",
+      description: "",
+      manifestFile: path,
+      supportFile: "",
+      files: localFiles,
+      folders: []
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function getLocalUserProducts(dazLibraryFolder) {
+  var products = [];
+  if (!dazLibraryFolder) return products;
+  var supportPath =
+    String(dazLibraryFolder).replace(/\\/g, "/").replace(/\/+$/g, "") + "/Runtime/Support";
+  var supportDir = new DzDir(supportPath);
+  if (!supportDir.exists()) return products;
+
+  var entries = supportDir.entryList();
+  for (var e = 0; e < entries.length; e++) {
+    var entry = String(entries[e]);
+    var lower = entry.toLowerCase();
+    if (lower.indexOf("local_user_") !== 0) continue;
+    if (lower.lastIndexOf(".dsx") !== lower.length - 4) continue;
+    var product = parseLocalUserMetadata(supportPath + "/" + entry, entry);
+    if (product) products.push(product);
+  }
+  print("Found " + products.length + " locally-installed (LOCAL_USER) products");
+  return products;
+}
+
+// ── Asset → product matching (from createListing.dsa) ─────────────────────────
+
+function detectSceneGenesisVersion(usedAssets) {
+  for (var i = 0; i < usedAssets.length; i++) {
+    var name = usedAssets[i].name.toLowerCase();
+    var techName = usedAssets[i].technicalName.toLowerCase();
+
+    if (name.indexOf("genesis 9") !== -1 || techName.indexOf("genesis9") !== -1) {
+      return 9;
+    }
+    if (name.indexOf("genesis 8.1") !== -1 || techName.indexOf("genesis8_1") !== -1) {
+      return 8.1;
+    }
+    if (name.indexOf("genesis 8") !== -1 || techName.indexOf("genesis8") !== -1) {
+      return 8;
+    }
+  }
+  return 0;
+}
+
+function productMatchesGenesisVersion(productName, version) {
+  var name = productName.toLowerCase();
+  if (version === 9) {
+    return name.indexOf("genesis 9") !== -1 || name.indexOf("g9") !== -1;
+  }
+  if (version === 8.1 || version === 8) {
+    return name.indexOf("genesis 8") !== -1 || name.indexOf("g8") !== -1;
+  }
+  return false;
+}
+
+function productIsWrongGenesisVersion(productName, sceneVersion) {
+  var name = productName.toLowerCase();
+  if (sceneVersion === 9) {
+    // Anything that explicitly names Genesis 9 (incl. cross-gen "for G8 and G9") is fine.
+    if (name.indexOf("genesis 9") !== -1 || name.indexOf(" g9") !== -1) return false;
+    // Otherwise reject products that target a DIFFERENT generation — including
+    // Genesis 8. Geografts/genitalia/morphs are generation-specific, and when the
+    // matching-generation product exists (e.g. the G9 Golden Palace) we want it,
+    // not the G8 one. Legit cross-gen clothing names Genesis 9 and is kept above.
+    if (name.indexOf("genesis 8") !== -1 || name.indexOf(" g8") !== -1) return true;
+    if (name.indexOf("genesis 3") !== -1 || name.indexOf(" g3") !== -1) return true;
+    if (name.indexOf("genesis 2") !== -1 || name.indexOf(" g2") !== -1) return true;
+    if (name.indexOf("genesis 1") !== -1) return true;
+  }
+  return false;
+}
+
+// Map the studio-supplied character genesis ("G9", "G8", "G8_1", …) to the numeric
+// scene version the matchers use. This is authoritative — preferred over guessing
+// from the scene's assets. 0 when unknown.
+function genesisVersionFromString(g) {
+  if (!g) return 0;
+  var s = String(g).toLowerCase();
+  if (s.indexOf("9") !== -1) return 9;
+  if (s.indexOf("8.1") !== -1 || s.indexOf("8_1") !== -1) return 8.1;
+  if (s.indexOf("8") !== -1) return 8;
+  if (s.indexOf("3") !== -1) return 3;
+  if (s.indexOf("2") !== -1) return 2;
+  return 0;
+}
+
+function findProductMatches(usedAssets, installedProducts, knownGenesisVersion) {
+  var matches = [];
+  var unmatched = [];
+
+  // Prefer the character's known Genesis version (from the studio); fall back to
+  // sniffing the scene only when it wasn't supplied.
+  var sceneGenesisVersion = knownGenesisVersion || detectSceneGenesisVersion(usedAssets);
+  print(
+    "Scene Genesis version: " +
+      (sceneGenesisVersion || "Unknown") +
+      (knownGenesisVersion ? " (from character)" : " (detected)")
+  );
+
+  var productNameMap = {};
+  var productKeywordMap = {};
+  var productSkuMap = {};
+  var fileIndex = {};
+  var folderIndex = {};
+
+  for (var i = 0; i < installedProducts.length; i++) {
+    var product = installedProducts[i];
+    var name = product.name.toLowerCase();
+
+    productNameMap[name] = product;
+    productSkuMap[product.sku] = product;
+
+    // Exact source-file → product lookup (file paths are product-specific).
+    if (product.files) {
+      for (var fIdx = 0; fIdx < product.files.length; fIdx++) {
+        var fkey = product.files[fIdx];
+        if (fkey && !fileIndex[fkey]) fileIndex[fkey] = product;
+      }
+    }
+    // "vendor/product" folder → product, for matching a node's texture path.
+    if (product.folders) {
+      for (var foI = 0; foI < product.folders.length; foI++) {
+        var folk = product.folders[foI];
+        if (folk && !folderIndex[folk]) folderIndex[folk] = product;
+      }
+    }
+
+    var keywords = extractKeywords(name);
+    for (var k = 0; k < keywords.length; k++) {
+      if (!productKeywordMap[keywords[k]]) {
+        productKeywordMap[keywords[k]] = [];
+      }
+      productKeywordMap[keywords[k]].push(product);
+    }
+  }
+
+  // Texture folders belonging to the base figure's SKIN. Geografts/genitalia are
+  // usually given a copy of the figure's active skin (e.g. via a copy-textures
+  // script), so their texture paths point at the SKIN product, not their own —
+  // identifying such an item by its textures would be wrong. Collect the figure's
+  // skin folders up front and exclude them from texture matching.
+  var skinFolders = {};
+  for (var sa = 0; sa < usedAssets.length; sa++) {
+    var fa = usedAssets[sa];
+    if (fa.type !== "Node" || !fa.textures) continue;
+    var isFigure =
+      fa.details === "Figure" ||
+      String(fa.name).toLowerCase().indexOf("genesis 9") === 0 ||
+      String(fa.name).toLowerCase().indexOf("genesis 8") === 0;
+    if (!isFigure) continue;
+    for (var ft = 0; ft < fa.textures.length; ft++) {
+      var sfk = productFolderKey(fa.textures[ft]);
+      if (sfk) skinFolders[sfk] = true;
+    }
+  }
+
+  for (var j = 0; j < usedAssets.length; j++) {
+    var asset = usedAssets[j];
+    var matchedProduct = null;
+    var matchMethod = "";
+
+    if (isBoneOrSkeleton(asset)) {
+      continue;
+    }
+
+    matchedProduct = findFileIndexMatch(asset, fileIndex, sceneGenesisVersion);
+    if (matchedProduct) {
+      matchMethod = "File Match";
+    }
+
+    // Texture-folder match: the node's own texture lives under a product's
+    // vendor/product folder. Strong evidence the product is genuinely used, so it
+    // does NOT apply the Genesis prefilter — this is how a G8 outfit auto-fitted to
+    // a G9 figure (e.g. "Adventure Outfit") still matches. Skin folders excluded.
+    if (!matchedProduct) {
+      matchedProduct = findTextureFolderMatch(asset, folderIndex, skinFolders);
+      if (matchedProduct) {
+        matchMethod = "Texture Match";
+      }
+    }
+
+    if (!matchedProduct) {
+      matchedProduct = findSkuMatch(asset, productSkuMap);
+      if (matchedProduct) {
+        matchMethod = "SKU Match";
+      }
+    }
+
+    if (!matchedProduct) {
+      matchedProduct = findDirectMatch(asset, productNameMap);
+      if (matchedProduct) {
+        matchMethod = "Direct Match";
+      }
+    }
+
+    if (!matchedProduct) {
+      matchedProduct = findKeywordMatch(asset, productKeywordMap, sceneGenesisVersion);
+      if (matchedProduct) {
+        matchMethod = "Keyword Match";
+      }
+    }
+
+    if (!matchedProduct) {
+      matchedProduct = findThirdPartyMatch(asset, installedProducts, sceneGenesisVersion);
+      if (matchedProduct) {
+        matchMethod = "Third-Party Match";
+      }
+    }
+
+    if (!matchedProduct) {
+      matchedProduct = findGenesisBaseMatch(asset, installedProducts, sceneGenesisVersion);
+      if (matchedProduct) {
+        matchMethod = "Genesis Base Match";
+      }
+    }
+
+    if (matchedProduct) {
+      matches.push({
+        asset: asset,
+        product: matchedProduct,
+        method: matchMethod,
+      });
+    } else {
+      unmatched.push(asset);
+    }
+  }
+
+  // Second pass: attribute an unmatched child node to the product its PARENT matched.
+  // Clothing sub-parts — zippers, flower trims, dForce layers — load as separate
+  // nodes parented to the garment, sharing no name/texture with the product, so they
+  // fall through. Inherit from the nearest matched ancestor that ISN'T the base figure
+  // (so a prop parented to Genesis isn't wrongly called "Starter Essentials").
+  unmatched = attributeChildrenToParents(usedAssets, matches, unmatched);
+
+  return {
+    matches: matches,
+    unmatched: unmatched,
+  };
+}
+
+// Move unmatched child nodes onto the product their parent garment matched. Returns
+// the still-unmatched list. Walks up the parent chain (capped) for an ancestor whose
+// match is a real product (not a Genesis Base Match).
+function attributeChildrenToParents(usedAssets, matches, unmatched) {
+  var nodeProduct = {};
+  var nodeMethod = {};
+  for (var i = 0; i < matches.length; i++) {
+    var mm = matches[i];
+    if (mm.asset && mm.asset.type === "Node" && mm.asset.technicalName) {
+      nodeProduct[mm.asset.technicalName] = mm.product;
+      nodeMethod[mm.asset.technicalName] = mm.method;
+    }
+  }
+  var parentOf = {};
+  for (var a = 0; a < usedAssets.length; a++) {
+    if (usedAssets[a].type === "Node" && usedAssets[a].technicalName) {
+      parentOf[usedAssets[a].technicalName] = usedAssets[a].parentName || "";
+    }
+  }
+
+  var stillUnmatched = [];
+  for (var u = 0; u < unmatched.length; u++) {
+    var asset = unmatched[u];
+    if (asset.type !== "Node") {
+      stillUnmatched.push(asset);
+      continue;
+    }
+    var cur = parentOf[asset.technicalName] || "";
+    var product = null;
+    var depth = 0;
+    while (cur && depth < 12) {
+      if (nodeProduct[cur] && nodeMethod[cur] !== "Genesis Base Match") {
+        product = nodeProduct[cur];
+        break;
+      }
+      cur = parentOf[cur] || "";
+      depth++;
+    }
+    if (product) {
+      matches.push({ asset: asset, product: product, method: "Parent Match" });
+    } else {
+      stillUnmatched.push(asset);
+    }
+  }
+  return stillUnmatched;
+}
+
+// Exact match: the asset's native source file is one of the files a product's DIM
+// manifest installed. The strongest signal — a file path belongs to a single
+// product — so this runs before the name/keyword heuristics, and it connects assets
+// whose label shares nothing with the product name (e.g. "ACGloves" → "Adventurer
+// Clothes"). Still refuses a wrong-generation product defensively.
+function findFileIndexMatch(asset, fileIndex, sceneGenesisVersion) {
+  var key = normalizeContentPath(asset.sourceFile);
+  if (!key) return null;
+  var product = fileIndex[key];
+  if (!product) return null;
+  if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
+    return null;
+  }
+  return product;
+}
+
+// Match a node by the vendor/product folder of its texture maps — the only file
+// reference Daz gives for a node. Skips folders that belong to the figure's skin
+// (a geograft wearing the copied body skin would otherwise match the SKIN product).
+// No Genesis prefilter: the node literally uses this product's textures, so a
+// cross-generation auto-fit (G8 item on a G9 figure) is a real, wanted match.
+function findTextureFolderMatch(asset, folderIndex, skinFolders) {
+  if (!asset.textures || !asset.textures.length) return null;
+  for (var i = 0; i < asset.textures.length; i++) {
+    var key = productFolderKey(asset.textures[i]);
+    if (!key || skinFolders[key]) continue; // none, or borrowed body skin
+    if (folderIndex[key]) return folderIndex[key];
+  }
+  return null;
+}
+
+function findSkuMatch(asset, productSkuMap) {
+  var techName = asset.technicalName;
+
+  var skuMatch = techName.match(/_(\d{4,5})$/);
+  if (skuMatch) {
+    var sku = skuMatch[1];
+    var skuVariants = [sku + "-1", "0" + sku + "-1", sku + "-01"];
+
+    for (var i = 0; i < skuVariants.length; i++) {
+      if (productSkuMap[skuVariants[i]]) {
+        return productSkuMap[skuVariants[i]];
+      }
+    }
+  }
+
+  return null;
+}
+
+function findDirectMatch(asset, productNameMap) {
+  var assetName = asset.name.toLowerCase();
+  var techName = asset.technicalName.toLowerCase();
+
+  for (var productName in productNameMap) {
+    if (
+      productName.indexOf("cartoonized") !== -1 &&
+      (assetName.indexOf("cartoon") !== -1 ||
+        techName.indexOf("cartoon") !== -1)
+    ) {
+      return productNameMap[productName];
+    }
+  }
+
+  return null;
+}
+
+function findKeywordMatch(asset, productKeywordMap, sceneGenesisVersion) {
+  // Include the native source file path — its folder segments often name the
+  // vendor/product, a more reliable signal than the asset label alone.
+  var assetKeywords = extractKeywords(
+    asset.name + " " + asset.technicalName + " " + (asset.sourceFile || "")
+  );
+  var candidateProducts = {};
+  var maxScore = 0;
+  var bestMatch = null;
+
+  for (var i = 0; i < assetKeywords.length; i++) {
+    var keyword = assetKeywords[i];
+    if (productKeywordMap[keyword]) {
+      var products = productKeywordMap[keyword];
+      for (var j = 0; j < products.length; j++) {
+        var product = products[j];
+
+        if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
+          continue;
+        }
+
+        var productId = product.name;
+        if (!candidateProducts[productId]) {
+          candidateProducts[productId] = { product: product, score: 0 };
+        }
+        candidateProducts[productId].score++;
+
+        if (sceneGenesisVersion && productMatchesGenesisVersion(product.name, sceneGenesisVersion)) {
+          candidateProducts[productId].score += 2;
+        }
+      }
+    }
+  }
+
+  for (var productId in candidateProducts) {
+    if (candidateProducts[productId].score > maxScore) {
+      maxScore = candidateProducts[productId].score;
+      bestMatch = candidateProducts[productId].product;
+    }
+  }
+
+  // Require solid confidence: a product needs 3 keyword "points" — either three
+  // shared distinctive words, or one shared word plus the +2 scene-Genesis bonus.
+  // (Raised from 2 to cut incidental single-keyword false positives.)
+  return maxScore >= 3 ? bestMatch : null;
+}
+
+function findThirdPartyMatch(asset, installedProducts, sceneGenesisVersion) {
+  var name = asset.name.toLowerCase();
+  var techName = asset.technicalName.toLowerCase();
+  var src = String(asset.sourceFile || "").toLowerCase();
+
+  var knownProducts = [
+    { pattern: "dicktator", searchTerms: ["dicktator"] },
+    { pattern: "goldenpalace", searchTerms: ["golden palace", "goldenpalace"] },
+    { pattern: "golden_palace", searchTerms: ["golden palace", "goldenpalace"] },
+    { pattern: "lva", searchTerms: ["lva "] },
+    { pattern: "pinup", searchTerms: ["pinup", "pin-up", "pin up"] },
+  ];
+
+  for (var k = 0; k < knownProducts.length; k++) {
+    var known = knownProducts[k];
+    if (
+      name.indexOf(known.pattern) !== -1 ||
+      techName.indexOf(known.pattern) !== -1 ||
+      src.indexOf(known.pattern) !== -1
+    ) {
+      // Among the installed products that carry this third-party name, prefer the
+      // one matching the scene's Genesis version, reject ones for a different
+      // generation, and otherwise fall back to the first acceptable candidate.
+      var fallback = null;
+      for (var i = 0; i < installedProducts.length; i++) {
+        var product = installedProducts[i];
+        var productName = product.name.toLowerCase();
+        var hit = false;
+        for (var s = 0; s < known.searchTerms.length; s++) {
+          if (productName.indexOf(known.searchTerms[s]) !== -1) {
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) continue;
+        if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
+          continue;
+        }
+        if (sceneGenesisVersion && productMatchesGenesisVersion(product.name, sceneGenesisVersion)) {
+          return product;
+        }
+        if (!fallback) fallback = product;
+      }
+      if (fallback) return fallback;
+    }
+  }
+
+  return null;
+}
+
+function findGenesisBaseMatch(asset, installedProducts, sceneGenesisVersion) {
+  var name = asset.name.toLowerCase();
+  var techName = asset.technicalName.toLowerCase();
+
+  if (name.indexOf("genesis") === -1 && techName.indexOf("genesis") === -1) {
+    return null;
+  }
+
+  var generation = "";
+  if (name.indexOf("genesis 8.1") !== -1 || techName.indexOf("genesis8_1") !== -1) {
+    generation = "genesis 8";
+  } else if (name.indexOf("genesis 8") !== -1 || techName.indexOf("genesis8") !== -1) {
+    generation = "genesis 8";
+  } else if (name.indexOf("genesis 9") !== -1 || techName.indexOf("genesis9") !== -1) {
+    generation = "genesis 9";
+  } else if (name.indexOf("genesis 3") !== -1 || techName.indexOf("genesis3") !== -1) {
+    generation = "genesis 3";
+  } else if (name.indexOf("genesis 2") !== -1 || techName.indexOf("genesis2") !== -1) {
+    generation = "genesis 2";
+  } else if (sceneGenesisVersion) {
+    // A bare "Genesis" asset with no version in its name — anchor to the scene's
+    // own generation rather than matching an unrelated generation's essentials
+    // (the old behaviour pulled in e.g. "Genesis 2 … Starter Essentials" on a G9 scene).
+    if (sceneGenesisVersion === 9) generation = "genesis 9";
+    else if (sceneGenesisVersion === 8 || sceneGenesisVersion === 8.1) generation = "genesis 8";
+  }
+
+  if (!generation) return null;
+
+  for (var i = 0; i < installedProducts.length; i++) {
+    var product = installedProducts[i];
+    var productName = product.name.toLowerCase();
+    if (
+      productName.indexOf(generation) !== -1 &&
+      productName.indexOf("starter essentials") !== -1
+    ) {
+      // Never return an essentials of the wrong base generation for the scene.
+      if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
+        continue;
+      }
+      return product;
+    }
+  }
+
+  return null;
+}
+
+function extractKeywords(text) {
+  var keywords = [];
+  var cleaned = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  var words = cleaned.split(" ");
+
+  var stopWords = [
+    "for", "and", "the", "genesis", "female", "male",
+    "body", "morphs", "morph", "proportion", "proportions",
+    "height", "length", "smaller", "larger", "size",
+    "base", "head", "torso", "legs", "arms",
+    "shape", "shapes", "hd", "bs"
+  ];
+
+  for (var i = 0; i < words.length; i++) {
+    var word = words[i];
+    var isStopWord = false;
+    for (var s = 0; s < stopWords.length; s++) {
+      if (word === stopWords[s]) {
+        isStopWord = true;
+        break;
+      }
+    }
+    if (word.length > 2 && !isStopWord) {
+      keywords.push(word);
+    }
+  }
+
+  return keywords;
+}
+
+function isBoneOrSkeleton(asset) {
+  var name = asset.name.toLowerCase();
+  var techName = asset.technicalName.toLowerCase();
+
+  var boneKeywords = [
+    "thigh", "shin", "foot", "toe", "hand", "finger", "thumb",
+    "shoulder", "forearm", "collar", "neck", "head", "jaw",
+    "abdomen", "chest", "pelvis", "hip", "spine", "pectoral",
+    "eye", "ear", "nostril", "eyelid", "brow", "lip",
+    "carpal", "index", "ring", "pinky", "mid", "metatarsal", "bigToe",
+    "chin", "tongue", "root", "crease",
+    // Dicktator/genital bones
+    "shaft", "foreskin", "glans", "urethra", "scrotum", "testicle",
+    "rectum", "anus",
+    // Golden Palace/genital bones
+    "clitoris", "clitzilla", "vagina", "tentacle", "mons", "labium", "labia",
+    // Rendering/display nodes
+    "shell"
+  ];
+
+  for (var i = 0; i < boneKeywords.length; i++) {
+    if (
+      name.indexOf(boneKeywords[i]) !== -1 ||
+      techName.indexOf(boneKeywords[i]) !== -1
+    ) {
+      return true;
+    }
+  }
+
+  if (
+    techName.match(/^[lr][A-Z]/) ||
+    techName.match(/^(upper|lower|mid)/i) ||
+    name.match(/(left|right)\s/i)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+// ── CSV output (replaces the .txt licensing report) ──────────────────────────
+
+// Classify what a matched asset is, so the user can tell WHY a product is in the
+// scene (a morph vs a clothing item vs a genital graft, etc.). Heuristic, from the
+// asset's name/technical-name/source-file and its node-type classification.
+function assetRole(asset) {
+  if (asset.type === "Morph") return "Morph";
+
+  var name = String(asset.name).toLowerCase();
+  var tech = String(asset.technicalName).toLowerCase();
+  var src = String(asset.sourceFile || "").toLowerCase();
+  var hay = name + " " + tech + " " + src;
+  var details = String(asset.details || "");
+
+  // Most specific first.
+  if (
+    hay.indexOf("golden palace") !== -1 ||
+    hay.indexOf("goldenpalace") !== -1 ||
+    hay.indexOf("dicktator") !== -1 ||
+    hay.indexOf("genital") !== -1
+  ) {
+    return "Genitalia";
+  }
+  if (hay.indexOf("geograft") !== -1 || hay.indexOf("graft") !== -1) return "Geograft";
+  if (hay.indexOf("hair") !== -1 || hay.indexOf("beard") !== -1 || hay.indexOf("brow") !== -1) {
+    return "Hair";
+  }
+  if (
+    hay.indexOf("dforce") !== -1 ||
+    hay.indexOf("cloth") !== -1 ||
+    hay.match(
+      /\b(top|bottom|dress|shirt|pants?|skirt|bra|lingerie|swimwear|bikini|boots?|shoes?|gloves?|outfit|jacket|coat|socks?|underwear|panties|corset|robe|gown)\b/
+    )
+  ) {
+    return "Clothing";
+  }
+  if (
+    hay.match(
+      /\b(earring|necklace|bracelet|ring|glasses|sunglasses|watch|jewel|piercing|belt|hat|cap|mask|tattoo|collar)\b/
+    )
+  ) {
+    return "Accessory";
+  }
+
+  // Fall back to the node-type classification getNodeType() recorded.
+  if (details === "Light") return "Light";
+  if (details === "Camera") return "Camera";
+  if (details === "Figure") return "Figure";
+  if (details === "Anatomy") return "Anatomy";
+  if (details === "Rigged Item") return "Wearable";
+  if (details === "Attachment") return "Attachment";
+
+  if (
+    hay.indexOf("environment") !== -1 ||
+    hay.indexOf("backdrop") !== -1 ||
+    hay.indexOf("scene ") !== -1
+  ) {
+    return "Environment / Prop";
+  }
+
+  return "Other";
+}
+
+// Quote a CSV field per RFC 4180 when it carries a comma, quote or newline.
+function csvField(value) {
+  var s = value === null || value === undefined ? "" : String(value);
+  if (
+    s.indexOf(",") !== -1 ||
+    s.indexOf('"') !== -1 ||
+    s.indexOf("\n") !== -1 ||
+    s.indexOf("\r") !== -1
+  ) {
+    s = '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// Sanitise a Daz scene name into a safe CSV filename stem. '' (an unsaved scene)
+// becomes "_no-scene" so the scan still records something.
+function sceneSlug(name) {
+  var s = String(name || "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+  return s || "_no-scene";
+}
+
+// Write the matched products (deduped by name, methods collected) and the
+// interesting unmatched assets to a fixed-column CSV the studio reads back. The
+// first data row records the scanned scene (name + path) so the studio can
+// attribute every product/asset to the outfit it was found in.
+function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath) {
+  var productInfo = {};
+  var order = [];
+  for (var i = 0; i < matchResults.matches.length; i++) {
+    var match = matchResults.matches[i];
+    var key = match.product.name;
+    if (!productInfo[key]) {
+      productInfo[key] = { product: match.product, methods: [], roles: [], assets: [] };
+      order.push(key);
+    }
+    if (productInfo[key].methods.indexOf(match.method) === -1) {
+      productInfo[key].methods.push(match.method);
+    }
+    // What was this product used for, and by which scene asset(s)?
+    var role = assetRole(match.asset);
+    if (productInfo[key].roles.indexOf(role) === -1) {
+      productInfo[key].roles.push(role);
+    }
+    // Record each matching scene asset with its kind, so the studio can expand a
+    // product to show exactly which morph(s)/node(s) it was found by. Generously
+    // capped — enough to see them all without an unbounded CSV cell.
+    var assetEntry = match.asset.name + " (" + match.asset.type + ")";
+    if (
+      productInfo[key].assets.length < 40 &&
+      productInfo[key].assets.indexOf(assetEntry) === -1
+    ) {
+      productInfo[key].assets.push(assetEntry);
+    }
+  }
+
+  var lines = [];
+  lines.push(
+    "row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by"
+  );
+  // The scene this scan analysed — name in col 1, full path in col 2.
+  lines.push(
+    ["scene", csvField(sceneName || ""), csvField(scenePath || ""), "", "", "", "", "", "", "", "", ""].join(",")
+  );
+
+  for (var o = 0; o < order.length; o++) {
+    var info = productInfo[order[o]];
+    var p = info.product;
+    lines.push(
+      [
+        "product",
+        csvField(p.name),
+        csvField(p.sku),
+        csvField(p.artist),
+        csvField(p.version),
+        csvField(p.productType),
+        csvField(info.methods.join("; ")),
+        "",
+        "",
+        "",
+        csvField(info.roles.join("; ")),
+        csvField(info.assets.join("; "))
+      ].join(",")
+    );
+  }
+
+  for (var u = 0; u < matchResults.unmatched.length; u++) {
+    var a = matchResults.unmatched[u];
+    var lname = String(a.name).toLowerCase();
+    var interesting =
+      a.type === "Node" ||
+      (a.type === "Morph" &&
+        (lname.indexOf("shape") !== -1 || lname.indexOf("morph") !== -1));
+    if (!interesting) continue;
+    lines.push(
+      [
+        "asset",
+        csvField(a.name),
+        "", // sku
+        csvField(a.artist), // artist (from the asset's own file metadata)
+        csvField(a.version), // version / revision
+        "", // product_type
+        "", // match_method
+        csvField(a.technicalName),
+        csvField(a.type),
+        csvField(a.sourceFile),
+        "", // usage
+        "" // used_by
+      ].join(",")
+    );
+  }
+
+  // Ensure the output folder exists (the studio derives it under app-local-data;
+  // it may not exist on the first scan).
+  var fileInfo = new DzFileInfo(outputCsvPath);
+  var parent = fileInfo.path();
+  var parentDir = new DzDir(parent);
+  if (!parentDir.exists()) {
+    parentDir.mkpath(parent);
+  }
+
+  var file = new DzFile(outputCsvPath);
+  if (file.open(file.WriteOnly, file.Truncate)) {
+    file.write(lines.join("\n"));
+    file.close();
+    print(
+      "DTH Product Scan: wrote " +
+        order.length +
+        " products to " +
+        outputCsvPath
+    );
+    return true;
+  }
+
+  print("DTH Product Scan ERROR: could not write " + outputCsvPath);
+  MessageBox.warning(
+    "Could not write the product scan CSV to:\n" + outputCsvPath,
+    "DTH Product Scan",
+    "&OK"
+  );
+  return false;
+}
+
+// ── Entry point ──────────────────────────────────────────────────────────────
+
+// Called by the generated Scan_Products_<Name>.dsa. config carries:
+//   characterId, characterName, genesis (identity, embedded by the studio)
+//   dimManifestPath   — DAZ Install Manager ManifestFiles folder (may be '')
+//   outputDir         — folder the per-scene CSV is written into
+//   dazLibraryFolder  — DAZ content library root, for artist/version metadata (may be '')
+// Analyses the scene CURRENTLY OPEN in Daz and names its CSV after that scene, so a
+// character's outfit/look variants each keep their own result instead of overwriting.
+function DthScanProducts(config) {
+  print("=== DTH Product Scan: " + config.characterName + " ===");
+
+  // Which scene/outfit is open? Names the output CSV and is recorded in it so the
+  // studio can attribute products to the scene (mirrors the export-subfolder logic).
+  var scenePath = "";
+  try { scenePath = String(Scene.getFilename()); } catch (e) {}
+  var sceneName = "";
+  if (scenePath) {
+    try { sceneName = String(new DzFileInfo(scenePath).completeBaseName()); } catch (e) {}
+  }
+  var outputCsvPath =
+    String(config.outputDir).replace(/\\/g, "/").replace(/\/+$/g, "") + "/" + sceneSlug(sceneName) + ".csv";
+  print("Scene: " + (sceneName || "(unsaved)") + " → " + outputCsvPath);
+
+  var usedAssets = getUsedAssets();
+  if (!usedAssets || usedAssets.length === 0) {
+    print("No used assets found in the current scene.");
+  }
+
+  var installedProducts = getInstalledProducts(config.dimManifestPath);
+  // Add manually-installed products (LOCAL_USER metadata) so non-DIM content can
+  // match too — these are absent from DIM's ManifestFiles.
+  var localProducts = getLocalUserProducts(config.dazLibraryFolder);
+  if (localProducts.length) {
+    installedProducts = installedProducts.concat(localProducts);
+  }
+  print(
+    "Matching " +
+      usedAssets.length +
+      " assets against " +
+      installedProducts.length +
+      " installed products (incl. " +
+      localProducts.length +
+      " local)..."
+  );
+
+  var matchResults = findProductMatches(
+    usedAssets,
+    installedProducts,
+    genesisVersionFromString(config.genesis)
+  );
+  print("Matched products (raw): " + matchResults.matches.length);
+  print("Unmatched assets: " + matchResults.unmatched.length);
+
+  // Fill in artist/version: matched products from the matched asset's metadata
+  // (DIM content metadata as a fallback), unmatched assets from their own files —
+  // the latter is how unofficial products (absent from DIM) still get a version.
+  enrichMatchedProducts(matchResults.matches, config.dazLibraryFolder);
+  enrichUnmatchedAssets(matchResults.unmatched, config.dazLibraryFolder);
+
+  var ok = writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath);
+  if (ok) {
+    MessageBox.information(
+      "Product scan complete for " +
+        config.characterName +
+        (sceneName ? " — scene “" + sceneName + "”" : "") +
+        ".\n\nReturn to DTH Character Studio and open this character to review " +
+        "and store the found products.",
+      "DTH Product Scan",
+      "&OK"
+    );
+  }
+}
