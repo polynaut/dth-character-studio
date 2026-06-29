@@ -405,8 +405,10 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       bonus only ranks, never promotes a one-word match) and folds in the morph
  *       parameter path, so a morph like "SL_Glutes Top Inflate" stops mis-filing
  *       under "Summertide Swimwear Top" and matches its real product instead.
+ *   9 — product scan writes the unmatched-node diagnostics file only when something
+ *       is unmatched (a clean scan writes none and removes a stale prior report).
  */
-export const RUNTIME_VERSION = 8
+export const RUNTIME_VERSION = 9
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

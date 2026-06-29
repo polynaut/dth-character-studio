@@ -1911,7 +1911,44 @@ function CharacterPage() {
                         <th className="pr-3 pb-1 font-medium">SKU</th>
                         <th className="pr-3 pb-1 font-medium">Artist</th>
                         <th className="pr-3 pb-1 font-medium">Version</th>
-                        <th className="pr-3 pb-1 font-medium">Match</th>
+                        <th className="pr-3 pb-1 font-medium">
+                          <span className="inline-flex items-center gap-0.5">
+                            Match
+                            <InfoPopup label="What the match methods mean">
+                              <div className="space-y-1">
+                                <p>How each product was identified — strongest signal first:</p>
+                                <p>
+                                  <strong>File / Texture Match</strong> — a used file or texture lives
+                                  in the product's own folder (definitive).
+                                </p>
+                                <p>
+                                  <strong>SKU Match</strong> — the asset name encodes the product's
+                                  store SKU.
+                                </p>
+                                <p>
+                                  <strong>Keyword Match</strong> — two or more distinct words from the
+                                  asset's name, path or source file match the product.
+                                </p>
+                                <p>
+                                  <strong>Third-Party Match</strong> — a known non-DIM product (e.g.
+                                  Golden Palace).
+                                </p>
+                                <p>
+                                  <strong>Genesis Base Match</strong> — the base figure / starter
+                                  essentials.
+                                </p>
+                                <p>
+                                  <strong>Parent / Group Match</strong> — a sub-part inherited from a
+                                  matched parent garment, or a group node from its matched children.
+                                </p>
+                                <p>
+                                  <strong>Manifest Match</strong> — the node's name is a file an
+                                  in-scene product installs.
+                                </p>
+                              </div>
+                            </InfoPopup>
+                          </span>
+                        </th>
                         {productScan.scan.scenes.length > 1 && (
                           <th className="pr-3 pb-1 font-medium">Scene(s)</th>
                         )}

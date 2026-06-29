@@ -1652,8 +1652,9 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath) {
 // all passes — its parent (and whether that parent matched), the texture-map folders
 // it exposed (and the raw paths), its children, and its source file — so a stubborn
 // case can be understood from real data instead of a guess. Written next to the
-// per-scene CSV as "_diagnostic-<scene>.txt"; the studio reads only .csv, so it's
-// ignored there. Also echoed to the Daz log. Best-effort, never throws.
+// per-scene CSV as "_diagnostic-<scene>.txt" ONLY when something is unmatched (a
+// clean scene writes nothing and a stale report from a prior scan is removed); the
+// studio reads only .csv, so it's ignored there. Echoed to the Daz log. Never throws.
 function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
   try {
     var matchedProductOf = {};
@@ -1700,7 +1701,14 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
       lines.push("  source:   " + (n.sourceFile || "(none)"));
       lines.push("");
     }
-    if (!count) lines.push("(no unmatched nodes)");
+    // Everything matched → write no file, and remove any stale diagnostic a previous
+    // scan of this scene left behind, so a now-clean scene leaves a clean folder.
+    if (!count) {
+      print("DTH Product Scan: no unmatched nodes.");
+      var stale = new DzFile(diagPath);
+      if (stale.exists()) stale.remove();
+      return;
+    }
 
     var body = lines.join("\n");
     print("=== unmatched diagnostics ===\n" + body + "\n=== end diagnostics ===");
