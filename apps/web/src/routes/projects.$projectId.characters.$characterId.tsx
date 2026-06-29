@@ -19,6 +19,7 @@ import {
   Link2,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
   Undo2,
@@ -1979,6 +1980,41 @@ function CharacterPage() {
                         : 'Store on character'}
                 </Button>
               </div>
+
+              {character.products.length > 0 && (
+                <div
+                  className={`mb-3 flex items-start gap-1.5 rounded-md border p-2 text-sm ${
+                    scanUpToDate
+                      ? 'border-emerald-500/40 bg-emerald-500/10'
+                      : 'border-amber-500/40 bg-amber-500/10'
+                  }`}
+                >
+                  {scanUpToDate ? (
+                    <Check className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                  ) : (
+                    <RefreshCw className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                  )}
+                  <span>
+                    {scanUpToDate ? (
+                      <>
+                        Up to date — the {character.products.length} stored product
+                        {character.products.length === 1 ? '' : 's'} match the scan files on disk.
+                      </>
+                    ) : (
+                      <>
+                        The scan on disk has changed since you last stored
+                        {character.productsScannedAt
+                          ? ` (saved ${new Date(character.productsScannedAt).toLocaleString()})`
+                          : ''}
+                        : {mergedScan?.products.length ?? 0} product
+                        {(mergedScan?.products.length ?? 0) === 1 ? '' : 's'} found now vs{' '}
+                        {character.products.length} stored. Click{' '}
+                        <strong>Update stored products</strong> to save the latest results.
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
 
               {scanScenes.length > 1 && (
                 <div className="mb-3 flex flex-wrap items-center gap-1.5">
