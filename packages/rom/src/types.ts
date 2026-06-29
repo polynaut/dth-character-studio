@@ -401,8 +401,12 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *   7 — product scan runs its structural attribution passes (parent→child, name↔file,
  *       child→parent) to a fixpoint, so a match made by one pass unblocks another
  *       (e.g. a decoration parented to a node that only the group pass matches).
+ *   8 — keyword matching requires TWO distinct shared keywords (the scene-Genesis
+ *       bonus only ranks, never promotes a one-word match) and folds in the morph
+ *       parameter path, so a morph like "SL_Glutes Top Inflate" stops mis-filing
+ *       under "Summertide Swimwear Top" and matches its real product instead.
  */
-export const RUNTIME_VERSION = 7
+export const RUNTIME_VERSION = 8
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

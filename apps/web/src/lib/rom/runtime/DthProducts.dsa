@@ -230,6 +230,15 @@ function getUsedAssets() {
           if (Math.abs(value) > 0.001) {
             var morphName = String(modifier.getName());
             var morphLabel = String(modifier.getLabel());
+            // The parameter PATH often carries the vendor/product ("Actor/Hip/Stereo
+            // Love/Shaping/…") — a strong product hint the bare morph name lacks, used
+            // by keyword matching to place the morph on its real product.
+            var morphPath = "";
+            try {
+              if (channel && typeof channel.getPath === "function") {
+                morphPath = String(channel.getPath());
+              }
+            } catch (ePath) {}
 
             verbose("used morph:", morphLabel, "=", value.toFixed(3));
             assetList.push({
@@ -239,6 +248,7 @@ function getUsedAssets() {
               details: "Value: " + value.toFixed(3),
               value: value,
               sourceFile: assetSourceFile(modifier),
+              path: morphPath,
               textures: [],
             });
           }
@@ -1207,50 +1217,58 @@ function findDirectMatch(asset, productNameMap) {
 }
 
 function findKeywordMatch(asset, productKeywordMap, sceneGenesisVersion) {
-  // Include the native source file path — its folder segments often name the
-  // vendor/product, a more reliable signal than the asset label alone.
+  // Include the native source file path AND the morph parameter path — both carry
+  // vendor/product folder segments ("…/meipex/Stereo Love/…", "Actor/Hip/Stereo
+  // Love/Shaping/…") that name the real product far more reliably than the bare label.
   var assetKeywords = extractKeywords(
-    asset.name + " " + asset.technicalName + " " + (asset.sourceFile || "")
+    asset.name +
+      " " +
+      asset.technicalName +
+      " " +
+      (asset.sourceFile || "") +
+      " " +
+      (asset.path || "")
   );
-  var candidateProducts = {};
-  var maxScore = 0;
-  var bestMatch = null;
+  var candidates = {};
 
   for (var i = 0; i < assetKeywords.length; i++) {
     var keyword = assetKeywords[i];
-    if (productKeywordMap[keyword]) {
-      var products = productKeywordMap[keyword];
-      for (var j = 0; j < products.length; j++) {
-        var product = products[j];
-
-        if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
-          continue;
-        }
-
-        var productId = product.name;
-        if (!candidateProducts[productId]) {
-          candidateProducts[productId] = { product: product, score: 0 };
-        }
-        candidateProducts[productId].score++;
-
-        if (sceneGenesisVersion && productMatchesGenesisVersion(product.name, sceneGenesisVersion)) {
-          candidateProducts[productId].score += 2;
-        }
+    if (!productKeywordMap[keyword]) continue;
+    var products = productKeywordMap[keyword];
+    for (var j = 0; j < products.length; j++) {
+      var product = products[j];
+      if (sceneGenesisVersion && productIsWrongGenesisVersion(product.name, sceneGenesisVersion)) {
+        continue;
+      }
+      var pid = product.name;
+      if (!candidates[pid]) candidates[pid] = { product: product, hits: {}, genesis: false };
+      candidates[pid].hits[keyword] = true; // count DISTINCT shared keywords
+      if (sceneGenesisVersion && productMatchesGenesisVersion(product.name, sceneGenesisVersion)) {
+        candidates[pid].genesis = true;
       }
     }
   }
 
-  for (var productId in candidateProducts) {
-    if (candidateProducts[productId].score > maxScore) {
-      maxScore = candidateProducts[productId].score;
-      bestMatch = candidateProducts[productId].product;
+  // Require at least TWO distinct shared keywords. A single shared generic word
+  // ("top", "layer", "front", …) must not pull an unrelated asset onto a product —
+  // that's what mis-filed the "SL_Glutes Top Inflate" morph (Stereo Love) under
+  // "Summertide Swimwear Top". The scene-Genesis match only RANKS the qualifying
+  // candidates (and breaks ties toward the right generation); it can no longer
+  // promote a one-word match over the bar.
+  var best = null;
+  var bestScore = 0;
+  for (var pid2 in candidates) {
+    var c = candidates[pid2];
+    var hitCount = 0;
+    for (var kw in c.hits) hitCount++;
+    if (hitCount < 2) continue;
+    var score = hitCount + (c.genesis ? 2 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = c.product;
     }
   }
-
-  // Require solid confidence: a product needs 3 keyword "points" — either three
-  // shared distinctive words, or one shared word plus the +2 scene-Genesis bonus.
-  // (Raised from 2 to cut incidental single-keyword false positives.)
-  return maxScore >= 3 ? bestMatch : null;
+  return best;
 }
 
 function findThirdPartyMatch(asset, installedProducts, sceneGenesisVersion) {
