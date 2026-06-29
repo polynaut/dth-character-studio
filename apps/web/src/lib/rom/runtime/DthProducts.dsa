@@ -392,19 +392,30 @@ function parseManifestFile(manifestPath) {
 
     // Index this product's content data files (the .dsf/.duf it installs) so a used
     // asset's native source file can be matched back to its exact product — the most
-    // reliable signal (e.g. "ACGloves.dsf" → "Adventurer Clothes"). Capped so a giant
-    // morph pack doesn't bloat the index; those match by keyword/SKU anyway.
-    var dataFiles = [];
+    // reliable signal (e.g. "ACGloves.dsf" → "Adventurer Clothes"). The list is capped
+    // so a giant morph pack doesn't bloat the global file index built across every
+    // installed product; morph packs match by keyword/SKU anyway. Crucially, GEOMETRY
+    // files are collected before morph files, so a product's part geometry (e.g.
+    // "Frangipani.dsf") always makes the capped list for the filename/folder matchers
+    // instead of being crowded out by a pile of "…/Morphs/…" .dsf files.
+    var geomFiles = [];
+    var morphFiles = [];
     var fileTokens = String(content).match(/VALUE="[^"]*\.(?:dsf|duf)"/gi);
     if (fileTokens) {
-      for (var fT = 0; fT < fileTokens.length && dataFiles.length < 60; fT++) {
+      for (var fT = 0; fT < fileTokens.length; fT++) {
         var vm = fileTokens[fT].match(/VALUE="([^"]+)"/i);
-        if (vm) {
-          var norm = normalizeContentPath(vm[1]);
-          if (norm) dataFiles.push(norm);
+        if (!vm) continue;
+        var norm = normalizeContentPath(vm[1]);
+        if (!norm) continue;
+        if (norm.indexOf("/morphs/") !== -1 || norm.indexOf("morphs/") === 0) {
+          morphFiles.push(norm);
+        } else {
+          geomFiles.push(norm);
         }
       }
     }
+    var dataFiles = geomFiles.concat(morphFiles);
+    if (dataFiles.length > 60) dataFiles = dataFiles.slice(0, 60);
 
     // Distinct "vendor/product" folders this product installs under — the key a
     // used node's texture path can be matched against (the node API gives us no
