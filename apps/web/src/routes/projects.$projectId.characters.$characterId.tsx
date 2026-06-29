@@ -51,6 +51,7 @@ import { Switch } from '#/components/ui/switch.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import {
   characterKeepFolders,
+  clearProductScan,
   copyDazScene,
   deleteCharacter,
   deleteFiles,
@@ -1344,6 +1345,7 @@ function CharacterPage() {
   const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
   const [storingProducts, setStoringProducts] = useState(false)
+  const [clearingScan, setClearingScan] = useState(false)
   const [expandedProducts, setExpandedProducts] = useState<Set<number>>(() => new Set())
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -1509,6 +1511,23 @@ function CharacterPage() {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setStoringProducts(false)
+    }
+  }
+
+  // Discard the unstored scan results (the per-scene CSVs) so the review panel
+  // clears. Leaves any products already stored on the character untouched.
+  async function clearScan() {
+    if (!productScan?.exists) return
+    setClearingScan(true)
+    try {
+      await clearProductScan({ data: { projectId, id: character.id } })
+      setExpandedProducts(new Set())
+      void router.invalidate()
+      toast.success('Cleared scan results')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setClearingScan(false)
     }
   }
 
@@ -1836,6 +1855,15 @@ function CharacterPage() {
           <div className="mt-3 flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void router.invalidate()}>
               Check for scan results
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearScan}
+              disabled={!productScan?.exists || clearingScan}
+              title="Discard the scan results (leaves products already stored on the character untouched)"
+            >
+              {clearingScan ? 'Clearing…' : 'Clear'}
             </Button>
             {character.products.length > 0 && (
               <span className="text-sm text-muted-foreground">

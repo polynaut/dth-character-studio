@@ -785,6 +785,19 @@ export async function fetchProductScan({
   }
 }
 
+/**
+ * Discard a character's unstored product-scan results — the per-scene CSVs the Daz
+ * script wrote into the scan folder. This clears the review panel; it does NOT
+ * touch the products already stored on the character (those live in its JSON).
+ * The whole folder is removed — the next scan recreates it. Best-effort.
+ */
+export async function clearProductScan({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const project = await resolveProject(projectId)
+  const dir = await storage.productScanDir(project.id, id)
+  if (await exists(dir)) await remove(dir, { recursive: true })
+}
+
 /** Whether `path` is a directory (false, never throws, when it can't be probed).
  *  Used to resolve a dropped folder vs file in the create-project drop zone. */
 export async function isDirectory(path: string): Promise<boolean> {
