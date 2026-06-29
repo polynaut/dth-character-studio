@@ -1204,6 +1204,7 @@ function findDirectMatch(asset, productNameMap) {
   var techName = asset.technicalName.toLowerCase();
 
   for (var productName in productNameMap) {
+    if (!hasOwn(productNameMap, productName)) continue; // skip polluted prototype keys
     if (
       productName.indexOf("cartoonized") !== -1 &&
       (assetName.indexOf("cartoon") !== -1 ||
@@ -1229,11 +1230,18 @@ function findKeywordMatch(asset, productKeywordMap, sceneGenesisVersion) {
       " " +
       (asset.path || "")
   );
+  // candidates: distinct shared keywords per product, tracked in an ARRAY (and an
+  // explicit `order` list) rather than counted with `for (k in obj)`. Daz's QtScript
+  // environment leaves enumerable members on Object.prototype, so a `for…in` count
+  // over a plain object is inflated by those — which silently defeated the two-keyword
+  // gate below (a one-keyword hit counted as ≥2 and matched). hasOwnProperty guards
+  // every map lookup for the same reason.
   var candidates = {};
+  var order = [];
 
   for (var i = 0; i < assetKeywords.length; i++) {
     var keyword = assetKeywords[i];
-    if (!productKeywordMap[keyword]) continue;
+    if (!hasOwn(productKeywordMap, keyword)) continue;
     var products = productKeywordMap[keyword];
     for (var j = 0; j < products.length; j++) {
       var product = products[j];
@@ -1241,10 +1249,15 @@ function findKeywordMatch(asset, productKeywordMap, sceneGenesisVersion) {
         continue;
       }
       var pid = product.name;
-      if (!candidates[pid]) candidates[pid] = { product: product, hits: {}, genesis: false };
-      candidates[pid].hits[keyword] = true; // count DISTINCT shared keywords
+      var c = hasOwn(candidates, pid) ? candidates[pid] : null;
+      if (!c) {
+        c = { product: product, kws: [], genesis: false };
+        candidates[pid] = c;
+        order.push(pid);
+      }
+      if (indexOfStr(c.kws, keyword) === -1) c.kws.push(keyword); // distinct keywords
       if (sceneGenesisVersion && productMatchesGenesisVersion(product.name, sceneGenesisVersion)) {
-        candidates[pid].genesis = true;
+        c.genesis = true;
       }
     }
   }
@@ -1252,23 +1265,34 @@ function findKeywordMatch(asset, productKeywordMap, sceneGenesisVersion) {
   // Require at least TWO distinct shared keywords. A single shared generic word
   // ("top", "layer", "front", …) must not pull an unrelated asset onto a product —
   // that's what mis-filed the "SL_Glutes Top Inflate" morph (Stereo Love) under
-  // "Summertide Swimwear Top". The scene-Genesis match only RANKS the qualifying
-  // candidates (and breaks ties toward the right generation); it can no longer
-  // promote a one-word match over the bar.
+  // "Summertide Swimwear Top", and "GP_Minora_Inflate Inside" (Golden Palace) under
+  // "Inside the Asylum Bundle" on the lone word "inside". The scene-Genesis match
+  // only RANKS the qualifying candidates (and breaks ties toward the right
+  // generation); it can no longer promote a one-word match over the bar.
   var best = null;
   var bestScore = 0;
-  for (var pid2 in candidates) {
-    var c = candidates[pid2];
-    var hitCount = 0;
-    for (var kw in c.hits) hitCount++;
-    if (hitCount < 2) continue;
-    var score = hitCount + (c.genesis ? 2 : 0);
+  for (var o = 0; o < order.length; o++) {
+    var cand = candidates[order[o]];
+    if (cand.kws.length < 2) continue;
+    var score = cand.kws.length + (cand.genesis ? 2 : 0);
     if (score > bestScore) {
       bestScore = score;
-      best = c.product;
+      best = cand.product;
     }
   }
   return best;
+}
+
+// hasOwnProperty / indexOf helpers that don't trust a (possibly polluted) prototype
+// chain — used wherever a plain object is treated as a map or an array as a set.
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+function indexOfStr(arr, value) {
+  for (var i = 0; i < arr.length; i++) {
+    if (arr[i] === value) return i;
+  }
+  return -1;
 }
 
 function findThirdPartyMatch(asset, installedProducts, sceneGenesisVersion) {
@@ -1727,50 +1751,6 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
   }
 }
 
-// TEMPORARY DIAGNOSTIC — dump every match with the exact asset fields and the
-// keyword list that drove a Keyword Match, so a surprising attribution can be read
-// off disk. Remove once verified. Never throws.
-function writeMatchDebug(debugPath, matchResults) {
-  try {
-    var lines = ["DTH match debug (temporary) — method | product | asset fields"];
-    for (var i = 0; i < matchResults.matches.length; i++) {
-      var m = matchResults.matches[i];
-      var a = m.asset || {};
-      var kwText =
-        String(a.name || "") +
-        " " +
-        String(a.technicalName || "") +
-        " " +
-        String(a.sourceFile || "") +
-        " " +
-        String(a.path || "");
-      var kws = m.method === "Keyword Match" ? extractKeywords(kwText).join(",") : "";
-      lines.push(
-        m.method +
-          " | " +
-          m.product.name +
-          " | name='" + (a.name || "") + "'" +
-          " tech='" + (a.technicalName || "") + "'" +
-          " type=" + (a.type || "") +
-          " src='" + (a.sourceFile || "") + "'" +
-          " path='" + (a.path || "") + "'" +
-          (kws ? " kw=[" + kws + "]" : "")
-      );
-    }
-    var fi = new DzFileInfo(debugPath);
-    var pd = new DzDir(fi.path());
-    if (!pd.exists()) pd.mkpath(fi.path());
-    var f = new DzFile(debugPath);
-    if (f.open(f.WriteOnly, f.Truncate)) {
-      f.write(lines.join("\n"));
-      f.close();
-      print("DTH Product Scan: wrote match debug to " + debugPath);
-    }
-  } catch (e) {
-    print("DTH Product Scan: match debug write failed - " + e);
-  }
-}
-
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 // Called by the generated Scan_Products_<Name>.dsa. config carries:
@@ -1824,16 +1804,6 @@ function DthScanProducts(config) {
   );
   print("Matched products (raw): " + matchResults.matches.length);
   print("Unmatched assets: " + matchResults.unmatched.length);
-
-  // TEMPORARY DIAGNOSTIC: dump every match with the asset fields that drove it, so a
-  // surprising keyword attribution can be understood from real runtime values. Remove
-  // once the keyword-matching is verified.
-  var debugPath =
-    String(config.outputDir).replace(/\\/g, "/").replace(/\/+$/g, "") +
-    "/_debug-matches-" +
-    sceneSlug(sceneName) +
-    ".txt";
-  writeMatchDebug(debugPath, matchResults);
 
   // Fill in artist/version: matched products from the matched asset's metadata
   // (DIM content metadata as a fallback), unmatched assets from their own files —

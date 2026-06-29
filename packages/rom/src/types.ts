@@ -409,8 +409,13 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       is unmatched (a clean scan writes none and removes a stale prior report).
  *  10 — product scan writes a temporary "_debug-matches-<scene>.txt" dumping the
  *       asset fields behind each match (to diagnose a surprising keyword attribution).
+ *  11 — keyword matcher counts distinct shared keywords with arrays + hasOwnProperty
+ *       instead of `for…in` over a plain object: Daz's QtScript leaves enumerable
+ *       members on Object.prototype, which inflated the count and silently defeated
+ *       the two-keyword gate (e.g. "GP_Minora_Inflate Inside" → "Inside the Asylum
+ *       Bundle" on the lone word "inside"). Temporary match-debug dump removed.
  */
-export const RUNTIME_VERSION = 10
+export const RUNTIME_VERSION = 11
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
