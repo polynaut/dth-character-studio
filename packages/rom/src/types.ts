@@ -392,8 +392,11 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       trim) to a product already matched in the same scene when the node's name
  *       is the basename of a file that product installs ("Manifest Match"), so
  *       figure-parented sub-parts stop landing in "unmatched".
+ *   5 — product scan reads ALL of a node's material map channels (normal, bump,
+ *       roughness, metallic, …), not just the diffuse map, so a sub-part whose only
+ *       file texture is on a non-diffuse channel still texture-folder matches.
  */
-export const RUNTIME_VERSION = 4
+export const RUNTIME_VERSION = 5
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

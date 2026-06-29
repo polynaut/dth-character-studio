@@ -254,10 +254,18 @@ function getUsedAssets() {
 // Collect a node's material texture-map file paths (absolute). This is the only
 // file reference Daz reliably gives for a node — its asset URI/id APIs don't exist —
 // and the texture's vendor/product folder is product-identifying. Cheap: bones and
-// option nodes have no object/materials and return []. Limited to the diffuse/base
-// maps of the first handful of materials, which is enough to name the product.
+// option nodes have no object/materials and return []. Reads EVERY mapped material
+// property (diffuse, normal, bump, roughness, metallic, cutout, …) across the first
+// handful of materials — a metal zipper or a procedurally-tinted flower often has no
+// diffuse map yet still references a product texture on another channel.
 function getNodeTextureFiles(node) {
   var files = [];
+  function addMap(tex) {
+    if (tex && typeof tex.getFilename === "function") {
+      var fn = String(tex.getFilename());
+      if (fn && files.indexOf(fn) === -1) files.push(fn);
+    }
+  }
   try {
     if (!node || typeof node.getObject !== "function") return files;
     var obj = node.getObject();
@@ -269,14 +277,17 @@ function getNodeTextureFiles(node) {
     for (var i = 0; i < limit; i++) {
       var mat = shape.getMaterial(i);
       if (!mat) continue;
-      var maps = [];
-      if (typeof mat.getColorMap === "function") maps.push(mat.getColorMap());
-      if (typeof mat.getBaseColorMap === "function") maps.push(mat.getBaseColorMap());
-      for (var x = 0; x < maps.length; x++) {
-        var tex = maps[x];
-        if (tex && typeof tex.getFilename === "function") {
-          var fn = String(tex.getFilename());
-          if (fn && files.indexOf(fn) === -1) files.push(fn);
+      // The named diffuse / base-color accessors first (cheap, always present)...
+      if (typeof mat.getColorMap === "function") addMap(mat.getColorMap());
+      if (typeof mat.getBaseColorMap === "function") addMap(mat.getBaseColorMap());
+      // ...then every other mapped property. Most return no map (skipped), so this
+      // stays cheap while catching surfaces whose only file texture is a bump/normal/
+      // roughness map sitting in the product's own folder.
+      if (typeof mat.getNumProperties === "function") {
+        var np = mat.getNumProperties();
+        for (var p = 0; p < np; p++) {
+          var prop = mat.getProperty(p);
+          if (prop && typeof prop.getMapValue === "function") addMap(prop.getMapValue());
         }
       }
     }
