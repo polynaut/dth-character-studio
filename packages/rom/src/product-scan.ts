@@ -173,9 +173,11 @@ export function mergeProductScans(scans: Array<ProductScan>): MergedProductScan 
       }
     }
   }
+  const byName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   return {
     scenes,
-    products: [...productByKey.values()],
-    unmatched: [...unmatchedByKey.values()],
+    products: [...productByKey.values()].sort(byName),
+    unmatched: [...unmatchedByKey.values()].sort(byName),
   }
 }

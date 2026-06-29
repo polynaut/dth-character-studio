@@ -167,6 +167,14 @@ describe('mergeProductScans', () => {
     expect(unmatchedByName['Frangipani']).toEqual(['Summertide'])
   })
 
+  it('sorts products and unmatched assets alphabetically (case-insensitive)', () => {
+    const merged = mergeProductScans([
+      scan('Default', ['Zebra', 'apple', 'Mango'], ['zeta', 'Alpha']),
+    ])
+    expect(merged.products.map((p) => p.name)).toEqual(['apple', 'Mango', 'Zebra'])
+    expect(merged.unmatched.map((a) => a.name)).toEqual(['Alpha', 'zeta'])
+  })
+
   it('labels a scan of an unsaved scene', () => {
     const merged = mergeProductScans([scan('', ['Essentials'], [])])
     expect(merged.scenes).toEqual(['(unsaved scene)'])
