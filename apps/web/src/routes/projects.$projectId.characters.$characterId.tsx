@@ -1946,11 +1946,68 @@ function CharacterPage() {
             )}
           </div>
 
-          {productScan?.exists && productScan.scan ? (
+          {scanFiles.length > 0 ? (
             <div className="mt-4 rounded-md border p-3">
+              <div className="mb-1 font-medium">
+                {scanFiles.length} scanned scene{scanFiles.length === 1 ? '' : 's'} on disk
+              </div>
+              <p className="mb-2 text-xs text-muted-foreground">
+                One CSV per scanned scene, written here by the Daz script — the Products panel below
+                is these files merged. <strong>Check for scan results</strong> re-reads them;{' '}
+                <strong>Clear</strong> deletes them (products already stored on the character are
+                kept).
+              </p>
+              {productScan?.dir && <PathCode path={productScan.dir} />}
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-muted-foreground">
+                      <th className="pr-3 pb-1 font-medium">Scene</th>
+                      <th className="pr-3 pb-1 font-medium">Products</th>
+                      <th className="pr-3 pb-1 font-medium">Unmatched</th>
+                      <th className="pr-3 pb-1 font-medium">Last written</th>
+                      <th className="pr-3 pb-1 font-medium">File</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scanFiles.map((f) => (
+                      <tr key={f.name} className="border-t align-top">
+                        <td className="py-1 pr-3">
+                          <div className="text-foreground/90">{f.scene || '(unsaved scene)'}</div>
+                          {f.scenePath && (
+                            <div className="text-xs break-all text-muted-foreground/70">
+                              {displayPath(f.scenePath)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-1 pr-3 text-muted-foreground">{f.products}</td>
+                        <td className="py-1 pr-3 text-muted-foreground">{f.unmatched || '—'}</td>
+                        <td className="py-1 pr-3 text-muted-foreground">
+                          {f.modifiedAt ? new Date(f.modifiedAt).toLocaleString() : '—'}
+                        </td>
+                        <td className="py-1 pr-3">
+                          <code className="text-xs text-muted-foreground/70">{f.name}</code>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No scan results found yet. Run the script in Daz, then click “Check for scan results”.
+            </p>
+          )}
+        </section>
+
+        {productScan?.exists && productScan.scan && (
+          <section className="mb-8 rounded-lg border bg-card p-5">
+            <h2 className="mb-3 text-xl font-semibold">Matched products</h2>
+            <div className="mt-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-                <span className="font-medium">
-                  Scan results — {viewProducts.length} product
+                <span className="text-sm text-muted-foreground">
+                  {viewProducts.length} product
                   {viewProducts.length === 1 ? '' : 's'}
                   {viewUnmatched.length ? `, ${viewUnmatched.length} unmatched` : ''}
                   {sceneFilterActive
@@ -2221,47 +2278,9 @@ function CharacterPage() {
                   </ul>
                 </details>
               )}
-
-              {scanFiles.length > 0 && (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-sm text-muted-foreground">
-                    {scanFiles.length} scan file{scanFiles.length === 1 ? '' : 's'} on disk
-                    {scanUpToDate ? ' · matches stored products' : ''}
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      One CSV per scanned scene, written here by the Daz script. The results above
-                      are these files merged. <strong>Check for scan results</strong> re-reads them;{' '}
-                      <strong>Clear</strong> deletes them (products already stored on the character
-                      are kept). The store button stays idle while the newest file is no newer than
-                      your last save.
-                    </p>
-                    {productScan?.dir && <PathCode path={productScan.dir} />}
-                    <ul className="space-y-1 text-sm">
-                      {scanFiles.map((f) => (
-                        <li key={f.name} className="flex flex-wrap items-baseline gap-x-2">
-                          <span className="text-foreground/80">{f.scene || '(unsaved scene)'}</span>
-                          <span className="text-muted-foreground">
-                            {f.products} product{f.products === 1 ? '' : 's'}
-                            {f.unmatched ? `, ${f.unmatched} unmatched` : ''}
-                            {f.modifiedAt
-                              ? ` · written ${new Date(f.modifiedAt).toLocaleString()}`
-                              : ''}
-                          </span>
-                          <code className="text-xs text-muted-foreground/70">{f.name}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </details>
-              )}
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              No scan results found yet. Run the script in Daz, then click “Check for scan results”.
-            </p>
-          )}
-        </section>
+          </section>
+        )}
         </div>
       )}
 
