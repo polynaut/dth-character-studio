@@ -10,6 +10,7 @@ import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-rout
 import { z } from 'zod'
 import {
   ArrowLeft,
+  Check,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -1631,6 +1632,18 @@ function CharacterPage() {
       ? mergedScan.unmatched.filter((a) => a.scenes.includes(sceneFilter!))
       : mergedScan.unmatched
   const multiScene = scanScenes.length > 1 && !sceneFilterActive
+  // The per-scene CSV files on disk, and whether the products stored on the
+  // character still reflect them: "up to date" when something is stored and no
+  // CSV is newer than the last store (ISO mtimes compare lexicographically). This
+  // is why the store button can sit idle even though scan files are still present.
+  const scanFiles = productScan?.files ?? []
+  const newestScanMtime = scanFiles.reduce((max, f) => (f.modifiedAt > max ? f.modifiedAt : max), '')
+  const scanUpToDate =
+    !!mergedScan &&
+    character.products.length > 0 &&
+    !!character.productsScannedAt &&
+    newestScanMtime !== '' &&
+    newestScanMtime <= character.productsScannedAt
   const sceneChipClass = (active: boolean) =>
     `rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
       active
@@ -1947,13 +1960,23 @@ function CharacterPage() {
                         ? ` · ${scanScenes[0]}`
                         : ''}
                 </span>
-                <Button onClick={storeProducts} disabled={storingProducts}>
-                  <Save />{' '}
+                <Button
+                  onClick={storeProducts}
+                  disabled={storingProducts || scanUpToDate}
+                  title={
+                    scanUpToDate
+                      ? 'The stored products already match the scan files on disk — nothing to update'
+                      : undefined
+                  }
+                >
+                  {scanUpToDate ? <Check /> : <Save />}{' '}
                   {storingProducts
                     ? 'Storing…'
-                    : character.products.length
-                      ? 'Update stored products'
-                      : 'Store on character'}
+                    : scanUpToDate
+                      ? 'Stored — up to date'
+                      : character.products.length
+                        ? 'Update stored products'
+                        : 'Store on character'}
                 </Button>
               </div>
 
@@ -2160,6 +2183,40 @@ function CharacterPage() {
                       </li>
                     ))}
                   </ul>
+                </details>
+              )}
+
+              {scanFiles.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">
+                    {scanFiles.length} scan file{scanFiles.length === 1 ? '' : 's'} on disk
+                    {scanUpToDate ? ' · matches stored products' : ''}
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      One CSV per scanned scene, written here by the Daz script. The results above
+                      are these files merged. <strong>Check for scan results</strong> re-reads them;{' '}
+                      <strong>Clear</strong> deletes them (products already stored on the character
+                      are kept). The store button stays idle while the newest file is no newer than
+                      your last save.
+                    </p>
+                    {productScan?.dir && <PathCode path={productScan.dir} />}
+                    <ul className="space-y-1 text-sm">
+                      {scanFiles.map((f) => (
+                        <li key={f.name} className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-foreground/80">{f.scene || '(unsaved scene)'}</span>
+                          <span className="text-muted-foreground">
+                            {f.products} product{f.products === 1 ? '' : 's'}
+                            {f.unmatched ? `, ${f.unmatched} unmatched` : ''}
+                            {f.modifiedAt
+                              ? ` · written ${new Date(f.modifiedAt).toLocaleString()}`
+                              : ''}
+                          </span>
+                          <code className="text-xs text-muted-foreground/70">{f.name}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </details>
               )}
             </div>

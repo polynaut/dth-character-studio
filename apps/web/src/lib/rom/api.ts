@@ -759,29 +759,69 @@ export async function detectDimManifestsFolder(): Promise<string> {
  * unmatched asset is attributed to the scene(s) it was found in. Best-effort —
  * returns `{ exists: false }` when no scan has been run or the folder is unreadable.
  */
+/** One per-scene CSV on disk in a character's scan folder — surfaced so the UI can
+ *  show exactly which files back the merged results and when each was last written. */
+export interface ProductScanFile {
+  /** The CSV file name on disk (e.g. `KiraSummertide_G9_GP.csv`). */
+  name: string
+  /** The Daz scene the CSV was written for ('' for an unsaved scene). */
+  scene: string
+  scenePath: string
+  products: number
+  unmatched: number
+  /** ISO mtime of the file, or '' when it couldn't be stat'd. */
+  modifiedAt: string
+}
+
 export async function fetchProductScan({
   data,
 }: {
   data: unknown
-}): Promise<{ exists: boolean; scan: MergedProductScan | null; dir: string }> {
+}): Promise<{
+  exists: boolean
+  scan: MergedProductScan | null
+  dir: string
+  files: Array<ProductScanFile>
+}> {
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
   const dir = await storage.productScanDir(project.id, id)
   try {
-    if (!(await exists(dir))) return { exists: false, scan: null, dir }
+    if (!(await exists(dir))) return { exists: false, scan: null, dir, files: [] }
     const scans: Array<ProductScan> = []
+    const files: Array<ProductScanFile> = []
     for (const entry of await readDir(dir)) {
       if (!entry.isFile || !entry.name.toLowerCase().endsWith('.csv')) continue
+      const full = joinPath(dir, entry.name)
       try {
-        scans.push(parseProductScanCsv(await readTextFile(joinPath(dir, entry.name))))
+        const parsed = parseProductScanCsv(await readTextFile(full))
+        scans.push(parsed)
+        let modifiedAt = ''
+        try {
+          const info = await stat(full)
+          modifiedAt = info.mtime ? info.mtime.toISOString() : ''
+        } catch {
+          // mtime unavailable — leave ''
+        }
+        files.push({
+          name: entry.name,
+          scene: parsed.sceneName,
+          scenePath: parsed.scenePath,
+          products: parsed.products.length,
+          unmatched: parsed.unmatched.length,
+          modifiedAt,
+        })
       } catch {
         // skip an individual unreadable CSV
       }
     }
-    if (scans.length === 0) return { exists: false, scan: null, dir }
-    return { exists: true, scan: mergeProductScans(scans), dir }
+    if (scans.length === 0) return { exists: false, scan: null, dir, files: [] }
+    files.sort((a, b) =>
+      (a.scene || a.name).localeCompare(b.scene || b.name, undefined, { sensitivity: 'base' }),
+    )
+    return { exists: true, scan: mergeProductScans(scans), dir, files }
   } catch {
-    return { exists: false, scan: null, dir }
+    return { exists: false, scan: null, dir, files: [] }
   }
 }
 
