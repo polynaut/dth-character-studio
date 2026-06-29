@@ -407,8 +407,10 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       under "Summertide Swimwear Top" and matches its real product instead.
  *   9 — product scan writes the unmatched-node diagnostics file only when something
  *       is unmatched (a clean scan writes none and removes a stale prior report).
+ *  10 — product scan writes a temporary "_debug-matches-<scene>.txt" dumping the
+ *       asset fields behind each match (to diagnose a surprising keyword attribution).
  */
-export const RUNTIME_VERSION = 9
+export const RUNTIME_VERSION = 10
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

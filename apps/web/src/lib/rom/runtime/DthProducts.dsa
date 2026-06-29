@@ -1727,6 +1727,50 @@ function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
   }
 }
 
+// TEMPORARY DIAGNOSTIC — dump every match with the exact asset fields and the
+// keyword list that drove a Keyword Match, so a surprising attribution can be read
+// off disk. Remove once verified. Never throws.
+function writeMatchDebug(debugPath, matchResults) {
+  try {
+    var lines = ["DTH match debug (temporary) — method | product | asset fields"];
+    for (var i = 0; i < matchResults.matches.length; i++) {
+      var m = matchResults.matches[i];
+      var a = m.asset || {};
+      var kwText =
+        String(a.name || "") +
+        " " +
+        String(a.technicalName || "") +
+        " " +
+        String(a.sourceFile || "") +
+        " " +
+        String(a.path || "");
+      var kws = m.method === "Keyword Match" ? extractKeywords(kwText).join(",") : "";
+      lines.push(
+        m.method +
+          " | " +
+          m.product.name +
+          " | name='" + (a.name || "") + "'" +
+          " tech='" + (a.technicalName || "") + "'" +
+          " type=" + (a.type || "") +
+          " src='" + (a.sourceFile || "") + "'" +
+          " path='" + (a.path || "") + "'" +
+          (kws ? " kw=[" + kws + "]" : "")
+      );
+    }
+    var fi = new DzFileInfo(debugPath);
+    var pd = new DzDir(fi.path());
+    if (!pd.exists()) pd.mkpath(fi.path());
+    var f = new DzFile(debugPath);
+    if (f.open(f.WriteOnly, f.Truncate)) {
+      f.write(lines.join("\n"));
+      f.close();
+      print("DTH Product Scan: wrote match debug to " + debugPath);
+    }
+  } catch (e) {
+    print("DTH Product Scan: match debug write failed - " + e);
+  }
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 // Called by the generated Scan_Products_<Name>.dsa. config carries:
@@ -1780,6 +1824,16 @@ function DthScanProducts(config) {
   );
   print("Matched products (raw): " + matchResults.matches.length);
   print("Unmatched assets: " + matchResults.unmatched.length);
+
+  // TEMPORARY DIAGNOSTIC: dump every match with the asset fields that drove it, so a
+  // surprising keyword attribution can be understood from real runtime values. Remove
+  // once the keyword-matching is verified.
+  var debugPath =
+    String(config.outputDir).replace(/\\/g, "/").replace(/\/+$/g, "") +
+    "/_debug-matches-" +
+    sceneSlug(sceneName) +
+    ".txt";
+  writeMatchDebug(debugPath, matchResults);
 
   // Fill in artist/version: matched products from the matched asset's metadata
   // (DIM content metadata as a fallback), unmatched assets from their own files —
