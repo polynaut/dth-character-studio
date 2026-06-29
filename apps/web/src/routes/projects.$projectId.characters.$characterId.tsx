@@ -1945,6 +1945,12 @@ function CharacterPage() {
                                   <strong>Manifest Match</strong> — the node's name is a file an
                                   in-scene product installs.
                                 </p>
+                                <p>
+                                  <strong>Content Folder Match</strong> — identified from the content
+                                  library's <code>data/&lt;Vendor&gt;/&lt;Product&gt;</code> folder.
+                                  Catches products with no DIM manifest (e.g. unofficial content); no
+                                  SKU, but the artist/version are read from the content's own files.
+                                </p>
                               </div>
                             </InfoPopup>
                           </span>

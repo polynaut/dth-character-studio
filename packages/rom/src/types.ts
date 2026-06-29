@@ -414,8 +414,12 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       members on Object.prototype, which inflated the count and silently defeated
  *       the two-keyword gate (e.g. "GP_Minora_Inflate Inside" → "Inside the Asylum
  *       Bundle" on the lone word "inside"). Temporary match-debug dump removed.
+ *  12 — product scan synthesizes products from the content library's
+ *       data/<Vendor>/<Product> folders as a last resort, so content with no DIM /
+ *       LOCAL_USER metadata (e.g. unofficial products) is still recognised — named by
+ *       its folder, with artist/version read from the content's own files.
  */
-export const RUNTIME_VERSION = 11
+export const RUNTIME_VERSION = 12
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

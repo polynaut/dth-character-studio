@@ -555,6 +555,38 @@ function readSupportMetadata(dazLibraryFolder, supportFile) {
   return result;
 }
 
+// Find one representative .dsf/.duf under a content folder (bounded breadth-first
+// search), so a synthesized content-folder product can read its real author/revision
+// from the content itself. Returns '' when none is found within the budget.
+function findRepresentativeDsf(folder) {
+  try {
+    var queue = [folder];
+    var visited = 0;
+    while (queue.length && visited < 80) {
+      var dir = queue.shift();
+      visited++;
+      var d = new DzDir(dir);
+      if (!d.exists()) continue;
+      var entries = d.entryList();
+      for (var i = 0; i < entries.length; i++) {
+        var name = String(entries[i]);
+        var low = name.toLowerCase();
+        if (low.lastIndexOf(".dsf") === low.length - 4 || low.lastIndexOf(".duf") === low.length - 4) {
+          return dir + "/" + name;
+        }
+      }
+      var subs = typeof d.getSubdirList === "function" ? d.getSubdirList() : entries;
+      for (var s = 0; s < subs.length; s++) {
+        var sub = String(subs[s]);
+        if (sub === "." || sub === "..") continue;
+        var full = dir + "/" + sub;
+        if (new DzDir(full).exists()) queue.push(full);
+      }
+    }
+  } catch (e) {}
+  return "";
+}
+
 // Fill in artist/version for the MATCHED products (a handful of extra file reads,
 // not thousands). Primary source is the matched asset's OWN file metadata (author
 // + revision) — that's the real vendor version and works for unofficial products
@@ -580,8 +612,18 @@ function enrichMatchedProducts(matches, dazLibraryFolder) {
         if (info.author && info.revision) break;
       }
     }
-    if (info.author && (product.artist === "Unknown" || !product.artist)) {
-      product.artist = info.author;
+    // 1c) Synthesized content-folder product (no manifest file list): read a
+    // representative .dsf from under its content folder for the real author/revision.
+    if ((!info.author || !info.revision) && product.contentFolder) {
+      var rep = findRepresentativeDsf(product.contentFolder);
+      if (rep) {
+        var cInfo = readAssetInfoFromFile(rep);
+        if (!info.author && cInfo.author) info.author = cInfo.author;
+        if (!info.revision && cInfo.revision) info.revision = cInfo.revision;
+      }
+    }
+    if (info.author && (product.artist === "Unknown" || !product.artist || product.synthesized)) {
+      product.artist = info.author; // the .dsf author beats the folder vendor for synth
     }
     if (info.revision) {
       product.version = info.revision; // a real content revision beats the DIM build
@@ -760,6 +802,75 @@ function getLocalUserProducts(dazLibraryFolder) {
   return products;
 }
 
+// Synthesize "products" from the content library's data/<Vendor>/<Product>/ folders,
+// so manually-installed content with NO DIM or LOCAL_USER metadata is still
+// recognisable — named by its folder, attributed to its vendor. These are a LAST
+// RESORT (matched only after real products, and skipped when a real product already
+// owns the folder or name), and carry productType "Content folder" so the studio can
+// warn that they're not properly installed (no SKU/version/updates). The vendor folder
+// is the artist; SKU/version are unknown.
+function getContentFolderProducts(dazLibraryFolder, realProducts) {
+  var products = [];
+  if (!dazLibraryFolder) return products;
+  try {
+    var dataRoot =
+      String(dazLibraryFolder).replace(/\\/g, "/").replace(/\/+$/g, "") + "/data";
+    var dataDir = new DzDir(dataRoot);
+    if (!dataDir.exists()) return products;
+
+    // Folder keys + names already covered by real products, so we don't duplicate them.
+    var realNames = {};
+    var realFolders = {};
+    for (var r = 0; r < realProducts.length; r++) {
+      realNames[String(realProducts[r].name).toLowerCase()] = true;
+      var rf = realProducts[r].folders;
+      if (rf) for (var rk = 0; rk < rf.length; rk++) realFolders[rf[rk]] = true;
+    }
+
+    var vendors =
+      typeof dataDir.getSubdirList === "function" ? dataDir.getSubdirList() : dataDir.entryList();
+    for (var v = 0; v < vendors.length; v++) {
+      var vendor = String(vendors[v]);
+      if (vendor === "." || vendor === "..") continue;
+      var vlow = vendor.toLowerCase();
+      if (vlow === "daz 3d" || vlow === "daz" || vlow === "daz3d") continue; // base content
+      var vendorPath = dataRoot + "/" + vendor;
+      var vendorDir = new DzDir(vendorPath);
+      if (!vendorDir.exists()) continue;
+      var prods =
+        typeof vendorDir.getSubdirList === "function"
+          ? vendorDir.getSubdirList()
+          : vendorDir.entryList();
+      for (var p = 0; p < prods.length; p++) {
+        var prod = String(prods[p]);
+        if (prod === "." || prod === "..") continue;
+        if (!new DzDir(vendorPath + "/" + prod).exists()) continue; // dirs only
+        var folderKey = vlow + "/" + prod.toLowerCase();
+        if (realFolders[folderKey] || realNames[prod.toLowerCase()]) continue;
+        products.push({
+          name: prod,
+          sku: "",
+          artist: vendor,
+          version: "",
+          installDate: "",
+          productType: "Content folder",
+          description: "",
+          manifestFile: "",
+          supportFile: "",
+          files: [],
+          folders: [folderKey],
+          contentFolder: vendorPath + "/" + prod,
+          synthesized: true,
+        });
+      }
+    }
+  } catch (e) {
+    print("Content-folder products: " + e);
+  }
+  print("Synthesized " + products.length + " content-folder products");
+  return products;
+}
+
 // ── Asset → product matching (from createListing.dsa) ─────────────────────────
 
 function detectSceneGenesisVersion(usedAssets) {
@@ -822,7 +933,7 @@ function genesisVersionFromString(g) {
   return 0;
 }
 
-function findProductMatches(usedAssets, installedProducts, knownGenesisVersion) {
+function findProductMatches(usedAssets, installedProducts, knownGenesisVersion, contentFolderProducts) {
   var matches = [];
   var unmatched = [];
 
@@ -962,6 +1073,12 @@ function findProductMatches(usedAssets, installedProducts, knownGenesisVersion) 
       unmatched.push(asset);
     }
   }
+
+  // Last resort, BEFORE the structural passes (so a folder-matched node can still seed
+  // parent/child attribution): place anything no real product claimed onto a
+  // synthesized content-folder product. Reached only by assets the metadata-backed
+  // products didn't match, so it never overrides or duplicates a real product.
+  unmatched = matchContentFolderProducts(unmatched, matches, contentFolderProducts, skinFolders);
 
   // Structural attribution passes, run to a FIXPOINT. Each can create a match that
   // unblocks another, so a single ordered sweep isn't enough: a decoration's parent
@@ -1293,6 +1410,89 @@ function indexOfStr(arr, value) {
     if (arr[i] === value) return i;
   }
   return -1;
+}
+
+// Last-resort matcher against synthesized content-folder products (manual installs
+// without DIM/LOCAL_USER metadata). Folder evidence first — a texture or source path
+// under the product's data/<Vendor>/<Product> folder (skin folders excluded) — then a
+// ≥2 distinct-keyword name match, the same two-keyword discipline as findKeywordMatch
+// so a lone generic word can't pull an asset onto a folder-product.
+function findContentFolderMatch(asset, synthFolderIndex, synthKeywordMap, skinFolders) {
+  var keys = [];
+  if (asset.textures) {
+    for (var t = 0; t < asset.textures.length; t++) keys.push(productFolderKey(asset.textures[t]));
+  }
+  keys.push(productFolderKey(asset.sourceFile || ""));
+  for (var k = 0; k < keys.length; k++) {
+    var fk = keys[k];
+    if (fk && !skinFolders[fk] && hasOwn(synthFolderIndex, fk)) return synthFolderIndex[fk];
+  }
+
+  var akw = extractKeywords(
+    asset.name + " " + asset.technicalName + " " + (asset.sourceFile || "") + " " + (asset.path || "")
+  );
+  var cand = {};
+  var order = [];
+  for (var i = 0; i < akw.length; i++) {
+    var kw = akw[i];
+    if (!hasOwn(synthKeywordMap, kw)) continue;
+    var ps = synthKeywordMap[kw];
+    for (var j = 0; j < ps.length; j++) {
+      var pid = ps[j].name;
+      var c = hasOwn(cand, pid) ? cand[pid] : null;
+      if (!c) {
+        c = { product: ps[j], kws: [] };
+        cand[pid] = c;
+        order.push(pid);
+      }
+      if (indexOfStr(c.kws, kw) === -1) c.kws.push(kw);
+    }
+  }
+  var best = null;
+  var bestN = 0;
+  for (var o = 0; o < order.length; o++) {
+    var cc = cand[order[o]];
+    if (cc.kws.length >= 2 && cc.kws.length > bestN) {
+      bestN = cc.kws.length;
+      best = cc.product;
+    }
+  }
+  return best;
+}
+
+// Run the content-folder last-resort over the still-unmatched assets, indexing the
+// synthesized products by folder key and by name keyword. Returns the leftover list.
+function matchContentFolderProducts(unmatched, matches, synthProducts, skinFolders) {
+  if (!synthProducts || !synthProducts.length) return unmatched;
+  var synthFolderIndex = {};
+  var synthKeywordMap = {};
+  for (var i = 0; i < synthProducts.length; i++) {
+    var sp = synthProducts[i];
+    if (sp.folders) {
+      for (var f = 0; f < sp.folders.length; f++) {
+        if (sp.folders[f] && !hasOwn(synthFolderIndex, sp.folders[f])) {
+          synthFolderIndex[sp.folders[f]] = sp;
+        }
+      }
+    }
+    var kws = extractKeywords(String(sp.name).toLowerCase());
+    for (var k = 0; k < kws.length; k++) {
+      if (!hasOwn(synthKeywordMap, kws[k])) synthKeywordMap[kws[k]] = [];
+      synthKeywordMap[kws[k]].push(sp);
+    }
+  }
+
+  var still = [];
+  for (var u = 0; u < unmatched.length; u++) {
+    var asset = unmatched[u];
+    var prod = findContentFolderMatch(asset, synthFolderIndex, synthKeywordMap, skinFolders);
+    if (prod) {
+      matches.push({ asset: asset, product: prod, method: "Content Folder Match" });
+    } else {
+      still.push(asset);
+    }
+  }
+  return still;
 }
 
 function findThirdPartyMatch(asset, installedProducts, sceneGenesisVersion) {
@@ -1797,10 +1997,15 @@ function DthScanProducts(config) {
       " local)..."
   );
 
+  // Last-resort recognition for manual installs with no DIM/LOCAL_USER metadata:
+  // synthesize products from the content library's data/<Vendor>/<Product> folders.
+  var contentFolderProducts = getContentFolderProducts(config.dazLibraryFolder, installedProducts);
+
   var matchResults = findProductMatches(
     usedAssets,
     installedProducts,
-    genesisVersionFromString(config.genesis)
+    genesisVersionFromString(config.genesis),
+    contentFolderProducts
   );
   print("Matched products (raw): " + matchResults.matches.length);
   print("Unmatched assets: " + matchResults.unmatched.length);
