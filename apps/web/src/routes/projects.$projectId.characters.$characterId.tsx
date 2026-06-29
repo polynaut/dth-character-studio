@@ -1347,7 +1347,11 @@ function CharacterPage() {
   const [saving, setSaving] = useState(false)
   const [storingProducts, setStoringProducts] = useState(false)
   const [clearingScan, setClearingScan] = useState(false)
-  const [expandedProducts, setExpandedProducts] = useState<Set<number>>(() => new Set())
+  // Keyed by a stable product id (sku||name, lowercased) — not the row index — so
+  // a row stays expanded when the scene filter changes the visible rows.
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(() => new Set())
+  // The Products view can be scoped to one scene; null = all scenes (merged).
+  const [sceneFilter, setSceneFilter] = useState<string | null>(null)
   // Only meaningful when the project enables Daz Products: splits this page into a
   // "Character" tab (everything) and a "Products" tab (the scan section).
   const [activeTab, setActiveTab] = useState<'character' | 'products'>('character')
@@ -1608,6 +1612,31 @@ function CharacterPage() {
   // switching. Gate on the flag too: if the feature is disabled while the
   // Products tab is active, the character group must not stay hidden.
   const onProductsTab = !!project?.dazProductsEnabled && activeTab === 'products'
+
+  // Product scan view: either the full merged set (all scenes) or one scene's
+  // slice. A merged record carries the `scenes` it was found in, so filtering is
+  // just "does this record include the selected scene". When scoped to a single
+  // scene the Scene(s) column is redundant, so `multiScene` drops it.
+  const mergedScan = productScan?.scan ?? null
+  const scanScenes = mergedScan?.scenes ?? []
+  const sceneFilterActive = sceneFilter != null && scanScenes.includes(sceneFilter)
+  const viewProducts = !mergedScan
+    ? []
+    : sceneFilterActive
+      ? mergedScan.products.filter((p) => p.scenes.includes(sceneFilter!))
+      : mergedScan.products
+  const viewUnmatched = !mergedScan
+    ? []
+    : sceneFilterActive
+      ? mergedScan.unmatched.filter((a) => a.scenes.includes(sceneFilter!))
+      : mergedScan.unmatched
+  const multiScene = scanScenes.length > 1 && !sceneFilterActive
+  const sceneChipClass = (active: boolean) =>
+    `rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+      active
+        ? 'border-primary/60 bg-primary/10 text-foreground'
+        : 'border-border bg-muted/50 text-muted-foreground hover:text-foreground'
+    }`
 
   return (
     <main className="p-8">
@@ -1907,16 +1936,16 @@ function CharacterPage() {
             <div className="mt-4 rounded-md border p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                 <span className="font-medium">
-                  Scan results — {productScan.scan.products.length} product
-                  {productScan.scan.products.length === 1 ? '' : 's'}
-                  {productScan.scan.unmatched.length
-                    ? `, ${productScan.scan.unmatched.length} unmatched`
-                    : ''}
-                  {productScan.scan.scenes.length > 1
-                    ? ` · across ${productScan.scan.scenes.length} scenes`
-                    : productScan.scan.scenes.length === 1
-                      ? ` · ${productScan.scan.scenes[0]}`
-                      : ''}
+                  Scan results — {viewProducts.length} product
+                  {viewProducts.length === 1 ? '' : 's'}
+                  {viewUnmatched.length ? `, ${viewUnmatched.length} unmatched` : ''}
+                  {sceneFilterActive
+                    ? ` · ${sceneFilter}`
+                    : scanScenes.length > 1
+                      ? ` · across ${scanScenes.length} scenes`
+                      : scanScenes.length === 1
+                        ? ` · ${scanScenes[0]}`
+                        : ''}
                 </span>
                 <Button onClick={storeProducts} disabled={storingProducts}>
                   <Save />{' '}
@@ -1928,7 +1957,32 @@ function CharacterPage() {
                 </Button>
               </div>
 
-              {productScan.scan.products.length > 0 ? (
+              {scanScenes.length > 1 && (
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 text-xs text-muted-foreground">View</span>
+                  <button
+                    type="button"
+                    onClick={() => setSceneFilter(null)}
+                    className={sceneChipClass(!sceneFilterActive)}
+                    title="Show every product across all scanned scenes"
+                  >
+                    All scenes
+                  </button>
+                  {scanScenes.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSceneFilter(s)}
+                      className={sceneChipClass(sceneFilter === s)}
+                      title={`Show only products found in ${s}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {viewProducts.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1982,20 +2036,18 @@ function CharacterPage() {
                             </InfoPopup>
                           </span>
                         </th>
-                        {productScan.scan.scenes.length > 1 && (
-                          <th className="pr-3 pb-1 font-medium">Scene(s)</th>
-                        )}
+                        {multiScene && <th className="pr-3 pb-1 font-medium">Scene(s)</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {productScan.scan.products.map((p, i) => {
+                      {viewProducts.map((p, i) => {
                         const url = dazProductUrl(p.sku)
-                        const multiScene = productScan.scan!.scenes.length > 1
                         const colCount = multiScene ? 7 : 6
-                        const open = expandedProducts.has(i)
+                        const pkey = (p.sku || p.name).toLowerCase()
+                        const open = expandedProducts.has(pkey)
                         const assets = p.usedBy ? p.usedBy.split('; ').filter(Boolean) : []
                         return (
-                          <Fragment key={`${p.sku}-${p.name}-${i}`}>
+                          <Fragment key={`${pkey}-${i}`}>
                             <tr className="border-t">
                               <td className="py-1 pr-3">
                                 <button
@@ -2003,8 +2055,8 @@ function CharacterPage() {
                                   onClick={() =>
                                     setExpandedProducts((prev) => {
                                       const next = new Set(prev)
-                                      if (next.has(i)) next.delete(i)
-                                      else next.add(i)
+                                      if (next.has(pkey)) next.delete(pkey)
+                                      else next.add(pkey)
                                       return next
                                     })
                                   }
@@ -2088,14 +2140,14 @@ function CharacterPage() {
                 </p>
               )}
 
-              {productScan.scan.unmatched.length > 0 && (
+              {viewUnmatched.length > 0 && (
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm text-muted-foreground">
-                    {productScan.scan.unmatched.length} unmatched asset
-                    {productScan.scan.unmatched.length === 1 ? '' : 's'} (no product match)
+                    {viewUnmatched.length} unmatched asset
+                    {viewUnmatched.length === 1 ? '' : 's'} (no product match)
                   </summary>
                   <ul className="mt-2 space-y-1 text-sm">
-                    {productScan.scan.unmatched.map((a, i) => (
+                    {viewUnmatched.map((a, i) => (
                       <li key={`${a.technicalName}-${a.name}-${i}`}>
                         <span className="text-foreground/80">{a.name}</span>{' '}
                         <span className="text-muted-foreground">
@@ -2103,9 +2155,7 @@ function CharacterPage() {
                           {a.artist ? ` — ${a.artist}` : ''}
                           {a.version ? ` v${a.version}` : ''}
                           {a.sourceFile ? ` — ${displayPath(a.sourceFile)}` : ''})
-                          {productScan.scan!.scenes.length > 1 && a.scenes.length
-                            ? ` · ${a.scenes.join(', ')}`
-                            : ''}
+                          {multiScene && a.scenes.length ? ` · ${a.scenes.join(', ')}` : ''}
                         </span>
                       </li>
                     ))}
