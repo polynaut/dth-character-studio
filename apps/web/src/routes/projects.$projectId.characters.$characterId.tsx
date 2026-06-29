@@ -2027,9 +2027,11 @@ function CharacterPage() {
                               <tr className="bg-muted/20">
                                 <td colSpan={colCount} className="px-3 py-2 pl-7">
                                   <div className="mb-1 text-xs text-muted-foreground">
-                                    Found by {assets.length} scene asset
+                                    Matched by {assets.length} asset
                                     {assets.length === 1 ? '' : 's'}
-                                    {multiScene ? ` · in ${p.scenes.join(', ')}` : ''}
+                                    {multiScene
+                                      ? ` · in ${p.scenes.length} scene${p.scenes.length === 1 ? '' : 's'}: ${p.scenes.join(', ')}`
+                                      : ''}
                                   </div>
                                   {assets.length ? (
                                     <ul className="space-y-0.5 text-sm">
