@@ -953,28 +953,25 @@ function findProductMatches(usedAssets, installedProducts, knownGenesisVersion) 
     }
   }
 
-  // Second pass: attribute an unmatched child node to the product its PARENT matched.
-  // Clothing sub-parts — zippers, flower trims, dForce layers — load as separate
-  // nodes parented to the garment, sharing no name/texture with the product, so they
-  // fall through. Inherit from the nearest matched ancestor that ISN'T the base figure
-  // (so a prop parented to Genesis isn't wrongly called "Starter Essentials").
-  unmatched = attributeChildrenToParents(usedAssets, matches, unmatched);
-
-  // Third pass: attribute a still-unmatched node to a product ALREADY confirmed in
-  // this scene when the node's name is the basename of a file that product installs.
-  // Decorative sub-parts (a zipper, a "Frangipani" flower) often load as separate
-  // nodes parented to the FIGURE, not the garment, so parent-inheritance can't reach
-  // them — yet the garment's own DIM manifest lists a "Frangipani.dsf"/"Zipper.dsf".
-  // Limiting candidates to in-scene products keeps it safe from generic names shared
-  // across the library.
-  unmatched = attributeByManifestFilename(matches, unmatched);
-
-  // Fourth pass: attribute a still-unmatched node to the product its matched CHILDREN
-  // belong to. Some decorations are an empty GROUP node (e.g. a "Frangipani" group
-  // whose actual geometry is a child "Frangipani Pull") — the group has no geometry,
-  // no texture and no own .dsf, so nothing above can place it, yet its matched
-  // children clearly pin it to a product. Inherit the product its children matched.
-  unmatched = attributeParentsToChildren(usedAssets, matches, unmatched);
+  // Structural attribution passes, run to a FIXPOINT. Each can create a match that
+  // unblocks another, so a single ordered sweep isn't enough: a decoration's parent
+  // may itself only get matched by the child→parent pass, after which the parent→child
+  // pass can finally place the decoration. Repeat until a full round adds nothing.
+  // Bounded so a pathological scene graph can't spin.
+  //   • attributeChildrenToParents — an unmatched child inherits the product of its
+  //     nearest matched ancestor that ISN'T the base figure (zippers, flower trims,
+  //     dForce layers parented to a garment).
+  //   • attributeByManifestFilename — an unmatched node whose name is the basename of
+  //     a file an in-scene product installs ("Frangipani.dsf") inherits that product.
+  //   • attributeParentsToChildren — an unmatched group/null node (no geometry/texture
+  //     /own .dsf) inherits the product its matched children belong to.
+  for (var pass = 0; pass < 8; pass++) {
+    var before = unmatched.length;
+    unmatched = attributeChildrenToParents(usedAssets, matches, unmatched);
+    unmatched = attributeByManifestFilename(matches, unmatched);
+    unmatched = attributeParentsToChildren(usedAssets, matches, unmatched);
+    if (unmatched.length === before) break;
+  }
 
   return {
     matches: matches,
