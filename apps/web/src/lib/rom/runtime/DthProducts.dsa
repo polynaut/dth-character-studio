@@ -938,6 +938,15 @@ function findProductMatches(usedAssets, installedProducts, knownGenesisVersion) 
   // (so a prop parented to Genesis isn't wrongly called "Starter Essentials").
   unmatched = attributeChildrenToParents(usedAssets, matches, unmatched);
 
+  // Third pass: attribute a still-unmatched node to a product ALREADY confirmed in
+  // this scene when the node's name is the basename of a file that product installs.
+  // Decorative sub-parts (a zipper, a "Frangipani" flower) often load as separate
+  // nodes parented to the FIGURE, not the garment, so parent-inheritance can't reach
+  // them — yet the garment's own DIM manifest lists a "Frangipani.dsf"/"Zipper.dsf".
+  // Limiting candidates to in-scene products keeps it safe from generic names shared
+  // across the library.
+  unmatched = attributeByManifestFilename(matches, unmatched);
+
   return {
     matches: matches,
     unmatched: unmatched,
@@ -984,6 +993,71 @@ function attributeChildrenToParents(usedAssets, matches, unmatched) {
     }
     if (product) {
       matches.push({ asset: asset, product: product, method: "Parent Match" });
+    } else {
+      stillUnmatched.push(asset);
+    }
+  }
+  return stillUnmatched;
+}
+
+// Reduce a manifest data-file path to a comparison key: its basename without the
+// .dsf/.duf extension, lowercased and stripped of spaces/underscores/dashes — so a
+// node label "Frangipani Pull" lines up with a file "FrangipaniPull.dsf".
+function manifestFileKey(path) {
+  var s = String(path || "").toLowerCase().replace(/\\/g, "/");
+  var slash = s.lastIndexOf("/");
+  var base = slash === -1 ? s : s.substring(slash + 1);
+  base = base.replace(/\.(dsf|duf)$/, "");
+  return base.replace(/[\s_\-]+/g, "");
+}
+
+// The same normalisation applied to a used node's identifiers (label + technical
+// name), so either can be compared against a product's file basenames.
+function nodeFileKeys(asset) {
+  var keys = [];
+  var raw = [String(asset.name || ""), String(asset.technicalName || "")];
+  for (var i = 0; i < raw.length; i++) {
+    var k = raw[i].toLowerCase().replace(/[\s_\-]+/g, "");
+    if (k && keys.indexOf(k) === -1) keys.push(k);
+  }
+  return keys;
+}
+
+// Attribute an unmatched node to a product that is ALREADY matched in this scene when
+// the node's name equals the basename of a .dsf/.duf the product installs. The scene
+// graph parents these decorative parts (a zipper, a flower trim) to the figure, not
+// the garment, so the parent pass misses them — but the garment's DIM manifest still
+// lists the part's geometry file. Restricting candidates to in-scene products avoids
+// false positives from generic names ("Zipper") shared across the whole library.
+function attributeByManifestFilename(matches, unmatched) {
+  var baseIndex = {};
+  var indexed = {};
+  for (var i = 0; i < matches.length; i++) {
+    var product = matches[i].product;
+    if (!product || indexed[product.name]) continue;
+    indexed[product.name] = true;
+    if (!product.files) continue;
+    for (var f = 0; f < product.files.length; f++) {
+      var bk = manifestFileKey(product.files[f]);
+      if (bk && !baseIndex[bk]) baseIndex[bk] = product;
+    }
+  }
+
+  var stillUnmatched = [];
+  for (var u = 0; u < unmatched.length; u++) {
+    var asset = unmatched[u];
+    var hit = null;
+    if (asset.type === "Node") {
+      var keys = nodeFileKeys(asset);
+      for (var k = 0; k < keys.length; k++) {
+        if (baseIndex[keys[k]]) {
+          hit = baseIndex[keys[k]];
+          break;
+        }
+      }
+    }
+    if (hit) {
+      matches.push({ asset: asset, product: hit, method: "Manifest Match" });
     } else {
       stillUnmatched.push(asset);
     }

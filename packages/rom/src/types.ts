@@ -388,8 +388,12 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *   3 — product scan keys its output by the open Daz scene (per-scene CSVs in a
  *       per-character folder) and reads texture-based matching, so existing scan
  *       scripts must be regenerated to write the new per-scene layout.
+ *   4 — product scan attributes an unmatched decorative node (a zipper, a flower
+ *       trim) to a product already matched in the same scene when the node's name
+ *       is the basename of a file that product installs ("Manifest Match"), so
+ *       figure-parented sub-parts stop landing in "unmatched".
  */
-export const RUNTIME_VERSION = 3
+export const RUNTIME_VERSION = 4
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
