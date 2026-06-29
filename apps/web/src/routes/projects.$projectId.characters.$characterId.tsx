@@ -40,6 +40,7 @@ import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
+import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
   Select,
   SelectContent,
@@ -1347,6 +1348,9 @@ function CharacterPage() {
   const [storingProducts, setStoringProducts] = useState(false)
   const [clearingScan, setClearingScan] = useState(false)
   const [expandedProducts, setExpandedProducts] = useState<Set<number>>(() => new Set())
+  // Only meaningful when the project enables Daz Products: splits this page into a
+  // "Character" tab (everything) and a "Products" tab (the scan section).
+  const [activeTab, setActiveTab] = useState<'character' | 'products'>('character')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
@@ -1598,6 +1602,13 @@ function CharacterPage() {
     }
   }
 
+  // When Daz Products is enabled the body splits into two tabs ("Character" /
+  // "Products"). We keep both groups mounted and toggle visibility with `hidden`
+  // rather than unmounting — cheaper, and it preserves scroll/edit state when
+  // switching. Gate on the flag too: if the feature is disabled while the
+  // Products tab is active, the character group must not stay hidden.
+  const onProductsTab = !!project?.dazProductsEnabled && activeTab === 'products'
+
   return (
     <main className="p-8">
       <div className="mb-1">
@@ -1687,6 +1698,20 @@ function CharacterPage() {
           popup dialogs below are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
+      {project?.dazProductsEnabled && (
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v === 'products' ? 'products' : 'character')}
+          className="mb-6"
+        >
+          <TabsList>
+            <TabsTrigger value="character">Character</TabsTrigger>
+            <TabsTrigger value="products">Products</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      <div className={onProductsTab ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5 pt-2">
@@ -1816,8 +1841,10 @@ function CharacterPage() {
           </p>
         )}
       </section>
+      </div>
 
       {project?.dazProductsEnabled && (
+        <div className={onProductsTab ? undefined : 'hidden'}>
         <section className="mb-8 rounded-lg border bg-card p-5">
           <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
             Daz Products
@@ -2092,8 +2119,10 @@ function CharacterPage() {
             </p>
           )}
         </section>
+        </div>
       )}
 
+      <div className={onProductsTab ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
           Export directory
@@ -2380,6 +2409,7 @@ function CharacterPage() {
           </Button>
         </div>
       </section>
+      </div>
       </div>
 
       {deleteOpen && (
