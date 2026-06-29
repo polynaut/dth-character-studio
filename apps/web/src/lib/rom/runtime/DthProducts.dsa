@@ -969,6 +969,13 @@ function findProductMatches(usedAssets, installedProducts, knownGenesisVersion) 
   // across the library.
   unmatched = attributeByManifestFilename(matches, unmatched);
 
+  // Fourth pass: attribute a still-unmatched node to the product its matched CHILDREN
+  // belong to. Some decorations are an empty GROUP node (e.g. a "Frangipani" group
+  // whose actual geometry is a child "Frangipani Pull") — the group has no geometry,
+  // no texture and no own .dsf, so nothing above can place it, yet its matched
+  // children clearly pin it to a product. Inherit the product its children matched.
+  unmatched = attributeParentsToChildren(usedAssets, matches, unmatched);
+
   return {
     matches: matches,
     unmatched: unmatched,
@@ -1080,6 +1087,55 @@ function attributeByManifestFilename(matches, unmatched) {
     }
     if (hit) {
       matches.push({ asset: asset, product: hit, method: "Manifest Match" });
+    } else {
+      stillUnmatched.push(asset);
+    }
+  }
+  return stillUnmatched;
+}
+
+// Attribute an unmatched node to the product its matched CHILDREN belong to — the
+// inverse of the parent pass. A decoration sometimes loads as an empty group/null
+// node (no geometry, no texture, no own .dsf) whose real parts are matched children,
+// so nothing else can place the group itself; its children pin it to a product. Skips
+// children matched only as the base figure so a generic group can't inherit "Starter
+// Essentials". When children span products, the first matched child's product wins.
+function attributeParentsToChildren(usedAssets, matches, unmatched) {
+  var nodeProduct = {};
+  for (var i = 0; i < matches.length; i++) {
+    var mm = matches[i];
+    if (
+      mm.asset &&
+      mm.asset.type === "Node" &&
+      mm.asset.technicalName &&
+      mm.method !== "Genesis Base Match"
+    ) {
+      nodeProduct[mm.asset.technicalName] = mm.product;
+    }
+  }
+  var childrenOf = {};
+  for (var a = 0; a < usedAssets.length; a++) {
+    var ua = usedAssets[a];
+    if (ua.type !== "Node" || !ua.parentName) continue;
+    if (!childrenOf[ua.parentName]) childrenOf[ua.parentName] = [];
+    childrenOf[ua.parentName].push(ua.technicalName);
+  }
+
+  var stillUnmatched = [];
+  for (var u = 0; u < unmatched.length; u++) {
+    var asset = unmatched[u];
+    var hit = null;
+    if (asset.type === "Node") {
+      var kids = childrenOf[asset.technicalName] || [];
+      for (var k = 0; k < kids.length; k++) {
+        if (nodeProduct[kids[k]]) {
+          hit = nodeProduct[kids[k]];
+          break;
+        }
+      }
+    }
+    if (hit) {
+      matches.push({ asset: asset, product: hit, method: "Group Match" });
     } else {
       stillUnmatched.push(asset);
     }
@@ -1577,6 +1633,77 @@ function writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath) {
   return false;
 }
 
+// Diagnostic aid: write a human-readable report of every node STILL unmatched after
+// all passes — its parent (and whether that parent matched), the texture-map folders
+// it exposed (and the raw paths), its children, and its source file — so a stubborn
+// case can be understood from real data instead of a guess. Written next to the
+// per-scene CSV as "_diagnostic-<scene>.txt"; the studio reads only .csv, so it's
+// ignored there. Also echoed to the Daz log. Best-effort, never throws.
+function writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets) {
+  try {
+    var matchedProductOf = {};
+    for (var i = 0; i < matchResults.matches.length; i++) {
+      var m = matchResults.matches[i];
+      if (m.asset && m.asset.type === "Node" && m.asset.technicalName) {
+        matchedProductOf[m.asset.technicalName] = m.product.name + " [" + m.method + "]";
+      }
+    }
+    var childrenOf = {};
+    for (var a = 0; a < usedAssets.length; a++) {
+      var ua = usedAssets[a];
+      if (ua.type !== "Node" || !ua.parentName) continue;
+      if (!childrenOf[ua.parentName]) childrenOf[ua.parentName] = [];
+      childrenOf[ua.parentName].push(ua.name + " [" + ua.technicalName + "]");
+    }
+
+    var lines = [];
+    lines.push("DTH Product Scan — unmatched-node diagnostics");
+    lines.push("Asset-level matches in scene: " + matchResults.matches.length);
+    lines.push("");
+    var count = 0;
+    for (var u = 0; u < matchResults.unmatched.length; u++) {
+      var n = matchResults.unmatched[u];
+      if (n.type !== "Node") continue;
+      count++;
+      var parentInfo = n.parentName
+        ? "'" + n.parentName + "' (" + (matchedProductOf[n.parentName] || "unmatched/none") + ")"
+        : "(none)";
+      var texFolders = [];
+      var texCount = n.textures ? n.textures.length : 0;
+      for (var t = 0; t < texCount; t++) {
+        var fk = productFolderKey(n.textures[t]);
+        if (fk && texFolders.indexOf(fk) === -1) texFolders.push(fk);
+      }
+      var kids = childrenOf[n.technicalName];
+      lines.push("UNMATCHED: '" + n.name + "' [" + n.technicalName + "]  type=" + (n.details || "?"));
+      lines.push("  parent:   " + parentInfo);
+      lines.push(
+        "  textures: " + texCount + " file(s); folders: " + (texFolders.length ? texFolders.join(", ") : "(none)")
+      );
+      for (var tt = 0; tt < texCount && tt < 6; tt++) lines.push("    tex: " + n.textures[tt]);
+      lines.push("  children: " + (kids ? kids.join(", ") : "(none)"));
+      lines.push("  source:   " + (n.sourceFile || "(none)"));
+      lines.push("");
+    }
+    if (!count) lines.push("(no unmatched nodes)");
+
+    var body = lines.join("\n");
+    print("=== unmatched diagnostics ===\n" + body + "\n=== end diagnostics ===");
+
+    var fileInfo = new DzFileInfo(diagPath);
+    var parentDir = new DzDir(fileInfo.path());
+    if (!parentDir.exists()) parentDir.mkpath(fileInfo.path());
+    var f = new DzFile(diagPath);
+    if (f.open(f.WriteOnly, f.Truncate)) {
+      f.write(body);
+      f.close();
+      print("DTH Product Scan: wrote diagnostics to " + diagPath);
+    }
+  } catch (e) {
+    print("DTH Product Scan: diagnostic write failed - " + e);
+  }
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 // Called by the generated Scan_Products_<Name>.dsa. config carries:
@@ -1636,6 +1763,15 @@ function DthScanProducts(config) {
   // the latter is how unofficial products (absent from DIM) still get a version.
   enrichMatchedProducts(matchResults.matches, config.dazLibraryFolder);
   enrichUnmatchedAssets(matchResults.unmatched, config.dazLibraryFolder);
+
+  // Report any nodes still unmatched, with the data that would place them (parent,
+  // textures, children), so a stubborn case is diagnosable from real values.
+  var diagPath =
+    String(config.outputDir).replace(/\\/g, "/").replace(/\/+$/g, "") +
+    "/_diagnostic-" +
+    sceneSlug(sceneName) +
+    ".txt";
+  writeUnmatchedDiagnostic(diagPath, matchResults, usedAssets);
 
   var ok = writeProductsCsv(outputCsvPath, matchResults, sceneName, scenePath);
   if (ok) {

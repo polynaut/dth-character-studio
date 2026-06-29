@@ -395,8 +395,11 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *   5 — product scan reads ALL of a node's material map channels (normal, bump,
  *       roughness, metallic, …), not just the diffuse map, so a sub-part whose only
  *       file texture is on a non-diffuse channel still texture-folder matches.
+ *   6 — product scan attributes an unmatched GROUP/null node to the product its
+ *       matched children belong to ("Group Match"), and writes an unmatched-node
+ *       diagnostics file next to each per-scene CSV.
  */
-export const RUNTIME_VERSION = 5
+export const RUNTIME_VERSION = 6
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
