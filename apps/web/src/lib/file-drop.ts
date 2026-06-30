@@ -39,8 +39,19 @@ function extOf(path: string): string {
 /** The id of the registered zone under a physical-pixel cursor position. */
 function zoneIdAt(physX: number, physY: number): string | null {
   const dpr = window.devicePixelRatio || 1
-  const el = document.elementFromPoint(physX / dpr, physY / dpr)
-  return el?.closest('[data-filedrop-id]')?.getAttribute('data-filedrop-id') ?? null
+  const x = physX / dpr
+  const y = physY / dpr
+  // Walk the whole element stack at the point (topmost first), not just the single
+  // top element. An open overlay — e.g. a SidePanel drawer's full-viewport backdrop,
+  // portaled above the page — would otherwise mask the drop zone beneath it and swallow
+  // every drop. The first element whose closest ancestor carries a `data-filedrop-id`
+  // wins: that's the topmost *registered* zone actually under the cursor (a zone nested
+  // inside the panel still wins over the page zone when the cursor is over it).
+  for (const el of document.elementsFromPoint(x, y)) {
+    const id = el.closest('[data-filedrop-id]')?.getAttribute('data-filedrop-id')
+    if (id) return id
+  }
+  return null
 }
 
 function zoneAccepts(zone: Zone, paths: Array<string>): boolean {

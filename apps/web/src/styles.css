@@ -348,3 +348,33 @@ a {
     z-index: -1;
   }
 }
+
+/* The "Refresh assets" action pulses a soft (light) orange when a refresh is
+   needed, to pull the eye to it. Breathes a light primary-orange tint of the
+   outline button's fill + border, plus a faint glow, in and out. Reduced-motion
+   holds the lit state instead of animating. Applied via the `.refresh-pulse`
+   class (added only when work is pending); unknown to tailwind-merge, so it
+   survives `cn()`. */
+@keyframes dth-refresh-pulse {
+  0%,
+  100% {
+    background-color: color-mix(in oklab, var(--primary) 10%, var(--card));
+    border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    background-color: color-mix(in oklab, var(--primary) 30%, var(--card));
+    border-color: color-mix(in oklab, var(--primary) 80%, var(--border));
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+}
+.refresh-pulse {
+  animation: dth-refresh-pulse 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-pulse {
+    animation: none;
+    background-color: color-mix(in oklab, var(--primary) 22%, var(--card));
+    border-color: color-mix(in oklab, var(--primary) 70%, var(--border));
+  }
+}

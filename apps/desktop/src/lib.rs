@@ -153,28 +153,28 @@ fn folder_name(p: &Path) -> String {
         .unwrap_or_else(|| p.display().to_string())
 }
 
-/// Which content (or, failing that, metadata) folders sit directly in `dir`.
-fn content_folders_in(dir: &Path) -> Vec<String> {
-    let real: Vec<String> = CONTENT_FOLDERS
-        .iter()
-        .filter(|n| dir.join(n).is_dir())
-        .map(|n| (*n).to_string())
-        .collect();
-    if !real.is_empty() {
-        return real;
-    }
-    META_FOLDERS
-        .iter()
-        .filter(|n| dir.join(n).is_dir())
-        .map(|n| (*n).to_string())
-        .collect()
-}
-
 /// Find the directory under `root` (within `depth` levels) that holds Daz content
 /// folders, plus the folder names found. Daz assets keep these at the root or a
 /// folder or two down (esp. inside zips).
+///
+/// Real content folders (`data`/`People`/`Runtime`) found at ANY depth take precedence
+/// over a metadata-only (`Documentation`) folder at a *shallower* level. Products are
+/// routinely packaged as a top-level `Documentation/` beside a `My Library/` (or
+/// `Content/`) wrapper that holds the real `data`/`Runtime` — installing the readme
+/// while skipping the wrapper would leave the morphs uninstalled. Only when there is
+/// no real content anywhere within `depth` does a Documentation-only level win, so a
+/// docs-only asset still reports as installed rather than "no content".
 fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)> {
-    let here = content_folders_in(root);
+    find_dir_level(root, depth, &CONTENT_FOLDERS)
+        .or_else(|| find_dir_level(root, depth, &META_FOLDERS))
+}
+
+/// The shallowest directory under `root` (within `depth` levels) that *directly*
+/// contains one of `wanted`, plus the matching names in `wanted` order. Depth-first;
+/// the first match wins.
+fn find_dir_level(root: &Path, depth: u32, wanted: &[&str]) -> Option<(PathBuf, Vec<String>)> {
+    let here: Vec<String> =
+        wanted.iter().filter(|n| root.join(n).is_dir()).map(|n| (*n).to_string()).collect();
     if !here.is_empty() {
         return Some((root.to_path_buf(), here));
     }
@@ -184,7 +184,7 @@ fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)>
     for entry in fs::read_dir(root).into_iter().flatten().flatten() {
         let p = entry.path();
         if p.is_dir() {
-            if let Some(found) = find_content_level(&p, depth - 1) {
+            if let Some(found) = find_dir_level(&p, depth - 1, wanted) {
                 return Some(found);
             }
         }
@@ -333,24 +333,25 @@ fn find_zip_content_level(paths: &[&str]) -> Option<(String, Vec<String>)> {
             children.entry(parent).or_default().insert(comps[i].to_string());
         }
     }
-    fn folders_in(dir: &str, children: &HashMap<String, BTreeSet<String>>) -> Vec<String> {
-        let kids = match children.get(dir) {
-            Some(k) => k,
-            None => return Vec::new(),
-        };
-        let real: Vec<String> =
-            CONTENT_FOLDERS.iter().filter(|f| kids.contains(**f)).map(|f| (*f).to_string()).collect();
-        if !real.is_empty() {
-            return real;
+    fn folders_in(
+        dir: &str,
+        children: &HashMap<String, BTreeSet<String>>,
+        wanted: &[&str],
+    ) -> Vec<String> {
+        match children.get(dir) {
+            Some(kids) => {
+                wanted.iter().filter(|f| kids.contains(**f)).map(|f| (*f).to_string()).collect()
+            }
+            None => Vec::new(),
         }
-        META_FOLDERS.iter().filter(|f| kids.contains(**f)).map(|f| (*f).to_string()).collect()
     }
     fn rec(
         dir: String,
         depth: u32,
         children: &HashMap<String, BTreeSet<String>>,
+        wanted: &[&str],
     ) -> Option<(String, Vec<String>)> {
-        let here = folders_in(&dir, children);
+        let here = folders_in(&dir, children, wanted);
         if !here.is_empty() {
             return Some((dir, here));
         }
@@ -360,14 +361,17 @@ fn find_zip_content_level(paths: &[&str]) -> Option<(String, Vec<String>)> {
         if let Some(kids) = children.get(&dir) {
             for k in kids {
                 let sub = if dir.is_empty() { k.clone() } else { format!("{dir}/{k}") };
-                if let Some(found) = rec(sub, depth - 1, children) {
+                if let Some(found) = rec(sub, depth - 1, children, wanted) {
                     return Some(found);
                 }
             }
         }
         None
     }
-    rec(String::new(), 5, &children)
+    // Real content folders found at any depth win over a shallower Documentation-only
+    // level (see `find_content_level`); fall back to a meta-only level otherwise.
+    rec(String::new(), 5, &children, &CONTENT_FOLDERS)
+        .or_else(|| rec(String::new(), 5, &children, &META_FOLDERS))
 }
 
 /// Format the final step for an asset once its diff is known.
@@ -1534,11 +1538,19 @@ struct ScriptsInstallRequest {
     dry_run: bool,
 }
 
-/// The repo zip — the default branch (`main`) HEAD. GitHub 302-redirects this to
-/// codeload; reqwest follows it by default.
+/// GitHub API for the HEAD commit of `main`. With the `.sha` media type the
+/// response body IS the 40-char commit SHA (no JSON parsing). Unauthenticated
+/// calls are rate-limited to 60/hr per IP — fine for the occasional install/check.
 #[cfg(desktop)]
-const DAZTOHUE_SCRIPTS_ZIP: &str =
-    "https://github.com/soltude/DazToHue-Scripts/archive/refs/heads/main.zip";
+const DAZTOHUE_SCRIPTS_COMMITS_API: &str =
+    "https://api.github.com/repos/soltude/DazToHue-Scripts/commits/main";
+
+/// Base for the per-commit source zip: `<base><sha>.zip` downloads exactly that
+/// commit's tree, so the installed files always match the SHA we record in the
+/// marker. GitHub 302-redirects to codeload; reqwest follows it by default.
+#[cfg(desktop)]
+const DAZTOHUE_SCRIPTS_ARCHIVE_BASE: &str =
+    "https://github.com/soltude/DazToHue-Scripts/archive/";
 
 /// Wrap a single step into a one-step report (mirrors the other installers).
 fn one_step_report(dry: bool, step: InstallStep) -> InstallReport {
@@ -1608,6 +1620,55 @@ async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes.to_vec())
 }
 
+/// The HEAD commit SHA of soltude/DazToHue-Scripts `main`, via the GitHub API. The
+/// `.sha` Accept type returns the bare SHA; GitHub requires a User-Agent. Errors
+/// (offline, 404, rate-limited) surface as a message the caller can show.
+#[cfg(desktop)]
+async fn fetch_daztohue_head_sha() -> Result<String, String> {
+    ensure_crypto_provider();
+    let client = reqwest::Client::builder()
+        .user_agent("DTH-Character-Studio")
+        .build()
+        .map_err(|e| format!("http client failed: {e}"))?;
+    let resp = client
+        .get(DAZTOHUE_SCRIPTS_COMMITS_API)
+        .header("Accept", "application/vnd.github.sha")
+        .send()
+        .await
+        .map_err(|e| format!("checking the latest version failed: {e}"))?;
+    let resp = resp
+        .error_for_status()
+        .map_err(|e| format!("checking the latest version failed: {e}"))?;
+    let sha = resp
+        .text()
+        .await
+        .map_err(|e| format!("reading the version failed: {e}"))?
+        .trim()
+        .to_string();
+    // A valid response is a hex SHA; anything else (an HTML error page, a JSON blob)
+    // would poison the marker, so reject it.
+    if sha.len() < 7 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("unexpected version response: {sha}"));
+    }
+    Ok(sha)
+}
+
+/// The latest available DazToHue-Scripts commit SHA — for the "is my install
+/// outdated?" check. Compared against the `.dth-version.json` marker the installer
+/// writes. Returns an error message (not a panic) when the check can't run.
+#[cfg(desktop)]
+#[tauri::command]
+async fn latest_daztohue_commit() -> Result<String, String> {
+    fetch_daztohue_head_sha().await
+}
+
+/// Web/mobile builds have no native HTTP (reqwest is desktop-only).
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn latest_daztohue_commit() -> Result<String, String> {
+    Err("only available on the desktop app".into())
+}
+
 /// Download the soltude/DazToHue-Scripts repo as a zip and install its contents
 /// into `dest`. The archive is fetched in memory, unpacked into a temp folder
 /// beside `dest`, then swapped in — so a failed download/extract never leaves a
@@ -1620,7 +1681,16 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     let dest = PathBuf::from(&request.dest);
     let label = "DazToHue-Scripts";
 
-    let bytes = match download_bytes(DAZTOHUE_SCRIPTS_ZIP).await {
+    // Resolve the exact HEAD commit first, then download that commit's tree — so the
+    // installed files always match the SHA we record (no branch-moved-under-us race).
+    let sha = match fetch_daztohue_head_sha().await {
+        Ok(s) => s,
+        Err(msg) => return one_step_report(dry, step_err(label, msg)),
+    };
+    let zip_url = format!("{DAZTOHUE_SCRIPTS_ARCHIVE_BASE}{sha}.zip");
+    let short = &sha[..7.min(sha.len())];
+
+    let bytes = match download_bytes(&zip_url).await {
         Ok(b) => b,
         Err(msg) => return one_step_report(dry, step_err(label, msg)),
     };
@@ -1641,7 +1711,11 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     if dry {
         return one_step_report(
             dry,
-            step_ok(label, file_count, format!("would install {file_count} file(s) → {}", dest.display())),
+            step_ok(
+                label,
+                file_count,
+                format!("would install {file_count} file(s) at {short} → {}", dest.display()),
+            ),
         );
     }
 
@@ -1671,7 +1745,12 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     let moved = fs::rename(&content_root, &dest).is_ok() || copy_dir(&content_root, &dest).is_ok();
     let _ = fs::remove_dir_all(&tmp);
     if moved {
-        one_step_report(dry, step_ok(label, file_count, format!("→ {}", dest.display())))
+        // Record the installed commit so the Tools tab can flag when it's outdated.
+        // `sha` is validated hex + `ref` is a literal, so hand-formatting the JSON is
+        // safe (no escaping needed) and avoids a serde_json dependency here.
+        let marker = dest.join(".dth-version.json");
+        let _ = fs::write(&marker, format!("{{\"commit\":\"{sha}\",\"ref\":\"main\"}}"));
+        one_step_report(dry, step_ok(label, file_count, format!("{short} → {}", dest.display())))
     } else {
         one_step_report(dry, step_err(label, format!("couldn't move files into {}", dest.display())))
     }
@@ -1943,31 +2022,204 @@ fn collect_duf(root: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
+// --- Multi-window: one project (.dcsp) per window -------------------------
+// Each window is pinned to the `.dcsp` it was opened with. The map (window label →
+// `.dcsp` path) is the source of truth the frontend reads via `active_project_file`;
+// the Home window simply has no entry. Opening a project (the file association, a
+// second launch, or the Home "Open") creates — or focuses — its own window.
+
+#[derive(Default)]
+struct WindowProjects(Mutex<HashMap<String, String>>);
+
+/// The `.dcsp` path passed on the command line (the OS hands a double-clicked file
+/// to the app as an argument), '/'-normalised. None when launched without one.
+fn dcsp_from_args(args: &[String]) -> Option<String> {
+    args.iter()
+        .skip(1)
+        .find(|a| a.to_lowercase().ends_with(".dcsp"))
+        .map(|a| a.replace('\\', "/"))
+}
+
+#[cfg(desktop)]
+fn unique_window_label(app: &tauri::AppHandle, prefix: &str) -> String {
+    use tauri::Manager;
+    for i in 1.. {
+        let label = format!("{prefix}-{i}");
+        if app.get_webview_window(&label).is_none() {
+            return label;
+        }
+    }
+    unreachable!()
+}
+
+/// Open a project in its own window — or focus the one already showing it.
+#[cfg(desktop)]
+fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let norm = path.replace('\\', "/");
+    let projects = app.state::<WindowProjects>();
+    let existing = projects
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(_, p)| p.eq_ignore_ascii_case(&norm))
+        .map(|(label, _)| label.clone());
+    if let Some(label) = existing {
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+    }
+    let label = unique_window_label(app, "project");
+    projects.0.lock().unwrap().insert(label.clone(), norm.clone());
+    let stem = Path::new(&norm)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title(format!("{stem} — DTH Character Studio"))
+        .inner_size(1440.0, 920.0)
+        .min_inner_size(960.0, 640.0)
+        // The app UI is dark; force it so tao applies dark-mode theming to the native
+        // menu bar too (runtime windows otherwise render a light menu strip).
+        .theme(Some(tauri::Theme::Dark))
+        .build()?;
+    Ok(())
+}
+
+/// Open — or focus — the Home (launcher) window (a window with no project mapping).
+#[cfg(desktop)]
+fn open_home_window_impl(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let with_project: HashSet<String> = app
+        .state::<WindowProjects>()
+        .0
+        .lock()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    for (label, w) in app.webview_windows() {
+        if !with_project.contains(&label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+    }
+    let label = unique_window_label(app, "home");
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title("DTH Character Studio")
+        .inner_size(1440.0, 920.0)
+        .min_inner_size(960.0, 640.0)
+        .theme(Some(tauri::Theme::Dark))
+        .build()?;
+    Ok(())
+}
+
+/// The `.dcsp` this window was opened with ('' for the Home window).
+#[tauri::command]
+fn active_project_file(window: tauri::Window, projects: tauri::State<WindowProjects>) -> String {
+    projects
+        .0
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .cloned()
+        .unwrap_or_default()
+}
+
+// `(async)` runs this on a worker thread, not the main thread. Building a webview
+// window synchronously on the main thread deadlocks (build() waits for the WebView2
+// controller, which needs the very event loop the command is blocking) — the window
+// shows white and frozen. Off-thread, build() dispatches creation to a free main
+// thread and returns normally.
+#[tauri::command(async)]
+fn open_project_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        return open_project_window_impl(&app, &path).map_err(|e| e.to_string());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, path);
+        Ok(())
+    }
+}
+
+#[tauri::command(async)]
+fn open_home_window(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        return open_home_window_impl(&app).map_err(|e| e.to_string());
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
+        // Window label → the `.dcsp` it's showing; read by `active_project_file`.
+        .manage(WindowProjects::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_os::init());
+        .plugin(tauri_plugin_os::init())
+        // If launched by double-clicking a `.dcsp` (the file association), pin it to
+        // the startup ("main") window so its frontend opens that project.
+        .setup(|app| {
+            use tauri::Manager;
+            if let Some(dcsp) = dcsp_from_args(&std::env::args().collect::<Vec<_>>()) {
+                app.state::<WindowProjects>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .insert("main".into(), dcsp);
+            }
+            Ok(())
+        });
 
-    // Updater + relaunch + the native app menu are desktop-only.
+    // Updater + relaunch + single-instance + the native app menu are desktop-only.
     #[cfg(desktop)]
     {
         use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
         use tauri::Emitter;
 
         builder = builder
+            // A second launch (e.g. opening another `.dcsp` from Explorer) is routed
+            // here: open it in its own window, or the Home window when it carries none.
+            .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+                // This callback runs on the main thread; build the window off it (see
+                // open_project_window) so creating the webview doesn't deadlock.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    match dcsp_from_args(&argv) {
+                        Some(dcsp) => {
+                            let _ = open_project_window_impl(&app, &dcsp);
+                        }
+                        None => {
+                            let _ = open_home_window_impl(&app);
+                        }
+                    }
+                });
+            }))
             .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_process::init())
-            // Main → Refresh assets / Exit; Help → About / Check for Updates. The
+            // Main → New Project / Refresh assets / Exit; Help → About / Check for
+            // Updates. New Project opens the Home window natively; the other
             // frontend-driven items emit an event the webview listens for (see
             // __root.tsx); Exit is the predefined Quit.
             .menu(|handle| {
+                let new_project =
+                    MenuItemBuilder::with_id("new_project", "New Project").build(handle)?;
                 let refresh =
                     MenuItemBuilder::with_id("refresh_assets", "Refresh assets").build(handle)?;
                 let exit = PredefinedMenuItem::quit(handle, Some("Exit"))?;
                 let main = SubmenuBuilder::new(handle, "Main")
+                    .item(&new_project)
                     .item(&refresh)
                     .separator()
                     .item(&exit)
@@ -1982,6 +2234,9 @@ pub fn run() {
                 MenuBuilder::new(handle).item(&main).item(&help).build()
             })
             .on_menu_event(|app, event| match event.id().as_ref() {
+                "new_project" => {
+                    let _ = open_home_window_impl(app);
+                }
                 "refresh_assets" => {
                     let _ = app.emit("menu-refresh-assets", ());
                 }
@@ -2005,12 +2260,16 @@ pub fn run() {
             default_daz_uninstall_folders,
             uninstall_daz,
             install_daztohue_scripts,
+            latest_daztohue_commit,
             install_daz_merge,
             install_houdini_presets,
             unc_for_path,
             ensure_network_drives,
             pose_asset_frames,
-            scan_duf_files
+            scan_duf_files,
+            active_project_file,
+            open_project_window,
+            open_home_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2055,6 +2314,66 @@ mod tests {
     fn zip_content_level_none() {
         let paths = vec!["random/file.txt", "other.bin"];
         assert!(find_zip_content_level(&paths).is_none());
+    }
+
+    #[test]
+    fn zip_content_level_descends_past_top_level_documentation() {
+        // Documentation at the package root, real content nested under a `My Library`
+        // wrapper (the common store layout). The real content must win over the
+        // shallower readme — otherwise the install copies only the Documentation.
+        let paths = vec![
+            "68812_HevieState3D/Documentation/read.pdf",
+            "68812_HevieState3D/My Library/data/foo.dsf",
+            "68812_HevieState3D/My Library/Runtime/Textures/x.png",
+        ];
+        let (root, mut folders) = find_zip_content_level(&paths).unwrap();
+        folders.sort();
+        assert_eq!(root, "68812_HevieState3D/My Library");
+        assert_eq!(folders, vec!["Runtime".to_string(), "data".to_string()]);
+    }
+
+    /// A unique, freshly-cleared temp dir for a filesystem test (no `tempfile` dep).
+    fn unique_temp_dir(tag: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("dth_test_{tag}_{}_{n}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn content_level_descends_past_top_level_documentation() {
+        // The folder equivalent of the zip case: a product unpacked as
+        // `<asset>/{Documentation, My Library/{data,Runtime}}`. The morphs live under
+        // the wrapper, so the search must skip the top-level Documentation folder.
+        let base = unique_temp_dir("content_descend");
+        let asset = base.join("68812_HevieState3D");
+        fs::create_dir_all(asset.join("Documentation")).unwrap();
+        fs::create_dir_all(asset.join("My Library").join("data")).unwrap();
+        fs::create_dir_all(asset.join("My Library").join("Runtime")).unwrap();
+
+        let (root, mut folders) = find_content_level(&asset, 5).unwrap();
+        folders.sort();
+        assert_eq!(root, asset.join("My Library"));
+        assert_eq!(folders, vec!["Runtime".to_string(), "data".to_string()]);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn content_level_documentation_only_is_the_fallback() {
+        // A docs-only asset (no data/People/Runtime anywhere) still resolves — to its
+        // Documentation folder — so it reports as installed rather than "no content".
+        let base = unique_temp_dir("content_docs_only");
+        let asset = base.join("ReadmePack");
+        fs::create_dir_all(asset.join("Documentation")).unwrap();
+
+        let (root, folders) = find_content_level(&asset, 5).unwrap();
+        assert_eq!(root, asset);
+        assert_eq!(folders, vec!["Documentation".to_string()]);
+
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
