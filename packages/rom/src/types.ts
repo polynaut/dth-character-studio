@@ -344,7 +344,14 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  * Stamped onto every saved character as `schemaVersion`. A stored value below
  * this means the JSON predates a schema change and is a migration candidate;
  * above it means the JSON came from a newer build. The migration framework that
- * acts on the difference is a later addition — this constant is its groundwork.
+ * acts on the difference is `migrateCharacterData` (see `migrate.ts`).
+ *
+ * To bump it: (1) edit `characterSchema`; (2) bump this constant + add a History
+ * line below; (3) add a `migrate.test.ts` case. Add a `characterMigrations` step
+ * in `migrate.ts` ONLY for a rename/restructure or a computed value — an additive
+ * field with a zod default and a removed field need none (zod fills/strips them),
+ * and a value needing host context resolves in web `parseCharacter`, not the core.
+ * The full decision tree + copy-paste templates live atop `migrate.ts`.
  *
  * History:
  *   1 — initial versioned schema (the shape as of its introduction).
@@ -353,8 +360,168 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *   4 — added `exportSceneSubfolders`.
  *   5 — added `exportWithRomScript`.
  *   6 — removed `targetSkeleton` (was never used in generation).
+ *   7 — added `generatedDthVersion` (the DTH release the PoseAsset CSV was last
+ *       generated for; additive with a '' default — no migration step needed).
+ *   8 — added `products` / `productsUnmatched` / `productsScannedAt` (the Daz
+ *       Products scan; additive with [] / '' defaults — no migration step needed).
  */
-export const CHARACTER_SCHEMA_VERSION = 6
+export const CHARACTER_SCHEMA_VERSION = 8
+
+/**
+ * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
+ * plus the shape of the scripts the studio emits. Independent of the app version
+ * and of {@link CHARACTER_SCHEMA_VERSION}. Bump this whenever a studio update
+ * changes the runtime files or the generated-script output in a way that means
+ * already-generated scripts on disk should be regenerated. Pure app/UI changes
+ * that don't alter generated output must NOT bump it.
+ *
+ * Stamped into every generated Daz script header as `// DTH-Runtime: v<N>`, so a
+ * script on disk can be read back to learn which runtime produced it. A value
+ * below this — or no marker at all (a script generated before this existed) —
+ * means the script is stale and "Refresh assets" should regenerate it.
+ *
+ * History:
+ *   1 — initial runtime version (the runtime + generated-script shape as of its
+ *       introduction; earlier scripts carry no marker and read as out-of-date).
+ *   2 — added the DthProducts.dsa runtime + the generated Scan_Products_<Name>.dsa
+ *       script (the Daz Products scan feature).
+ *   3 — product scan keys its output by the open Daz scene (per-scene CSVs in a
+ *       per-character folder) and reads texture-based matching, so existing scan
+ *       scripts must be regenerated to write the new per-scene layout.
+ *   4 — product scan attributes an unmatched decorative node (a zipper, a flower
+ *       trim) to a product already matched in the same scene when the node's name
+ *       is the basename of a file that product installs ("Manifest Match"), so
+ *       figure-parented sub-parts stop landing in "unmatched".
+ *   5 — product scan reads ALL of a node's material map channels (normal, bump,
+ *       roughness, metallic, …), not just the diffuse map, so a sub-part whose only
+ *       file texture is on a non-diffuse channel still texture-folder matches.
+ *   6 — product scan attributes an unmatched GROUP/null node to the product its
+ *       matched children belong to ("Group Match"), and writes an unmatched-node
+ *       diagnostics file next to each per-scene CSV.
+ *   7 — product scan runs its structural attribution passes (parent→child, name↔file,
+ *       child→parent) to a fixpoint, so a match made by one pass unblocks another
+ *       (e.g. a decoration parented to a node that only the group pass matches).
+ *   8 — keyword matching requires TWO distinct shared keywords (the scene-Genesis
+ *       bonus only ranks, never promotes a one-word match) and folds in the morph
+ *       parameter path, so a morph like "SL_Glutes Top Inflate" stops mis-filing
+ *       under "Summertide Swimwear Top" and matches its real product instead.
+ *   9 — product scan writes the unmatched-node diagnostics file only when something
+ *       is unmatched (a clean scan writes none and removes a stale prior report).
+ *  10 — product scan writes a temporary "_debug-matches-<scene>.txt" dumping the
+ *       asset fields behind each match (to diagnose a surprising keyword attribution).
+ *  11 — keyword matcher counts distinct shared keywords with arrays + hasOwnProperty
+ *       instead of `for…in` over a plain object: Daz's QtScript leaves enumerable
+ *       members on Object.prototype, which inflated the count and silently defeated
+ *       the two-keyword gate (e.g. "GP_Minora_Inflate Inside" → "Inside the Asylum
+ *       Bundle" on the lone word "inside"). Temporary match-debug dump removed.
+ *  12 — product scan synthesizes products from the content library's
+ *       data/<Vendor>/<Product> folders as a last resort, so content with no DIM /
+ *       LOCAL_USER metadata (e.g. unofficial products) is still recognised — named by
+ *       its folder, with artist/version read from the content's own files.
+ */
+export const RUNTIME_VERSION = 12
+
+/**
+ * DTH releases at which the generated **PoseAsset CSV** format changed in a
+ * breaking way, ascending. A release's CSV *era* is the highest entry that is
+ * `<=` it (see {@link poseAssetCsvEra}); two releases in the same era produce
+ * interchangeable CSVs, so a character generated under one is NOT stale under the
+ * other. A character's CSV needs regenerating only when its era differs from the
+ * active release's era.
+ *
+ *   2.4.3 — first DTH release with CSV import/export; today's baseline.
+ *
+ * When a future release changes the CSV, add its version here AND teach
+ * {@link toPoseAssetCsv} to emit the matching variant for that era — both shipped
+ * in the same studio update, so a user switching to that release is flagged for a
+ * refresh while everyone on an earlier release stays "all good".
+ */
+export const POSEASSET_CSV_BREAKING_VERSIONS = ['2.4.3'] as const
+
+/**
+ * Compare two dotted version strings numerically (segment-wise; missing segments
+ * count as 0; '' sorts below everything). Returns >0 when `a` > `b`, <0 when
+ * `a` < `b`, 0 when equal. e.g. `compareDthVersions('2.4.10', '2.4.3') > 0`.
+ */
+export function compareDthVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
+}
+
+/**
+ * The CSV era of a DTH release: the highest {@link POSEASSET_CSV_BREAKING_VERSIONS}
+ * entry that is `<=` `release`, or '' when the release predates the first baseline
+ * (or no release is given). Two releases with the same era have interchangeable
+ * PoseAsset CSVs — the studio uses this to decide both which CSV variant to emit
+ * and whether an already-generated CSV is out of date.
+ */
+export function poseAssetCsvEra(release: string): string {
+  if (!release) return ''
+  let era = ''
+  for (const v of POSEASSET_CSV_BREAKING_VERSIONS) {
+    if (compareDthVersions(release, v) >= 0) era = v
+  }
+  return era
+}
+
+/**
+ * One installed Daz product a product scan matched to an asset used in the
+ * character's scene. Written by the generated `Scan_Products_<Name>.dsa` to the
+ * scan CSV, then stored onto the character when the user accepts the results.
+ * All fields but `name` default to '' so a sparse manifest still parses.
+ */
+export const productRecordSchema = z.object({
+  name: z.string(),
+  sku: z.string().default(''),
+  artist: z.string().default(''),
+  version: z.string().default(''),
+  productType: z.string().default(''),
+  /** How the scan tied this product to a scene asset, e.g. "SKU Match",
+   *  "Direct Match", "Keyword Match", "Third-Party Match", "Genesis Base Match". */
+  matchMethod: z.string().default(''),
+  /** What the product appears to be used for in the scene — distinct roles of the
+   *  matched assets, joined (e.g. "Clothing; Geograft"). Heuristic; '' when unknown. */
+  usage: z.string().default(''),
+  /** The specific scene assets that matched this product (labels, capped + joined),
+   *  so you can see exactly why it's in the scene. */
+  usedBy: z.string().default(''),
+  /** The Daz scene(s)/outfit(s) this product was found in — basenames of the open
+   *  scene file(s) that were scanned (e.g. "KiraDefault_G9_GP"). A character can
+   *  have several scenes; the studio merges per-scene scans and lists every scene a
+   *  product appears in here. Empty for scans that captured no saved scene. */
+  scenes: z.array(z.string()).default([]),
+})
+export type ProductRecord = z.infer<typeof productRecordSchema>
+
+/**
+ * A scene asset (a node or a non-zero morph) a product scan could NOT tie to an
+ * installed product — surfaced alongside the matched products so the user can
+ * attribute it manually.
+ */
+export const unmatchedAssetSchema = z.object({
+  name: z.string(),
+  technicalName: z.string().default(''),
+  /** "Node" or "Morph". */
+  assetType: z.string().default(''),
+  /** Native source file the asset loaded from (the `.duf`/`.dsf` path Daz reports
+   *  for it), or '' when unknown. Provenance the scan captures without the DIM
+   *  manifests — the folder segments often name the vendor/product. */
+  sourceFile: z.string().default(''),
+  /** Author + revision read from the source file's own `asset_info` block (DSON),
+   *  '' when unreadable. This is how unofficial products (absent from DIM, hence
+   *  unmatched) still surface an artist and a real version. */
+  artist: z.string().default(''),
+  version: z.string().default(''),
+  /** The Daz scene(s)/outfit(s) this asset was found unmatched in (scene-file
+   *  basenames). Same per-scene attribution as {@link productRecordSchema.scenes}. */
+  scenes: z.array(z.string()).default([]),
+})
+export type UnmatchedAsset = z.infer<typeof unmatchedAssetSchema>
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -429,6 +596,27 @@ export const characterSchema = z.object({
    * export path.
    */
   exportWithRomScript: z.boolean().default(true),
+  /**
+   * The DTH release the PoseAsset CSV was last generated for (e.g. "2.4.3"); ''
+   * when never generated, or generated with no DTH release configured. The CSV is
+   * the only artifact tied to the DTH release, so its provenance lives here in the
+   * app-owned JSON (the CSV itself can't carry a version — the Houdini HDA parser
+   * reads every row's first column as a type). Detection compares its
+   * {@link poseAssetCsvEra} to the active release's; Refresh re-stamps it.
+   */
+  generatedDthVersion: z.string().default(''),
+  /**
+   * Daz products this character uses, as stored from the most recent product
+   * scan (the generated `Scan_Products_<Name>.dsa` analyses the open scene and
+   * writes a CSV; the user reviews + stores it from the character page). Empty
+   * until a scan is stored. Provenance only — does NOT affect generation.
+   */
+  products: z.array(productRecordSchema).default([]),
+  /** Scene assets the last stored scan could not match to a product — kept for
+   *  manual review next to {@link products}. */
+  productsUnmatched: z.array(unmatchedAssetSchema).default([]),
+  /** ISO timestamp the products above were last stored from a scan; '' = never. */
+  productsScannedAt: z.string().default(''),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —

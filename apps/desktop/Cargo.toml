@@ -39,10 +39,13 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # folder walks + zip central-directory reads).
 rayon = "1"
 
-# Desktop-only plugins (updater + relaunch).
+# Desktop-only plugins (updater + relaunch + single-instance).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# One OS process, many windows: a second launch (e.g. double-clicking another
+# `.dcsp`) is routed into the running app, which opens it in its own window.
+tauri-plugin-single-instance = "2"
 # Server-side download of the soltude/DazToHue-Scripts repo zip (Tools installer) —
 # the webview can't fetch it (codeload's CORS only allows render.githubusercontent.com),
 # but Rust has no CORS. reqwest 0.13 is ALREADY in the tree via tauri-plugin-updater

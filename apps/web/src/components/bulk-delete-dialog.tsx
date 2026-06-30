@@ -18,6 +18,8 @@ export function BulkDeleteDialog({
   message,
   keepLabel,
   keepNote,
+  keep2Label,
+  keep2Note,
   busy,
   error,
   onConfirm,
@@ -33,12 +35,18 @@ export function BulkDeleteDialog({
   keepLabel?: ReactNode
   /** Extra clarification shown under the toggle. */
   keepNote?: ReactNode
+  /** Label for an optional SECOND "keep" toggle (e.g. a Houdini subfolder); omit
+   *  for none. Its value is reported as `keep2`. */
+  keep2Label?: ReactNode
+  /** Extra clarification shown under the second toggle. */
+  keep2Note?: ReactNode
   busy: boolean
   error?: ReactNode
-  onConfirm: (opts: { keep: boolean }) => void
+  onConfirm: (opts: { keep: boolean; keep2: boolean }) => void
   onClose: () => void
 }) {
   const [keep, setKeep] = useState(false)
+  const [keep2, setKeep2] = useState(false)
   const count = names.length
 
   useEffect(() => {
@@ -65,13 +73,26 @@ export function BulkDeleteDialog({
         <h2 className="text-lg font-semibold">{heading}</h2>
         {preview && <p className="text-sm text-muted-foreground">{preview}</p>}
         <p className="text-sm text-muted-foreground">{message}</p>
-        {keepLabel && (
-          <div className="rounded-md border bg-card p-3">
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>{keepLabel}</span>
-              <Switch checked={keep} onCheckedChange={setKeep} />
-            </label>
-            {keepNote && <p className="mt-1.5 text-xs text-muted-foreground">{keepNote}</p>}
+        {(keepLabel || keep2Label) && (
+          <div className="space-y-3 rounded-md border bg-card p-3">
+            {keepLabel && (
+              <div>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span>{keepLabel}</span>
+                  <Switch checked={keep} onCheckedChange={setKeep} />
+                </label>
+                {keepNote && <p className="mt-1.5 text-xs text-muted-foreground">{keepNote}</p>}
+              </div>
+            )}
+            {keep2Label && (
+              <div>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span>{keep2Label}</span>
+                  <Switch checked={keep2} onCheckedChange={setKeep2} />
+                </label>
+                {keep2Note && <p className="mt-1.5 text-xs text-muted-foreground">{keep2Note}</p>}
+              </div>
+            )}
           </div>
         )}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -79,7 +100,7 @@ export function BulkDeleteDialog({
           <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={() => onConfirm({ keep })}>
+          <Button variant="destructive" disabled={busy} onClick={() => onConfirm({ keep, keep2 })}>
             {busy ? 'Deleting…' : count === 1 ? 'Delete' : `Delete ${count}`}
           </Button>
         </div>
