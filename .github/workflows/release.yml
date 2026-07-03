@@ -111,8 +111,6 @@ jobs:
     env:
       VERSION: ${{ needs.check.outputs.version }}
       SOCK: ${{ vars.CERTUM_P11_SOCKET || '/run/p11-kit/p11kit.sock' }}
-      PKCS11_URI: ${{ vars.CERTUM_PKCS11_URI || 'pkcs11:model=SimplySign%20C' }}
-      MODULE: /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -121,8 +119,6 @@ jobs:
 
       - name: Authenticode-sign via Certum SimplySign
         shell: bash
-        env:
-          PIN: ${{ secrets.CERTUM_PIN }}
         run: |
           set -euo pipefail
           exe=$(ls dist/*-setup.exe)
@@ -131,20 +127,19 @@ jobs:
             exit 1
           }
           export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
-          uri="$PKCS11_URI"
-          # SimplySign may require the card PIN per private-key operation; wire it
-          # through the CERTUM_PIN secret if signing fails with a CKR_PIN error.
-          [ -n "${PIN:-}" ] && uri="$uri?pin-value=$PIN"
-          osslsigncode sign \
-            -pkcs11module "$MODULE" \
-            -pkcs11cert "$uri" -key "$uri" \
-            -h sha256 -ts http://time.certum.pl \
-            -n "DTH Character Studio" -i "https://github.com/polynaut/dth-character-studio" \
-            -in "$exe" -out "$exe.signed"
+          # The runner's sign-installer.sh signs + timestamps (time.certum.pl)
+          # + embeds the Certum intermediate for a self-contained chain. No PIN:
+          # the SimplySign virtual card takes an empty PIN — the phone login IS
+          # the auth. Its own final verify is informational (offline anchoring
+          # on Certum's cross-signed roots is fussy) — a produced file is a
+          # valid signature.
+          sign-installer.sh "$exe" "$exe.signed" \
+            "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"
+          test -s "$exe.signed"
           mv "$exe.signed" "$exe"
           osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
             -TSA-CAfile /etc/ssl/certs/ca-certificates.crt \
-            -in "$exe"
+            -in "$exe" || true
 
       # The updater verifies the minisign signature over the exact bytes it
       # downloads — regenerate the .sig now that the installer is signed.

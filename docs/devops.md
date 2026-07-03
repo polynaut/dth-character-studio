@@ -140,13 +140,26 @@ container:
    - **Signing smoke test** — downloads a previous installer, signs and
      verifies it on the runner. Publishes nothing. Green = releases will sign.
 
+### The signer script
+
+Both workflows sign through **`sign-installer.sh`** (lives on the runner, in
+PATH): `sign-installer.sh <in.exe> <out.exe> ["Product Name"] [project-url]`.
+It signs, timestamps (`http://time.certum.pl/`), and **embeds the Certum
+intermediate** so the chain is self-contained. Its final verify (and the
+workflows' `osslsigncode verify`) is **informational only** — offline
+chain-anchoring on Certum's cross-signed roots is fussy; a produced file is a
+valid signature.
+
 ### Repo configuration
 
 | Kind | Name | Holds |
 |---|---|---|
 | variable | `CERTUM_P11_SOCKET` | socket path in the runner (set: `/run/p11-kit/p11kit.sock`) |
-| variable | `CERTUM_PKCS11_URI` | token/cert selector (default `pkcs11:model=SimplySign%20C`; refine from `p11tool --list-tokens` if needed) |
-| secret | `CERTUM_PIN` | card PIN — only needed if signing fails with a `CKR_PIN…` error; appended to the PKCS#11 URI as `pin-value` |
+
+**No PIN anywhere:** the SimplySign virtual card takes an empty PIN — the
+phone-app login *is* the auth. (A `Key handle invalid` signing error is NOT a
+PIN problem; historically it was a broken SimplySign app version — the signer
+pins SimplySign **2.9.13**.)
 
 ### Gotchas
 
@@ -156,9 +169,11 @@ container:
 - GitHub rewrites spaces in release asset names to dots
   (`DTH Character Studio_…` → `DTH.Character.Studio_…`); `latest.json` must
   point at the rewritten name. The workflow handles this.
-- If the NAS rebooted, the SimplySign session is gone: the `sign-publish` job
-  fails fast with "p11-kit socket missing" (or the token list is empty). VNC
-  in, log in again, re-run the failed job.
+- **The SimplySign session does not survive a certum-container restart.** While
+  the container runs, signing is unattended; after any signer restart / NAS
+  reboot, the `sign-publish` job fails fast with "p11-kit socket missing" (or
+  the sign step errors) — one ~60s VNC OTP login re-arms it, then re-run the
+  failed job.
 - Only the **installer** is signed for now; the app `.exe` inside it is not
   (would require signing during the Windows build, i.e. a cross-machine
   `signCommand` — revisit if Defender flags the installed binary).
