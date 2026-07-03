@@ -657,39 +657,6 @@ function SettingsPage() {
               />
             </div>
 
-            <FolderField
-              label="My DAZ 3D Library"
-              value={settings.dazLibraryFolder}
-              placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
-              onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
-              help={
-                <>
-                  Your Daz content library — where the release's content is installed.
-                  {settings.dazLibraryFolder && (
-                    <>
-                      {' '}
-                      Generated character scripts install to{' '}
-                      <PathCode
-                        path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
-                      />
-                      .
-                    </>
-                  )}
-                </>
-              }
-            />
-            <FolderField
-              label="Houdini documents folder (optional)"
-              value={settings.houdiniDocsFolder}
-              placeholder="C:\Users\you\Documents\houdini20.5"
-              onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
-              help={
-                <>
-                  Your Houdini user folder. The install merges the release's Houdini assets
-                  (otls/presets/toolbar) into it.
-                </>
-              }
-            />
             {(canInstallDaz || canInstallHoudini) && (
               <p className="text-sm text-muted-foreground">
                 Ready to install DTH{' '}
@@ -700,14 +667,34 @@ function SettingsPage() {
               </p>
             )}
 
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Daz content → My DAZ 3D Library</p>
+            <div>
+              <FolderField
+                label="My DAZ 3D Library"
+                value={settings.dazLibraryFolder}
+                placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library"
+                onChange={(value) => setSettings((s) => ({ ...s, dazLibraryFolder: value }))}
+                help={
+                  <>
+                    Your Daz content library — where the release's content is installed.
+                    {settings.dazLibraryFolder && (
+                      <>
+                        {' '}
+                        Generated character scripts install to{' '}
+                        <PathCode
+                          path={displayPath(`${settings.dazLibraryFolder}/Scripts/DTH-Character-Studio`)}
+                        />
+                        .
+                      </>
+                    )}
+                  </>
+                }
+              />
               {!canInstallDaz && (
-                <p className="text-sm text-muted-foreground">
+                <p className="mt-2 text-sm text-muted-foreground">
                   Set {dazBlockers.join(', ')} to enable this install.
                 </p>
               )}
-              <div className="flex gap-2 pt-1">
+              <div className="mt-2 flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() =>
@@ -752,14 +739,25 @@ function SettingsPage() {
               </div>
             </div>
 
-            <div className="space-y-1 border-t pt-4">
-              <p className="text-sm font-medium">Houdini assets → Houdini documents folder</p>
+            <div className="border-t pt-4">
+              <FolderField
+                label="Houdini documents folder (optional)"
+                value={settings.houdiniDocsFolder}
+                placeholder="C:\Users\you\Documents\houdini20.5"
+                onChange={(value) => setSettings((s) => ({ ...s, houdiniDocsFolder: value }))}
+                help={
+                  <>
+                    Your Houdini user folder. The install merges the release's Houdini assets
+                    (otls/presets/toolbar) into it.
+                  </>
+                }
+              />
               {!canInstallHoudini && (
-                <p className="text-sm text-muted-foreground">
+                <p className="mt-2 text-sm text-muted-foreground">
                   Set {houdiniBlockers.join(', ')} to enable this install.
                 </p>
               )}
-              <div className="flex gap-2 pt-1">
+              <div className="mt-2 flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() =>
