@@ -1,5 +1,7 @@
 # @dth/rom
 
+## 0.28.0
+
 ## 0.27.0
 
 ### Minor Changes

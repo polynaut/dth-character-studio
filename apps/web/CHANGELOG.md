@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.28.0
+
+### Minor Changes
+
+- [#106](https://github.com/polynaut/dth-character-studio/pull/106) [`18e6787`](https://github.com/polynaut/dth-character-studio/commit/18e6787b82c74d7291c7164692487490ede09613) Thanks [@polynaut](https://github.com/polynaut)! - **Setup DTH Release** split into two independent installs, each with its own Dry run / Install buttons placed directly under its destination folder field: **Daz content** under "My DAZ 3D Library", **Houdini assets** under "Houdini documents folder". Each half is enabled by its own prerequisites (a resolved DTH release + its destination folder), so you can install only the Daz side or only the Houdini side. The Daz install still re-scans the release's poses on success; the native `install_dth_release` command gained a `target` selector (`daz` / `houdini` / `all`).
+
+### Patch Changes
+
+- [#104](https://github.com/polynaut/dth-character-studio/pull/104) [`d6db042`](https://github.com/polynaut/dth-character-studio/commit/d6db042511c6da702c8a2f02a81fc663f7df537b) Thanks [@polynaut](https://github.com/polynaut)! - Settings: the **DAZ Install Manager manifests folder** field (+ its "Detect installed location" button) moved from the General tab to the **Project tab, directly under the "Enable Daz Products" toggle** it belongs with. It remains a machine-wide setting (stored with the app, shared by all projects — the info popup now says so); the Project tab's Save persists it alongside the project settings. The character page's "set it in Settings" hint points at the new location.
+
+- Updated dependencies []:
+  - @dth/rom@0.28.0
+
 ## 0.27.0
 
 ### Minor Changes
