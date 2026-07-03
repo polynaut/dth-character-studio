@@ -105,6 +105,9 @@ jobs:
   sign-publish:
     needs: [check, build]
     runs-on: [self-hosted, linux, certum-signer]
+    # Protected environment (required reviewer): every release PAUSES here for
+    # manual approval before anything touches the SimplySign session.
+    environment: release-signing
     env:
       VERSION: ${{ needs.check.outputs.version }}
       SOCK: ${{ vars.CERTUM_P11_SOCKET || '/run/user/1000/p11-kit/p11kit.sock' }}

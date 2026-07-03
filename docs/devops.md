@@ -105,6 +105,11 @@ release.yml
                                              → gh release create (tag + assets)
 ```
 
+Both signing jobs run in the protected **`release-signing` environment**
+(required reviewer: `polynaut`, deployments restricted to `main`) — every
+release and smoke test **pauses for manual approval** in the Actions UI before
+anything touches the SimplySign session.
+
 The NAS runs two containers:
 
 - **certum-container** — SimplySign Desktop in Xvnc, exposing the virtual card

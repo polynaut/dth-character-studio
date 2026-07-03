@@ -27,6 +27,9 @@ permissions:
 jobs:
   sign:
     runs-on: [self-hosted, linux, certum-signer]
+    # Same protected environment as the release's sign job — approving the run
+    # is part of the smoke test (it exercises the approval gate too).
+    environment: release-signing
     env:
       SOCK: ${{ inputs.socket }}
       # Which token/cert to sign with. Override via the CERTUM_PKCS11_URI repo
