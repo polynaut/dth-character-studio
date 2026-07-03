@@ -1904,7 +1904,7 @@ function CharacterPage() {
               No DAZ Install Manager manifests folder is set, so a scan can list used assets but
               can't name products.{' '}
               <Link to="/settings" className="underline">
-                Set it in Settings → General
+                Set it in Settings → Project
               </Link>
               .
             </p>
