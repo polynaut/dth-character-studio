@@ -24,6 +24,13 @@ struct ReleaseInstallRequest {
     houdini_docs_folder: String,
     /// Count what would be copied without writing anything.
     dry_run: bool,
+    /// Which half to install: "daz", "houdini", or "all" (default — both).
+    #[serde(default = "default_install_target")]
+    target: String,
+}
+
+fn default_install_target() -> String {
+    "all".into()
 }
 
 #[derive(Deserialize)]
@@ -797,8 +804,9 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
 }
 
 /// Install the DTH *release* content: `Daz Studio Content/{data,DazToHue}` → the
-/// Daz library, and (optionally) `Houdini Assets/*` → the Houdini documents
-/// folder. Native port of the dth-cli `install-daz-dth` / `install-houdini-dth`.
+/// Daz library, and/or `Houdini Assets/*` → the Houdini documents folder,
+/// selected by `target` ("daz" / "houdini" / "all"). Native port of the dth-cli
+/// `install-daz-dth` / `install-houdini-dth` — now individually runnable.
 #[tauri::command]
 fn install_dth_release(request: ReleaseInstallRequest) -> InstallReport {
     let dry = request.dry_run;
@@ -808,25 +816,29 @@ fn install_dth_release(request: ReleaseInstallRequest) -> InstallReport {
     let mut steps: Vec<InstallStep> = Vec::new();
 
     // Daz content (data, DazToHue) → My DAZ 3D Library.
-    for folder in ["data", "DazToHue"] {
-        steps.push(install_folder(
-            &format!("Daz content: {folder}"),
-            &daz_content.join(folder),
-            &lib.join(folder),
-            dry,
-        ));
+    if request.target != "houdini" {
+        for folder in ["data", "DazToHue"] {
+            steps.push(install_folder(
+                &format!("Daz content: {folder}"),
+                &daz_content.join(folder),
+                &lib.join(folder),
+                dry,
+            ));
+        }
     }
 
     // Houdini assets (otls/presets/toolbar/…) → Houdini documents folder (optional).
-    if request.houdini_docs_folder.is_empty() {
-        steps.push(step_skip("Houdini assets", "Houdini documents folder not set".into()));
-    } else {
-        steps.push(install_contents(
-            "Houdini assets",
-            &release_root.join("Houdini Assets"),
-            Path::new(&request.houdini_docs_folder),
-            dry,
-        ));
+    if request.target != "daz" {
+        if request.houdini_docs_folder.is_empty() {
+            steps.push(step_skip("Houdini assets", "Houdini documents folder not set".into()));
+        } else {
+            steps.push(install_contents(
+                "Houdini assets",
+                &release_root.join("Houdini Assets"),
+                Path::new(&request.houdini_docs_folder),
+                dry,
+            ));
+        }
     }
 
     let total_files = steps.iter().map(|s| s.files).sum();

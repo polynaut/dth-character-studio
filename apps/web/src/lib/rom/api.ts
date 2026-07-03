@@ -1196,15 +1196,19 @@ export interface InstallReport {
 }
 
 /**
- * Install the DTH *release* content into the local Daz library + (optionally) the
+ * Install one half of the DTH *release* content — `target: 'daz'` copies the Daz
+ * content into the local library, `'houdini'` merges the Houdini assets into the
  * Houdini documents folder — a port of the dth-cli `install-daz-dth` /
- * `install-houdini-dth` commands. Path resolution happens here; the recursive
- * copy runs in native Rust (`install_dth_release`). Throws with a combined
- * message when prerequisites are missing. `dryRun` previews without writing.
+ * `install-houdini-dth` commands, individually runnable. Path resolution happens
+ * here; the recursive copy runs in native Rust (`install_dth_release`). Throws
+ * with a combined message when the half's prerequisites are missing. `dryRun`
+ * previews without writing.
  */
 export async function installDthRelease({ data }: { data: unknown }): Promise<InstallReport> {
-  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
-  const plan = await storage.resolveReleaseInstall()
+  const { dryRun, target } = z
+    .object({ dryRun: z.boolean().optional(), target: z.enum(['daz', 'houdini']) })
+    .parse(data ?? {})
+  const plan = await storage.resolveReleaseInstall(target)
   if (plan.errors.length) throw new Error(plan.errors.join('\n'))
   return invoke<InstallReport>('install_dth_release', {
     request: {
@@ -1212,6 +1216,7 @@ export async function installDthRelease({ data }: { data: unknown }): Promise<In
       dazLibFolder: plan.dazLibFolder,
       houdiniDocsFolder: plan.houdiniDocsFolder,
       dryRun: dryRun ?? false,
+      target,
     },
   })
 }
