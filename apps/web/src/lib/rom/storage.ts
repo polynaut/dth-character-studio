@@ -1707,16 +1707,21 @@ export interface ReleaseInstall {
 
 /**
  * Resolve the DTH *release* install from saved settings: the active release root
- * + "My DAZ 3D Library" (required) + the Houdini documents folder (optional).
+ * plus the destination the chosen `target` half needs — "My DAZ 3D Library" for
+ * the Daz content, the Houdini documents folder for the Houdini assets ('all'
+ * requires the library and treats Houdini as optional, as before).
  */
-export async function resolveReleaseInstall(): Promise<ReleaseInstall> {
+export async function resolveReleaseInstall(
+  target: 'daz' | 'houdini' | 'all' = 'all',
+): Promise<ReleaseInstall> {
   const s = await getSettings()
   const errors: Array<string> = []
   const release = await resolveActiveReleaseRoot(s.dthPosesFolder, s.currentDthVersion)
   if (release.error || !release.releaseRoot) {
     errors.push(release.error ?? 'No DTH release resolved — set the DTH release folder.')
   }
-  if (!s.dazLibraryFolder) errors.push('Set “My DAZ 3D Library”.')
+  if (target !== 'houdini' && !s.dazLibraryFolder) errors.push('Set “My DAZ 3D Library”.')
+  if (target === 'houdini' && !s.houdiniDocsFolder) errors.push('Set the Houdini documents folder.')
   return {
     releaseRoot: release.releaseRoot,
     releaseName: release.name,
