@@ -357,12 +357,20 @@ function SettingsPage() {
       pCreateHoudini !== project.createHoudiniSubdir ||
       pAssetsEnabled !== project.assetsEnabled ||
       pDazProductsEnabled !== project.dazProductsEnabled ||
-      pCharactersSubdir !== project.charactersSubdir)
+      pCharactersSubdir !== project.charactersSubdir ||
+      // Edited on the Project tab (under the Daz Products toggle) but stored in
+      // the machine settings — saved by onSaveProjectSettings alongside the manifest.
+      settings.dimManifestsFolder !== initial.dimManifestsFolder)
 
   async function onSaveProjectSettings() {
     if (!project) return
     setSavingProject(true)
     try {
+      // The DIM manifests folder lives under the Daz Products toggle on this tab
+      // but is a machine setting (settings.json, not the .dcsp) — persist it too.
+      if (settings.dimManifestsFolder !== initial.dimManifestsFolder) {
+        await saveSettings({ data: settings })
+      }
       await saveProjectSettings({
         data: {
           projectId: project.path,
@@ -492,8 +500,7 @@ function SettingsPage() {
     settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
-    settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
-    settings.dimManifestsFolder !== initial.dimManifestsFolder
+    settings.houdiniDocsFolder !== initial.houdiniDocsFolder
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
@@ -677,39 +684,6 @@ function SettingsPage() {
                 </>
               }
             />
-            <div>
-              <FolderField
-                label="DAZ Install Manager manifests folder (optional)"
-                value={settings.dimManifestsFolder}
-                placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
-                onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
-                info={
-                  <>
-                    The <strong>ManifestFiles</strong> folder DAZ Install Manager writes (a folder
-                    of <code>.dsx</code> files) — see DIM → Advanced Settings → “Download/Install”.
-                    The <strong>Daz Products</strong> scan reads it to resolve scene assets to
-                    product names, SKUs and artists. Leave empty to skip product naming (the scan
-                    still lists used assets).
-                  </>
-                }
-                help={
-                  <>
-                    Read by the per-character product scan to identify installed products.
-                  </>
-                }
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={onDetectDimFolder}
-                disabled={detectingDim}
-              >
-                {detectingDim ? 'Detecting…' : 'Detect installed location'}
-              </Button>
-            </div>
-
             {canInstallRelease ? (
               <p className="text-sm text-muted-foreground">
                 Ready to install DTH{' '}
@@ -1002,11 +976,44 @@ function SettingsPage() {
                     character. Open the character's scene in Daz and run it: it analyses the scene
                     for used products and writes a CSV the character page reads back, so you can
                     review and store the found products. Set the{' '}
-                    <strong>DAZ Install Manager manifests folder</strong> in the General tab for
-                    product names &amp; SKUs. Off by default.
+                    <strong>DAZ Install Manager manifests folder</strong> below for product names
+                    &amp; SKUs. Off by default.
                   </InfoPopup>
                 </span>
                 <Switch checked={pDazProductsEnabled} onCheckedChange={setPDazProductsEnabled} />
+              </div>
+              <div>
+                <FolderField
+                  label="DAZ Install Manager manifests folder (optional)"
+                  value={settings.dimManifestsFolder}
+                  placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
+                  onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
+                  info={
+                    <>
+                      The <strong>ManifestFiles</strong> folder DAZ Install Manager writes (a folder
+                      of <code>.dsx</code> files) — see DIM → Advanced Settings → “Download/Install”.
+                      The <strong>Daz Products</strong> scan reads it to resolve scene assets to
+                      product names, SKUs and artists. Leave empty to skip product naming (the scan
+                      still lists used assets). Machine-wide setting — shared by all projects
+                      (stored with the app, not in the <code>.dcsp</code>).
+                    </>
+                  }
+                  help={
+                    <>
+                      Read by the per-character product scan to identify installed products.
+                    </>
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={onDetectDimFolder}
+                  disabled={detectingDim}
+                >
+                  {detectingDim ? 'Detecting…' : 'Detect installed location'}
+                </Button>
               </div>
               <Button onClick={onSaveProjectSettings} disabled={savingProject || !projectDirty}>
                 <Save /> {savingProject ? 'Saving…' : projectDirty ? 'Save' : 'Saved'}
