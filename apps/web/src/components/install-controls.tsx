@@ -157,7 +157,12 @@ export function InstallReportList({ report, onClose }: { report: InstallReport; 
         ))}
         {groups.map((group, i) => (
           <li key={group.header.label + i} className="pt-3 first:pt-0">
-            <details open className="group/folder">
+            {/* Start open only when something in the folder needs attention
+                (files to copy, or an error) — all-skipped folders collapse. */}
+            <details
+              open={group.steps.some((s) => s.status !== 'skipped')}
+              className="group/folder"
+            >
               <summary className="flex cursor-pointer items-start gap-2 [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-open/folder:rotate-90" />
                 <span className="font-mono text-xs font-semibold break-all text-foreground">

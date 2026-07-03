@@ -13,34 +13,49 @@ function step(partial: Partial<InstallStep>): InstallStep {
 describe('InstallReportList', () => {
   afterEach(cleanup)
 
-  it('groups asset steps under a collapsible, initially-open folder header', () => {
+  it('groups asset steps per folder; only folders with updates start expanded', () => {
     const report: InstallReport = {
       dryRun: true,
-      totalFiles: 0,
+      totalFiles: 3,
       steps: [
         step({ label: 'X:/assets/_genesis 9', status: 'header' }),
         step({ label: '67582_Meipe.zip', detail: 'already installed · 2147 files' }),
         step({ label: '67091_Meipe.zip', detail: 'already installed · 1436 files' }),
         step({ label: 'X:/assets/other', status: 'header' }),
-        step({ label: 'thing.zip', detail: 'no Daz content' }),
+        step({ label: 'new-thing.zip', status: 'ok', files: 3, detail: '3/3 files to copy' }),
+        step({ label: 'old-thing.zip', detail: 'already installed · 9 files' }),
       ],
     }
     render(<InstallReportList report={report} />)
 
-    // Each source folder renders as its own <details> group, open by default,
-    // with the header (+ asset count) as the toggle.
-    const groups = document.querySelectorAll('details')
-    expect(groups).toHaveLength(2)
-    for (const group of groups) expect(group.open).toBe(true)
-    expect(screen.getByText(/_genesis 9/)).toBeTruthy()
-    expect(screen.getByText('· 2 asset(s)')).toBeTruthy()
-    expect(screen.getByText('· 1 asset(s)')).toBeTruthy()
+    // Each source folder renders as its own <details> group with the header
+    // (+ asset count) as the toggle. The all-skipped folder starts collapsed;
+    // the one with files to copy starts open.
+    const genesis = screen.getByText(/_genesis 9/).closest('details') as HTMLDetailsElement
+    const other = screen.getByText(/assets(\/|\\)other/).closest('details') as HTMLDetailsElement
+    expect(document.querySelectorAll('details')).toHaveLength(2)
+    expect(genesis.open).toBe(false)
+    expect(other.open).toBe(true)
+    expect(screen.getAllByText('· 2 asset(s)')).toHaveLength(2)
 
     // Asset rows live inside their folder's group.
-    const first = screen.getByText(/_genesis 9/).closest('details') as HTMLElement
-    expect(screen.getByText('67582_Meipe.zip').closest('details')).toBe(first)
-    expect(screen.getByText('67091_Meipe.zip').closest('details')).toBe(first)
-    expect(screen.getByText('thing.zip').closest('details')).not.toBe(first)
+    expect(screen.getByText('67582_Meipe.zip').closest('details')).toBe(genesis)
+    expect(screen.getByText('67091_Meipe.zip').closest('details')).toBe(genesis)
+    expect(screen.getByText('old-thing.zip').closest('details')).toBe(other)
+  })
+
+  it('expands a folder whose scan hit an error', () => {
+    const report: InstallReport = {
+      dryRun: true,
+      totalFiles: 0,
+      steps: [
+        step({ label: 'X:/assets/broken', status: 'header' }),
+        step({ label: 'corrupt.zip', status: 'error', detail: 'unzip failed' }),
+      ],
+    }
+    render(<InstallReportList report={report} />)
+    const group = screen.getByText(/broken/).closest('details') as HTMLDetailsElement
+    expect(group.open).toBe(true)
   })
 
   it('renders reports without folder headers flat, with no collapsible group', () => {
