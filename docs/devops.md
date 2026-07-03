@@ -116,9 +116,11 @@ The NAS runs two containers:
   through a p11-kit server socket (`p11kit.sock`) on a shared volume.
 - **the Actions runner** (`jebpot-certum-signer`, labels
   `self-hosted, linux, certum-signer`) — has `osslsigncode`, `node`, `gh`,
-  `p11tool` and the `p11-kit-client.so` module; mounts the same socket volume
-  (default path `/run/user/1000/p11-kit/p11kit.sock`, override with the
-  `CERTUM_P11_SOCKET` repo **variable**).
+  `p11tool` and the `p11-kit-client.so` module; mounts the same socket volume.
+  In the current QNAP deployment the runner sees the socket at
+  `/run/p11-kit/p11kit.sock` — recorded in the `CERTUM_P11_SOCKET` repo
+  **variable**, which all signing workflows read (workflow inputs can
+  override it per run).
 
 ### The one manual step: the SimplySign session
 
@@ -142,7 +144,7 @@ container:
 
 | Kind | Name | Holds |
 |---|---|---|
-| variable | `CERTUM_P11_SOCKET` | socket path in the runner (default `/run/user/1000/p11-kit/p11kit.sock`) |
+| variable | `CERTUM_P11_SOCKET` | socket path in the runner (set: `/run/p11-kit/p11kit.sock`) |
 | variable | `CERTUM_PKCS11_URI` | token/cert selector (default `pkcs11:model=SimplySign%20C`; refine from `p11tool --list-tokens` if needed) |
 | secret | `CERTUM_PIN` | card PIN — only needed if signing fails with a `CKR_PIN…` error; appended to the PKCS#11 URI as `pin-value` |
 

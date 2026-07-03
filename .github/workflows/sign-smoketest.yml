@@ -17,9 +17,9 @@ on:
         required: false
         default: "v0.26.1"
       socket:
-        description: "p11-kit socket path as seen inside the runner"
+        description: "p11-kit socket path override (defaults to the CERTUM_P11_SOCKET repo variable)"
         required: false
-        default: "/run/user/1000/p11-kit/p11kit.sock"
+        default: ""
 
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
     # is part of the smoke test (it exercises the approval gate too).
     environment: release-signing
     env:
-      SOCK: ${{ inputs.socket }}
+      SOCK: ${{ inputs.socket || vars.CERTUM_P11_SOCKET || '/run/p11-kit/p11kit.sock' }}
       # Which token/cert to sign with. Override via the CERTUM_PKCS11_URI repo
       # variable once `p11tool --list-tokens` shows the real token attributes.
       PKCS11_URI: ${{ vars.CERTUM_PKCS11_URI || 'pkcs11:model=SimplySign%20C' }}
