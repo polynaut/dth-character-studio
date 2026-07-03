@@ -1,0 +1,91 @@
+name: Signing smoke test
+
+# Manual end-to-end probe of the Certum/SimplySign Authenticode path: signs a
+# COPY of a previously released installer on the self-hosted signer runner and
+# verifies the result. Publishes NOTHING — the signed file never leaves the
+# runner and is deleted at the end. Run this after (re)starting certum-container
+# and logging into SimplySign, before cutting the first signed release.
+#
+# The sign step is intentionally identical (same command, same vars/defaults)
+# to the one in release.yml — a green run here means the release path signs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release whose installer is used as the test binary"
+        required: false
+        default: "v0.26.1"
+      socket:
+        description: "p11-kit socket path override (defaults to the CERTUM_P11_SOCKET repo variable)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: [self-hosted, linux, certum-signer]
+    # Same protected environment as the release's sign job — approving the run
+    # is part of the smoke test (it exercises the approval gate too).
+    environment: release-signing
+    env:
+      SOCK: ${{ inputs.socket || vars.CERTUM_P11_SOCKET || '/run/p11-kit/p11kit.sock' }}
+      # Which token/cert to sign with. Override via the CERTUM_PKCS11_URI repo
+      # variable once `p11tool --list-tokens` shows the real token attributes.
+      PKCS11_URI: ${{ vars.CERTUM_PKCS11_URI || 'pkcs11:model=SimplySign%20C' }}
+      MODULE: /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so
+    steps:
+      - name: Fetch a test binary (previous release's installer)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          rm -rf smoke && mkdir smoke
+          gh release download "${{ inputs.release_tag }}" \
+            --repo "$GITHUB_REPOSITORY" --pattern '*-setup.exe' --output smoke/test.exe
+          ls -l smoke/test.exe
+
+      - name: Socket + token visible
+        shell: bash
+        run: |
+          [ -S "$SOCK" ] || {
+            echo "::error::p11-kit socket missing at $SOCK — is certum-container running and SimplySign logged in (VNC → login → close)?"
+            exit 1
+          }
+          export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
+          echo "--- tokens ---"
+          p11tool --list-tokens
+          echo "--- certificates on the token ---"
+          p11tool --list-all-certs "$PKCS11_URI" || true
+
+      - name: Sign (same command as release.yml)
+        shell: bash
+        env:
+          PIN: ${{ secrets.CERTUM_PIN }}
+        run: |
+          set -euo pipefail
+          export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
+          uri="$PKCS11_URI"
+          # SimplySign may require the card PIN per private-key operation; wire it
+          # through the CERTUM_PIN secret if signing fails with a CKR_PIN error.
+          [ -n "${PIN:-}" ] && uri="$uri?pin-value=$PIN"
+          osslsigncode sign \
+            -pkcs11module "$MODULE" \
+            -pkcs11cert "$uri" -key "$uri" \
+            -h sha256 -ts http://time.certum.pl \
+            -n "DTH Character Studio" -i "https://github.com/polynaut/dth-character-studio" \
+            -in smoke/test.exe -out smoke/test-signed.exe
+
+      - name: Verify signature + timestamp
+        shell: bash
+        run: |
+          osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
+            -TSA-CAfile /etc/ssl/certs/ca-certificates.crt \
+            -in smoke/test-signed.exe
+
+      - name: Cleanup
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf smoke

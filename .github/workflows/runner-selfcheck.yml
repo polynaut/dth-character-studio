@@ -14,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       socket:
-        description: "p11-kit socket path as seen inside the runner"
+        description: "p11-kit socket path override (defaults to the CERTUM_P11_SOCKET repo variable)"
         required: false
-        default: "/run/user/1000/p11-kit/p11kit.sock"
+        default: ""
 
 jobs:
   check:
@@ -72,7 +72,7 @@ jobs:
         if: ${{ always() }}
         shell: bash
         env:
-          SOCK: ${{ inputs.socket }}
+          SOCK: ${{ inputs.socket || vars.CERTUM_P11_SOCKET || '/run/p11-kit/p11kit.sock' }}
         run: |
           set +e
           echo "socket: $SOCK"
