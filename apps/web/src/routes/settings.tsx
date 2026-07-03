@@ -540,11 +540,17 @@ function SettingsPage() {
   // before either runs (they read the saved settings).
   const releaseReady = !releases.error && releases.mode !== 'none'
   const exporterReady = !exporter.error && exporter.mode !== 'none'
-  const canInstallRelease = releaseReady && !!settings.dazLibraryFolder
+  // The release install is split: Daz content → library, Houdini assets → the
+  // Houdini documents folder — each half has its own prerequisites and buttons.
+  const canInstallDaz = releaseReady && !!settings.dazLibraryFolder
+  const canInstallHoudini = releaseReady && !!settings.houdiniDocsFolder
   const canInstallPlugin = exporterReady && !!settings.dazInstallFolder
-  const releaseBlockers: Array<string> = []
-  if (!releaseReady) releaseBlockers.push('a DTH release')
-  if (!settings.dazLibraryFolder) releaseBlockers.push('“My DAZ 3D Library”')
+  const dazBlockers: Array<string> = []
+  if (!releaseReady) dazBlockers.push('a DTH release')
+  if (!settings.dazLibraryFolder) dazBlockers.push('“My DAZ 3D Library”')
+  const houdiniBlockers: Array<string> = []
+  if (!releaseReady) houdiniBlockers.push('a DTH release')
+  if (!settings.houdiniDocsFolder) houdiniBlockers.push('the Houdini documents folder')
   const pluginBlockers: Array<string> = []
   if (!exporterReady) pluginBlockers.push('a DTH Exporter Plugin')
   if (!settings.dazInstallFolder) pluginBlockers.push('the Daz Studio install folder')
@@ -684,7 +690,7 @@ function SettingsPage() {
                 </>
               }
             />
-            {canInstallRelease ? (
+            {(canInstallDaz || canInstallHoudini) && (
               <p className="text-sm text-muted-foreground">
                 Ready to install DTH{' '}
                 <strong className="text-foreground">
@@ -692,47 +698,96 @@ function SettingsPage() {
                 </strong>
                 {dirty ? ' — pending changes are saved on install.' : '.'}
               </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Set {releaseBlockers.join(', ')} to enable the install.
-              </p>
             )}
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => runInstall(installDthRelease, true, setReleaseInstalling, setReleaseReport)}
-                disabled={!canInstallRelease || releaseInstalling}
-              >
-                {releaseInstalling ? 'Working…' : 'Dry run'}
-              </Button>
-              <Button
-                onClick={() =>
-                  runInstall(
-                    installDthRelease,
-                    false,
-                    setReleaseInstalling,
-                    setReleaseReport,
-                    undefined,
-                    // Re-scan poses from the just-installed release so the studio
-                    // can open/generate characters without a separate Save.
-                    async () => {
-                      const result = await rebuildCatalog()
-                      if (result.error)
-                        toast.error(`Installed, but the pose scan failed: ${result.error}`)
-                      else
-                        toast.success(
-                          `Scanned ${result.assets.length} pose presets${
-                            result.releaseName ? ` from ${result.releaseName}` : ''
-                          }`,
-                        )
-                    },
-                  )
-                }
-                disabled={!canInstallRelease || releaseInstalling}
-              >
-                <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
-              </Button>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Daz content → My DAZ 3D Library</p>
+              {!canInstallDaz && (
+                <p className="text-sm text-muted-foreground">
+                  Set {dazBlockers.join(', ')} to enable this install.
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    runInstall(
+                      (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
+                      true,
+                      setReleaseInstalling,
+                      setReleaseReport,
+                    )
+                  }
+                  disabled={!canInstallDaz || releaseInstalling}
+                >
+                  {releaseInstalling ? 'Working…' : 'Dry run'}
+                </Button>
+                <Button
+                  onClick={() =>
+                    runInstall(
+                      (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
+                      false,
+                      setReleaseInstalling,
+                      setReleaseReport,
+                      undefined,
+                      // Re-scan poses from the just-installed release so the studio
+                      // can open/generate characters without a separate Save.
+                      async () => {
+                        const result = await rebuildCatalog()
+                        if (result.error)
+                          toast.error(`Installed, but the pose scan failed: ${result.error}`)
+                        else
+                          toast.success(
+                            `Scanned ${result.assets.length} pose presets${
+                              result.releaseName ? ` from ${result.releaseName}` : ''
+                            }`,
+                          )
+                      },
+                    )
+                  }
+                  disabled={!canInstallDaz || releaseInstalling}
+                >
+                  <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1 border-t pt-4">
+              <p className="text-sm font-medium">Houdini assets → Houdini documents folder</p>
+              {!canInstallHoudini && (
+                <p className="text-sm text-muted-foreground">
+                  Set {houdiniBlockers.join(', ')} to enable this install.
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    runInstall(
+                      (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
+                      true,
+                      setReleaseInstalling,
+                      setReleaseReport,
+                    )
+                  }
+                  disabled={!canInstallHoudini || releaseInstalling}
+                >
+                  {releaseInstalling ? 'Working…' : 'Dry run'}
+                </Button>
+                <Button
+                  onClick={() =>
+                    runInstall(
+                      (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
+                      false,
+                      setReleaseInstalling,
+                      setReleaseReport,
+                    )
+                  }
+                  disabled={!canInstallHoudini || releaseInstalling}
+                >
+                  <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
+                </Button>
+              </div>
             </div>
 
             {releaseReport && (
