@@ -112,6 +112,12 @@ jobs:
       VERSION: ${{ needs.check.outputs.version }}
       SOCK: ${{ vars.CERTUM_P11_SOCKET || '/run/p11-kit/p11kit.sock' }}
     steps:
+      # The self-hosted runner reuses its workspace — without this, the previous
+      # release's installer is still in dist/ and the exe globs match two files.
+      - name: Clean workspace
+        shell: bash
+        run: rm -rf dist latest.json
+
       - uses: actions/download-artifact@v4
         with:
           name: unsigned-installer
@@ -121,7 +127,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          exe=$(ls dist/*-setup.exe)
+          # Version-strict: exactly this release's installer, nothing else.
+          matches=(dist/*_"${VERSION}"_*-setup.exe)
+          if [ ${#matches[@]} -ne 1 ] || [ ! -f "${matches[0]}" ]; then
+            echo "::error::expected exactly one v${VERSION} installer in dist/ — found: ${matches[*]}"
+            exit 1
+          fi
+          exe="${matches[0]}"
           [ -S "$SOCK" ] || {
             echo "::error::p11-kit socket missing at $SOCK — is certum-container running and SimplySign logged in (VNC → login → close)? See docs/devops.md → Code signing."
             exit 1
@@ -133,8 +145,11 @@ jobs:
           # the auth. Its own final verify is informational (offline anchoring
           # on Certum's cross-signed roots is fussy) — a produced file is a
           # valid signature.
-          sign-installer.sh "$exe" "$exe.signed" \
-            "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"
+          if ! sign-installer.sh "$exe" "$exe.signed" \
+            "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"; then
+            echo "::error::signing failed — if the log says 'Failed to enumerate slots', the SimplySign session (~2 h lifetime) has expired: VNC into certum-container, log in with a fresh OTP, press close, then re-run this job."
+            exit 1
+          fi
           test -s "$exe.signed"
           mv "$exe.signed" "$exe"
           osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
@@ -150,7 +165,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          exe=$(ls dist/*-setup.exe)
+          exe=$(ls dist/*_"${VERSION}"_*-setup.exe)
           npx --yes @tauri-apps/cli@^2 signer sign \
             --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
             --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
@@ -164,7 +179,7 @@ jobs:
           NOTES: ${{ needs.check.outputs.notes }}
         run: |
           set -euo pipefail
-          exe=$(ls dist/*-setup.exe)
+          exe=$(ls dist/*_"${VERSION}"_*-setup.exe)
           # GitHub rewrites spaces in asset names to dots — latest.json must
           # point at the rewritten name (same convention tauri-action used).
           asset=$(basename "$exe" | tr ' ' '.')

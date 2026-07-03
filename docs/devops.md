@@ -169,11 +169,19 @@ pins SimplySign **2.9.13**.)
 - GitHub rewrites spaces in release asset names to dots
   (`DTH Character Studio_…` → `DTH.Character.Studio_…`); `latest.json` must
   point at the rewritten name. The workflow handles this.
-- **The SimplySign session does not survive a certum-container restart.** While
-  the container runs, signing is unattended; after any signer restart / NAS
-  reboot, the `sign-publish` job fails fast with "p11-kit socket missing" (or
-  the sign step errors) — one ~60s VNC OTP login re-arms it, then re-run the
-  failed job.
+- **The SimplySign session lives ~2 hours** (Certum's documented connection
+  lifetime — observed in practice: a release signed fine 10 minutes after
+  login, and failed with `Failed to enumerate slots` 2¼ hours after). It also
+  does not survive a certum-container restart. So: **re-arm right before
+  cutting a release** — one ~60s VNC OTP login (login → close → disconnect).
+  If the `sign-publish` job fails with "p11-kit socket missing" or
+  `Failed to enumerate slots`, re-arm and **re-run the failed job** (the
+  release-signing gate can also simply be left unapproved until the session
+  is fresh).
+- **The self-hosted runner's workspace persists between runs** — the
+  `sign-publish` job cleans `dist/` before downloading the artifact and matches
+  the installer by version; keep it that way or a previous release's installer
+  gets picked up.
 - Only the **installer** is signed for now; the app `.exe` inside it is not
   (would require signing during the Windows build, i.e. a cross-machine
   `signCommand` — revisit if Defender flags the installed binary).
