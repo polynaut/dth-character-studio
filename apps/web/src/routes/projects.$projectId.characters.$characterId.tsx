@@ -1,16 +1,25 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { z } from 'zod'
 import {
   ArrowLeft,
-  Copy,
+  Check,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   FolderInput,
   FolderOpen,
   Link2,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
   Undo2,
@@ -22,6 +31,7 @@ import { EditableTitle } from '#/components/editable-title.tsx'
 import { Field } from '#/components/field.tsx'
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
+import { Tag } from '#/components/tag.tsx'
 import { RemoveAssetDialog } from '#/components/remove-asset-dialog.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import dazLogo from '#/assets/daz-logo.png'
@@ -32,6 +42,7 @@ import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
+import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
   Select,
   SelectContent,
@@ -42,17 +53,21 @@ import {
 import { Switch } from '#/components/ui/switch.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import {
-  cloneCharacter,
+  characterKeepFolders,
+  clearProductScan,
   copyDazScene,
   deleteCharacter,
   deleteFiles,
   fetchCharacter,
   fetchPoseAssets,
+  fetchProductScan,
+  fetchProject,
   fetchSettings,
   fileExists,
   generateCharacterFiles,
   getCharacterPath,
   moveCharacter,
+  setActiveProjectDir,
   openScene,
   relinkScene,
   resolvePresetFrames,
@@ -62,12 +77,23 @@ import {
   uploadCharacterImageFromPath,
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
-import { CloneCharacterDialog } from '#/components/clone-character-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
+import { open as openExternal } from '@tauri-apps/plugin-shell'
+
+/**
+ * Daz readme page for a DIM product SKU ("86958-1" → store id `86958`). It resolves
+ * by SKU, names the product, and links to its store page — the only SKU-keyed Daz
+ * URL that reliably maps to a product. Returns '' when the SKU isn't a numeric DIM
+ * store id (LOCAL_USER / third-party products carry none → no link).
+ */
+function dazProductUrl(sku: string): string {
+  const id = (sku || '').split('-')[0]?.trim() ?? ''
+  return /^\d+$/.test(id) ? `https://docs.daz3d.com/doku.php/public/read_me/index/${id}/start` : ''
+}
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
-import { characterSkinning, countPoses, jcmMorphModSchema } from '@dth/rom'
+import { characterSkinning, characterSlug, countPoses, jcmMorphModSchema } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
@@ -76,6 +102,8 @@ import type { Character, GenesisVersion } from '@dth/rom'
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params }) => {
     const { projectId, characterId: id } = params
+    // The route param IS the project's folder — pin it so avatars resolve.
+    setActiveProjectDir(projectId)
     const character = await fetchCharacter({ data: { projectId, id } })
     if (!character) throw notFound()
     // The Daz scenes folder = the directory holding the primary scene. Tracking
@@ -84,27 +112,35 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
     const sceneFolder = character.scenePath
       ? character.scenePath.replace(/[\\/][^\\/]*$/, '')
       : ''
-    const [settings, catalog, location, sceneExists, sceneFolderExists] = await Promise.all([
-      fetchSettings(),
-      fetchPoseAssets(),
-      getCharacterPath({ data: { projectId, id } }),
-      character.scenePath
-        ? fileExists({ data: { path: character.scenePath } })
-        : Promise.resolve(false),
-      sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
-    ])
+    const [project, settings, catalog, location, sceneExists, sceneFolderExists, productScan] =
+      await Promise.all([
+        fetchProject({ data: { projectId } }),
+        fetchSettings(),
+        fetchPoseAssets(),
+        getCharacterPath({ data: { projectId, id } }),
+        character.scenePath
+          ? fileExists({ data: { path: character.scenePath } })
+          : Promise.resolve(false),
+        sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
+        // Best-effort: a scan CSV exists only after the user runs the generated
+        // Scan_Products script in Daz. Harmless when the feature is off (the UI
+        // section that consumes it is gated on project.dazProductsEnabled).
+        fetchProductScan({ data: { projectId, id } }),
+      ])
     // Preset ROM block lengths, measured live from the actual .duf assets. Null
     // (best-effort) when an included asset can't be read — the editor then shows
     // a notice and generation hard-errors; opening the character never fails.
     const presetFrames = await resolvePresetFrames(character, catalog).catch(() => null)
     return {
       character,
+      project,
       settings,
       catalog,
       location,
       sceneExists,
       sceneFolderExists,
       presetFrames,
+      productScan,
     }
   },
   component: CharacterPageRoute,
@@ -328,10 +364,13 @@ function ImageDialog({
           </div>
         </FileDropZone>
 
-        {scenes.length >= 2 && (
+        {/* Offer the linked scenes' thumbnails whenever there's at least one — the
+            current avatar may have come from a scene since unlinked, so even a
+            single remaining scene needs to be selectable to switch back to it. */}
+        {scenes.length > 0 && (
           <div>
             <p className="mb-1.5 text-sm text-muted-foreground">
-              Or use a linked Daz scene's image:
+              {scenes.length === 1 ? "Or use the linked Daz scene's image:" : "Or use a linked Daz scene's image:"}
             </p>
             <div className="flex flex-wrap gap-2">
               {scenes.map((scene) => (
@@ -544,12 +583,9 @@ function SceneCard({
           )}
           {primary && (
             <div className="mt-1">
-              <span
-                className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-                title="The character's original scene — it can't be unlinked"
-              >
+              <Tag tone="green" title="The character's original scene — it can't be unlinked">
                 primary
-              </span>
+              </Tag>
             </div>
           )}
         </div>
@@ -639,6 +675,13 @@ function DazSceneField({
   function insideCharFolder(p: string): boolean {
     return norm(p).toLowerCase().startsWith(charFolder.toLowerCase() + '/')
   }
+  // Every scene already attached to this character (primary + extras). A scene is
+  // linked at most once, so a pick/drop that repeats one is rejected up front.
+  const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  function isAlreadyLinked(p: string): boolean {
+    const target = norm(p).toLowerCase()
+    return linkedScenes.some((s) => norm(s).toLowerCase() === target)
+  }
   const primaryDir = character.scenePath ? norm(character.scenePath).replace(/\/[^/]*$/, '') : ''
   const baseDazRel =
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
@@ -703,6 +746,19 @@ function DazSceneField({
   }
 
   async function applyAdd(scene: string, copyInto: boolean) {
+    const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    const subfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
+    // Reject a scene that's already attached, before any copy runs. An in-place add
+    // compares the picked path itself; a copy compares its destination inside the
+    // character folder — which catches re-copying the same external scene (its source
+    // path differs from the in-folder copy, but the destination collides, which would
+    // otherwise overwrite the existing copy and add a duplicate card). Checking up
+    // front also means a `deleteOriginal` move never deletes the source then bails.
+    const dest = copyInto ? [charFolder, subfolder, sceneName].filter(Boolean).join('/') : scene
+    if (isAlreadyLinked(dest)) {
+      toast.error(`“${sceneName}” is already linked to this character.`)
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -712,7 +768,7 @@ function DazSceneField({
               projectId,
               characterId: character.id,
               scenePath: scene,
-              subfolder: [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/'),
+              subfolder,
               deleteOriginal,
             },
           })
@@ -1270,12 +1326,14 @@ function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
     character: initial,
+    project,
     settings,
     catalog,
     location,
     sceneExists,
     sceneFolderExists,
     presetFrames: initialFrames,
+    productScan,
   } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
@@ -1289,6 +1347,16 @@ function CharacterPage() {
   // on router.invalidate() to complete in a second, separate render.
   const [baseline, setBaseline] = useState<Character>(initial)
   const [saving, setSaving] = useState(false)
+  const [storingProducts, setStoringProducts] = useState(false)
+  const [clearingScan, setClearingScan] = useState(false)
+  // Keyed by a stable product id (sku||name, lowercased) — not the row index — so
+  // a row stays expanded when the scene filter changes the visible rows.
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(() => new Set())
+  // The Products view can be scoped to one scene; null = all scenes (merged).
+  const [sceneFilter, setSceneFilter] = useState<string | null>(null)
+  // Only meaningful when the project enables Daz Products: splits this page into a
+  // "Character" tab (everything) and a "Products" tab (the scan section).
+  const [activeTab, setActiveTab] = useState<'character' | 'products'>('character')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
@@ -1429,6 +1497,50 @@ function CharacterPage() {
     }
   }
 
+  // Store the most recent product scan onto the character. Products don't affect
+  // generated scripts, so this just persists the draft + the scan fields — no
+  // regeneration. Merges into the current draft so any in-progress edits are kept.
+  async function storeProducts() {
+    if (!productScan?.scan) return
+    setStoringProducts(true)
+    try {
+      const next: Character = {
+        ...character,
+        products: productScan.scan.products,
+        productsUnmatched: productScan.scan.unmatched,
+        productsScannedAt: new Date().toISOString(),
+      }
+      const saved = await saveCharacter({ data: { projectId, character: next } })
+      setCharacter(saved)
+      setBaseline(saved)
+      void router.invalidate()
+      toast.success(
+        `Stored ${saved.products.length} product${saved.products.length === 1 ? '' : 's'} on “${saved.name}”`,
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setStoringProducts(false)
+    }
+  }
+
+  // Discard the unstored scan results (the per-scene CSVs) so the review panel
+  // clears. Leaves any products already stored on the character untouched.
+  async function clearScan() {
+    if (!productScan?.exists) return
+    setClearingScan(true)
+    try {
+      await clearProductScan({ data: { projectId, id: character.id } })
+      setExpandedProducts(new Set())
+      void router.invalidate()
+      toast.success('Cleared scan results')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setClearingScan(false)
+    }
+  }
+
   // The Generate panel was dissolved — generation feedback is a concise toast
   // (the install location lives in Settings); a script-install error still warns.
   function notifyGenerated(title: string, result: GenerateResult) {
@@ -1457,45 +1569,36 @@ function CharacterPage() {
     setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
   }
 
-  // --- Special operations (clone / delete) ---
-  const [cloneOpen, setCloneOpen] = useState(false)
-  const [cloning, setCloning] = useState(false)
-  const [cloneError, setCloneError] = useState('')
+  // --- Special operations (delete) ---
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-
-  const hasScenes = Boolean(character.scenePath) || character.extraScenes.length > 0
+  // Whether the character has a Houdini subfolder on disk — gates the delete
+  // dialog's "keep Houdini files" toggle (checked when the dialog opens).
+  const [keepHoudiniAvailable, setKeepHoudiniAvailable] = useState(false)
+  useEffect(() => {
+    if (!deleteOpen) return
+    let cancelled = false
+    void characterKeepFolders({ data: { projectId, id: character.id } })
+      .then((f) => !cancelled && setKeepHoudiniAvailable(f.houdini))
+      .catch(() => !cancelled && setKeepHoudiniAvailable(false))
+    return () => {
+      cancelled = true
+    }
+  }, [deleteOpen, projectId, character.id])
 
   async function onPickExportDir() {
     const picked = await pickFolder('Choose the export directory for the DTH Exporter')
     if (picked) await patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
   }
 
-  async function doClone({ name, copyScenes }: { name: string; copyScenes: boolean }) {
-    setCloning(true)
-    setCloneError('')
-    try {
-      const clone = await cloneCharacter({ data: { projectId, id: character.id, name, copyScenes } })
-      setCloneOpen(false)
-      toast.success(`Cloned to “${clone.name}”`)
-      // Navigation remounts the editor (keyed by id) onto the copy — see the
-      // route wrapper — so the busy flag doesn't need resetting on success.
-      await router.navigate({
-        to: '/projects/$projectId/characters/$characterId',
-        params: { projectId, characterId: clone.id },
-      })
-    } catch (e) {
-      setCloneError(e instanceof Error ? e.message : String(e))
-      setCloning(false)
-    }
-  }
-
-  async function onDeleteCharacter({ keep }: { keep: boolean }) {
+  async function onDeleteCharacter({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
     setDeleting(true)
     setDeleteError('')
     try {
-      await deleteCharacter({ data: { projectId, id: character.id, keepDaz: keep } })
+      await deleteCharacter({
+        data: { projectId, id: character.id, keepDaz: keep, keepHoudini: keep2 },
+      })
       toast.success(`Deleted “${character.name}”`)
       // Navigation unmounts this editor — no need to reset the busy flag.
       await router.navigate({ to: '/projects/$projectId', params: { projectId } })
@@ -1504,6 +1607,50 @@ function CharacterPage() {
       setDeleting(false)
     }
   }
+
+  // When Daz Products is enabled the body splits into two tabs ("Character" /
+  // "Products"). We keep both groups mounted and toggle visibility with `hidden`
+  // rather than unmounting — cheaper, and it preserves scroll/edit state when
+  // switching. Gate on the flag too: if the feature is disabled while the
+  // Products tab is active, the character group must not stay hidden.
+  const onProductsTab = !!project?.dazProductsEnabled && activeTab === 'products'
+
+  // Product scan view: either the full merged set (all scenes) or one scene's
+  // slice. A merged record carries the `scenes` it was found in, so filtering is
+  // just "does this record include the selected scene". When scoped to a single
+  // scene the Scene(s) column is redundant, so `multiScene` drops it.
+  const mergedScan = productScan?.scan ?? null
+  const scanScenes = mergedScan?.scenes ?? []
+  const sceneFilterActive = sceneFilter != null && scanScenes.includes(sceneFilter)
+  const viewProducts = !mergedScan
+    ? []
+    : sceneFilterActive
+      ? mergedScan.products.filter((p) => p.scenes.includes(sceneFilter!))
+      : mergedScan.products
+  const viewUnmatched = !mergedScan
+    ? []
+    : sceneFilterActive
+      ? mergedScan.unmatched.filter((a) => a.scenes.includes(sceneFilter!))
+      : mergedScan.unmatched
+  const multiScene = scanScenes.length > 1 && !sceneFilterActive
+  // The per-scene CSV files on disk, and whether the products stored on the
+  // character still reflect them: "up to date" when something is stored and no
+  // CSV is newer than the last store (ISO mtimes compare lexicographically). This
+  // is why the store button can sit idle even though scan files are still present.
+  const scanFiles = productScan?.files ?? []
+  const newestScanMtime = scanFiles.reduce((max, f) => (f.modifiedAt > max ? f.modifiedAt : max), '')
+  const scanUpToDate =
+    !!mergedScan &&
+    character.products.length > 0 &&
+    !!character.productsScannedAt &&
+    newestScanMtime !== '' &&
+    newestScanMtime <= character.productsScannedAt
+  const sceneChipClass = (active: boolean) =>
+    `rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+      active
+        ? 'border-primary/60 bg-primary/10 text-foreground'
+        : 'border-border bg-muted/50 text-muted-foreground hover:text-foreground'
+    }`
 
   return (
     <main className="p-8">
@@ -1522,7 +1669,7 @@ function CharacterPage() {
           }}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> Back to project
+          <ArrowLeft className="size-4" /> Back to overview
         </Link>
       </div>
 
@@ -1594,6 +1741,20 @@ function CharacterPage() {
           popup dialogs below are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
+      {project?.dazProductsEnabled && (
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v === 'products' ? 'products' : 'character')}
+          className="mb-6"
+        >
+          <TabsList>
+            <TabsTrigger value="character">Character</TabsTrigger>
+            <TabsTrigger value="products">Products</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      <div className={onProductsTab ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5 pt-2">
@@ -1678,7 +1839,7 @@ function CharacterPage() {
               location={location}
               sceneExists={sceneExists}
               sceneFolderExists={sceneFolderExists}
-              defaultSubdir={settings.dazSubdir}
+              defaultSubdir={project?.dazSubdir ?? 'daz3d'}
               onLinked={onSceneLinked}
             />
             <HoudiniProjectsField
@@ -1723,7 +1884,407 @@ function CharacterPage() {
           </p>
         )}
       </section>
+      </div>
 
+      {project?.dazProductsEnabled && (
+        <div className={onProductsTab ? undefined : 'hidden'}>
+        <section className="mb-8 rounded-lg border bg-card p-5">
+          <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+            Daz Products
+            <InfoPopup label="Daz Products — more information">
+              Open this character's scene in Daz and run the generated{' '}
+              <code>Scan_Products_{characterSlug(character)}.dsa</code>. It analyses the open scene,
+              matches the used assets to your installed products, and writes a CSV the studio reads
+              back here — review the results below and store them on the character.
+            </InfoPopup>
+          </h2>
+
+          {!settings.dimManifestsFolder.trim() && (
+            <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
+              No DAZ Install Manager manifests folder is set, so a scan can list used assets but
+              can't name products.{' '}
+              <Link to="/settings" className="underline">
+                Set it in Settings → General
+              </Link>
+              .
+            </p>
+          )}
+
+          <p className="mb-2 text-sm text-muted-foreground">
+            Run <code>Scan_Products_{characterSlug(character)}.dsa</code> with this character's scene
+            open in Daz, then check for results. Results are kept per scene — open each outfit/look
+            variant and run it again to map products to every scene.
+          </p>
+          {scriptsAbs && (
+            <PathCode path={scriptsAbs}>
+              <span className="text-muted-foreground/60">{scriptsLib}</span>
+              <span className="text-foreground/80">{scriptsSuffix}</span>
+            </PathCode>
+          )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void router.invalidate()}>
+              Check for scan results
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearScan}
+              disabled={!productScan?.exists || clearingScan}
+              title="Discard the scan results (leaves products already stored on the character untouched)"
+            >
+              {clearingScan ? 'Clearing…' : 'Clear'}
+            </Button>
+            {character.products.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                Stored: {character.products.length} product
+                {character.products.length === 1 ? '' : 's'}
+                {character.productsScannedAt
+                  ? ` (${new Date(character.productsScannedAt).toLocaleString()})`
+                  : ''}
+              </span>
+            )}
+          </div>
+
+          {scanFiles.length > 0 ? (
+            <div className="mt-4 rounded-md border p-3">
+              <div className="mb-1 font-medium">
+                {scanFiles.length} scanned scene{scanFiles.length === 1 ? '' : 's'} on disk
+              </div>
+              <p className="mb-2 text-xs text-muted-foreground">
+                One CSV per scanned scene, written here by the Daz script — the Products panel below
+                is these files merged. <strong>Check for scan results</strong> re-reads them;{' '}
+                <strong>Clear</strong> deletes them (products already stored on the character are
+                kept).
+              </p>
+              {productScan?.dir && <PathCode path={productScan.dir} />}
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-muted-foreground">
+                      <th className="pr-3 pb-1 font-medium">Scene</th>
+                      <th className="pr-3 pb-1 font-medium">Products</th>
+                      <th className="pr-3 pb-1 font-medium">Unmatched</th>
+                      <th className="pr-3 pb-1 font-medium">Last written</th>
+                      <th className="pr-3 pb-1 font-medium">File</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scanFiles.map((f) => (
+                      <tr key={f.name} className="border-t align-top">
+                        <td className="py-1 pr-3">
+                          <div className="text-foreground/90">{f.scene || '(unsaved scene)'}</div>
+                          {f.scenePath && (
+                            <div className="text-xs break-all text-muted-foreground/70">
+                              {displayPath(f.scenePath)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-1 pr-3 text-muted-foreground">{f.products}</td>
+                        <td className="py-1 pr-3 text-muted-foreground">{f.unmatched || '—'}</td>
+                        <td className="py-1 pr-3 text-muted-foreground">
+                          {f.modifiedAt ? new Date(f.modifiedAt).toLocaleString() : '—'}
+                        </td>
+                        <td className="py-1 pr-3">
+                          <code className="text-xs text-muted-foreground/70">{f.name}</code>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No scan results found yet. Run the script in Daz, then click “Check for scan results”.
+            </p>
+          )}
+        </section>
+
+        {productScan?.exists && productScan.scan && (
+          <section className="mb-8 rounded-lg border bg-card p-5">
+            <h2 className="mb-3 text-xl font-semibold">Matched products</h2>
+            <div className="mt-2">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {viewProducts.length} product
+                  {viewProducts.length === 1 ? '' : 's'}
+                  {viewUnmatched.length ? `, ${viewUnmatched.length} unmatched` : ''}
+                  {sceneFilterActive
+                    ? ` · ${sceneFilter}`
+                    : scanScenes.length > 1
+                      ? ` · across ${scanScenes.length} scenes`
+                      : scanScenes.length === 1
+                        ? ` · ${scanScenes[0]}`
+                        : ''}
+                </span>
+                <Button
+                  onClick={storeProducts}
+                  disabled={storingProducts || scanUpToDate}
+                  title={
+                    scanUpToDate
+                      ? 'The stored products already match the scan files on disk — nothing to update'
+                      : undefined
+                  }
+                >
+                  {scanUpToDate ? <Check /> : <Save />}{' '}
+                  {storingProducts
+                    ? 'Storing…'
+                    : scanUpToDate
+                      ? 'Stored — up to date'
+                      : character.products.length
+                        ? 'Update stored products'
+                        : 'Store on character'}
+                </Button>
+              </div>
+
+              {character.products.length > 0 && (
+                <div
+                  className={`mb-3 flex items-start gap-1.5 rounded-md border p-2 text-sm ${
+                    scanUpToDate
+                      ? 'border-emerald-500/40 bg-emerald-500/10'
+                      : 'border-amber-500/40 bg-amber-500/10'
+                  }`}
+                >
+                  {scanUpToDate ? (
+                    <Check className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                  ) : (
+                    <RefreshCw className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                  )}
+                  <span>
+                    {scanUpToDate ? (
+                      <>
+                        Up to date — the {character.products.length} stored product
+                        {character.products.length === 1 ? '' : 's'} match the scan files on disk.
+                      </>
+                    ) : (
+                      <>
+                        The scan on disk has changed since you last stored
+                        {character.productsScannedAt
+                          ? ` (saved ${new Date(character.productsScannedAt).toLocaleString()})`
+                          : ''}
+                        : {mergedScan?.products.length ?? 0} product
+                        {(mergedScan?.products.length ?? 0) === 1 ? '' : 's'} found now vs{' '}
+                        {character.products.length} stored. Click{' '}
+                        <strong>Update stored products</strong> to save the latest results.
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {scanScenes.length > 1 && (
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 text-xs text-muted-foreground">View</span>
+                  <button
+                    type="button"
+                    onClick={() => setSceneFilter(null)}
+                    className={sceneChipClass(!sceneFilterActive)}
+                    title="Show every product across all scanned scenes"
+                  >
+                    All scenes
+                  </button>
+                  {scanScenes.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSceneFilter(s)}
+                      className={sceneChipClass(sceneFilter === s)}
+                      title={`Show only products found in ${s}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {viewProducts.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="pr-3 pb-1 font-medium">Product</th>
+                        <th className="pr-3 pb-1 font-medium">Used as</th>
+                        <th className="pr-3 pb-1 font-medium">SKU</th>
+                        <th className="pr-3 pb-1 font-medium">Artist</th>
+                        <th className="pr-3 pb-1 font-medium">Version</th>
+                        <th className="pr-3 pb-1 font-medium">
+                          <span className="inline-flex items-center gap-0.5">
+                            Match
+                            <InfoPopup label="What the match methods mean">
+                              <div className="space-y-1">
+                                <p>How each product was identified — strongest signal first:</p>
+                                <p>
+                                  <strong>File / Texture Match</strong> — a used file or texture lives
+                                  in the product's own folder (definitive).
+                                </p>
+                                <p>
+                                  <strong>SKU Match</strong> — the asset name encodes the product's
+                                  store SKU.
+                                </p>
+                                <p>
+                                  <strong>Keyword Match</strong> — two or more distinct words from the
+                                  asset's name, path or source file match the product.
+                                </p>
+                                <p>
+                                  <strong>Third-Party Match</strong> — a known non-DIM product (e.g.
+                                  Golden Palace).
+                                </p>
+                                <p>
+                                  <strong>Genesis Base Match</strong> — the base figure / starter
+                                  essentials.
+                                </p>
+                                <p>
+                                  <strong>Parent / Group Match</strong> — a sub-part inherited from a
+                                  matched parent garment, or a group node from its matched children.
+                                </p>
+                                <p>
+                                  <strong>Manifest Match</strong> — the node's name is a file an
+                                  in-scene product installs.
+                                </p>
+                                <p>
+                                  <strong>Content Folder Match</strong> — identified from the content
+                                  library's <code>data/&lt;Vendor&gt;/&lt;Product&gt;</code> folder.
+                                  Catches products with no DIM manifest (e.g. unofficial content); no
+                                  SKU, but the artist/version are read from the content's own files.
+                                </p>
+                              </div>
+                            </InfoPopup>
+                          </span>
+                        </th>
+                        {multiScene && <th className="pr-3 pb-1 font-medium">Scene(s)</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewProducts.map((p, i) => {
+                        const url = dazProductUrl(p.sku)
+                        const colCount = multiScene ? 7 : 6
+                        const pkey = (p.sku || p.name).toLowerCase()
+                        const open = expandedProducts.has(pkey)
+                        const assets = p.usedBy ? p.usedBy.split('; ').filter(Boolean) : []
+                        return (
+                          <Fragment key={`${pkey}-${i}`}>
+                            <tr className="border-t">
+                              <td className="py-1 pr-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedProducts((prev) => {
+                                      const next = new Set(prev)
+                                      if (next.has(pkey)) next.delete(pkey)
+                                      else next.add(pkey)
+                                      return next
+                                    })
+                                  }
+                                  className="mr-1 inline-flex align-middle text-muted-foreground hover:text-foreground"
+                                  aria-label={open ? 'Hide matched assets' : 'Show matched assets'}
+                                >
+                                  {open ? (
+                                    <ChevronDown className="size-3.5" />
+                                  ) : (
+                                    <ChevronRight className="size-3.5" />
+                                  )}
+                                </button>
+                                {url ? (
+                                  <a
+                                    href={url}
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      void openExternal(url)
+                                    }}
+                                    className="inline-flex items-center gap-1 text-primary underline underline-offset-2"
+                                    title="Open the Daz product page"
+                                  >
+                                    {p.name}
+                                    <ExternalLink className="size-3.5 shrink-0" />
+                                  </a>
+                                ) : (
+                                  p.name
+                                )}
+                              </td>
+                              <td
+                                className="py-1 pr-3 text-muted-foreground"
+                                title={p.usedBy ? `Used by: ${p.usedBy}` : undefined}
+                              >
+                                {p.usage || '—'}
+                              </td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.sku}</td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.artist}</td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.version}</td>
+                              <td className="py-1 pr-3 text-muted-foreground">{p.matchMethod}</td>
+                              {multiScene && (
+                                <td className="py-1 pr-3 text-muted-foreground">
+                                  {p.scenes.join(', ')}
+                                </td>
+                              )}
+                            </tr>
+                            {open && (
+                              <tr className="bg-muted/20">
+                                <td colSpan={colCount} className="px-3 py-2 pl-7">
+                                  <div className="mb-1 text-xs text-muted-foreground">
+                                    Matched by {assets.length} asset
+                                    {assets.length === 1 ? '' : 's'}
+                                    {multiScene
+                                      ? ` · in ${p.scenes.length} scene${p.scenes.length === 1 ? '' : 's'}: ${p.scenes.join(', ')}`
+                                      : ''}
+                                  </div>
+                                  {assets.length ? (
+                                    <ul className="space-y-0.5 text-sm">
+                                      {assets.map((a, j) => (
+                                        <li key={`${a}-${j}`} className="text-foreground/80">
+                                          {a}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">
+                                      No specific scene assets were recorded for this product.
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No products matched. The assets below are what the scan found in the scene.
+                </p>
+              )}
+
+              {viewUnmatched.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">
+                    {viewUnmatched.length} unmatched asset
+                    {viewUnmatched.length === 1 ? '' : 's'} (no product match)
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {viewUnmatched.map((a, i) => (
+                      <li key={`${a.technicalName}-${a.name}-${i}`}>
+                        <span className="text-foreground/80">{a.name}</span>{' '}
+                        <span className="text-muted-foreground">
+                          ({a.assetType}
+                          {a.artist ? ` — ${a.artist}` : ''}
+                          {a.version ? ` v${a.version}` : ''}
+                          {a.sourceFile ? ` — ${displayPath(a.sourceFile)}` : ''})
+                          {multiScene && a.scenes.length ? ` · ${a.scenes.join(', ')}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          </section>
+        )}
+        </div>
+      )}
+
+      <div className={onProductsTab ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
           Export directory
@@ -2002,40 +2563,16 @@ function CharacterPage() {
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Operations</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Duplicate this character into a new copy, or delete it from the project.
+          Delete this character from the project.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setCloneError('')
-              setCloneOpen(true)
-            }}
-            disabled={cloning || deleting}
-          >
-            <Copy /> {cloning ? 'Cloning…' : 'Clone'}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => setDeleteOpen(true)}
-            disabled={cloning || deleting}
-          >
+          <Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={deleting}>
             <Trash2 /> Delete
           </Button>
         </div>
       </section>
       </div>
-
-      {cloneOpen && (
-        <CloneCharacterDialog
-          defaultName={`${character.name} copy`}
-          hasScenes={hasScenes}
-          busy={cloning}
-          error={cloneError}
-          onConfirm={doClone}
-          onClose={() => setCloneOpen(false)}
-        />
-      )}
+      </div>
 
       {deleteOpen && (
         <BulkDeleteDialog
@@ -2045,8 +2582,20 @@ function CharacterPage() {
           keepLabel={
             <>
               Keep the Daz files folder{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">{settings.dazSubdir}</code>
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                {project?.dazSubdir ?? 'daz3d'}
+              </code>
             </>
+          }
+          keep2Label={
+            keepHoudiniAvailable ? (
+              <>
+                Keep the Houdini files folder{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {project?.houdiniSubdir ?? 'houdini'}
+                </code>
+              </>
+            ) : undefined
           }
           busy={deleting}
           error={deleteError}

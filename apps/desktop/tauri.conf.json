@@ -18,6 +18,7 @@
         "minWidth": 960,
         "minHeight": 640,
         "backgroundColor": "#2e2e2e",
+        "theme": "Dark",
         "dragDropEnabled": true
       }
     ],
@@ -38,6 +39,14 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["dcsp"],
+        "name": "DTHCharacterStudioProject",
+        "description": "DTH Character Studio Project",
+        "role": "Editor"
+      }
     ],
     "createUpdaterArtifacts": true
   },

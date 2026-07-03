@@ -2,17 +2,21 @@ import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { open as openExternal } from '@tauri-apps/plugin-shell'
 
-import { fetchAppVersion } from '#/lib/rom/api.ts'
+import { detectAssetVersions, fetchAppVersion } from '#/lib/rom/api.ts'
 
 const GITHUB_URL = 'https://github.com/polynaut/dth-character-studio'
 
 export const Route = createFileRoute('/about')({
-  loader: () => fetchAppVersion(),
+  loader: async () => ({
+    version: await fetchAppVersion(),
+    // Best-effort — a failed detection just hides the assets summary.
+    assets: await detectAssetVersions().catch(() => null),
+  }),
   component: AboutPage,
 })
 
 function AboutPage() {
-  const version = Route.useLoaderData()
+  const { version, assets } = Route.useLoaderData()
   const router = useRouter()
 
   // About is reachable from several places, so go back to wherever we came from
@@ -64,6 +68,27 @@ function AboutPage() {
           </Link>
           .
         </p>
+        {assets && assets.total > 0 && (
+          <p className="mt-6 max-w-prose leading-relaxed text-muted-foreground">
+            {assets.refreshNeeded ? (
+              <>
+                Generated assets: <strong className="text-foreground">refresh recommended</strong> —{' '}
+                {assets.staleCount} of {assets.total} character
+                {assets.total === 1 ? '' : 's'} need updating.{' '}
+              </>
+            ) : (
+              <>Generated assets are up to date (runtime v{assets.app.runtime}). </>
+            )}
+            <Link
+              to="/tools"
+              search={{ tab: 'refresh' }}
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Refresh assets
+            </Link>
+            .
+          </p>
+        )}
         <p className="mt-12 max-w-prose leading-relaxed text-muted-foreground">
           Find the source, releases and issues on{' '}
           <a

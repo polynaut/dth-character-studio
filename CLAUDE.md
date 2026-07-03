@@ -71,23 +71,47 @@ Rust commands (`apps/desktop/src/lib.rs`) take camelCase serde structs (`#[serde
 must be registered in the `generate_handler!` list, and are gated `#[cfg(desktop)]` when they use
 desktop-only deps (updater/process/reqwest live under the non-android/ios target block in `Cargo.toml`).
 
-### Two storage roots
+### Projects are `.dcsp` files (one active project per window)
 
-- **App-owned data** (settings.json, the projects list, avatars) → the per-user app-data folder
-  (`appLocalDataDir()`), so it survives app updates.
-- **Characters** → each **project's folder**, chosen by the user and backed up by them.
+A **project** is a user-chosen folder marked by a single **`.dcsp`** manifest (JSON: id, name,
+created, + per-project behaviour defaults `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir`, and the
+opt-in `assetsEnabled` flag + `charactersSubdir` root — see below). There is
+**no global registry** — a folder's location *is* the project. The OS file association opens a `.dcsp`
+in its **own window** (single-instance routes a second launch into a new window; see `lib.rs`
+`open_project_window`/`active_project_file`). Routes still use `/projects/$projectId`, but `projectId`
+is now the **project folder path** (the route param), resolved to a record via `storage.readManifest`.
+The active folder for a window is pinned by the project/character route loaders via
+`api.setActiveProjectDir` (used by avatar resolution); the launcher reads it from `desktop.activeProjectFile`.
 
-A character's generated Daz script goes to `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`;
-the shared DTH runtime files it `include()`s are installed once at that root (`storage.ts`:
-`studioScriptsDir` / `copyRuntimeFiles`).
+- **Project folder** (backed up by the user): the `.dcsp`, the character folders (under
+  `charactersSubdir` when set, e.g. `<dir>/assets/characters/<Name>/`, else directly `<dir>/<Name>/` →
+  `<Name>.json` + generated artifacts), a hidden **`.dcsmeta/images`** for avatars, and `.assets/` for
+  project-scoped Daz-scene assets (only when `assetsEnabled`).
+- **App-data folder** (`appLocalDataDir()`, volatile/machine-only): `settings.json` (machine/tool
+  paths), `recents.json` (recently-opened `.dcsp` list, the Home screen's source), and
+  `network-drives.json`. No project registry, no avatars, no global assets — assets are per-project only.
+
+A character's generated Daz script still goes to
+`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`; the shared DTH runtime is
+installed once at that root (`storage.ts`: `studioScriptsDir` / `copyRuntimeFiles`).
+
+Upgrading from the pre-`.dcsp` model (old `projects.json` + `app-data/images`) is a one-time automatic
+migration on first launch (`lib/rom/migrate-projects.ts`), then the legacy files are removed.
 
 ### Settings flow
 
-Settings are persisted to settings.json and validated by the zod `settingsInput` schema in `api.ts`.
-Adding a setting requires changes in three places: `storage.ts` (the `StudioSettings` type, its
-defaults, and the parse), `api.ts` (the `settingsInput` schema), and the route. The Settings/Tools
-routes gate "save before action" on a `dirty` flag — a new field must be included in that comparison
-or its value never reaches disk.
+Two scopes now:
+- **App-global** (`settings.json`, machine/tool paths) → validated by the zod `settingsInput` schema in
+  `api.ts`. Adding one requires changes in three places: `storage.ts` (the `StudioSettings` type, its
+  defaults, and the parse), `api.ts` (`settingsInput`), and the Settings route. Settings/Tools gate
+  "save before action" on a `dirty` flag — include a new field there or its value never reaches disk.
+- **Per-project** (the `.dcsp` manifest: `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir` +
+  `assetsEnabled`/`charactersSubdir`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
+  `storage.ts`, saved via `api.saveProjectSettings` and edited from the **Settings → Project tab**
+  (shown only inside a project window). `assetsEnabled` is opt-in (default off → characters only).
+  Changing `charactersSubdir` is **destructive**: `saveProjectSettings` calls
+  `storage.moveCharactersRoot` to physically move existing character folders to the new root (and
+  repoint their scene/Houdini paths) before writing the manifest.
 
 ## Conventions & gotchas
 
@@ -96,6 +120,16 @@ or its value never reaches disk.
   requires `pnpm generate-routes` (adding a tab inside an existing route does not).
 - **Versioning:** Changesets. `@dth/web` / `@dth/desktop` / `@dth/rom` are a **fixed group** — one
   product version, bumped in lockstep. Every feature PR needs a changeset.
+- **Character-schema changes:** the persisted `Character` shape is versioned by
+  `CHARACTER_SCHEMA_VERSION` (`packages/rom/src/types.ts`); old JSONs are migrated on read by
+  `migrateCharacterData` (`packages/rom/src/migrate.ts`). To change the shape: edit `characterSchema`,
+  bump the constant + add a History line, add a `migrate.test.ts` case. Add a `characterMigrations[N]`
+  **step** ONLY for a rename/restructure or a **computed** value — an additive field with a zod default
+  and a removed field need no step (zod fills/strips them); a value needing host context (settings, fs,
+  active DTH release) resolves in web `parseCharacter` like `canonicalImage`, never in the pure core.
+  Steps are pre-zod, idempotent, and guard on `=== undefined`. Tools → Refresh assets migrates +
+  re-saves stale definitions. **Full decision tree + copy-paste templates live atop `migrate.ts`** —
+  read it before touching the schema.
 - **Releases are automated** (don't tag/publish by hand): feature PR + changeset → `main` → the
   **Version** workflow opens a "version packages" PR → merging it triggers the **Release** workflow
   (NSIS installer + signed updater `latest.json`). The Tauri version is read from
