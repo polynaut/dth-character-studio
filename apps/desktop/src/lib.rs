@@ -319,10 +319,10 @@ impl DestSizes {
     }
 }
 
-/// Find the directory *inside a zip* (within 5 levels) that holds Daz content
-/// folders, plus the folder names — the archive equivalent of `find_content_level`,
+/// The directory *inside a zip* (within 5 levels) that *directly* contains one of
+/// `wanted`, plus the matching names — the archive equivalent of `find_dir_level`,
 /// computed purely from the central-directory entry paths (no extraction).
-fn find_zip_content_level(paths: &[&str]) -> Option<(String, Vec<String>)> {
+fn zip_dir_level(paths: &[&str], wanted: &[&str]) -> Option<(String, Vec<String>)> {
     // Map each directory in the archive to its immediate child directory names.
     let mut children: HashMap<String, BTreeSet<String>> = HashMap::new();
     for p in paths {
@@ -368,10 +368,18 @@ fn find_zip_content_level(paths: &[&str]) -> Option<(String, Vec<String>)> {
         }
         None
     }
-    // Real content folders found at any depth win over a shallower Documentation-only
-    // level (see `find_content_level`); fall back to a meta-only level otherwise.
-    rec(String::new(), 5, &children, &CONTENT_FOLDERS)
-        .or_else(|| rec(String::new(), 5, &children, &META_FOLDERS))
+    rec(String::new(), 5, &children, wanted)
+}
+
+/// Find the directory *inside a zip* that holds Daz content folders. Real content
+/// folders found at any depth win over a shallower Documentation-only level (see
+/// `find_content_level`); a meta-only level is the fallback. The production
+/// callers (`diff_zip_archive` / `collect_zip_files`) inline this precedence with
+/// the nested-package descent between the two passes; this helper states the base
+/// rule for the tests.
+#[cfg(test)]
+fn find_zip_content_level(paths: &[&str]) -> Option<(String, Vec<String>)> {
+    zip_dir_level(paths, &CONTENT_FOLDERS).or_else(|| zip_dir_level(paths, &META_FOLDERS))
 }
 
 /// Format the final step for an asset once its diff is known.
@@ -435,9 +443,140 @@ fn extract_zip_entry(
     Ok(())
 }
 
+/// How deep to follow zip-in-zip packaging: some stores wrap the real DIM package
+/// zip in an outer download zip (beside a `.dsx` manifest and PDFs) that holds no
+/// content folders itself. Two levels covers even a wrapped wrapper.
+const NESTED_ZIP_DEPTH: u32 = 2;
+
+/// A temp file that deletes itself when dropped. Nested zips are inflated to disk
+/// because an archive can't be read from a non-seekable inner entry stream.
+struct TempFile(PathBuf);
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// Inflate the nested zip entry `idx` to a unique temp file.
+fn extract_nested_zip(
+    archive: &mut zip::ZipArchive<fs::File>,
+    idx: usize,
+) -> std::io::Result<TempFile> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("dth-nested-{}-{n}.zip", std::process::id()));
+    let tmp = TempFile(path);
+    extract_zip_entry(archive, idx, &tmp.0)?;
+    Ok(tmp)
+}
+
+/// Central-directory pass over an archive: each file entry's index, normalized
+/// path and uncompressed size. Setting up `by_index` reads only the local header —
+/// no decompression happens here.
+fn zip_file_entries(archive: &mut zip::ZipArchive<fs::File>) -> Vec<(usize, String, u64)> {
+    let mut entries = Vec::new();
+    for i in 0..archive.len() {
+        let entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.is_dir() {
+            continue;
+        }
+        // enclosed_name rejects absolute / `..` paths (zip-slip).
+        let rel = match entry.enclosed_name() {
+            Some(p) => p.to_string_lossy().replace('\\', "/"),
+            None => continue,
+        };
+        entries.push((i, rel, entry.size()));
+    }
+    entries
+}
+
+/// Diff (and, unless `dry`, install) the content of one opened zip archive into
+/// `dest`, accumulating the changed files / total / destination fingerprint so
+/// nested package zips merge into their outer asset's step. Returns whether a Daz
+/// content level was found in this archive or a nested one; `Err` carries a
+/// step_err detail.
+fn diff_zip_archive(
+    archive: &mut zip::ZipArchive<fs::File>,
+    dest: &Path,
+    dry: bool,
+    force: bool,
+    accepted: &HashSet<String>,
+    depth: u32,
+    dest_sizes: &mut DestSizes,
+    diff_files: &mut Vec<String>,
+    total: &mut u64,
+    fp: &mut u64,
+) -> Result<bool, String> {
+    let entries = zip_file_entries(archive);
+    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
+    // Same precedence as find_zip_content_level, with nested packages between the
+    // two passes: content in this archive → content in nested zips → Documentation.
+    let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
+    if content.is_none() && depth > 0 {
+        let mut found = false;
+        for (idx, path, _) in &entries {
+            if !path.to_ascii_lowercase().ends_with(".zip") {
+                continue;
+            }
+            let tmp = extract_nested_zip(archive, *idx)
+                .map_err(|e| io_detail(&format!("unpack {path}"), &e))?;
+            let file =
+                fs::File::open(&tmp.0).map_err(|e| io_detail(&format!("open {path}"), &e))?;
+            let mut inner =
+                zip::ZipArchive::new(file).map_err(|e| format!("unzip {path} failed: {e}"))?;
+            found |= diff_zip_archive(
+                &mut inner, dest, dry, force, accepted, depth - 1, dest_sizes, diff_files, total,
+                fp,
+            )?;
+        }
+        if found {
+            return Ok(true);
+        }
+    }
+    let (root, folders) = match content.or_else(|| zip_dir_level(&paths, &META_FOLDERS)) {
+        Some(level) => level,
+        None => return Ok(false),
+    };
+    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
+    let mut needed: Vec<(usize, String)> = Vec::new();
+    for (idx, path, size) in &entries {
+        // Keep only entries under <content-root>/<one of the chosen folders>.
+        let sub = match path.strip_prefix(&prefix) {
+            Some(s) => s,
+            None => continue,
+        };
+        let first = sub.split('/').next().unwrap_or("");
+        if !folders.iter().any(|f| f == first) {
+            continue;
+        }
+        *total += 1;
+        fp_add(fp, sub);
+        let needs = !accepted.contains(sub)
+            && (force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size));
+        if needs {
+            diff_files.push(sub.to_string());
+            needed.push((*idx, sub.to_string()));
+        }
+    }
+    // Inflate only the differing entries on a real install.
+    if !dry {
+        for (idx, sub) in &needed {
+            if let Err(e) = extract_zip_entry(archive, *idx, &join_rel(dest, sub)) {
+                return Err(io_detail(&format!("extract {sub}"), &e));
+            }
+        }
+    }
+    Ok(true)
+}
+
 /// Diff (and, unless `dry`, install) one `.zip` asset — read straight from the
 /// archive's central directory (uncompressed sizes), never extracting the whole
-/// thing. For a real install only the entries that differ are inflated.
+/// thing. For a real install only the entries that differ are inflated. Wrapper
+/// downloads (no content folders, a package zip inside) are descended into.
 fn process_zip_asset(
     asset: &Path,
     name: &str,
@@ -454,63 +593,25 @@ fn process_zip_asset(
         Ok(a) => a,
         Err(e) => return (step_err(name, format!("unzip failed: {e}")), None),
     };
-    // Central-directory pass: each file entry's path + uncompressed size. Setting
-    // up `by_index` reads only the local header — no decompression happens here.
-    let mut entries: Vec<(usize, String, u64)> = Vec::new();
-    for i in 0..archive.len() {
-        let entry = match archive.by_index(i) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        if entry.is_dir() {
-            continue;
-        }
-        // enclosed_name rejects absolute / `..` paths (zip-slip).
-        let rel = match entry.enclosed_name() {
-            Some(p) => p.to_string_lossy().replace('\\', "/"),
-            None => continue,
-        };
-        entries.push((i, rel, entry.size()));
-    }
-    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
-    let (root, folders) = match find_zip_content_level(&paths) {
-        Some(found) => found,
-        None => return (step_skip(name, "no Daz content".into()), None),
-    };
-    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
     let mut dest_sizes = DestSizes::new();
     let mut diff_files: Vec<String> = Vec::new();
-    let mut needed: Vec<(usize, String)> = Vec::new();
-    let mut total = 0u64;
-    let mut fp = 0u64;
-    for (idx, path, size) in &entries {
-        // Keep only entries under <content-root>/<one of the chosen folders>.
-        let sub = match path.strip_prefix(&prefix) {
-            Some(s) => s,
-            None => continue,
-        };
-        let first = sub.split('/').next().unwrap_or("");
-        if !folders.iter().any(|f| f == first) {
-            continue;
-        }
-        total += 1;
-        fp_add(&mut fp, sub);
-        let needs = !accepted.contains(sub)
-            && (force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size));
-        if needs {
-            diff_files.push(sub.to_string());
-            needed.push((*idx, sub.to_string()));
-        }
+    let (mut total, mut fp) = (0u64, 0u64);
+    match diff_zip_archive(
+        &mut archive,
+        dest,
+        dry,
+        force,
+        accepted,
+        NESTED_ZIP_DEPTH,
+        &mut dest_sizes,
+        &mut diff_files,
+        &mut total,
+        &mut fp,
+    ) {
+        Err(detail) => (step_err(name, detail), None),
+        Ok(false) => (step_skip(name, "no Daz content".into()), None),
+        Ok(true) => (finish_step(name, diff_files, total, dry), Some(fp)),
     }
-    // Inflate only the differing entries on a real install.
-    if !dry {
-        for (idx, sub) in &needed {
-            if let Err(e) = extract_zip_entry(&mut archive, *idx, &join_rel(dest, sub)) {
-                return (step_err(name, io_detail(&format!("extract {sub}"), &e)), None);
-            }
-        }
-    }
-    (finish_step(name, diff_files, total, dry), Some(fp))
 }
 
 /// Diff/install one asset (folder or `.zip`). Loose files at the source root
@@ -1095,6 +1196,52 @@ fn collect_folder_files(dir: &Path, rel: &Path, out: &mut Vec<(String, u64)>) {
     }
 }
 
+/// Dedup's counterpart of `diff_zip_archive`: collect an opened archive's
+/// content-file list (dest-relative path → size), descending into nested package
+/// zips the same way so a wrapper download dedups like a flat zip of the same
+/// content. Returns whether a content level was found; unreadable nested zips are
+/// skipped (dedup is lenient — the asset resolves to None, not an error).
+fn collect_zip_files(
+    archive: &mut zip::ZipArchive<fs::File>,
+    depth: u32,
+    out: &mut Vec<(String, u64)>,
+) -> bool {
+    let entries = zip_file_entries(archive);
+    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
+    let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
+    if content.is_none() && depth > 0 {
+        let mut found = false;
+        for (idx, path, _) in &entries {
+            if !path.to_ascii_lowercase().ends_with(".zip") {
+                continue;
+            }
+            if let Ok(tmp) = extract_nested_zip(archive, *idx) {
+                if let Ok(file) = fs::File::open(&tmp.0) {
+                    if let Ok(mut inner) = zip::ZipArchive::new(file) {
+                        found |= collect_zip_files(&mut inner, depth - 1, out);
+                    }
+                }
+            }
+        }
+        if found {
+            return true;
+        }
+    }
+    let (root, folders) = match content.or_else(|| zip_dir_level(&paths, &META_FOLDERS)) {
+        Some(level) => level,
+        None => return false,
+    };
+    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
+    for (_, p, sz) in &entries {
+        if let Some(sub) = p.strip_prefix(&prefix) {
+            if folders.iter().any(|f| f == sub.split('/').next().unwrap_or("")) {
+                out.push((sub.to_string(), *sz));
+            }
+        }
+    }
+    true
+}
+
 /// Resolve an asset to its full content-file list (rel path → size). None for
 /// loose files / assets with no Daz content.
 fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
@@ -1106,31 +1253,9 @@ fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
     if is_zip {
         let file = fs::File::open(asset).ok()?;
         let mut archive = zip::ZipArchive::new(file).ok()?;
-        let mut entries: Vec<(String, u64)> = Vec::new();
-        for i in 0..archive.len() {
-            let e = match archive.by_index(i) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            if e.is_dir() {
-                continue;
-            }
-            let rel = match e.enclosed_name() {
-                Some(p) => p.to_string_lossy().replace('\\', "/"),
-                None => continue,
-            };
-            entries.push((rel, e.size()));
-        }
-        let paths: Vec<&str> = entries.iter().map(|(p, _)| p.as_str()).collect();
-        let (root, folders) = find_zip_content_level(&paths)?;
-        let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
         let mut files = Vec::new();
-        for (p, sz) in &entries {
-            if let Some(sub) = p.strip_prefix(&prefix) {
-                if folders.iter().any(|f| f == sub.split('/').next().unwrap_or("")) {
-                    files.push((sub.to_string(), *sz));
-                }
-            }
+        if !collect_zip_files(&mut archive, NESTED_ZIP_DEPTH, &mut files) {
+            return None;
         }
         Some(AssetFiles {
             label,
@@ -2117,6 +2242,191 @@ mod tests {
         let (root, folders) = find_content_level(&asset, 5).unwrap();
         assert_eq!(root, asset);
         assert_eq!(folders, vec!["Documentation".to_string()]);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Write a zip at `path` whose file entries are (name, bytes).
+    fn write_zip(path: &Path, files: &[(&str, &[u8])]) {
+        let mut w = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        for (name, data) in files {
+            w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut w, data).unwrap();
+        }
+        w.finish().unwrap();
+    }
+
+    /// A zip's raw bytes, for nesting one archive inside another.
+    fn zip_bytes(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for (name, data) in files {
+            w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut w, data).unwrap();
+        }
+        w.finish().unwrap().into_inner()
+    }
+
+    /// The store wrapper layout: the download zip holds PDFs + a `.dsx` manifest
+    /// beside the real DIM package zip, whose content lives under `Content/`.
+    fn write_wrapper_zip(path: &Path) {
+        let inner = zip_bytes(&[
+            ("Manifest.dsx", b"<manifest/>".as_slice()),
+            ("Content/data/Meipe/morph.dsf", b"morph-data".as_slice()),
+            ("Content/Runtime/Textures/t.png", b"png".as_slice()),
+            ("Content/Documentation/read.pdf", b"pdf".as_slice()),
+        ]);
+        write_zip(
+            path,
+            &[
+                ("EndUserLicense.pdf", b"eula".as_slice()),
+                ("IM80067582-01_Product.dsx", b"<dsx/>".as_slice()),
+                ("IM80067582-01_Product.zip", inner.as_slice()),
+            ],
+        );
+    }
+
+    #[test]
+    fn zip_asset_descends_into_nested_package_zip() {
+        let base = unique_temp_dir("nested_zip");
+        fs::create_dir_all(&base).unwrap();
+        let outer = base.join("67582_Meipe.zip");
+        write_wrapper_zip(&outer);
+        let dest = base.join("lib");
+
+        // Dry run resolves the inner package's data/Runtime files (its
+        // Documentation folder is metadata, like in a flat zip).
+        let (step, fp) =
+            process_zip_asset(&outer, "67582_Meipe.zip", &dest, true, false, &HashSet::new());
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert_eq!(step.files, 2);
+        let mut list = step.files_list.clone();
+        list.sort();
+        assert_eq!(list, vec!["Runtime/Textures/t.png", "data/Meipe/morph.dsf"]);
+        assert!(fp.is_some());
+
+        // A real install inflates the nested entries into the library.
+        let (step, _) =
+            process_zip_asset(&outer, "67582_Meipe.zip", &dest, false, false, &HashSet::new());
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert_eq!(fs::read(join_rel(&dest, "data/Meipe/morph.dsf")).unwrap(), b"morph-data");
+        assert!(join_rel(&dest, "Runtime/Textures/t.png").is_file());
+
+        // A re-scan now reports the wrapper as already installed.
+        let (step, _) =
+            process_zip_asset(&outer, "67582_Meipe.zip", &dest, true, false, &HashSet::new());
+        assert_eq!(step.status, "skipped");
+        assert!(step.detail.contains("already installed"), "detail: {}", step.detail);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn zip_asset_nested_zip_without_content_is_skipped() {
+        let base = unique_temp_dir("nested_zip_none");
+        fs::create_dir_all(&base).unwrap();
+        let inner = zip_bytes(&[("random/notes.txt", b"x".as_slice())]);
+        let outer = base.join("wrapper.zip");
+        write_zip(&outer, &[("inner.zip", inner.as_slice())]);
+
+        let (step, fp) =
+            process_zip_asset(&outer, "wrapper.zip", &base.join("lib"), true, false, &HashSet::new());
+        assert_eq!(step.status, "skipped");
+        assert_eq!(step.detail, "no Daz content");
+        assert!(fp.is_none());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn zip_asset_with_own_content_ignores_nested_zips() {
+        // A product that legitimately ships a .zip *inside* its content is not a
+        // wrapper — the archive's own content level wins and the nested zip is
+        // treated as a file to install, not descended into.
+        let base = unique_temp_dir("nested_zip_own_content");
+        fs::create_dir_all(&base).unwrap();
+        let inner = zip_bytes(&[("Content/data/other.dsf", b"other".as_slice())]);
+        let outer = base.join("asset.zip");
+        write_zip(
+            &outer,
+            &[
+                ("data/main.dsf", b"main".as_slice()),
+                ("Runtime/extra.zip", inner.as_slice()),
+            ],
+        );
+
+        let (step, _) =
+            process_zip_asset(&outer, "asset.zip", &base.join("lib"), true, false, &HashSet::new());
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        let mut list = step.files_list.clone();
+        list.sort();
+        assert_eq!(list, vec!["Runtime/extra.zip", "data/main.dsf"]);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn nested_package_content_wins_over_outer_documentation() {
+        // A wrapper that also carries a Documentation folder: the package's real
+        // content must win over the shallower docs-only level (the zip-in-zip
+        // equivalent of `zip_content_level_descends_past_top_level_documentation`).
+        let base = unique_temp_dir("nested_zip_docs");
+        fs::create_dir_all(&base).unwrap();
+        let inner = zip_bytes(&[("Content/data/x.dsf", b"x".as_slice())]);
+        let outer = base.join("wrapper.zip");
+        write_zip(
+            &outer,
+            &[
+                ("Documentation/read.pdf", b"pdf".as_slice()),
+                ("pkg.zip", inner.as_slice()),
+            ],
+        );
+
+        let (step, _) =
+            process_zip_asset(&outer, "wrapper.zip", &base.join("lib"), true, false, &HashSet::new());
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert_eq!(step.files_list, vec!["data/x.dsf"]);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn nested_and_flat_zip_share_a_fingerprint() {
+        // A wrapper download and a flat repack of the same product install the same
+        // library files, so they must share a fingerprint (the "same files as …"
+        // duplicate hint).
+        let base = unique_temp_dir("nested_zip_fp");
+        fs::create_dir_all(&base).unwrap();
+        let content: &[(&str, &[u8])] = &[
+            ("Content/data/x.dsf", b"x".as_slice()),
+            ("Content/People/Genesis 9/y.duf", b"y".as_slice()),
+        ];
+        let flat = base.join("flat.zip");
+        write_zip(&flat, content);
+        let wrapper = base.join("wrapper.zip");
+        write_zip(&wrapper, &[("IM123_Product.zip", zip_bytes(content).as_slice())]);
+        let dest = base.join("lib");
+
+        let (_, fp_flat) = process_zip_asset(&flat, "flat.zip", &dest, true, false, &HashSet::new());
+        let (_, fp_wrap) =
+            process_zip_asset(&wrapper, "wrapper.zip", &dest, true, false, &HashSet::new());
+        assert!(fp_flat.is_some());
+        assert_eq!(fp_flat, fp_wrap);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn collect_asset_files_descends_into_nested_package_zip() {
+        // Dedup resolves a wrapper to the inner package's files too.
+        let base = unique_temp_dir("nested_zip_collect");
+        fs::create_dir_all(&base).unwrap();
+        let outer = base.join("67582_Meipe.zip");
+        write_wrapper_zip(&outer);
+
+        let af = collect_asset_files(&outer).unwrap();
+        let mut rels: Vec<String> = af.files.iter().map(|(p, _)| p.clone()).collect();
+        rels.sort();
+        assert_eq!(rels, vec!["Runtime/Textures/t.png", "data/Meipe/morph.dsf"]);
 
         let _ = fs::remove_dir_all(&base);
     }
