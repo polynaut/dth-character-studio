@@ -11,6 +11,7 @@ import {
   toDazFbmJson,
   toExportScriptDsa,
   toPoseAssetCsv,
+  toScanProductsScriptDsa,
   toWorkflowDsa,
 } from './generate'
 
@@ -356,6 +357,40 @@ describe('toCharacterScriptDsa', () => {
   })
 })
 
+describe('toScanProductsScriptDsa', () => {
+  const opts = {
+    dimManifestPath: 'E:\\DAZ 3D\\Install Manager\\ManifestFiles',
+    outputDir: 'C:\\Users\\me\\AppData\\Local\\app\\product-scans\\proj\\char',
+    dazLibraryFolder: 'D:\\DAZ 3D\\My DAZ 3D Library',
+  }
+
+  it('emits a Scan_Products_<slug>.dsa that includes the DthProducts runtime and calls DthScanProducts', () => {
+    const file = toScanProductsScriptDsa(makeCharacter(), opts)
+    expect(file.fileName).toBe('Scan_Products_ElectraG9.dsa')
+    expect(file.target).toBe('daz')
+    expect(file.content).toContain('// DTH-Runtime: v')
+    expect(file.content).toContain('include(dir_self.filePath("../../.DthProducts.dsa"));')
+    expect(file.content).toContain('DthScanProducts(')
+  })
+
+  it('embeds the character identity and forward-slashed paths', () => {
+    const open = file2config(toScanProductsScriptDsa(makeCharacter(), opts).content)
+    expect(open.characterId).toBe('test')
+    expect(open.characterName).toBe('Electra G9')
+    expect(open.genesis).toBe('G9')
+    // Backslashes are forward-slashed before embedding (DzFile/DzDir want '/').
+    expect(open.dimManifestPath).toBe('E:/DAZ 3D/Install Manager/ManifestFiles')
+    expect(open.outputDir).toBe('C:/Users/me/AppData/Local/app/product-scans/proj/char')
+    expect(open.dazLibraryFolder).toBe('D:/DAZ 3D/My DAZ 3D Library')
+  })
+})
+
+/** Parse the JSON argument of the single `DthScanProducts(...)` call. */
+function file2config(content: string) {
+  const open = content.lastIndexOf('DthScanProducts(') + 'DthScanProducts('.length
+  return JSON.parse(content.slice(open, content.lastIndexOf(');')))
+}
+
 describe('generateAll', () => {
   it('produces the character script (daz) and the PoseAsset CSV (houdini)', () => {
     const files = generateAll(makeCharacter(), {}, FRAMES)
@@ -363,6 +398,23 @@ describe('generateAll', () => {
       ['ElectraG9_G9.dsa', 'daz'],
       ['ElectraG9_pose_asset.csv', 'houdini'],
     ])
+  })
+
+  it('omits the scan script unless scanProducts options are passed', () => {
+    const files = generateAll(makeCharacter(), {}, FRAMES, undefined, undefined, {
+      dimManifestPath: 'E:/DIM/ManifestFiles',
+      outputDir: 'C:/data/product-scans/proj/char',
+      dazLibraryFolder: 'D:/DAZ 3D/My DAZ 3D Library',
+    })
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ElectraG9_G9.dsa',
+      'Scan_Products_ElectraG9.dsa',
+      'ElectraG9_pose_asset.csv',
+    ])
+    // Without the options the scan script is not emitted.
+    expect(generateAll(makeCharacter(), {}, FRAMES).map((f) => f.fileName)).not.toContain(
+      'Scan_Products_ElectraG9.dsa',
+    )
   })
 })
 
