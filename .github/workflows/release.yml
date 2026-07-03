@@ -2,9 +2,19 @@ name: Release
 
 # On every push to main: release only when there are no pending changesets (i.e.
 # the "version packages" PR has just merged, bumping apps/desktop/package.json)
-# AND that version has no tag yet. Then build the Tauri app and publish a GitHub
-# Release with the installer + the updater's latest.json. Feature merges (which
-# still carry changesets) are skipped — they only feed the version packages PR.
+# AND that version has no tag yet. Feature merges (which still carry changesets)
+# are skipped — they only feed the version packages PR.
+#
+# Two stages (see docs/devops.md → "Code signing"):
+#   build         hosted Windows runner — builds the NSIS installer (unsigned)
+#   sign-publish  self-hosted Certum signer (the NAS runner beside the always-on
+#                 certum-container/SimplySign session) — Authenticode-signs the
+#                 installer through the shared p11-kit socket, regenerates the
+#                 updater .sig over the SIGNED bytes, and publishes the GitHub
+#                 Release (installer + .sig + latest.json).
+#
+# Order matters: the updater signature and latest.json must be computed AFTER
+# Authenticode signing, because signing changes the installer bytes.
 
 on:
   push:
@@ -21,6 +31,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       should_release: ${{ steps.v.outputs.should_release }}
+      notes: ${{ steps.notes.outputs.body }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -46,8 +57,20 @@ jobs:
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "Releasing v$version."
           fi
+      # Build the release body from the Changesets CHANGELOGs (the actual
+      # changes), rather than the "version packages" commit subject. Computed
+      # here so the signer job needs no checkout.
+      - id: notes
+        if: steps.v.outputs.should_release == 'true'
+        shell: bash
+        run: |
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            node scripts/release-notes.mjs "${{ steps.v.outputs.version }}"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
-  release:
+  build:
     needs: check
     if: needs.check.outputs.should_release == 'true'
     runs-on: windows-latest
@@ -62,26 +85,107 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
-      # Build the release body from the Changesets CHANGELOGs (the actual changes),
-      # rather than letting it fall back to the "version packages" commit subject.
-      - id: notes
-        shell: bash
-        run: |
-          {
-            echo "body<<RELEASE_NOTES_EOF"
-            node scripts/release-notes.mjs "${{ needs.check.outputs.version }}"
-            echo "RELEASE_NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
+      # Build only — no tagName/release inputs, so tauri-action publishes
+      # nothing. The signing env is still required (createUpdaterArtifacts),
+      # but this build-time .sig is discarded: it is regenerated on the signer
+      # over the Authenticode-signed bytes.
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Updater artifact signing (generate with `pnpm --filter @dth/desktop tauri signer generate`)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
-          tagName: v${{ needs.check.outputs.version }}
-          releaseName: DTH Character Studio v${{ needs.check.outputs.version }}
-          releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: false
-          includeUpdaterJson: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: apps/desktop/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 3
+
+  sign-publish:
+    needs: [check, build]
+    runs-on: [self-hosted, linux, certum-signer]
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      SOCK: ${{ vars.CERTUM_P11_SOCKET || '/run/user/1000/p11-kit/p11kit.sock' }}
+      PKCS11_URI: ${{ vars.CERTUM_PKCS11_URI || 'pkcs11:model=SimplySign%20C' }}
+      MODULE: /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist
+
+      - name: Authenticode-sign via Certum SimplySign
+        shell: bash
+        env:
+          PIN: ${{ secrets.CERTUM_PIN }}
+        run: |
+          set -euo pipefail
+          exe=$(ls dist/*-setup.exe)
+          [ -S "$SOCK" ] || {
+            echo "::error::p11-kit socket missing at $SOCK — is certum-container running and SimplySign logged in (VNC → login → close)? See docs/devops.md → Code signing."
+            exit 1
+          }
+          export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
+          uri="$PKCS11_URI"
+          # SimplySign may require the card PIN per private-key operation; wire it
+          # through the CERTUM_PIN secret if signing fails with a CKR_PIN error.
+          [ -n "${PIN:-}" ] && uri="$uri?pin-value=$PIN"
+          osslsigncode sign \
+            -pkcs11module "$MODULE" \
+            -pkcs11cert "$uri" -key "$uri" \
+            -h sha256 -ts http://time.certum.pl \
+            -n "DTH Character Studio" -i "https://github.com/polynaut/dth-character-studio" \
+            -in "$exe" -out "$exe.signed"
+          mv "$exe.signed" "$exe"
+          osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
+            -TSA-CAfile /etc/ssl/certs/ca-certificates.crt \
+            -in "$exe"
+
+      # The updater verifies the minisign signature over the exact bytes it
+      # downloads — regenerate the .sig now that the installer is signed.
+      - name: Regenerate updater signature (over the signed installer)
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          exe=$(ls dist/*-setup.exe)
+          npx --yes @tauri-apps/cli@^2 signer sign \
+            --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+            --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+            "$exe"
+          test -s "$exe.sig"
+
+      - name: Publish release (installer + .sig + latest.json)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ needs.check.outputs.notes }}
+        run: |
+          set -euo pipefail
+          exe=$(ls dist/*-setup.exe)
+          # GitHub rewrites spaces in asset names to dots — latest.json must
+          # point at the rewritten name (same convention tauri-action used).
+          asset=$(basename "$exe" | tr ' ' '.')
+          export ASSET_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${asset}"
+          node -e '
+            const fs = require("fs");
+            const sig = fs.readFileSync(process.argv[1] + ".sig", "utf8").trim();
+            const entry = { signature: sig, url: process.env.ASSET_URL };
+            fs.writeFileSync("latest.json", JSON.stringify({
+              version: process.env.VERSION,
+              notes: process.env.NOTES,
+              pub_date: new Date().toISOString(),
+              platforms: { "windows-x86_64": entry, "windows-x86_64-nsis": entry },
+            }, null, 2));
+          ' "$exe"
+          gh release create "v${VERSION}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "DTH Character Studio v${VERSION}" \
+            --notes "$NOTES" \
+            --latest \
+            "$exe" "$exe.sig" latest.json
