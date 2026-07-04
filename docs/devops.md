@@ -169,15 +169,17 @@ pins SimplySign **2.9.13**.)
 - GitHub rewrites spaces in release asset names to dots
   (`DTH Character Studio_…` → `DTH.Character.Studio_…`); `latest.json` must
   point at the rewritten name. The workflow handles this.
-- **The SimplySign session lives ~2 hours** (Certum's documented connection
-  lifetime — observed in practice: a release signed fine 10 minutes after
-  login, and failed with `Failed to enumerate slots` 2¼ hours after). It also
-  does not survive a certum-container restart. So: **re-arm right before
-  cutting a release** — one ~60s VNC OTP login (login → close → disconnect).
-  If the `sign-publish` job fails with "p11-kit socket missing" or
-  `Failed to enumerate slots`, re-arm and **re-run the failed job** (the
-  release-signing gate can also simply be left unapproved until the session
-  is fresh).
+- **The SimplySign session lives ~2 hours** (Certum's documented lifetime,
+  verified in practice), and it does not survive a certum-container restart.
+  **The NAS runs an auto-login keepalive** (since 2026-07-04) that re-arms the
+  session, so signing is normally zero-touch. Two lessons baked into it: a
+  re-login alone is NOT a re-arm — after an expiry the p11-kit server still
+  holds the dead session's module state and must be bounced (the runner talks
+  to the p11-kit server, not to SimplySign Desktop) — and the keepalive must
+  verify the token is visible *through the shared socket* afterwards. Manual
+  fallback if the keepalive is down: restart certum-container → VNC OTP login
+  → "close" → re-run the failed `sign-publish` job (the release-signing gate
+  can also simply be left unapproved until the session is fresh).
 - **The self-hosted runner's workspace persists between runs** — the
   `sign-publish` job cleans `dist/` before downloading the artifact and matches
   the installer by version; keep it that way or a previous release's installer
