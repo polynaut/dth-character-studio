@@ -1718,20 +1718,23 @@ function CharacterPage() {
       </div>
 
       <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background">
-        {/* Top-centered, its own standalone element. Fades/slides in on scroll
-            (scroll-timeline, same range as the subtitle collapse) so it's hidden
-            at the top where the full report is already visible, and appears as
-            you scroll past it. Click scrolls back up to the report. */}
+        {/* Top-centered, its own standalone element. The full-width wrapper
+            centers it via flexbox (robust regardless of the containing block);
+            the button fades/slides in on scroll (scroll-timeline, same range as
+            the subtitle collapse) so it's hidden at the top where the full report
+            is already visible. Click scrolls back up to the report. */}
         {hasRunProblems && (
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            title="Scroll to the run report"
-            className="runhint-scroll absolute top-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
-          >
-            <CircleX className="size-4 shrink-0" />
-            Errors in the last ROM run — click to see details
-          </button>
+          <div className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center">
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              title="Scroll to the run report"
+              className="runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
+            >
+              <CircleX className="size-4 shrink-0" />
+              Errors in the last ROM run — click to see details
+            </button>
+          </div>
         )}
         <button
           type="button"
