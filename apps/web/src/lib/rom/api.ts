@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
@@ -861,69 +861,101 @@ export interface RomRunLog {
   unreadable?: boolean
 }
 
+/** The studio's OWN copy of the last run log (`.last_rom_run.json`, character
+ *  folder). The Daz-written `dth_rom_run_log.json` is a throwaway transport:
+ *  fetchRomRunLog ingests it here and deletes it. */
+const LAST_ROM_RUN_FILE = '.last_rom_run.json'
+
+/** Parse run-log JSON into the normalized shape (throws on unparseable text). */
+function parseRomRunLogText(text: string): RomRunLog {
+  const record = (JSON.parse(text) ?? {}) as Record<string, unknown>
+  return {
+    character: typeof record.character === 'string' ? record.character : '',
+    finishedAt: typeof record.finishedAt === 'string' ? record.finishedAt : '',
+    finishedAtMs: typeof record.finishedAtMs === 'number' ? record.finishedAtMs : 0,
+    framesTotal: typeof record.framesTotal === 'number' ? record.framesTotal : undefined,
+    ok: record.ok === true,
+    errors: Array.isArray(record.errors) ? record.errors.map((e) => String(e)) : [],
+    failedMorphs: Array.isArray(record.failedMorphs)
+      ? record.failedMorphs.map((m) => {
+          const entry = (m ?? {}) as Record<string, unknown>
+          return {
+            frame: typeof entry.frame === 'number' ? entry.frame : -1,
+            node: String(entry.node ?? ''),
+            prop: String(entry.prop ?? ''),
+            reason: String(entry.reason ?? ''),
+          }
+        })
+      : [],
+    unreadable: record.unreadable === true || undefined,
+  }
+}
+
+/** An existing-but-corrupt log still surfaces as a problem instead of throwing. */
+function unreadableRomRunLog(): RomRunLog {
+  return {
+    character: '',
+    finishedAt: '',
+    finishedAtMs: Date.now(),
+    ok: false,
+    unreadable: true,
+    errors: [
+      'The ROM run log exists but could not be read — the run may have crashed while writing it. Re-run the ROM script in Daz.',
+    ],
+    failedMorphs: [],
+  }
+}
+
 /**
- * Read the ROM run log the generated Daz script wrote for this character —
- * null when no run has been logged yet. Defensive: a malformed/partial file
- * (e.g. Daz crashed mid-write) comes back as an `unreadable` problem log
- * rather than throwing, so unexpected failures still surface in the UI.
+ * The character's last ROM run log. A freshly Daz-written `dth_rom_run_log.json`
+ * is ingested into the studio's own `.last_rom_run.json` and DELETED (throwaway
+ * transport); otherwise the stored copy is returned. Null when no run was ever
+ * logged (or the report was dismissed). Defensive throughout — a malformed file
+ * becomes an `unreadable` problem log rather than an exception.
  */
 export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRunLog | null> {
   const { projectId, id } = charScopeInput.parse(data)
   const lib = await charactersRoot(projectId)
   const folder = await storage.getCharacterFolder(lib, id)
-  const path = joinPath(folder, ROM_RUN_LOG_FILE)
+  const dazPath = joinPath(folder, ROM_RUN_LOG_FILE)
+  const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
-    if (!(await exists(path))) return null
+    if (await exists(dazPath)) {
+      let log: RomRunLog
+      try {
+        log = parseRomRunLogText(await readTextFile(dazPath))
+      } catch {
+        log = unreadableRomRunLog()
+      }
+      await writeTextFile(storePath, JSON.stringify(log, null, 2))
+      await remove(dazPath)
+      return log
+    }
+  } catch {
+    // ingest failed (e.g. Daz still holds the file) — fall back to the store;
+    // the next focus/load retries the ingest.
+  }
+  try {
+    if (!(await exists(storePath))) return null
+    return parseRomRunLogText(await readTextFile(storePath))
   } catch {
     return null
   }
-  try {
-    const raw: unknown = JSON.parse(await readTextFile(path))
-    const record = (raw ?? {}) as Record<string, unknown>
-    return {
-      character: typeof record.character === 'string' ? record.character : '',
-      finishedAt: typeof record.finishedAt === 'string' ? record.finishedAt : '',
-      finishedAtMs: typeof record.finishedAtMs === 'number' ? record.finishedAtMs : 0,
-      framesTotal: typeof record.framesTotal === 'number' ? record.framesTotal : undefined,
-      ok: record.ok === true,
-      errors: Array.isArray(record.errors) ? record.errors.map((e) => String(e)) : [],
-      failedMorphs: Array.isArray(record.failedMorphs)
-        ? record.failedMorphs.map((m) => {
-            const entry = (m ?? {}) as Record<string, unknown>
-            return {
-              frame: typeof entry.frame === 'number' ? entry.frame : -1,
-              node: String(entry.node ?? ''),
-              prop: String(entry.prop ?? ''),
-              reason: String(entry.reason ?? ''),
-            }
-          })
-        : [],
-    }
-  } catch {
-    return {
-      character: '',
-      finishedAt: '',
-      finishedAtMs: 0,
-      ok: false,
-      unreadable: true,
-      errors: [
-        'The ROM run log exists but could not be read — the run may have crashed while writing it. Re-run the ROM script in Daz.',
-      ],
-      failedMorphs: [],
-    }
-  }
 }
 
-/** Delete the character's ROM run log (the banner's Dismiss). Best-effort. */
+/** Dismiss the last run report: drop the studio's stored copy (and any not-yet-
+ *  ingested Daz file). Best-effort. */
 export async function dismissRomRunLog({ data }: { data: unknown }): Promise<void> {
   const { projectId, id } = charScopeInput.parse(data)
   const lib = await charactersRoot(projectId)
   const folder = await storage.getCharacterFolder(lib, id)
-  const path = joinPath(folder, ROM_RUN_LOG_FILE)
-  try {
-    if (await exists(path)) await remove(path)
-  } catch {
-    // best-effort — a locked file just leaves the banner until the next run
+  for (const name of [LAST_ROM_RUN_FILE, ROM_RUN_LOG_FILE]) {
+    try {
+      const path = joinPath(folder, name)
+      if (await exists(path)) await remove(path)
+    } catch {
+      // best-effort — a locked file just leaves the banner until the next run
+    }
   }
 }
 

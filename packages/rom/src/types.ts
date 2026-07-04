@@ -425,8 +425,15 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       slots come from the declaration, NaN frames are logged + skipped, and the
  *       legacy per-frame loop no longer aborts a frame on the first missing morph.
  *       The character script is now always named ROM_<Name>_<Genesis>.dsa.
+ *  14 — v13 regression fix: the generated script's include() moved back to the
+ *       TOP level — Daz resolves include() via its legacy-include mechanism,
+ *       which fails inside try/catch ("URIError: Legacy Include"), breaking every
+ *       v13 script before it ran. The catch-all now guards only the call (a
+ *       typeof check covers a missing runtime), the export block is skipped when
+ *       the ROM build aborts, and the Daz dialogs are short + generic — the
+ *       details live in the studio, which ingests the run log.
  */
-export const RUNTIME_VERSION = 13
+export const RUNTIME_VERSION = 14
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
