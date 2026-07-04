@@ -136,6 +136,9 @@ interface RomSectionsProps {
   catalog: PoseAssetCatalog
   /** Measured preset-block frame lengths; null while unmeasurable (assets unread). */
   presetFrames: PresetFrames | null
+  /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
+   *  matching pose rows are marked red. */
+  failedFrames?: Set<number>
   onChange: (sections: RomSectionsModel) => void
 }
 
@@ -415,6 +418,8 @@ interface MorphPatch {
 
 interface PoseTableMeta {
   startFrame: number
+  /** Absolute frames whose morphs failed in the last ROM run — rows marked red. */
+  failedFrames?: Set<number>
   showReferenceFbx: boolean
   expandedIds: Set<string>
   toggleExpanded: (poseId: string) => void
@@ -597,12 +602,18 @@ function SortablePoseRow({
     id: pose.id,
   })
   const visibleCells = row.getVisibleCells()
+  // Marked red when this pose's frame failed in the last ROM run (see the
+  // run report at the top of the page).
+  const failed = meta.failedFrames?.has(meta.startFrame + row.index) === true
   return (
     <>
       <tr
         ref={setNodeRef}
         style={{ transform: CSS.Transform.toString(transform), transition }}
-        className={`border-b last:border-b-0 hover:bg-muted/30 ${isDragging ? 'relative z-10 bg-muted/50 opacity-70' : ''}`}
+        title={failed ? 'This morph failed in the last ROM run — see the report above' : undefined}
+        className={`border-b last:border-b-0 ${
+          failed ? 'bg-destructive/15 hover:bg-destructive/25' : 'hover:bg-muted/30'
+        } ${isDragging ? 'relative z-10 bg-muted/50 opacity-70' : ''}`}
       >
         <td className="px-1 py-0.5">
           <button
@@ -726,6 +737,7 @@ function GroupCard({
   group,
   gender,
   startFrame,
+  failedFrames,
   removable = true,
   expandedIds,
   onToggleExpanded,
@@ -737,6 +749,7 @@ function GroupCard({
   group: RomGroup
   gender: Gender
   startFrame: number
+  failedFrames?: Set<number>
   removable?: boolean
   expandedIds: Set<string>
   onToggleExpanded: (poseId: string) => void
@@ -763,6 +776,7 @@ function GroupCard({
 
   const meta: PoseTableMeta = {
     startFrame,
+    failedFrames,
     showReferenceFbx,
     expandedIds,
     toggleExpanded: onToggleExpanded,
@@ -982,6 +996,7 @@ function PoseGroupsEditor({
   groups,
   gender,
   startFrames,
+  failedFrames,
   removable,
   onGroupsChange,
 }: {
@@ -989,6 +1004,7 @@ function PoseGroupsEditor({
   groups: Array<RomGroup>
   gender: Gender
   startFrames: Map<string, number>
+  failedFrames?: Set<number>
   removable: boolean
   onGroupsChange: (groups: Array<RomGroup>) => void
 }) {
@@ -1144,6 +1160,7 @@ function PoseGroupsEditor({
             group={group}
             gender={gender}
             startFrame={startFrames.get(group.id) ?? 1}
+            failedFrames={failedFrames}
             removable={removable}
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
@@ -1398,6 +1415,7 @@ export function RomSections({
   skinning,
   catalog,
   presetFrames,
+  failedFrames,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
@@ -1629,6 +1647,7 @@ export function RomSections({
                       groups={config.groups.length > 0 ? config.groups : [flatGroup(section)]}
                       gender={gender}
                       startFrames={startFrames}
+                      failedFrames={failedFrames}
                       removable={false}
                       onGroupsChange={(groups) => patchSection(section, { groups })}
                     />
@@ -1641,6 +1660,7 @@ export function RomSections({
                       groups={config.groups}
                       gender={gender}
                       startFrames={startFrames}
+                      failedFrames={failedFrames}
                       removable
                       onGroupsChange={(groups) => patchSection(section, { groups })}
                     />

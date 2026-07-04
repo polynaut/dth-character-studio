@@ -736,11 +736,10 @@ export function toCharacterScriptDsa(
   const exportDir = character.exportPath.trim()
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
-      ? `
-    // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+) after the ROM build.
+      ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
 ${buildExportBlock(character, frames, charFolderAbs)
   .split('\n')
-  .map((line) => (line ? `    ${line}` : line))
+  .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
       : ''
 
@@ -756,37 +755,57 @@ ${buildExportBlock(character, frames, charFolderAbs)
 
 var dthCharacterConfig = ${JSON.stringify(config, null, 2)};
 
-// Even a catastrophic failure (runtime files missing, an unexpected exception)
-// must reach the studio: write a minimal run log and tell the user here.
-try {
-    var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
-    include(dir_self.filePath("../../.DthWorkflow.dsa"));
-
-    ApplyDTHCharacter(dthCharacterConfig);
-${exportBlock}} catch (dthErr) {
+// Write a minimal run log so even a catastrophic failure reaches the studio.
+function dthWriteFailureLog(sError) {
     try {
-        if (dthCharacterConfig.runLogPath) {
-            var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
-            if (dthLogFile.open(dthLogFile.WriteOnly, dthLogFile.Truncate)) {
-                dthLogFile.write(JSON.stringify({
-                    logVersion: 1,
-                    character: dthCharacterConfig.characterName,
-                    runtimeVersion: dthCharacterConfig.runtimeVersion,
-                    studioVersion: dthCharacterConfig.studioVersion,
-                    finishedAt: new Date().toString(),
-                    finishedAtMs: new Date().getTime(),
-                    ok: false,
-                    errors: ["Unexpected script error: " + dthErr],
-                    failedMorphs: []
-                }, null, 2));
-                dthLogFile.close();
-            }
+        if (!dthCharacterConfig.runLogPath) return;
+        var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
+        if (dthLogFile.open(dthLogFile.WriteOnly, dthLogFile.Truncate)) {
+            dthLogFile.write(JSON.stringify({
+                logVersion: 1,
+                character: dthCharacterConfig.characterName,
+                runtimeVersion: dthCharacterConfig.runtimeVersion,
+                studioVersion: dthCharacterConfig.studioVersion,
+                finishedAt: new Date().toString(),
+                finishedAtMs: new Date().getTime(),
+                ok: false,
+                errors: [String(sError)],
+                failedMorphs: []
+            }, null, 2));
+            dthLogFile.close();
         }
-    } catch (dthErr2) { /* even the log failed — the dialog below still fires */ }
+    } catch (dthLogErr) { /* even the log failed — the dialog still fires */ }
+}
+
+// Short + generic on purpose: the details (which morph, which frame, why)
+// belong in DTH Character Studio, which reads the run log back.
+function dthFailureDialog() {
     MessageBox.critical(
-        "The ROM script failed unexpectedly:\\n\\n" + dthErr +
-        "\\n\\nSwitch back to DTH Character Studio to see the details.",
+        "Something went wrong while building the ROM.\\n\\nSwitch back to DTH Character Studio to see what failed.",
         "DTH Character Studio", "&OK");
+}
+
+// The include MUST stay at the top level: Daz resolves include() through its
+// legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+include(dir_self.filePath("../../.DthWorkflow.dsa"));
+
+if (typeof ApplyDTHCharacter != "function") {
+    // Runtime not loaded (moved/deleted library?) — report instead of crashing.
+    dthWriteFailureLog("The DTH runtime (.DthWorkflow.dsa) could not be loaded. Reinstall it from DTH Character Studio: save the character, or Tools \\u2192 Refresh assets.");
+    dthFailureDialog();
+} else {
+    try {
+        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);${exportBlock ? `
+        // Export only when the ROM build didn't abort (partial-morph problems
+        // still export — the timeline is complete; hard aborts don't).
+        if (dthRomOk !== false) {
+${exportBlock}        }` : ''}
+    } catch (dthErr) {
+        // Unexpected exception — ApplyDTHCharacter couldn't log/report it itself.
+        dthWriteFailureLog("Unexpected script error: " + dthErr);
+        dthFailureDialog();
+    }
 }
 `
   const baseName = characterScriptName(character)

@@ -374,12 +374,10 @@ function ApplyDTHCharacter(config){
 		ok: bFinished && iProblems === 0
 	});
 	if(iProblems > 0){
+		// Short + generic on purpose: the details (which morph, which frame, why)
+		// belong in the studio, which reads the run log back.
 		MessageBox.warning(
-			"The ROM run reported " + iProblems + " problem" + (iProblems === 1 ? "" : "s") +
-			(bFinished
-				? " — the timeline is complete, but the listed morphs/steps did not apply."
-				: " and the ROM build DID NOT FINISH.") +
-			"\n\nSwitch back to DTH Character Studio to see exactly what failed.",
+			"Something went wrong while building the ROM.\n\nSwitch back to DTH Character Studio to see what failed.",
 			"DTH Character Studio", "&OK");
 	} else if(bFinished) {
 		print("ROM run finished without problems.");
