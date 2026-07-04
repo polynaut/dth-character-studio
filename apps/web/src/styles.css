@@ -252,6 +252,23 @@ a {
     opacity: 0;
   }
 }
+/* The top-centered run-error hint fades + slides in as the header collapses on
+   scroll (same range as the subtitle), so it's hidden at the top where the full
+   report banner is visible, and appears once you've scrolled past it. The
+   translateX(-50%) keeps it centered (it replaces the element's Tailwind
+   transform while the animation is active). */
+@keyframes dth-runhint-appear {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -0.5rem);
+    pointer-events: none;
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    pointer-events: auto;
+  }
+}
 @supports (animation-timeline: scroll()) {
   .title-scroll {
     animation: dth-title-drop linear both;
@@ -267,6 +284,11 @@ a {
   .title-subtitle {
     overflow: hidden;
     animation: dth-subtitle-collapse linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+  .runhint-scroll {
+    animation: dth-runhint-appear linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }

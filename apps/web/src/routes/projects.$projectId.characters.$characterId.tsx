@@ -1398,17 +1398,6 @@ function CharacterPage() {
   // The "reveal frame N" signal a clicked failed morph sends to the ROM editor
   // (nonce forces the effect to re-fire even for the same frame).
   const [revealFrame, setRevealFrame] = useState<{ frame: number; nonce: number } | null>(null)
-  // The header hint duplicates the report only when the report is scrolled out of
-  // view — at the top, the full banner is already visible, so the hint is hidden.
-  const romRunLogRef = useRef<HTMLElement | null>(null)
-  const [reportInView, setReportInView] = useState(true)
-  useEffect(() => {
-    const el = romRunLogRef.current
-    if (!hasRunProblems || !el) return
-    const observer = new IntersectionObserver(([entry]) => setReportInView(entry.isIntersecting))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasRunProblems])
   // Clicking a failed morph in the report opens its ROM section and scrolls its
   // row into view (RomSections does the scroll off the nonce change).
   function revealFailedFrame(frame: number) {
@@ -1729,6 +1718,21 @@ function CharacterPage() {
       </div>
 
       <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background">
+        {/* Top-centered, its own standalone element. Fades/slides in on scroll
+            (scroll-timeline, same range as the subtitle collapse) so it's hidden
+            at the top where the full report is already visible, and appears as
+            you scroll past it. Click scrolls back up to the report. */}
+        {hasRunProblems && (
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            title="Scroll to the run report"
+            className="runhint-scroll absolute top-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
+          >
+            <CircleX className="size-4 shrink-0" />
+            Errors in the last ROM run — click to see details
+          </button>
+        )}
         <button
           type="button"
           className="group relative mt-5 mb-5 shrink-0"
@@ -1763,31 +1767,13 @@ function CharacterPage() {
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
           </p>
-          {/* Path chip + (when the last run failed AND its report is scrolled out
-              of view) a mini run-error alert beside it. Hidden at the top, where
-              the full report banner is already visible. Click scrolls to top. */}
-          {(location || (hasRunProblems && !reportInView)) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
-              {location && (
-                <p className="text-xs">
-                  <PathCode path={defDir}>
-                    <span className="text-muted-foreground/60">{libRoot}</span>
-                    <span className="text-foreground/80">{defSuffix}</span>
-                  </PathCode>
-                </p>
-              )}
-              {hasRunProblems && !reportInView && (
-                <button
-                  type="button"
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  title="Scroll to the run report"
-                  className="flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
-                >
-                  <CircleX className="size-3.5 shrink-0" />
-                  Errors in the last ROM run — click to see details
-                </button>
-              )}
-            </div>
+          {location && (
+            <p className="mt-1.5 text-xs">
+              <PathCode path={defDir}>
+                <span className="text-muted-foreground/60">{libRoot}</span>
+                <span className="text-foreground/80">{defSuffix}</span>
+              </PathCode>
+            </p>
           )}
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
@@ -1816,10 +1802,7 @@ function CharacterPage() {
       <div className="contain-editor-body">
       {/* Above the tabs, so the report is visible from the Products tab too. */}
       {romRunLog && !romRunLog.ok && (
-        <section
-          ref={romRunLogRef}
-          className="mb-8 rounded-lg border border-destructive/50 bg-destructive/10 p-5"
-        >
+        <section className="mb-8 rounded-lg border border-destructive/50 bg-destructive/10 p-5">
           <div className="flex items-start justify-between gap-3">
             <h2 className="flex items-center gap-2 font-semibold">
               <CircleX className="size-5 shrink-0 text-destructive" />
