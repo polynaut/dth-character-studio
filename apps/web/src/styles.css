@@ -252,6 +252,18 @@ a {
     opacity: 0;
   }
 }
+/* The run-error hint mirrors the subtitle, inverted: hidden at the top, expands
+   in as the header collapses on scroll (so it takes the subtitle's place). */
+@keyframes dth-runhint-expand {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 1.75rem;
+    opacity: 1;
+  }
+}
 @supports (animation-timeline: scroll()) {
   .title-scroll {
     animation: dth-title-drop linear both;
@@ -267,6 +279,12 @@ a {
   .title-subtitle {
     overflow: hidden;
     animation: dth-subtitle-collapse linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+  .title-runhint {
+    overflow: hidden;
+    animation: dth-runhint-expand linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }

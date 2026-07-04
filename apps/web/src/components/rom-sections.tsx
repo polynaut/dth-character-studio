@@ -139,6 +139,9 @@ interface RomSectionsProps {
   /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
    *  matching pose rows are marked red. */
   failedFrames?: Set<number>
+  /** Set (with a fresh nonce) to open the section holding `frame` and scroll its
+   *  pose row into view — driven by clicking a failed morph in the run report. */
+  revealFrame?: { frame: number; nonce: number } | null
   onChange: (sections: RomSectionsModel) => void
 }
 
@@ -604,11 +607,13 @@ function SortablePoseRow({
   const visibleCells = row.getVisibleCells()
   // Marked red when this pose's frame failed in the last ROM run (see the
   // run report at the top of the page).
-  const failed = meta.failedFrames?.has(meta.startFrame + row.index) === true
+  const absFrame = meta.startFrame + row.index
+  const failed = meta.failedFrames?.has(absFrame) === true
   return (
     <>
       <tr
         ref={setNodeRef}
+        id={failed ? `dth-rom-frame-${absFrame}` : undefined}
         style={{ transform: CSS.Transform.toString(transform), transition }}
         title={failed ? 'This morph failed in the last ROM run — see the report above' : undefined}
         className={`border-b last:border-b-0 ${
@@ -1416,6 +1421,7 @@ export function RomSections({
   catalog,
   presetFrames,
   failedFrames,
+  revealFrame,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
@@ -1430,6 +1436,8 @@ export function RomSections({
   // sequence continues. Left empty when frames couldn't be measured — the
   // editor shows a notice and the group editors fall back to a relative count.
   const startFrames = new Map<string, number>()
+  // Which section holds each absolute frame, for the "reveal a failed morph" jump.
+  const sectionByFrame = new Map<number, RomSection>()
   if (presetFrames) {
     let frame = presetFrameCount(sections, gender, presetFrames)
     for (const section of ROM_SECTIONS) {
@@ -1437,10 +1445,29 @@ export function RomSections({
       if (!config.enabled || config.mode !== 'custom') continue
       for (const group of config.groups) {
         startFrames.set(group.id, frame)
+        for (let i = 0; i < group.poses.length; i++) sectionByFrame.set(frame + i, section)
         frame += group.poses.length
       }
     }
   }
+
+  // A failed morph clicked in the run report: open its section and scroll the row
+  // (which carries id `dth-rom-frame-<abs>`) into view. Two rAFs so the section
+  // body has mounted before we scroll.
+  useEffect(() => {
+    if (!revealFrame) return
+    const section = sectionByFrame.get(revealFrame.frame)
+    if (!section) return
+    setOpen((o) => ({ ...o, [section]: true }))
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`dth-rom-frame-${revealFrame.frame}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealFrame?.nonce])
 
   function patchSection(section: RomSection, patch: Partial<RomSectionConfig>) {
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })

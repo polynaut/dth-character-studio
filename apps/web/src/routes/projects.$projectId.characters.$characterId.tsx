@@ -1395,21 +1395,15 @@ function CharacterPage() {
   const failedFrames = hasRunProblems
     ? new Set(romRunLog.failedMorphs.map((morph) => morph.frame))
     : undefined
-  // When the report banner is scrolled out of view (the page is long), a small
-  // fixed hint offers to jump to it — the user returning from Daz mid-scroll
-  // shouldn't have to know to look at the top.
+  // Scroll target for the header hint + the report; and the "reveal frame N"
+  // signal a clicked failed morph sends to the ROM editor (nonce forces re-fire).
   const romRunLogRef = useRef<HTMLElement | null>(null)
-  const [runLogBannerInView, setRunLogBannerInView] = useState(true)
-  useEffect(() => {
-    if (!hasRunProblems) return
-    const el = romRunLogRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(([entry]) =>
-      setRunLogBannerInView(entry.isIntersecting),
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasRunProblems])
+  const [revealFrame, setRevealFrame] = useState<{ frame: number; nonce: number } | null>(null)
+  // Clicking a failed morph in the report opens its ROM section and scrolls its
+  // row into view (RomSections does the scroll off the nonce change).
+  function revealFailedFrame(frame: number) {
+    setRevealFrame((prev) => ({ frame, nonce: (prev?.nonce ?? 0) + 1 }))
+  }
   const swallowNavRef = useRef(false)
   // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
   // disk even when nothing changed (handy during development).
@@ -1749,6 +1743,22 @@ function CharacterPage() {
           </span>
         </button>
         <div className="title-scroll pb-6">
+          {/* Mirrors the subtitle's scroll collapse, inverted: as the header
+              shrinks (scroll down) the subtitle hides and this run-error hint
+              expands in its place; scrolling back up swaps them again. Only
+              present when the last run had problems; click jumps to the report. */}
+          {hasRunProblems && (
+            <button
+              type="button"
+              onClick={() =>
+                romRunLogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              className="title-runhint flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
+            >
+              <CircleX className="size-4 shrink-0" />
+              Errors in the last ROM run — click to see details
+            </button>
+          )}
           <EditableTitle
             name={character.name}
             ariaLabel="Character name"
@@ -1792,19 +1802,6 @@ function CharacterPage() {
           popup dialogs below are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
-      {/* A returning user may be scrolled anywhere on this (long) page — when the
-          run report is off-screen, this fixed hint jumps to it on click. */}
-      {hasRunProblems && !runLogBannerInView && (
-        <button
-          type="button"
-          onClick={() =>
-            romRunLogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }
-          className="fixed top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-destructive px-4 py-1.5 text-sm font-medium text-white shadow-lg transition-opacity hover:opacity-90"
-        >
-          <CircleX className="size-4" /> Errors in the last ROM run — click to see details
-        </button>
-      )}
       {/* Above the tabs, so the report is visible from the Products tab too. */}
       {romRunLog && !romRunLog.ok && (
         <section
@@ -1839,13 +1836,21 @@ function CharacterPage() {
               <p className="text-sm">
                 These morphs could not be applied — their frames stay in the ROM (empty), so the
                 rest of the character is unaffected. The matching rows in the ROM sections below
-                are marked red. Fix the morph names or add the missing content, then Save and
-                re-run the script:
+                are marked red. Click one to jump to it, then fix the morph name or add the
+                missing content, Save, and re-run the script:
               </p>
               <ul className="mt-2 max-h-56 space-y-0.5 overflow-y-auto font-mono text-xs">
                 {romRunLog.failedMorphs.map((morph, i) => (
                   <li key={i}>
-                    frame {morph.frame} · {morph.node} / <strong>{morph.prop}</strong> — {morph.reason}
+                    <button
+                      type="button"
+                      onClick={() => revealFailedFrame(morph.frame)}
+                      className="text-left hover:underline"
+                      title="Jump to this morph in the ROM editor"
+                    >
+                      frame {morph.frame} · {morph.node} / <strong>{morph.prop}</strong> —{' '}
+                      {morph.reason}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -2648,6 +2653,7 @@ function CharacterPage() {
           catalog={catalog}
           presetFrames={presetFrames}
           failedFrames={failedFrames}
+          revealFrame={revealFrame}
           onChange={(sections) => patch({ sections })}
         />
       </section>
