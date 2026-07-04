@@ -4,11 +4,66 @@
 
 var DTH_VERBOSE = false;
 var EPSILON = .0001;
- 
+
 function verbose(){
 	if( DTH_VERBOSE ){
 		print.apply(this, arguments);
 	}
+}
+
+/**********************************************************************
+ * ROM run log — collects every problem of a run (a morph that couldn't be
+ * applied, a preset that failed to load, any unexpected error) so the run can
+ * finish drift-free and the studio can show exactly what failed afterwards.
+ * Written as JSON by writeRunLog (path baked into the generated script). */
+var DTH_RUN_LOG = { errors: [], failedMorphs: [] };
+
+function resetRunLog(){
+	DTH_RUN_LOG = { errors: [], failedMorphs: [] };
+}
+
+/** A general problem (preset failed, node missing, unexpected error, …). */
+function logRunError(sMessage){
+	DTH_RUN_LOG.errors.push(String(sMessage));
+	print("ERROR:", sMessage);
+}
+
+/** One morph/property that couldn't be applied — the frame slot stays, only
+ *  this morph is missing, and the studio lists it after the run. */
+function logRunFailedMorph(iFrame, sNode, sProp, sReason){
+	DTH_RUN_LOG.failedMorphs.push({
+		frame: iFrame, node: String(sNode), prop: String(sProp), reason: String(sReason)
+	});
+	print("FAILED MORPH: frame", iFrame, "-", sNode, "/", sProp, "-", sReason);
+}
+
+function runLogProblemCount(){
+	return DTH_RUN_LOG.errors.length + DTH_RUN_LOG.failedMorphs.length;
+}
+
+/** Write the run log JSON to sPath. oSummary carries the run metadata
+ *  (character, versions, frame counts, ok) baked in by the caller. */
+function writeRunLog(sPath, oSummary){
+	if(!sPath) return false;
+	var oLog = oSummary || {};
+	oLog.logVersion = 1;
+	oLog.finishedAt = new Date().toString();
+	oLog.finishedAtMs = new Date().getTime();
+	oLog.errors = DTH_RUN_LOG.errors;
+	oLog.failedMorphs = DTH_RUN_LOG.failedMorphs;
+	try {
+		var oFile = new DzFile(sPath);
+		if(oFile.open(oFile.WriteOnly, oFile.Truncate)){
+			oFile.write(JSON.stringify(oLog, null, 2));
+			oFile.close();
+			print("Run log written to", sPath);
+			return true;
+		}
+		print("Could not open run log for writing:", sPath);
+	} catch(e) {
+		print("Failed writing run log:", e);
+	}
+	return false;
 }
 /**********************************************************************
 **********               */
@@ -125,7 +180,7 @@ function setPropertyByName(oNode, sPropName, fValue, iFrame){
  	print("Setting property", sPropName, "to", fValue, "at frame", iFrame, "...");
 	var oProp = oNode.findProperty(sPropName);
 	if (!oProp){
-		print("Failed to set property", sPropName, "- not found on node", oNode.getLabel());
+		logRunFailedMorph(iFrame, oNode.getLabel(), sPropName, "property not found");
 		return false;
 	}
 	var tFrame = iFrame * Scene.getTimeStep();
@@ -137,7 +192,7 @@ function setPropertyByName(oNode, sPropName, fValue, iFrame){
 		print("Set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
 		return true;
 	}
-	print("Failed to set property", oProp.getLabel(), "to", fValue, "at frame", iFrame);
+	logRunFailedMorph(iFrame, oNode.getLabel(), sPropName, "value did not apply (limits?)");
 	return false;
 }
 
@@ -373,6 +428,13 @@ function processFrameDataJSON(jsonData, frameDatas, iOffset, gpArtData, dkArtDat
 	for (var i = 0; i < jsonData.frames.length; i++) {
 		var frameEntry = jsonData.frames[i];
 		var frameNum = parseInt(frameEntry.frame) + iOffset;
+		// A bad frame number must not silently shorten the timeline (drift!) —
+		// log it and skip just this entry; every valid frame keeps its slot.
+		if (isNaN(frameNum) || frameNum < 0) {
+			logRunError("Frame entry " + i + " ('" + (frameEntry.name || "") +
+				"') has an invalid frame number: " + frameEntry.frame);
+			continue;
+		}
 
 		if (!frameDatas[frameNum]) {
 			frameDatas[frameNum] = {
@@ -510,14 +572,16 @@ function createMorphFrames( oNode, morphConfigs, iStartFrame){
 		for ( var j=0; j<frameConfig.length; j++){
 			var config = frameConfig[j];
 			var oProp = oNode.findProperty(config.name);
-			if (!oProp) 
+			if (!oProp)
 				oProp = oNode.findPropertyByLabel(config.name);
 			if(!oProp){
 				oProp = getMorphPropFromNode(oNode, config.name)
 			}
 			if(!oProp){
-				print("property ", config.name, " not found on node", oNode.getLabel());
-				break; 
+				// continue (NOT break): one missing morph must not drop the rest
+				// of this frame's morphs — the frame slot and count stay intact.
+				logRunFailedMorph(iStartFrame + i, oNode.getLabel(), config.name, "morph/property not found");
+				continue;
 			}
 			fValue = config.value || 1;
 			var success = createMorphFrame(oProp, iStartFrame + i, fValue);
@@ -753,7 +817,7 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
 					verbose("Successfully created sustained morph frame on", keyData.nodeName, "prop:", keyData.propName, keyData.propValue);
 					return true;
 				}
-				print("Failed to create sustained morph frame on", keyData.nodeName, "prop:", keyData.propName, keyData.propValue);
+				logRunFailedMorph(frameIdx, keyData.nodeName, keyData.propName, "could not create sustained keyframe");
 				return false;
 			}
 
@@ -762,17 +826,21 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
 				return true;
 			}
 			else{
-				print("Failed to create morph frame on", keyData.nodeName, "prop:", keyData.propName, keyData.propValue);
+				logRunFailedMorph(frameIdx, keyData.nodeName, keyData.propName, "could not create keyframe");
 				return false;
 			}
 		}
 		else{
-			print("property ", keyData.propName, " not found on node", oNode.getLabel());
+			// The frame slot itself stays (frame counts come from the declaration),
+			// so ONLY this morph is missing — the rest of the ROM stays aligned.
+			logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName,
+				"morph/property not found on node " + oNode.getLabel());
 			return false;
 		}
 	}
 	else {
-		print("could not find node:", keyData.nodeName, "on node:", oNodeRoot.getLabel());
+		logRunFailedMorph(keyData.frameIdx, keyData.nodeName, keyData.propName,
+			"node not found under " + oNodeRoot.getLabel());
 		return false
 	}
 }
@@ -1466,7 +1534,7 @@ function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
             }
 
             if (!oNode) {
-                print("  WARNING: Node not found:", morph.node);
+                logRunFailedMorph(absoluteFrame, morph.node, morph.prop, "node not found (art direction)");
                 continue;
             }
 
@@ -1500,7 +1568,7 @@ function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
             }
 
             if (!oProp) {
-                print("  WARNING: Property not found:", morph.prop, "on node", morph.node);
+                logRunFailedMorph(absoluteFrame, morph.node, morph.prop, "morph/property not found (art direction)");
                 continue;
             }
 

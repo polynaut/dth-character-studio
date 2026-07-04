@@ -13,6 +13,7 @@ import {
   parseProductScanCsv,
   poseAssetFileName,
   resolveRomPaths,
+  ROM_RUN_LOG_FILE,
 } from '@dth/rom'
 import * as storage from './storage'
 import { dataPath } from './storage'
@@ -836,6 +837,94 @@ export async function clearProductScan({ data }: { data: unknown }): Promise<voi
   const project = await resolveProject(projectId)
   const dir = await storage.productScanDir(project.id, id)
   if (await exists(dir)) await remove(dir, { recursive: true })
+}
+
+/** One morph the ROM run couldn't apply (from the Daz-side run log). */
+export interface RomRunFailedMorph {
+  frame: number
+  node: string
+  prop: string
+  reason: string
+}
+
+/** The run log the generated ROM script writes into the character folder after
+ *  every run in Daz (success too). `unreadable` marks an existing-but-corrupt
+ *  log — itself surfaced as a problem. */
+export interface RomRunLog {
+  character: string
+  finishedAt: string
+  finishedAtMs: number
+  framesTotal?: number
+  ok: boolean
+  errors: Array<string>
+  failedMorphs: Array<RomRunFailedMorph>
+  unreadable?: boolean
+}
+
+/**
+ * Read the ROM run log the generated Daz script wrote for this character —
+ * null when no run has been logged yet. Defensive: a malformed/partial file
+ * (e.g. Daz crashed mid-write) comes back as an `unreadable` problem log
+ * rather than throwing, so unexpected failures still surface in the UI.
+ */
+export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRunLog | null> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const lib = await charactersRoot(projectId)
+  const folder = await storage.getCharacterFolder(lib, id)
+  const path = joinPath(folder, ROM_RUN_LOG_FILE)
+  try {
+    if (!(await exists(path))) return null
+  } catch {
+    return null
+  }
+  try {
+    const raw: unknown = JSON.parse(await readTextFile(path))
+    const record = (raw ?? {}) as Record<string, unknown>
+    return {
+      character: typeof record.character === 'string' ? record.character : '',
+      finishedAt: typeof record.finishedAt === 'string' ? record.finishedAt : '',
+      finishedAtMs: typeof record.finishedAtMs === 'number' ? record.finishedAtMs : 0,
+      framesTotal: typeof record.framesTotal === 'number' ? record.framesTotal : undefined,
+      ok: record.ok === true,
+      errors: Array.isArray(record.errors) ? record.errors.map((e) => String(e)) : [],
+      failedMorphs: Array.isArray(record.failedMorphs)
+        ? record.failedMorphs.map((m) => {
+            const entry = (m ?? {}) as Record<string, unknown>
+            return {
+              frame: typeof entry.frame === 'number' ? entry.frame : -1,
+              node: String(entry.node ?? ''),
+              prop: String(entry.prop ?? ''),
+              reason: String(entry.reason ?? ''),
+            }
+          })
+        : [],
+    }
+  } catch {
+    return {
+      character: '',
+      finishedAt: '',
+      finishedAtMs: 0,
+      ok: false,
+      unreadable: true,
+      errors: [
+        'The ROM run log exists but could not be read — the run may have crashed while writing it. Re-run the ROM script in Daz.',
+      ],
+      failedMorphs: [],
+    }
+  }
+}
+
+/** Delete the character's ROM run log (the banner's Dismiss). Best-effort. */
+export async function dismissRomRunLog({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const lib = await charactersRoot(projectId)
+  const folder = await storage.getCharacterFolder(lib, id)
+  const path = joinPath(folder, ROM_RUN_LOG_FILE)
+  try {
+    if (await exists(path)) await remove(path)
+  } catch {
+    // best-effort — a locked file just leaves the banner until the next run
+  }
 }
 
 /** Whether `path` is a directory (false, never throws, when it can't be probed).

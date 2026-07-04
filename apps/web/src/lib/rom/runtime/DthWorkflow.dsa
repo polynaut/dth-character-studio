@@ -23,19 +23,19 @@ function ApplyDTHWorkflow(options){
 	var oNode = Scene.getPrimarySelection();
 	var oNodeRoot = getNodeRoot(oNode);
 	if(!oNodeRoot || !oNodeRoot.inherits("DzNode")){
-		print("Error: Node `Genesis 9` not found in scene");
+		logRunError("Node `Genesis 9` not found in scene — select the figure and re-run. ROM aborted.");
 		return false; }
 	var oNodeMouth = oNodeRoot.findNodeChildByLabel("Genesis 9 Mouth");
 	if(!oNodeMouth && options.bIncludeJCM && options.bIncludeFAC){
-		print("Error: Node `Genesis 9 Mouth` not found in scene");
+		logRunError("Node `Genesis 9 Mouth` not found in scene. ROM aborted.");
 		return false; }
 	var oNodeDk9 = oNodeRoot.findNodeChildByLabel("DicktatorG9");
 	if(!oNodeDk9 && options.bIncludeDK){
-		print("Error: Node `DicktatorG9` not found in scene");
+		logRunError("Node `DicktatorG9` not found in scene. ROM aborted.");
 		return false; }
 	var oNodeGP = oNodeRoot.findNodeChildByLabel("GoldenPalace_G9");
 	if(!oNodeGP && options.bIncludeGP){
-		print("Error: Node `GoldenPalace_G9` not found in scene");
+		logRunError("Node `GoldenPalace_G9` not found in scene. ROM aborted.");
 		return false; }
 
 	/**       *****************************************************/
@@ -201,12 +201,11 @@ function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 				print("Successfully loaded pose preset.");
 				return true;
 		} else {
-				print("Failed loading ROM:", sMouthROM);
+				logRunError("Failed loading Mouth ROM preset: " + sMouthROM + ". ROM aborted.");
 			}
 		}
 	} else {
-		print("Failed loading ROM:", sJcmROM);
-		print("This is a necessary step. Aborting script.");
+		logRunError("Failed loading JCM ROM preset: " + sJcmROM + " — this is a necessary step. ROM aborted.");
 	}
 	return false;
 }
@@ -238,7 +237,7 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 	var sDk9ROM = options["dkRomPath"] ? options["dkRomPath"] : ROM_DK9;
 	print("Loading ROM: ", sDk9ROM, "at frame", startFrame);
 	if( !loadPreset(sDk9ROM, oNodeDk9, startFrame) ){
-		print("Failed loading ROM:", sDk9ROM);
+		logRunError("Failed loading DK ROM preset: " + sDk9ROM);
 		return false;
 	}
 
@@ -270,7 +269,7 @@ function ApplyPhysics(options, oNodeRoot, startFrame){
 	var sPhysROM = options["physRomPath"] ? options["physRomPath"] : ROM_PHYS;
 	print("Loading ROM: ", sPhysROM, "at frame", startFrame);
 	if( !loadPreset(sPhysROM, oNodeRoot, startFrame) ){
-		print("Failed loading ROM:", sPhysROM);
+		logRunError("Failed loading Physics ROM preset: " + sPhysROM + ". ROM aborted.");
 		return false;
 	}
 
@@ -299,7 +298,7 @@ function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
 	var sGp9ROM = options["gpRomPath"] ? options["gpRomPath"] : ROM_GP9;
 	print("Loading ROM: ", sGp9ROM, "at frame", startFrame);
 	if( !loadPreset(sGp9ROM, oNodeGP, startFrame) ){
-		print("Failed loading ROM:", sGp9ROM);
+		logRunError("Failed loading GP ROM preset: " + sGp9ROM + ". ROM aborted.");
 		return false;
 	}
 
@@ -354,7 +353,38 @@ function ApplyDTHCharacter(config){
 	options.gpArtDirection = config.gpArtDirection ? config.gpArtDirection : null;
 	options.dkArtDirection = config.dkArtDirection ? config.dkArtDirection : null;
 	options.extraJSONs = [];
-	return ApplyDTHWorkflow(options);
+
+	// Every run ends with a written log (success too — it clears a previous error
+	// log in the studio) and, when anything failed, a dialog pointing back to the
+	// studio. Unexpected exceptions are caught so the log/dialog still happen.
+	resetRunLog();
+	var bFinished = false;
+	try {
+		bFinished = ApplyDTHWorkflow(options) !== false;
+	} catch(e) {
+		logRunError("Unexpected error while building the ROM: " + e);
+	}
+	var iProblems = runLogProblemCount();
+	writeRunLog(config.runLogPath, {
+		character: config.characterName || "",
+		genesis: config.genesis || "",
+		runtimeVersion: config.runtimeVersion || 0,
+		studioVersion: config.studioVersion || "",
+		framesTotal: Scene.getAnimRange().end / Scene.getTimeStep(),
+		ok: bFinished && iProblems === 0
+	});
+	if(iProblems > 0){
+		MessageBox.warning(
+			"The ROM run reported " + iProblems + " problem" + (iProblems === 1 ? "" : "s") +
+			(bFinished
+				? " — the timeline is complete, but the listed morphs/steps did not apply."
+				: " and the ROM build DID NOT FINISH.") +
+			"\n\nSwitch back to DTH Character Studio to see exactly what failed.",
+			"DTH Character Studio", "&OK");
+	} else if(bFinished) {
+		print("ROM run finished without problems.");
+	}
+	return bFinished;
 }
 
 

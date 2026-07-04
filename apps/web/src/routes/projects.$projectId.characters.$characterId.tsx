@@ -13,6 +13,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleX,
   ExternalLink,
   FolderInput,
   FolderOpen,
@@ -58,10 +59,12 @@ import {
   copyDazScene,
   deleteCharacter,
   deleteFiles,
+  dismissRomRunLog,
   fetchCharacter,
   fetchPoseAssets,
   fetchProductScan,
   fetchProject,
+  fetchRomRunLog,
   fetchSettings,
   fileExists,
   generateCharacterFiles,
@@ -112,21 +115,32 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
     const sceneFolder = character.scenePath
       ? character.scenePath.replace(/[\\/][^\\/]*$/, '')
       : ''
-    const [project, settings, catalog, location, sceneExists, sceneFolderExists, productScan] =
-      await Promise.all([
-        fetchProject({ data: { projectId } }),
-        fetchSettings(),
-        fetchPoseAssets(),
-        getCharacterPath({ data: { projectId, id } }),
-        character.scenePath
-          ? fileExists({ data: { path: character.scenePath } })
-          : Promise.resolve(false),
-        sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
-        // Best-effort: a scan CSV exists only after the user runs the generated
-        // Scan_Products script in Daz. Harmless when the feature is off (the UI
-        // section that consumes it is gated on project.dazProductsEnabled).
-        fetchProductScan({ data: { projectId, id } }),
-      ])
+    const [
+      project,
+      settings,
+      catalog,
+      location,
+      sceneExists,
+      sceneFolderExists,
+      productScan,
+      romRunLog,
+    ] = await Promise.all([
+      fetchProject({ data: { projectId } }),
+      fetchSettings(),
+      fetchPoseAssets(),
+      getCharacterPath({ data: { projectId, id } }),
+      character.scenePath
+        ? fileExists({ data: { path: character.scenePath } })
+        : Promise.resolve(false),
+      sceneFolder ? fileExists({ data: { path: sceneFolder } }) : Promise.resolve(false),
+      // Best-effort: a scan CSV exists only after the user runs the generated
+      // Scan_Products script in Daz. Harmless when the feature is off (the UI
+      // section that consumes it is gated on project.dazProductsEnabled).
+      fetchProductScan({ data: { projectId, id } }),
+      // The run log the ROM script writes in Daz — re-read on window focus too,
+      // so problems show the moment the user switches back to the studio.
+      fetchRomRunLog({ data: { projectId, id } }),
+    ])
     // Preset ROM block lengths, measured live from the actual .duf assets. Null
     // (best-effort) when an included asset can't be read — the editor then shows
     // a notice and generation hard-errors; opening the character never fails.
@@ -141,6 +155,7 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
       sceneFolderExists,
       presetFrames,
       productScan,
+      romRunLog,
     }
   },
   component: CharacterPageRoute,
@@ -1334,6 +1349,7 @@ function CharacterPage() {
     sceneFolderExists,
     presetFrames: initialFrames,
     productScan,
+    romRunLog: initialRomRunLog,
   } = Route.useLoaderData()
   const router = useRouter()
   // The page owns a draft copy; "Save" persists it and revalidates the loader.
@@ -1359,6 +1375,21 @@ function CharacterPage() {
   const [activeTab, setActiveTab] = useState<'character' | 'products'>('character')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  // The ROM run log written by the Daz-side script. Re-read whenever the window
+  // regains focus, so problems from a run surface the moment the user switches
+  // back from Daz to the studio.
+  const [romRunLog, setRomRunLog] = useState(initialRomRunLog)
+  useEffect(() => {
+    const refetch = () => {
+      void fetchRomRunLog({ data: { projectId, id: initial.id } }).then(setRomRunLog)
+    }
+    window.addEventListener('focus', refetch)
+    return () => window.removeEventListener('focus', refetch)
+  }, [projectId, initial.id])
+  async function onDismissRomRunLog() {
+    setRomRunLog(null)
+    await dismissRomRunLog({ data: { projectId, id: initial.id } })
+  }
   const swallowNavRef = useRef(false)
   // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
   // disk even when nothing changed (handy during development).
@@ -1418,8 +1449,8 @@ function CharacterPage() {
   const defSep = Math.max(defAbs.lastIndexOf('\\'), defAbs.lastIndexOf('/'))
   const defDir = defSep >= 0 ? defAbs.slice(0, defSep) : defAbs
   const defSuffix = defDir.startsWith(libRoot) ? defDir.slice(libRoot.length) : defDir
-  // Where the generated <Name>_<Genesis>.dsa lands in the Daz library, so the
-  // user knows where to find/run it in Daz. Empty until the DAZ library is set.
+  // Where the generated ROM_<Name>_<Genesis>.dsa lands in the Daz library, so
+  // the user knows where to find/run it in Daz. Empty until the DAZ library is set.
   const scriptsLib = displayPath(settings.dazLibraryFolder)
   const scriptsAbs =
     settings.dazLibraryFolder && character.projectName
@@ -1431,9 +1462,9 @@ function CharacterPage() {
     ? scriptsAbs.slice(scriptsLib.length)
     : scriptsAbs
   // With an export folder set and the export NOT combined with the ROM script,
-  // generation splits into a ROM_ build script + a standalone Export_ script
-  // (see generate.ts toRomScriptDsa / toExportScriptDsa). Otherwise it's one
-  // self-contained <Name>_<Genesis>.dsa. Drives the scripts-pane info note.
+  // generation splits into the ROM_ build script + a standalone Export_ script
+  // (see generate.ts toCharacterScriptDsa / toExportScriptDsa). Otherwise it's
+  // one self-contained ROM_<Name>_<Genesis>.dsa. Drives the scripts-pane note.
   const exportSet = character.exportPath.trim() !== ''
   const exportSplit = exportSet && character.exportWithRomScript === false
 
@@ -1755,6 +1786,49 @@ function CharacterPage() {
       )}
 
       <div className={onProductsTab ? 'hidden' : undefined}>
+      {romRunLog && !romRunLog.ok && (
+        <section className="mb-8 rounded-lg border border-destructive/50 bg-destructive/10 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <CircleX className="size-5 shrink-0 text-destructive" />
+              The last ROM run in Daz reported{' '}
+              {romRunLog.errors.length + romRunLog.failedMorphs.length} problem
+              {romRunLog.errors.length + romRunLog.failedMorphs.length === 1 ? '' : 's'}
+            </h2>
+            <Button variant="outline" size="sm" onClick={() => void onDismissRomRunLog()}>
+              <X /> Dismiss
+            </Button>
+          </div>
+          {romRunLog.finishedAt && (
+            <p className="mt-1 text-xs text-muted-foreground">Run finished: {romRunLog.finishedAt}</p>
+          )}
+          {romRunLog.errors.length > 0 && (
+            <ul className="mt-3 space-y-1 text-sm">
+              {romRunLog.errors.map((error, i) => (
+                <li key={i} className="text-destructive">
+                  {error}
+                </li>
+              ))}
+            </ul>
+          )}
+          {romRunLog.failedMorphs.length > 0 && (
+            <div className="mt-3">
+              <p className="text-sm">
+                These morphs could not be applied — their frames stay in the ROM (empty), so the
+                rest of the character is unaffected. Fix the morph names or add the missing
+                content, then Save and re-run the script:
+              </p>
+              <ul className="mt-2 max-h-56 space-y-0.5 overflow-y-auto font-mono text-xs">
+                {romRunLog.failedMorphs.map((morph, i) => (
+                  <li key={i}>
+                    frame {morph.frame} · {morph.node} / <strong>{morph.prop}</strong> — {morph.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5 pt-2">
@@ -1865,8 +1939,8 @@ function CharacterPage() {
               </>
             ) : (
               <>
-                Where the generated <code>{character.name}_{character.genesis}.dsa</code> script is
-                installed in your DAZ library on Save — open it from Daz to build the ROM
+                Where the generated <code>ROM_{character.name}_{character.genesis}.dsa</code> script
+                is installed in your DAZ library on Save — open it from Daz to build the ROM
                 {exportSet ? ' and run the export' : ''}.
               </>
             )}{' '}
@@ -2362,10 +2436,9 @@ function CharacterPage() {
           >
             Run the export with the ROM script
             <InfoPopup label="Run the export with the ROM script — more information">
-              On: one <code>{character.name}_{character.genesis}.dsa</code> builds the ROM and runs
-              the export. Off: the ROM build (
-              <code>ROM_{character.name}_{character.genesis}.dsa</code>) and the export (
-              <code>Export_{character.name}_{character.genesis}.dsa</code>) split into two scripts, so
+              On: one <code>ROM_{character.name}_{character.genesis}.dsa</code> builds the ROM and
+              runs the export. Off: the export splits into its own{' '}
+              <code>Export_{character.name}_{character.genesis}.dsa</code> beside the ROM script, so
               you can re-export — for another Daz scene, or after a failed export — without rebuilding
               the ROM. Run the Export script after the ROM script in the same Daz session.{' '}
               {!character.exportPath && 'Set an export folder above to enable this.'}

@@ -418,8 +418,15 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       data/<Vendor>/<Product> folders as a last resort, so content with no DIM /
  *       LOCAL_USER metadata (e.g. unofficial products) is still recognised — named by
  *       its folder, with artist/version read from the content's own files.
+ *  13 — the ROM script writes a run log (dth_rom_run_log.json in the character
+ *       folder) recording every morph that couldn't be applied and any unexpected
+ *       error, and ends with a dialog when there were problems (the studio reads
+ *       the log back). Missing morphs can no longer shorten the timeline: frame
+ *       slots come from the declaration, NaN frames are logged + skipped, and the
+ *       legacy per-frame loop no longer aborts a frame on the first missing morph.
+ *       The character script is now always named ROM_<Name>_<Genesis>.dsa.
  */
-export const RUNTIME_VERSION = 12
+export const RUNTIME_VERSION = 13
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
