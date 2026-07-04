@@ -1395,10 +1395,20 @@ function CharacterPage() {
   const failedFrames = hasRunProblems
     ? new Set(romRunLog.failedMorphs.map((morph) => morph.frame))
     : undefined
-  // Scroll target for the header hint + the report; and the "reveal frame N"
-  // signal a clicked failed morph sends to the ROM editor (nonce forces re-fire).
-  const romRunLogRef = useRef<HTMLElement | null>(null)
+  // The "reveal frame N" signal a clicked failed morph sends to the ROM editor
+  // (nonce forces the effect to re-fire even for the same frame).
   const [revealFrame, setRevealFrame] = useState<{ frame: number; nonce: number } | null>(null)
+  // The header hint duplicates the report only when the report is scrolled out of
+  // view — at the top, the full banner is already visible, so the hint is hidden.
+  const romRunLogRef = useRef<HTMLElement | null>(null)
+  const [reportInView, setReportInView] = useState(true)
+  useEffect(() => {
+    const el = romRunLogRef.current
+    if (!hasRunProblems || !el) return
+    const observer = new IntersectionObserver(([entry]) => setReportInView(entry.isIntersecting))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasRunProblems])
   // Clicking a failed morph in the report opens its ROM section and scrolls its
   // row into view (RomSections does the scroll off the nonce change).
   function revealFailedFrame(frame: number) {
@@ -1743,22 +1753,6 @@ function CharacterPage() {
           </span>
         </button>
         <div className="title-scroll pb-6">
-          {/* Mirrors the subtitle's scroll collapse, inverted: as the header
-              shrinks (scroll down) the subtitle hides and this run-error hint
-              expands in its place; scrolling back up swaps them again. Only
-              present when the last run had problems; click jumps to the report. */}
-          {hasRunProblems && (
-            <button
-              type="button"
-              onClick={() =>
-                romRunLogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
-              className="title-runhint flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
-            >
-              <CircleX className="size-4 shrink-0" />
-              Errors in the last ROM run — click to see details
-            </button>
-          )}
           <EditableTitle
             name={character.name}
             ariaLabel="Character name"
@@ -1769,13 +1763,31 @@ function CharacterPage() {
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
           </p>
-          {location && (
-            <p className="mt-1.5 text-xs">
-              <PathCode path={defDir}>
-                <span className="text-muted-foreground/60">{libRoot}</span>
-                <span className="text-foreground/80">{defSuffix}</span>
-              </PathCode>
-            </p>
+          {/* Path chip + (when the last run failed AND its report is scrolled out
+              of view) a mini run-error alert beside it. Hidden at the top, where
+              the full report banner is already visible. Click scrolls to top. */}
+          {(location || (hasRunProblems && !reportInView)) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+              {location && (
+                <p className="text-xs">
+                  <PathCode path={defDir}>
+                    <span className="text-muted-foreground/60">{libRoot}</span>
+                    <span className="text-foreground/80">{defSuffix}</span>
+                  </PathCode>
+                </p>
+              )}
+              {hasRunProblems && !reportInView && (
+                <button
+                  type="button"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  title="Scroll to the run report"
+                  className="flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
+                >
+                  <CircleX className="size-3.5 shrink-0" />
+                  Errors in the last ROM run — click to see details
+                </button>
+              )}
+            </div>
           )}
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
@@ -1806,7 +1818,7 @@ function CharacterPage() {
       {romRunLog && !romRunLog.ok && (
         <section
           ref={romRunLogRef}
-          className="mb-8 scroll-mt-6 rounded-lg border border-destructive/50 bg-destructive/10 p-5"
+          className="mb-8 rounded-lg border border-destructive/50 bg-destructive/10 p-5"
         >
           <div className="flex items-start justify-between gap-3">
             <h2 className="flex items-center gap-2 font-semibold">
