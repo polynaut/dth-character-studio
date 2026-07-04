@@ -47,8 +47,8 @@ Automatic Strength** — are keyed at frame 0 if your character needs them.
 
 Press **Save**. Every save regenerates the character's files in one go:
 
-- **`<Name>_G9.dsa`** — the Daz apply-script, installed straight into your Daz
-  library under `Scripts/DTH-Character-Studio/<Project>/<Character>/`
+- **`ROM_<Name>_G9.dsa`** — the Daz apply-script, installed straight into your
+  Daz library under `Scripts/DTH-Character-Studio/<Project>/<Character>/`
 - **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
   character's folder
 - FBM helper files and (with an export folder set — see next step) an export script

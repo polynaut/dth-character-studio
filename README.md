@@ -39,7 +39,7 @@ Because both come from the same source, the "hundreds of frames must match 100%"
 
 - 🎯 **Frame-exact & validated.** The Genesis 9 path is verified byte-for-byte against hand-built artifacts on both sides.
 - 🖱️ **One-click everything.** Install the DTH runtime and exporter, generate, and apply — no manual file shuffling.
-- 🗂️ **Projects & character library.** Organize characters per game project, switch between them instantly, and keep your library wherever you back up.
+- 🗂️ **Projects & character library.** Organize characters per game project and keep your library wherever you back up.
 - 🔄 **Always up to date.** The desktop app checks for updates on launch and installs them with a click.
 - 🤝 **Share recipes, not assets.** Definitions reference morphs by name and frame — freely shareable, with no licensed content baked in.
 
