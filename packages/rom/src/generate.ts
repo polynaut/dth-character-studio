@@ -596,6 +596,10 @@ export function characterScriptName(character: Character): string {
   return `${characterSlug(character)}_${character.genesis}`
 }
 
+/** File name of the ROM run log the generated Daz script writes into the
+ *  character folder (fixed name — the studio reads it back to surface errors). */
+export const ROM_RUN_LOG_FILE = 'dth_rom_run_log.json'
+
 /** File name for the Houdini PoseAsset CSV: `<Name>_pose_asset.csv` (DTH naming). */
 export function poseAssetFileName(character: Character): string {
   return `${characterSlug(character)}_pose_asset.csv`
@@ -654,7 +658,7 @@ ${csvCopyBlock}} else {
 }
 
 /**
- * The one self-contained Daz script for a character: `<Name>_<Genesis>.dsa`.
+ * The one self-contained Daz script for a character: `ROM_<Name>_<Genesis>.dsa`.
  * It includes the DTH runtime (DthWorkflow.dsa, installed alongside it) and
  * makes a single `ApplyDTHCharacter(config)` call whose argument carries the
  * FULL character configuration AND all ROM morph definitions inline — replacing
@@ -689,6 +693,11 @@ export function toCharacterScriptDsa(
   const config: Record<string, unknown> = {
     genesis: character.genesis,
     gender: character.gender,
+    // Run-log metadata: the runtime writes dth_rom_run_log.json (character
+    // folder) after every run; the studio reads it back to surface problems.
+    characterName: character.name,
+    runtimeVersion: RUNTIME_VERSION,
+    studioVersion: character.studioVersion ?? '',
     bIncludeJCM: includeJCM,
     bIncludeFAC: includeFAC,
     bIncludeDK: includeDK,
@@ -697,6 +706,9 @@ export function toCharacterScriptDsa(
     bDQS: characterSkinning(character) === 'dqs',
     FACsDetailStrength: character.facsDetailStrength,
     FlexionStrength: character.flexionStrength,
+  }
+  if (charFolderAbs) {
+    config.runLogPath = `${charFolderAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
   }
   // Custom JCM path wins over the catalog-resolved one.
   const jcmRomPath = jcmCustomPath || romPaths.jcm
@@ -720,15 +732,16 @@ export function toCharacterScriptDsa(
   // Optional auto-export: when an export directory is set, the ROM build is
   // followed by a DTH Exporter run. With `exportWithRomScript` (the default) that
   // export block is appended here — one combined script. Otherwise it's split off
-  // into a standalone Export_ script (see toExportScriptDsa) and this ROM-only
-  // script is renamed ROM_ so the pair reads clearly.
+  // into a standalone Export_ script (see toExportScriptDsa).
   const exportDir = character.exportPath.trim()
-  const split = exportDir !== '' && character.exportWithRomScript === false
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `
-// Export to the DTH pipeline via the Exporter Plugin (v1.8.1+) after the ROM build.
-${buildExportBlock(character, frames, charFolderAbs)}`
+    // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+) after the ROM build.
+${buildExportBlock(character, frames, charFolderAbs)
+  .split('\n')
+  .map((line) => (line ? `    ${line}` : line))
+  .join('\n')}`
       : ''
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
@@ -741,13 +754,43 @@ ${buildExportBlock(character, frames, charFolderAbs)}`
 // the studio installs ONCE in the DTH-Character-Studio root — two levels up from
 // this script's <project>/<character>/ subfolder.
 
-var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
-include(dir_self.filePath("../../.DthWorkflow.dsa"));
+var dthCharacterConfig = ${JSON.stringify(config, null, 2)};
 
-ApplyDTHCharacter(${JSON.stringify(config, null, 2)});
-${exportBlock}`
+// Even a catastrophic failure (runtime files missing, an unexpected exception)
+// must reach the studio: write a minimal run log and tell the user here.
+try {
+    var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+    include(dir_self.filePath("../../.DthWorkflow.dsa"));
+
+    ApplyDTHCharacter(dthCharacterConfig);
+${exportBlock}} catch (dthErr) {
+    try {
+        if (dthCharacterConfig.runLogPath) {
+            var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
+            if (dthLogFile.open(dthLogFile.WriteOnly, dthLogFile.Truncate)) {
+                dthLogFile.write(JSON.stringify({
+                    logVersion: 1,
+                    character: dthCharacterConfig.characterName,
+                    runtimeVersion: dthCharacterConfig.runtimeVersion,
+                    studioVersion: dthCharacterConfig.studioVersion,
+                    finishedAt: new Date().toString(),
+                    finishedAtMs: new Date().getTime(),
+                    ok: false,
+                    errors: ["Unexpected script error: " + dthErr],
+                    failedMorphs: []
+                }, null, 2));
+                dthLogFile.close();
+            }
+        }
+    } catch (dthErr2) { /* even the log failed — the dialog below still fires */ }
+    MessageBox.critical(
+        "The ROM script failed unexpectedly:\\n\\n" + dthErr +
+        "\\n\\nSwitch back to DTH Character Studio to see the details.",
+        "DTH Character Studio", "&OK");
+}
+`
   const baseName = characterScriptName(character)
-  return { fileName: `${split ? `ROM_${baseName}` : baseName}.dsa`, content, target: 'daz' }
+  return { fileName: `ROM_${baseName}.dsa`, content, target: 'daz' }
 }
 
 /**

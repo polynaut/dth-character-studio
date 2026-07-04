@@ -18,8 +18,12 @@ import {
 /** Parse the JSON argument of the single `ApplyDTHCharacter(...)` call. The
  *  marker also appears in a comment, so anchor on the last occurrence (the call). */
 function characterConfig(content: string) {
-  const open = content.lastIndexOf('ApplyDTHCharacter(') + 'ApplyDTHCharacter('.length
-  return JSON.parse(content.slice(open, content.lastIndexOf(');')))
+  // The config is assigned to a var (so the catch-all error handler can reach
+  // it), then passed to ApplyDTHCharacter by name.
+  const marker = 'var dthCharacterConfig = '
+  const open = content.indexOf(marker) + marker.length
+  const close = content.indexOf('\n};', open) + 2
+  return JSON.parse(content.slice(open, close))
 }
 import {
   characterSchema,
@@ -309,7 +313,7 @@ describe('toWorkflowDsa', () => {
 describe('toCharacterScriptDsa', () => {
   it('emits one self-contained script that calls ApplyDTHCharacter with inline data', () => {
     const file = toCharacterScriptDsa(makeCharacter())
-    expect(file.fileName).toBe('ElectraG9_G9.dsa')
+    expect(file.fileName).toBe('ROM_ElectraG9_G9.dsa')
     expect(file.target).toBe('daz')
     expect(file.content).toContain('include(dir_self.filePath("../../.DthWorkflow.dsa"));')
     expect(file.content).toContain('ApplyDTHCharacter(')
@@ -355,6 +359,22 @@ describe('toCharacterScriptDsa', () => {
     expect(config.jcmRomPath).toBe('P/G9 DQS JCM FAC - Base.duf')
     expect(config.gpRomPath).toBe('P/GP9 - Golden Palace.duf')
   })
+
+  it('bakes the run-log path + metadata, and a catch-all that still reports', () => {
+    const withFolder = toCharacterScriptDsa(makeCharacter(), {}, undefined, 'D:\\lib\\Electra')
+    const config = characterConfig(withFolder.content)
+    expect(config.runLogPath).toBe('D:/lib/Electra/dth_rom_run_log.json')
+    expect(config.characterName).toBe('Electra G9')
+    expect(typeof config.runtimeVersion).toBe('number')
+    // Even a catastrophic failure (runtime missing, unexpected exception) writes
+    // a minimal log and tells the user to check the studio.
+    expect(withFolder.content).toContain('catch (dthErr)')
+    expect(withFolder.content).toContain('MessageBox.critical')
+    expect(withFolder.content).toContain('dthCharacterConfig.runLogPath')
+    // Pure/web context (no character folder): no log path, catch-all still there.
+    const noFolder = characterConfig(toCharacterScriptDsa(makeCharacter()).content)
+    expect(noFolder.runLogPath).toBeUndefined()
+  })
 })
 
 describe('toScanProductsScriptDsa', () => {
@@ -395,7 +415,7 @@ describe('generateAll', () => {
   it('produces the character script (daz) and the PoseAsset CSV (houdini)', () => {
     const files = generateAll(makeCharacter(), {}, FRAMES)
     expect(files.map((f) => [f.fileName, f.target])).toEqual([
-      ['ElectraG9_G9.dsa', 'daz'],
+      ['ROM_ElectraG9_G9.dsa', 'daz'],
       ['ElectraG9_pose_asset.csv', 'houdini'],
     ])
   })
@@ -407,7 +427,7 @@ describe('generateAll', () => {
       dazLibraryFolder: 'D:/DAZ 3D/My DAZ 3D Library',
     })
     expect(files.map((f) => f.fileName)).toEqual([
-      'ElectraG9_G9.dsa',
+      'ROM_ElectraG9_G9.dsa',
       'Scan_Products_ElectraG9.dsa',
       'ElectraG9_pose_asset.csv',
     ])
@@ -710,11 +730,11 @@ describe('exporter integration', () => {
   it('combined (default): one script that builds the ROM and exports', () => {
     const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
     const rom = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra')
-    expect(rom.fileName).toBe('Electra_G9.dsa')
+    expect(rom.fileName).toBe('ROM_Electra_G9.dsa')
     expect(rom.content).toContain('ApplyDTHCharacter(')
     expect(rom.content).toContain('doExport')
     const files = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra')
-    expect(files.map((f) => f.fileName)).toEqual(['Electra_G9.dsa', 'Electra_pose_asset.csv'])
+    expect(files.map((f) => f.fileName)).toEqual(['ROM_Electra_G9.dsa', 'Electra_pose_asset.csv'])
   })
 
   it('split (exportWithRomScript off): ROM_ script builds, Export_ script exports', () => {
@@ -744,9 +764,9 @@ describe('exporter integration', () => {
   it('split has no effect without an export path (stays one combined script)', () => {
     const character = withReferencePose({ name: 'Electra', exportWithRomScript: false })
     const rom = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra')
-    expect(rom.fileName).toBe('Electra_G9.dsa')
+    expect(rom.fileName).toBe('ROM_Electra_G9.dsa')
     expect(generateAll(character, {}, FRAMES).map((f) => f.fileName)).toEqual([
-      'Electra_G9.dsa',
+      'ROM_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
   })
