@@ -1,5 +1,14 @@
 # @dth/web
 
+## 0.29.2
+
+### Patch Changes
+
+- [#115](https://github.com/polynaut/dth-character-studio/pull/115) [`a91d48c`](https://github.com/polynaut/dth-character-studio/commit/a91d48c23720b7271dced957d7ce619a862cad56) Thanks [@polynaut](https://github.com/polynaut)! - **Run-report UX polish.** When the last ROM run had problems, a top-centered "Errors in the last ROM run" mini-alert fades into the sticky character header as you scroll (hidden at the top, where the full report banner is already visible); clicking it scrolls the page back up to the report. In the report, each failed morph is now **clickable** — it opens the ROM section that holds that frame and scrolls the (red-marked) row into view, so you can go straight from the error to the field to fix.
+
+- Updated dependencies []:
+  - @dth/rom@0.29.2
+
 ## 0.29.1
 
 ### Patch Changes
