@@ -54,6 +54,8 @@ Because both come from the same source, the "hundreds of frames must match 100%"
 
 **[⬇️ Download the latest release](https://github.com/polynaut/dth-character-studio/releases/latest)** (Windows installer). The app self-updates from there.
 
+**[📖 Getting started guide](./docs/guide/README.md)** — from install to your first generated ROM in about 15 minutes.
+
 > Prefer to run it yourself or build from source? See the [Development guide](./docs/development.md).
 
 ## Status
