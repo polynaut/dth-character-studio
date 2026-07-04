@@ -371,6 +371,13 @@ describe('toCharacterScriptDsa', () => {
     expect(withFolder.content).toContain('catch (dthErr)')
     expect(withFolder.content).toContain('MessageBox.critical')
     expect(withFolder.content).toContain('dthCharacterConfig.runLogPath')
+    // REGRESSION GUARD (v13 broke every script): include() must stay at the TOP
+    // level — Daz resolves it via its legacy-include mechanism, which fails
+    // inside try/catch ("URIError: Legacy Include"). Top level = unindented line;
+    // wrapping it in any block would indent it.
+    expect(withFolder.content).toMatch(/^include\(dir_self\.filePath/m)
+    // A missing runtime is guarded by a typeof check, not by wrapping include().
+    expect(withFolder.content).toContain('typeof ApplyDTHCharacter != "function"')
     // Pure/web context (no character folder): no log path, catch-all still there.
     const noFolder = characterConfig(toCharacterScriptDsa(makeCharacter()).content)
     expect(noFolder.runLogPath).toBeUndefined()

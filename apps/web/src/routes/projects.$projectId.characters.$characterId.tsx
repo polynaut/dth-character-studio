@@ -1375,9 +1375,9 @@ function CharacterPage() {
   const [activeTab, setActiveTab] = useState<'character' | 'products'>('character')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
-  // The ROM run log written by the Daz-side script. Re-read whenever the window
-  // regains focus, so problems from a run surface the moment the user switches
-  // back from Daz to the studio.
+  // The ROM run log written by the Daz-side script (ingested into the studio's
+  // own store on read). Re-read whenever the window regains focus, so problems
+  // from a run surface the moment the user switches back from Daz to the studio.
   const [romRunLog, setRomRunLog] = useState(initialRomRunLog)
   useEffect(() => {
     const refetch = () => {
@@ -1390,6 +1390,26 @@ function CharacterPage() {
     setRomRunLog(null)
     await dismissRomRunLog({ data: { projectId, id: initial.id } })
   }
+  const hasRunProblems = !!romRunLog && !romRunLog.ok
+  // Frames whose morphs failed in the last run — the matching editor rows go red.
+  const failedFrames = hasRunProblems
+    ? new Set(romRunLog.failedMorphs.map((morph) => morph.frame))
+    : undefined
+  // When the report banner is scrolled out of view (the page is long), a small
+  // fixed hint offers to jump to it — the user returning from Daz mid-scroll
+  // shouldn't have to know to look at the top.
+  const romRunLogRef = useRef<HTMLElement | null>(null)
+  const [runLogBannerInView, setRunLogBannerInView] = useState(true)
+  useEffect(() => {
+    if (!hasRunProblems) return
+    const el = romRunLogRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(([entry]) =>
+      setRunLogBannerInView(entry.isIntersecting),
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasRunProblems])
   const swallowNavRef = useRef(false)
   // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
   // disk even when nothing changed (handy during development).
@@ -1772,22 +1792,25 @@ function CharacterPage() {
           popup dialogs below are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
-      {project?.dazProductsEnabled && (
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v === 'products' ? 'products' : 'character')}
-          className="mb-6"
+      {/* A returning user may be scrolled anywhere on this (long) page — when the
+          run report is off-screen, this fixed hint jumps to it on click. */}
+      {hasRunProblems && !runLogBannerInView && (
+        <button
+          type="button"
+          onClick={() =>
+            romRunLogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+          className="fixed top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-destructive px-4 py-1.5 text-sm font-medium text-white shadow-lg transition-opacity hover:opacity-90"
         >
-          <TabsList>
-            <TabsTrigger value="character">Character</TabsTrigger>
-            <TabsTrigger value="products">Products</TabsTrigger>
-          </TabsList>
-        </Tabs>
+          <CircleX className="size-4" /> Errors in the last ROM run — click to see details
+        </button>
       )}
-
-      <div className={onProductsTab ? 'hidden' : undefined}>
+      {/* Above the tabs, so the report is visible from the Products tab too. */}
       {romRunLog && !romRunLog.ok && (
-        <section className="mb-8 rounded-lg border border-destructive/50 bg-destructive/10 p-5">
+        <section
+          ref={romRunLogRef}
+          className="mb-8 scroll-mt-6 rounded-lg border border-destructive/50 bg-destructive/10 p-5"
+        >
           <div className="flex items-start justify-between gap-3">
             <h2 className="flex items-center gap-2 font-semibold">
               <CircleX className="size-5 shrink-0 text-destructive" />
@@ -1815,8 +1838,9 @@ function CharacterPage() {
             <div className="mt-3">
               <p className="text-sm">
                 These morphs could not be applied — their frames stay in the ROM (empty), so the
-                rest of the character is unaffected. Fix the morph names or add the missing
-                content, then Save and re-run the script:
+                rest of the character is unaffected. The matching rows in the ROM sections below
+                are marked red. Fix the morph names or add the missing content, then Save and
+                re-run the script:
               </p>
               <ul className="mt-2 max-h-56 space-y-0.5 overflow-y-auto font-mono text-xs">
                 {romRunLog.failedMorphs.map((morph, i) => (
@@ -1829,6 +1853,21 @@ function CharacterPage() {
           )}
         </section>
       )}
+
+      {project?.dazProductsEnabled && (
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v === 'products' ? 'products' : 'character')}
+          className="mb-6"
+        >
+          <TabsList>
+            <TabsTrigger value="character">Character</TabsTrigger>
+            <TabsTrigger value="products">Products</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      <div className={onProductsTab ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5 pt-2">
@@ -2608,6 +2647,7 @@ function CharacterPage() {
           skinning={characterSkinning(character)}
           catalog={catalog}
           presetFrames={presetFrames}
+          failedFrames={failedFrames}
           onChange={(sections) => patch({ sections })}
         />
       </section>
