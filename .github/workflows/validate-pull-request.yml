@@ -19,9 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # pnpm version comes from package.json "packageManager".
       - uses: pnpm/action-setup@v5
-        with:
-          version: 9
       - uses: actions/setup-node@v5
         with:
           node-version: 22
