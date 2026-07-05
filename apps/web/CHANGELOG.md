@@ -1,5 +1,28 @@
 # @dth/web
 
+## 0.31.0
+
+### Minor Changes
+
+- [#122](https://github.com/polynaut/dth-character-studio/pull/122) [`3e4bd09`](https://github.com/polynaut/dth-character-studio/commit/3e4bd09012b3a47a69d9440428888fa407a8bae7) Thanks [@polynaut](https://github.com/polynaut)! - **Fix a frame-alignment off-by-one + harden generated scripts against injection** (from a full app audit).
+
+  - **Base-less characters no longer desync from Daz.** A character with no preset ROM block (FBM-only, or custom JCM groups) started its first custom frame at 1 in the PoseAsset CSV / exporter reference frames, while Daz built it at 0 — a one-frame misalignment for the whole custom sequence (the exact class of bug the "frames are computed, never stored" invariant exists to prevent). Removed the `Math.max(…, 0)` clamp in all three consumers. Runtime bumped to **v15** so **Tools → Refresh assets** regenerates affected characters' scripts/CSVs.
+  - **Daz Script injection closed.** A character `name` containing a newline could break out of the generated `.dsa`'s `//` comment header into executable DzScript — reachable by opening/generating a shared malicious definition. Control chars (CR/LF/U+2028/U+2029) are now stripped from names in comment headers.
+  - **CSV injection closed.** Group labels and reference-FBX paths are stripped of commas/newlines so they can't inject extra columns/rows into the Houdini PoseAsset CSV.
+
+### Patch Changes
+
+- [#125](https://github.com/polynaut/dth-character-studio/pull/125) [`cc6f9ad`](https://github.com/polynaut/dth-character-studio/commit/cc6f9ad94b087637afc20fc1199e0c6708045c04) Thanks [@polynaut](https://github.com/polynaut)! - **Persistence + safety fixes** (from a full app audit):
+
+  - **The one-time project-file migration no longer clobbers your settings.** When a project was unreachable (offline drive) during the migration, every relaunch re-wrote _all_ the already-migrated projects' `.dcsp` manifests back to defaults — silently losing per-project settings (and, if `charactersSubdir` had been changed, hiding that project's characters). It now skips any project that already has a manifest.
+  - **Changing the characters subfolder now asks first** and moves atomically: it confirms before the (destructive) folder move, and pre-checks every destination for collisions before moving anything — so a collision partway through can't strand some characters at the new root while the manifest still points at the old one.
+  - **A manifest with no id gets a stable id** (persisted once) instead of minting a fresh one on every read.
+  - **"Open scene" only opens local scene/project files** (`.duf`/`.hip`), refusing arbitrary URLs — a shared character definition can't turn it into a phishing launcher.
+  - **External links go through one guarded helper**, so "open on GitHub"-style links also work in the plain-browser build (they previously threw outside the desktop app).
+
+- Updated dependencies [[`3e4bd09`](https://github.com/polynaut/dth-character-studio/commit/3e4bd09012b3a47a69d9440428888fa407a8bae7)]:
+  - @dth/rom@0.31.0
+
 ## 0.30.0
 
 ### Minor Changes
