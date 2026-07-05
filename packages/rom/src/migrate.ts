@@ -41,8 +41,11 @@ import type { RomSection } from './types'
  * default would erase post-parse. That's how you compute a value only when it's
  * missing (and it makes the step idempotent for free).
  *
- * History (mirrors {@link CHARACTER_SCHEMA_VERSION}):
- *   v2–v7 — additive / removal only → handled by the schema, no step needed.
+ * History: the authoritative per-version log lives atop
+ * {@link CHARACTER_SCHEMA_VERSION} in types.ts. Through the current version every
+ * bump has been additive / removal-only (handled by the zod schema), so there is
+ * no migration STEP below — add one here only for a rename/restructure or a
+ * computed value (see the templates).
  */
 export const characterMigrations: Record<
   number,

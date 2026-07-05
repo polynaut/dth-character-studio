@@ -61,9 +61,13 @@ two artifacts are derived from the same source and stay frame-aligned.
 
 ### The native boundary
 
-All native access is concentrated in **`apps/web/src/lib/rom/{api,storage}.ts`** and
-**`lib/desktop.ts`** — this keeps the SPA runnable in a plain browser (web-only e2e mocks this layer).
-`api.ts` is the only bridge between the React UI and the filesystem; it keeps the `{ data }` call
+Native access lives in the **`lib/` layer**, not in routes/components: primarily
+**`apps/web/src/lib/rom/{api,storage}.ts`** + **`lib/desktop.ts`** (the bulk of it), plus a few
+focused helpers that legitimately touch Tauri APIs — `lib/updater.ts`, `lib/file-drop.ts`,
+`lib/path.ts`, `lib/rom/migrate-projects.ts`, and the app shell (`routes/__root.tsx`, `main.tsx`).
+Each is `isTauri()`-guarded so the SPA still runs in a plain browser (web-only e2e mocks this layer);
+UI code opens external links via `desktop.openExternal`, never `@tauri-apps/plugin-shell` directly.
+`api.ts` is the primary bridge between the React UI and the filesystem; it keeps the `{ data }` call
 convention the routes use, validates input with zod, and `invoke()`s Rust commands. When adding a
 native capability, follow the existing pattern: **resolve paths in TS, do heavy file work in Rust**.
 
