@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
+import { openExternal } from '#/lib/desktop.ts'
 
 import { detectAssetVersions, fetchAppVersion } from '#/lib/rom/api.ts'
 

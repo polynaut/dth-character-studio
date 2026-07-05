@@ -1,7 +1,35 @@
-import { open } from '@tauri-apps/plugin-dialog'
+import { ask, open } from '@tauri-apps/plugin-dialog'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
 import { rememberNetworkPath } from './rom/api.ts'
+
+/**
+ * Open an external URL — via the Tauri shell in the desktop app, or `window.open`
+ * in a plain browser. Routing every "open link" through here keeps native access
+ * in the desktop boundary and makes external links work in the web build too
+ * (a bare `@tauri-apps/plugin-shell` call throws outside Tauri).
+ */
+export async function openExternal(url: string): Promise<void> {
+  if (!isTauri()) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  await shellOpen(url)
+}
+
+/**
+ * A native yes/no confirmation for a destructive action, via the Tauri dialog
+ * plugin (falls back to `window.confirm` in a plain browser). Returns whether the
+ * user confirmed. Keeps native dialog access inside the desktop boundary.
+ */
+export async function confirmDialog(
+  message: string,
+  opts?: { title?: string; kind?: 'info' | 'warning' | 'error' },
+): Promise<boolean> {
+  if (!isTauri()) return window.confirm(message)
+  return ask(message, { title: opts?.title, kind: opts?.kind, okLabel: 'Yes', cancelLabel: 'Cancel' })
+}
 
 /**
  * After any pick, remember (in the background) whether the path sits on a mapped
