@@ -432,8 +432,16 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       typeof check covers a missing runtime), the export block is skipped when
  *       the ROM build aborts, and the Daz dialogs are short + generic — the
  *       details live in the studio, which ingests the run log.
+ *  15 — generator fix (not a runtime-API change; bumped to force regeneration of
+ *       affected scripts): a base-less character (no JCM/GEN/PHY preset — e.g.
+ *       FBM-only, or custom JCM groups) now starts its first custom frame at 0
+ *       instead of 1, re-aligning the PoseAsset CSV / exporter reference frames
+ *       with the Daz timeline (removed a Math.max(...,0) off-by-one). Also
+ *       hardens the generated .dsa/CSV against injection: control chars are
+ *       stripped from names in comment headers, commas/newlines from CSV group
+ *       labels + reference-FBX paths.
  */
-export const RUNTIME_VERSION = 14
+export const RUNTIME_VERSION = 15
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -727,7 +735,10 @@ export function presetFrameCount(
     (genPreset && roms.gp ? frames.gp : 0) +
     (genPreset && roms.dk ? frames.dk : 0) +
     (sections.PHY.enabled && sections.PHY.mode === 'preset' ? frames.phys : 0)
-  return Math.max(lastPresetFrame, 0) + 1
+  // No preset block → lastPresetFrame is -1 and custom frames start at 0, so the
+  // count is 0. Clamping to 0 before +1 wrongly reported 1 and shifted the editor's
+  // frame numbers out of sync with Daz — keep the raw -1.
+  return lastPresetFrame + 1
 }
 
 /**

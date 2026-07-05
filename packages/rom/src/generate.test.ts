@@ -631,13 +631,76 @@ describe('toPoseAssetCsv', () => {
     ]
     const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
     expect(file.experimental).toBe(true)
+    // No preset base ROM (JCM custom-groups, empty base path) → the FIRST custom
+    // pose lands at frame 0, matching the Daz runtime's startFrame=0. (This used
+    // to wrongly start at 1 — the Math.max(...,0) off-by-one, now fixed.)
     expect(file.content.trimEnd().split('\n')).toEqual([
       'JCMGROUP,1,0,ball_l',
-      'JCM,1,BallBD40',
-      'JCM,2,BallBU60',
-      'FBM,3,BodyTone,',
-      'FBM,4,GluteUpDown,',
+      'JCM,0,BallBD40',
+      'JCM,1,BallBU60',
+      'FBM,2,BodyTone,',
+      'FBM,3,GluteUpDown,',
     ])
+  })
+
+  it('a base-less character (only FBMs) starts custom frames at 0, not 1', () => {
+    // The core-invariant regression guard: FBM-only, no JCM/FAC/GEN/PHY preset.
+    const sections = makeSections()
+    sections.JCM.enabled = false
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
+    const first = file.content.trimEnd().split('\n').find((l) => l.startsWith('FBM,'))
+    expect(first).toBe('FBM,0,BodyTone,')
+    // referenceFrames uses the same offset — a base-less reference pose is at 0 too.
+    const refChar = makeCharacter({
+      sections: {
+        ...sections,
+        FBM: {
+          ...sections.FBM,
+          groups: [
+            {
+              id: 'g',
+              label: '',
+              suffix: 'centre',
+              method: 'individual',
+              calculateFrom: 'default',
+              poses: [{ id: 'r', name: 'Ref', morphs: [], referenceFbx: 'ref.fbx' }],
+            },
+          ],
+        },
+      },
+    })
+    expect(referenceFrames(refChar, FRAMES)).toEqual([0])
+  })
+
+  it('sanitizes control chars out of .dsa comment headers (Daz Script injection)', () => {
+    const evil = 'Kira\n DzFile("x").remove(); //'
+    const content = toCharacterScriptDsa(makeCharacter({ name: evil }), {}, FRAMES).content
+    // The name reaches the // header, but the newline must be stripped so it can't
+    // break out of the comment into executable DzScript.
+    const header = content.split('\n').find((l) => l.includes('DTH ROM for')) ?? ''
+    expect(header).toContain('Kira  DzFile') // newline collapsed to a space
+    expect(header).not.toMatch(/\n/)
+    // No standalone line in the whole script starts with the injected call.
+    expect(content.split('\n').some((l) => l.trim().startsWith('DzFile('))).toBe(false)
+  })
+
+  it('sanitizes commas/newlines out of CSV group labels + reference FBX', () => {
+    const sections = makeSections()
+    sections.JCM.mode = 'custom'
+    sections.JCM.groups = [
+      {
+        id: 'g',
+        label: 'evil,label\ninjected',
+        suffix: 'left',
+        method: 'individual',
+        calculateFrom: 'default',
+        poses: [{ id: 'p', name: 'Pose', morphs: [], referenceFbx: 'a,b\nc.fbx' }],
+      },
+    ]
+    const rows = toPoseAssetCsv(makeCharacter({ sections }), FRAMES).content.split('\n')
+    const group = rows.find((r) => r.startsWith('JCMGROUP')) ?? ''
+    expect(group).toBe('JCMGROUP,1,0,evil label injected') // comma + newline → space
+    expect(rows.every((r) => !r.includes('\n'))).toBe(true)
   })
 })
 
