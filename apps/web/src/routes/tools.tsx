@@ -959,8 +959,9 @@ function ToolsPage() {
             <div>
               <h2 className="font-semibold">Houdini presets</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Your Houdini <span className="font-mono">my_presets</span>. Replaces the folder in
-                your Houdini documents folder (set in the DazToHue tab) and wires it into{' '}
+                Your Houdini <span className="font-mono">my_presets</span>. Merges into the folder in
+                your Houdini documents folder (set in the DazToHue tab) — adds/updates files without
+                deleting the folder first — and wires it into{' '}
                 <span className="font-mono">houdini.env</span> (SHARED_PRESETS + HOUDINI_PATH).
               </p>
             </div>

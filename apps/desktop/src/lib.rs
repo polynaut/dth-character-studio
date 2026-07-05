@@ -94,14 +94,51 @@ fn step_header(label: &str) -> InstallStep {
     InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new(), files_list: Vec::new(), note: String::new() }
 }
 
-/// Number of files (recursively) under `dir`; 0 when it can't be read.
+/// Whether a read_dir entry is a real directory WITHOUT following symlinks/
+/// junctions — `Path::is_dir()` follows them, which lets a recursive walk escape
+/// its tree (delete outside app-data) or loop forever on a junction cycle. Use
+/// this in every recursive walker so a linked dir is treated as a leaf and skipped.
+fn entry_is_real_dir(entry: &fs::DirEntry) -> bool {
+    entry.file_type().map(|t| t.is_dir()).unwrap_or(false)
+}
+
+/// Guard a user/settings-supplied path before a RECURSIVE delete: refuse a
+/// filesystem/drive root or a path so shallow (fewer than two real name segments)
+/// that deleting it would wipe a drive or a top-level profile folder. Returns
+/// Some(reason) to refuse, None to allow. Defense-in-depth even against a poisoned
+/// settings.json — the UI confirm is not the only safeguard.
+fn unsafe_recursive_target(path: &Path) -> Option<String> {
+    if path.parent().is_none() {
+        return Some(format!("refusing to delete a filesystem root ({})", path.display()));
+    }
+    let named = path
+        .components()
+        .filter(|c| matches!(c, std::path::Component::Normal(_)))
+        .count();
+    if named < 2 {
+        return Some(format!("refusing to delete a top-level path ({})", path.display()));
+    }
+    None
+}
+
+/// Whether any path segment contains "daz" (case-insensitive) — a Daz-owned
+/// folder. Gates the uninstall's recursive deletes so a stray/poisoned path
+/// (e.g. the user's Documents) can never be wiped by the cleanup.
+fn looks_like_daz_folder(path: &Path) -> bool {
+    path.components().any(|c| match c {
+        std::path::Component::Normal(s) => s.to_string_lossy().to_lowercase().contains("daz"),
+        _ => false,
+    })
+}
+
+/// Number of files (recursively) under `dir`; 0 when it can't be read. Does not
+/// follow directory symlinks/junctions (see `entry_is_real_dir`).
 fn count_files(dir: &Path) -> u64 {
     let mut n = 0;
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                n += count_files(&path);
+            if entry_is_real_dir(&entry) {
+                n += count_files(&entry.path());
             } else {
                 n += 1;
             }
@@ -119,7 +156,7 @@ fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<u64> {
         let entry = entry?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
-        if from.is_dir() {
+        if entry_is_real_dir(&entry) {
             count += copy_dir(&from, &to)?;
         } else {
             fs::copy(&from, &to)?;
@@ -138,7 +175,7 @@ fn copy_dir_add_only(src: &Path, dst: &Path) -> std::io::Result<u64> {
         let entry = entry?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
-        if from.is_dir() {
+        if entry_is_real_dir(&entry) {
             count += copy_dir_add_only(&from, &to)?;
         } else if !to.exists() {
             fs::copy(&from, &to)?;
@@ -680,7 +717,17 @@ fn annotate_duplicates(mut items: Vec<AssetStep>) -> Vec<InstallStep> {
 fn wire_houdini_env(houdini_docs: &Path, presets_dir: &Path) -> std::io::Result<bool> {
     let env_path = houdini_docs.join("houdini.env");
     let presets_fwd = presets_dir.display().to_string().replace('\\', "/");
-    let existing = fs::read_to_string(&env_path).unwrap_or_default();
+    // Distinguish "no file yet" (start empty) from a real read error / non-UTF-8
+    // content: a blanket unwrap_or_default() would treat an unreadable existing
+    // houdini.env as empty and then OVERWRITE it, wiping the user's other Houdini
+    // settings. Read as bytes (so a non-UTF-8 file is a hard error, not "empty")
+    // and only treat NotFound as a fresh start.
+    let existing = match fs::read(&env_path) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "houdini.env is not valid UTF-8 — leaving it untouched"))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
     let lower = existing.to_lowercase();
     let mut add = String::new();
     if !lower.contains("shared_presets =") && !lower.contains("shared_presets=") {
@@ -1154,24 +1201,21 @@ fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
 }
 
 /// Rank a source folder by its Genesis number so newer wins (e.g. "_genesis 9" →
-/// 9, "_genesis 8" → 8). The last run of digits; 0 when none is found.
+/// 9, "_genesis 8" → 8). The FIRST digit run after the "genesis" token — so
+/// "_genesis 9 (2024)" ranks 9, not 2024, and "Genesis 8.1" ranks 8, not 1.
+/// 0 when there is no "genesis" token. Overflow saturates to 0.
 fn genesis_rank(source_root: &str) -> u32 {
-    let mut best = 0u32;
-    let mut cur = String::new();
-    for ch in source_root.chars() {
-        if ch.is_ascii_digit() {
-            cur.push(ch);
-        } else {
-            if let Ok(v) = cur.parse() {
-                best = v;
-            }
-            cur.clear();
-        }
-    }
-    if let Ok(v) = cur.parse() {
-        best = v;
-    }
-    best
+    let lower = source_root.to_ascii_lowercase();
+    let after = match lower.find("genesis") {
+        Some(i) => &lower[i + "genesis".len()..],
+        None => return 0,
+    };
+    let digits: String = after
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().unwrap_or(0)
 }
 
 #[derive(Serialize)]
@@ -1200,7 +1244,7 @@ fn collect_folder_files(dir: &Path, rel: &Path, out: &mut Vec<(String, u64)>) {
         for e in entries.flatten() {
             let p = e.path();
             let rc = rel.join(e.file_name());
-            if p.is_dir() {
+            if entry_is_real_dir(&e) {
                 collect_folder_files(&p, &rc, out);
             } else if let Ok(md) = e.metadata() {
                 out.push((rc.to_string_lossy().replace('\\', "/"), md.len()));
@@ -1480,8 +1524,16 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         if !dry && !quarantine.is_empty() {
             let qdir = Path::new(&quarantine);
             for &i in &redundant {
-                let target = qdir.join(&assets[i].label);
-                if !target.exists() && move_to_quarantine(&assets[i].asset_path, &target) {
+                // Disambiguate on a name collision instead of skipping — otherwise
+                // a same-named redundant copy (another group, or a prior run) is
+                // silently left installed as a live duplicate.
+                let mut target = qdir.join(&assets[i].label);
+                let mut n = 1;
+                while target.exists() {
+                    target = qdir.join(format!("{} ({n})", assets[i].label));
+                    n += 1;
+                }
+                if move_to_quarantine(&assets[i].asset_path, &target) {
                     assets_quarantined += 1;
                     fixed = true;
                 }
@@ -1528,16 +1580,16 @@ struct UninstallDefaultsRequest {
 }
 
 /// The default leftover-folder list (ported from the dth-cli `uninstall-daz`): the
-/// library root (parent of "My DAZ 3D Library"), the common Documents / Public
-/// library spots, and the APPDATA `DAZ 3D` + Start-Menu folders.
+/// user's DAZ library folder, the common Documents / Public library spots, and the
+/// APPDATA `DAZ 3D` + Start-Menu folders. NB: we push the library folder ITSELF,
+/// never its parent — the parent is typically the whole Documents folder, and this
+/// list is prefilled straight into a recursive delete.
 #[tauri::command]
 fn default_daz_uninstall_folders(request: UninstallDefaultsRequest) -> Vec<String> {
     let mut folders: Vec<String> = Vec::new();
     let lib = request.daz_lib_folder.trim();
     if !lib.is_empty() {
-        if let Some(parent) = Path::new(lib).parent() {
-            folders.push(parent.display().to_string());
-        }
+        folders.push(lib.to_string());
     }
     folders.push("D:\\User Data\\Documents\\DAZ 3D".into());
     folders.push("E:\\User Data\\Documents\\DAZ 3D".into());
@@ -1574,6 +1626,17 @@ fn uninstall_daz(request: UninstallDazRequest) -> InstallReport {
             continue;
         }
         let p = Path::new(trimmed);
+        // Rails: never recursively delete a non-Daz folder (a stray/poisoned path
+        // like the user's Documents) or a drive/profile root — even on a dry run
+        // we surface the refusal so the user sees it can't happen.
+        if let Some(reason) = unsafe_recursive_target(p) {
+            steps.push(step_err(trimmed, reason));
+            continue;
+        }
+        if !looks_like_daz_folder(p) {
+            steps.push(step_err(trimmed, "refused: not a recognised Daz folder (no “DAZ” in the path)".into()));
+            continue;
+        }
         if !p.exists() {
             steps.push(step_skip(trimmed, "not found".into()));
         } else if dry {
@@ -1629,23 +1692,19 @@ fn install_houdini_presets(request: HoudiniPresetsRequest) -> InstallReport {
     } else {
         let dest = houdini_docs.join(folder_name(src));
         if dry {
-            steps.push(step_ok("Houdini presets", count_files(src), format!("would replace → {}", dest.display())));
+            steps.push(step_ok("Houdini presets", count_files(src), format!("would merge → {}", dest.display())));
             steps.push(step_skip("houdini.env", "would wire SHARED_PRESETS + HOUDINI_PATH".into()));
         } else {
             let mut failed = false;
-            if dest.exists() {
-                if let Err(e) = fs::remove_dir_all(&dest) {
-                    steps.push(step_err("Houdini presets", io_detail(&format!("clear {}", dest.display()), &e)));
+            // MERGE (copy over), never remove-then-copy: the destination folder
+            // name is derived from the source basename, so a mis-named source
+            // (e.g. "otls") must not wipe an arbitrary Houdini subfolder — and a
+            // mid-copy failure must not leave a deleted-then-partial install.
+            match copy_dir(src, &dest) {
+                Ok(n) => steps.push(step_ok("Houdini presets", n, format!("→ {}", dest.display()))),
+                Err(e) => {
+                    steps.push(step_err("Houdini presets", io_detail(&format!("{} → {}", src.display(), dest.display()), &e)));
                     failed = true;
-                }
-            }
-            if !failed {
-                match copy_dir(src, &dest) {
-                    Ok(n) => steps.push(step_ok("Houdini presets", n, format!("→ {}", dest.display()))),
-                    Err(e) => {
-                        steps.push(step_err("Houdini presets", io_detail(&format!("{} → {}", src.display(), dest.display()), &e)));
-                        failed = true;
-                    }
                 }
             }
             if !failed {
@@ -1870,17 +1929,29 @@ async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> InstallRepo
     }
     let content_root = single_child_dir(&tmp).unwrap_or_else(|| tmp.clone());
 
-    // Replace any previous install, then move the fresh content into place.
-    if dest.exists() {
-        if let Err(e) = fs::remove_dir_all(&dest) {
-            let _ = fs::remove_dir_all(&tmp);
-            return one_step_report(dry, step_err(label, io_detail("clear previous install", &e)));
-        }
-    }
     if let Some(p) = dest.parent() {
         let _ = fs::create_dir_all(p);
     }
+    // Swap, don't remove-then-move: move any previous install ASIDE first, put the
+    // fresh content in place, and only then delete the old copy — so a failure
+    // during the move never leaves the user with no install (the old one is
+    // restored). Avoids the deleted-then-partial window.
+    let backup = dest.with_file_name(".DazToHue-Scripts.prev");
+    let _ = fs::remove_dir_all(&backup);
+    let had_old = dest.exists();
+    if had_old {
+        if let Err(e) = fs::rename(&dest, &backup) {
+            let _ = fs::remove_dir_all(&tmp);
+            return one_step_report(dry, step_err(label, io_detail("move previous install aside", &e)));
+        }
+    }
     let moved = fs::rename(&content_root, &dest).is_ok() || copy_dir(&content_root, &dest).is_ok();
+    if moved {
+        let _ = fs::remove_dir_all(&backup);
+    } else if had_old {
+        // New content didn't land — restore the previous install so nothing is lost.
+        let _ = fs::rename(&backup, &dest);
+    }
     let _ = fs::remove_dir_all(&tmp);
     if moved {
         // Record the installed commit so the Tools tab can flag when it's outdated.
@@ -2143,9 +2214,8 @@ fn dir_size(dir: &Path) -> (u64, u64) {
     let (mut files, mut bytes) = (0u64, 0u64);
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let (f, b) = dir_size(&path);
+            if entry_is_real_dir(&entry) {
+                let (f, b) = dir_size(&entry.path());
                 files += f;
                 bytes += b;
             } else if let Ok(md) = entry.metadata() {
@@ -2167,7 +2237,9 @@ fn sweep_old_files(dir: &Path, cutoff: SystemTime, report: &mut SweepReport) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        // entry_is_real_dir does NOT follow symlinks — the sweep can't escape the
+        // app-data tree through a junction and delete files elsewhere.
+        if entry_is_real_dir(&entry) {
             sweep_old_files(&path, cutoff, report);
             // Remove the directory if the sweep emptied it (keep non-empty ones).
             if fs::read_dir(&path).map(|mut d| d.next().is_none()).unwrap_or(false) {
@@ -2201,7 +2273,9 @@ struct SweepRequest {
 fn housekeeping_sweep(request: SweepRequest) -> SweepReport {
     let mut report = SweepReport::default();
     let dir = Path::new(&request.product_scans_dir);
-    if !dir.is_dir() {
+    // max_age_days == 0 would set the cutoff to "now" and delete essentially every
+    // scan file — refuse it (a real retention window is always > 0).
+    if request.max_age_days == 0 || !dir.is_dir() {
         return report;
     }
     let cutoff = SystemTime::now()
@@ -2239,7 +2313,9 @@ fn folder_stats(path: String) -> FolderStats {
 fn empty_folder(path: String) -> SweepReport {
     let mut report = SweepReport::default();
     let dir = Path::new(&path);
-    if path.trim().is_empty() || !dir.is_dir() {
+    // Rail: never empty a drive/profile root, even if the quarantine folder was
+    // (mis)configured to one. Contents-only (the folder itself is kept).
+    if path.trim().is_empty() || !dir.is_dir() || unsafe_recursive_target(dir).is_some() {
         return report;
     }
     let entries = match fs::read_dir(dir) {
@@ -2319,6 +2395,14 @@ fn dcsp_from_args(args: &[String]) -> Option<String> {
         .map(|a| a.replace('\\', "/"))
 }
 
+/// Lock the window→project map, recovering from a poisoned mutex (the guarded map
+/// is plain data — a peer thread panicking must not wedge every later window op).
+fn lock_windows(
+    projects: &WindowProjects,
+) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
+    projects.0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(desktop)]
 fn unique_window_label(app: &tauri::AppHandle, prefix: &str) -> String {
     use tauri::Manager;
@@ -2337,21 +2421,33 @@ fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     let norm = path.replace('\\', "/");
     let projects = app.state::<WindowProjects>();
-    let existing = projects
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|(_, p)| p.eq_ignore_ascii_case(&norm))
-        .map(|(label, _)| label.clone());
-    if let Some(label) = existing {
-        if let Some(w) = app.get_webview_window(&label) {
-            let _ = w.set_focus();
-            return Ok(());
+    // Hold the lock across find → (prune stale) → allocate → insert so two racing
+    // launches (double-clicking two .dcsp files, or a file-assoc launch racing the
+    // frontend) can't compute the SAME label or map two paths to one window.
+    let label = {
+        let mut map = lock_windows(&projects);
+        if let Some(label) =
+            map.iter().find(|(_, p)| p.eq_ignore_ascii_case(&norm)).map(|(l, _)| l.clone())
+        {
+            if app.get_webview_window(&label).is_some() {
+                let _ = app.get_webview_window(&label).map(|w| w.set_focus());
+                return Ok(());
+            }
+            // Window was closed but its mapping lingered — drop it and reopen.
+            map.remove(&label);
         }
-    }
-    let label = unique_window_label(app, "project");
-    projects.0.lock().unwrap().insert(label.clone(), norm.clone());
+        // A label that's neither a live window nor already reserved in the map.
+        let mut i = 1;
+        let label = loop {
+            let candidate = format!("project-{i}");
+            if app.get_webview_window(&candidate).is_none() && !map.contains_key(&candidate) {
+                break candidate;
+            }
+            i += 1;
+        };
+        map.insert(label.clone(), norm.clone());
+        label
+    };
     let stem = Path::new(&norm)
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -2370,15 +2466,10 @@ fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result
 /// Open — or focus — the Home (launcher) window (a window with no project mapping).
 #[cfg(desktop)]
 fn open_home_window_impl(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-    let with_project: HashSet<String> = app
-        .state::<WindowProjects>()
-        .0
-        .lock()
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect();
+    use tauri::Manager;
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let projects = app.state::<WindowProjects>();
+    let with_project: HashSet<String> = lock_windows(&projects).keys().cloned().collect();
     for (label, w) in app.webview_windows() {
         if !with_project.contains(&label) {
             let _ = w.set_focus();
@@ -2398,13 +2489,7 @@ fn open_home_window_impl(app: &tauri::AppHandle) -> tauri::Result<()> {
 /// The `.dcsp` this window was opened with ('' for the Home window).
 #[tauri::command]
 fn active_project_file(window: tauri::Window, projects: tauri::State<WindowProjects>) -> String {
-    projects
-        .0
-        .lock()
-        .unwrap()
-        .get(window.label())
-        .cloned()
-        .unwrap_or_default()
+    lock_windows(&projects).get(window.label()).cloned().unwrap_or_default()
 }
 
 // `(async)` runs this on a worker thread, not the main thread. Building a webview
@@ -2452,11 +2537,8 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
             if let Some(dcsp) = dcsp_from_args(&std::env::args().collect::<Vec<_>>()) {
-                app.state::<WindowProjects>()
-                    .0
-                    .lock()
-                    .unwrap()
-                    .insert("main".into(), dcsp);
+                let projects = app.state::<WindowProjects>();
+                lock_windows(&projects).insert("main".into(), dcsp);
             }
             Ok(())
         });
@@ -2904,8 +2986,29 @@ mod tests {
         assert_eq!(genesis_rank("_genesis 9"), 9);
         assert_eq!(genesis_rank("_genesis 8"), 8);
         assert_eq!(genesis_rank("_genesis 3"), 3);
-        assert_eq!(genesis_rank("my daz assets"), 0); // no number → unranked
+        assert_eq!(genesis_rank("my daz assets"), 0); // no genesis token → unranked
         assert!(genesis_rank("_genesis 9") > genesis_rank("_genesis 8"));
+        // The FIRST digit run after "genesis" wins — a trailing year must NOT
+        // hijack the rank (the old last-run impl returned 2024 here, inverting
+        // "newer genesis wins" and quarantining the wrong copy).
+        assert_eq!(genesis_rank("_genesis 9 (2024)"), 9);
+        assert_eq!(genesis_rank("Genesis 8.1"), 8); // not 1
+        assert!(genesis_rank("_genesis 9 (2020)") > genesis_rank("_genesis 8 (2024)"));
+        assert_eq!(genesis_rank("Genesis"), 0); // token, no number
+    }
+
+    #[test]
+    fn recursive_delete_guards_refuse_roots_and_non_daz_paths() {
+        // Roots / too-shallow paths are refused for any recursive delete.
+        assert!(unsafe_recursive_target(Path::new("C:\\")).is_some());
+        assert!(unsafe_recursive_target(Path::new("C:\\Users")).is_some());
+        assert!(unsafe_recursive_target(Path::new("/")).is_some());
+        // Two+ real segments is allowed by the shallow-path rail.
+        assert!(unsafe_recursive_target(Path::new("C:\\Users\\Bob\\Documents")).is_none());
+        // The uninstall additionally requires a Daz-owned segment.
+        assert!(looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents\\DAZ 3D")));
+        assert!(looks_like_daz_folder(Path::new("C:\\Program Files\\DAZ 3D\\DAZStudio6")));
+        assert!(!looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents")));
     }
 
     #[test]
