@@ -19,9 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # pnpm version comes from package.json "packageManager".
       - uses: pnpm/action-setup@v5
-        with:
-          version: 9
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -33,3 +32,24 @@ jobs:
         run: pnpm -r test
       - name: Build web
         run: pnpm --filter @dth/web build
+
+  # The Rust backend wasn't built/tested on PRs — a broken crate (or a reverted
+  # alloc pin) only surfaced at release time on main. This job catches both.
+  rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify the brotli alloc pins are intact
+        shell: bash
+        working-directory: apps/desktop
+        run: |
+          # These exact versions keep brotli 8 working with Tauri (see Cargo.toml).
+          # A stray `cargo update` or new dep can silently revert them.
+          grep -A1 'name = "alloc-no-stdlib"' Cargo.lock | grep -q 'version = "2.0.4"' \
+            || { echo "::error::alloc-no-stdlib is not pinned to 2.0.4 (breaks brotli 8) — re-pin per docs/devops.md"; exit 1; }
+          grep -A1 'name = "alloc-stdlib"' Cargo.lock | grep -q 'version = "0.2.2"' \
+            || { echo "::error::alloc-stdlib is not pinned to 0.2.2 — re-pin per docs/devops.md"; exit 1; }
+      - name: cargo test (locked)
+        working-directory: apps/desktop
+        run: cargo test --locked

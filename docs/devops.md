@@ -69,8 +69,12 @@ gh api -X POST repos/polynaut/dth-character-studio/rulesets \
   -F 'rules[][type]=non_fast_forward'
 ```
 
-(Require a PR before merging + block force-pushes/deletion. Add a required
-status-check rule once CI check names are stable.)
+(Require a PR before merging + block force-pushes/deletion.) The PR CI
+(`validate-pull-request.yml`) runs the JS **validate** job (typecheck / tests /
+web build) and a **rust** job (cargo test `--locked` + a guard that fails if the
+brotli `alloc-*` pins were reverted). Both are set as **required status checks**
+on `main`, so a red PR — including a broken Rust build or a reverted pin — can't
+merge and trigger a signed release.
 
 ## Cutting a release
 
