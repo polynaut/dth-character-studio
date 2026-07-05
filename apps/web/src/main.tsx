@@ -7,7 +7,7 @@ import { isTauri } from '@tauri-apps/api/core'
 
 import { getRouter } from './router'
 import { checkForUpdates } from './lib/updater'
-import { isRefreshNeeded } from './lib/rom/api'
+import { housekeepingSweep, isRefreshNeeded } from './lib/rom/api'
 import { activeProjectFile } from './lib/desktop'
 import { migrateProjects } from './lib/rom/migrate-projects'
 import './styles.css'
@@ -51,6 +51,9 @@ void (async () => {
   }
   await checkForUpdates()
   if (!isTauri()) return
+  // Quiet housekeeping: age-out stale product-scan files so app-data can't grow
+  // without bound. Fire-and-forget — never blocks or fails startup.
+  void housekeepingSweep().catch(() => {})
   if (await isRefreshNeeded()) {
     void router.navigate({ to: '/tools', search: { tab: 'refresh' } })
   }
