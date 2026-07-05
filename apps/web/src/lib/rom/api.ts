@@ -448,14 +448,24 @@ async function writeAvatarBytes(
   await mkdir(dir, { recursive: true })
   const id = basename(characterId)
   // One avatar per character — drop any previous variant (old fixed name or version).
+  await removeCharacterAvatars(projectDir, id)
+  const fileName = `${id}-${Date.now()}.${ext}`
+  await writeFile(joinPath(dir, fileName), bytes)
+  return fileName
+}
+
+/** Remove every avatar image stored for a character (old fixed name + versioned
+ *  `<id>-<ts>.<ext>`), used both when replacing an avatar and when the character
+ *  is deleted. Best-effort per file; a missing images folder is a no-op. */
+async function removeCharacterAvatars(projectDir: string, characterId: string): Promise<void> {
+  const dir = storage.metaImagesDir(projectDir)
+  const id = basename(characterId)
+  if (!(await exists(dir))) return
   for (const entry of await readDir(dir)) {
     if (entry.isFile && (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))) {
       await remove(joinPath(dir, entry.name))
     }
   }
-  const fileName = `${id}-${Date.now()}.${ext}`
-  await writeFile(joinPath(dir, fileName), bytes)
-  return fileName
 }
 
 /**
@@ -839,6 +849,56 @@ export async function clearProductScan({ data }: { data: unknown }): Promise<voi
   if (await exists(dir)) await remove(dir, { recursive: true })
 }
 
+// --- Housekeeping: keep app-generated data from filling the disk -------------
+// Product-scan CSVs (one per Daz scene, app-data) age out after
+// PRODUCT_SCAN_RETENTION_DAYS; the dedup quarantine (large, reversible backup) is
+// only ever emptied on the user's explicit request. deleteCharacter also prunes a
+// character's scan folder + avatar so nothing orphans going forward.
+
+/** Days a product-scan file is kept before the launch/manual sweep ages it out. */
+export const PRODUCT_SCAN_RETENTION_DAYS = 30
+
+/** Files + bytes removed by a housekeeping action. */
+export interface HousekeepingResult {
+  filesDeleted: number
+  bytesFreed: number
+}
+
+/**
+ * Age-out stale product-scan files (not modified within the retention window)
+ * under the app-data `product-scans` root, pruning folders they empty. Runs on
+ * app launch and from the Tools "Clean up now" button. No-op in the plain web
+ * build (no native layer).
+ */
+export async function housekeepingSweep(): Promise<HousekeepingResult> {
+  if (!isTauri()) return { filesDeleted: 0, bytesFreed: 0 }
+  const productScansDir = await storage.dataPath('product-scans')
+  return invoke<HousekeepingResult>('housekeeping_sweep', {
+    request: { productScansDir, maxAgeDays: PRODUCT_SCAN_RETENTION_DAYS },
+  })
+}
+
+/** The dedup quarantine folder's file count + size (Tools readout). Zeroed when
+ *  no quarantine folder is configured or the app has no native layer. */
+export async function quarantineStats(): Promise<{
+  exists: boolean
+  files: number
+  bytes: number
+}> {
+  const { dedupQuarantineFolder } = await storage.getSettings()
+  if (!isTauri() || !dedupQuarantineFolder.trim()) return { exists: false, files: 0, bytes: 0 }
+  return invoke('folder_stats', { path: dedupQuarantineFolder })
+}
+
+/** Empty the dedup quarantine folder's contents — the user's manual "reclaim this
+ *  backup" action. Callers MUST confirm first: this permanently deletes the
+ *  moved-aside duplicate assets (they can be re-created by re-running dedup). */
+export async function emptyQuarantine(): Promise<HousekeepingResult> {
+  const { dedupQuarantineFolder } = await storage.getSettings()
+  if (!dedupQuarantineFolder.trim()) throw new Error('No quarantine folder is set.')
+  return invoke<HousekeepingResult>('empty_folder', { path: dedupQuarantineFolder })
+}
+
 /** One morph the ROM run couldn't apply (from the Daz-side run log). */
 export interface RomRunFailedMorph {
   frame: number
@@ -1009,6 +1069,19 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
     } catch {
       // leave an orphaned script folder rather than failing the delete
     }
+  }
+  // Prune the character's app-data product-scan folder + its avatar image — both
+  // are orphaned once the character is gone (housekeeping; best-effort).
+  try {
+    const scanDir = await storage.productScanDir(project.id, id)
+    if (await exists(scanDir)) await remove(scanDir, { recursive: true })
+  } catch {
+    // an orphaned scan folder is harmless — the age-out sweep clears it later
+  }
+  try {
+    await removeCharacterAvatars(project.path, id)
+  } catch {
+    // leave an orphaned avatar rather than failing the delete
   }
 }
 
