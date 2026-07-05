@@ -81,8 +81,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
+import { openExternal, pickDufPath, pickFolder, pickHipPath } from '#/lib/desktop.ts'
 
 /**
  * Daz readme page for a DIM product SKU ("86958-1" → store id `86958`). It resolves

@@ -17,7 +17,7 @@ import {
   useTransitionStyles,
 } from '@floating-ui/react'
 import { useNavigate } from '@tanstack/react-router'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
+import { openExternal } from '#/lib/desktop.ts'
 
 import { cn } from '#/lib/utils.ts'
 
