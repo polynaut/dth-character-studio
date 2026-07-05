@@ -166,7 +166,9 @@ jobs:
         run: |
           set -euo pipefail
           exe=$(ls dist/*_"${VERSION}"_*-setup.exe)
-          npx --yes @tauri-apps/cli@^2 signer sign \
+          # Pin the CLI to the exact lockfile version — a floating `@^2` would pull
+          # unpinned code from npm at release time WITH the real updater key in env.
+          npx --yes @tauri-apps/cli@2.11.2 signer sign \
             --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
             --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
             "$exe"
