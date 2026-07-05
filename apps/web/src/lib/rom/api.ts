@@ -705,9 +705,18 @@ export async function setAvatarFromScene({ data }: { data: unknown }): Promise<s
   return fileName
 }
 
-/** Open a file with its OS-default application (a `.duf` opens in Daz Studio). */
+/** Open a scene/project file with its OS-default application (a `.duf` opens in
+ *  Daz Studio, a `.hip` in Houdini). Only LOCAL files with an expected extension
+ *  are opened — a character definition is shareable, so a crafted `scenePath`
+ *  must not turn "Open scene" into launching an arbitrary URL (phishing). */
 export async function openScene({ data }: { data: unknown }): Promise<void> {
   const { scenePath } = z.object({ scenePath: z.string().min(1) }).parse(data)
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(scenePath)) {
+    throw new Error('Refusing to open a URL — the scene path must be a local file.')
+  }
+  if (!/\.(duf|hip|hipnc|hiplc)$/i.test(scenePath)) {
+    throw new Error('Refusing to open — not a recognised scene/project file (.duf/.hip).')
+  }
   await shellOpen(scenePath)
 }
 

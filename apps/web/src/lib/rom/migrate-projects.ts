@@ -69,6 +69,13 @@ export async function migrateProjects(): Promise<void> {
         allOk = false // unreachable — leave it for a later run
         continue
       }
+      // Already migrated on an earlier run (e.g. this project was reachable then,
+      // another wasn't, so projects.json is still around). Do NOT re-write its
+      // manifest — that would clobber the user's per-project settings back to
+      // defaults. Skip it; it counts as done (doesn't hold up finalisation).
+      if (await findManifestPath(dir)) {
+        continue
+      }
       const manifest: DcspManifest = {
         schemaVersion: DCSP_SCHEMA_VERSION,
         id: project.id,

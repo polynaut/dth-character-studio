@@ -34,6 +34,7 @@ import {
   saveSettings,
   uncForPath,
 } from '#/lib/rom/api.ts'
+import { confirmDialog } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { cn } from '#/lib/utils.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -364,6 +365,16 @@ function SettingsPage() {
 
   async function onSaveProjectSettings() {
     if (!project) return
+    // Changing the characters subfolder physically MOVES every existing character
+    // folder to the new root — confirm before that destructive, non-trivial move.
+    const subdirChanged = pCharactersSubdir.trim() !== (project.charactersSubdir ?? '')
+    if (subdirChanged) {
+      const ok = await confirmDialog(
+        'Change the characters subfolder?\n\nThis moves all existing character folders to the new location and repoints their scene/Houdini paths. Make sure no character files are open elsewhere.',
+        { title: 'Move character folders', kind: 'warning' },
+      )
+      if (!ok) return
+    }
     setSavingProject(true)
     try {
       // The DIM manifests folder lives under the Daz Products toggle on this tab

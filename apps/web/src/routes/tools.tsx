@@ -14,7 +14,6 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
 import { poseAssetCsvEra } from '@dth/rom'
 
 import { Button } from '#/components/ui/button.tsx'
@@ -43,7 +42,7 @@ import {
   uninstallDaz,
 } from '#/lib/rom/api.ts'
 import { daztohueScriptsDir } from '#/lib/rom/storage.ts'
-import { pickFolder } from '#/lib/desktop.ts'
+import { openExternal, pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList, ReportClose } from '#/components/install-controls.tsx'

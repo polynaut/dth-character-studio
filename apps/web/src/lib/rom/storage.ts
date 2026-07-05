@@ -425,7 +425,11 @@ export async function moveCharactersRoot(oldRoot: string, newRoot: string): Prom
   // alone (moving them by their old-relative path would double-nest them).
   const newInsideOld = (to + '/').startsWith(from + '/')
   await mkdir(to, { recursive: true })
-  let moved = 0
+
+  // Plan every move up front and check ALL destinations for collisions BEFORE
+  // moving anything — so a collision on the third character can't leave the first
+  // two stranded at the new root while the manifest still points at the old one.
+  const plan: Array<{ src: string; dest: string; relFolder: string; defAbs: string }> = []
   for (const entry of await scanLibrary(from)) {
     // A folder-backed character moves its folder; a loose root-level definition
     // moves just its `.json` (its "folder" IS the root — never move that).
@@ -438,9 +442,15 @@ export async function moveCharactersRoot(oldRoot: string, newRoot: string): Prom
     if (await isTaken(dest)) {
       throw new Error(`Can't move character to "${dest}" — something already exists there.`)
     }
+    plan.push({ src, dest, relFolder: entry.relFolder, defAbs: entry.definitionAbs })
+  }
+
+  let moved = 0
+  for (const { src, dest, relFolder, defAbs: oldDefAbs } of plan) {
     await mkdir(dirname(dest), { recursive: true })
     await rename(src, dest)
     moved += 1
+    const entry = { relFolder, folderAbs: src, definitionAbs: oldDefAbs }
     // Repoint scenes / Houdini projects that travelled inside the moved folder.
     if (entry.relFolder) {
       try {
@@ -1025,10 +1035,11 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
   if (!path) return defaults
   try {
     const raw = JSON.parse(await readTextFile(path))
-    return {
+    const hadId = typeof raw.id === 'string' && raw.id
+    const manifest: DcspManifest = {
       schemaVersion:
         typeof raw.schemaVersion === 'number' ? raw.schemaVersion : DCSP_SCHEMA_VERSION,
-      id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
+      id: hadId ? raw.id : newId(),
       name: typeof raw.name === 'string' && raw.name ? raw.name : defaults.name,
       createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : '',
       dazSubdir:
@@ -1052,6 +1063,17 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
           ? raw.charactersSubdir
           : defaults.charactersSubdir,
     }
+    // A manifest without an id used to mint a fresh one on EVERY read — a
+    // non-deterministic project id (its product-scan output dir + recents key
+    // change between reads). Persist the minted id once so it's stable. Best-effort.
+    if (!hadId) {
+      try {
+        await writeManifest(dir, manifest)
+      } catch {
+        // read-only manifest — falls back to the old per-read behaviour, no worse
+      }
+    }
+    return manifest
   } catch {
     return defaults
   }
