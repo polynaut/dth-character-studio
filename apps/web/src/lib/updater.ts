@@ -1,8 +1,9 @@
 import { isTauri } from '@tauri-apps/api/core'
-import { ask } from '@tauri-apps/plugin-dialog'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { toast } from 'sonner'
+
+import { requestUpdatePrompt } from './update-prompt'
 
 /**
  * Check GitHub Releases for a newer signed version. If one exists, ask the user;
@@ -14,6 +15,10 @@ import { toast } from 'sonner'
  * Called silently on startup. When invoked from the Help → Check for Updates menu
  * (`manual: true`) it also surfaces the "already up to date" / "not available in
  * dev" / "check failed" outcomes as toasts, so the click always gives feedback.
+ *
+ * When an update exists, the confirm is an app-styled React dialog (rendered by
+ * `<UpdatePromptHost/>`, see components/update-prompt.tsx) rather than the native
+ * OS dialog; that dialog owns the download/install + relaunch from here on.
  */
 export async function checkForUpdates({ manual = false }: { manual?: boolean } = {}): Promise<void> {
   if (!isTauri() || import.meta.env.DEV) {
@@ -27,20 +32,16 @@ export async function checkForUpdates({ manual = false }: { manual?: boolean } =
       return
     }
 
-    const notes = update.body ? `\n\n${update.body}` : ''
-    const accepted = await ask(
-      `Version ${update.version} is available.${notes}\n\nDownload and install it now? The app will restart.`,
-      {
-        title: 'Update available',
-        kind: 'info',
-        okLabel: 'Update now',
-        cancelLabel: 'Later',
+    // App-styled React confirm (see components/update-prompt.tsx) instead of the
+    // native ask(). The dialog drives the download/install + relaunch itself.
+    requestUpdatePrompt({
+      version: update.version,
+      notes: update.body || undefined,
+      install: async () => {
+        await update.downloadAndInstall()
+        await relaunch()
       },
-    )
-    if (!accepted) return
-
-    await update.downloadAndInstall()
-    await relaunch()
+    })
   } catch (err) {
     // Update check is best-effort — a missing/locked release or offline state
     // shouldn't break startup.
