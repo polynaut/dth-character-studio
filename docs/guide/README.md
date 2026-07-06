@@ -23,3 +23,15 @@ to Houdini.
 6. [Into Houdini](./06-into-houdini.md)
 
 Each step is short — the whole path takes about 15 minutes once the downloads are in place.
+
+## Optional & advanced
+
+None of these are needed to generate a ROM — reach for them once you want the studio
+to help maintain your Daz/Houdini content or organize a project beyond its characters:
+
+- [The Tools page](./tools.md) — install/maintain your own Daz & Houdini content,
+  deduplicate downloads, storage housekeeping, and refresh generated files.
+- [Daz assets](./daz-assets.md) — attach reusable Daz scenes (not full characters) to
+  a project, organized alongside its characters. *(Opt-in per project.)*
+- [Daz product scanning](./product-scanning.md) — discover which Daz products a
+  character uses and store the list on it. *(Opt-in per project.)*
