@@ -268,6 +268,9 @@ fn fp_add(fp: &mut u64, rel: &str) {
 /// `rel`) into `out`, and returns the total file count — so "already installed"
 /// is simply "`out` empty", read from the real filesystem rather than a fragile
 /// single-file marker, and `out` powers the expandable per-asset list.
+// 8 args: one cohesive recursive dir-sync (source/rel/out + counters/flags); a
+// params struct would add indirection without making it clearer.
+#[allow(clippy::too_many_arguments)]
 fn sync_dir(
     src: &Path,
     dst: &Path,
@@ -477,7 +480,7 @@ fn extract_zip_entry(
 ) -> std::io::Result<()> {
     let mut entry = archive
         .by_index(idx)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
     if let Some(parent) = dest_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -544,6 +547,9 @@ fn zip_file_entries(archive: &mut zip::ZipArchive<fs::File>) -> Vec<(usize, Stri
 /// nested package zips merge into their outer asset's step. Returns whether a Daz
 /// content level was found in this archive or a nested one; `Err` carries a
 /// step_err detail.
+// 10 args: a recursive zip-diff threading scan state through each nested archive;
+// splitting it would just scatter that state across a struct.
+#[allow(clippy::too_many_arguments)]
 fn diff_zip_archive(
     archive: &mut zip::ZipArchive<fs::File>,
     dest: &Path,
@@ -668,7 +674,7 @@ fn process_asset(
     force: bool,
     skip_map: &HashMap<PathBuf, HashSet<String>>,
 ) -> Option<AssetStep> {
-    let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+    let is_zip = asset.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
     if !asset.is_dir() && !is_zip {
         return None;
     }
@@ -1045,6 +1051,9 @@ fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
 
 /// Read a source folder's immediate children, sorted. On failure returns a single
 /// step (folder-missing skip or read error) for the caller to surface.
+// InstallStep is the shared install-report type threaded through the whole install
+// pipeline; boxing it here alone wouldn't shrink the others, so keep it inline.
+#[allow(clippy::result_large_err)]
 fn collect_assets(source: &str) -> Result<Vec<PathBuf>, InstallStep> {
     let src = Path::new(source);
     if !src.is_dir() {
@@ -1302,7 +1311,7 @@ fn collect_zip_files(
 /// Resolve an asset to its full content-file list (rel path → size). None for
 /// loose files / assets with no Daz content.
 fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
-    let is_zip = asset.extension().map_or(false, |e| e.eq_ignore_ascii_case("zip"));
+    let is_zip = asset.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
     if !asset.is_dir() && !is_zip {
         return None;
     }
@@ -1432,8 +1441,8 @@ fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         }
     }
     let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
-    for i in 0..n {
-        if !assets[i].files.is_empty() {
+    for (i, asset) in assets.iter().enumerate() {
+        if !asset.files.is_empty() {
             let r = uf_find(&mut parent, i);
             groups.entry(r).or_default().push(i);
         }
@@ -1764,7 +1773,7 @@ fn extract_archive<R: std::io::Read + std::io::Seek>(
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         let rel = match entry.enclosed_name() {
             Some(p) => p,
             None => continue,
@@ -2501,7 +2510,7 @@ fn active_project_file(window: tauri::Window, projects: tauri::State<WindowProje
 fn open_project_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        return open_project_window_impl(&app, &path).map_err(|e| e.to_string());
+        open_project_window_impl(&app, &path).map_err(|e| e.to_string())
     }
     #[cfg(not(desktop))]
     {
@@ -2514,7 +2523,7 @@ fn open_project_window(app: tauri::AppHandle, path: String) -> Result<(), String
 fn open_home_window(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        return open_home_window_impl(&app).map_err(|e| e.to_string());
+        open_home_window_impl(&app).map_err(|e| e.to_string())
     }
     #[cfg(not(desktop))]
     {
