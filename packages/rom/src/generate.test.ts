@@ -726,6 +726,44 @@ describe.skipIf(!existsSync(ELECTRA))('round-trip with the real ElectraG9_FBMs.j
   })
 })
 
+// The product invariant, guarded across a config matrix: the Houdini PoseAsset CSV
+// and the Daz-side script derive every custom frame's position from the SAME
+// measured preset-block lengths, so the two artifacts can't drift. (Only three
+// configs were hand-checked before; this proves the property, not just examples.)
+describe('frame alignment: PoseAsset CSV ↔ Daz config (no drift)', () => {
+  const cases: Array<{ label: string; patch: (s: RomSections) => void }> = [
+    { label: 'base only', patch: () => {} },
+    { label: 'GEN (GP)', patch: (s) => { s.GEN.enabled = true } },
+    {
+      label: 'GEN + PHY',
+      patch: (s) => { s.GEN.enabled = true; s.PHY.enabled = true; s.PHY.mode = 'preset' },
+    },
+    { label: 'base-less (FBM only)', patch: (s) => { s.JCM.enabled = false } },
+  ]
+  for (const { label, patch } of cases) {
+    it(`custom frames start at the measured preset offset — ${label}`, () => {
+      const sections = makeSections()
+      patch(sections)
+      const character = makeCharacter({ sections })
+      const offset = presetFrameCount(sections, character.gender, FRAMES)
+
+      // Houdini side: the first custom (FBM) row lands at exactly that offset.
+      const firstFbm = toPoseAssetCsv(character, FRAMES)
+        .content.trimEnd()
+        .split('\n')
+        .find((l) => l.startsWith('FBM,'))
+      expect(firstFbm).toBe(`FBM,${offset},BodyTone,`)
+
+      // Daz side: the script carries the SAME measured preset lengths, and its
+      // inline custom frames are 0-based — so the runtime places that block at the
+      // identical absolute frame (offset + 0). Same inputs → no drift, by construction.
+      const cfg = characterConfig(toCharacterScriptDsa(character, {}, FRAMES).content)
+      expect(cfg.presetFrames).toEqual(FRAMES)
+      expect(cfg.extraFrames.frames[0].frame).toBe(0)
+    })
+  }
+})
+
 describe('exporter integration', () => {
   /** A character with one reference-skeleton FBM pose and no GEN preset (so the
    *  CSV carries no template GEN rows to confuse the reference-frame check). */

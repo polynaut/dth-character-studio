@@ -218,7 +218,11 @@ export function toDazFbmCsv(character: Character): GeneratedFile {
  * DthWorkflow<Name>.dsa — thin wrapper that configures and runs the
  * DazToHue-Scripts workflow (one-click full ROM apply in Daz Studio).
  */
-export function toWorkflowDsa(character: Character, romPaths: RomPaths = {}): GeneratedFile {
+export function toWorkflowDsa(
+  character: Character,
+  romPaths: RomPaths = {},
+  frames?: PresetFrames,
+): GeneratedFile {
   const slug = characterSlug(character)
   const { sections } = character
   // Preset sections compile into the DthWorkflow include flags; custom
@@ -260,7 +264,7 @@ options.bIncludePhysics = ${includePhysics};
 options.bDQS = ${characterSkinning(character) === 'dqs'};
 options.FACsDetailStrength = ${character.facsDetailStrength};
 options.FlexionStrength = ${character.flexionStrength};
-${
+${frames ? `// Measured preset-block lengths — the runtime sizes each block from these,\n// never a hard-coded literal.\noptions.presetFrames = ${JSON.stringify(frames)};\n` : ''}${
   romPaths.jcm || romPaths.mouth || romPaths.gp || romPaths.dk || romPaths.phys
     ? `
 // Exact ROM files resolved from the studio's preset selection
@@ -743,6 +747,11 @@ export function toCharacterScriptDsa(
     FACsDetailStrength: character.facsDetailStrength,
     FlexionStrength: character.flexionStrength,
   }
+  // Measured preset-block lengths (base/gp/dk/phys), so the Daz runtime sizes
+  // each block from the real .duf frame counts instead of hard-coded literals —
+  // the two artifacts can't drift. Omitted only in pure/web contexts (no native
+  // measurement); the runtime then fails loud rather than guessing.
+  if (frames) config.presetFrames = frames
   if (charFolderAbs) {
     config.runLogPath = `${charFolderAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
   }
