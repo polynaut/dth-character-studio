@@ -1023,9 +1023,9 @@ function SettingsPage() {
               </label>
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
-                  Enable assets
-                  <InfoPopup label="Enable assets — more information">
-                    Adds an <strong>Assets</strong> tab for reusable Daz scenes (bases to build
+                  Enable scenes
+                  <InfoPopup label="Enable scenes — more information">
+                    Adds a <strong>Scenes</strong> tab for reusable Daz scenes (bases to build
                     characters on), stored in this project. Off by default — the project then has
                     characters only.
                   </InfoPopup>
