@@ -40,6 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - name: Verify the brotli alloc pins are intact
         shell: bash
         working-directory: apps/desktop
@@ -50,6 +52,9 @@ jobs:
             || { echo "::error::alloc-no-stdlib is not pinned to 2.0.4 (breaks brotli 8) — re-pin per docs/devops.md"; exit 1; }
           grep -A1 'name = "alloc-stdlib"' Cargo.lock | grep -q 'version = "0.2.2"' \
             || { echo "::error::alloc-stdlib is not pinned to 0.2.2 — re-pin per docs/devops.md"; exit 1; }
+      - name: cargo clippy (locked, deny warnings)
+        working-directory: apps/desktop
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: cargo test (locked)
         working-directory: apps/desktop
         run: cargo test --locked
