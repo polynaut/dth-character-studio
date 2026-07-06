@@ -1,5 +1,23 @@
 # @dth/web
 
+## 0.31.2
+
+### Patch Changes
+
+- [#134](https://github.com/polynaut/dth-character-studio/pull/134) [`05a6233`](https://github.com/polynaut/dth-character-studio/commit/05a62336c617cab8b29e035fa0040f600e1d9dfc) Thanks [@polynaut](https://github.com/polynaut)! - **Rename the per-project "Assets" feature to "Attachments".**
+
+  The optional per-project feature for attaching reusable Daz `.duf` scenes (bases,
+  props, looks) now reads as **Attachments** everywhere in the UI — the `Enable
+attachments` toggle, the `Characters / Attachments` tab, the `Character / Attachment`
+  add choice, and the attachment cards/messages. This removes the confusing overlap
+  with the Tools page's **Daz assets** install section (which installs downloaded Daz
+  products), so the docs no longer need a "two different things called Daz assets"
+  disclaimer. Internal storage is unchanged (`.assets/` folder + `assetsEnabled`
+  manifest key), so existing projects keep working with no migration.
+
+- Updated dependencies []:
+  - @dth/rom@0.31.2
+
 ## 0.31.1
 
 ### Patch Changes
