@@ -9,6 +9,7 @@ import { listen } from '@tauri-apps/api/event'
 
 import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
+import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import type { QueryClient } from '@tanstack/react-query'
@@ -81,6 +82,8 @@ function RootComponent() {
           },
         }}
       />
+      {/* App-styled auto-update confirm (replaces the native OS dialog). */}
+      <UpdatePromptHost />
       {/* Dev-only: never ship the devtools button to installed/end-user builds. */}
       {import.meta.env.DEV && (
         <TanStackDevtools
