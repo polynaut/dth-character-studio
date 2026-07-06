@@ -1,5 +1,17 @@
 # @dth/web
 
+## 0.31.3
+
+### Patch Changes
+
+- [#135](https://github.com/polynaut/dth-character-studio/pull/135) [`cfa5c6f`](https://github.com/polynaut/dth-character-studio/commit/cfa5c6f9ea55b858f88a212a36ecff45a51754a5) Thanks [@polynaut](https://github.com/polynaut)! - **The "update available" prompt is now an in-app dialog** instead of the native OS
+  dialog. When a new version is found, the confirm is rendered in React in the app's
+  own style (matching the other dialogs) — with the version, release notes, and
+  **Later** / **Update now**. The dialog also shows a "Downloading and installing…"
+  state while it works and surfaces any install error inline, then restarts the app.
+- Updated dependencies []:
+  - @dth/rom@0.31.3
+
 ## 0.31.2
 
 ### Patch Changes
