@@ -368,7 +368,7 @@ function ProjectCharactersPage() {
 
       <SidePanel
         open={panelOpen}
-        title={assetsEnabled && panelTab === 'asset' ? 'Add asset' : 'Create character'}
+        title={assetsEnabled && panelTab === 'asset' ? 'Add scene' : 'Create character'}
         onClose={() => setPanelOpen(false)}
       >
         <Tabs
@@ -379,7 +379,7 @@ function ProjectCharactersPage() {
           {assetsEnabled && (
             <TabsList className="w-full">
               <TabsTrigger value="character">Character</TabsTrigger>
-              <TabsTrigger value="asset">Asset</TabsTrigger>
+              <TabsTrigger value="asset">Scene</TabsTrigger>
             </TabsList>
           )}
           <TabsContent value="character">
@@ -533,7 +533,7 @@ function ProjectCharactersPage() {
         {assetsEnabled && (
           <TabsList className="mb-6">
             <TabsTrigger value="characters">Characters</TabsTrigger>
-            <TabsTrigger value="assets">Assets</TabsTrigger>
+            <TabsTrigger value="assets">Scenes</TabsTrigger>
           </TabsList>
         )}
         <TabsContent value="characters">

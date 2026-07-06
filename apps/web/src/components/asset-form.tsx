@@ -66,7 +66,7 @@ export function AssetForm({
           deleteOriginal: copy && deleteOriginal,
         },
       })
-      toast.success(`Added asset “${name.trim() || sceneStem(scenePath)}”`)
+      toast.success(`Added scene “${name.trim() || sceneStem(scenePath)}”`)
       onCreated()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -78,7 +78,7 @@ export function AssetForm({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Add a Daz scene as a reusable <strong>asset</strong> — a starting point to build characters
+        Add a reusable Daz <strong>scene</strong> — a starting point to build characters
         on. Stored in this project.
       </p>
       <Button variant="outline" onClick={() => void pick()}>
@@ -95,7 +95,7 @@ export function AssetForm({
             />
           </div>
           <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Asset name" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Scene name" />
           </Field>
           <Field label="Description (optional)">
             <Textarea
@@ -129,12 +129,12 @@ export function AssetForm({
               </>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Linked in place — the scene stays where it is; the asset just points to it.
+                Linked in place — the scene stays where it is; this entry just points to it.
               </p>
             )}
           </div>
           <Button onClick={() => void onCreate()} disabled={busy || !name.trim()}>
-            {busy ? 'Adding…' : 'Add asset'}
+            {busy ? 'Adding…' : 'Add scene'}
           </Button>
         </>
       )}

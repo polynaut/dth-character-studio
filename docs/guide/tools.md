@@ -10,12 +10,6 @@ It has three tabs.
 
 <!-- screenshot: Tools page, three tabs -->
 
-> **Two different things called "Daz assets".** On this page, the **Daz assets**
-> *section* (in the *Daz Studio & Houdini* tab) installs your **downloaded Daz
-> products** into your library. That is **not** the same as the optional per-project
-> **Assets** feature (reusable scenes attached to a project) — see
-> [Daz assets](./daz-assets.md) for that. Same words, different features.
-
 ---
 
 ## Tab 1 — DazToHue-Scripts
@@ -48,8 +42,7 @@ Point it at your **asset source folders** (e.g. per-Genesis download folders;
 there**. When two products ship the same file, the winner is picked automatically:
 **newer Genesis wins** (by folder name, e.g. `_genesis 9` over `_genesis 8`), then
 the **bigger file** — so only the winning copy installs. **Scan** lists what's
-found; **Install** copies only what changed. *(This is the "install my downloads"
-feature — not the project Assets feature.)*
+found; **Install** copies only what changed.
 
 <!-- screenshot: Daz assets install section -->
 
