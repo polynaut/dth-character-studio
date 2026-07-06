@@ -52,7 +52,7 @@ export function AssetsGrid({
       await deleteAsset({ data: { projectId, id: pendingDelete.id, keepFiles: keep } })
       setPendingDelete(null)
       await reload()
-      toast.success('Asset removed')
+      toast.success('Scene removed')
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -67,15 +67,15 @@ export function AssetsGrid({
           <Plus /> Add
         </Button>
         <span className="text-sm text-muted-foreground">
-          {assets.length} asset{assets.length === 1 ? '' : 's'}
+          {assets.length} scene{assets.length === 1 ? '' : 's'}
         </span>
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading assets…</p>
+        <p className="text-sm text-muted-foreground">Loading scenes…</p>
       ) : assets.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No assets yet. Add a Daz scene as a reusable base for new characters.
+          No scenes yet. Add a Daz scene as a reusable base for new characters.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -111,7 +111,7 @@ export function AssetsGrid({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    title="Remove asset"
+                    title="Remove scene"
                     onClick={() => setPendingDelete(asset)}
                   >
                     <Trash2 className="size-4" />
@@ -125,12 +125,12 @@ export function AssetsGrid({
 
       {pendingDelete && (
         <BulkDeleteDialog
-          noun="asset"
+          noun="scene"
           names={[pendingDelete.name]}
           message={
             pendingDelete.linked
-              ? 'This removes the asset from the list. The linked scene file is left untouched.'
-              : 'This removes the asset and its copied scene files.'
+              ? 'This removes the scene from the list. The linked file on disk is left untouched.'
+              : 'This removes the scene and its copied files.'
           }
           keepLabel={pendingDelete.linked ? undefined : 'Keep the copied scene files on disk'}
           busy={deleting}

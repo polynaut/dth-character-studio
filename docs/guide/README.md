@@ -31,7 +31,7 @@ to help maintain your Daz/Houdini content or organize a project beyond its chara
 
 - [The Tools page](./tools.md) — install/maintain your own Daz & Houdini content,
   deduplicate downloads, storage housekeeping, and refresh generated files.
-- [Daz assets](./daz-assets.md) — attach reusable Daz scenes (not full characters) to
+- [Scenes](./scenes.md) — attach reusable Daz scenes (not full characters) to
   a project, organized alongside its characters. *(Opt-in per project.)*
 - [Daz product scanning](./product-scanning.md) — discover which Daz products a
   character uses and store the list on it. *(Opt-in per project.)*
