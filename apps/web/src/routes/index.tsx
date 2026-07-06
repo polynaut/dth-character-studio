@@ -149,8 +149,7 @@ function HomePage() {
 
       {recents.length === 0 ? (
         <p className="text-muted-foreground">
-          No recent projects — create one, open an existing <code>.dcsp</code> file, or drop one
-          anywhere on the page.
+          No recent projects — create one or open an existing <code>.dcsp</code> file.
         </p>
       ) : (
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
