@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.31.1
+
+### Patch Changes
+
+- [#130](https://github.com/polynaut/dth-character-studio/pull/130) [`b0058d1`](https://github.com/polynaut/dth-character-studio/commit/b0058d109b71c64d111376dc7546396b20703e78) Thanks [@polynaut](https://github.com/polynaut)! - **Tidy the Home empty-state copy and add deep-dive docs for the optional features.**
+
+  - The "No recent projects" line no longer repeats the "drop one anywhere on the
+    page" hint (still shown in the create-project instructions just below).
+  - New guide pages document the optional, never-required features: the Tools page,
+    the per-project Daz assets feature, and Daz product scanning.
+
+- Updated dependencies []:
+  - @dth/rom@0.31.1
+
 ## 0.31.0
 
 ### Minor Changes
