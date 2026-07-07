@@ -41,6 +41,17 @@ pub(crate) fn looks_like_daz_folder(path: &Path) -> bool {
     })
 }
 
+/// The path the recursive-delete rails should judge: the CANONICAL form when the
+/// target exists — so a `..`-laden spelling or a junction/symlink can't dress a
+/// dangerous target (a drive root, a profile folder) up as a safe-looking one —
+/// and the raw path when it doesn't (missing targets keep their existing
+/// "not found" handling). Segment counting still works on the canonical form:
+/// the Windows `\\?\` verbatim prefix is a `Prefix`/`RootDir` component, never a
+/// `Normal` one, so it adds no phantom segments.
+pub(crate) fn rail_target(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 /// Number of files (recursively) under `dir`; 0 when it can't be read. Does not
 /// follow directory symlinks/junctions (see `entry_is_real_dir`).
 pub(crate) fn count_files(dir: &Path) -> u64 {
@@ -131,6 +142,7 @@ pub(crate) fn join_rel(base: &Path, rel: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testutil::unique_temp_dir;
 
     #[test]
     fn join_rel_uses_components() {
@@ -150,5 +162,38 @@ mod tests {
         assert!(looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents\\DAZ 3D")));
         assert!(looks_like_daz_folder(Path::new("C:\\Program Files\\DAZ 3D\\DAZStudio6")));
         assert!(!looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents")));
+    }
+
+    #[test]
+    fn rail_target_unmasks_a_dotdot_spelling_of_a_root() {
+        // A path with plenty of Normal segments that RESOLVES to the filesystem
+        // root: safe-looking to the raw rails, refused once canonicalized.
+        let base = unique_temp_dir("rail_canon");
+        let deep = base.join("sub");
+        fs::create_dir_all(&deep).unwrap();
+        // Climb one level per Normal segment (plus one for the root itself —
+        // Windows clamps any excess `..` at the drive root anyway).
+        let ups = deep
+            .components()
+            .filter(|c| matches!(c, std::path::Component::Normal(_)))
+            .count();
+        let mut sneaky = deep.clone();
+        for _ in 0..ups + 1 {
+            sneaky.push("..");
+        }
+        // Raw, the spelling passes the shallow-path rail…
+        assert!(unsafe_recursive_target(&sneaky).is_none());
+        // …but the canonical target is the root, which the rail refuses.
+        let canon = rail_target(&sneaky);
+        assert!(
+            unsafe_recursive_target(&canon).is_some(),
+            "canonical form must be refused: {} → {}",
+            sneaky.display(),
+            canon.display()
+        );
+        // A missing path keeps its raw form (today's "not found" handling).
+        let missing = Path::new("C:\\definitely\\not\\there\\dth_rail_test");
+        assert_eq!(rail_target(missing), missing);
+        let _ = fs::remove_dir_all(&base);
     }
 }

@@ -67,6 +67,43 @@ describe('generatedDthVersion (v7, additive)', () => {
   })
 })
 
+describe('string bounds (hostile shared JSONs)', () => {
+  it('parses a realistic character untouched', () => {
+    const character = characterSchema.parse({
+      ...base,
+      image: 'Electra.png',
+      scenePath: 'X:\\_3d\\dth-characters\\Electra\\daz3d\\ElectraDefault_G9.duf',
+      extraScenes: ['X:\\_3d\\dth-characters\\Electra\\daz3d\\ElectraSummer_G9.duf'],
+      houdiniProjects: ['X:\\_3d\\dth-characters\\Electra\\houdini\\Electra.hip'],
+      preserveMorphs: [{ name: 'body_bs_BreastsPosition', keepValue: 0.5 }],
+      products: [
+        {
+          name: 'Golden Palace for Genesis 9',
+          artist: 'Meipe',
+          usedBy: 'GoldenPalace_G9; GP Shell',
+          scenes: ['ElectraDefault_G9'],
+        },
+      ],
+    })
+    expect(character.name).toBe('Electra')
+    expect(character.products[0].artist).toBe('Meipe')
+  })
+
+  it('rejects an absurd multi-megabyte string field', () => {
+    const bomb = 'x'.repeat(5 * 1024 * 1024) // 5 MB
+    expect(characterSchema.safeParse({ ...base, scenePath: bomb }).success).toBe(false)
+    expect(characterSchema.safeParse({ ...base, name: bomb }).success).toBe(false)
+    expect(characterSchema.safeParse({ ...base, image: bomb }).success).toBe(false)
+  })
+
+  it('keeps a data: URL image within the generous image bound', () => {
+    // canonicalImage keeps data: URLs verbatim — the image bound must not
+    // reject a reasonable inline avatar.
+    const dataUrl = `data:image/png;base64,${'A'.repeat(100_000)}`
+    expect(characterSchema.safeParse({ ...base, image: dataUrl }).success).toBe(true)
+  })
+})
+
 describe('compareDthVersions', () => {
   it('orders by numeric segments, not lexically', () => {
     expect(compareDthVersions('2.4.10', '2.4.3')).toBeGreaterThan(0)

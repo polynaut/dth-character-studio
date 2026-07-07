@@ -150,6 +150,22 @@ describe('project manifest (.dcsp)', () => {
     expect(after.charactersSubdir).toBe('assets/characters')
   })
 
+  it('neutralizes a traversal charactersSubdir in a hostile manifest', async () => {
+    // Projects are shared between users — a manifest carrying a `..` path must
+    // read back as '' (the project root), never escape it. A normal relative
+    // folder survives untouched.
+    await storage.createProjectManifest('/games/Evil', 'Evil')
+    const m = await storage.readManifest('/games/Evil')
+    await storage.writeManifest('/games/Evil', { ...m, charactersSubdir: '../../etc' })
+    expect((await storage.readManifest('/games/Evil')).charactersSubdir).toBe('')
+
+    await storage.writeManifest('/games/Evil', { ...m, charactersSubdir: 'C:\\Windows' })
+    expect((await storage.readManifest('/games/Evil')).charactersSubdir).toBe('')
+
+    await storage.writeManifest('/games/Evil', { ...m, charactersSubdir: 'assets/characters' })
+    expect((await storage.readManifest('/games/Evil')).charactersSubdir).toBe('assets/characters')
+  })
+
   it('writeManifest reuses the existing .dcsp file name on rename', async () => {
     await storage.createProjectManifest('/games/Nova', 'Nova')
     const m = await storage.readManifest('/games/Nova')
