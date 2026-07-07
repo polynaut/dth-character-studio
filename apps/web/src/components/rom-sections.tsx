@@ -1846,6 +1846,28 @@ export function RomSections({
         const effectiveEnabled = tiedToJcm
           ? sections.JCM.enabled && sections.JCM.mode === 'preset'
           : config.enabled
+        // Preset sections whose required asset the installed DTH release doesn't
+        // ship for this generation (e.g. GP/DK or Physics on G8/G8.1, FAC on G8):
+        // generation will fail loud — flag it HERE, on the section that causes it.
+        // FAC rides in a FAC-variant JCM base ROM, not a FAC-section asset.
+        const missingPresetAsset = (() => {
+          if (!effectiveEnabled || config.mode !== 'preset' || catalog.assets.length === 0)
+            return false
+          const forGen = catalog.assets.filter(
+            (a) => a.genesis === null || a.genesis === genesis,
+          )
+          if (section === 'JCM') return !forGen.some((a) => a.section === 'JCM')
+          if (section === 'FAC')
+            return !forGen.some((a) => a.section === 'JCM' && a.includesFac)
+          if (section === 'GEN') {
+            const roms = genRomIncludes(gender, config.presetAssets)
+            const has = (g: Gender) =>
+              forGen.some((a) => a.section === 'GEN' && genAssetGender(a.name) === g)
+            return (roms.gp && !has('female')) || (roms.dk && !has('male'))
+          }
+          if (section === 'PHY') return !forGen.some((a) => a.section === 'PHY')
+          return false
+        })()
         return (
           // Each section is its own wrapper on purpose: position:sticky constrains
           // the title to its parent, which is exactly what makes the NEXT section's
@@ -1867,6 +1889,14 @@ export function RomSections({
               />
               <span className="w-12 font-mono text-sm font-semibold">{section}</span>
               <span className="font-medium">{SECTION_LABELS[section]}</span>
+              {missingPresetAsset && (
+                <span
+                  className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
+                  title={`The installed DTH release ships no ${SECTION_LABELS[section]} preset for ${genesis} — generation will fail. Disable this section or switch it to a custom asset.`}
+                >
+                  no {genesis} asset
+                </span>
+              )}
               <span className="ml-auto text-xs text-muted-foreground">
                 {tiedToJcm
                   ? effectiveEnabled

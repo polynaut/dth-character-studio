@@ -152,6 +152,26 @@ function ProjectCharactersPage() {
     return (p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '').replace(/\.duf$/i, '')
   }
 
+  /**
+   * Guess the generation from a scene filename ("LaraCroft_G8_1_GP" → G8.1,
+   * "KiraG9" → G9, "Vicky Genesis 8" → G8). Longest match first so 8.1 isn't
+   * swallowed by 8; null when the name gives no (supported) hint — G3 is not
+   * selectable yet, so it is deliberately not guessed.
+   */
+  function genesisFromFileName(base: string): GenesisVersion | null {
+    // Split CamelCase / digit→Upper seams into word boundaries first, so
+    // "KiraG9" and "Genesis9Base" hint while "Aug8Party" doesn't.
+    const s = base
+      .replace(/([a-z])([A-Z])/g, '$1_$2')
+      .replace(/([0-9])([A-Z])/g, '$1_$2')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+    if (/(^|_)(g8_?1|genesis_?8_?1)(_|$)/.test(s)) return 'G8.1'
+    if (/(^|_)(g8|genesis_?8)(_|$)/.test(s)) return 'G8'
+    if (/(^|_)(g9|genesis_?9)(_|$)/.test(s)) return 'G9'
+    return null
+  }
+
   // The character's folder (and its JSON filename) are created from the name, so
   // disallow a trailing ".json".
   const nameTrimmed = name.trim()
@@ -165,6 +185,13 @@ function ProjectCharactersPage() {
     setScenePath(picked)
     // Prefill the name from the scene's filename (the folder is created from it).
     setName(sceneBaseName(picked))
+    // Best-effort: when the filename hints the generation (Kira_G8_1.duf,
+    // LaraG9.duf, "… Genesis 8 …"), preselect it — the user can still override.
+    const hinted = genesisFromFileName(sceneBaseName(picked))
+    if (hinted) {
+      setGenesis(hinted)
+      setPrefill('empty')
+    }
   }
 
   async function onPickScene() {
