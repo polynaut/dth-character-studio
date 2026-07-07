@@ -42,11 +42,21 @@ void (async () => {
     // One-time upgrade of any pre-`.dcsp` install (old projects.json + avatars) to
     // project files — must run before anything reads project data.
     await migrateProjects().catch(() => {})
-    // Activate this window's project — the `.dcsp` it was opened with. The Home
-    // window has none and stays on `/`.
+    // Activate this window's project — the `.dcsp` it was opened with. Windows
+    // created at runtime load `index.html`, whose pathname (/index.html) matches
+    // no route — every window must be navigated somewhere explicitly.
     const file = await activeProjectFile()
     if (file) {
       await router.navigate({ to: '/projects/$projectId', params: { projectId: dirOf(file) } })
+    } else {
+      // A Home window: land on `/`, preserving the `?new=1` the native
+      // "New Project" menu passes so the create-project panel opens.
+      const wantsNew = new URLSearchParams(window.location.search).get('new')
+      await router.navigate({
+        to: '/',
+        search: wantsNew ? { new: true } : {},
+        replace: true,
+      })
     }
   }
   await checkForUpdates()

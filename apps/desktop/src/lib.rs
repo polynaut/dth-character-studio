@@ -2511,20 +2511,28 @@ fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result
 }
 
 /// Open — or focus — the Home (launcher) window (a window with no project mapping).
+/// With `new_project`, also open its create-project panel: an already-running
+/// window gets the `menu-new-project` event (its listener is live); a fresh
+/// window is created on `/?new=1` instead, which the Home route reads on mount —
+/// an emit at creation time would race the webview's listener registration.
 #[cfg(desktop)]
-fn open_home_window_impl(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri::Manager;
+fn open_home_window_impl(app: &tauri::AppHandle, new_project: bool) -> tauri::Result<()> {
+    use tauri::{Emitter, Manager};
     use tauri::{WebviewUrl, WebviewWindowBuilder};
     let projects = app.state::<WindowProjects>();
     let with_project: HashSet<String> = lock_windows(&projects).keys().cloned().collect();
     for (label, w) in app.webview_windows() {
         if !with_project.contains(&label) {
             let _ = w.set_focus();
+            if new_project {
+                let _ = app.emit_to(&label, "menu-new-project", ());
+            }
             return Ok(());
         }
     }
+    let url = if new_project { "index.html?new=1" } else { "index.html" };
     let label = unique_window_label(app, "home");
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
         .title("DTH Character Studio")
         .inner_size(1440.0, 920.0)
         .min_inner_size(960.0, 640.0)
@@ -2561,7 +2569,7 @@ fn open_project_window(app: tauri::AppHandle, path: String) -> Result<(), String
 fn open_home_window(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        open_home_window_impl(&app).map_err(|e| e.to_string())
+        open_home_window_impl(&app, false).map_err(|e| e.to_string())
     }
     #[cfg(not(desktop))]
     {
@@ -2609,7 +2617,7 @@ pub fn run() {
                             let _ = open_project_window_impl(&app, &dcsp);
                         }
                         None => {
-                            let _ = open_home_window_impl(&app);
+                            let _ = open_home_window_impl(&app, false);
                         }
                     }
                 });
@@ -2643,7 +2651,8 @@ pub fn run() {
             })
             .on_menu_event(|app, event| match event.id().as_ref() {
                 "new_project" => {
-                    let _ = open_home_window_impl(app);
+                    // Focus/open Home AND open its create-project panel.
+                    let _ = open_home_window_impl(app, true);
                 }
                 "refresh_assets" => {
                     let _ = app.emit("menu-refresh-assets", ());
