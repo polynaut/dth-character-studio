@@ -135,7 +135,13 @@ export function UnrealProjectsField({
             key={path}
             uprojectPath={path}
             projectDirAbs={project.path}
-            onOpen={() => void openScene({ data: { scenePath: path } })}
+            onOpen={() =>
+              // Surface failures — a scope/association problem otherwise looks
+              // like a dead button (exactly how the .uproject scope bug hid).
+              void openScene({ data: { scenePath: path } }).catch((e: unknown) =>
+                toast.error(e instanceof Error ? e.message : String(e)),
+              )
+            }
             onRemove={() =>
               void save(
                 project.unrealProjects.filter((p) => p !== path),
