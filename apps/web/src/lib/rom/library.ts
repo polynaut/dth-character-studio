@@ -41,6 +41,16 @@ export function definitionFileName(name: string): string {
 }
 
 /**
+ * The notes file belonging to a character definition: `<Name>.json` →
+ * `<Name>.notes.md`. Single source of the derivation — everything that renames,
+ * moves or deletes a definition must take this file along, or the character's
+ * notes are silently orphaned under the old name.
+ */
+export function notesPathFor(definitionPath: string): string {
+  return definitionPath.replace(/\.json$/i, '.notes.md')
+}
+
+/**
  * Validate + normalise a user-entered folder path relative to the library root.
  * Returns a clean '/'-separated relative path. Throws on anything that could
  * escape the library (absolute paths, drive letters, `..` segments) or that

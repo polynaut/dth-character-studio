@@ -57,6 +57,7 @@ import { ImageDialog } from '#/components/image-dialog.tsx'
 import { JcmModsEditor } from '#/components/jcm-mods-editor.tsx'
 import { NumberField } from '#/components/number-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
+import { Tag } from '#/components/tag.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
@@ -639,7 +640,17 @@ function CharacterPage() {
           <div className="flex flex-col gap-5 pt-2">
             <div className="flex flex-wrap gap-4">
               <div>
-                <Label className="mb-1">Genesis</Label>
+                <div className="mb-1 flex items-center gap-2">
+                  <Label>Genesis</Label>
+                  {character.genesis !== 'G9' && (
+                    <Tag
+                      tone="orange"
+                      title={`${GENESIS_LABELS[character.genesis]} PoseAsset CSVs use the custom-only layout, which hasn't been validated in Houdini yet. The Daz-side ROM works; the HDA import may still need adjustments.`}
+                    >
+                      experimental
+                    </Tag>
+                  )}
+                </div>
                 <Select
                   value={character.genesis}
                   onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
