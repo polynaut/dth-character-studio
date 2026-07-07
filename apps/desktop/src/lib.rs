@@ -1875,6 +1875,44 @@ async fn latest_daztohue_commit() -> Result<String, String> {
     Err("only available on the desktop app".into())
 }
 
+/// Tag names of the app's own GitHub releases, newest first (one page). Feeds
+/// the update dialog's "versions you skipped" link list — the webview can't
+/// query GitHub itself (the strict CSP allows IPC only). Errors surface as a
+/// message; the caller degrades to showing no list.
+#[cfg(desktop)]
+#[tauri::command]
+async fn app_release_tags() -> Result<Vec<String>, String> {
+    ensure_crypto_provider();
+    let client = reqwest::Client::builder()
+        .user_agent("DTH-Character-Studio")
+        .build()
+        .map_err(|e| format!("http client failed: {e}"))?;
+    let resp = client
+        .get("https://api.github.com/repos/polynaut/dth-character-studio/releases?per_page=30")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("listing releases failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("listing releases failed: {e}"))?;
+    #[derive(serde::Deserialize)]
+    struct Release {
+        tag_name: String,
+    }
+    let releases: Vec<Release> = resp
+        .json()
+        .await
+        .map_err(|e| format!("reading the releases failed: {e}"))?;
+    Ok(releases.into_iter().map(|r| r.tag_name).collect())
+}
+
+/// Web/mobile builds have no native HTTP (reqwest is desktop-only).
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn app_release_tags() -> Result<Vec<String>, String> {
+    Err("only available on the desktop app".into())
+}
+
 /// Download the soltude/DazToHue-Scripts repo as a zip and install its contents
 /// into `dest`. The archive is fetched in memory, unpacked into a temp folder
 /// beside `dest`, then swapped in — so a failed download/extract never leaves a
@@ -2631,6 +2669,7 @@ pub fn run() {
             uninstall_daz,
             install_daztohue_scripts,
             latest_daztohue_commit,
+            app_release_tags,
             install_daz_merge,
             install_houdini_presets,
             unc_for_path,
