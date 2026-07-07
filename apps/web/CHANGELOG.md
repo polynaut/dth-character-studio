@@ -1,5 +1,68 @@
 # @dth/web
 
+## 0.34.0
+
+### Minor Changes
+
+- [#166](https://github.com/polynaut/dth-character-studio/pull/166) [`f6259cd`](https://github.com/polynaut/dth-character-studio/commit/f6259cdd2261697ec4bf4e2dd82649beadc9371b) Thanks [@polynaut](https://github.com/polynaut)! - Genesis 8 / 8.1 support. Both generations are now selectable for characters;
+  everything is driven by what the installed DTH release actually ships per
+  generation: G8.1 gets the full JCM (DQS/Linear) + FAC flow, plain G8 is
+  Linear-only (no DQS/FAC assets exist), and Golden Palace / Dicktator / Physics
+  remain G9-only — enabling a section whose asset doesn't exist for the
+  generation fails loud with a clear message. New ROM entries default to the
+  generation's base-figure node (Genesis8_1Female, Genesis8Male, …) instead of
+  always Genesis9, skinning defaults to Linear where DTH ships no DQS ROM, and
+  the runtime (v19) skips the G9-only mouth ROM pass and FACS/flexion strength
+  dials on non-G9 figures instead of failing or logging spurious errors. The
+  PoseAsset CSV for non-G9 characters uses the measured custom-sections path
+  (the G9 ground-truth template stays G9-only for now).
+
+- [#165](https://github.com/polynaut/dth-character-studio/pull/165) [`fd9fdd9`](https://github.com/polynaut/dth-character-studio/commit/fd9fdd927501acca778b606bb259d41655accb71) Thanks [@polynaut](https://github.com/polynaut)! - Morph scanner scripts + Morph-name autocomplete. The runtime install (v18) now
+  also drops visible `Scan_Morphs_G9/G8.1/G8/G3` scripts into the DTH Character
+  Studio scripts root: run one on a freshly created (unrenamed) figure in Daz and
+  it scans everything dialable on the figure and all its descendants — delta
+  morphs AND controller/ERC dials, across geografts like Golden Palace /
+  Dicktator, nipples/navel add-ons, fitted clothing — into a per-generation
+  JSON index in the studio's app folder. Once an index exists, the
+  ROM editor's Morph name fields autocomplete against it: search by the Daz UI
+  label or the internal name (each suggestion tags which one matched and the node
+  the morph lives on), and picking a suggestion fills in both the internal morph
+  name and the correct node.
+
+### Patch Changes
+
+- [#162](https://github.com/polynaut/dth-character-studio/pull/162) [`8888219`](https://github.com/polynaut/dth-character-studio/commit/88882194e18a8f366f95ca250c4fb6ab6af87b1d) Thanks [@polynaut](https://github.com/polynaut)! - **Main → New Project opens the create-project panel again.** The menu entry
+  focused/opened the Home window but never opened the dialog. Now an
+  already-running Home window gets told to open the panel, and a freshly created
+  one starts with it open.
+
+- [#160](https://github.com/polynaut/dth-character-studio/pull/160) [`bdedd9d`](https://github.com/polynaut/dth-character-studio/commit/bdedd9df93ae57a737be4131c9e7ef960ae0c0ec) Thanks [@polynaut](https://github.com/polynaut)! - **Refresh assets now always covers every known project.** Running it from a
+  project window used to scope the sweep to that project only — the same button
+  meant different things in different windows. It now behaves identically
+  everywhere: every known (recent) project is detected and refreshed, plus the
+  current window's project even if it isn't in recents yet.
+
+- [#161](https://github.com/polynaut/dth-character-studio/pull/161) [`db82ae3`](https://github.com/polynaut/dth-character-studio/commit/db82ae383cd475d7ed39c193c0c460f14d318afe) Thanks [@polynaut](https://github.com/polynaut)! - **Removed the "Example" ROM prefill.** New characters start Empty or prefill
+  from one of your own characters (any project) — the bundled example character
+  is gone from the create panel, the API and the guide.
+
+- [#164](https://github.com/polynaut/dth-character-studio/pull/164) [`8ef6ec5`](https://github.com/polynaut/dth-character-studio/commit/8ef6ec58ef04bcf87bd6fab67a5fea0356bc409b) Thanks [@polynaut](https://github.com/polynaut)! - **ROM grid: explained columns + Houdini-safe names.**
+
+  - The **Name** and **Morph name** column headers got info popups: _Name_ is the
+    one value that travels to Houdini and later Unreal Engine; _Morph name_ must
+    exactly match the morph's internal name in Daz Studio.
+  - Names are now normalized as you type: letters, numbers and underscores only —
+    Houdini rejects anything else, so spaces/special characters are stripped on
+    commit (the same rule the CSV generator already applied).
+  - The **Value** column title now sits flush over its numbers instead of
+    floating at the column's left edge.
+  - The column titles are **sticky** too: they pin right under the sticky section
+    title while the grid scrolls - frame numbers, names and values always have
+    their labels in view.
+
+- Updated dependencies [[`f6259cd`](https://github.com/polynaut/dth-character-studio/commit/f6259cdd2261697ec4bf4e2dd82649beadc9371b), [`fd9fdd9`](https://github.com/polynaut/dth-character-studio/commit/fd9fdd927501acca778b606bb259d41655accb71)]:
+  - @dth/rom@0.34.0
+
 ## 0.33.0
 
 ### Patch Changes
