@@ -53,7 +53,9 @@ function writeRunLog(sPath, oSummary){
 	oLog.failedMorphs = DTH_RUN_LOG.failedMorphs;
 	try {
 		var oFile = new DzFile(sPath);
-		if(oFile.open(oFile.WriteOnly, oFile.Truncate)){
+		// One ORed mode arg — DzFile.open(mode) takes a single flags int; a second
+		// argument was silently ignored on DS4 but warns on DS6 ("Too many arguments").
+		if(oFile.open(oFile.WriteOnly | oFile.Truncate)){
 			oFile.write(JSON.stringify(oLog, null, 2));
 			oFile.close();
 			print("Run log written to", sPath);
@@ -66,11 +68,30 @@ function writeRunLog(sPath, oSummary){
 	return false;
 }
 /**********************************************************************
-**********               */
+ * DAZ Studio 6 detection (JoxiMoon's field-tested 3-tier pattern, trimmed to
+ * the version APIs — no material at hand here for feature detection; with no
+ * version API at all we assume DS4-era, whose Linear keys are correct). */
+function dthDetectDaz6(){
+	if (typeof App != "undefined" && typeof App.versionString == "string") {
+		return App.versionString.indexOf("6.") == 0;
+	}
+	if (typeof App != "undefined" && typeof App.getVersionString == "function") {
+		return App.getVersionString().indexOf("6.") == 0;
+	}
+	return false;
+}
+var DTH_IS_DAZ6 = dthDetectDaz6();
+
+/**********************************************************************
+ * Stamp the ROM's morph keys with the interpolation the running Daz needs:
+ * LINEAR on DS4 (the validated original behavior), CONSTANT on DS6 — DS6's
+ * animation engine drifts Linear-interpolated ROM keys across the timeline
+ * (mrpdean, June 2026: "G9 DQS JCM FAC" cheek poses creeping); converting
+ * every key to Constant after applying is his validated workaround. */
 function setLinearInterp(oNodes, startFrame, endFrame){
 
-	// Set default to linear interpolation off the bat, so hopefully it doesn't need to be set later
-	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
+	// Set the session default to match, so keys created later start out right.
+	Scene.setDefaultKeyInterpolationType(DTH_IS_DAZ6 ? DzProperty.Constant : DzProperty.Linear);
 
  	startFrame = typeof startFrame !== 'undefined' ? startFrame : 0;
  	endFrame = typeof endFrame !== 'undefined' ? endFrame : 0;
@@ -103,12 +124,13 @@ function setLinearInterp(oNodes, startFrame, endFrame){
 		}
 		// Skip node properties entirely - they include Scale/Transform which should never be modified
 	}
-	print("Morph props to set linear interp:", props.length)
+	print("Morph props to set", DTH_IS_DAZ6 ? "CONSTANT" : "LINEAR", "interp:", props.length)
+	var iInterp = DTH_IS_DAZ6 ? DzFloatProperty.CONSTANT_INTERP : DzFloatProperty.LINEAR_INTERP;
 	for( var i = 0; i < props.length; i++){
 		oProp = props[i];
 		for( var j = 0; j < oProp.getNumKeys(); j++) {
 			// Only set interpolation type - do NOT call setValue as it can modify values
-			oProp.setKeyInterpolationType(j, DzFloatProperty.LINEAR_INTERP);
+			oProp.setKeyInterpolationType(j, iInterp);
 		}
 	}
 }

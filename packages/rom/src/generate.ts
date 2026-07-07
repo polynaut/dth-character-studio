@@ -810,7 +810,8 @@ function dthWriteFailureLog(sError) {
     try {
         if (!dthCharacterConfig.runLogPath) return;
         var dthLogFile = new DzFile(dthCharacterConfig.runLogPath);
-        if (dthLogFile.open(dthLogFile.WriteOnly, dthLogFile.Truncate)) {
+        // One ORed mode arg — a second open() argument warns on DS6.
+        if (dthLogFile.open(dthLogFile.WriteOnly | dthLogFile.Truncate)) {
             dthLogFile.write(JSON.stringify({
                 logVersion: 1,
                 character: dthCharacterConfig.characterName,

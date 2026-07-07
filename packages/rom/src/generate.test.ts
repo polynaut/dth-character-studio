@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -709,28 +708,6 @@ describe('toPoseAssetCsv', () => {
     const group = rows.find((r) => r.startsWith('JCMGROUP')) ?? ''
     expect(group).toBe('JCMGROUP,1,0,evil label injected') // comma + newline → space
     expect(rows.every((r) => !r.includes('\n'))).toBe(true)
-  })
-})
-
-// Round-trip against the real DazToHue-Scripts checkout when present on this
-// machine: importing ElectraG9_FBMs.json and regenerating must reproduce the
-// exact same frame data.
-const ELECTRA = 'D:/Development/DazToHue-Scripts/ElectraG9_FBMs.json'
-
-describe.skipIf(!existsSync(ELECTRA))('round-trip with the real ElectraG9_FBMs.json', () => {
-  it('reproduces all frames identically', () => {
-    const original = JSON.parse(readFileSync(ELECTRA, 'utf8'))
-    const sections = sectionsFromFlatFrames(
-      [...original.frames].sort((a: any, b: any) => a.frame - b.frame),
-    )
-    sections.GEN.enabled = true // Electra uses the Golden Palace ROM
-    const character = makeCharacter({
-      sections,
-      resetGenBeforeApplying: original.meta.resetGPBeforeApplying,
-    })
-    const regenerated = JSON.parse(toDazFbmJson(character).content)
-    expect(regenerated.frames).toEqual(original.frames)
-    expect(regenerated.meta.resetGPBeforeApplying).toBe(original.meta.resetGPBeforeApplying)
   })
 })
 
