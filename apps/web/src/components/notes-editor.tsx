@@ -213,7 +213,11 @@ export function NotesEditor({
                       onClick={(e) => {
                         e.preventDefault()
                         const ref = mediaRef(href)
-                        if (ref) void openNoteMedia({ data: { projectId, fileName: ref } })
+                        if (ref)
+                          void openNoteMedia({ data: { projectId, fileName: ref } }).catch(
+                            (err: unknown) =>
+                              toast.error(err instanceof Error ? err.message : String(err)),
+                          )
                         else if (href) void openExternal(href)
                       }}
                     >

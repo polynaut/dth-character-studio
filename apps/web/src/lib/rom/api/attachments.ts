@@ -229,9 +229,12 @@ export async function revealPath({ data }: { data: unknown }): Promise<void> {
   }
   let dir = path
   try {
-    if (!(await stat(path)).isDirectory) dir = path.replace(/[\/][^\/]*$/, '')
+    if (!(await stat(path)).isDirectory) dir = path.replace(/[\\/][^\\/]*$/, '')
   } catch {
     throw new Error('The path does not exist (anymore).')
   }
+  // Trailing separator: that's how the shell-open scope (tauri.conf.json)
+  // recognises a FOLDER — extensionless paths are refused otherwise.
+  if (!/[\\/]$/.test(dir)) dir += path.includes('\\') ? '\\' : '/'
   await shellOpen(dir)
 }
