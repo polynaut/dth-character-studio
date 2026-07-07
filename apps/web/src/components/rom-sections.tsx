@@ -1652,9 +1652,19 @@ export function RomSections({
           ? sections.JCM.enabled && sections.JCM.mode === 'preset'
           : config.enabled
         return (
+          // Each section is its own wrapper on purpose: position:sticky constrains
+          // the title to its parent, which is exactly what makes the NEXT section's
+          // title push the previous one out (iOS-contacts style) instead of stacking.
           <div key={section} className={`rounded-lg border ${effectiveEnabled ? '' : 'opacity-60'}`}>
+            {/* Sticky section title: pins below the character page's collapsed
+                sticky header (~134px: 90px avatar + 2px borders + my-5), z below
+                its z-10. Solid bg so rows can't show through; rounded-t so the
+                bg doesn't square out the card's top corners at rest. NB: the
+                ancestor `contain: layout paint` re-scopes position:fixed but NOT
+                sticky (sticky binds to the scrollport, which containment doesn't
+                create), and no ancestor up to the page scroller has overflow. */}
             <div
-              className="flex cursor-pointer items-center gap-3 px-4 py-3 select-none"
+              className="sticky top-[134px] z-[5] flex cursor-pointer items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
               onClick={() => setOpen((o) => ({ ...o, [section]: !isOpen }))}
             >
               <ChevronRight
