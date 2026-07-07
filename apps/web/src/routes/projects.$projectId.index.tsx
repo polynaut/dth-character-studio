@@ -114,7 +114,7 @@ function ProjectCharactersPage() {
   const [name, setName] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
   const [gender, setGender] = useState<Gender>('female')
-  // 'empty' | 'example' | an existing character's id (copy its ROM definitions).
+  // 'empty' | an existing character's id (copy its ROM definitions).
   const [prefill, setPrefill] = useState<string>('empty')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -222,8 +222,8 @@ function ProjectCharactersPage() {
 
   /** Create the character; when `copyScene`, also copy the scene + its thumbnails. */
   async function doCreate(copyScene: boolean) {
-    // ROM prefill is 'empty' / 'example', or an existing character's id to copy.
-    const fromChar = prefill !== 'empty' && prefill !== 'example'
+    // ROM prefill is 'empty', or an existing character's id to copy.
+    const fromChar = prefill !== 'empty'
     setBusy(true)
     setError('')
     try {
@@ -235,7 +235,6 @@ function ProjectCharactersPage() {
           gender,
           scenePath: scenePath.trim(),
           relFolder: nameTrimmed,
-          prefill: fromChar ? 'empty' : prefill,
           prefillFromId: fromChar ? prefill : undefined,
         },
       })
@@ -474,8 +473,8 @@ function ProjectCharactersPage() {
                         {/* -my-1.5 keeps the 24px "i" from inflating the label line,
                             so this control stays bottom-aligned with Genesis/Gender. */}
                         <InfoPopup label="ROM prefill — more information" className="-my-1.5">
-                          Copy the ROM definitions from the bundled example or an existing{' '}
-                          {genesis} {gender} character in any project.
+                          Copy the ROM definitions from an existing {genesis} {gender} character
+                          in any project.
                         </InfoPopup>
                       </span>
                     }
@@ -487,7 +486,6 @@ function ProjectCharactersPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="empty">Empty</SelectItem>
-                        <SelectItem value="example">Example</SelectItem>
                         {prefillChars.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.projectName} - {c.name}

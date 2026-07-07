@@ -4,7 +4,6 @@ import { z } from 'zod'
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
-import exampleCharacter from '../example-character.json'
 import {
   characterSchema,
   genderSchema,
@@ -73,13 +72,11 @@ const createInput = z.object({
   scenePath: z.string().optional(),
   /** Subfolder relative to the project root; '' stores in the project root. */
   relFolder: z.string().optional(),
-  /** 'example' seeds the ROM definitions from the bundled example. */
-  prefill: z.enum(['empty', 'example']).optional(),
   /** Copy the ROM definitions from this existing character (in the same project). */
   prefillFromId: z.string().optional(),
 })
 
-/** ROM-definition fields copied when prefilling from the example or another
+/** ROM-definition fields copied when prefilling from another
  *  character — everything that shapes the ROM, minus identity / provenance. */
 function romFields(src: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -99,11 +96,9 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   const lib = charsRoot(project)
   const now = new Date().toISOString()
   const id = newId()
-  // ROM prefill: from the bundled example, or copied from an existing character.
+  // ROM prefill: copied from an existing character (any project).
   let prefill: Record<string, unknown> = {}
-  if (input.prefill === 'example') {
-    prefill = romFields(exampleCharacter as Record<string, unknown>)
-  } else if (input.prefillFromId) {
+  if (input.prefillFromId) {
     // The source may live in any project (prefill lists characters globally).
     const source = await storage.findCharacterAcrossProjects(input.prefillFromId)
     if (source) prefill = romFields(source as unknown as Record<string, unknown>)
