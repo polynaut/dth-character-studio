@@ -1,5 +1,16 @@
 # @dth/rom
 
+## 0.36.1
+
+### Patch Changes
+
+- [#177](https://github.com/polynaut/dth-character-studio/pull/177) [`172029c`](https://github.com/polynaut/dth-character-studio/commit/172029c552f2fe0e6e6ee0f7da70dda9a838714d) Thanks [@polynaut](https://github.com/polynaut)! - Opening linked Unreal projects works now — the desktop shell-open scope only
+  allowed `.duf`/`.hip` files (and https links), so clicking an Unreal card,
+  Ctrl+clicking a path chip (folder reveal) or opening non-image note media was
+  silently refused. The scope now covers `.uproject`, folders, and the common
+  image/video/audio/document/3D media formats (executables stay refused), and
+  those open actions surface errors as a toast instead of doing nothing.
+
 ## 0.36.0
 
 ### Minor Changes
