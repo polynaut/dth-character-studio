@@ -12,3 +12,6 @@
   commit (the same rule the CSV generator already applied).
 - The **Value** column title now sits flush over its numbers instead of
   floating at the column's left edge.
+- The column titles are **sticky** too: they pin right under the sticky section
+  title while the grid scrolls - frame numbers, names and values always have
+  their labels in view.
