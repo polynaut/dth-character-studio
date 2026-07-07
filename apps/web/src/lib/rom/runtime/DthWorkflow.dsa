@@ -206,23 +206,26 @@ function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 
 	print("Loading JCM ROM: ", sJcmROM);
 	setTotalFrames(iRomFrames);
-	if( loadPreset(sJcmROM, oNodeRoot) ){
-		print("Successfully loaded pose preset.");
-
-		if( options["bIncludeFAC"] ){
-			print("Loading Mouth ROM: ", sMouthROM);
-			setTotalFrames(iRomFrames);
-			if(loadPreset(sMouthROM,  oNodeMouth) ){
-				print("Successfully loaded pose preset.");
-				return true;
-		} else {
-				logRunError("Failed loading Mouth ROM preset: " + sMouthROM + ". ROM aborted.");
-			}
-		}
-	} else {
+	if( !loadPreset(sJcmROM, oNodeRoot) ){
 		logRunError("Failed loading JCM ROM preset: " + sJcmROM + " - this is a necessary step. ROM aborted.");
+		return false;
 	}
-	return false;
+	print("Successfully loaded pose preset.");
+
+	// FAC is optional: without it (e.g. a custom JCM base with FAC disabled) the
+	// base ROM alone IS a successful load. The old flow only returned true from
+	// inside this branch, so JCM-without-FAC fell through to `return false` and
+	// silently aborted the whole workflow after loading the base.
+	if( options["bIncludeFAC"] ){
+		print("Loading Mouth ROM: ", sMouthROM);
+		setTotalFrames(iRomFrames);
+		if( !loadPreset(sMouthROM, oNodeMouth) ){
+			logRunError("Failed loading Mouth ROM preset: " + sMouthROM + ". ROM aborted.");
+			return false;
+		}
+		print("Successfully loaded pose preset.");
+	}
+	return true;
 }
 
 
