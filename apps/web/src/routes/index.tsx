@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { FolderOpen, FolderPlus, Trash2 } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
@@ -15,6 +17,11 @@ import { displayPath } from '#/lib/path.ts'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
+  // `?new=1` — a freshly created Home window (native menu "New Project") starts
+  // with the create-project panel open (an event would race the webview's
+  // listener registration; the URL can't).
+  validateSearch: (search: Record<string, unknown>): { new?: boolean } =>
+    search.new ? { new: true } : {},
   loader: () => fetchRecents(),
   component: HomePage,
 })
@@ -58,6 +65,25 @@ function HomePage() {
     setPath('')
     setPanelOpen(true)
   }
+
+  // Native menu "New Project" → open the create panel. Two arrival paths: the
+  // `?new=1` search param (this window was just created on it) and the
+  // `menu-new-project` event (this window was already running and got focused).
+  const { new: startNew } = Route.useSearch()
+  useEffect(() => {
+    if (!startNew) return
+    openCreatePanel()
+    // One-shot: strip the param so a reload/back doesn't re-open the panel.
+    void router.navigate({ to: '/', search: {}, replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startNew])
+  useEffect(() => {
+    if (!isTauri()) return
+    const unlisten: Array<() => void> = []
+    void listen('menu-new-project', () => openCreatePanel()).then((u) => unlisten.push(u))
+    return () => unlisten.forEach((u) => u())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function onChooseFolder() {
     const picked = await pickFolder('Choose the project folder')
