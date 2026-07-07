@@ -9,21 +9,34 @@ clobber, the CI Rust gate + required checks, …). What's left below is
 worth doing. Every item needs a bit of hands-on validation that couldn't be done
 in the fix pass, which is why it's here rather than already merged.
 
-Tackle in any order; each is independent.
+**STATUS: CLOSED (July 7 2026) — all five items done.** Shipped across
+v0.32.0/v0.32.1; the detail sections below are kept for the record.
 
-**Status (July 2026):**
-1. ✅ Done — runtime v16 (#137 + #142): preset lengths measured, fail-loud, guarded
-   by a no-literal CI test + cross-artifact alignment tests. Daz-validated (stock
-   G9, custom-JCM base of non-standard length, old-script fail-loud).
-2. ✅ CSP done / fs documented — strict prod `csp` + `devCsp`, asset protocol
-   **disabled** (nothing used it; images are inlined `data:` URLs). The broad `fs:`
-   scope stays **by design**: projects are user-chosen folders anywhere on disk and
-   `storage.ts` works there directly; destructive rails live in the Rust commands.
-   Long-term option: route JS-side remove/rename through validated Rust commands.
-3. ✅ Done (#140) — throwaway updater key in the build job (real key only on the
-   signer), tauri-action + rust-toolchain SHA-pinned.
-4. ◐ Tests done (#139: `resolvePresetFrames`); the god-module *split* remains open.
-5. ✅ Done (#138) — clippy `-D warnings` gate in CI, pre-existing lints cleared.
+1. ✅ Runtime v16 (#137 + #142): preset lengths measured, fail-loud, guarded by a
+   no-literal CI test + cross-artifact alignment tests. Daz-validated (stock G9,
+   custom-JCM base of non-standard length, old-script fail-loud). Mirrored into
+   DazToHue-Scripts (its flavor: stock-length defaults, overridable via
+   `options.presetFrames`) on the upstream PR branch.
+2. ✅ CSP done / fs documented (#144) — strict prod `csp` + `devCsp`, asset protocol
+   **disabled** (nothing used it; images are inlined `data:` URLs), the
+   `protocol-asset` cargo feature removed. The broad `fs:` scope stays **by
+   design**: projects are user-chosen folders anywhere on disk and `storage.ts`
+   works there directly; destructive rails live in the Rust commands.
+3. ✅ Throwaway updater key in the build job (#140 + #143) — the real key exists
+   only on the self-hosted signer; validated by the live v0.32.0/v0.32.1 releases.
+   Every action in every workflow is SHA-pinned (#147), including the third-party
+   `pnpm/action-setup` feeding the signed binary and `changesets/action` holding a
+   write token.
+4. ✅ Tests: `resolvePresetFrames` (#139) + staleness judgment & refresh
+   convergence (#148). Splits: `api.ts` → 9 focused `api/*` modules behind a
+   barrel, identical export surface (#146); character route 2725 → 1069 lines,
+   7 components lifted (#150).
+5. ✅ clippy `-D warnings` gate in CI (#138), pre-existing lints cleared.
+
+**Optional leftovers (no commitment, revisit when they annoy):** split
+`storage.ts` (~1800 lines); route the JS-side `remove`/`rename` through validated
+Rust commands; lift the route's remaining draft-state-wired sections if they ever
+grow again.
 
 ---
 
