@@ -877,7 +877,11 @@ function SettingsPage() {
               help={
                 <>
                   Where Daz Studio is installed. The DLLs go into its
-                  <span className="font-mono"> /plugins</span> subfolder.
+                  <span className="font-mono"> /plugins</span> subfolder. Usually{' '}
+                  <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio4'}</span> (Daz
+                  Studio 4, sometimes with a <span className="font-mono">64-bit</span> suffix) or{' '}
+                  <span className="font-mono">{'C:\\Program Files\\DAZ 3D\\DAZStudio6'}</span> (Daz
+                  Studio 6).
                 </>
               }
             />

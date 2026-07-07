@@ -50,6 +50,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
+import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
@@ -179,7 +180,7 @@ function CharacterPage() {
   const [saving, setSaving] = useState(false)
   // Only meaningful when the project enables Daz Products: splits this page into a
   // "Character" tab (everything) and a "Products" tab (the scan section).
-  const [activeTab, setActiveTab] = useState<'character' | 'products'>('character')
+  const [activeTab, setActiveTab] = useState<'character' | 'products' | 'notes'>('character')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   // The ROM run log written by the Daz-side script (ingested into the studio's
@@ -597,20 +598,34 @@ function CharacterPage() {
         </section>
       )}
 
-      {project?.dazProductsEnabled && (
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v === 'products' ? 'products' : 'character')}
-          className="mb-6"
-        >
-          <TabsList>
-            <TabsTrigger value="character">Character</TabsTrigger>
-            <TabsTrigger value="products">Products</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) =>
+          setActiveTab(v === 'products' || v === 'notes' ? v : 'character')
+        }
+        className="mb-6"
+      >
+        <TabsList>
+          <TabsTrigger value="character">Character</TabsTrigger>
+          {project?.dazProductsEnabled && <TabsTrigger value="products">Products</TabsTrigger>}
+          <TabsTrigger value="notes">Notes</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {activeTab === 'notes' && (
+        <section className="mb-8 rounded-lg border bg-card p-5">
+          {/* Freeform character notes (markdown + dropped media) — background,
+              art direction, references. Stored as <Name>.notes.md next to the
+              definition; media in the project's .dcsmeta/media. */}
+          <NotesEditor
+            projectId={projectId}
+            characterId={initial.id}
+            placeholder={`Describe ${character.name}'s background in markdown — drop images or other files right into the editor…`}
+          />
+        </section>
       )}
 
-      <div className={onProductsTab ? 'hidden' : undefined}>
+      <div className={activeTab !== 'character' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5 pt-2">

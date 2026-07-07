@@ -1169,6 +1169,11 @@ export function metaImagesDir(projectDir: string): string {
   return join(dcsmetaDir(projectDir), 'images')
 }
 
+/** Where a project's notes media (dropped images/files) lives (under `.dcsmeta`). */
+export function metaMediaDir(projectDir: string): string {
+  return join(dcsmetaDir(projectDir), 'media')
+}
+
 // --- Recent projects (volatile app-data) ---------------------------------
 // The only project state the app keeps: a capped, newest-first list of recently
 // opened `.dcsp` files, for the Home screen. Non-important — losing it just empties
