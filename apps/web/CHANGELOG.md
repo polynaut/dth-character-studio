@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.32.0
+
+### Patch Changes
+
+- [#142](https://github.com/polynaut/dth-character-studio/pull/142) [`62c4adf`](https://github.com/polynaut/dth-character-studio/commit/62c4adfd171a8287f13172c87548ea7122e01573) Thanks [@polynaut](https://github.com/polynaut)! - **Fix: a JCM base ROM without FAC no longer aborts the run.** The Daz runtime's
+  base-ROM loader only reported success when the FAC/mouth ROM also loaded — so a
+  character with JCM enabled but FAC disabled (e.g. a custom JCM base asset) loaded
+  its base ROM, then silently aborted the rest of the workflow (custom frames never
+  applied) and marked the run failed. The base ROM alone now counts as success; FAC
+  stays optional. (Pre-existing bug surfaced by the runtime-v16 validation.)
+- Updated dependencies [[`bdacdba`](https://github.com/polynaut/dth-character-studio/commit/bdacdba1f4df07e0553ba29ed0ee74eae289a9fc)]:
+  - @dth/rom@0.32.0
+
 ## 0.31.3
 
 ### Patch Changes
