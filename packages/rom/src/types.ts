@@ -448,8 +448,15 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       future-DTH preset of non-standard length can't silently desync the Daz
  *       timeline from the PoseAsset CSV. Scripts generated before v16 carry no
  *       presetFrames and must be regenerated (Tools → Refresh assets).
+ *  17 — DS6 keyframe-drift workaround: on Daz Studio 6 every ROM morph key is
+ *       stamped CONSTANT instead of LINEAR (and the session default matches).
+ *       DS6's animation engine drifts Linear ROM keys across the timeline
+ *       (mrpdean, June 2026); converting all keys to Constant after applying
+ *       is his validated fix. DS4 behavior unchanged (Linear). The final
+ *       interpolation pass now also covers the FAC mouth node, whose keys a
+ *       root-only pass never touched.
  */
-export const RUNTIME_VERSION = 16
+export const RUNTIME_VERSION = 17
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
