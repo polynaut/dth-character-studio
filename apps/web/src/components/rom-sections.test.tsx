@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -97,5 +98,32 @@ describe('insert frame between rows (the “+” behind the frame number)', () =
     expect(poses).toHaveLength(2)
     expect(poses[0].name).toBe('')
     expect(poses[1].name).toBe('SLGlutes SS')
+  })
+
+  it('focuses the new row’s name field once it renders (controlled flow)', () => {
+    // A controlled harness — the insert flows through onChange back into the
+    // sections prop, so the new row actually renders (like the real editor).
+    function Controlled() {
+      const [sections, setSections] = useState(sectionsWithMultiMorphPose())
+      return (
+        <RomSections
+          sections={sections}
+          genesis="G9"
+          gender="female"
+          skinning="dqs"
+          catalog={{ folder: '', assets: [], error: null }}
+          presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+          onChange={setSections}
+        />
+      )
+    }
+    render(<Controlled />)
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
+    fireEvent.click(screen.getByText('Add after'))
+
+    const active = document.activeElement as HTMLInputElement
+    expect(active.getAttribute('data-pose-input')).toBeTruthy()
+    expect(active.value).toBe('') // the freshly inserted (empty) pose's name field
   })
 })

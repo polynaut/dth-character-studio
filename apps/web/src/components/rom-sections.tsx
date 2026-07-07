@@ -351,10 +351,13 @@ function TextCell({
   value,
   onCommit,
   placeholder,
+  dataId,
 }: {
   value: string
   onCommit: (value: string) => void
   placeholder?: string
+  /** Optional `data-pose-input` marker so a freshly inserted row can be focused. */
+  dataId?: string
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
@@ -363,6 +366,7 @@ function TextCell({
       className={`${cellInputClass} w-full`}
       value={draft}
       placeholder={placeholder}
+      data-pose-input={dataId}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft !== value && onCommit(draft)}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
@@ -464,14 +468,14 @@ function InsertFrameMenu({ onBefore, onAfter }: { onBefore: () => void; onAfter:
           <div className="absolute top-1/2 left-full z-30 ml-1 w-28 -translate-y-1/2 rounded-md border bg-background p-1 shadow-md">
             <button
               type="button"
-              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-primary hover:text-primary-foreground"
+              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
               onClick={() => pick(onBefore)}
             >
               Add before
             </button>
             <button
               type="button"
-              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-primary hover:text-primary-foreground"
+              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
               onClick={() => pick(onAfter)}
             >
               Add after
@@ -550,6 +554,7 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
       <TextCell
         value={getValue()}
         placeholder="e.g. BodyTone"
+        dataId={row.original.id}
         onCommit={(name) => (table.options.meta as PoseTableMeta).update(row.index, { name })}
       />
     ),
@@ -831,6 +836,22 @@ function GroupCard({
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
   const { setNodeRef: setDropRef } = useDroppable({ id: group.id })
 
+  // A freshly inserted pose's name field gets focused once its row renders (the
+  // insert flows through the parent's onChange, so the row exists a render later).
+  // Quote/backslash-escape is all a quoted attribute selector needs (CSS.escape
+  // is unavailable in jsdom, and the bare name is shadowed by @dnd-kit's CSS).
+  const [focusPoseId, setFocusPoseId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!focusPoseId) return
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-pose-input="${focusPoseId.replace(/["\\]/g, '\\$&')}"]`,
+    )
+    if (el) {
+      el.focus()
+      setFocusPoseId(null)
+    }
+  }, [focusPoseId, group.poses])
+
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
     onChange({
       ...group,
@@ -872,14 +893,17 @@ function GroupCard({
       const neighbor = group.poses[index - 1] ?? group.poses[index]
       const node =
         neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+      const id = newId()
       const poses = [...group.poses]
       poses.splice(index, 0, {
-        id: newId(),
+        id,
         name: '',
         morphs: [{ node, prop: '', value: 1 }],
         referenceFbx: '',
       })
       onChange({ ...group, poses })
+      // Focus the new row's name field as soon as it renders.
+      setFocusPoseId(id)
     },
   }
 
