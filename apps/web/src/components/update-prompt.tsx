@@ -113,7 +113,8 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
       >
         <h2 className="text-lg font-semibold">Update available</h2>
         <p className="text-sm text-muted-foreground">
-          Version {req.version} is ready to install.{' '}
+          Version {req.version} is ready to install
+          {req.currentVersion ? <> — you have {req.currentVersion}</> : null}.{' '}
           {busy ? 'Downloading and installing…' : 'The app will restart to finish.'}
         </p>
         {req.notes ? (
