@@ -18,3 +18,4 @@ data/
 # Electron build + packaging output
 out/
 release/
+.claude/worktrees/
