@@ -446,7 +446,7 @@ function MorphNameCell({
         }}
       />
       {matches.length > 0 && (
-        <div className="absolute top-full left-0 z-30 mt-1 max-h-72 w-[30rem] max-w-[80vw] overflow-y-auto rounded-md border bg-background p-1 shadow-md">
+        <div className="absolute top-full left-0 z-30 mt-1 max-h-72 w-[30rem] max-w-[80vw] overflow-y-auto rounded-md border bg-popover text-popover-foreground p-1 shadow-lg">
           {matches.map((e) => {
             const hitInternal = e.name.toLowerCase().includes(q)
             return (
