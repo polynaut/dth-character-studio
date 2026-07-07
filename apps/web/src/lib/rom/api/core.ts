@@ -40,6 +40,8 @@ export interface ProjectInfo extends storage.Project {
   assetsEnabled: boolean
   dazProductsEnabled: boolean
   charactersSubdir: string
+  /** Absolute paths of linked Unreal project files (.uproject). */
+  unrealProjects: Array<string>
 }
 
 /** Resolve a project folder to its manifest-backed record. */
@@ -56,6 +58,7 @@ export async function resolveProject(projectDir: string): Promise<ProjectInfo> {
     assetsEnabled: m.assetsEnabled,
     dazProductsEnabled: m.dazProductsEnabled,
     charactersSubdir: m.charactersSubdir,
+    unrealProjects: m.unrealProjects,
     ...(m.createdAt ? { createdAt: m.createdAt } : {}),
   }
 }

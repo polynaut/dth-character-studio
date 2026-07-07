@@ -181,8 +181,10 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(scenePath)) {
     throw new Error('Refusing to open a URL — the scene path must be a local file.')
   }
-  if (!/\.(duf|hip|hipnc|hiplc)$/i.test(scenePath)) {
-    throw new Error('Refusing to open — not a recognised scene/project file (.duf/.hip).')
+  if (!/\.(duf|hip|hipnc|hiplc|uproject)$/i.test(scenePath)) {
+    throw new Error(
+      'Refusing to open — not a recognised scene/project file (.duf/.hip/.uproject).',
+    )
   }
   await shellOpen(scenePath)
 }

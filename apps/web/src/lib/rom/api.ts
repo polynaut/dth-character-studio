@@ -34,6 +34,7 @@ export {
   openProject,
   renameProject,
   saveProjectSettings,
+  setUnrealProjects,
 } from './api/projects'
 
 // --- characters: CRUD, imports, run log, paths ------------------------------

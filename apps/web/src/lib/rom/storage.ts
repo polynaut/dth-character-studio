@@ -1034,6 +1034,9 @@ export interface DcspManifest {
   /** Relative folder the character folders live in, under the project root. '' = the
    *  project root itself (e.g. 'assets/characters' → <project>/assets/characters/<char>). */
   charactersSubdir: string
+  /** Absolute paths of linked Unreal project files (.uproject) - shown on the
+   *  project page like the character pages' Daz scenes / Houdini projects. */
+  unrealProjects: Array<string>
 }
 
 function manifestDefaults(dir: string): DcspManifest {
@@ -1048,6 +1051,7 @@ function manifestDefaults(dir: string): DcspManifest {
     assetsEnabled: false,
     dazProductsEnabled: false,
     charactersSubdir: '',
+    unrealProjects: [],
   }
 }
 
@@ -1105,6 +1109,9 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
         typeof raw.charactersSubdir === 'string'
           ? raw.charactersSubdir
           : defaults.charactersSubdir,
+      unrealProjects: Array.isArray(raw.unrealProjects)
+        ? raw.unrealProjects.filter((p: unknown): p is string => typeof p === 'string' && p !== '')
+        : [],
     }
     // A manifest without an id used to mint a fresh one on EVERY read — a
     // non-deterministic project id (its product-scan output dir + recents key

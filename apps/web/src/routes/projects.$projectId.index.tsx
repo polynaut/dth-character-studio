@@ -55,6 +55,7 @@ import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { Tag } from '#/components/tag.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
+import { UnrealProjectsField } from '#/components/unreal-projects-field.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
@@ -549,6 +550,13 @@ function ProjectCharactersPage() {
           )}
         </Tabs>
       </SidePanel>
+
+      {/* Linked Unreal projects, prominent above the character list (the loader
+          revalidates on link/unlink, so loader data is the single source; empty
+          it collapses to the label + link button). */}
+      <div className="mb-8">
+        <UnrealProjectsField project={project} onChanged={() => {}} />
+      </div>
 
       <Tabs
         value={assetsEnabled ? listTab : 'characters'}
