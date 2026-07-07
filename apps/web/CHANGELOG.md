@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.32.2
+
+### Patch Changes
+
+- [#149](https://github.com/polynaut/dth-character-studio/pull/149) [`779339e`](https://github.com/polynaut/dth-character-studio/commit/779339e23d19ee526f500eac1b3ecb59b6225888) Thanks [@polynaut](https://github.com/polynaut)! - **The update dialog now renders its release notes as real markdown** — headings,
+  bullets, bold, inline code and links instead of raw `##`/`**` syntax — and the
+  dialog is larger with a much taller notes area, so more of the changelog is
+  readable at once. Links in the notes open in your browser (never inside the app).
+- Updated dependencies []:
+  - @dth/rom@0.32.2
+
 ## 0.32.1
 
 ### Patch Changes
