@@ -1,5 +1,8 @@
 # Tauri migration plan
 
+**✅ COMPLETED (June 2026)** — the migration shipped; every release since runs on
+Tauri. Kept as a historical record of the decision + plan.
+
 **Decision (2026-06-14):** migrate the desktop app from Electron to **Tauri 2.x**.
 The app is inherently local-first (it reads the user's Daz content, FBX files, and
 writes `.dsa`/CSV to disk) and its core value — the ROM/CSV/DSA generation — is
@@ -84,20 +87,20 @@ Revisit if we want tighter scoping.
 
 ## Phases
 
-- [ ] **0. Prereq:** install Rust (`rustup`). WebView2 already present. *(user)*
+- [x] **0. Prereq:** install Rust (`rustup`). WebView2 already present. *(user)*
 - [x] **1. Scaffold:** `src-tauri/` (Cargo.toml, tauri.conf.json, main.rs, lib.rs,
       build.rs, capabilities), Tauri npm deps, `tauri` script. *(additive, done)*
-- [ ] **2. SPA conversion:** drop `tanstackStart()` from vite.config; add
+- [x] **2. SPA conversion:** drop `tanstackStart()` from vite.config; add
       `index.html` + client `main.tsx` entry; switch router to client
       `@tanstack/react-router`; remove SSR/server entries. Verify `vite build` + vitest.
-- [ ] **3. Data-layer port:** rewrite `api.ts` → Tauri client module; swap
+- [x] **3. Data-layer port:** rewrite `api.ts` → Tauri client module; swap
       `storage.ts` fs; drop `paths.ts`/image route/`lib/desktop.ts`. Typecheck.
-- [ ] **4. Updater:** wire `plugin-updater` in lib.rs + a client `updater.ts`
+- [x] **4. Updater:** wire `plugin-updater` in lib.rs + a client `updater.ts`
       (check→prompt→install→relaunch); generate signing keypair.
-- [ ] **5. Build + run:** `pnpm tauri dev`, then `pnpm tauri build` (needs Rust).
-- [ ] **6. Remove Electron:** delete `apps/desktop`, `apps/web/server/`,
+- [x] **5. Build + run:** `pnpm tauri dev`, then `pnpm tauri build` (needs Rust).
+- [x] **6. Remove Electron:** delete `apps/desktop`, `apps/web/server/`,
       `bundle-server.mjs`/`standalone.js`; update changesets config + scripts.
-- [ ] **7. Release pipeline:** `release.yml` for Tauri; updater secrets; first release.
+- [x] **7. Release pipeline:** `release.yml` for Tauri; updater secrets; first release.
 
 ## Toolchain notes
 
