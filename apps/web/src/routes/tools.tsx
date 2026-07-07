@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import {
-  ArrowLeft,
   CircleAlert,
   CircleCheck,
   Download,
@@ -9,7 +8,6 @@ import {
   FolderOpen,
   Plus,
   RefreshCw,
-  Save,
   Trash2,
   TriangleAlert,
   X,
@@ -17,6 +15,7 @@ import {
 import { poseAssetCsvEra } from '@dth/rom'
 
 import { Button } from '#/components/ui/button.tsx'
+import { FormHeader } from '#/components/form-header.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
@@ -601,18 +600,14 @@ function ToolsPage() {
 
   return (
     <main className="p-8">
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={goBack}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" /> Back
-        </button>
-      </div>
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold">Tools</h1>
-      </header>
+      <FormHeader
+        title="Tools"
+        onBack={goBack}
+        dirty={dirty}
+        busy={busy}
+        onDiscard={() => setSettings(initial)}
+        onSave={() => void onSave()}
+      />
 
       <Tabs
         defaultValue={tab === 'install' ? 'install' : tab === 'refresh' ? 'refresh' : 'daztohue'}
@@ -1096,12 +1091,6 @@ function ToolsPage() {
               <InstallReportList report={uninstallReport} onClose={() => setUninstallReport(null)} />
             )}
           </section>
-
-          <div>
-            <Button onClick={onSave} disabled={busy || !dirty}>
-              <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-            </Button>
-          </div>
         </TabsContent>
 
         <TabsContent value="daztohue" className="space-y-5">
