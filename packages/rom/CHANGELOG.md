@@ -1,5 +1,40 @@
 # @dth/rom
 
+## 0.36.0
+
+### Minor Changes
+
+- [#172](https://github.com/polynaut/dth-character-studio/pull/172) [`a2accc6`](https://github.com/polynaut/dth-character-studio/commit/a2accc6ae3bd75041a894904789be7e4f54e7477) Thanks [@polynaut](https://github.com/polynaut)! - Project & character notes — a markdown editor (Write/Preview) on a new Notes
+  tab of both the project page and the character page. Autosaves while you type,
+  and dropped images/media files are stored with the project (like avatar
+  images, under `.dcsmeta/media`) with the right markdown tag inserted at the
+  cursor — images render inline in the preview, other media opens with its
+  default app. Notes live as plain `notes.md` / `<Name>.notes.md` files next to
+  what they describe, so they back up (and read) like everything else.
+
+- [#171](https://github.com/polynaut/dth-character-studio/pull/171) [`8f96436`](https://github.com/polynaut/dth-character-studio/commit/8f96436a67608dc1115a7add87cfe239d5c21bb3) Thanks [@polynaut](https://github.com/polynaut)! - Link Unreal projects to a studio project. The project page gets an "Unreal
+  projects" section above the character list: link one or more `.uproject` files
+  (picker or drag-and-drop), shown as prominent cards like the character pages'
+  Daz scenes / Houdini projects — clicking a card opens the project in Unreal
+  Engine. Links only: files stay where they are, unlinking never deletes.
+
+- [#175](https://github.com/polynaut/dth-character-studio/pull/175) [`0f7db81`](https://github.com/polynaut/dth-character-studio/commit/0f7db818b6675ca6afd515eb7d54254adec7ceec) Thanks [@polynaut](https://github.com/polynaut)! - Unsaved changes are guarded now: navigating away from a character editor (or
+  the Settings page) with unsaved edits asks "leave and lose them?" first —
+  closing or reloading the window warns too. Deleting the character skips the
+  question (there is nothing left to save).
+
+### Patch Changes
+
+- [#172](https://github.com/polynaut/dth-character-studio/pull/172) [`a2accc6`](https://github.com/polynaut/dth-character-studio/commit/a2accc6ae3bd75041a894904789be7e4f54e7477) Thanks [@polynaut](https://github.com/polynaut)! - Path chips: Ctrl+click opens the path directly in the Windows Explorer (a file
+  path opens its parent folder) — plain click still copies. And the Settings
+  page now hints where a Daz Studio installation is usually found.
+
+- [#173](https://github.com/polynaut/dth-character-studio/pull/173) [`90c52f7`](https://github.com/polynaut/dth-character-studio/commit/90c52f7003c51dd52a83f3c17bea56fd70042239) Thanks [@polynaut](https://github.com/polynaut)! - Morph autocomplete: suggestions now show the Daz UI name on its own labeled
+  line ("Daz UI name: …"), never truncated — a match on the UI name (e.g.
+  searching "GPL*…" where the internal name is "GP*…") is clearly readable
+  instead of looking like a wrong suggestion. The match tag spells it out too
+  ("UI name match" / "internal match").
+
 ## 0.35.0
 
 ### Minor Changes
