@@ -10,6 +10,8 @@
 export type UpdatePromptRequest = {
   /** The available version, e.g. "0.31.2". */
   version: string
+  /** The installed version the update replaces - shown as the "from" reference. */
+  currentVersion?: string
   /** Release notes (`update.body`); shown in a scrollable box when present. */
   notes?: string
   /** Releases between the installed version and the latest (exclusive of both),
