@@ -121,6 +121,30 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
             <ReleaseNotes markdown={req.notes} />
           </div>
         ) : null}
+        {req.skipped && req.skipped.length > 0 ? (
+          // Catching up across several versions: the releases between the
+          // installed one and the latest (newest first, max 3), as links to
+          // their GitHub release pages — opened externally, never in the app.
+          <div className="text-sm text-muted-foreground">
+            <p className="mb-1">Also included since your version:</p>
+            <ul className="space-y-0.5">
+              {req.skipped.map((s) => (
+                <li key={s.version}>
+                  <a
+                    href={s.url}
+                    className="text-primary underline underline-offset-2"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      void openExternal(s.url)
+                    }}
+                  >
+                    v{s.version} — release notes
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={onClose}>

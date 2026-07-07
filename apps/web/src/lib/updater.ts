@@ -1,9 +1,9 @@
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { toast } from 'sonner'
 
-import { requestUpdatePrompt } from './update-prompt'
+import { requestUpdatePrompt, skippedVersionsBetween } from './update-prompt'
 
 /**
  * Check GitHub Releases for a newer signed version. If one exists, ask the user;
@@ -32,11 +32,24 @@ export async function checkForUpdates({ manual = false }: { manual?: boolean } =
       return
     }
 
+    // Catching up across several versions? List the skipped releases (between
+    // installed and latest, newest first, max 3) as GitHub links under the
+    // latest notes. Fetched via Rust (the CSP allows IPC only) — best-effort:
+    // offline/rate-limited just means no list.
+    let skipped: Array<{ version: string; url: string }> = []
+    try {
+      const tags = await invoke<Array<string>>('app_release_tags')
+      skipped = skippedVersionsBetween(tags, update.currentVersion, update.version)
+    } catch {
+      // No list — the latest release's notes above still cover the update itself.
+    }
+
     // App-styled React confirm (see components/update-prompt.tsx) instead of the
     // native ask(). The dialog drives the download/install + relaunch itself.
     requestUpdatePrompt({
       version: update.version,
       notes: update.body || undefined,
+      skipped,
       install: async () => {
         await update.downloadAndInstall()
         await relaunch()

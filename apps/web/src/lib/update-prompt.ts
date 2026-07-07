@@ -12,11 +12,41 @@ export type UpdatePromptRequest = {
   version: string
   /** Release notes (`update.body`); shown in a scrollable box when present. */
   notes?: string
+  /** Releases between the installed version and the latest (exclusive of both),
+   *  newest first, max 3 — shown as links to their GitHub release pages when the
+   *  user is catching up across several versions. */
+  skipped?: Array<{ version: string; url: string }>
   /**
    * Download + install + relaunch. On success the process exits, so this never
    * resolves; a rejection means the update failed and the dialog surfaces it.
    */
   install: () => Promise<void>
+}
+
+import { compareDthVersions } from '@dth/rom'
+
+/**
+ * The releases the user skipped between their installed version and the latest,
+ * from the repo's release tags: strictly between the two (exclusive — the latest
+ * is displayed in full right above), newest first, capped at 3, each linking to
+ * its GitHub release page. Pure — tags may carry a leading `v`.
+ */
+export function skippedVersionsBetween(
+  tags: Array<string>,
+  installed: string,
+  latest: string,
+): Array<{ version: string; url: string }> {
+  return tags
+    .map((tag) => tag.replace(/^v/, ''))
+    .filter(
+      (v) => compareDthVersions(v, installed) > 0 && compareDthVersions(v, latest) < 0,
+    )
+    .sort((a, b) => compareDthVersions(b, a))
+    .slice(0, 3)
+    .map((version) => ({
+      version,
+      url: `https://github.com/polynaut/dth-character-studio/releases/tag/v${version}`,
+    }))
 }
 
 let current: UpdatePromptRequest | null = null
