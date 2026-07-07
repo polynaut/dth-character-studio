@@ -8,6 +8,7 @@ afterEach(cleanup)
 import { RomSections } from './rom-sections'
 import { defaultSections } from '@dth/rom'
 
+import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { RomSections as RomSectionsModel } from '@dth/rom'
 
 function sectionsWithMultiMorphPose(): RomSectionsModel {
@@ -125,6 +126,94 @@ describe('insert frame between rows (the “+” behind the frame number)', () =
     const active = document.activeElement as HTMLInputElement
     expect(active.getAttribute('data-pose-input')).toBeTruthy()
     expect(active.value).toBe('') // the freshly inserted (empty) pose's name field
+  })
+})
+
+describe('Morph name autocomplete (scanned index)', () => {
+  function sectionsWithSingleMorphPose(): RomSectionsModel {
+    const sections = defaultSections()
+    sections.FBM.enabled = true
+    sections.FBM.groups = [
+      {
+        id: 'g1',
+        label: '',
+        suffix: 'centre',
+        method: 'individual',
+        calculateFrom: 'default',
+        poses: [
+          {
+            id: 'p1',
+            name: 'BodyTone',
+            referenceFbx: '',
+            morphs: [{ node: 'Genesis9', prop: '', value: 1 }],
+          },
+        ],
+      },
+    ]
+    return sections
+  }
+  const morphIndex: Array<MorphIndexEntry> = [
+    { node: 'Genesis9', nodeLabel: 'Genesis 9', label: 'Body Tone', name: 'body_bs_BodyTone' },
+    { node: 'GoldenPalace_G9', nodeLabel: 'GoldenPalace_G9', label: 'Spread All', name: 'GP_Spread_All' },
+  ]
+
+  it('matches UI label or internal name, tags the hit, and picking sets prop AND node', () => {
+    let next: RomSectionsModel | null = null
+    render(
+      <RomSections
+        sections={sectionsWithSingleMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        morphIndex={morphIndex}
+        onChange={(s) => {
+          next = s
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    const input = screen.getByPlaceholderText('body_bs_BodyTone')
+
+    // A UI-label hit ("Body Tone" has a space, the internal name doesn't):
+    // the suggestion shows the internal name plus a "UI name" match tag.
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'body tone' } })
+    const suggestion = screen.getByText('body_bs_BodyTone').closest('button')!
+    expect(suggestion.textContent).toContain('UI name')
+    expect(suggestion.textContent).toContain('Genesis9')
+
+    // An internal-name hit on a graft morph — picking it (mousedown, which fires
+    // before the input's blur) sets the morph's prop AND its node.
+    fireEvent.change(input, { target: { value: 'spread' } })
+    const graft = screen.getByText('GP_Spread_All').closest('button')!
+    expect(graft.textContent).toContain('internal')
+    fireEvent.mouseDown(graft)
+    const morph = next!.FBM.groups[0].poses[0].morphs[0]
+    expect(morph.prop).toBe('GP_Spread_All')
+    expect(morph.node).toBe('GoldenPalace_G9')
+  })
+
+  it('stays quiet without an index and below two typed characters', () => {
+    render(
+      <RomSections
+        sections={sectionsWithSingleMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        morphIndex={morphIndex}
+        onChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    const input = screen.getByPlaceholderText('body_bs_BodyTone')
+    fireEvent.focus(input)
+    // One character — no dropdown yet.
+    fireEvent.change(input, { target: { value: 'b' } })
+    expect(screen.queryByText('body_bs_BodyTone', { selector: 'span' })).toBeNull()
   })
 })
 

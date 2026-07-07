@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
@@ -65,6 +65,7 @@ import {
 } from '@dth/rom'
 
 import type { ColumnDef } from '@tanstack/react-table'
+import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type {
   ArtDirectionFrame,
   CalculateFrom,
@@ -129,6 +130,12 @@ interface PoseAssetCatalog {
   error: string | null
 }
 
+// The machine-wide morph index (Scan_Morphs_<Genesis>.dsa output) that powers the
+// Morph-name autocomplete. A context so the deeply nested cells can reach it
+// without threading through the editor/group/table layers.
+const EMPTY_MORPH_INDEX: Array<MorphIndexEntry> = []
+const MorphIndexContext = createContext<Array<MorphIndexEntry>>(EMPTY_MORPH_INDEX)
+
 interface RomSectionsProps {
   sections: RomSectionsModel
   genesis: GenesisVersion
@@ -137,6 +144,9 @@ interface RomSectionsProps {
   catalog: PoseAssetCatalog
   /** Measured preset-block frame lengths; null while unmeasurable (assets unread). */
   presetFrames: PresetFrames | null
+  /** Scanned morphs for this character's generation — enables the Morph-name
+   *  autocomplete when a Scan_Morphs_<Genesis> run has produced an index. */
+  morphIndex?: Array<MorphIndexEntry>
   /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
    *  matching pose rows are marked red. */
   failedFrames?: Set<number>
@@ -384,6 +394,94 @@ function TextCell({
   )
 }
 
+/**
+ * The Morph-name input with autocomplete over the scanned morph index
+ * (Scan_Morphs_<Genesis>.dsa output). Search hits match the internal name OR the
+ * Daz UI label; each entry shows which field matched and the node the morph
+ * lives on — picking one sets BOTH the internal name and the node on the morph.
+ * Free typing still works exactly like a plain cell (committed on blur).
+ */
+function MorphNameCell({
+  value,
+  placeholder,
+  onCommit,
+  onPick,
+}: {
+  value: string
+  placeholder?: string
+  onCommit: (prop: string) => void
+  onPick: (entry: MorphIndexEntry) => void
+}) {
+  const index = useContext(MorphIndexContext)
+  const [draft, setDraft] = useState(value)
+  const [open, setOpen] = useState(false)
+  useEffect(() => setDraft(value), [value])
+  const q = draft.trim().toLowerCase()
+  const matches =
+    open && q.length >= 2 && index.length > 0
+      ? index
+          .filter(
+            (e) => e.name.toLowerCase().includes(q) || e.label.toLowerCase().includes(q),
+          )
+          .slice(0, 8)
+      : []
+  return (
+    <div className="relative">
+      <input
+        className={`${cellInputClass} w-full`}
+        value={draft}
+        placeholder={placeholder}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          setOpen(false)
+          if (draft !== value) onCommit(draft)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false)
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        }}
+      />
+      {matches.length > 0 && (
+        <div className="absolute top-full left-0 z-30 mt-1 max-h-72 w-[30rem] max-w-[80vw] overflow-y-auto rounded-md border bg-background p-1 shadow-md">
+          {matches.map((e) => {
+            const hitInternal = e.name.toLowerCase().includes(q)
+            return (
+              <button
+                type="button"
+                key={`${e.node}|${e.name}`}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                // mousedown fires BEFORE the input's blur — a plain onClick would
+                // arrive after the menu already closed.
+                onMouseDown={(ev) => {
+                  ev.preventDefault()
+                  setOpen(false)
+                  setDraft(e.name)
+                  onPick(e)
+                }}
+              >
+                <span className="shrink-0 font-medium">{e.name}</span>
+                <span className="truncate text-xs text-muted-foreground">{e.label}</span>
+                <span className="ml-auto flex shrink-0 gap-1">
+                  <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                    {hitInternal ? 'internal' : 'UI name'}
+                  </span>
+                  <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                    {e.node}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Morph values are stored 0–1 but shown/edited as Daz-style percentages
 // (0–100%); toFixed trims the float noise of the *100 / /100 conversions.
 function valueToPct(v: number): string {
@@ -609,11 +707,18 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
           {row.original.morphs.length} morphs combined
         </span>
       ) : (
-        <TextCell
+        <MorphNameCell
           value={getValue()}
           placeholder="body_bs_BodyTone"
           onCommit={(prop) =>
             (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, { prop })
+          }
+          // Picking from the index also selects the node the morph lives on.
+          onPick={(e) =>
+            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, {
+              prop: e.name,
+              node: e.node,
+            })
           }
         />
       ),
@@ -786,10 +891,13 @@ function SortablePoseRow({
                     />
                   </div>
                   <div className="flex-1">
-                    <TextCell
+                    <MorphNameCell
                       value={morph.prop}
                       placeholder="body_bs_BodyTone"
                       onCommit={(prop) => meta.updateMorphAt(row.index, morphIndex, { prop })}
+                      onPick={(e) =>
+                        meta.updateMorphAt(row.index, morphIndex, { prop: e.name, node: e.node })
+                      }
                     />
                   </div>
                   <NumberCell
@@ -1505,10 +1613,11 @@ function ArtDirectionFrameRow({
                 />
               </div>
               <div className="flex-1">
-                <TextCell
+                <MorphNameCell
                   value={morph.prop}
                   placeholder="GP_Anus_Open"
                   onCommit={(prop) => patchMorph(index, { prop })}
+                  onPick={(e) => patchMorph(index, { prop: e.name, node: e.node })}
                 />
               </div>
               <NumberCell
@@ -1571,6 +1680,7 @@ export function RomSections({
   presetFrames,
   failedFrames,
   revealFrame,
+  morphIndex,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
@@ -1684,6 +1794,7 @@ export function RomSections({
   }
 
   return (
+    <MorphIndexContext.Provider value={morphIndex ?? EMPTY_MORPH_INDEX}>
     <div className="space-y-2">
       {!presetFrames && (
         <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
@@ -1890,5 +2001,6 @@ export function RomSections({
         />
       )}
     </div>
+    </MorphIndexContext.Provider>
   )
 }

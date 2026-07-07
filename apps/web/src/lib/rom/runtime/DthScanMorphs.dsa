@@ -1,0 +1,87 @@
+// DAZ Studio version 4.22.0.16 filetype DAZ Script
+
+// DTH Character Studio — morph scanner. Included by the visible
+// Scan_Morphs_<Genesis>.dsa wrappers installed next to this file; walks the
+// selected figure AND every descendant node (geografts like Golden Palace /
+// Dicktator, nipples/navel add-ons, fitted clothing — they all carry morphs of
+// their own) and writes every DzMorph as { node, nodeLabel, label, name } into
+// a per-generation JSON in the studio's app-data folder. The studio's
+// Morph-name autocomplete reads that index. Studio-only (no DazToHue-Scripts
+// twin); the wrapper bakes the output path at install time.
+
+function DthScanMorphs(config){
+	var oSel = Scene.getPrimarySelection();
+	if(!oSel){
+		MessageBox.information(
+			"Select the figure first - an unrenamed " + config.figurePrefix +
+			" character - then run this again.",
+			"DTH Character Studio", "&OK");
+		return;
+	}
+	var sLabel = String(oSel.getLabel());
+	var bMatch = sLabel.indexOf(config.figurePrefix) == 0;
+	// "Genesis 8 Female" and "Genesis 8.1 Female" share a prefix - the G8 scan
+	// must not accept an 8.1 figure (it has its own scan + index).
+	if(bMatch && config.excludePrefix && sLabel.indexOf(config.excludePrefix) == 0) bMatch = false;
+	if(!bMatch){
+		MessageBox.information(
+			"The selected node is \"" + sLabel + "\" - expected an unrenamed " +
+			config.figurePrefix + " figure. Select the figure root and run again.",
+			"DTH Character Studio", "&OK");
+		return;
+	}
+
+	// The figure root plus every descendant (recursive) - grafts and clothing too.
+	var aNodes = [oSel].concat(oSel.getNodeChildren(true));
+	var aMorphs = [];
+	var oSeen = {};
+	var iNodesWithMorphs = 0;
+	for(var n = 0; n < aNodes.length; n++){
+		var oNode = aNodes[n];
+		var oObj = oNode.getObject();
+		if(!oObj) continue;
+		// Instance suffixes (GoldenPalace_G9_9694) vary per scene - strip the
+		// trailing _<digits> so the stored node id matches the ROM convention
+		// (GoldenPalace_G9, Genesis9, ...).
+		var sNode = String(oNode.name).replace(/_\d+$/, "");
+		var iBefore = aMorphs.length;
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			var sName = String(oMod.getName());
+			var sKey = sNode + "|" + sName;
+			if(oSeen[sKey]) continue;
+			oSeen[sKey] = true;
+			aMorphs.push({
+				node: sNode,
+				nodeLabel: String(oNode.getLabel()),
+				label: oProp ? String(oProp.getLabel()) : sName,
+				name: sName
+			});
+		}
+		if(aMorphs.length > iBefore) iNodesWithMorphs++;
+	}
+
+	var oOut = {
+		version: 1,
+		genesis: config.genesis,
+		figure: sLabel,
+		scannedAt: new Date().toString(),
+		morphs: aMorphs
+	};
+	var oFile = new DzFile(config.outPath);
+	// One ORed mode arg - a second open() argument warns on DS6.
+	if(oFile.open(oFile.WriteOnly | oFile.Truncate)){
+		oFile.write(JSON.stringify(oOut, null, 1));
+		oFile.close();
+		MessageBox.information(
+			"Scanned " + aMorphs.length + " morphs on " + iNodesWithMorphs +
+			" nodes.\n\nThe Morph name autocomplete in DTH Character Studio now knows them.",
+			"DTH Character Studio", "&OK");
+	} else {
+		MessageBox.information(
+			"Could not write the morph index:\n" + config.outPath,
+			"DTH Character Studio", "&OK");
+	}
+}

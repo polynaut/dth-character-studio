@@ -44,6 +44,7 @@ export {
   dismissRomRunLog,
   fetchAllCharacters,
   fetchCharacter,
+  fetchMorphIndex,
   fetchCharacters,
   fetchRomRunLog,
   getCharacterPath,
@@ -52,7 +53,7 @@ export {
   moveCharacter,
   saveCharacter,
 } from './api/characters'
-export type { CharacterWithProject, RomRunFailedMorph, RomRunLog } from './api/characters'
+export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog } from './api/characters'
 
 // --- avatars: avatar images + scene thumbnails ------------------------------
 export {
