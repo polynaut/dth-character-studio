@@ -1,5 +1,14 @@
 # @dth/desktop
 
+## 0.33.0
+
+### Patch Changes
+
+- [#158](https://github.com/polynaut/dth-character-studio/pull/158) [`70b1f54`](https://github.com/polynaut/dth-character-studio/commit/70b1f54fa7c6638274adf34b084e1975b3814212) Thanks [@polynaut](https://github.com/polynaut)! - **The update dialog now shows what you skipped.** When the installed version is
+  several releases behind, the dialog still renders the latest release's notes in
+  full — and below them lists the in-between releases (newest first, up to 3) as
+  links to their GitHub release pages, so the catch-up path is one click away.
+
 ## 0.32.3
 
 ## 0.32.2
