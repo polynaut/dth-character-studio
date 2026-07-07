@@ -1,4 +1,4 @@
-import { exists, mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
@@ -215,4 +215,23 @@ export async function fileExists({ data }: { data: unknown }): Promise<boolean> 
   } catch {
     return false
   }
+}
+
+/**
+ * Open a path in the OS file manager (Explorer on Windows) — a file path opens
+ * its parent folder. Same URL-scheme refusal as openScene: a shareable
+ * character definition must not turn Ctrl+click into launching arbitrary URLs.
+ */
+export async function revealPath({ data }: { data: unknown }): Promise<void> {
+  const { path } = z.object({ path: z.string().min(1) }).parse(data)
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(path)) {
+    throw new Error('Refusing to open a URL — the path must be a local file or folder.')
+  }
+  let dir = path
+  try {
+    if (!(await stat(path)).isDirectory) dir = path.replace(/[\/][^\/]*$/, '')
+  } catch {
+    throw new Error('The path does not exist (anymore).')
+  }
+  await shellOpen(dir)
 }

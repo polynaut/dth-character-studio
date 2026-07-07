@@ -56,6 +56,7 @@ import { PathCode } from '#/components/path-code.tsx'
 import { Tag } from '#/components/tag.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { UnrealProjectsField } from '#/components/unreal-projects-field.tsx'
+import { NotesEditor } from '#/components/notes-editor.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
@@ -124,7 +125,7 @@ function ProjectCharactersPage() {
   // Daz scenes scoped to this project). `assetRefresh` reloads the grid after an add.
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<'character' | 'asset'>('character')
-  const [listTab, setListTab] = useState<'characters' | 'assets'>('characters')
+  const [listTab, setListTab] = useState<'characters' | 'assets' | 'notes'>('characters')
   const [assetRefresh, setAssetRefresh] = useState(0)
   // When the picked scene is outside the project, the create flow pauses on this
   // modal to ask whether to copy the scene into the character folder.
@@ -559,15 +560,18 @@ function ProjectCharactersPage() {
       </div>
 
       <Tabs
-        value={assetsEnabled ? listTab : 'characters'}
-        onValueChange={(v) => setListTab(v as 'characters' | 'assets')}
+        value={!assetsEnabled && listTab === 'assets' ? 'characters' : listTab}
+        onValueChange={(v) => setListTab(v as 'characters' | 'assets' | 'notes')}
       >
-        {assetsEnabled && (
-          <TabsList className="mb-6">
-            <TabsTrigger value="characters">Characters</TabsTrigger>
-            <TabsTrigger value="assets">Attachments</TabsTrigger>
-          </TabsList>
-        )}
+        <TabsList className="mb-6">
+          <TabsTrigger value="characters">Characters</TabsTrigger>
+          {assetsEnabled && <TabsTrigger value="assets">Attachments</TabsTrigger>}
+          <TabsTrigger value="notes">Notes</TabsTrigger>
+        </TabsList>
+        <TabsContent value="notes">
+          {/* Freeform project notes (markdown + dropped media). */}
+          <NotesEditor projectId={projectId} />
+        </TabsContent>
         <TabsContent value="characters">
           {characters.length === 0 ? (
             <div className="flex flex-col items-start gap-4">

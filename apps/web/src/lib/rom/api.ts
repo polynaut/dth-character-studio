@@ -75,10 +75,18 @@ export {
   fileExists,
   listAssets,
   openScene,
+  revealPath,
   relinkScene,
 } from './api/attachments'
 
 // --- products: the Daz Products scan ----------------------------------------
+export {
+  addNoteMedia,
+  fetchNotes,
+  openNoteMedia,
+  resolveNoteMedia,
+  saveNotes,
+} from './api/notes'
 export { clearProductScan, detectDimManifestsFolder, fetchProductScan } from './api/products'
 export type { ProductScanFile } from './api/products'
 
