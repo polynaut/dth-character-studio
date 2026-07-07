@@ -24,7 +24,7 @@ const RUNTIME_FILES = ['DthWorkflow.dsa', 'DthUtils.dsa', 'DthOptions.dsa', 'Dth
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '0e49cac31745664286b1d31ef80a4b92e26fb02c6ae9d932e25bb99dc1a34bbd'
+const EXPECTED_RUNTIME_HASH = 'a1e7d74bd5b35de6f24758aaf5e565230c259cc0ab76f6bcb08418ff134e178b'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -44,5 +44,21 @@ describe('bundled DTH runtime (.dsa)', () => {
       actual,
       `The bundled runtime .dsa files changed. If intentional: set EXPECTED_RUNTIME_HASH = "${actual}", bump RUNTIME_VERSION (currently ${RUNTIME_VERSION}) in packages/rom/src/types.ts, and mirror into DazToHue-Scripts.`,
     ).toBe(EXPECTED_RUNTIME_HASH)
+  })
+
+  // The core-invariant guard: preset-block lengths must be MEASURED (threaded in as
+  // options.presetFrames), never hard-coded. A literal frame count in the runtime is
+  // exactly how the Daz timeline could silently drift from the PoseAsset CSV.
+  it('sizes every preset block from measured presetFrames — no hard-coded frame count', () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+    const workflow = readFileSync(join(dir, 'DthWorkflow.dsa'), 'utf8')
+    // No numeric literal assigned to a *FrameCount var, and no `iRomFrames = 328 : 617`.
+    expect(workflow).not.toMatch(/FrameCount\s*=\s*\d/)
+    expect(workflow).not.toMatch(/iRomFrames\s*=\s*[^;\n]*\d/)
+    expect(workflow).not.toMatch(/\?\s*328\s*:\s*617/)
+    // Each block reads its measured length via the fail-loud helper instead.
+    for (const key of ['base', 'gp', 'dk', 'phys']) {
+      expect(workflow).toContain(`getPresetFrameCount(options, "${key}")`)
+    }
   })
 })
