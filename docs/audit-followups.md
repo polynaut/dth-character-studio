@@ -11,6 +11,20 @@ in the fix pass, which is why it's here rather than already merged.
 
 Tackle in any order; each is independent.
 
+**Status (July 2026):**
+1. ✅ Done — runtime v16 (#137 + #142): preset lengths measured, fail-loud, guarded
+   by a no-literal CI test + cross-artifact alignment tests. Daz-validated (stock
+   G9, custom-JCM base of non-standard length, old-script fail-loud).
+2. ✅ CSP done / fs documented — strict prod `csp` + `devCsp`, asset protocol
+   **disabled** (nothing used it; images are inlined `data:` URLs). The broad `fs:`
+   scope stays **by design**: projects are user-chosen folders anywhere on disk and
+   `storage.ts` works there directly; destructive rails live in the Rust commands.
+   Long-term option: route JS-side remove/rename through validated Rust commands.
+3. ✅ Done (#140) — throwaway updater key in the build job (real key only on the
+   signer), tauri-action + rust-toolchain SHA-pinned.
+4. ◐ Tests done (#139: `resolvePresetFrames`); the god-module *split* remains open.
+5. ✅ Done (#138) — clippy `-D warnings` gate in CI, pre-existing lints cleared.
+
 ---
 
 ## 1. Single-source the preset-block frame counts
