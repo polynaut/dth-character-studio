@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Pencil } from 'lucide-react'
 
 import { cn } from '#/lib/utils.ts'
 
@@ -30,11 +30,14 @@ export function PathCode({
   children,
   className,
   variant = 'default',
+  onEdit,
 }: {
   path: string
   children?: ReactNode
   className?: string
   variant?: 'default' | 'secondary'
+  /** When set, a small edit (pencil) button renders in front of the chip. */
+  onEdit?: () => void
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -63,6 +66,22 @@ export function PathCode({
       }}
       className="group/path relative inline-flex max-w-full cursor-pointer align-middle"
     >
+      {onEdit && (
+        <button
+          type="button"
+          title="Edit"
+          aria-label="Edit path"
+          className="mr-1 inline-flex shrink-0 items-center self-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          // The chip's own click copies — editing must not also copy.
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit()
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Pencil className="size-3" />
+        </button>
+      )}
       <code
         className={cn(
           pathChipClass(variant),
