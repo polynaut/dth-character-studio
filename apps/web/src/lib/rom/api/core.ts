@@ -101,26 +101,20 @@ export async function getActiveProjectDir(): Promise<string> {
 
 /**
  * The projects a cross-project sweep — Refresh assets and version detection —
- * should act on, decided by the window it runs in:
- *  - In a **project window** (an active project is pinned) → just that project.
- *    We're working on one project, so refresh/detection stay scoped to it.
- *  - In the **Home / main window** (no active project) → every **known** project,
- *    i.e. the recents list. There's no global registry now, so recents is the set
- *    of projects the app knows about; entries dedupe by normalised folder path.
- * Unreachable folders (a moved/deleted project, an unreadable `.dcsp`) are skipped
- * — they simply contribute nothing to the sweep.
+ * acts on: **every known project, in every window**. Known = the recents list
+ * (there's no global registry; recents is the set of projects the app knows
+ * about), unioned with this window's active project in case it hasn't reached
+ * recents yet. A refresh from a project window used to scope to that project
+ * only, which made the same button mean different things in different windows —
+ * now it always brings the whole library up to date. Entries dedupe by
+ * normalised folder path; unreachable folders (a moved/deleted project, an
+ * unreadable `.dcsp`) are skipped — they simply contribute nothing to the sweep.
  */
 export async function projectsForSweep(): Promise<Array<ProjectInfo>> {
-  const activeDir = await getActiveProjectDir()
-  if (activeDir) {
-    try {
-      return [await resolveProject(activeDir)]
-    } catch {
-      return [] // the pinned project is unreadable — nothing to sweep
-    }
-  }
   const recents = await storage.listRecents()
   const dirs = new Set(recents.map((r) => joinPath(dirname(r.path))))
+  const activeDir = await getActiveProjectDir()
+  if (activeDir) dirs.add(joinPath(activeDir))
   const projects: Array<ProjectInfo> = []
   for (const dir of dirs) {
     try {

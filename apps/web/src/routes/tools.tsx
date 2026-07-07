@@ -1343,9 +1343,9 @@ function RefreshAssetsTab() {
           Refresh assets
           <InfoPopup label="Refresh assets — more information">
             Re-generates the Daz scripts and PoseAsset CSVs so all generated files match the current
-            version — run this after updating the studio or switching DTH release. From a project
-            window it covers that project; from the Home window it covers every known (recent)
-            project. Character definitions aren't changed.
+            version — run this after updating the studio or switching DTH release. It always covers
+            every known (recent) project, no matter which window it runs from. Character definitions
+            aren't changed.
           </InfoPopup>
         </h2>
         {/* The action sits up top so it's visible at a glance, above the table; it's
