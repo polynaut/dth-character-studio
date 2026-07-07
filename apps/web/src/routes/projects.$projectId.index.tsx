@@ -440,11 +440,10 @@ function ProjectCharactersPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="G9">G9</SelectItem>
-                        <SelectItem value="G8.1" disabled>
-                          G8.1 — later
-                        </SelectItem>
-                        <SelectItem value="G8" disabled>
-                          G8 — later
+                        <SelectItem value="G8.1">G8.1</SelectItem>
+                        <SelectItem value="G8">G8</SelectItem>
+                        <SelectItem value="G3" disabled>
+                          G3 — later
                         </SelectItem>
                       </SelectContent>
                     </Select>

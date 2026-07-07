@@ -389,6 +389,20 @@ describe('toCharacterScriptDsa', () => {
     const noFolder = characterConfig(toCharacterScriptDsa(makeCharacter()).content)
     expect(noFolder.runLogPath).toBeUndefined()
   })
+
+  it('non-G9: genesis in the config, G9-only strength dials zeroed', () => {
+    const g81 = characterConfig(
+      toCharacterScriptDsa(makeCharacter({ genesis: 'G8.1' })).content,
+    )
+    expect(g81.genesis).toBe('G8.1')
+    // Dialing facs_ctrl_/body_ctrl_ strengths on a non-G9 figure would log a
+    // spurious "property not found" run failure — 0 makes the runtime skip them.
+    expect(g81.FACsDetailStrength).toBe(0)
+    expect(g81.FlexionStrength).toBe(0)
+    const g9 = characterConfig(toCharacterScriptDsa(makeCharacter()).content)
+    expect(g9.FACsDetailStrength).toBe(1)
+    expect(g9.FlexionStrength).toBe(1)
+  })
 })
 
 describe('toScanProductsScriptDsa', () => {

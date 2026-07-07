@@ -749,8 +749,11 @@ export function toCharacterScriptDsa(
     bIncludeGP: includeGP,
     bIncludePhysics: includePhysics,
     bDQS: characterSkinning(character) === 'dqs',
-    FACsDetailStrength: character.facsDetailStrength,
-    FlexionStrength: character.flexionStrength,
+    // The FACS-detail/flexion strength dials only exist on Genesis 9 figures —
+    // 0 makes the runtime skip them (setting them on a non-G9 figure would log
+    // a spurious "property not found" run failure).
+    FACsDetailStrength: character.genesis === 'G9' ? character.facsDetailStrength : 0,
+    FlexionStrength: character.genesis === 'G9' ? character.flexionStrength : 0,
   }
   // Measured preset-block lengths (base/gp/dk/phys), so the Daz runtime sizes
   // each block from the real .duf frame counts instead of hard-coded literals —

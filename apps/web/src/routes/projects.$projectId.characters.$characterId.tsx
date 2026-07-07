@@ -626,11 +626,10 @@ function CharacterPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="G9">G9</SelectItem>
-                    <SelectItem value="G8.1" disabled>
-                      G8.1 — later
-                    </SelectItem>
-                    <SelectItem value="G8" disabled>
-                      G8 — later
+                    <SelectItem value="G8.1">G8.1</SelectItem>
+                    <SelectItem value="G8">G8</SelectItem>
+                    <SelectItem value="G3" disabled>
+                      G3 — later
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -656,36 +655,38 @@ function CharacterPage() {
           {/* The legend is positioned absolutely (a notch on the border) so it
               doesn't consume a row of flow — that keeps the FACS / Flexion fields
               on the same baseline as the Genesis row on the left. -mt-2 + pt-2
-              lift the box so its fields start at the same y as the left column. */}
-          <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4">
-            <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
-              {GENESIS_LABELS[character.genesis]} Specific
-            </legend>
-            {/* Genesis-9-specific tuning. When G8 / G8.1 support lands, branch on
-                character.genesis here and swap in that version's settings. */}
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                  FACS detail strength
-                </Label>
-                <NumberField
-                  className="w-28"
-                  value={character.facsDetailStrength}
-                  onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
-                />
+              lift the box so its fields start at the same y as the left column.
+              The dials only exist on Genesis 9 figures — other generations have
+              no generation-specific settings (yet), so the box disappears. */}
+          {character.genesis === 'G9' && (
+            <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4">
+              <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
+                {GENESIS_LABELS[character.genesis]} Specific
+              </legend>
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+                    FACS detail strength
+                  </Label>
+                  <NumberField
+                    className="w-28"
+                    value={character.facsDetailStrength}
+                    onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+                    Flexion strength
+                  </Label>
+                  <NumberField
+                    className="w-28"
+                    value={character.flexionStrength}
+                    onCommit={(flexionStrength) => patch({ flexionStrength })}
+                  />
+                </div>
               </div>
-              <div>
-                <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                  Flexion strength
-                </Label>
-                <NumberField
-                  className="w-28"
-                  value={character.flexionStrength}
-                  onCommit={(flexionStrength) => patch({ flexionStrength })}
-                />
-              </div>
-            </div>
-          </fieldset>
+            </fieldset>
+          )}
         </div>
         {location && (
           <div className="mt-6 space-y-4 border-t pt-5">

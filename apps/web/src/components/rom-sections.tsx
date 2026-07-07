@@ -58,6 +58,7 @@ import {
   SECTION_MODES,
   genAssetGender,
   genDefaultNode,
+  genesisFigureNode,
   genRomIncludes,
   genRomStartFrame,
   mirrorGroup,
@@ -138,6 +139,11 @@ interface PoseAssetCatalog {
 const EMPTY_MORPH_INDEX: Array<MorphIndexEntry> = []
 const MorphIndexContext = createContext<Array<MorphIndexEntry>>(EMPTY_MORPH_INDEX)
 
+// The default scene node for new ROM entries — the unrenamed base figure of the
+// character's generation (Genesis9, Genesis8_1Female, …). A context for the same
+// reason as the morph index: the fallback lives in deeply nested table cells.
+const FigureNodeContext = createContext<string>('Genesis9')
+
 interface RomSectionsProps {
   sections: RomSectionsModel
   genesis: GenesisVersion
@@ -161,9 +167,9 @@ interface RomSectionsProps {
 const PRESET_DESCRIPTIONS: Partial<Record<RomSection, string>> = {
   RET: 'Covered by the pre-defined DTH base ROM (RestPose, UnrealPose, TPose, …). Loads together with the Joint Corrective base ROM.',
   JCM: 'Pre-defined DTH base ROM (DQS / linear).',
-  FAC: 'Pre-defined DTH face ROM incl. the separate Mouth figure ROM.',
+  FAC: 'Pre-defined DTH face ROM (on Genesis 9 incl. the separate Mouth figure ROM).',
   GEN: 'Pre-defined genitalia ROM.',
-  PHY: 'Pre-defined physics example ROM (43 frames). Map its poses in the PoseAsset node manually for now.',
+  PHY: 'Pre-defined physics example ROM. Map its poses in the PoseAsset node manually for now.',
 }
 
 function PresetAssetPicker({
@@ -568,6 +574,8 @@ interface PoseTableMeta {
   remove: (rowIndex: number) => void
   /** Insert an empty pose at this index (frames renumber — they're never stored). */
   insertAt: (index: number) => void
+  /** Default scene node for new entries — the generation's unrenamed base figure. */
+  figureNode: string
 }
 
 /**
@@ -909,7 +917,7 @@ function SortablePoseRow({
                   <div className="w-44">
                     <TextCell
                       value={morph.node}
-                      placeholder="Genesis9"
+                      placeholder={meta.figureNode}
                       onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
                     />
                   </div>
@@ -1004,6 +1012,7 @@ function GroupCard({
   const showSuffix = GROUPED_SECTIONS.includes(section)
   const showMethod = METHOD_SECTIONS.includes(section)
   const showCalcFrom = CALC_FROM_SECTIONS.includes(section)
+  const figureNode = useContext(FigureNodeContext)
   // The group's own id is its container droppable, so a pose can be dropped onto
   // an empty group's body. The DndContext spanning all groups lives in the parent
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
@@ -1038,6 +1047,7 @@ function GroupCard({
     showReferenceFbx,
     expandedIds,
     toggleExpanded: onToggleExpanded,
+    figureNode,
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
       const pose = group.poses[rowIndex]
@@ -1049,7 +1059,7 @@ function GroupCard({
     addMorph: (rowIndex) => {
       const pose = group.poses[rowIndex]
       patchPose(rowIndex, {
-        morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? 'Genesis9', prop: '', value: 1 }],
+        morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 }],
       })
     },
     removeMorphAt: (rowIndex, morphIndex) => {
@@ -1065,7 +1075,7 @@ function GroupCard({
       // the same node throughout.
       const neighbor = group.poses[index - 1] ?? group.poses[index]
       const node =
-        neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+        neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : figureNode)
       const id = newId()
       const poses = [...group.poses]
       poses.splice(index, 0, {
@@ -1093,7 +1103,7 @@ function GroupCard({
     // same node throughout. A GEN group starts on the gender's geograft node.
     const lastNode =
       group.poses[group.poses.length - 1]?.morphs[0]?.node ??
-      (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+      (section === 'GEN' ? genDefaultNode(gender) : figureNode)
     onChange({
       ...group,
       poses: [
@@ -1818,6 +1828,7 @@ export function RomSections({
 
   return (
     <MorphIndexContext.Provider value={morphIndex ?? EMPTY_MORPH_INDEX}>
+    <FigureNodeContext.Provider value={genesisFigureNode(genesis, gender)}>
     <div className="space-y-2">
       {!presetFrames && (
         <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
@@ -2024,6 +2035,7 @@ export function RomSections({
         />
       )}
     </div>
+    </FigureNodeContext.Provider>
     </MorphIndexContext.Provider>
   )
 }
