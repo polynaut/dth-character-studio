@@ -1,5 +1,26 @@
 # @dth/desktop
 
+## 0.35.0
+
+### Minor Changes
+
+- [#170](https://github.com/polynaut/dth-character-studio/pull/170) [`14f3ed3`](https://github.com/polynaut/dth-character-studio/commit/14f3ed3c9899cfd732530f7293557a6e05a9df58) Thanks [@polynaut](https://github.com/polynaut)! - The Daz scenes subfolder is now editable on an existing character: the scenes
+  folder chip grows a small pencil — editing the subfolder physically moves the
+  folder on disk and repoints every linked scene, so nothing breaks. Path chips
+  in general now support an optional edit affordance.
+
+- [#169](https://github.com/polynaut/dth-character-studio/pull/169) [`bb695ef`](https://github.com/polynaut/dth-character-studio/commit/bb695efae90d970981a36fd191045a94f3c8a9c8) Thanks [@polynaut](https://github.com/polynaut)! - App-styled tooltips everywhere. Every `title` attribute in the app now shows a
+  proper tooltip — rounded, drop-shadowed, on the app's popover surface, smartly
+  positioned by Floating UI (flips/shifts at viewport edges) — instead of the
+  browser's plain native tooltip. One global host intercepts hover/focus, so all
+  existing and future `title=` usage migrates automatically; keyboard focus shows
+  the tooltip instantly, and icon-only controls keep an accessible name.
+
+### Patch Changes
+
+- [#167](https://github.com/polynaut/dth-character-studio/pull/167) [`1e1ae08`](https://github.com/polynaut/dth-character-studio/commit/1e1ae082e238f41dbfc2c508809c3340adec18bd) Thanks [@polynaut](https://github.com/polynaut)! - The update dialog now names the installed version as the reference point:
+  "Version 0.34.0 is ready to install — you have 0.33.0."
+
 ## 0.34.0
 
 ### Minor Changes
