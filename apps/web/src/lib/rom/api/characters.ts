@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
@@ -15,12 +15,15 @@ import {
   sectionsFromFlatFrames,
 } from '@dth/rom'
 import {
+  characterLocationCache,
   charactersRoot,
   charScopeInput,
   charsRoot,
   dirname,
   fetchPoseAssets,
+  invalidateCharacterLocations,
   joinPath,
+  morphIndexCache,
   projectIdInput,
   resolveProject,
 } from './core'
@@ -60,9 +63,44 @@ export async function fetchAllCharacters(): Promise<Array<CharacterWithProject>>
   return lists.flat()
 }
 
+/**
+ * Where a character lives, through the session location cache: a cache hit is
+ * verified with a single `exists()` (so external deletes/renames are noticed);
+ * a miss or stale entry falls back to the full library scan and repopulates.
+ * Mutations (save/move/delete) also clear the cache outright — navigating right
+ * after a rename re-scans instead of 404ing.
+ */
+async function locateCharacter(
+  root: string,
+  id: string,
+): Promise<storage.CharacterLocation | null> {
+  const key = `${root}|${id}`
+  const cached = characterLocationCache.get(key)
+  if (cached) {
+    try {
+      if (await exists(cached.definitionAbs)) return cached
+    } catch {
+      // unverifiable (e.g. an unreachable share) — treat as stale
+    }
+    characterLocationCache.delete(key)
+  }
+  const location = await storage.getCharacterPath(root, id)
+  if (location) characterLocationCache.set(key, location)
+  return location
+}
+
 export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
   const { projectId, id } = charScopeInput.parse(data)
-  return storage.getCharacter(await charactersRoot(projectId), id)
+  const root = await charactersRoot(projectId)
+  const location = await locateCharacter(root, id)
+  if (!location) return null
+  // Re-read just the located definition instead of re-parsing the whole library.
+  const character = await storage.readCharacterAt(location.definitionAbs)
+  if (character && character.id === id) return character
+  // The file changed identity under us (replaced/moved externally) — drop the
+  // stale location and let the full scan decide.
+  characterLocationCache.delete(`${root}|${id}`)
+  return storage.getCharacter(root, id)
 }
 
 const createInput = z.object({
@@ -237,8 +275,9 @@ function unreadableRomRunLog(): RomRunLog {
  */
 export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRunLog | null> {
   const { projectId, id } = charScopeInput.parse(data)
-  const lib = await charactersRoot(projectId)
-  const folder = await storage.getCharacterFolder(lib, id)
+  const location = await locateCharacter(await charactersRoot(projectId), id)
+  if (!location) return null
+  const folder = location.folderAbs
   const dazPath = joinPath(folder, ROM_RUN_LOG_FILE)
   const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
@@ -269,8 +308,9 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
  *  ingested Daz file). Best-effort. */
 export async function dismissRomRunLog({ data }: { data: unknown }): Promise<void> {
   const { projectId, id } = charScopeInput.parse(data)
-  const lib = await charactersRoot(projectId)
-  const folder = await storage.getCharacterFolder(lib, id)
+  const location = await locateCharacter(await charactersRoot(projectId), id)
+  if (!location) return
+  const folder = location.folderAbs
   for (const name of [LAST_ROM_RUN_FILE, ROM_RUN_LOG_FILE]) {
     try {
       const path = joinPath(folder, name)
@@ -286,6 +326,9 @@ const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown(
 export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
   const { projectId, character } = saveInput.parse(data)
   const project = await resolveProject(projectId)
+  // A name change renames the character's folder on disk — drop the cached
+  // locations so the next read re-scans instead of chasing the old path.
+  invalidateCharacterLocations()
   return storage.saveCharacter(project, characterSchema.parse(character), charsRoot(project))
 }
 
@@ -301,6 +344,7 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   const { projectId, id, keepDaz, keepHoudini } = deleteCharacterInput.parse(data)
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
+  invalidateCharacterLocations()
   // Capture the name before deleting — it keys the generated script subfolder.
   const character = await storage.getCharacter(lib, id)
   const settings = await storage.getSettings()
@@ -428,7 +472,7 @@ export async function getCharacterPath({
   data: unknown
 }): Promise<storage.CharacterLocation | null> {
   const { projectId, id } = charScopeInput.parse(data)
-  return storage.getCharacterPath(await charactersRoot(projectId), id)
+  return locateCharacter(await charactersRoot(projectId), id)
 }
 
 const moveInput = z.object({
@@ -444,6 +488,7 @@ export async function moveCharacter({
   data: unknown
 }): Promise<{ location: storage.CharacterLocation; character: Character }> {
   const { projectId, id, relPath } = moveInput.parse(data)
+  invalidateCharacterLocations()
   return storage.moveCharacter(await charactersRoot(projectId), id, relPath)
 }
 
@@ -468,10 +513,9 @@ export async function moveCharacterScenesFolder({
 }): Promise<Character> {
   const { projectId, id, newSubdir } = moveScenesFolderInput.parse(data)
   const root = await charactersRoot(projectId)
-  const [character, loc] = await Promise.all([
-    storage.getCharacter(root, id),
-    storage.getCharacterPath(root, id),
-  ])
+  const loc = await locateCharacter(root, id)
+  const located = loc ? await storage.readCharacterAt(loc.definitionAbs) : null
+  const character = located?.id === id ? located : null
   if (!character?.scenePath || !loc) throw new Error('No Daz scene linked.')
   const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
   const charFolder = norm(loc.folderAbs)
@@ -523,10 +567,28 @@ export interface MorphIndexEntry {
  * merging indexes would only offer dials the actual figure can't drive.
  */
 export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<MorphIndexEntry>> {
+  // Cheap staleness check first: the parsed+deduped index is cached per genesis,
+  // keyed on the file's mtime+size — the deliberate re-fetch on every window
+  // focus then costs one stat() instead of a full re-read+re-parse. A missing
+  // file (or one whose mtime can't be read) is never served from cache.
+  let path: string
+  let stamp: string | null = null
+  try {
+    path = await storage.dataPath(`morphs_${genesis}.json`)
+    const info = await stat(path)
+    const mtime = info.mtime?.getTime()
+    if (mtime !== undefined) stamp = `${mtime}:${info.size}`
+  } catch {
+    // no scan for this generation yet — nothing to offer
+    morphIndexCache.delete(genesis)
+    return []
+  }
+  const cached = morphIndexCache.get(genesis)
+  if (stamp && cached && cached.stamp === stamp) return cached.entries
   const out: Array<MorphIndexEntry> = []
   const seen = new Set<string>()
   try {
-    const raw = await readTextFile(await storage.dataPath(`morphs_${genesis}.json`))
+    const raw = await readTextFile(path)
     const parsed = JSON.parse(raw) as { morphs?: Array<Record<string, unknown>> }
     for (const m of parsed.morphs ?? []) {
       if (typeof m.name !== 'string' || !m.name || typeof m.node !== 'string' || !m.node) continue
@@ -541,7 +603,10 @@ export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<Mo
       })
     }
   } catch {
-    // no scan for this generation yet — nothing to offer
+    // unreadable/broken file — the autocomplete stays quiet
+    morphIndexCache.delete(genesis)
+    return out
   }
+  if (stamp) morphIndexCache.set(genesis, { stamp, entries: out })
   return out
 }

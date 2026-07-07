@@ -106,6 +106,20 @@ async function findEntry(lib: string, id: string): Promise<LibraryEntry | null> 
   return (await scanLibrary(lib)).find((entry) => entry.character.id === id) ?? null
 }
 
+/**
+ * Read + parse ONE definition file at a known path — the fast path for the api
+ * layer's character-location cache, which skips the full library scan when it
+ * already knows where a definition lives. Null when the file is missing or no
+ * longer parses as a character (callers then fall back to the full scan).
+ */
+export async function readCharacterAt(definitionAbs: string): Promise<Character | null> {
+  try {
+    return parseCharacter(JSON.parse(await readTextFile(definitionAbs)))
+  } catch {
+    return null
+  }
+}
+
 export async function listCharacters(lib: string): Promise<Array<Character>> {
   const entries = await scanLibrary(lib)
   return entries.map((entry) => entry.character).sort((a, b) => a.name.localeCompare(b.name))

@@ -3,7 +3,7 @@ import { isTauri } from '@tauri-apps/api/core'
 
 import { mergeProductScans, parseProductScanCsv } from '@dth/rom'
 import * as storage from '../storage'
-import { charScopeInput, joinPath, resolveProject } from './core'
+import { charScopeInput, joinPath, productScanCache, resolveProject } from './core'
 
 import type { MergedProductScan, ProductScan } from '@dth/rom'
 
@@ -55,53 +55,74 @@ export interface ProductScanFile {
   modifiedAt: string
 }
 
-export async function fetchProductScan({
-  data,
-}: {
-  data: unknown
-}): Promise<{
+export interface ProductScanResult {
   exists: boolean
   scan: MergedProductScan | null
   dir: string
   files: Array<ProductScanFile>
-}> {
+}
+
+export async function fetchProductScan({ data }: { data: unknown }): Promise<ProductScanResult> {
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
   const dir = await storage.productScanDir(project.id, id)
   try {
-    if (!(await exists(dir))) return { exists: false, scan: null, dir, files: [] }
-    const scans: Array<ProductScan> = []
-    const files: Array<ProductScanFile> = []
+    if (!(await exists(dir))) {
+      productScanCache.delete(dir)
+      return { exists: false, scan: null, dir, files: [] }
+    }
+    // List + stat the CSVs first (cheap): when the listing matches the cached
+    // signature (names + mtimes + sizes), serve the cached merge instead of
+    // re-reading and re-parsing every file on each navigation to the character.
+    const listing: Array<{ name: string; modifiedAt: string; size: number }> = []
     for (const entry of await readDir(dir)) {
       if (!entry.isFile || !entry.name.toLowerCase().endsWith('.csv')) continue
-      const full = joinPath(dir, entry.name)
+      let modifiedAt = ''
+      let size = -1
       try {
-        const parsed = parseProductScanCsv(await readTextFile(full))
+        const info = await stat(joinPath(dir, entry.name))
+        modifiedAt = info.mtime ? info.mtime.toISOString() : ''
+        size = info.size
+      } catch {
+        // mtime unavailable — leave '' (and a -1 size keeps the entry "unstable",
+        // so an unstattable file is simply re-read next time)
+      }
+      listing.push({ name: entry.name, modifiedAt, size })
+    }
+    listing.sort((a, b) => a.name.localeCompare(b.name))
+    const signature = listing.map((f) => `${f.name}|${f.modifiedAt}|${f.size}`).join('\n')
+    const cached = productScanCache.get(dir)
+    if (cached && cached.signature === signature) return cached.result
+
+    const scans: Array<ProductScan> = []
+    const files: Array<ProductScanFile> = []
+    for (const f of listing) {
+      try {
+        const parsed = parseProductScanCsv(await readTextFile(joinPath(dir, f.name)))
         scans.push(parsed)
-        let modifiedAt = ''
-        try {
-          const info = await stat(full)
-          modifiedAt = info.mtime ? info.mtime.toISOString() : ''
-        } catch {
-          // mtime unavailable — leave ''
-        }
         files.push({
-          name: entry.name,
+          name: f.name,
           scene: parsed.sceneName,
           scenePath: parsed.scenePath,
           products: parsed.products.length,
           unmatched: parsed.unmatched.length,
-          modifiedAt,
+          modifiedAt: f.modifiedAt,
         })
       } catch {
         // skip an individual unreadable CSV
       }
     }
-    if (scans.length === 0) return { exists: false, scan: null, dir, files: [] }
-    files.sort((a, b) =>
-      (a.scene || a.name).localeCompare(b.scene || b.name, undefined, { sensitivity: 'base' }),
-    )
-    return { exists: true, scan: mergeProductScans(scans), dir, files }
+    let result: ProductScanResult
+    if (scans.length === 0) {
+      result = { exists: false, scan: null, dir, files: [] }
+    } else {
+      files.sort((a, b) =>
+        (a.scene || a.name).localeCompare(b.scene || b.name, undefined, { sensitivity: 'base' }),
+      )
+      result = { exists: true, scan: mergeProductScans(scans), dir, files }
+    }
+    productScanCache.set(dir, { signature, result })
+    return result
   } catch {
     return { exists: false, scan: null, dir, files: [] }
   }
@@ -117,5 +138,6 @@ export async function clearProductScan({ data }: { data: unknown }): Promise<voi
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
   const dir = await storage.productScanDir(project.id, id)
+  productScanCache.delete(dir)
   if (await exists(dir)) await remove(dir, { recursive: true })
 }
