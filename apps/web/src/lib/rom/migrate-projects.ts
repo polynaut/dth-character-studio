@@ -88,6 +88,7 @@ export async function migrateProjects(): Promise<void> {
         assetsEnabled: false,
         dazProductsEnabled: false,
         charactersSubdir: '',
+        unrealProjects: [],
       }
       await writeManifest(dir, manifest)
       const dest = metaImagesDir(dir)
