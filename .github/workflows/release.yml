@@ -82,16 +82,33 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
       - run: pnpm install --frozen-lockfile
-      # Build only — no tagName/release inputs, so tauri-action publishes
-      # nothing. The signing env is still required (createUpdaterArtifacts),
-      # but this build-time .sig is discarded: it is regenerated on the signer
-      # over the Authenticode-signed bytes.
-      - uses: tauri-apps/tauri-action@v0
+      # The build-time updater .sig is DISCARDED — the signer regenerates it over
+      # the Authenticode-signed bytes with the real key. So the real updater key
+      # (which every installed app trusts) never needs to enter this hosted-runner
+      # job that runs third-party actions: generate a throwaway keypair just to
+      # satisfy createUpdaterArtifacts. The real TAURI_SIGNING_PRIVATE_KEY lives
+      # only on the self-hosted signer job below.
+      - name: Generate a throwaway updater key (real key stays on the signer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes @tauri-apps/cli@2.11.2 signer generate --ci --password "" -f -w throwaway.key
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY<<THROWAWAY_KEY_EOF"
+            cat throwaway.key
+            echo "THROWAWAY_KEY_EOF"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
+          } >> "$GITHUB_ENV"
+      # Build only — no tagName/release inputs, so tauri-action publishes nothing.
+      # Pinned to a full commit SHA: this third-party action builds the installer
+      # we then Authenticode-sign + ship, so a moved tag must not be able to change
+      # its output silently. (Bump the SHA by hand when updating tauri-action.)
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
       - uses: actions/upload-artifact@v4
