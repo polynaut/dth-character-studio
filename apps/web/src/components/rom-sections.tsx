@@ -1075,11 +1075,19 @@ function GroupCard({
       <div ref={setDropRef}>
         <table className="w-full border-collapse text-sm">
           <thead>
+            {/* Third sticky tier: the column titles pin right under the section
+                title (128px pin + its 48px height = 176px), z under its z-[5].
+                Sticky lives on the th's (not the tr), with a solid bg and an
+                inset bottom shadow standing in for the border — collapsed table
+                borders don't travel with sticky cells. */}
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b">
-                <th className="w-7" />
+              <tr key={headerGroup.id}>
+                <th className="sticky top-[176px] z-[4] w-7 bg-background shadow-[inset_0_-1px_0_0_var(--color-border)]" />
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-2 py-1.5 text-left text-xs font-medium text-muted-foreground">
+                  <th
+                    key={header.id}
+                    className="sticky top-[176px] z-[4] bg-background px-2 py-1.5 text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border)]"
+                  >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
