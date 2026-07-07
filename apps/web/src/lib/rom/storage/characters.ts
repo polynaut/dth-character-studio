@@ -111,6 +111,21 @@ export async function listCharacters(lib: string): Promise<Array<Character>> {
   return entries.map((entry) => entry.character).sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/**
+ * Every character notes file under the characters root (absolute paths).
+ * Matched by the `.notes.md` suffix rather than via the definitions, so even a
+ * notes file whose definition is temporarily unparseable still counts — the
+ * media GC treats its `media://` references as live.
+ */
+export async function listNotesFiles(lib: string): Promise<Array<string>> {
+  if (!lib || !(await isDir(lib))) return []
+  const out: Array<string> = []
+  for (const rel of await walkFiles(lib)) {
+    if (rel.toLowerCase().endsWith('.notes.md')) out.push(join(lib, rel))
+  }
+  return out
+}
+
 export async function getCharacter(lib: string, id: string): Promise<Character | null> {
   return (await findEntry(lib, id))?.character ?? null
 }

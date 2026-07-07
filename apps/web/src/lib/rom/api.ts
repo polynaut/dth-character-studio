@@ -83,6 +83,7 @@ export {
 export {
   addNoteMedia,
   fetchNotes,
+  NotesConflictError,
   openNoteMedia,
   resolveNoteMedia,
   saveNotes,
@@ -152,6 +153,7 @@ export {
   fetchKnownDrives,
   forgetNetworkDrive,
   housekeepingSweep,
+  NOTE_MEDIA_RETENTION_DAYS,
   PRODUCT_SCAN_RETENTION_DAYS,
   quarantineStats,
   rememberNetworkPath,
