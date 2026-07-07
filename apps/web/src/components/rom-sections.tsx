@@ -431,6 +431,56 @@ interface PoseTableMeta {
   addMorph: (rowIndex: number) => void
   removeMorphAt: (rowIndex: number, morphIndex: number) => void
   remove: (rowIndex: number) => void
+  /** Insert an empty pose at this index (frames renumber — they're never stored). */
+  insertAt: (index: number) => void
+}
+
+/**
+ * The small "+" behind each frame number — opens a two-item menu right at the
+ * icon to insert an empty pose before/after this row. Frame numbers are computed
+ * from order, so the rest of the list simply renumbers.
+ */
+function InsertFrameMenu({ onBefore, onAfter }: { onBefore: () => void; onAfter: () => void }) {
+  const [open, setOpen] = useState(false)
+  function pick(action: () => void) {
+    setOpen(false)
+    action()
+  }
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        title="Insert a frame here"
+        aria-label="Insert a frame here"
+        className="rounded p-0.5 text-muted-foreground/50 hover:bg-muted hover:text-foreground"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Plus className="size-3" />
+      </button>
+      {open && (
+        <>
+          {/* Click-away layer — any click outside the menu closes it. */}
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute top-1/2 left-full z-30 ml-1 w-28 -translate-y-1/2 rounded-md border bg-background py-1 shadow-md">
+            <button
+              type="button"
+              className="block w-full px-3 py-1 text-left text-sm hover:bg-muted"
+              onClick={() => pick(onBefore)}
+            >
+              Add before
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-1 text-left text-sm hover:bg-muted"
+              onClick={() => pick(onAfter)}
+            >
+              Add after
+            </button>
+          </div>
+        </>
+      )}
+    </span>
+  )
 }
 
 /** Number input that may be empty (= unset). */
@@ -479,11 +529,20 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
   columnHelper.display({
     id: 'frame',
     header: 'Frame',
-    cell: ({ row, table }) => (
-      <span className="px-2 text-sm text-muted-foreground tabular-nums">
-        {(table.options.meta as PoseTableMeta).startFrame + row.index}
-      </span>
-    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      return (
+        <span className="flex items-center">
+          <span className="pr-1 pl-2 text-sm text-muted-foreground tabular-nums">
+            {meta.startFrame + row.index}
+          </span>
+          <InsertFrameMenu
+            onBefore={() => meta.insertAt(row.index)}
+            onAfter={() => meta.insertAt(row.index + 1)}
+          />
+        </span>
+      )
+    },
   }),
   columnHelper.accessor('name', {
     header: 'Name',
@@ -806,6 +865,22 @@ function GroupCard({
     },
     remove: (rowIndex) =>
       onChange({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) }),
+    insertAt: (index) => {
+      // Inherit the node from the pose before the insertion point (falling back
+      // to the one after, then the section default) — pose lists usually target
+      // the same node throughout.
+      const neighbor = group.poses[index - 1] ?? group.poses[index]
+      const node =
+        neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+      const poses = [...group.poses]
+      poses.splice(index, 0, {
+        id: newId(),
+        name: '',
+        morphs: [{ node, prop: '', value: 1 }],
+        referenceFbx: '',
+      })
+      onChange({ ...group, poses })
+    },
   }
 
   const table = useReactTable({
