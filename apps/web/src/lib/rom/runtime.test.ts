@@ -24,7 +24,7 @@ const RUNTIME_FILES = ['DthWorkflow.dsa', 'DthUtils.dsa', 'DthOptions.dsa', 'Dth
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '6746dc12ee60d8c821a6a5b916ca9f04d13d07b99b7748485d1e10b25ce63096'
+const EXPECTED_RUNTIME_HASH = '8be75f1847ea7a1d0d62a5292a59d9d1841701b64a2adc9e36428770840bf576'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')

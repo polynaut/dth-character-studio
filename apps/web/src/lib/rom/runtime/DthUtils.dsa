@@ -53,7 +53,9 @@ function writeRunLog(sPath, oSummary){
 	oLog.failedMorphs = DTH_RUN_LOG.failedMorphs;
 	try {
 		var oFile = new DzFile(sPath);
-		if(oFile.open(oFile.WriteOnly, oFile.Truncate)){
+		// One ORed mode arg — DzFile.open(mode) takes a single flags int; a second
+		// argument was silently ignored on DS4 but warns on DS6 ("Too many arguments").
+		if(oFile.open(oFile.WriteOnly | oFile.Truncate)){
 			oFile.write(JSON.stringify(oLog, null, 2));
 			oFile.close();
 			print("Run log written to", sPath);
