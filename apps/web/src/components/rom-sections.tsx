@@ -461,17 +461,17 @@ function InsertFrameMenu({ onBefore, onAfter }: { onBefore: () => void; onAfter:
         <>
           {/* Click-away layer — any click outside the menu closes it. */}
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute top-1/2 left-full z-30 ml-1 w-28 -translate-y-1/2 rounded-md border bg-background py-1 shadow-md">
+          <div className="absolute top-1/2 left-full z-30 ml-1 w-28 -translate-y-1/2 rounded-md border bg-background p-1 shadow-md">
             <button
               type="button"
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-muted"
+              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-primary hover:text-primary-foreground"
               onClick={() => pick(onBefore)}
             >
               Add before
             </button>
             <button
               type="button"
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-muted"
+              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-primary hover:text-primary-foreground"
               onClick={() => pick(onAfter)}
             >
               Add after
