@@ -728,6 +728,9 @@ function ProjectCharactersPage() {
       )}
 
       <SelectionBar
+        // The Unreal footer bar docks at bottom-0 on this page — float the pill
+        // above it instead of on top of it.
+        className="bottom-20"
         open={sel.selecting}
         count={sel.count}
         total={visible.length}

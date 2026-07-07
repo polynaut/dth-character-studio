@@ -26,12 +26,16 @@ export function TooltipHost() {
     const tip = tipRef.current
     if (!tip) return
     let anchor: HTMLElement | null = null
+    // The anchor whose tooltip a click just dismissed — if the click flips its
+    // title (PathCode's "Copied!"), the observer below brings the tooltip back.
+    let clicked: HTMLElement | null = null
     let timer = 0
 
     const hide = () => {
       window.clearTimeout(timer)
       timer = 0
       anchor = null
+      clicked = null
       tip.style.display = 'none'
     }
 
@@ -51,20 +55,31 @@ export function TooltipHost() {
       })
     }
 
+    /** Move a `title` out of the browser's reach (into `data-tooltip`), keeping
+     *  icon-only controls named for assistive tech. */
+    const steal = (target: HTMLElement, title: string) => {
+      target.removeAttribute('title')
+      if (title.trim()) target.setAttribute('data-tooltip', title)
+      else target.removeAttribute('data-tooltip')
+      if (!target.hasAttribute('aria-label') && !(target.textContent ?? '').trim()) {
+        target.setAttribute('aria-label', title)
+      }
+    }
+
+    const stillHovered = (el: Element): boolean => {
+      try {
+        return el.matches(':hover')
+      } catch {
+        return false
+      }
+    }
+
     const onEnter = (e: Event) => {
       const start = e.target as Element | null
       const target = start?.closest?.('[title], [data-tooltip]') as HTMLElement | null
       if (!target) return
-      // Steal the native title once; later renders that CHANGE it re-enter here.
       const title = target.getAttribute('title')
-      if (title !== null) {
-        target.removeAttribute('title')
-        if (title.trim()) target.setAttribute('data-tooltip', title)
-        // Keep icon-only controls named for assistive tech.
-        if (!target.hasAttribute('aria-label') && !(target.textContent ?? '').trim()) {
-          target.setAttribute('aria-label', title)
-        }
-      }
+      if (title !== null) steal(target, title)
       const text = target.getAttribute('data-tooltip')
       if (!text || target === anchor) return
       window.clearTimeout(timer)
@@ -81,21 +96,52 @@ export function TooltipHost() {
       target.addEventListener('blur', cancel)
     }
 
+    // React re-renders write a fresh `title` (it diffs against its own vdom, not
+    // the stolen attribute). Re-steal live so a tooltip that's on screen tracks
+    // the change — this is what lets click feedback like PathCode's "Copied!"
+    // reach the styled tooltip at all.
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        const el = m.target as HTMLElement
+        const title = el.getAttribute('title')
+        if (title === null) continue // our own removeAttribute echoing back
+        steal(el, title)
+        const text = el.getAttribute('data-tooltip')
+        if (el === anchor) {
+          if (text) show(el, text)
+          else hide()
+        } else if (el === clicked && text && stillHovered(el)) {
+          show(el, text)
+        }
+      }
+    })
+    observer.observe(document.body, { attributes: true, attributeFilter: ['title'], subtree: true })
+
+    const onPointerDown = (e: Event) => {
+      // Clicking usually stales the position — get out of the way. But when the
+      // click lands on the anchor itself, remember it: a title flip right after
+      // ("Copied!") re-shows the tooltip with the fresh text.
+      const target = e.target as Node | null
+      const wasAnchor = anchor && target && anchor.contains(target) ? anchor : null
+      hide()
+      clicked = wasAnchor
+    }
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') hide()
     }
     document.addEventListener('mouseover', onEnter, true)
     document.addEventListener('focusin', onEnter, true)
-    // Clicking or scrolling stales the position — just get out of the way.
-    document.addEventListener('pointerdown', hide, true)
+    document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('scroll', hide, true)
     document.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('mouseover', onEnter, true)
       document.removeEventListener('focusin', onEnter, true)
-      document.removeEventListener('pointerdown', hide, true)
+      document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('scroll', hide, true)
       document.removeEventListener('keydown', onKey, true)
+      observer.disconnect()
       hide()
     }
   }, [])

@@ -1,12 +1,15 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useBlocker } from '@tanstack/react-router'
 
-import { confirmDialog } from '#/lib/desktop.ts'
+import { confirmDialog, onWindowCloseRequested } from '#/lib/desktop.ts'
 
 /**
  * Blocks route navigation while `dirty`, asking the user first — so unsaved
  * edits can't be lost to a stray click on Back / a breadcrumb / the header nav.
- * Also arms the `beforeunload` guard for window close / reload while dirty.
+ * Also arms the `beforeunload` guard for reloads (browser build) and intercepts
+ * the NATIVE window close in the Tauri shell — the titlebar ✕ never delivers
+ * `beforeunload` there, so without the close-request hook a dirty window would
+ * just close.
  *
  * Returns `bypass()` for programmatic navigations that must never ask: call it
  * right before navigating away from something that no longer exists (e.g. the
@@ -19,6 +22,8 @@ export function useUnsavedChangesGuard(dirty: boolean, message: string) {
   const dirtyRef = useRef(dirty)
   dirtyRef.current = dirty
   const bypassRef = useRef(false)
+  const messageRef = useRef(message)
+  messageRef.current = message
   useBlocker({
     shouldBlockFn: async () => {
       if (!dirtyRef.current || bypassRef.current) return false
@@ -27,6 +32,30 @@ export function useUnsavedChangesGuard(dirty: boolean, message: string) {
     },
     enableBeforeUnload: () => dirtyRef.current && !bypassRef.current,
   })
+  useEffect(() => {
+    // Tauri holds the close while the (possibly async) handler runs and only
+    // destroys the window if preventDefault wasn't called — so awaiting the
+    // dialog here is the supported shape. `asking` blocks further ✕ clicks
+    // from stacking a second dialog while the first is open.
+    let asking = false
+    return onWindowCloseRequested(async (event) => {
+      if (!dirtyRef.current || bypassRef.current) return
+      if (asking) {
+        event.preventDefault()
+        return
+      }
+      asking = true
+      try {
+        const leave = await confirmDialog(messageRef.current, {
+          title: 'Unsaved changes',
+          kind: 'warning',
+        })
+        if (!leave) event.preventDefault()
+      } finally {
+        asking = false
+      }
+    })
+  }, [])
   return {
     bypass: () => {
       bypassRef.current = true

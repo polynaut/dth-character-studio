@@ -41,6 +41,30 @@ describe('TooltipHost (global title → floating tooltip)', () => {
     expect(tip.style.display).toBe('none')
   })
 
+  it('updates a visible tooltip live when the anchor title changes (e.g. "Copied!")', async () => {
+    render(
+      <>
+        <button title="Click to copy">path</button>
+        <TooltipHost />
+      </>,
+    )
+    const button = screen.getByRole('button')
+    fireEvent.mouseOver(button)
+    await vi.advanceTimersByTimeAsync(400)
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    expect(tip.textContent).toBe('Click to copy')
+
+    // A React re-render writes a fresh title (React diffs against its own vdom,
+    // not the stolen DOM attribute) — the tooltip must track it live.
+    button.setAttribute('title', 'Copied!')
+    await vi.advanceTimersByTimeAsync(0) // flush the MutationObserver microtask
+
+    expect(button.getAttribute('title')).toBeNull() // re-stolen
+    expect(button.getAttribute('data-tooltip')).toBe('Copied!')
+    expect(tip.style.display).toBe('block')
+    expect(tip.textContent).toBe('Copied!')
+  })
+
   it('shows immediately on keyboard focus and never overwrites an existing label', async () => {
     render(
       <>

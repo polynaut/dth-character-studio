@@ -235,6 +235,96 @@ describe('moveCharactersRoot', () => {
   })
 })
 
+describe('notes follow the definition', () => {
+  // `<Name>.notes.md` derives from the definition filename — every rename/move/
+  // delete of a definition must take it along or the notes are orphaned.
+  const project = { id: 'p1', name: 'Nova', path: '/games/Nova' }
+
+  function seedKira() {
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    addDir('/games/Nova/Kira')
+    files.set('/games/Nova/Kira/Kira.json', JSON.stringify(c))
+    files.set('/games/Nova/Kira/Kira.notes.md', '# backstory')
+    return c
+  }
+
+  it('saveCharacter renames the notes with the folder + definition', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const c = seedKira()
+
+    await storage.saveCharacter(project, { ...c, name: 'Kira2' })
+
+    expect(files.get('/games/Nova/Kira2/Kira2.notes.md')).toBe('# backstory')
+    expect(files.has('/games/Nova/Kira/Kira.notes.md')).toBe(false)
+    expect(files.has('/games/Nova/Kira2/Kira.notes.md')).toBe(false)
+  })
+
+  it('moveCharacter keeps the notes beside a renamed definition (same folder)', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const c = seedKira()
+
+    await storage.moveCharacter('/games/Nova', c.id, 'Kira/Renamed.json')
+
+    expect(files.get('/games/Nova/Kira/Renamed.notes.md')).toBe('# backstory')
+    expect(files.has('/games/Nova/Kira/Kira.notes.md')).toBe(false)
+  })
+
+  it('moveCharacter keeps the notes through a folder move + rename', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const c = seedKira()
+
+    await storage.moveCharacter('/games/Nova', c.id, 'Chars/Kira2/Kira2.json')
+
+    expect(files.get('/games/Nova/Chars/Kira2/Kira2.notes.md')).toBe('# backstory')
+    expect(files.has('/games/Nova/Kira/Kira.notes.md')).toBe(false)
+  })
+
+  it('moveCharactersRoot moves a loose definition WITH its notes', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Solo',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    files.set('/games/Nova/Solo.json', JSON.stringify(c))
+    files.set('/games/Nova/Solo.notes.md', 'solo notes')
+
+    await storage.moveCharactersRoot('/games/Nova', '/games/Nova/chars')
+
+    expect(files.get('/games/Nova/chars/Solo.notes.md')).toBe('solo notes')
+    expect(files.has('/games/Nova/Solo.notes.md')).toBe(false)
+  })
+
+  it('deleteCharacter removes a loose definition together with its notes', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Solo',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    files.set('/games/Nova/Solo.json', JSON.stringify(c))
+    files.set('/games/Nova/Solo.notes.md', 'solo notes')
+
+    await storage.deleteCharacter('/games/Nova', c.id)
+
+    expect(files.has('/games/Nova/Solo.json')).toBe(false)
+    expect(files.has('/games/Nova/Solo.notes.md')).toBe(false)
+  })
+})
+
 describe('migrateProjects', () => {
   function seedCharacter(dir: string, name: string, image: string): void {
     const c = characterSchema.parse({

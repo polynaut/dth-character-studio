@@ -1,6 +1,7 @@
 import { ask, open } from '@tauri-apps/plugin-dialog'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import { rememberNetworkPath } from './rom/api.ts'
 
@@ -16,6 +17,32 @@ export async function openExternal(url: string): Promise<void> {
     return
   }
   await shellOpen(url)
+}
+
+/**
+ * Intercept this window's native close request (the titlebar ✕ / Alt+F4). The
+ * Tauri shell does NOT deliver `beforeunload` on a native close, so browser-style
+ * guards never see it — this is the only hook that does. The handler may be
+ * async; calling `event.preventDefault()` before it resolves keeps the window
+ * open. Returns an unsubscribe. No-op in a plain browser (where `beforeunload`
+ * works and covers the same case).
+ */
+export function onWindowCloseRequested(
+  handler: (event: { preventDefault: () => void }) => void | Promise<void>,
+): () => void {
+  if (!isTauri()) return () => {}
+  let unlisten: (() => void) | null = null
+  let disposed = false
+  void getCurrentWindow()
+    .onCloseRequested(handler)
+    .then((fn) => {
+      if (disposed) fn()
+      else unlisten = fn
+    })
+  return () => {
+    disposed = true
+    unlisten?.()
+  }
 }
 
 /**

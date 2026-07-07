@@ -3,6 +3,7 @@ import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
 import * as storage from '../storage'
+import { notesPathFor } from '../library'
 import { basename, charactersRoot, joinPath, projectPath } from './core'
 
 // Project / character notes: freeform markdown the user writes about a project
@@ -26,7 +27,7 @@ async function notesPath(projectId: string, characterId?: string): Promise<strin
   if (!characterId) return joinPath(await projectPath(projectId), 'notes.md')
   const loc = await storage.getCharacterPath(await charactersRoot(projectId), characterId)
   if (!loc) throw new Error('Character not found.')
-  return loc.definitionAbs.replace(/\.json$/i, '.notes.md')
+  return notesPathFor(loc.definitionAbs)
 }
 
 export async function fetchNotes({ data }: { data: unknown }): Promise<string> {

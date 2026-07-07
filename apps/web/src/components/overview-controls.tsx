@@ -190,6 +190,7 @@ export function SelectionBar({
   onClear,
   onDelete,
   busy,
+  className,
 }: {
   /** Whether a selection is active (drives the slide-in / slide-out). */
   open: boolean
@@ -201,6 +202,9 @@ export function SelectionBar({
   onClear: () => void
   onDelete: () => void
   busy: boolean
+  /** Extra pill classes — e.g. a higher `bottom-*` on pages whose viewport
+   *  bottom is occupied by a docked footer bar. */
+  className?: string
 }) {
   return createPortal(
     <div
@@ -209,7 +213,8 @@ export function SelectionBar({
         'fixed bottom-6 left-1/2 z-40 -translate-x-1/2 transition-[transform,opacity] duration-300 ease-out',
         open
           ? 'translate-y-0 opacity-100'
-          : 'pointer-events-none translate-y-[calc(100%+2.5rem)] opacity-0',
+          : 'pointer-events-none translate-y-[calc(100%+7rem)] opacity-0',
+        className,
       )}
     >
       <div className="flex items-center gap-1 rounded-full border bg-card/95 py-2 pr-2 pl-4 shadow-lg shadow-black/25 backdrop-blur">
