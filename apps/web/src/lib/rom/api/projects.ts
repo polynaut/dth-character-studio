@@ -177,3 +177,23 @@ export async function isDirectory(path: string): Promise<boolean> {
     return false
   }
 }
+
+const unrealProjectsInput = z.object({
+  projectId: z.string().min(1),
+  /** Absolute .uproject paths, in display order. */
+  paths: z.array(z.string().min(1)),
+})
+
+/**
+ * Replace the project's linked Unreal project files (.uproject). Links only —
+ * the files are never copied or touched; unlinking never deletes.
+ */
+export async function setUnrealProjects({ data }: { data: unknown }): Promise<ProjectInfo> {
+  const { projectId, paths } = unrealProjectsInput.parse(data)
+  const dir = await projectPath(projectId)
+  const manifest = await storage.readManifest(dir)
+  // De-dup while keeping the caller's order (a file can be linked only once).
+  const unique = [...new Set(paths.map((p) => p.trim()).filter(Boolean))]
+  await storage.writeManifest(dir, { ...manifest, unrealProjects: unique })
+  return resolveProject(dir)
+}

@@ -84,6 +84,20 @@ export async function pickCsvPath(title: string): Promise<string> {
 }
 
 /**
+ * Native Unreal project picker via the Tauri dialog plugin. Returns the picked
+ * absolute path, or '' if the user cancelled.
+ */
+export async function pickUprojectPath(title: string): Promise<string> {
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title,
+    filters: [{ name: 'Unreal projects', extensions: ['uproject'] }],
+  })
+  return notePick(typeof selected === 'string' ? selected : '')
+}
+
+/**
  * Native Houdini project picker via the Tauri dialog plugin. Returns the picked
  * absolute path, or '' if the user cancelled.
  */

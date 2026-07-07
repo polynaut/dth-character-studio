@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Generic "U in a circle" mark for linked Unreal projects (not the trademark). -->
+  <circle cx="32" cy="32" r="30" fill="#0e0e0e" stroke="#fff" stroke-width="3"/>
+  <path
+    d="M22 18v20c0 6.5 4.5 10 10 10s10-3.5 10-10V18h-6.5v19.5c0 2.6-1.4 4.2-3.5 4.2s-3.5-1.6-3.5-4.2V18Z"
+    fill="#fff"
+  />
+</svg>
