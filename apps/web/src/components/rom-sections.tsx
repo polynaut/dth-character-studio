@@ -61,6 +61,7 @@ import {
   mirrorGroup,
   newId,
   presetFrameCount,
+  sanitizePoseName,
 } from '@dth/rom'
 
 import type { ColumnDef } from '@tanstack/react-table'
@@ -352,21 +353,30 @@ function TextCell({
   onCommit,
   placeholder,
   dataId,
+  validate,
 }: {
   value: string
   onCommit: (value: string) => void
   placeholder?: string
   /** Optional `data-pose-input` marker so a freshly inserted row can be focused. */
   dataId?: string
+  /** Live validation: return an error message ('' = valid). The value is NEVER
+   *  rewritten — an invalid entry stays as typed and is flagged instead. */
+  validate?: (value: string) => string
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
+  const error = validate?.(draft) ?? ''
   return (
     <input
-      className={`${cellInputClass} w-full`}
+      className={`${cellInputClass} w-full ${
+        error ? 'border-destructive ring-1 ring-destructive/40 focus:border-destructive' : ''
+      }`}
       value={draft}
       placeholder={placeholder}
       data-pose-input={dataId}
+      aria-invalid={error ? true : undefined}
+      title={error || undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft !== value && onCommit(draft)}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
@@ -549,12 +559,30 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
     },
   }),
   columnHelper.accessor('name', {
-    header: 'Name',
+    header: () => (
+      <span className="flex items-center gap-1">
+        Name
+        <InfoPopup label="Name — more information" className="-my-1">
+          The generated morph's name in <strong>Houdini</strong> and later{' '}
+          <strong>Unreal Engine</strong> — the one value that travels the whole pipeline.
+          Letters, numbers and underscores only — Houdini accepts nothing else. The
+          group's Left/Right suffix is appended for you (<code>_l</code>/<code>_r</code>).
+        </InfoPopup>
+      </span>
+    ),
     cell: ({ getValue, row, table }) => (
       <TextCell
         value={getValue()}
         placeholder="e.g. BodyTone"
         dataId={row.original.id}
+        // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
+        // silently rewriting what the user typed (same rule the generator's
+        // sanitizePoseName enforces on the CSV).
+        validate={(v) =>
+          v !== sanitizePoseName(v)
+            ? 'Only letters, numbers and underscores — Houdini rejects anything else.'
+            : ''
+        }
         onCommit={(name) => (table.options.meta as PoseTableMeta).update(row.index, { name })}
       />
     ),
@@ -563,7 +591,18 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
   // edited in the morphs expansion — it is constant for typical pose lists.
   columnHelper.accessor((pose) => pose.morphs[0]?.prop ?? '', {
     id: 'prop',
-    header: 'Morph name',
+    header: () => (
+      <span className="flex items-center gap-1">
+        Morph name
+        <InfoPopup label="Morph name — more information" className="-my-1">
+          <strong>Must exactly match the morph's internal name in Daz Studio</strong>{' '}
+          (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
+          dials it; a mismatch fails on that frame. See the guide for how to look the
+          internal name up in Daz, or import the exact names from a{' '}
+          <code>DthScanFrames</code> CSV.
+        </InfoPopup>
+      </span>
+    ),
     cell: ({ getValue, row, table }) =>
       row.original.morphs.length > 1 ? (
         <span className="px-2 text-sm text-muted-foreground italic">
@@ -581,7 +620,10 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
   }),
   columnHelper.accessor((pose) => pose.morphs[0]?.value ?? 1, {
     id: 'value',
-    header: () => 'Value',
+    // Mirror the NumberCell geometry (w-20 box, right-aligned digits, pr-5 "%"
+    // gutter) so the title sits flush over the numbers instead of floating at
+    // the column's left edge.
+    header: () => <span className="block w-20 pr-5 text-right">Value</span>,
     cell: ({ getValue, row, table }) =>
       row.original.morphs.length > 1 ? null : (
         <NumberCell
@@ -1044,11 +1086,19 @@ function GroupCard({
       <div ref={setDropRef}>
         <table className="w-full border-collapse text-sm">
           <thead>
+            {/* Third sticky tier: the column titles pin right under the section
+                title (128px pin + its 48px height = 176px), z under its z-[5].
+                Sticky lives on the th's (not the tr), with a solid bg and an
+                inset bottom shadow standing in for the border — collapsed table
+                borders don't travel with sticky cells. */}
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b">
-                <th className="w-7" />
+              <tr key={headerGroup.id}>
+                <th className="sticky top-[176px] z-[4] w-7 bg-background shadow-[inset_0_-1px_0_0_var(--color-border)]" />
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-2 py-1.5 text-left text-xs font-medium text-muted-foreground">
+                  <th
+                    key={header.id}
+                    className="sticky top-[176px] z-[4] bg-background px-2 py-1.5 text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border)]"
+                  >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
