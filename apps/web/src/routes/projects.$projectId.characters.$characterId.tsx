@@ -58,6 +58,7 @@ import { NumberField } from '#/components/number-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
+import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -243,6 +244,11 @@ function CharacterPage() {
   }, [])
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
+  // Leaving with unsaved edits asks first; delete bypasses (see onDeleteCharacter).
+  const unsavedGuard = useUnsavedChangesGuard(
+    dirty,
+    'You have unsaved changes on this character — leave and lose them?',
+  )
 
   // Re-measure the preset ROM block lengths when a preset/custom selection that
   // affects them changes (not on every custom-pose keystroke). Debounced; the
@@ -421,7 +427,9 @@ function CharacterPage() {
         data: { projectId, id: character.id, keepDaz: keep, keepHoudini: keep2 },
       })
       toast.success(`Deleted “${character.name}”`)
-      // Navigation unmounts this editor — no need to reset the busy flag.
+      // Navigation unmounts this editor — no need to reset the busy flag. The
+      // unsaved-changes guard is bypassed: the edited character no longer exists.
+      unsavedGuard.bypass()
       await router.navigate({ to: '/projects/$projectId', params: { projectId } })
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e))

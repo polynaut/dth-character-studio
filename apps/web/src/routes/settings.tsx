@@ -36,6 +36,7 @@ import {
   uncForPath,
 } from '#/lib/rom/api.ts'
 import { confirmDialog } from '#/lib/desktop.ts'
+import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
 import { cn } from '#/lib/utils.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -513,6 +514,9 @@ function SettingsPage() {
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder
+  // Leaving with unsaved settings asks first (no programmatic navigations here —
+  // the install flows save before acting, gated on this same dirty flag).
+  useUnsavedChangesGuard(dirty, 'You have unsaved settings — leave and lose them?')
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the
