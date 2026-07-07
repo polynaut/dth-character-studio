@@ -38,6 +38,7 @@ import {
   fetchPoseAssets,
   fetchProductScan,
   fetchProject,
+  fetchMorphIndex,
   fetchRomRunLog,
   fetchSettings,
   fileExists,
@@ -60,6 +61,7 @@ import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { displayPath } from '#/lib/path.ts'
 import { characterSkinning, countPoses } from '@dth/rom'
 
+import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
 import type { Character, GenesisVersion } from '@dth/rom'
 
@@ -191,6 +193,20 @@ function CharacterPage() {
     window.addEventListener('focus', refetch)
     return () => window.removeEventListener('focus', refetch)
   }, [projectId, initial.id])
+
+  // The scanned morph index for this generation (Scan_Morphs_<Genesis>.dsa →
+  // app-data JSON) powering the Morph-name autocomplete. Loaded on mount and
+  // re-read on window focus, so a scan just run in Daz is offered immediately.
+  const [morphIndex, setMorphIndex] = useState<Array<MorphIndexEntry>>([])
+  useEffect(() => {
+    const load = () => {
+      void fetchMorphIndex(character.genesis).then(setMorphIndex)
+    }
+    load()
+    window.addEventListener('focus', load)
+    return () => window.removeEventListener('focus', load)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [character.genesis])
   async function onDismissRomRunLog() {
     setRomRunLog(null)
     await dismissRomRunLog({ data: { projectId, id: initial.id } })
@@ -996,6 +1012,7 @@ function CharacterPage() {
           presetFrames={presetFrames}
           failedFrames={failedFrames}
           revealFrame={revealFrame}
+          morphIndex={morphIndex}
           onChange={(sections) => patch({ sections })}
         />
       </section>

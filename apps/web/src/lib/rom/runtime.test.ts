@@ -20,11 +20,21 @@ import { describe, expect, it } from 'vitest'
 //
 // A silent edit that skips any of these is exactly what this catches.
 
-const RUNTIME_FILES = ['DthWorkflow.dsa', 'DthUtils.dsa', 'DthOptions.dsa', 'DthProducts.dsa']
+const RUNTIME_FILES = [
+  'DthWorkflow.dsa',
+  'DthUtils.dsa',
+  'DthOptions.dsa',
+  'DthProducts.dsa',
+  'DthScanMorphs.dsa',
+  'Scan_Morphs_G9.dsa',
+  'Scan_Morphs_G8.1.dsa',
+  'Scan_Morphs_G8.dsa',
+  'Scan_Morphs_G3.dsa',
+]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '8be75f1847ea7a1d0d62a5292a59d9d1841701b64a2adc9e36428770840bf576'
+const EXPECTED_RUNTIME_HASH = 'd301fbba6ffff59e89f042b50c0d9613406ed278f34606e1660e40e8b04b1017'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')

@@ -1,0 +1,16 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - scan ALL morphs of a selected, unrenamed Genesis 8 figure
+// (including grafts, nipples/navel add-ons and fitted clothing children) into
+// the studio's morph index. Select the figure root in the scene, then run this.
+// The output path is baked in by the studio when it installs this script.
+
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+include(dir_self.filePath(".DthScanMorphs.dsa"));
+
+DthScanMorphs({
+	genesis: "G8",
+	figurePrefix: "Genesis 8",
+	excludePrefix: "Genesis 8.1",
+	outPath: "__DTH_APPDATA_DIR__/morphs_G8.json"
+});
