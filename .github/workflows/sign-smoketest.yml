@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           [ -S "$SOCK" ] || {
-            echo "::error::p11-kit socket missing at $SOCK — is certum-container running and SimplySign logged in (VNC → login → close)?"
+            echo "::error::p11-kit socket missing at $SOCK — is certum-container running with its keepalive robot?"
             exit 1
           }
           export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
@@ -63,8 +63,8 @@ jobs:
           export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
           # The runner's sign-installer.sh signs + timestamps (time.certum.pl)
           # + embeds the Certum intermediate for a self-contained chain. No PIN:
-          # the SimplySign virtual card takes an empty PIN — the phone login IS
-          # the auth.
+          # the SimplySign virtual card takes an empty PIN — the automated
+          # SimplySign login (NAS keepalive robot) is the auth.
           sign-installer.sh smoke/test.exe smoke/test-signed.exe \
             "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"
           test -s smoke/test-signed.exe
