@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 #[cfg(desktop)]
-use crate::archive::extract_archive;
+use crate::archive::{extract_archive, InflateBudget};
 #[cfg(desktop)]
 use crate::fsutil::copy_dir;
 #[cfg(desktop)]
@@ -187,6 +187,10 @@ pub async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> Install
         Ok(b) => b,
         Err(msg) => return one_step_report(dry, step_err(label, msg)),
     };
+    // Decompression-bomb rail for the downloaded archive: ratio-based inflate
+    // budget derived from the compressed download size (+ an entry-count cap,
+    // both enforced inside extract_archive).
+    let mut budget = InflateBudget::new(format!("the {label} download ({short})"), bytes.len() as u64);
     let mut archive = match zip::ZipArchive::new(std::io::Cursor::new(bytes)) {
         Ok(a) => a,
         Err(e) => return one_step_report(dry, step_err(label, format!("unzip failed: {e}"))),
@@ -219,7 +223,8 @@ pub async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> Install
     if let Err(e) = fs::create_dir_all(&tmp) {
         return one_step_report(dry, step_err(label, io_detail("create temp folder", &e)));
     }
-    if let Err(e) = extract_archive(&mut archive, &tmp) {
+    if let Err(e) = extract_archive(&mut archive, &tmp, &mut budget) {
+        // Never leave a partial extraction behind (e.g. on a bomb-budget breach).
         let _ = fs::remove_dir_all(&tmp);
         return one_step_report(dry, step_err(label, io_detail("extract", &e)));
     }

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use crate::fsutil::{entry_is_real_dir, unsafe_recursive_target};
+use crate::fsutil::{entry_is_real_dir, rail_target, unsafe_recursive_target};
 
 // --- Housekeeping: keep app-generated data from filling the disk -------------
 // The app writes per-scene product-scan CSVs (app-data) and moves redundant Daz
@@ -123,8 +123,11 @@ pub fn empty_folder(path: String) -> SweepReport {
     let mut report = SweepReport::default();
     let dir = Path::new(&path);
     // Rail: never empty a drive/profile root, even if the quarantine folder was
-    // (mis)configured to one. Contents-only (the folder itself is kept).
-    if path.trim().is_empty() || !dir.is_dir() || unsafe_recursive_target(dir).is_some() {
+    // (mis)configured to one. Contents-only (the folder itself is kept). Judged
+    // on the CANONICAL path (rail_target) so a junction or `..`-laden spelling
+    // can't dress a root up as a deep-looking folder.
+    if path.trim().is_empty() || !dir.is_dir() || unsafe_recursive_target(&rail_target(dir)).is_some()
+    {
         return report;
     }
     let entries = match fs::read_dir(dir) {
