@@ -1846,28 +1846,32 @@ export function RomSections({
         const effectiveEnabled = tiedToJcm
           ? sections.JCM.enabled && sections.JCM.mode === 'preset'
           : config.enabled
-        // Preset sections whose required asset the installed DTH release doesn't
-        // ship for this generation (e.g. GP/DK or Physics on G8/G8.1, FAC on G8):
-        // generation will fail loud — flag it HERE, on the section that causes it.
+        // Whether the installed DTH release ships this section's preset asset for
+        // the character's generation (e.g. GP/DK and Physics don't exist for
+        // G8/G8.1, FAC doesn't for G8). Unavailable → preset mode isn't offered:
+        // enabling the section lands directly on the custom morph list, the Mode
+        // select locks the preset option, and a legacy character that still HAS
+        // it enabled in preset mode gets a red chip (generation fails loud).
         // FAC rides in a FAC-variant JCM base ROM, not a FAC-section asset.
-        const missingPresetAsset = (() => {
-          if (!effectiveEnabled || config.mode !== 'preset' || catalog.assets.length === 0)
-            return false
+        const presetAvailable = (() => {
+          if (catalog.assets.length === 0) return true // catalog unknown — don't lock
           const forGen = catalog.assets.filter(
             (a) => a.genesis === null || a.genesis === genesis,
           )
-          if (section === 'JCM') return !forGen.some((a) => a.section === 'JCM')
+          if (section === 'JCM') return forGen.some((a) => a.section === 'JCM')
           if (section === 'FAC')
-            return !forGen.some((a) => a.section === 'JCM' && a.includesFac)
+            return forGen.some((a) => a.section === 'JCM' && a.includesFac)
           if (section === 'GEN') {
             const roms = genRomIncludes(gender, config.presetAssets)
             const has = (g: Gender) =>
               forGen.some((a) => a.section === 'GEN' && genAssetGender(a.name) === g)
-            return (roms.gp && !has('female')) || (roms.dk && !has('male'))
+            return (!roms.gp || has('female')) && (!roms.dk || has('male'))
           }
-          if (section === 'PHY') return !forGen.some((a) => a.section === 'PHY')
-          return false
+          if (section === 'PHY') return forGen.some((a) => a.section === 'PHY')
+          return true
         })()
+        const missingPresetAsset =
+          effectiveEnabled && config.mode === 'preset' && !presetAvailable
         return (
           // Each section is its own wrapper on purpose: position:sticky constrains
           // the title to its parent, which is exactly what makes the NEXT section's
@@ -1915,7 +1919,19 @@ export function RomSections({
                         ? 'Disable this section'
                         : 'Enable this section'
                   }
-                  onCheckedChange={(enabled) => patchSection(section, { enabled })}
+                  onCheckedChange={(enabled) =>
+                    // No preset asset for this generation → enabling goes
+                    // straight to the custom morph list (preset isn't offered).
+                    patchSection(
+                      section,
+                      enabled &&
+                        !presetAvailable &&
+                        config.mode === 'preset' &&
+                        modes.includes('custom')
+                        ? { enabled, mode: 'custom' }
+                        : { enabled },
+                    )
+                  }
                 />
               </span>
             </div>
@@ -1935,7 +1951,11 @@ export function RomSections({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="preset">Pre-defined DTH assets</SelectItem>
+                        <SelectItem value="preset" disabled={!presetAvailable}>
+                          {presetAvailable
+                            ? 'Pre-defined DTH assets'
+                            : `Pre-defined DTH assets — none for ${genesis}`}
+                        </SelectItem>
                         <SelectItem value="custom">
                           {section === 'JCM' ? 'Custom JCM asset' : 'Custom morph list'}
                         </SelectItem>

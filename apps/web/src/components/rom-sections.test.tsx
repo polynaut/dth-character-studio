@@ -225,6 +225,76 @@ describe('Morph name autocomplete (scanned index)', () => {
   })
 })
 
+describe('per-generation preset availability', () => {
+  // A G8.1 catalog: JCM (FAC-capable) exists, GP/DK and Physics don't.
+  const g81Catalog = {
+    folder: 'X:/DTH/Poses',
+    error: null,
+    assets: [
+      {
+        name: 'G8.1 DQS JCM FAC - Base',
+        relPath: 'Genesis 8.1/DQS/G8.1 DQS JCM FAC - Base.duf',
+        genesis: 'G8.1' as const,
+        skinning: 'dqs' as const,
+        section: 'JCM' as const,
+        includesFac: true,
+      },
+      {
+        name: 'GP9 - Golden Palace',
+        relPath: 'Genesis 9/Common/Golden Palace 9/GP9 - Golden Palace.duf',
+        genesis: 'G9' as const,
+        skinning: null,
+        section: 'GEN' as const,
+        includesFac: false,
+      },
+    ],
+  }
+
+  it('enabling a section without a preset asset lands on the custom morph list', () => {
+    let next: RomSectionsModel | null = null
+    render(
+      <RomSections
+        sections={defaultSections()}
+        genesis="G8.1"
+        gender="female"
+        skinning="dqs"
+        catalog={g81Catalog}
+        presetFrames={{ base: 328, gp: 0, dk: 0, phys: 0 }}
+        onChange={(s) => {
+          next = s
+        }}
+      />,
+    )
+    // Switches titled "Enable this section" belong to the disabled sections, in
+    // ROM order: EXP, GEN, PHY, FBM, MISC → index 1 is GEN.
+    fireEvent.click(screen.getAllByTitle('Enable this section')[1])
+    expect(next!.GEN.enabled).toBe(true)
+    expect(next!.GEN.mode).toBe('custom') // no GP/DK for G8.1 — preset not offered
+
+    // FAC exists for G8.1 (FAC-variant JCM base): enabling keeps preset mode.
+    fireEvent.click(screen.getAllByTitle('Enable this section')[0]) // EXP is custom-only anyway
+    expect(next!.EXP.mode).toBe('custom')
+  })
+
+  it('flags a legacy character that still has an unavailable preset enabled', () => {
+    const sections = defaultSections()
+    sections.GEN.enabled = true // pre-G8-support character, GEN preset from an old prefill
+    render(
+      <RomSections
+        sections={sections}
+        genesis="G8.1"
+        gender="female"
+        skinning="dqs"
+        catalog={g81Catalog}
+        presetFrames={null}
+        onChange={() => {}}
+      />,
+    )
+    const chip = screen.getByText('no G8.1 asset')
+    expect(chip.title).toContain('generation will fail')
+  })
+})
+
 describe('pose Name validation (Houdini-safe)', () => {
   it('flags invalid characters without rewriting the value', () => {
     let next: RomSectionsModel | null = null
