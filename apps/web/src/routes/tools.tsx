@@ -34,6 +34,7 @@ import {
   installDazToHueScripts,
   installHoudiniPresets,
   listDazAssets,
+  NOTE_MEDIA_RETENTION_DAYS,
   PRODUCT_SCAN_RETENTION_DAYS,
   quarantineStats,
   refreshAllAssets,
@@ -338,8 +339,8 @@ function ToolsPage() {
       const result = await housekeepingSweep()
       toast.success(
         result.filesDeleted > 0
-          ? `Freed ${formatBytes(result.bytesFreed)} — removed ${result.filesDeleted} stale scan file(s)`
-          : 'Nothing to clean up — no stale scan files',
+          ? `Freed ${formatBytes(result.bytesFreed)} — removed ${result.filesDeleted} stale file(s)`
+          : 'Nothing to clean up — no stale scans or unused note media',
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -793,9 +794,11 @@ function ToolsPage() {
                   The studio ages out its own generated data so it can't fill your disk.
                   Per-scene <strong>product-scan</strong> files are deleted automatically once
                   they're older than <strong>{PRODUCT_SCAN_RETENTION_DAYS} days</strong> (also on
-                  every launch); deleting a character removes its scan data right away. The dedup{' '}
-                  <strong>quarantine</strong> is your reversible backup, so it's only ever emptied
-                  when you ask.
+                  every launch); deleting a character removes its scan data right away. Dropped{' '}
+                  <strong>note media</strong> no notes reference anymore is removed after{' '}
+                  <strong>{NOTE_MEDIA_RETENTION_DAYS} days</strong> (saving notes already cleans up
+                  after an hour). The dedup <strong>quarantine</strong> is your reversible backup,
+                  so it's only ever emptied when you ask.
                 </InfoPopup>
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -808,7 +811,8 @@ function ToolsPage() {
                 <Trash2 /> {cleanupBusy ? 'Working…' : 'Clean up now'}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Age out product-scan files older than {PRODUCT_SCAN_RETENTION_DAYS} days.
+                Age out product-scan files older than {PRODUCT_SCAN_RETENTION_DAYS} days and
+                unreferenced note media older than {NOTE_MEDIA_RETENTION_DAYS} days.
               </span>
             </div>
 

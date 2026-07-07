@@ -1,4 +1,14 @@
-import { exists, mkdir, readFile, readTextFile, remove, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import {
+  exists,
+  mkdir,
+  readDir,
+  readFile,
+  readTextFile,
+  remove,
+  stat,
+  writeFile,
+  writeTextFile,
+} from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
@@ -30,26 +40,159 @@ async function notesPath(projectId: string, characterId?: string): Promise<strin
   return notesPathFor(loc.definitionAbs)
 }
 
-export async function fetchNotes({ data }: { data: unknown }): Promise<string> {
-  const { projectId, characterId } = notesScopeInput.parse(data)
+/** A file's mtime in epoch ms — null when it doesn't exist (or carries none). */
+async function fileMtime(path: string): Promise<number | null> {
   try {
-    return await readTextFile(await notesPath(projectId, characterId))
+    const info = await stat(path)
+    return info.mtime ? new Date(info.mtime).getTime() : null
   } catch {
-    return '' // no notes yet
+    return null
   }
 }
 
-const saveNotesInput = notesScopeInput.extend({ text: z.string().max(2_000_000) })
+export interface NotesFile {
+  text: string
+  /** The notes file's mtime (ms) when it was read; null when no file exists.
+   *  Hand it back to {@link saveNotes} as `expectedMtime` so a concurrent edit
+   *  from another window is detected instead of silently overwritten. */
+  mtime: number | null
+}
 
-/** Write the notes markdown; clearing the text removes the file again. */
-export async function saveNotes({ data }: { data: unknown }): Promise<void> {
-  const { projectId, characterId, text } = saveNotesInput.parse(data)
+export async function fetchNotes({ data }: { data: unknown }): Promise<NotesFile> {
+  const { projectId, characterId } = notesScopeInput.parse(data)
+  try {
+    const path = await notesPath(projectId, characterId)
+    // Stat before read: if the file changes in between, the stale mtime makes
+    // the next save conflict (safe) rather than pass (clobbers the change).
+    const mtime = await fileMtime(path)
+    return { text: await readTextFile(path), mtime }
+  } catch {
+    return { text: '', mtime: null } // no notes yet
+  }
+}
+
+const saveNotesInput = notesScopeInput.extend({
+  text: z.string().max(2_000_000),
+  /** The mtime returned by the load / previous save; null when there was no file. */
+  expectedMtime: z.number().nullable(),
+})
+
+/** The notes file on disk is newer than what the caller loaded — the same
+ *  project is probably open in a second window. Nothing was written; the
+ *  caller must offer the disk version rather than retry blindly. */
+export class NotesConflictError extends Error {
+  constructor() {
+    super('The notes changed on disk since they were loaded.')
+    this.name = 'NotesConflictError'
+  }
+}
+
+/**
+ * Write the notes markdown; clearing the text removes the file again. Guarded
+ * against concurrent windows: when the file's mtime no longer matches
+ * `expectedMtime`, nothing is written and a {@link NotesConflictError} is
+ * thrown. Returns the file's new mtime (null when the file was removed).
+ */
+export async function saveNotes({ data }: { data: unknown }): Promise<number | null> {
+  const { projectId, characterId, text, expectedMtime } = saveNotesInput.parse(data)
   const path = await notesPath(projectId, characterId)
+  const onDisk = await fileMtime(path)
+  if (onDisk !== null && onDisk !== expectedMtime) throw new NotesConflictError()
+  let mtime: number | null = null
   if (!text.trim()) {
     if (await exists(path)) await remove(path)
-    return
+  } else {
+    await writeTextFile(path, text)
+    mtime = await fileMtime(path)
   }
-  await writeTextFile(path, text)
+  // A successful save is the natural moment to drop media nothing references
+  // anymore. Best-effort: GC trouble must never fail the save that ran it.
+  try {
+    await gcNoteMedia(await projectPath(projectId), MEDIA_GC_GRACE_MS)
+  } catch {
+    // e.g. an unreadable folder mid-scan — the next save or sweep gets it
+  }
+  return mtime
+}
+
+// --- Media GC ----------------------------------------------------------------
+// Dropped media is a project-level pool under `.dcsmeta/media`, referenced from
+// ANY of the project's notes files (another character's notes may reference a
+// file this one dropped). Deleting a reference — or a whole notes file — would
+// otherwise strand the bytes forever, and app-generated data must never
+// accumulate unbounded. Two layers share the same core: every successful save
+// GCs unreferenced files older than an hour (the grace protects cut/paste
+// during an editing session), and the housekeeping sweep backstops with a
+// 7-day bound for projects that are never saved again.
+
+/** Grace before the save-time GC may delete an unreferenced media file. */
+export const MEDIA_GC_GRACE_MS = 60 * 60 * 1000
+
+/** A `media://<file>` reference in markdown; group 1 is the bare filename. */
+const MEDIA_REF_RE = /media:\/\/([^\s)"'<>]+)/g
+
+/** Every media filename referenced by any of the project's notes files: the
+ *  project `notes.md` + every character `<Name>.notes.md` under the characters
+ *  root. A notes file that exists but can't be read aborts the collection (and
+ *  with it the GC) — treating it as empty would delete media it references. */
+async function referencedMedia(projectDir: string): Promise<Set<string>> {
+  const notesFiles = [
+    joinPath(projectDir, 'notes.md'),
+    ...(await storage.listNotesFiles(await charactersRoot(projectDir))),
+  ]
+  const refs = new Set<string>()
+  for (const file of notesFiles) {
+    if (!(await exists(file))) continue
+    const text = await readTextFile(file)
+    for (const match of text.matchAll(MEDIA_REF_RE)) refs.add(match[1])
+  }
+  return refs
+}
+
+/** Epoch-ms age anchor of a media file: the filename's leading `Date.now()`
+ *  prefix (`<millis>-<name>`, what {@link addNoteMedia} writes), falling back
+ *  to the file's mtime. Null when neither parses — such a file is never GC'd. */
+async function mediaBornAt(path: string, fileName: string): Promise<number | null> {
+  const prefix = /^(\d{13})-/.exec(fileName)
+  if (prefix) return Number(prefix[1])
+  return fileMtime(path)
+}
+
+/**
+ * Delete media files under `projectDir` that no notes file references anymore
+ * and that are older than `maxAgeMs`. Returns what it freed. Callers treat
+ * trouble as non-fatal; a single file that won't delete (e.g. open elsewhere)
+ * is skipped — the next GC retries.
+ */
+export async function gcNoteMedia(
+  projectDir: string,
+  maxAgeMs: number,
+): Promise<{ filesDeleted: number; bytesFreed: number }> {
+  const result = { filesDeleted: 0, bytesFreed: 0 }
+  const mediaDir = storage.metaMediaDir(projectDir)
+  let entries: Awaited<ReturnType<typeof readDir>>
+  try {
+    entries = await readDir(mediaDir)
+  } catch {
+    return result // no media folder (or an unreachable project) — nothing to GC
+  }
+  const referenced = await referencedMedia(projectDir)
+  const now = Date.now()
+  for (const entry of entries) {
+    if (!entry.isFile || referenced.has(entry.name)) continue
+    const path = joinPath(mediaDir, entry.name)
+    const bornAt = await mediaBornAt(path, entry.name)
+    if (bornAt === null || now - bornAt <= maxAgeMs) continue
+    try {
+      const size = (await stat(path)).size
+      await remove(path)
+      result.filesDeleted += 1
+      result.bytesFreed += size
+    } catch {
+      // locked / already gone — the next save or sweep retries
+    }
+  }
+  return result
 }
 
 /** Extensions the preview can inline as an <img> (everything else links). */
