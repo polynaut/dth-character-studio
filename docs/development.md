@@ -69,6 +69,5 @@ Full pipeline, signing-key, and branch-policy setup live in
 ## More docs
 
 - [devops.md](./devops.md) — release pipeline, signing keys, branch policy
-- [tauri-migration.md](./tauri-migration.md) — the Electron → Tauri migration notes
 - [poseasset-csv-spec.md](../apps/web/docs/poseasset-csv-spec.md) — the DazToHue PoseAsset import-CSV format, reverse-engineered from the HDA
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — how to contribute
