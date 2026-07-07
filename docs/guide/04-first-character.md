@@ -9,9 +9,8 @@
    **It must not contain an animation** — just the character itself.
 3. Name it (the name becomes its folder in the project), confirm **Genesis** (G9)
    and **Gender**.
-4. **ROM prefill** — for a first character pick **Example**: it copies a complete,
-   working ROM definition you can explore and adapt. (Later you can prefill from
-   any of your own characters, across projects.)
+4. **ROM prefill** — start **Empty** for a first character, or prefill from any
+   of your own characters (across projects) to copy a working ROM definition.
 5. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
@@ -38,7 +37,7 @@ The studio computes every frame number from this structure — you never type a
 frame, and the Daz and Houdini outputs can't drift apart. Typical first-character
 work: open **Full Body (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
-key). The **Example** prefill shows how the pieces fit.
+key) — or import them from a `DthScanFrames` CSV (see [Tools](./tools.md)).
 
 Two G9 sliders above the sections — **FACS Detail Strength** and **Flexion
 Automatic Strength** — are keyed at frame 0 if your character needs them.
