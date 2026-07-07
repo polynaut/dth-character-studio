@@ -1,5 +1,18 @@
 # @dth/desktop
 
+## 0.36.2
+
+### Patch Changes
+
+- [#179](https://github.com/polynaut/dth-character-studio/pull/179) [`a868c65`](https://github.com/polynaut/dth-character-studio/commit/a868c650705ade11ff970c307debb5adced1f0d9) Thanks [@polynaut](https://github.com/polynaut)! - The slide-in drawers (New project, Create character, …) animate reliably again
+  — they used to pop in without the transition when the open raced the first
+  paint.
+
+- [#180](https://github.com/polynaut/dth-character-studio/pull/180) [`01d5a0f`](https://github.com/polynaut/dth-character-studio/commit/01d5a0f9de90b2ebaa63b8614bf213312e6be4b3) Thanks [@polynaut](https://github.com/polynaut)! - Linked Unreal projects moved into a footer bar docked to the bottom of the
+  project window — always visible, compact chips that open the project in Unreal
+  on click (folder in the tooltip, hover ✕ unlinks), with the picker and
+  drag-drop linking right on the bar.
+
 ## 0.36.1
 
 ### Patch Changes
