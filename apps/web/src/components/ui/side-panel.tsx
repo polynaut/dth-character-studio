@@ -55,8 +55,18 @@ export function SidePanel({
   useEffect(() => {
     if (open) {
       setMounted(true)
-      const raf = requestAnimationFrame(() => setShown(true))
-      return () => cancelAnimationFrame(raf)
+      // Double rAF: a single one fires BEFORE the freshly mounted (off-screen)
+      // state has painted, so React coalesces mount + shown into ONE paint and
+      // the slide-in never runs — the drawer just pops in. The second rAF lands
+      // after that first paint, giving the transition a start state.
+      let raf2 = 0
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setShown(true))
+      })
+      return () => {
+        cancelAnimationFrame(raf1)
+        cancelAnimationFrame(raf2)
+      }
     }
     setShown(false)
     const timer = window.setTimeout(() => setMounted(false), ANIM_MS)
