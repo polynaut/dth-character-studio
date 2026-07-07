@@ -439,32 +439,31 @@ export interface MorphIndexEntry {
  * The machine-wide morph index for a generation — written into app-data by the
  * Scan_Morphs_<Genesis>.dsa scripts installed at the DTH-Character-Studio
  * scripts root. Feeds the Morph-name autocomplete. A missing/broken file just
- * yields an empty index (the autocomplete stays quiet). G8 characters may sit
- * on an 8.1 figure, so G8 merges both generations' indexes.
+ * yields an empty index (the autocomplete stays quiet). Strictly the character's
+ * own generation: the scan is empirical, so cross-compatible morphs already land
+ * in the right file (Daz auto-loads Genesis 8 morphs onto a scanned 8.1 figure);
+ * merging indexes would only offer dials the actual figure can't drive.
  */
 export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<MorphIndexEntry>> {
-  const gens: Array<string> = genesis === 'G8' ? ['G8', 'G8.1'] : [genesis]
   const out: Array<MorphIndexEntry> = []
   const seen = new Set<string>()
-  for (const g of gens) {
-    try {
-      const raw = await readTextFile(await storage.dataPath(`morphs_${g}.json`))
-      const parsed = JSON.parse(raw) as { morphs?: Array<Record<string, unknown>> }
-      for (const m of parsed.morphs ?? []) {
-        if (typeof m.name !== 'string' || !m.name || typeof m.node !== 'string' || !m.node) continue
-        const key = `${m.node}|${m.name}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        out.push({
-          node: m.node,
-          nodeLabel: typeof m.nodeLabel === 'string' && m.nodeLabel ? m.nodeLabel : m.node,
-          label: typeof m.label === 'string' && m.label ? m.label : m.name,
-          name: m.name,
-        })
-      }
-    } catch {
-      // no scan for this generation yet — nothing to offer
+  try {
+    const raw = await readTextFile(await storage.dataPath(`morphs_${genesis}.json`))
+    const parsed = JSON.parse(raw) as { morphs?: Array<Record<string, unknown>> }
+    for (const m of parsed.morphs ?? []) {
+      if (typeof m.name !== 'string' || !m.name || typeof m.node !== 'string' || !m.node) continue
+      const key = `${m.node}|${m.name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        node: m.node,
+        nodeLabel: typeof m.nodeLabel === 'string' && m.nodeLabel ? m.nodeLabel : m.node,
+        label: typeof m.label === 'string' && m.label ? m.label : m.name,
+        name: m.name,
+      })
     }
+  } catch {
+    // no scan for this generation yet — nothing to offer
   }
   return out
 }
