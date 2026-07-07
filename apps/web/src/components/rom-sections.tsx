@@ -351,10 +351,13 @@ function TextCell({
   value,
   onCommit,
   placeholder,
+  dataId,
 }: {
   value: string
   onCommit: (value: string) => void
   placeholder?: string
+  /** Optional `data-pose-input` marker so a freshly inserted row can be focused. */
+  dataId?: string
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
@@ -363,6 +366,7 @@ function TextCell({
       className={`${cellInputClass} w-full`}
       value={draft}
       placeholder={placeholder}
+      data-pose-input={dataId}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft !== value && onCommit(draft)}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
@@ -431,6 +435,56 @@ interface PoseTableMeta {
   addMorph: (rowIndex: number) => void
   removeMorphAt: (rowIndex: number, morphIndex: number) => void
   remove: (rowIndex: number) => void
+  /** Insert an empty pose at this index (frames renumber — they're never stored). */
+  insertAt: (index: number) => void
+}
+
+/**
+ * The small "+" behind each frame number — opens a two-item menu right at the
+ * icon to insert an empty pose before/after this row. Frame numbers are computed
+ * from order, so the rest of the list simply renumbers.
+ */
+function InsertFrameMenu({ onBefore, onAfter }: { onBefore: () => void; onAfter: () => void }) {
+  const [open, setOpen] = useState(false)
+  function pick(action: () => void) {
+    setOpen(false)
+    action()
+  }
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        title="Insert a frame here"
+        aria-label="Insert a frame here"
+        className="rounded p-0.5 text-muted-foreground/50 hover:bg-muted hover:text-foreground"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Plus className="size-3" />
+      </button>
+      {open && (
+        <>
+          {/* Click-away layer — any click outside the menu closes it. */}
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute top-1/2 left-full z-30 ml-1 w-28 -translate-y-1/2 rounded-md border bg-background p-1 shadow-md">
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              onClick={() => pick(onBefore)}
+            >
+              Add before
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              onClick={() => pick(onAfter)}
+            >
+              Add after
+            </button>
+          </div>
+        </>
+      )}
+    </span>
+  )
 }
 
 /** Number input that may be empty (= unset). */
@@ -479,11 +533,20 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
   columnHelper.display({
     id: 'frame',
     header: 'Frame',
-    cell: ({ row, table }) => (
-      <span className="px-2 text-sm text-muted-foreground tabular-nums">
-        {(table.options.meta as PoseTableMeta).startFrame + row.index}
-      </span>
-    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      return (
+        <span className="flex items-center">
+          <span className="pr-1 pl-2 text-sm text-muted-foreground tabular-nums">
+            {meta.startFrame + row.index}
+          </span>
+          <InsertFrameMenu
+            onBefore={() => meta.insertAt(row.index)}
+            onAfter={() => meta.insertAt(row.index + 1)}
+          />
+        </span>
+      )
+    },
   }),
   columnHelper.accessor('name', {
     header: 'Name',
@@ -491,6 +554,7 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
       <TextCell
         value={getValue()}
         placeholder="e.g. BodyTone"
+        dataId={row.original.id}
         onCommit={(name) => (table.options.meta as PoseTableMeta).update(row.index, { name })}
       />
     ),
@@ -772,6 +836,22 @@ function GroupCard({
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
   const { setNodeRef: setDropRef } = useDroppable({ id: group.id })
 
+  // A freshly inserted pose's name field gets focused once its row renders (the
+  // insert flows through the parent's onChange, so the row exists a render later).
+  // Quote/backslash-escape is all a quoted attribute selector needs (CSS.escape
+  // is unavailable in jsdom, and the bare name is shadowed by @dnd-kit's CSS).
+  const [focusPoseId, setFocusPoseId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!focusPoseId) return
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-pose-input="${focusPoseId.replace(/["\\]/g, '\\$&')}"]`,
+    )
+    if (el) {
+      el.focus()
+      setFocusPoseId(null)
+    }
+  }, [focusPoseId, group.poses])
+
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
     onChange({
       ...group,
@@ -806,6 +886,25 @@ function GroupCard({
     },
     remove: (rowIndex) =>
       onChange({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) }),
+    insertAt: (index) => {
+      // Inherit the node from the pose before the insertion point (falling back
+      // to the one after, then the section default) — pose lists usually target
+      // the same node throughout.
+      const neighbor = group.poses[index - 1] ?? group.poses[index]
+      const node =
+        neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+      const id = newId()
+      const poses = [...group.poses]
+      poses.splice(index, 0, {
+        id,
+        name: '',
+        morphs: [{ node, prop: '', value: 1 }],
+        referenceFbx: '',
+      })
+      onChange({ ...group, poses })
+      // Focus the new row's name field as soon as it renders.
+      setFocusPoseId(id)
+    },
   }
 
   const table = useReactTable({
@@ -1553,9 +1652,19 @@ export function RomSections({
           ? sections.JCM.enabled && sections.JCM.mode === 'preset'
           : config.enabled
         return (
+          // Each section is its own wrapper on purpose: position:sticky constrains
+          // the title to its parent, which is exactly what makes the NEXT section's
+          // title push the previous one out (iOS-contacts style) instead of stacking.
           <div key={section} className={`rounded-lg border ${effectiveEnabled ? '' : 'opacity-60'}`}>
+            {/* Sticky section title: pins below the character page's collapsed
+                sticky header (collapsed header = 90px avatar box + my-5 = 130px; pinned at 128px - a 2px tuck under the solid header hides any subpixel seam), z below
+                its z-10. Solid bg so rows can't show through; rounded-t so the
+                bg doesn't square out the card's top corners at rest. NB: the
+                ancestor `contain: layout paint` re-scopes position:fixed but NOT
+                sticky (sticky binds to the scrollport, which containment doesn't
+                create), and no ancestor up to the page scroller has overflow. */}
             <div
-              className="flex cursor-pointer items-center gap-3 px-4 py-3 select-none"
+              className="sticky top-[128px] z-[5] flex cursor-pointer items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
               onClick={() => setOpen((o) => ({ ...o, [section]: !isOpen }))}
             >
               <ChevronRight
