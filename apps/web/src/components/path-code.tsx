@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Check, Copy, Pencil } from 'lucide-react'
 
 import { cn } from '#/lib/utils.ts'
+import { revealPath } from '#/lib/rom/api.ts'
 
 /**
  * Renders a filesystem path as an inline code chip (the app's "backtick" style).
@@ -52,16 +53,24 @@ export function PathCode({
     }
   }
 
+  function reveal() {
+    // Ctrl+click: jump to the path in the OS file manager instead of copying
+    // (a file path opens its parent folder). Errors surface as a toast-less
+    // no-op — the path may be gone; copying still works either way.
+    void revealPath({ data: { path } }).catch(() => {})
+  }
+
   return (
     <span
       role="button"
       tabIndex={0}
-      title={copied ? 'Copied!' : 'Click to copy'}
-      onClick={() => void copy()}
+      title={copied ? 'Copied!' : 'Click to copy — Ctrl+click to show in Explorer'}
+      onClick={(e) => (e.ctrlKey || e.metaKey ? reveal() : void copy())}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          void copy()
+          if (e.ctrlKey || e.metaKey) reveal()
+          else void copy()
         }
       }}
       className="group/path relative inline-flex max-w-full cursor-pointer align-middle"
