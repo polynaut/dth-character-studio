@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+
+import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
@@ -395,6 +397,25 @@ function TextCell({
 }
 
 /**
+ * Wraps the first case-insensitive occurrence of the query in a highlight, so
+ * a suggestion shows WHERE it matched (the query may hit the internal name,
+ * the UI label, or both).
+ */
+function highlightMatch(text: string, q: string): ReactNode {
+  const at = q ? text.toLowerCase().indexOf(q) : -1
+  if (at < 0) return text
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-[2px] bg-primary/30 text-inherit">
+        {text.slice(at, at + q.length)}
+      </mark>
+      {text.slice(at + q.length)}
+    </>
+  )
+}
+
+/**
  * The Morph-name input with autocomplete over the scanned morph index
  * (Scan_Morphs_<Genesis>.dsa output). Search hits match the internal name OR the
  * Daz UI label; each entry shows which field matched and the node the morph
@@ -463,8 +484,10 @@ function MorphNameCell({
                   onPick(e)
                 }}
               >
-                <span className="shrink-0 font-medium">{e.name}</span>
-                <span className="truncate text-xs text-muted-foreground">{e.label}</span>
+                <span className="shrink-0 font-medium">{highlightMatch(e.name, q)}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {highlightMatch(e.label, q)}
+                </span>
                 <span className="ml-auto flex shrink-0 gap-1">
                   <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
                     {hitInternal ? 'internal' : 'UI name'}

@@ -183,12 +183,20 @@ describe('Morph name autocomplete (scanned index)', () => {
     const suggestion = screen.getByText('body_bs_BodyTone').closest('button')!
     expect(suggestion.textContent).toContain('UI name')
     expect(suggestion.textContent).toContain('Genesis9')
+    // …and the matched substring is visibly highlighted (in the label here —
+    // the internal name has an underscore where the query has a space).
+    expect(within(suggestion).getByText('Body Tone', { selector: 'mark' })).toBeTruthy()
 
     // An internal-name hit on a graft morph — picking it (mousedown, which fires
     // before the input's blur) sets the morph's prop AND its node.
     fireEvent.change(input, { target: { value: 'spread' } })
-    const graft = screen.getByText('GP_Spread_All').closest('button')!
+    // The mark splits the name across text nodes — match on full textContent.
+    const graft = screen
+      .getAllByRole('button')
+      .find((b) => b.textContent?.includes('GP_Spread_All'))!
     expect(graft.textContent).toContain('internal')
+    // "spread" hits the internal name AND the UI label — both get a highlight.
+    expect(within(graft).getAllByText('Spread', { selector: 'mark' })).toHaveLength(2)
     fireEvent.mouseDown(graft)
     const morph = next!.FBM.groups[0].poses[0].morphs[0]
     expect(morph.prop).toBe('GP_Spread_All')
