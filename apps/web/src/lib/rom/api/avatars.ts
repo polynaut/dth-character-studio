@@ -1,0 +1,204 @@
+import { exists, mkdir, readDir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { z } from 'zod'
+
+import * as storage from '../storage'
+import { isExternalImage } from '../image'
+import { basename, getActiveProjectDir, joinPath } from './core'
+
+// Avatar images + Daz scene thumbnails: storing avatar bytes in the active
+// project's `.dcsmeta/images`, deriving avatars from a scene's `.tip.png`, and
+// resolving stored image references / scene previews into loadable URLs.
+
+/** Scene path with a trailing ".duf" stripped (case-insensitive). */
+export function sceneBase(scenePath: string): string {
+  return scenePath.replace(/\.duf$/i, '')
+}
+
+/**
+ * First existing Daz tip thumbnail next to a scene, trying both naming
+ * conventions: `<scene>.tip.png` (e.g. Kira.duf.tip.png) and `<base>.tip.png`
+ * (Kira.tip.png). Returns '' when neither exists.
+ */
+async function findTipImage(scenePath: string): Promise<string> {
+  for (const p of [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]) {
+    if (await exists(p)) return p
+  }
+  return ''
+}
+
+/**
+ * Write a character's avatar bytes under a content-versioned filename
+ * (`<id>-<ts>.<ext>`), removing any previous avatar for that id first. The version
+ * in the name makes the stored reference change whenever the image does, so every
+ * `<Avatar>` keyed on it re-resolves — a fixed `<id>.png` would look unchanged and
+ * keep showing the cached old image (e.g. switching the avatar between two scenes).
+ * Returns the stored filename.
+ */
+async function writeAvatarBytes(
+  characterId: string,
+  bytes: Uint8Array,
+  ext: string,
+): Promise<string> {
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) throw new Error('No project is open.')
+  const dir = storage.metaImagesDir(projectDir)
+  await mkdir(dir, { recursive: true })
+  const id = basename(characterId)
+  // One avatar per character — drop any previous variant (old fixed name or version).
+  await removeCharacterAvatars(projectDir, id)
+  const fileName = `${id}-${Date.now()}.${ext}`
+  await writeFile(joinPath(dir, fileName), bytes)
+  return fileName
+}
+
+/** Remove every avatar image stored for a character (old fixed name + versioned
+ *  `<id>-<ts>.<ext>`), used both when replacing an avatar and when the character
+ *  is deleted. Best-effort per file; a missing images folder is a no-op. */
+export async function removeCharacterAvatars(projectDir: string, characterId: string): Promise<void> {
+  const dir = storage.metaImagesDir(projectDir)
+  const id = basename(characterId)
+  if (!(await exists(dir))) return
+  for (const entry of await readDir(dir)) {
+    if (entry.isFile && (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))) {
+      await remove(joinPath(dir, entry.name))
+    }
+  }
+}
+
+/**
+ * Copy a Daz scene's tip thumbnail into the app's images folder as the
+ * character's avatar. Returns the stored filename, or '' when no tip image exists
+ * next to the scene.
+ */
+export async function copyTipImage(characterId: string, scenePath: string): Promise<string> {
+  const tipPath = await findTipImage(scenePath)
+  if (!tipPath) return ''
+  return writeAvatarBytes(characterId, await readFile(tipPath), 'png')
+}
+
+const sceneAvatarInput = z.object({
+  characterId: z.string().min(1),
+  scenePath: z.string().min(1),
+})
+
+/**
+ * Set a character's avatar to a Daz scene's tip thumbnail — copies the scene's
+ * `.tip.png` into the app images folder as `<id>.png` and returns the stored
+ * filename (the portable reference saved on the character). Throws when the scene
+ * has no thumbnail. Powers the avatar dialog's scene-thumbnail picker, so the user
+ * can switch the avatar to any linked scene's image.
+ */
+export async function setAvatarFromScene({ data }: { data: unknown }): Promise<string> {
+  const { characterId, scenePath } = sceneAvatarInput.parse(data)
+  const fileName = await copyTipImage(characterId, scenePath)
+  if (!fileName) throw new Error('That scene has no thumbnail (.tip.png) to use.')
+  return fileName
+}
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+}
+
+const uploadImageInput = z.object({
+  characterId: z.string().min(1),
+  mimeType: z.string(),
+  /** Raw image data, base64 (no data-URL prefix). Capped at ~10 MB. */
+  dataBase64: z.string().max(14_000_000),
+})
+
+/**
+ * Stores a dropped avatar image under <data>/images/ and returns its bare
+ * filename — the portable canonical reference saved on the character (see
+ * ./image). Avatars are global (keyed by character id), not per-project.
+ */
+export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
+  const input = uploadImageInput.parse(data)
+  const extension = IMAGE_EXTENSIONS[input.mimeType]
+  if (!extension) throw new Error(`Unsupported image type: ${input.mimeType}`)
+  const bytes = Uint8Array.from(atob(input.dataBase64), (c) => c.charCodeAt(0))
+  // extension is like ".png"; writeAvatarBytes wants the bare "png".
+  return writeAvatarBytes(input.characterId, bytes, extension.slice(1))
+}
+
+/** Extension → MIME for avatar images dropped as a file path (native drag-drop). */
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+}
+
+/**
+ * Store an avatar image from an absolute file path — native OS drag-drop hands us
+ * a path, not file bytes. Reads it, infers the MIME from the extension, and
+ * delegates to {@link uploadCharacterImage}.
+ */
+export async function uploadCharacterImageFromPath({ data }: { data: unknown }): Promise<string> {
+  const { characterId, path } = z
+    .object({ characterId: z.string().min(1), path: z.string().min(1) })
+    .parse(data)
+  const ext = (path.split('.').pop() ?? '').toLowerCase()
+  const mimeType = IMAGE_MIME[ext]
+  if (!mimeType) throw new Error(`Unsupported image type${ext ? `: .${ext}` : ''}`)
+  const bytes = await readFile(path)
+  if (bytes.length > 10 * 1024 * 1024) throw new Error('Image is larger than 10 MB.')
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return uploadCharacterImage({ data: { characterId, mimeType, dataBase64: btoa(binary) } })
+}
+
+/** Inline raw image bytes as a `data:` URL, MIME inferred from the file name. */
+function bytesToDataUrl(bytes: Uint8Array, fileName: string): string {
+  const ext = (fileName.split('.').pop() ?? '').toLowerCase()
+  const mime = IMAGE_MIME[ext] ?? 'image/png'
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return `data:${mime};base64,${btoa(binary)}`
+}
+
+/**
+ * Turns a stored `image` reference (see ./image) into a URL the webview can load.
+ * External URLs pass through unchanged; a local filename resolves to the avatar in
+ * the active project's `.dcsmeta/images`, read as an inline data URL (the asset
+ * protocol isn't scoped to arbitrary project folders). Returns '' when there's no
+ * active project or the file is missing, so the UI falls back to the placeholder.
+ */
+export async function resolveImageSrc(image: string): Promise<string> {
+  if (!image) return ''
+  if (isExternalImage(image)) return image
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return ''
+  try {
+    const bytes = await readFile(joinPath(storage.metaImagesDir(projectDir), image))
+    return bytesToDataUrl(bytes, image)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Preview a picked Daz scene's tip thumbnail (`<scene>.tip.png`) as a data URL.
+ * The asset protocol is scoped to the app folder, so an arbitrary scene path
+ * can't be served via convertFileSrc — we read the bytes and inline them.
+ * Returns '' when there's no tip image.
+ */
+export async function resolveScenePreview(scenePath: string): Promise<string> {
+  if (!scenePath) return ''
+  try {
+    const tipPath = await findTipImage(scenePath)
+    if (!tipPath) return ''
+    return bytesToDataUrl(await readFile(tipPath), tipPath)
+  } catch {
+    return ''
+  }
+}

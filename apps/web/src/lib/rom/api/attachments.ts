@@ -1,0 +1,216 @@
+import { exists, mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
+import { z } from 'zod'
+
+import { characterSchema, newId } from '@dth/rom'
+import * as storage from '../storage'
+import { normalizeRelFolder } from '../library'
+import { basename, charactersRoot, charsRoot, joinPath, projectPath, resolveProject } from './core'
+import { copyTipImage, sceneBase } from './avatars'
+
+import type { Character } from '@dth/rom'
+
+// Daz scenes attached to characters (copy into the character folder, relink,
+// open with the OS) + the per-project reusable-asset registry (`.assets`).
+
+const copySceneInput = z.object({
+  projectId: z.string().min(1),
+  characterId: z.string().min(1),
+  /** Absolute path to the picked Daz scene (.duf). */
+  scenePath: z.string().min(1),
+  /** Subfolder inside the character's folder; '' copies into the folder itself. */
+  subfolder: z.string().optional(),
+  /** When true, delete the source `.duf` + thumbnails after copying (a move). */
+  deleteOriginal: z.boolean().optional(),
+})
+
+/**
+ * Copy a Daz scene into the character's folder (used when the picked scene lives
+ * outside the project). Copies the `.duf` plus its two sibling thumbnails
+ * (`<scene>.png` and `<scene>.tip.png`) into `<characterFolder>/<subfolder>/`.
+ * With `deleteOriginal`, the sources are removed afterwards (effectively a move).
+ * Returns the absolute path of the copied `.duf`.
+ */
+/**
+ * Copy a Daz scene (`.duf` + its `.png` / `.tip.png` sidecars) into `destDir`,
+ * creating it. With `deleteOriginal` the sources are removed after every copy
+ * succeeds (a move) — best-effort, so a locked source can't undo the copy.
+ * Returns the absolute path of the copied `.duf`. Shared by the character copy
+ * and the asset copy.
+ */
+async function copySceneInto(
+  scenePath: string,
+  destDir: string,
+  deleteOriginal: boolean,
+): Promise<string> {
+  await mkdir(destDir, { recursive: true })
+  const sources = [
+    scenePath,
+    `${scenePath}.png`,
+    `${scenePath}.tip.png`,
+    `${sceneBase(scenePath)}.tip.png`,
+  ]
+  const copied: Array<string> = []
+  for (const src of sources) {
+    if (await exists(src)) {
+      await writeFile(joinPath(destDir, basename(src)), await readFile(src))
+      copied.push(src)
+    }
+  }
+  if (deleteOriginal) {
+    for (const src of copied) {
+      try {
+        await remove(src)
+      } catch {
+        // leave a stray original rather than failing the whole operation
+      }
+    }
+  }
+  return joinPath(destDir, basename(scenePath))
+}
+
+export async function copyDazScene({ data }: { data: unknown }): Promise<string> {
+  const input = copySceneInput.parse(data)
+  const lib = await charactersRoot(input.projectId)
+  const folder = await storage.getCharacterFolder(lib, input.characterId)
+  const sub = normalizeRelFolder(input.subfolder ?? '')
+  const destDir = sub ? joinPath(folder, sub) : folder
+  return copySceneInto(input.scenePath, destDir, input.deleteOriginal ?? false)
+}
+
+// --- Assets ---------------------------------------------------------------
+// Reusable Daz scenes ("assets") — bases to build characters on — live inside a
+// project's folder (its `.assets`). There is no global/shared asset library: a
+// project opts into the feature via its manifest's `assetsEnabled` flag.
+
+/** The root a project's assets live under (its folder). */
+async function assetsBase(projectId: string): Promise<string> {
+  return projectPath(projectId)
+}
+
+export async function listAssets({ data }: { data: unknown }): Promise<Array<storage.DazAsset>> {
+  const { projectId } = z.object({ projectId: z.string().min(1) }).parse(data)
+  return storage.listAssets(await assetsBase(projectId))
+}
+
+const createAssetInput = z.object({
+  /** The project the asset belongs to (its folder path). */
+  projectId: z.string().min(1),
+  /** Absolute path to the picked Daz scene (.duf). */
+  scenePath: z.string().min(1),
+  /** Display name; defaults to the scene's file name. */
+  name: z.string().optional(),
+  description: z.string().optional(),
+  /** Subfolder under `.assets` to copy into (only used when copying). */
+  subfolder: z.string().optional(),
+  /** Copy the scene into `.assets` (default), or link it in place. */
+  copy: z.boolean().optional(),
+  /** When copying, delete the source after a successful copy (a move). */
+  deleteOriginal: z.boolean().optional(),
+})
+
+export async function createAsset({ data }: { data: unknown }): Promise<storage.DazAsset> {
+  const input = createAssetInput.parse(data)
+  const base = await assetsBase(input.projectId)
+  const copy = input.copy ?? true
+  const now = new Date().toISOString()
+  let scenePath = input.scenePath
+  let linked = true
+  let subfolder = ''
+  if (copy) {
+    const sub = normalizeRelFolder(input.subfolder ?? '')
+    const destDir = sub ? joinPath(storage.assetsDir(base), sub) : storage.assetsDir(base)
+    scenePath = await copySceneInto(input.scenePath, destDir, input.deleteOriginal ?? false)
+    linked = false
+    subfolder = sub
+  }
+  const name = input.name?.trim() || basename(input.scenePath).replace(/\.duf$/i, '') || 'Asset'
+  return storage.addAsset(base, {
+    id: newId(),
+    name,
+    scenePath,
+    description: input.description?.trim() ?? '',
+    subfolder,
+    linked,
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+const deleteAssetInput = z.object({
+  projectId: z.string().min(1),
+  id: z.string().min(1),
+  /** Keep a copied asset's scene files on disk (only the registry entry is dropped). */
+  keepFiles: z.boolean().optional(),
+})
+
+export async function deleteAsset({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id, keepFiles } = deleteAssetInput.parse(data)
+  await storage.removeAsset(await assetsBase(projectId), id, { keepFiles })
+}
+
+const relinkInput = z.object({
+  projectId: z.string().min(1),
+  /** The current (possibly draft) character — saved with the new scene path. */
+  character: z.unknown(),
+  /** Absolute path to the newly-linked Daz scene (.duf). */
+  scenePath: z.string().min(1),
+})
+
+/**
+ * Point a character at a (new) Daz scene: persist the path and refresh the
+ * avatar from that scene's `.tip.png`. Operates on the passed-in character so
+ * any unsaved editor edits are preserved (mirrors the inline rename).
+ */
+export async function relinkScene({ data }: { data: unknown }): Promise<Character> {
+  const { projectId, character, scenePath } = relinkInput.parse(data)
+  const parsed = characterSchema.parse(character)
+  const next: Character = { ...parsed, scenePath, updatedAt: new Date().toISOString() }
+  const image = await copyTipImage(parsed.id, scenePath)
+  if (image) next.image = image
+  const project = await resolveProject(projectId)
+  return storage.saveCharacter(project, next, charsRoot(project))
+}
+
+/** Open a scene/project file with its OS-default application (a `.duf` opens in
+ *  Daz Studio, a `.hip` in Houdini). Only LOCAL files with an expected extension
+ *  are opened — a character definition is shareable, so a crafted `scenePath`
+ *  must not turn "Open scene" into launching an arbitrary URL (phishing). */
+export async function openScene({ data }: { data: unknown }): Promise<void> {
+  const { scenePath } = z.object({ scenePath: z.string().min(1) }).parse(data)
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(scenePath)) {
+    throw new Error('Refusing to open a URL — the scene path must be a local file.')
+  }
+  if (!/\.(duf|hip|hipnc|hiplc)$/i.test(scenePath)) {
+    throw new Error('Refusing to open — not a recognised scene/project file (.duf/.hip).')
+  }
+  await shellOpen(scenePath)
+}
+
+/**
+ * Delete files from disk (best-effort, each independently) — used when unlinking
+ * a Daz scene / Houdini project with "Delete file on disk" on. The caller passes
+ * the asset plus any siblings (e.g. a scene's `.png` / `.tip.png` thumbnails).
+ */
+export async function deleteFiles({ data }: { data: unknown }): Promise<void> {
+  const { paths } = z.object({ paths: z.array(z.string()) }).parse(data)
+  for (const p of paths) {
+    if (!p) continue
+    try {
+      if (await exists(p)) await remove(p)
+    } catch {
+      // best-effort — a locked/absent file shouldn't fail the whole unlink
+    }
+  }
+}
+
+/** Whether a path exists on disk; false (never throws) when it can't be probed. */
+export async function fileExists({ data }: { data: unknown }): Promise<boolean> {
+  const { path } = z.object({ path: z.string() }).parse(data)
+  if (!path) return false
+  try {
+    return await exists(path)
+  } catch {
+    return false
+  }
+}
