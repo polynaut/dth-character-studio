@@ -349,6 +349,14 @@ describe('toCharacterScriptDsa', () => {
     expect(config.dkArtDirection).toBeUndefined()
   })
 
+  it('forward-slashes a custom JCM asset path (DzFile wants /)', () => {
+    const sections = makeSections()
+    sections.JCM.mode = 'custom'
+    sections.JCM.customAssetPath = 'D:\\DAZ 3D\\My Lib\\Custom Base.duf'
+    const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections })).content)
+    expect(config.jcmRomPath).toBe('D:/DAZ 3D/My Lib/Custom Base.duf')
+  })
+
   it('passes the resolved ROM paths through to the config', () => {
     const config = characterConfig(
       toCharacterScriptDsa(makeCharacter(), {
@@ -724,6 +732,44 @@ describe.skipIf(!existsSync(ELECTRA))('round-trip with the real ElectraG9_FBMs.j
     expect(regenerated.frames).toEqual(original.frames)
     expect(regenerated.meta.resetGPBeforeApplying).toBe(original.meta.resetGPBeforeApplying)
   })
+})
+
+// The product invariant, guarded across a config matrix: the Houdini PoseAsset CSV
+// and the Daz-side script derive every custom frame's position from the SAME
+// measured preset-block lengths, so the two artifacts can't drift. (Only three
+// configs were hand-checked before; this proves the property, not just examples.)
+describe('frame alignment: PoseAsset CSV ↔ Daz config (no drift)', () => {
+  const cases: Array<{ label: string; patch: (s: RomSections) => void }> = [
+    { label: 'base only', patch: () => {} },
+    { label: 'GEN (GP)', patch: (s) => { s.GEN.enabled = true } },
+    {
+      label: 'GEN + PHY',
+      patch: (s) => { s.GEN.enabled = true; s.PHY.enabled = true; s.PHY.mode = 'preset' },
+    },
+    { label: 'base-less (FBM only)', patch: (s) => { s.JCM.enabled = false } },
+  ]
+  for (const { label, patch } of cases) {
+    it(`custom frames start at the measured preset offset — ${label}`, () => {
+      const sections = makeSections()
+      patch(sections)
+      const character = makeCharacter({ sections })
+      const offset = presetFrameCount(sections, character.gender, FRAMES)
+
+      // Houdini side: the first custom (FBM) row lands at exactly that offset.
+      const firstFbm = toPoseAssetCsv(character, FRAMES)
+        .content.trimEnd()
+        .split('\n')
+        .find((l) => l.startsWith('FBM,'))
+      expect(firstFbm).toBe(`FBM,${offset},BodyTone,`)
+
+      // Daz side: the script carries the SAME measured preset lengths, and its
+      // inline custom frames are 0-based — so the runtime places that block at the
+      // identical absolute frame (offset + 0). Same inputs → no drift, by construction.
+      const cfg = characterConfig(toCharacterScriptDsa(character, {}, FRAMES).content)
+      expect(cfg.presetFrames).toEqual(FRAMES)
+      expect(cfg.extraFrames.frames[0].frame).toBe(0)
+    })
+  }
 })
 
 describe('exporter integration', () => {

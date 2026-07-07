@@ -440,8 +440,16 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       hardens the generated .dsa/CSV against injection: control chars are
  *       stripped from names in comment headers, commas/newlines from CSV group
  *       labels + reference-FBX paths.
+ *  16 — runtime-API change: preset-block lengths (base/gp/dk/phys) are no longer
+ *       hard-coded in the runtime (was iRomFrames 328/617, gp 104, dk 54, phys 43).
+ *       The studio measures each from the actual .duf and threads them in as
+ *       config/options.presetFrames; the runtime sizes every block from those and
+ *       fails loud (logRunError + abort) if a count is missing — so a custom or
+ *       future-DTH preset of non-standard length can't silently desync the Daz
+ *       timeline from the PoseAsset CSV. Scripts generated before v16 carry no
+ *       presetFrames and must be regenerated (Tools → Refresh assets).
  */
-export const RUNTIME_VERSION = 15
+export const RUNTIME_VERSION = 16
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

@@ -23,7 +23,7 @@ function ApplyDTHWorkflow(options){
 	var oNode = Scene.getPrimarySelection();
 	var oNodeRoot = getNodeRoot(oNode);
 	if(!oNodeRoot || !oNodeRoot.inherits("DzNode")){
-		logRunError("Node `Genesis 9` not found in scene — select the figure and re-run. ROM aborted.");
+		logRunError("Node `Genesis 9` not found in scene - select the figure and re-run. ROM aborted.");
 		return false; }
 	var oNodeMouth = oNodeRoot.findNodeChildByLabel("Genesis 9 Mouth");
 	if(!oNodeMouth && options.bIncludeJCM && options.bIncludeFAC){
@@ -182,12 +182,27 @@ function ApplyInitialValues(options, oNodeRoot){
 }
 
 
+// The measured length of a preset ROM block (base/gp/dk/phys), threaded in from the
+// studio as options.presetFrames — measured live from the actual .duf, never a
+// hard-coded literal. A missing/invalid count returns -1; callers abort on it, so
+// the Daz timeline can never silently desync from the PoseAsset CSV.
+function getPresetFrameCount(options, sKey){
+	var pf = options["presetFrames"];
+	if( pf && typeof pf[sKey] == "number" && pf[sKey] > 0 ){
+		return pf[sKey];
+	}
+	logRunError("Missing measured '" + sKey + "' ROM frame count - regenerate this character in DTH Character Studio (Tools > Refresh assets).");
+	return -1;
+}
+
+
 function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 
 	var ROMs = getRomPaths(options);
 	var sJcmROM = ROMs[0];
 	var sMouthROM = ROMs[1];
-	var iRomFrames = options["bDQS"] ? 328 : 617;
+	var iRomFrames = getPresetFrameCount(options, "base");
+	if( iRomFrames < 0 ) return false;
 
 	print("Loading JCM ROM: ", sJcmROM);
 	setTotalFrames(iRomFrames);
@@ -205,7 +220,7 @@ function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 			}
 		}
 	} else {
-		logRunError("Failed loading JCM ROM preset: " + sJcmROM + " — this is a necessary step. ROM aborted.");
+		logRunError("Failed loading JCM ROM preset: " + sJcmROM + " - this is a necessary step. ROM aborted.");
 	}
 	return false;
 }
@@ -226,8 +241,10 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 	//   - shipped DK9_ArtDirection.json is circumcised-only; the uncircumcised foreskin
 	//     path (DK9.csv frames 34-45 + foreskin-anchored fences) is unmodeled.
 	// ---------------------------------------------------------------------------
-	// DK9 ROM is 54 frames (offsets 0-53)
-	var dk9FrameCount = 54;
+	// DK9 ROM length — measured from the actual .duf (was 54 for the stock DK9.csv,
+	// frames 0-53), never hard-coded.
+	var dk9FrameCount = getPresetFrameCount(options, "dk");
+	if( dk9FrameCount < 0 ) return false;
 	var totalFrames = startFrame + dk9FrameCount;
 
 	print("Setting fence pose for", oNodeRoot.objectName, "from frame", 0, "to", startFrame);
@@ -262,8 +279,10 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 
 
 function ApplyPhysics(options, oNodeRoot, startFrame){
-	// Physics example ROM has 43 frames (offsets 0-42)
-	var physFrameCount = 43;
+	// Physics ROM length — measured from the actual .duf (was 43 for the stock
+	// example, frames 0-42), never hard-coded.
+	var physFrameCount = getPresetFrameCount(options, "phys");
+	if( physFrameCount < 0 ) return false;
 	setTotalFrames(startFrame + physFrameCount);
 
 	var sPhysROM = options["physRomPath"] ? options["physRomPath"] : ROM_PHYS;
@@ -280,16 +299,17 @@ function ApplyPhysics(options, oNodeRoot, startFrame){
 
 
 function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
-	// The GP ROM is 104 frames (rel 0-103). gpFrameCount = 104 reserves the whole
-	// block so the NEXT section starts at rel 104 - the frame after ClitorisErect -
-	// matching DK (dk9FrameCount = its full 54 frames). This is the 0-based Daz
-	// convention: timeline frame 0 is the first frame, and a section's frame 0 is its
-	// first frame, so a loadPreset ROM block (Physics) AND a 0-based extraJSONs
-	// section both land cleanly at rel 104. Verified against a real ElectraG9
-	// PoseAsset export: ClitorisErect at abs 431, FBM BodyTone at abs 432 (= 432 + 0).
-	// IMPORTANT: extraJSONs MUST be 0-based (first frame = 0). The older 103 handoff
-	// only worked because the JSONs were 1-based, which silently masked the overlap.
-	var gpFrameCount = 104;
+	// The GP block's measured length reserves the whole block so the NEXT section
+	// starts at the frame after the last GP pose (ClitorisErect) — matching DK (its
+	// full measured length). This is the 0-based Daz convention: timeline frame 0 is
+	// the first frame, and a section's frame 0 is its first frame, so a loadPreset ROM
+	// block (Physics) AND a 0-based extraJSONs section both land cleanly at the block
+	// end. Verified against a real ElectraG9 export (stock 104-frame GP): ClitorisErect
+	// at abs 431, FBM BodyTone at abs 432 (= 432 + 0).
+	// IMPORTANT: extraJSONs MUST be 0-based (first frame = 0). The older off-by-one
+	// handoff only worked because the JSONs were 1-based, which silently masked it.
+	var gpFrameCount = getPresetFrameCount(options, "gp");
+	if( gpFrameCount < 0 ) return false;
 	var totalFrames = startFrame + gpFrameCount;
 
 	// Set total frames before loading preset
@@ -340,7 +360,7 @@ function ApplyDTHCharacter(config){
 	// Override the shared defaults with whatever the character config supplies.
 	var keys = [
 		"bIncludeJCM", "bIncludeFAC", "bIncludeDK", "bIncludeGP", "bIncludePhysics", "bDQS",
-		"FACsDetailStrength", "FlexionStrength",
+		"FACsDetailStrength", "FlexionStrength", "presetFrames",
 		"jcmRomPath", "mouthRomPath", "gpRomPath", "dkRomPath", "physRomPath",
 		"aGPFenceOffsets", "aDK9FenceOffsets",
 		"preserveMorphs", "preserveNodeTransforms", "jcmMorphMods"
