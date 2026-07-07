@@ -52,7 +52,53 @@ Each pose row has two name fields with very different jobs:
 ### Finding a morph's internal Daz name
 
 The internal name usually differs from the slider's label (label *Body Tone* →
-internal `body_bs_BodyTone`). Two ways to get it:
+internal `body_bs_BodyTone`). The comfortable way is to let the studio
+**autocomplete** them for you — after a one-time scan per Genesis generation,
+every Morph name field offers matching suggestions as you type. Two manual
+routes still work when you just need a single name.
+
+<details>
+<summary><strong>Recommended: scan your morphs once, then autocomplete</strong> — <code>Scan_Morphs_&lt;Genesis&gt;.dsa</code></summary>
+
+The runtime installation (see [Tools](./tools.md)) puts four visible scan
+scripts into your Daz library at `Scripts/DTH-Character-Studio/`:
+
+- `Scan_Morphs_G9.dsa`
+- `Scan_Morphs_G8.1.dsa`
+- `Scan_Morphs_G8.dsa`
+- `Scan_Morphs_G3.dsa`
+
+Run the one matching your generation, once per generation:
+
+1. In Daz Studio, load a **freshly created, unrenamed** figure of that
+   generation (e.g. plain *Genesis 9*) — plus anything whose morphs you want
+   indexed: geografts like Golden Palace / Dicktator, add-ons, fitted
+   clothing. The scan covers the selected figure **and every node fitted to
+   it**.
+2. Select the figure root and run the scan script from the Content Library
+   (`Scripts/DTH-Character-Studio/Scan_Morphs_<Genesis>`).
+3. A summary tells you how many morphs were found across how many nodes.
+
+That's the whole scan — it indexes **everything dialable** the figure carries:
+classic morphs *and* controller dials, across all products installed for that
+generation. The studio picks the index up automatically (switch back to the
+studio window and it's live).
+
+From then on, every **Morph name** field autocompletes after two typed
+characters:
+
+- search by the **internal name** *or* the **Daz UI label** — each suggestion
+  shows both, tags which one matched, and names the node the morph lives on;
+- picking a suggestion fills in the exact internal name **and** selects the
+  right node on that ROM entry — no more mismatched node/morph pairs.
+
+Installed new morph products since the last scan? Just run the scan script
+again — the index is replaced wholesale, and the studio refreshes it the next
+time its window gains focus.
+
+</details>
+
+Manual alternatives:
 
 1. **One morph — Parameter Settings:** in Daz's **Parameters** pane, find the
    slider, open its **gear menu → Parameter Settings…** — the **Name** field is
