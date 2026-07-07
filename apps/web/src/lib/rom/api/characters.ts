@@ -447,6 +447,59 @@ export async function moveCharacter({
   return storage.moveCharacter(await charactersRoot(projectId), id, relPath)
 }
 
+const moveScenesFolderInput = z.object({
+  projectId: z.string().min(1),
+  id: z.string().min(1),
+  /** New scenes subfolder, relative to the character folder (e.g. "daz3d"). */
+  newSubdir: z.string().min(1),
+})
+
+/**
+ * Rename the character's Daz scenes folder (the primary scene's directory) to a
+ * new subfolder relative to the character folder: physically moves the folder on
+ * disk, then repoints every linked scene path underneath it and saves. The
+ * scenes folder must live INSIDE the character folder — a scene linked from
+ * elsewhere has no subfolder to edit.
+ */
+export async function moveCharacterScenesFolder({
+  data,
+}: {
+  data: unknown
+}): Promise<Character> {
+  const { projectId, id, newSubdir } = moveScenesFolderInput.parse(data)
+  const root = await charactersRoot(projectId)
+  const [character, loc] = await Promise.all([
+    storage.getCharacter(root, id),
+    storage.getCharacterPath(root, id),
+  ])
+  if (!character?.scenePath || !loc) throw new Error('No Daz scene linked.')
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
+  const charFolder = norm(loc.folderAbs)
+  const oldDir = norm(character.scenePath).replace(/\/[^/]*$/, '')
+  if (!oldDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')) {
+    throw new Error('The scenes folder lives outside the character folder.')
+  }
+  const rel = normalizeRelFolder(newSubdir) // separators, no '..' / absolute / illegal chars
+  if (!rel) throw new Error('Enter a subfolder name.')
+  const newDir = `${charFolder}/${rel}`
+  if (norm(newDir).toLowerCase() === oldDir.toLowerCase()) return character
+  await storage.moveFolder(oldDir, newDir)
+  // Everything that lived under the old folder travels with the rename.
+  const repoint = (p: string) => {
+    const n = norm(p)
+    return n.toLowerCase().startsWith(oldDir.toLowerCase() + '/')
+      ? `${newDir}${n.slice(oldDir.length)}`
+      : p
+  }
+  const next: Character = {
+    ...character,
+    scenePath: repoint(character.scenePath),
+    extraScenes: character.extraScenes.map(repoint),
+  }
+  const project = await resolveProject(projectId)
+  return storage.saveCharacter(project, next, root)
+}
+
 // --- Morph index (Scan_Morphs_<Genesis>.dsa output) -------------------------
 
 /** One scanned morph from a Scan_Morphs_<Genesis>.dsa run in Daz. */

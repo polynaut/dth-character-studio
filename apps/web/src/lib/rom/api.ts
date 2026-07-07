@@ -51,6 +51,7 @@ export {
   importCharacterFromJson,
   importPosesFromCsv,
   moveCharacter,
+  moveCharacterScenesFolder,
   saveCharacter,
 } from './api/characters'
 export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog } from './api/characters'

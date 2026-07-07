@@ -519,6 +519,19 @@ export async function existingCharacterSubfolders(
 }
 
 /**
+ * Move/rename a folder on disk, creating the destination's parent first.
+ * Collisions throw (the destination is user-chosen — never silently merged).
+ */
+export async function moveFolder(oldAbs: string, newAbs: string): Promise<void> {
+  if (await isTaken(newAbs)) {
+    throw new Error(`Something already exists at "${newAbs}".`)
+  }
+  const parent = newAbs.replace(/[\\/][^\\/]*$/, '')
+  if (parent) await mkdir(parent, { recursive: true })
+  await rename(oldAbs, newAbs)
+}
+
+/**
  * Move/rename a character by its definition path relative to the project library
  * (e.g. `Electra/Electra.json` → `Electra/OutfitDefault/Electra.json`). Moves the
  * whole folder to the new location and renames the definition to the new
