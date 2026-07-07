@@ -55,7 +55,7 @@ import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { Tag } from '#/components/tag.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
-import { UnrealProjectsField } from '#/components/unreal-projects-field.tsx'
+import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
@@ -369,7 +369,7 @@ function ProjectCharactersPage() {
   }
 
   return (
-    <main data-filedrop-id={dropId} className="relative min-h-screen p-8">
+    <main data-filedrop-id={dropId} className="relative min-h-screen p-8 pb-24">
       {dropOver && (
         <div className="pointer-events-none fixed inset-4 z-[60] flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-base font-medium text-primary">
           Drop a Daz scene (.duf) to create a character
@@ -552,12 +552,11 @@ function ProjectCharactersPage() {
         </Tabs>
       </SidePanel>
 
-      {/* Linked Unreal projects, prominent above the character list (the loader
-          revalidates on link/unlink, so loader data is the single source; empty
-          it collapses to the label + link button). */}
-      <div className="mb-8">
-        <UnrealProjectsField project={project} onChanged={() => {}} />
-      </div>
+      {/* Linked Unreal projects: a footer bar docked to the bottom of the
+          viewport, always visible (the loader revalidates on link/unlink, so
+          loader data is the single source). The main element carries pb-20 so
+          content scrolls clear of the bar. */}
+      <UnrealProjectsBar project={project} onChanged={() => {}} />
 
       <Tabs
         value={!assetsEnabled && listTab === 'assets' ? 'characters' : listTab}
