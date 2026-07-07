@@ -26,6 +26,7 @@ import {
   definitionFileName,
   normalizeRelFolder,
   normalizeRelPath,
+  notesPathFor,
 } from './library'
 // The DTH runtime (DazToHue-Scripts) is bundled into the app so the studio is
 // self-contained — no external checkout to configure. copyRuntimeFiles installs
@@ -302,6 +303,14 @@ export async function saveCharacter(
       if (movedDefinition !== definitionAbs && (await exists(movedDefinition))) {
         await rename(movedDefinition, definitionAbs)
       }
+      // The notes file travelled with the folder still named after the OLD
+      // definition — rename it too, or the editor resolves <NewName>.notes.md
+      // and shows an empty page while the notes sit orphaned on disk.
+      const movedNotes = notesPathFor(movedDefinition)
+      const newNotes = notesPathFor(definitionAbs)
+      if (movedNotes !== newNotes && (await exists(movedNotes))) {
+        await rename(movedNotes, newNotes)
+      }
       folderMove = { from: existing.folderAbs, to: folderAbs }
     } else {
       definitionAbs = existing.definitionAbs
@@ -396,6 +405,9 @@ export async function deleteCharacter(
   // the library itself — only remove its file, never recursively wipe the library.
   if (entry.relFolder === '') {
     if (await exists(entry.definitionAbs)) await remove(entry.definitionAbs)
+    // A loose definition's notes sit beside it — they belong to the character.
+    const looseNotes = notesPathFor(entry.definitionAbs)
+    if (await exists(looseNotes)) await remove(looseNotes)
     return
   }
   if (!(await exists(entry.folderAbs))) return
@@ -455,6 +467,12 @@ export async function moveCharactersRoot(oldRoot: string, newRoot: string): Prom
     await mkdir(dirname(dest), { recursive: true })
     await rename(src, dest)
     moved += 1
+    // A folder-backed character carries its notes inside the folder; a loose
+    // definition's `<Name>.notes.md` sits beside it and must move separately.
+    if (!relFolder) {
+      const srcNotes = notesPathFor(src)
+      if (await exists(srcNotes)) await rename(srcNotes, notesPathFor(dest))
+    }
     const entry = { relFolder, folderAbs: src, definitionAbs: oldDefAbs }
     // Repoint scenes / Houdini projects that travelled inside the moved folder.
     if (entry.relFolder) {
@@ -559,9 +577,12 @@ export async function moveCharacter(
 
   if (newDefAbs !== entry.definitionAbs) {
     if (newFolderAbs === entry.folderAbs) {
-      // Same folder — just renaming the definition file.
+      // Same folder — just renaming the definition file (+ its notes, which are
+      // named after it).
       if (await exists(newDefAbs)) throw new Error(`A file already exists at "${clean}".`)
       await rename(entry.definitionAbs, newDefAbs)
+      const oldNotes = notesPathFor(entry.definitionAbs)
+      if (await exists(oldNotes)) await rename(oldNotes, notesPathFor(newDefAbs))
     } else {
       // Moving the whole folder to a new location.
       if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${newFolderRel}".`)
@@ -577,7 +598,12 @@ export async function moveCharacter(
       } else {
         await rename(entry.folderAbs, newFolderAbs)
       }
-      if (newFileName !== oldDefName) await rename(join(newFolderAbs, oldDefName), newDefAbs)
+      if (newFileName !== oldDefName) {
+        await rename(join(newFolderAbs, oldDefName), newDefAbs)
+        // The notes moved with the folder but still carry the old name.
+        const movedNotes = notesPathFor(join(newFolderAbs, oldDefName))
+        if (await exists(movedNotes)) await rename(movedNotes, notesPathFor(newDefAbs))
+      }
     }
   }
 
