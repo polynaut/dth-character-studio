@@ -36,6 +36,11 @@ import dthUtilsRuntime from './runtime/DthUtils.dsa?raw'
 import dthOptionsRuntime from './runtime/DthOptions.dsa?raw'
 import dthWorkflowRuntime from './runtime/DthWorkflow.dsa?raw'
 import dthProductsRuntime from './runtime/DthProducts.dsa?raw'
+import dthScanMorphsRuntime from './runtime/DthScanMorphs.dsa?raw'
+import scanMorphsG9 from './runtime/Scan_Morphs_G9.dsa?raw'
+import scanMorphsG81 from './runtime/Scan_Morphs_G8.1.dsa?raw'
+import scanMorphsG8 from './runtime/Scan_Morphs_G8.dsa?raw'
+import scanMorphsG3 from './runtime/Scan_Morphs_G3.dsa?raw'
 
 import { characterScriptName } from '@dth/rom'
 import type { Character, DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
@@ -622,6 +627,22 @@ const RUNTIME_FILES: Record<string, string> = {
   // Product-scan runtime — used only by the generated Scan_Products_<Name>.dsa
   // (the Daz Products feature), but installed for every project (harmless when off).
   'DthProducts.dsa': dthProductsRuntime,
+  // Morph-scanner runtime — included by the VISIBLE Scan_Morphs_<Genesis>.dsa
+  // wrappers below; feeds the Morph-name autocomplete's per-generation index.
+  'DthScanMorphs.dsa': dthScanMorphsRuntime,
+}
+
+/**
+ * The visible per-generation morph-scan scripts, installed AS-IS at the
+ * DTH-Character-Studio root (they run there, so they include
+ * `.DthScanMorphs.dsa` directly — no `../../` rewrite), with the studio's
+ * app-data folder baked into their output path at install time.
+ */
+const SCAN_MORPH_SCRIPTS: Record<string, string> = {
+  'Scan_Morphs_G9.dsa': scanMorphsG9,
+  'Scan_Morphs_G8.1.dsa': scanMorphsG81,
+  'Scan_Morphs_G8.dsa': scanMorphsG8,
+  'Scan_Morphs_G3.dsa': scanMorphsG3,
 }
 
 /** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install root,
@@ -707,8 +728,17 @@ export async function copyRuntimeFiles(destDir: string): Promise<void> {
     }
     await writeTextFile(join(destDir, `.${name}`), content)
   }
+  // The visible Scan_Morphs_<Genesis>.dsa scripts: installed as-is (they run at
+  // this root — their include of `.DthScanMorphs.dsa` resolves right here), with
+  // the studio's app-data folder baked into the JSON output path so the scan
+  // lands where the Morph-name autocomplete reads it (DzFile wants '/').
+  const appData = (await dataDir()).replace(/\\/g, '/')
+  for (const [name, raw] of Object.entries(SCAN_MORPH_SCRIPTS)) {
+    await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
+  }
   // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)
-  // the studio installed before runtime files were dot-prefixed.
+  // the studio installed before runtime files were dot-prefixed. Scan_Morphs
+  // wrappers are exempt — they're MEANT to be visible.
   for (const legacy of [...Object.keys(RUNTIME_FILES), 'ScanKeyFrames.dsa']) {
     const old = join(destDir, legacy)
     if (await exists(old)) await remove(old)
