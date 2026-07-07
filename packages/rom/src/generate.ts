@@ -719,7 +719,12 @@ export function toCharacterScriptDsa(
   const { sections } = character
   // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
   // a pre-defined asset (so it still drives bIncludeJCM + jcmRomPath).
-  const jcmCustomPath = sections.JCM.mode === 'custom' ? sections.JCM.customAssetPath.trim() : ''
+  // Forward-slashed like the catalog paths — DzFile/DzDir want '/', and the picker
+  // hands us a raw Windows path.
+  const jcmCustomPath =
+    sections.JCM.mode === 'custom'
+      ? sections.JCM.customAssetPath.trim().replace(/\\/g, '/')
+      : ''
   const includeJCM =
     sections.JCM.enabled && (sections.JCM.mode === 'preset' || jcmCustomPath !== '')
   const includeFAC = sections.FAC.enabled && sections.FAC.mode === 'preset'

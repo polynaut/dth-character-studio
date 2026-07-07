@@ -23,7 +23,7 @@ function ApplyDTHWorkflow(options){
 	var oNode = Scene.getPrimarySelection();
 	var oNodeRoot = getNodeRoot(oNode);
 	if(!oNodeRoot || !oNodeRoot.inherits("DzNode")){
-		logRunError("Node `Genesis 9` not found in scene — select the figure and re-run. ROM aborted.");
+		logRunError("Node `Genesis 9` not found in scene - select the figure and re-run. ROM aborted.");
 		return false; }
 	var oNodeMouth = oNodeRoot.findNodeChildByLabel("Genesis 9 Mouth");
 	if(!oNodeMouth && options.bIncludeJCM && options.bIncludeFAC){
@@ -191,7 +191,7 @@ function getPresetFrameCount(options, sKey){
 	if( pf && typeof pf[sKey] == "number" && pf[sKey] > 0 ){
 		return pf[sKey];
 	}
-	logRunError("Missing measured '" + sKey + "' ROM frame count — regenerate this character in DTH Character Studio (Tools > Refresh assets).");
+	logRunError("Missing measured '" + sKey + "' ROM frame count - regenerate this character in DTH Character Studio (Tools > Refresh assets).");
 	return -1;
 }
 
@@ -220,7 +220,7 @@ function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 			}
 		}
 	} else {
-		logRunError("Failed loading JCM ROM preset: " + sJcmROM + " — this is a necessary step. ROM aborted.");
+		logRunError("Failed loading JCM ROM preset: " + sJcmROM + " - this is a necessary step. ROM aborted.");
 	}
 	return false;
 }

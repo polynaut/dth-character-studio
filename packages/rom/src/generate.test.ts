@@ -349,6 +349,14 @@ describe('toCharacterScriptDsa', () => {
     expect(config.dkArtDirection).toBeUndefined()
   })
 
+  it('forward-slashes a custom JCM asset path (DzFile wants /)', () => {
+    const sections = makeSections()
+    sections.JCM.mode = 'custom'
+    sections.JCM.customAssetPath = 'D:\\DAZ 3D\\My Lib\\Custom Base.duf'
+    const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections })).content)
+    expect(config.jcmRomPath).toBe('D:/DAZ 3D/My Lib/Custom Base.duf')
+  })
+
   it('passes the resolved ROM paths through to the config', () => {
     const config = characterConfig(
       toCharacterScriptDsa(makeCharacter(), {
