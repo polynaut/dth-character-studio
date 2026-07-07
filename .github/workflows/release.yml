@@ -95,9 +95,13 @@ jobs:
         run: |
           set -euo pipefail
           npx --yes @tauri-apps/cli@2.11.2 signer generate --ci --password "" -f -w throwaway.key
+          # printf'ing the command substitution guarantees exactly one trailing
+          # newline — the generated key file has NONE, and without it the heredoc
+          # delimiter lands on the key's own line and GitHub's env parser fails
+          # ("Matching delimiter not found").
           {
             echo "TAURI_SIGNING_PRIVATE_KEY<<THROWAWAY_KEY_EOF"
-            cat throwaway.key
+            printf '%s\n' "$(cat throwaway.key)"
             echo "THROWAWAY_KEY_EOF"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
           } >> "$GITHUB_ENV"
