@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 
-use crate::fsutil::{count_files, looks_like_daz_folder, unsafe_recursive_target};
+use crate::fsutil::{count_files, looks_like_daz_folder, rail_target, unsafe_recursive_target};
 use crate::report::{io_detail, step_err, step_ok, step_skip, InstallReport, InstallStep};
 
 // --- "Danger zone": clean up leftover Daz folders after uninstalling Daz -----
@@ -62,12 +62,15 @@ pub fn uninstall_daz(request: UninstallDazRequest) -> InstallReport {
         let p = Path::new(trimmed);
         // Rails: never recursively delete a non-Daz folder (a stray/poisoned path
         // like the user's Documents) or a drive/profile root — even on a dry run
-        // we surface the refusal so the user sees it can't happen.
-        if let Some(reason) = unsafe_recursive_target(p) {
+        // we surface the refusal so the user sees it can't happen. They judge the
+        // CANONICAL path when the target exists (rail_target), so a junction or a
+        // `..`-laden spelling can't smuggle a dangerous target past them.
+        let canon = rail_target(p);
+        if let Some(reason) = unsafe_recursive_target(&canon) {
             steps.push(step_err(trimmed, reason));
             continue;
         }
-        if !looks_like_daz_folder(p) {
+        if !looks_like_daz_folder(&canon) {
             steps.push(step_err(trimmed, "refused: not a recognised Daz folder (no “DAZ” in the path)".into()));
             continue;
         }

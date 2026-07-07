@@ -2,7 +2,7 @@ import { mkdir, readDir, readTextFile, writeTextFile } from '@tauri-apps/plugin-
 
 import { newId } from '@dth/rom'
 
-import { characterFolderName } from '../library'
+import { characterFolderName, normalizeRelFolder } from '../library'
 import { basename, join } from './fs'
 import { dataPath, ensureAppDir } from './app-data'
 
@@ -71,6 +71,22 @@ function dcspFileName(name: string): string {
   return `${characterFolderName(name.trim()) || 'project'}.${DCSP_EXT}`
 }
 
+/**
+ * Sanitize a manifest's `charactersSubdir`: it is later joined onto the project
+ * dir, and projects are shared between users — a hostile manifest carrying
+ * `"../../.."` must not traverse outside the project. Anything
+ * `normalizeRelFolder` rejects (absolute, drive letter, `..`, illegal chars)
+ * falls back to `''` (the project root) rather than propagating the error.
+ */
+function safeCharactersSubdir(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  try {
+    return normalizeRelFolder(raw)
+  } catch {
+    return ''
+  }
+}
+
 /** Absolute path to the single `.dcsp` file in a project folder, or null. */
 export async function findManifestPath(dir: string): Promise<string | null> {
   if (!dir) return null
@@ -116,10 +132,7 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
         typeof raw.dazProductsEnabled === 'boolean'
           ? raw.dazProductsEnabled
           : defaults.dazProductsEnabled,
-      charactersSubdir:
-        typeof raw.charactersSubdir === 'string'
-          ? raw.charactersSubdir
-          : defaults.charactersSubdir,
+      charactersSubdir: safeCharactersSubdir(raw.charactersSubdir),
       unrealProjects: Array.isArray(raw.unrealProjects)
         ? raw.unrealProjects.filter((p: unknown): p is string => typeof p === 'string' && p !== '')
         : [],

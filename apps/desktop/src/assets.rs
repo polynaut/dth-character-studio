@@ -7,7 +7,9 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::archive::{extract_nested_zip, extract_zip_entry, zip_file_entries, NESTED_ZIP_DEPTH};
+use crate::archive::{
+    extract_nested_zip, extract_zip_entry, zip_file_entries, InflateBudget, NESTED_ZIP_DEPTH,
+};
 use crate::content::{find_content_level, zip_dir_level, CONTENT_FOLDERS, META_FOLDERS};
 use crate::dedup::{collect_asset_files, genesis_rank, AssetFiles};
 use crate::fsutil::{folder_name, join_rel, lock_dest};
@@ -167,8 +169,9 @@ fn process_folder_asset(
 /// `dest`, accumulating the changed files / total / destination fingerprint so
 /// nested package zips merge into their outer asset's step. Returns whether a Daz
 /// content level was found in this archive or a nested one; `Err` carries a
-/// step_err detail.
-// 10 args: a recursive zip-diff threading scan state through each nested archive;
+/// step_err detail. `budget` is the CURRENT archive's inflate budget (bounding
+/// its own entry + nested-zip inflation); each nested archive derives its own.
+// 11 args: a recursive zip-diff threading scan state through each nested archive;
 // splitting it would just scatter that state across a struct.
 #[allow(clippy::too_many_arguments)]
 fn diff_zip_archive(
@@ -182,6 +185,7 @@ fn diff_zip_archive(
     diff_files: &mut Vec<String>,
     total: &mut u64,
     fp: &mut u64,
+    budget: &mut InflateBudget,
 ) -> Result<bool, String> {
     let entries = zip_file_entries(archive);
     let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
@@ -194,15 +198,19 @@ fn diff_zip_archive(
             if !path.to_ascii_lowercase().ends_with(".zip") {
                 continue;
             }
-            let tmp = extract_nested_zip(archive, *idx)
+            let tmp = extract_nested_zip(archive, *idx, budget)
                 .map_err(|e| io_detail(&format!("unpack {path}"), &e))?;
+            // The inner archive gets its own ratio budget from ITS compressed size.
+            let inner_len = fs::metadata(&tmp.0).map(|m| m.len()).unwrap_or(0);
             let file =
                 fs::File::open(&tmp.0).map_err(|e| io_detail(&format!("open {path}"), &e))?;
             let mut inner =
                 zip::ZipArchive::new(file).map_err(|e| format!("unzip {path} failed: {e}"))?;
+            let mut inner_budget = budget.nested(path, inner_len);
+            inner_budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
             found |= diff_zip_archive(
                 &mut inner, dest, dry, force, accepted, depth - 1, dest_sizes, diff_files, total,
-                fp,
+                fp, &mut inner_budget,
             )?;
         }
         if found {
@@ -237,7 +245,7 @@ fn diff_zip_archive(
     // Inflate only the differing entries on a real install.
     if !dry {
         for (idx, sub) in &needed {
-            if let Err(e) = extract_zip_entry(archive, *idx, &join_rel(dest, sub)) {
+            if let Err(e) = extract_zip_entry(archive, *idx, &join_rel(dest, sub), budget) {
                 return Err(io_detail(&format!("extract {sub}"), &e));
             }
         }
@@ -261,10 +269,16 @@ fn process_zip_asset(
         Ok(f) => f,
         Err(e) => return (step_err(name, io_detail("open zip", &e)), None),
     };
+    let compressed_len = file.metadata().map(|m| m.len()).unwrap_or(0);
     let mut archive = match zip::ZipArchive::new(file) {
         Ok(a) => a,
         Err(e) => return (step_err(name, format!("unzip failed: {e}")), None),
     };
+    // Decompression-bomb rails: a ratio-based inflate budget + an entry-count cap.
+    let mut budget = InflateBudget::new(name, compressed_len);
+    if let Err(e) = budget.check_entry_count(archive.len()) {
+        return (step_err(name, e.to_string()), None);
+    }
     let mut dest_sizes = DestSizes::new();
     let mut diff_files: Vec<String> = Vec::new();
     let (mut total, mut fp) = (0u64, 0u64);
@@ -279,6 +293,7 @@ fn process_zip_asset(
         &mut diff_files,
         &mut total,
         &mut fp,
+        &mut budget,
     ) {
         Err(detail) => (step_err(name, detail), None),
         Ok(false) => (step_skip(name, "no Daz content".into()), None),

@@ -1,13 +1,103 @@
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::fsutil::lock_dest;
 
-/// Inflate one archive entry to `dest_path` (creating parent dirs as needed).
+// --- Decompression-bomb bounds ----------------------------------------------
+// Users share Daz asset zips with each other, so a hostile archive is in scope.
+// Wherever entries are actually INFLATED, the output is bounded per archive: a
+// byte budget of max(INFLATE_RATIO × the archive's compressed file size,
+// INFLATE_FLOOR) plus an entry-count cap. Central-directory-only scans
+// (`zip_file_entries`) inflate nothing and carry no budget.
+
+/// Total inflated bytes allowed per compressed byte — generous for any real Daz
+/// asset (typical zips inflate well under 10×), fatal for a crafted bomb.
+const INFLATE_RATIO: u64 = 100;
+/// Minimum byte budget, so tiny archives still get a sane allowance: 1 GiB.
+const INFLATE_FLOOR: u64 = 1024 * 1024 * 1024;
+/// Most entries an archive may hold before we refuse to extract from it.
+const MAX_ZIP_ENTRIES: usize = 100_000;
+
+/// A per-archive inflation budget, threaded through every path that inflates
+/// entries so the running total covers the WHOLE archive, not just one entry.
+pub(crate) struct InflateBudget {
+    /// Names the archive in a breach error.
+    label: String,
+    /// Total inflated bytes this archive may produce.
+    max_bytes: u64,
+    /// Running total of bytes inflated so far (across all entries).
+    inflated: u64,
+}
+
+impl InflateBudget {
+    /// Budget for an archive whose compressed form is `compressed_len` bytes:
+    /// max(100 × compressed, 1 GiB).
+    pub(crate) fn new(label: impl Into<String>, compressed_len: u64) -> Self {
+        Self::with_max_bytes(label, compressed_len.saturating_mul(INFLATE_RATIO).max(INFLATE_FLOOR))
+    }
+
+    /// Budget with an explicit byte cap. Production goes through `new`; tests
+    /// inject a tiny cap here instead of crafting a >1 GiB fixture.
+    fn with_max_bytes(label: impl Into<String>, max_bytes: u64) -> Self {
+        Self { label: label.into(), max_bytes, inflated: 0 }
+    }
+
+    /// Budget for a NESTED archive found inside this one — same formula, keyed
+    /// to the inner zip's compressed size, labelled through the outer archive.
+    pub(crate) fn nested(&self, entry_path: &str, compressed_len: u64) -> Self {
+        Self::new(format!("{} → {entry_path}", self.label), compressed_len)
+    }
+
+    /// Refuse an archive with an absurd entry count before inflating anything.
+    pub(crate) fn check_entry_count(&self, entries: usize) -> std::io::Result<()> {
+        if entries > MAX_ZIP_ENTRIES {
+            return Err(std::io::Error::other(format!(
+                "refusing to extract {}: {entries} entries exceed the {MAX_ZIP_ENTRIES}-entry limit",
+                self.label
+            )));
+        }
+        Ok(())
+    }
+
+    /// Charge `n` freshly inflated bytes against the budget; errors on breach.
+    fn charge(&mut self, n: u64) -> std::io::Result<()> {
+        self.inflated = self.inflated.saturating_add(n);
+        if self.inflated > self.max_bytes {
+            return Err(std::io::Error::other(format!(
+                "refusing to extract {}: inflated output exceeds its {} byte budget (possible decompression bomb)",
+                self.label, self.max_bytes
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// `std::io::copy`, charging the archive's inflate budget as bytes flow.
+fn copy_bounded(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    budget: &mut InflateBudget,
+) -> std::io::Result<()> {
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            return Ok(());
+        }
+        budget.charge(n as u64)?;
+        writer.write_all(&buf[..n])?;
+    }
+}
+
+/// Inflate one archive entry to `dest_path` (creating parent dirs as needed),
+/// bounded by the archive's inflate budget. A mid-entry failure (including a
+/// budget breach) removes the partial file rather than leaving it half-written.
 pub(crate) fn extract_zip_entry(
     archive: &mut zip::ZipArchive<fs::File>,
     idx: usize,
     dest_path: &Path,
+    budget: &mut InflateBudget,
 ) -> std::io::Result<()> {
     let mut entry = archive
         .by_index(idx)
@@ -18,7 +108,11 @@ pub(crate) fn extract_zip_entry(
     // Serialize writes to the same library file across assets (see lock_dest).
     let _guard = lock_dest(dest_path);
     let mut out = fs::File::create(dest_path)?;
-    std::io::copy(&mut entry, &mut out)?;
+    if let Err(e) = copy_bounded(&mut entry, &mut out, budget) {
+        drop(out);
+        let _ = fs::remove_file(dest_path);
+        return Err(e);
+    }
     Ok(())
 }
 
@@ -36,17 +130,19 @@ impl Drop for TempFile {
     }
 }
 
-/// Inflate the nested zip entry `idx` to a unique temp file.
+/// Inflate the nested zip entry `idx` to a unique temp file, charged against the
+/// OUTER archive's budget (the inner archive then gets its own via `nested`).
 pub(crate) fn extract_nested_zip(
     archive: &mut zip::ZipArchive<fs::File>,
     idx: usize,
+    budget: &mut InflateBudget,
 ) -> std::io::Result<TempFile> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("dth-nested-{}-{n}.zip", std::process::id()));
     let tmp = TempFile(path);
-    extract_zip_entry(archive, idx, &tmp.0)?;
+    extract_zip_entry(archive, idx, &tmp.0, budget)?;
     Ok(tmp)
 }
 
@@ -73,12 +169,17 @@ pub(crate) fn zip_file_entries(archive: &mut zip::ZipArchive<fs::File>) -> Vec<(
     entries
 }
 
-/// Extract every file entry of `archive` into `dest`, preserving its tree. Skips
-/// zip-slip paths (`enclosed_name`); directory entries are created lazily.
+/// Extract every file entry of `archive` into `dest`, preserving its tree, bounded
+/// by the archive's inflate budget (entry count + total inflated bytes). Skips
+/// zip-slip paths (`enclosed_name`); directory entries are created lazily. On a
+/// mid-extraction failure the offending partial file is removed; callers own any
+/// cleanup of the (partially populated) `dest` dir.
 pub(crate) fn extract_archive<R: std::io::Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
     dest: &Path,
+    budget: &mut InflateBudget,
 ) -> std::io::Result<()> {
+    budget.check_entry_count(archive.len())?;
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
@@ -96,7 +197,71 @@ pub(crate) fn extract_archive<R: std::io::Read + std::io::Seek>(
             fs::create_dir_all(parent)?;
         }
         let mut f = fs::File::create(&out)?;
-        std::io::copy(&mut entry, &mut f)?;
+        if let Err(e) = copy_bounded(&mut entry, &mut f, budget) {
+            drop(f);
+            let _ = fs::remove_file(&out);
+            return Err(e);
+        }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{unique_temp_dir, write_zip};
+
+    #[test]
+    fn extract_archive_fails_loud_when_the_inflate_budget_is_breached() {
+        let base = unique_temp_dir("inflate_budget");
+        fs::create_dir_all(&base).unwrap();
+        let zip_path = base.join("bomb.zip");
+        // Two entries totalling 96 inflated bytes, against a 64-byte injected cap:
+        // the first fills the budget exactly, the second breaches it.
+        write_zip(&zip_path, &[("a.bin", &[0u8; 64][..]), ("b.bin", &[0u8; 32][..])]);
+        let file = fs::File::open(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let mut budget = InflateBudget::with_max_bytes("bomb.zip", 64);
+        let dest = base.join("out");
+        let err = extract_archive(&mut archive, &dest, &mut budget).unwrap_err();
+        assert!(err.to_string().contains("bomb.zip"), "error must name the archive: {err}");
+        assert!(err.to_string().contains("decompression bomb"), "error: {err}");
+        // The breaching entry is not left behind half-written.
+        assert!(!dest.join("b.bin").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn extract_archive_within_budget_succeeds() {
+        let base = unique_temp_dir("inflate_ok");
+        fs::create_dir_all(&base).unwrap();
+        let zip_path = base.join("ok.zip");
+        write_zip(&zip_path, &[("a.txt", b"hello".as_slice())]);
+        let file = fs::File::open(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        // The real formula: a tiny archive still gets the 1 GiB floor.
+        let mut budget = InflateBudget::new("ok.zip", fs::metadata(&zip_path).unwrap().len());
+        let dest = base.join("out");
+        extract_archive(&mut archive, &dest, &mut budget).unwrap();
+        assert_eq!(fs::read(dest.join("a.txt")).unwrap(), b"hello");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn budget_formula_is_ratio_with_a_floor() {
+        // 100 × 20 MiB = 2000 MiB > the 1 GiB floor → the ratio wins.
+        let big = InflateBudget::new("big.zip", 20 * 1024 * 1024);
+        assert_eq!(big.max_bytes, 100 * 20 * 1024 * 1024);
+        // A tiny archive gets the floor, not 100 × a few bytes.
+        let small = InflateBudget::new("small.zip", 10);
+        assert_eq!(small.max_bytes, INFLATE_FLOOR);
+    }
+
+    #[test]
+    fn entry_count_cap_refuses_absurd_archives() {
+        let budget = InflateBudget::with_max_bytes("many.zip", u64::MAX);
+        assert!(budget.check_entry_count(MAX_ZIP_ENTRIES).is_ok());
+        let err = budget.check_entry_count(MAX_ZIP_ENTRIES + 1).unwrap_err();
+        assert!(err.to_string().contains("many.zip"), "error must name the archive: {err}");
+    }
 }

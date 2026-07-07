@@ -62,6 +62,27 @@ export const SECTION_MODES: Record<RomSection, ReadonlyArray<SectionMode>> = {
   MISC: ['custom'],
 }
 
+// --- Generous string bounds -------------------------------------------------
+// Character JSONs are shared between users, so a hostile definition is in scope.
+// Persisted strings carry GENEROUS upper bounds: the goal is rejecting absurd
+// multi-megabyte values (a memory/UI DoS vector), never constraining real use.
+// A validation-only tightening is not a shape change — no schema-version bump
+// and no migration step (see the decision tree atop migrate.ts).
+
+/** Names, labels, ids, morph/node/property names, version strings. */
+const MAX_NAME_LENGTH = 500
+/** Filesystem paths (Windows practical limits are far below this). */
+const MAX_PATH_LENGTH = 4096
+/** Joined display lists (e.g. a product's capped "used by" labels). */
+const MAX_JOINED_LENGTH = 2048
+/**
+ * `image` may legitimately be a `data:` URL kept verbatim (see the web layer's
+ * canonicalImage) — allow a reasonable inline image, reject multi-MB blobs.
+ */
+const MAX_IMAGE_LENGTH = 1_000_000
+/** Arrays of paths (linked scenes/projects, preset selections). */
+const MAX_PATH_LIST = 1000
+
 /** One pre-defined DTH pose preset (.duf) from the DazToHue Poses folder. */
 export interface DthPoseAsset {
   /** File name without extension, e.g. "G9 DQS JCM FAC - Base". */
@@ -78,9 +99,9 @@ export interface DthPoseAsset {
 /** One morph dialed on one node at a given frame. */
 export const morphSchema = z.object({
   /** Scene node the property lives on, e.g. "Genesis9". */
-  node: z.string(),
+  node: z.string().max(MAX_NAME_LENGTH),
   /** Internal property name, e.g. "body_bs_BodyTone". */
-  prop: z.string(),
+  prop: z.string().max(MAX_NAME_LENGTH),
   value: z.number(),
   /**
    * Value the sawtooth returns to on the frames around the pose (default 0).
@@ -99,14 +120,14 @@ export type Morph = z.infer<typeof morphSchema>
  */
 export const romPoseSchema = z.object({
   /** Stable row id for grid editing. */
-  id: z.string(),
-  name: z.string(),
+  id: z.string().max(MAX_NAME_LENGTH),
+  name: z.string().max(MAX_NAME_LENGTH),
   morphs: z.array(morphSchema),
   /**
    * Optional reference skeleton FBX for poses that scale bones (e.g.
    * Proportion Height). Only meaningful in GEN and FBM categories.
    */
-  referenceFbx: z.string().default(''),
+  referenceFbx: z.string().max(MAX_PATH_LENGTH).default(''),
 })
 export type RomPose = z.infer<typeof romPoseSchema>
 
@@ -135,9 +156,9 @@ export const calculateFromSchema = z.enum(['default', 'restPose', 'animationFram
 export type CalculateFrom = z.infer<typeof calculateFromSchema>
 
 export const romGroupSchema = z.object({
-  id: z.string(),
+  id: z.string().max(MAX_NAME_LENGTH),
   /** Driver bone(s) for JCM/GEN/PHY groups (the CSV `bones` column), e.g. "ball_l". */
-  label: z.string().default(''),
+  label: z.string().max(MAX_NAME_LENGTH).default(''),
   suffix: groupSuffixSchema.default('centre'),
   method: generationMethodSchema.default('default'),
   calculateFrom: calculateFromSchema.default('default'),
@@ -151,11 +172,11 @@ export type RomGroup = z.infer<typeof romGroupSchema>
  * GP9_ArtDirection.json mechanism in DazToHue-Scripts, now per character).
  */
 export const artDirectionFrameSchema = z.object({
-  id: z.string(),
+  id: z.string().max(MAX_NAME_LENGTH),
   rom: z.enum(['gp', 'dk']),
   /** Relative offset from the ROM block start (see the frame map). */
   frame: z.number(),
-  name: z.string(),
+  name: z.string().max(MAX_NAME_LENGTH),
   morphs: z.array(morphSchema).default([]),
 })
 export type ArtDirectionFrame = z.infer<typeof artDirectionFrameSchema>
@@ -224,7 +245,7 @@ export const romSectionConfigSchema = z.object({
    * "GP9 - Golden Palace.duf"). Usually one entry; GEN may select several.
    * Empty means "auto" — derived from genesis/skinning at generation time.
    */
-  presetAssets: z.array(z.string()).default([]),
+  presetAssets: z.array(z.string().max(MAX_PATH_LENGTH)).max(MAX_PATH_LIST).default([]),
   /** GEN preset mode: per-character art direction for the pre-made ROM frames. */
   artDirection: z.array(artDirectionFrameSchema).default([]),
   /** Only used in custom mode. */
@@ -233,7 +254,7 @@ export const romSectionConfigSchema = z.object({
    * JCM custom mode: an absolute path to a custom `.duf` pose preset, loaded as
    * the base ROM exactly like a pre-defined DTH JCM asset.
    */
-  customAssetPath: z.string().default(''),
+  customAssetPath: z.string().max(MAX_PATH_LENGTH).default(''),
 })
 export type RomSectionConfig = z.infer<typeof romSectionConfigSchema>
 
@@ -320,7 +341,7 @@ export function genRomIncludes(
 }
 
 export const preserveMorphSchema = z.object({
-  name: z.string(),
+  name: z.string().max(MAX_NAME_LENGTH),
   keepValue: z.number(),
 })
 export type PreserveMorph = z.infer<typeof preserveMorphSchema>
@@ -328,7 +349,7 @@ export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 const rangeSchema = z.object({ start: z.number(), end: z.number() })
 
 const jcmMorphModDriveSchema = z.object({
-  morphName: z.string(),
+  morphName: z.string().max(MAX_NAME_LENGTH),
   range: z.object({ angle: rangeSchema, value: rangeSchema }),
 })
 
@@ -337,9 +358,9 @@ const jcmMorphModDriveSchema = z.object({
  * (DthWorkflow.dsa `options.jcmMorphMods`).
  */
 export const jcmMorphModSchema = z.object({
-  boneLabel: z.string(),
+  boneLabel: z.string().max(MAX_NAME_LENGTH),
   /** Rotation axis, e.g. "XRotate". */
-  axis: z.string(),
+  axis: z.string().max(MAX_NAME_LENGTH),
   positive: z.array(jcmMorphModDriveSchema).default([]),
   negative: z.array(jcmMorphModDriveSchema).default([]),
 })
@@ -539,25 +560,25 @@ export function poseAssetCsvEra(release: string): string {
  * All fields but `name` default to '' so a sparse manifest still parses.
  */
 export const productRecordSchema = z.object({
-  name: z.string(),
-  sku: z.string().default(''),
-  artist: z.string().default(''),
-  version: z.string().default(''),
-  productType: z.string().default(''),
+  name: z.string().max(MAX_NAME_LENGTH),
+  sku: z.string().max(MAX_NAME_LENGTH).default(''),
+  artist: z.string().max(MAX_NAME_LENGTH).default(''),
+  version: z.string().max(MAX_NAME_LENGTH).default(''),
+  productType: z.string().max(MAX_NAME_LENGTH).default(''),
   /** How the scan tied this product to a scene asset, e.g. "SKU Match",
    *  "Direct Match", "Keyword Match", "Third-Party Match", "Genesis Base Match". */
-  matchMethod: z.string().default(''),
+  matchMethod: z.string().max(MAX_NAME_LENGTH).default(''),
   /** What the product appears to be used for in the scene — distinct roles of the
    *  matched assets, joined (e.g. "Clothing; Geograft"). Heuristic; '' when unknown. */
-  usage: z.string().default(''),
+  usage: z.string().max(MAX_JOINED_LENGTH).default(''),
   /** The specific scene assets that matched this product (labels, capped + joined),
    *  so you can see exactly why it's in the scene. */
-  usedBy: z.string().default(''),
+  usedBy: z.string().max(MAX_JOINED_LENGTH).default(''),
   /** The Daz scene(s)/outfit(s) this product was found in — basenames of the open
    *  scene file(s) that were scanned (e.g. "KiraDefault_G9_GP"). A character can
    *  have several scenes; the studio merges per-scene scans and lists every scene a
    *  product appears in here. Empty for scans that captured no saved scene. */
-  scenes: z.array(z.string()).default([]),
+  scenes: z.array(z.string().max(MAX_NAME_LENGTH)).max(MAX_PATH_LIST).default([]),
 })
 export type ProductRecord = z.infer<typeof productRecordSchema>
 
@@ -567,48 +588,48 @@ export type ProductRecord = z.infer<typeof productRecordSchema>
  * attribute it manually.
  */
 export const unmatchedAssetSchema = z.object({
-  name: z.string(),
-  technicalName: z.string().default(''),
+  name: z.string().max(MAX_NAME_LENGTH),
+  technicalName: z.string().max(MAX_NAME_LENGTH).default(''),
   /** "Node" or "Morph". */
-  assetType: z.string().default(''),
+  assetType: z.string().max(MAX_NAME_LENGTH).default(''),
   /** Native source file the asset loaded from (the `.duf`/`.dsf` path Daz reports
    *  for it), or '' when unknown. Provenance the scan captures without the DIM
    *  manifests — the folder segments often name the vendor/product. */
-  sourceFile: z.string().default(''),
+  sourceFile: z.string().max(MAX_PATH_LENGTH).default(''),
   /** Author + revision read from the source file's own `asset_info` block (DSON),
    *  '' when unreadable. This is how unofficial products (absent from DIM, hence
    *  unmatched) still surface an artist and a real version. */
-  artist: z.string().default(''),
-  version: z.string().default(''),
+  artist: z.string().max(MAX_NAME_LENGTH).default(''),
+  version: z.string().max(MAX_NAME_LENGTH).default(''),
   /** The Daz scene(s)/outfit(s) this asset was found unmatched in (scene-file
    *  basenames). Same per-scene attribution as {@link productRecordSchema.scenes}. */
-  scenes: z.array(z.string()).default([]),
+  scenes: z.array(z.string().max(MAX_NAME_LENGTH)).max(MAX_PATH_LIST).default([]),
 })
 export type UnmatchedAsset = z.infer<typeof unmatchedAssetSchema>
 
 export const characterSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1),
-  /** Path or URL to a recognition image; optional. */
-  image: z.string().default(''),
+  id: z.string().max(MAX_NAME_LENGTH),
+  name: z.string().min(1).max(MAX_NAME_LENGTH),
+  /** Path or URL to a recognition image; optional (may be a `data:` URL). */
+  image: z.string().max(MAX_IMAGE_LENGTH).default(''),
   /**
    * Absolute path to the Daz scene (`.duf`) this character was created from.
    * Read-only provenance shown in the editor; empty for characters made before
    * the scene-based create flow.
    */
-  scenePath: z.string().default(''),
+  scenePath: z.string().max(MAX_PATH_LENGTH).default(''),
   /**
    * Additional Daz scenes (`.duf`) — outfit / look variants linked to this
    * character beyond the primary `scenePath`. Each opens in Daz; they live in
    * the character's Daz-scenes folder (next to the primary scene).
    */
-  extraScenes: z.array(z.string()).default([]),
+  extraScenes: z.array(z.string().max(MAX_PATH_LENGTH)).max(MAX_PATH_LIST).default([]),
   /**
    * Houdini project files (`.hip` / `.hipnc` / `.hiplc`) linked to this character.
    * Each opens in Houdini; they live in the character's Houdini folder. No
    * thumbnails — the cards show the Houdini logo.
    */
-  houdiniProjects: z.array(z.string()).default([]),
+  houdiniProjects: z.array(z.string().max(MAX_PATH_LENGTH)).max(MAX_PATH_LIST).default([]),
   genesis: genesisVersionSchema.default('G9'),
   gender: genderSchema.default('female'),
   /** G9 detail strengths set at frame 0 (DthWorkflow.dsa applies them when > 0). */
@@ -620,20 +641,22 @@ export const characterSchema = z.object({
   /** Morph values restored after ROM loading (e.g. breast position). */
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
-  preserveNodeTransforms: z.array(z.object({ nodeLabel: z.string() })).default([]),
+  preserveNodeTransforms: z
+    .array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) }))
+    .default([]),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   sections: sectionsSchema.default(defaultSections()),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.string().max(MAX_NAME_LENGTH),
+  updatedAt: z.string().max(MAX_NAME_LENGTH),
   /** DTH Character Studio version that last wrote this character ('' = unknown,
    *  e.g. created before this was tracked). Stamped on every save. */
-  studioVersion: z.string().default(''),
+  studioVersion: z.string().max(MAX_NAME_LENGTH).default(''),
   /** Name of the project this character belongs to, stamped on every save
    *  (provenance — the character lives in this project's library). Empty for
    *  characters last written before this was tracked. */
-  projectName: z.string().default(''),
+  projectName: z.string().max(MAX_NAME_LENGTH).default(''),
   /** Absolute path of the owning project's library folder, stamped on save. */
-  projectPath: z.string().default(''),
+  projectPath: z.string().max(MAX_PATH_LENGTH).default(''),
   /**
    * Export directory for the DTH Exporter plugin (v1.8.1+). When set, the
    * generated Daz script runs the exporter (`doExport`) into this folder after
@@ -641,7 +664,7 @@ export const characterSchema = z.object({
    * `<characterName>` subfolder here, so this should be a folder OUTSIDE the
    * project's character directory.
    */
-  exportPath: z.string().default(''),
+  exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
   /**
    * When `exportPath` is set, also nest the export under a subfolder named after
    * the Daz scene open in Daz when the script runs (`Scene.getFilename()`), so a
@@ -667,7 +690,7 @@ export const characterSchema = z.object({
    * reads every row's first column as a type). Detection compares its
    * {@link poseAssetCsvEra} to the active release's; Refresh re-stamps it.
    */
-  generatedDthVersion: z.string().default(''),
+  generatedDthVersion: z.string().max(MAX_NAME_LENGTH).default(''),
   /**
    * Daz products this character uses, as stored from the most recent product
    * scan (the generated `Scan_Products_<Name>.dsa` analyses the open scene and
@@ -679,7 +702,7 @@ export const characterSchema = z.object({
    *  manual review next to {@link products}. */
   productsUnmatched: z.array(unmatchedAssetSchema).default([]),
   /** ISO timestamp the products above were last stored from a scan; '' = never. */
-  productsScannedAt: z.string().default(''),
+  productsScannedAt: z.string().max(MAX_NAME_LENGTH).default(''),
   /**
    * Character-JSON schema version (see {@link CHARACTER_SCHEMA_VERSION}). Stamped
    * on every save. The default is the BASELINE `1` — never the live constant —

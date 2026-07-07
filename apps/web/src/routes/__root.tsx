@@ -11,9 +11,11 @@ import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import { TooltipHost } from '#/components/ui/tooltip-host.tsx'
+import { Button } from '#/components/ui/button.tsx'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import type { QueryClient } from '@tanstack/react-query'
+import type { ErrorComponentProps } from '@tanstack/react-router'
 
 interface MyRouterContext {
   queryClient: QueryClient
@@ -21,7 +23,37 @@ interface MyRouterContext {
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   component: RootComponent,
+  errorComponent: RootErrorComponent,
 })
+
+/**
+ * App-styled last-resort error boundary: any loader/render throw that nothing
+ * below catches lands here instead of TanStack's default error UI. Deliberately
+ * self-contained (plain anchor, no router Link) — it must render even when the
+ * router state itself is broken.
+ */
+function RootErrorComponent({ error }: ErrorComponentProps) {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    <main className="flex min-h-screen items-center justify-center p-8">
+      <div className="w-full max-w-lg rounded-lg border bg-card p-6">
+        <h1 className="text-lg font-semibold">Something went wrong</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          The app hit an unexpected error. Reload to try again, or go back to the start screen.
+        </p>
+        <pre className="mt-4 max-h-48 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap">
+          {message || 'Unknown error'}
+        </pre>
+        <div className="mt-4 flex gap-2">
+          <Button onClick={() => window.location.reload()}>Reload</Button>
+          <Button variant="outline" asChild>
+            <a href="/">Back to start</a>
+          </Button>
+        </div>
+      </div>
+    </main>
+  )
+}
 
 function RootComponent() {
   const navigate = useNavigate()

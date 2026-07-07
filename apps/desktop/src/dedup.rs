@@ -4,10 +4,10 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::archive::{extract_nested_zip, zip_file_entries, NESTED_ZIP_DEPTH};
+use crate::archive::{extract_nested_zip, zip_file_entries, InflateBudget, NESTED_ZIP_DEPTH};
 use crate::assets::fp_add;
 use crate::content::{find_content_level, zip_dir_level, CONTENT_FOLDERS, META_FOLDERS};
-use crate::fsutil::{copy_dir, entry_is_real_dir, folder_name};
+use crate::fsutil::{copy_dir, entry_is_real_dir, folder_name, rail_target, unsafe_recursive_target};
 
 // --- "Dedup" action: resolve duplicate assets + conflicting shared files ------
 
@@ -88,6 +88,13 @@ fn uf_union(parent: &mut [usize], a: usize, b: usize) {
 /// Move `src` to `dst`, falling back to copy-then-delete when a plain rename fails
 /// (e.g. the quarantine folder is on a different drive). Returns success.
 fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
+    // Rail: quarantining a folder can end in a recursive delete (the copy-then-
+    // delete fallback). Refuse a root/too-shallow source, judged on the CANONICAL
+    // path so a junction or `..`-laden spelling can't dress a dangerous target up
+    // as a safe-looking one.
+    if src.is_dir() && unsafe_recursive_target(&rail_target(src)).is_some() {
+        return false;
+    }
     if let Some(p) = dst.parent() {
         let _ = fs::create_dir_all(p);
     }
@@ -167,10 +174,13 @@ fn collect_folder_files(dir: &Path, rel: &Path, out: &mut Vec<(String, u64)>) {
 /// zips the same way so a wrapper download dedups like a flat zip of the same
 /// content. Returns whether a content level was found; unreadable nested zips are
 /// skipped (dedup is lenient — the asset resolves to None, not an error).
+/// `budget` is the CURRENT archive's inflate budget (its nested-zip entries are
+/// the only thing this scan inflates); each inner archive derives its own.
 fn collect_zip_files(
     archive: &mut zip::ZipArchive<fs::File>,
     depth: u32,
     out: &mut Vec<(String, u64)>,
+    budget: &mut InflateBudget,
 ) -> bool {
     let entries = zip_file_entries(archive);
     let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
@@ -181,10 +191,14 @@ fn collect_zip_files(
             if !path.to_ascii_lowercase().ends_with(".zip") {
                 continue;
             }
-            if let Ok(tmp) = extract_nested_zip(archive, *idx) {
+            if let Ok(tmp) = extract_nested_zip(archive, *idx, budget) {
+                let inner_len = fs::metadata(&tmp.0).map(|m| m.len()).unwrap_or(0);
                 if let Ok(file) = fs::File::open(&tmp.0) {
                     if let Ok(mut inner) = zip::ZipArchive::new(file) {
-                        found |= collect_zip_files(&mut inner, depth - 1, out);
+                        let mut inner_budget = budget.nested(path, inner_len);
+                        if inner_budget.check_entry_count(inner.len()).is_ok() {
+                            found |= collect_zip_files(&mut inner, depth - 1, out, &mut inner_budget);
+                        }
                     }
                 }
             }
@@ -218,9 +232,13 @@ pub(crate) fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
     let label = folder_name(asset);
     if is_zip {
         let file = fs::File::open(asset).ok()?;
+        let compressed_len = file.metadata().map(|m| m.len()).unwrap_or(0);
         let mut archive = zip::ZipArchive::new(file).ok()?;
+        // Bomb rails (lenient like the rest of dedup: a breach skips the asset).
+        let mut budget = InflateBudget::new(&label, compressed_len);
+        budget.check_entry_count(archive.len()).ok()?;
         let mut files = Vec::new();
-        if !collect_zip_files(&mut archive, NESTED_ZIP_DEPTH, &mut files) {
+        if !collect_zip_files(&mut archive, NESTED_ZIP_DEPTH, &mut files, &mut budget) {
             return None;
         }
         Some(AssetFiles {
