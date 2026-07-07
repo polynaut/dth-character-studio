@@ -1,5 +1,15 @@
 # @dth/desktop
 
+## 0.36.3
+
+### Patch Changes
+
+- [#187](https://github.com/polynaut/dth-character-studio/pull/187) [`c3261bf`](https://github.com/polynaut/dth-character-studio/commit/c3261bfd824987ed2936b72c75d38a563a8bbc55) Thanks [@polynaut](https://github.com/polynaut)! - Hardening: zip extraction is bounded (ratio-based size + entry caps) against decompression bombs; recursive-delete rails run on canonicalized paths; a hostile manifest charactersSubdir can no longer traverse outside the project; character schema strings carry generous size bounds; the app has a styled root error boundary.
+
+- [#188](https://github.com/polynaut/dth-character-studio/pull/188) [`198ea5a`](https://github.com/polynaut/dth-character-studio/commit/198ea5a43a4bb5a626f2999954435d501f83d2b8) Thanks [@polynaut](https://github.com/polynaut)! - Notes integrity: autosave failures surface as a toast, and concurrent edits from a second window are detected instead of silently overwritten (reload option offered). Note media is garbage-collected — unreferenced files are removed after an hour on save, with a 7-day housekeeping backstop — and `.duf` preset decompression is bounded.
+
+- [#185](https://github.com/polynaut/dth-character-studio/pull/185) [`f2eb122`](https://github.com/polynaut/dth-character-studio/commit/f2eb1228e74ccdd73b55a0390745394d7c984827) Thanks [@polynaut](https://github.com/polynaut)! - Internal: split the desktop crate's lib.rs into focused modules (no behavior change).
+
 ## 0.36.2
 
 ### Patch Changes
