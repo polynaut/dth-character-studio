@@ -292,6 +292,17 @@ export function genDefaultNode(gender: Gender): string {
 }
 
 /**
+ * The scene-node name of an unrenamed base figure — the default `node` for new
+ * ROM entries. G9 is gender-neutral; earlier generations ship per-gender
+ * figures (Daz node names have no dots/spaces: Genesis8_1Female).
+ */
+export function genesisFigureNode(genesis: GenesisVersion, gender: Gender): string {
+  if (genesis === 'G9') return 'Genesis9'
+  const base = genesis === 'G8.1' ? 'Genesis8_1' : genesis === 'G8' ? 'Genesis8' : 'Genesis3'
+  return `${base}${gender === 'female' ? 'Female' : 'Male'}`
+}
+
+/**
  * Which pre-made genitalia ROMs the GEN preset section includes: explicit
  * asset selection wins, otherwise the gender decides.
  */
@@ -462,8 +473,16 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       JSON in the studio's app-data folder — the Morph-name autocomplete's
  *       index. Install-time templating bakes the app-data path into the
  *       wrappers; no generated-script API change.
+ *  19 — Genesis 8/8.1 support: the mouth ROM pass now runs only when a mouth
+ *       pose asset was actually resolved (G9 is the only generation that ships
+ *       one — G8.1's FAC frames live in its base ROM, and its figures have no
+ *       separate mouth node to require). The figure-root error message no
+ *       longer claims "Genesis 9" (the root has always come from the user's
+ *       selection, any generation works). Non-G9 generated configs zero the
+ *       G9-only FACS-detail/flexion strengths so runs don't log a spurious
+ *       "property not found" failure.
  */
-export const RUNTIME_VERSION = 18
+export const RUNTIME_VERSION = 19
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -697,14 +716,18 @@ export function characterSlug(character: Pick<Character, 'name'>): string {
 /**
  * Skinning is not stored — it is defined by the selected JCM preset asset
  * (e.g. "G9 DQS JCM FAC - Base.duf"). DQS = 328 base frames, linear = 617.
- * Without an explicit selection the DTH-recommended DQS is assumed.
+ * Without an explicit selection the DTH-recommended DQS is assumed — except
+ * for generations DTH ships no DQS ROM for (G8, G3, Linear-only), where the
+ * auto-selected asset can only be Linear; an explicit DQS pick still wins.
  */
-export function characterSkinning(character: Pick<Character, 'sections'>): 'linear' | 'dqs' {
+export function characterSkinning(
+  character: Pick<Character, 'sections'> & Partial<Pick<Character, 'genesis'>>,
+): 'linear' | 'dqs' {
   const jcm = character.sections.JCM
   const asset =
     jcm.mode === 'preset' ? jcm.presetAssets[0] : jcm.mode === 'custom' ? jcm.customAssetPath : undefined
   if (asset) return /\bDQS\b/i.test(asset) ? 'dqs' : 'linear'
-  return 'dqs'
+  return character.genesis === 'G8' || character.genesis === 'G3' ? 'linear' : 'dqs'
 }
 
 /** The sections whose frames the studio generates (enabled custom sections, in ROM order). */

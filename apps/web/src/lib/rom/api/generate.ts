@@ -99,7 +99,9 @@ export async function resolvePresetFrames(
     if (!block.need) continue
     if (!block.path) {
       throw new Error(
-        `Couldn't locate the ${block.label} pose asset — rescan the poses in Settings.`,
+        `Couldn't locate the ${block.label} pose asset for ${character.genesis} — ` +
+          `the installed DTH release may not ship it for this generation; ` +
+          `disable the section or rescan the poses in Settings.`,
       )
     }
     const hit = measured.get(block.path)

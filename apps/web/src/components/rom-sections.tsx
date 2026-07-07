@@ -58,6 +58,7 @@ import {
   SECTION_MODES,
   genAssetGender,
   genDefaultNode,
+  genesisFigureNode,
   genRomIncludes,
   genRomStartFrame,
   mirrorGroup,
@@ -138,6 +139,11 @@ interface PoseAssetCatalog {
 const EMPTY_MORPH_INDEX: Array<MorphIndexEntry> = []
 const MorphIndexContext = createContext<Array<MorphIndexEntry>>(EMPTY_MORPH_INDEX)
 
+// The default scene node for new ROM entries — the unrenamed base figure of the
+// character's generation (Genesis9, Genesis8_1Female, …). A context for the same
+// reason as the morph index: the fallback lives in deeply nested table cells.
+const FigureNodeContext = createContext<string>('Genesis9')
+
 interface RomSectionsProps {
   sections: RomSectionsModel
   genesis: GenesisVersion
@@ -161,9 +167,9 @@ interface RomSectionsProps {
 const PRESET_DESCRIPTIONS: Partial<Record<RomSection, string>> = {
   RET: 'Covered by the pre-defined DTH base ROM (RestPose, UnrealPose, TPose, …). Loads together with the Joint Corrective base ROM.',
   JCM: 'Pre-defined DTH base ROM (DQS / linear).',
-  FAC: 'Pre-defined DTH face ROM incl. the separate Mouth figure ROM.',
+  FAC: 'Pre-defined DTH face ROM (on Genesis 9 incl. the separate Mouth figure ROM).',
   GEN: 'Pre-defined genitalia ROM.',
-  PHY: 'Pre-defined physics example ROM (43 frames). Map its poses in the PoseAsset node manually for now.',
+  PHY: 'Pre-defined physics example ROM. Map its poses in the PoseAsset node manually for now.',
 }
 
 function PresetAssetPicker({
@@ -568,6 +574,8 @@ interface PoseTableMeta {
   remove: (rowIndex: number) => void
   /** Insert an empty pose at this index (frames renumber — they're never stored). */
   insertAt: (index: number) => void
+  /** Default scene node for new entries — the generation's unrenamed base figure. */
+  figureNode: string
 }
 
 /**
@@ -909,7 +917,7 @@ function SortablePoseRow({
                   <div className="w-44">
                     <TextCell
                       value={morph.node}
-                      placeholder="Genesis9"
+                      placeholder={meta.figureNode}
                       onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
                     />
                   </div>
@@ -1004,6 +1012,7 @@ function GroupCard({
   const showSuffix = GROUPED_SECTIONS.includes(section)
   const showMethod = METHOD_SECTIONS.includes(section)
   const showCalcFrom = CALC_FROM_SECTIONS.includes(section)
+  const figureNode = useContext(FigureNodeContext)
   // The group's own id is its container droppable, so a pose can be dropped onto
   // an empty group's body. The DndContext spanning all groups lives in the parent
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
@@ -1038,6 +1047,7 @@ function GroupCard({
     showReferenceFbx,
     expandedIds,
     toggleExpanded: onToggleExpanded,
+    figureNode,
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
       const pose = group.poses[rowIndex]
@@ -1049,7 +1059,7 @@ function GroupCard({
     addMorph: (rowIndex) => {
       const pose = group.poses[rowIndex]
       patchPose(rowIndex, {
-        morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? 'Genesis9', prop: '', value: 1 }],
+        morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 }],
       })
     },
     removeMorphAt: (rowIndex, morphIndex) => {
@@ -1065,7 +1075,7 @@ function GroupCard({
       // the same node throughout.
       const neighbor = group.poses[index - 1] ?? group.poses[index]
       const node =
-        neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+        neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : figureNode)
       const id = newId()
       const poses = [...group.poses]
       poses.splice(index, 0, {
@@ -1093,7 +1103,7 @@ function GroupCard({
     // same node throughout. A GEN group starts on the gender's geograft node.
     const lastNode =
       group.poses[group.poses.length - 1]?.morphs[0]?.node ??
-      (section === 'GEN' ? genDefaultNode(gender) : 'Genesis9')
+      (section === 'GEN' ? genDefaultNode(gender) : figureNode)
     onChange({
       ...group,
       poses: [
@@ -1818,6 +1828,7 @@ export function RomSections({
 
   return (
     <MorphIndexContext.Provider value={morphIndex ?? EMPTY_MORPH_INDEX}>
+    <FigureNodeContext.Provider value={genesisFigureNode(genesis, gender)}>
     <div className="space-y-2">
       {!presetFrames && (
         <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
@@ -1835,6 +1846,32 @@ export function RomSections({
         const effectiveEnabled = tiedToJcm
           ? sections.JCM.enabled && sections.JCM.mode === 'preset'
           : config.enabled
+        // Whether the installed DTH release ships this section's preset asset for
+        // the character's generation (e.g. GP/DK and Physics don't exist for
+        // G8/G8.1, FAC doesn't for G8). Unavailable → preset mode isn't offered:
+        // enabling the section lands directly on the custom morph list, the Mode
+        // select locks the preset option, and a legacy character that still HAS
+        // it enabled in preset mode gets a red chip (generation fails loud).
+        // FAC rides in a FAC-variant JCM base ROM, not a FAC-section asset.
+        const presetAvailable = (() => {
+          if (catalog.assets.length === 0) return true // catalog unknown — don't lock
+          const forGen = catalog.assets.filter(
+            (a) => a.genesis === null || a.genesis === genesis,
+          )
+          if (section === 'JCM') return forGen.some((a) => a.section === 'JCM')
+          if (section === 'FAC')
+            return forGen.some((a) => a.section === 'JCM' && a.includesFac)
+          if (section === 'GEN') {
+            const roms = genRomIncludes(gender, config.presetAssets)
+            const has = (g: Gender) =>
+              forGen.some((a) => a.section === 'GEN' && genAssetGender(a.name) === g)
+            return (!roms.gp || has('female')) && (!roms.dk || has('male'))
+          }
+          if (section === 'PHY') return forGen.some((a) => a.section === 'PHY')
+          return true
+        })()
+        const missingPresetAsset =
+          effectiveEnabled && config.mode === 'preset' && !presetAvailable
         return (
           // Each section is its own wrapper on purpose: position:sticky constrains
           // the title to its parent, which is exactly what makes the NEXT section's
@@ -1856,6 +1893,14 @@ export function RomSections({
               />
               <span className="w-12 font-mono text-sm font-semibold">{section}</span>
               <span className="font-medium">{SECTION_LABELS[section]}</span>
+              {missingPresetAsset && (
+                <span
+                  className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
+                  title={`The installed DTH release ships no ${SECTION_LABELS[section]} preset for ${genesis} — generation will fail. Disable this section or switch it to a custom asset.`}
+                >
+                  no {genesis} asset
+                </span>
+              )}
               <span className="ml-auto text-xs text-muted-foreground">
                 {tiedToJcm
                   ? effectiveEnabled
@@ -1874,7 +1919,19 @@ export function RomSections({
                         ? 'Disable this section'
                         : 'Enable this section'
                   }
-                  onCheckedChange={(enabled) => patchSection(section, { enabled })}
+                  onCheckedChange={(enabled) =>
+                    // No preset asset for this generation → enabling goes
+                    // straight to the custom morph list (preset isn't offered).
+                    patchSection(
+                      section,
+                      enabled &&
+                        !presetAvailable &&
+                        config.mode === 'preset' &&
+                        modes.includes('custom')
+                        ? { enabled, mode: 'custom' }
+                        : { enabled },
+                    )
+                  }
                 />
               </span>
             </div>
@@ -1894,7 +1951,11 @@ export function RomSections({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="preset">Pre-defined DTH assets</SelectItem>
+                        <SelectItem value="preset" disabled={!presetAvailable}>
+                          {presetAvailable
+                            ? 'Pre-defined DTH assets'
+                            : `Pre-defined DTH assets — none for ${genesis}`}
+                        </SelectItem>
                         <SelectItem value="custom">
                           {section === 'JCM' ? 'Custom JCM asset' : 'Custom morph list'}
                         </SelectItem>
@@ -2024,6 +2085,7 @@ export function RomSections({
         />
       )}
     </div>
+    </FigureNodeContext.Provider>
     </MorphIndexContext.Provider>
   )
 }

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   CHARACTER_SCHEMA_VERSION,
   characterSchema,
+  characterSkinning,
   compareDthVersions,
+  genesisFigureNode,
   poseAssetCsvEra,
 } from './types'
 
@@ -88,5 +90,30 @@ describe('poseAssetCsvEra', () => {
   it('is empty for a release before the first baseline or when none is given', () => {
     expect(poseAssetCsvEra('2.4.2')).toBe('')
     expect(poseAssetCsvEra('')).toBe('')
+  })
+})
+
+describe('genesisFigureNode', () => {
+  it('maps each generation to its unrenamed base-figure node name', () => {
+    expect(genesisFigureNode('G9', 'female')).toBe('Genesis9')
+    expect(genesisFigureNode('G9', 'male')).toBe('Genesis9')
+    expect(genesisFigureNode('G8.1', 'female')).toBe('Genesis8_1Female')
+    expect(genesisFigureNode('G8.1', 'male')).toBe('Genesis8_1Male')
+    expect(genesisFigureNode('G8', 'female')).toBe('Genesis8Female')
+    expect(genesisFigureNode('G3', 'male')).toBe('Genesis3Male')
+  })
+})
+
+describe('characterSkinning genesis default', () => {
+  it('defaults to linear for generations DTH ships no DQS ROM for', () => {
+    const character = characterSchema.parse(base)
+    expect(characterSkinning(character)).toBe('dqs')
+    expect(characterSkinning({ ...character, genesis: 'G8.1' })).toBe('dqs')
+    expect(characterSkinning({ ...character, genesis: 'G8' })).toBe('linear')
+    expect(characterSkinning({ ...character, genesis: 'G3' })).toBe('linear')
+    // An explicit DQS pick still wins over the generation default.
+    const sections = structuredClone(character.sections)
+    sections.JCM.presetAssets = ['G8 Custom DQS JCM - Base.duf']
+    expect(characterSkinning({ ...character, genesis: 'G8', sections })).toBe('dqs')
   })
 })
