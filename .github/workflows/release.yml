@@ -155,19 +155,19 @@ jobs:
           fi
           exe="${matches[0]}"
           [ -S "$SOCK" ] || {
-            echo "::error::p11-kit socket missing at $SOCK — is certum-container running and SimplySign logged in (VNC → login → close)? See docs/devops.md → Code signing."
+            echo "::error::p11-kit socket missing at $SOCK — is certum-container running with its keepalive robot? See docs/devops.md → Code signing."
             exit 1
           }
           export P11_KIT_SERVER_ADDRESS="unix:path=$SOCK"
           # The runner's sign-installer.sh signs + timestamps (time.certum.pl)
           # + embeds the Certum intermediate for a self-contained chain. No PIN:
-          # the SimplySign virtual card takes an empty PIN — the phone login IS
-          # the auth. Its own final verify is informational (offline anchoring
+          # the SimplySign virtual card takes an empty PIN — the automated
+          # SimplySign login (NAS keepalive robot) is the auth. Its own final verify is informational (offline anchoring
           # on Certum's cross-signed roots is fussy) — a produced file is a
           # valid signature.
           if ! sign-installer.sh "$exe" "$exe.signed" \
             "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"; then
-            echo "::error::signing failed — if the log says 'Failed to enumerate slots', the SimplySign session (~2 h lifetime) has expired: VNC into certum-container, log in with a fresh OTP, press close, then re-run this job."
+            echo "::error::signing failed — if the log says 'Failed to enumerate slots', the SimplySign session has lapsed — check the NAS keepalive robot (it should refresh the session before the ~2 h expiry), then re-run this job."
             exit 1
           fi
           test -s "$exe.signed"
