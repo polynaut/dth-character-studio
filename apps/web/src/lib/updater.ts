@@ -48,6 +48,7 @@ export async function checkForUpdates({ manual = false }: { manual?: boolean } =
     // native ask(). The dialog drives the download/install + relaunch itself.
     requestUpdatePrompt({
       version: update.version,
+      currentVersion: update.currentVersion,
       notes: update.body || undefined,
       skipped,
       install: async () => {
