@@ -480,7 +480,7 @@ function MorphNameCell({
               <button
                 type="button"
                 key={`${e.node}|${e.name}`}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full flex-col gap-0.5 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 // mousedown fires BEFORE the input's blur — a plain onClick would
                 // arrive after the menu already closed.
                 onMouseDown={(ev) => {
@@ -490,18 +490,28 @@ function MorphNameCell({
                   onPick(e)
                 }}
               >
-                <span className="shrink-0 font-medium">{highlightMatch(e.name, q)}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {highlightMatch(e.label, q)}
-                </span>
-                <span className="ml-auto flex shrink-0 gap-1">
-                  <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                    {hitInternal ? 'internal' : 'UI name'}
+                <span className="flex w-full items-center gap-2">
+                  {/* The internal name — what picking inserts. Never truncated. */}
+                  <span className="font-medium [overflow-wrap:anywhere]">
+                    {highlightMatch(e.name, q)}
                   </span>
-                  <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                    {e.node}
+                  <span className="ml-auto flex shrink-0 gap-1">
+                    <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                      {hitInternal ? 'internal match' : 'UI name match'}
+                    </span>
+                    <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                      {e.node}
+                    </span>
                   </span>
                 </span>
+                {/* The Daz UI name on its own labeled line (only when it differs)
+                    and never truncated — a hit here must stay READABLE, or a
+                    match on "GPL_…" looks like a wrong "GP_…" suggestion. */}
+                {e.label !== e.name && (
+                  <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    Daz UI name: {highlightMatch(e.label, q)}
+                  </span>
+                )}
               </button>
             )
           })}
