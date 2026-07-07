@@ -456,8 +456,9 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       interpolation pass now also covers the FAC mouth node, whose keys a
  *       root-only pass never touched.
  *  18 — Scan_Morphs_<Genesis>.dsa scripts (G9/G8.1/G8/G3) + the shared
- *       .DthScanMorphs.dsa runtime: scan every DzMorph on a selected unrenamed
- *       figure AND its descendants (grafts, clothing) into a per-generation
+ *       .DthScanMorphs.dsa runtime: scan every morph dial (DzMorph modifiers +
+ *       controller float properties) on a selected unrenamed figure AND its
+ *       descendants (grafts, clothing) into a per-generation
  *       JSON in the studio's app-data folder — the Morph-name autocomplete's
  *       index. Install-time templating bakes the app-data path into the
  *       wrappers; no generated-script API change.

@@ -4,10 +4,17 @@
 // Scan_Morphs_<Genesis>.dsa wrappers installed next to this file; walks the
 // selected figure AND every descendant node (geografts like Golden Palace /
 // Dicktator, nipples/navel add-ons, fitted clothing — they all carry morphs of
-// their own) and writes every DzMorph as { node, nodeLabel, label, name } into
-// a per-generation JSON in the studio's app-data folder. The studio's
+// their own) and writes every morph dial as { node, nodeLabel, label, name }
+// into a per-generation JSON in the studio's app-data folder. The studio's
 // Morph-name autocomplete reads that index. Studio-only (no DazToHue-Scripts
 // twin); the wrapper bakes the output path at install time.
+//
+// Two passes per node, mirroring how the ROM runtime resolves a morph name
+// (DthUtils: findProperty -> findPropertyByLabel -> morph-modifier scan):
+//   1. DzMorph modifiers on the node's object (classic delta morphs), and
+//   2. float properties on the node itself — controller dials without their
+//      own deltas (ERC shape products like SL_Hourglass) live HERE, not as
+//      modifiers, and would otherwise be invisible to the scan.
 
 function DthScanMorphs(config){
 	var oSel = Scene.getPrimarySelection();
@@ -31,6 +38,11 @@ function DthScanMorphs(config){
 		return;
 	}
 
+	// Node-property groups that are rig/scene plumbing, not morph dials. Any
+	// float property under these is skipped in pass 2 (transforms, display
+	// toggles, simulation weights, smoothing iterations, ...).
+	var rxSkipGroup = /^(General|Transforms|Display|Simulation|Smoothing|Mesh Smoothing|Line Tessellation|Rigid Follow|Instances)($|\/)/;
+
 	// The figure root plus every descendant (recursive) - grafts and clothing too.
 	var aNodes = [oSel].concat(oSel.getNodeChildren(true));
 	var aMorphs = [];
@@ -38,28 +50,54 @@ function DthScanMorphs(config){
 	var iNodesWithMorphs = 0;
 	for(var n = 0; n < aNodes.length; n++){
 		var oNode = aNodes[n];
-		var oObj = oNode.getObject();
-		if(!oObj) continue;
 		// Instance suffixes (GoldenPalace_G9_9694) vary per scene - strip the
 		// trailing _<digits> so the stored node id matches the ROM convention
 		// (GoldenPalace_G9, Genesis9, ...).
 		var sNode = String(oNode.name).replace(/_\d+$/, "");
+		var sNodeLabel = String(oNode.getLabel());
 		var iBefore = aMorphs.length;
-		for(var i = 0; i < oObj.getNumModifiers(); i++){
-			var oMod = oObj.getModifier(i);
-			if(!oMod || !oMod.inherits("DzMorph")) continue;
-			var oProp = oMod.getValueControl();
-			var sName = String(oMod.getName());
-			var sKey = sNode + "|" + sName;
-			if(oSeen[sKey]) continue;
-			oSeen[sKey] = true;
-			aMorphs.push({
-				node: sNode,
-				nodeLabel: String(oNode.getLabel()),
-				label: oProp ? String(oProp.getLabel()) : sName,
-				name: sName
-			});
+
+		// Pass 1: DzMorph modifiers on the node's object (delta morphs).
+		var oObj = oNode.getObject();
+		if(oObj){
+			for(var i = 0; i < oObj.getNumModifiers(); i++){
+				var oMod = oObj.getModifier(i);
+				if(!oMod || !oMod.inherits("DzMorph")) continue;
+				var oProp = oMod.getValueControl();
+				var sName = String(oMod.getName());
+				var sKey = sNode + "|" + sName;
+				if(oSeen[sKey]) continue;
+				oSeen[sKey] = true;
+				aMorphs.push({
+					node: sNode,
+					nodeLabel: sNodeLabel,
+					label: oProp ? String(oProp.getLabel()) : sName,
+					name: sName
+				});
+			}
 		}
+
+		// Pass 2: controller dials that live as float properties on the node
+		// (no modifier of their own). Bones only carry transforms/rig floats,
+		// so they are skipped wholesale.
+		if(!oNode.inherits("DzBone")){
+			for(var p = 0; p < oNode.getNumProperties(); p++){
+				var oNProp = oNode.getProperty(p);
+				if(!oNProp || !oNProp.inherits("DzFloatProperty")) continue;
+				if(rxSkipGroup.test(String(oNProp.getPath()).replace(/^\//, ""))) continue;
+				var sPName = String(oNProp.getName());
+				var sPKey = sNode + "|" + sPName;
+				if(oSeen[sPKey]) continue;
+				oSeen[sPKey] = true;
+				aMorphs.push({
+					node: sNode,
+					nodeLabel: sNodeLabel,
+					label: String(oNProp.getLabel()),
+					name: sPName
+				});
+			}
+		}
+
 		if(aMorphs.length > iBefore) iNodesWithMorphs++;
 	}
 
