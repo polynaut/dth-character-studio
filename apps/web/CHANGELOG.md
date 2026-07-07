@@ -1,5 +1,24 @@
 # @dth/web
 
+## 0.36.3
+
+### Patch Changes
+
+- [#187](https://github.com/polynaut/dth-character-studio/pull/187) [`c3261bf`](https://github.com/polynaut/dth-character-studio/commit/c3261bfd824987ed2936b72c75d38a563a8bbc55) Thanks [@polynaut](https://github.com/polynaut)! - Hardening: zip extraction is bounded (ratio-based size + entry caps) against decompression bombs; recursive-delete rails run on canonicalized paths; a hostile manifest charactersSubdir can no longer traverse outside the project; character schema strings carry generous size bounds; the app has a styled root error boundary.
+
+- [#182](https://github.com/polynaut/dth-character-studio/pull/182) [`2cd7be6`](https://github.com/polynaut/dth-character-studio/commit/2cd7be6b451a63f9ade98e047a860833627e8435) Thanks [@polynaut](https://github.com/polynaut)! - Fix batch: character notes now follow renames and moves (`<Name>.notes.md` is renamed with the definition in save/move/library-root moves, and removed with a loose definition on delete — previously a rename silently orphaned the notes); the unsaved-changes guard now intercepts the native window close (Tauri's ✕ never delivered `beforeunload`); the selection pill floats above the Unreal footer bar instead of overlapping it; styled tooltips track live `title` changes so PathCode's "Copied!" feedback actually shows; non-G9 characters carry an "experimental" chip until the G8/G8.1 CSV path is validated in Houdini.
+
+- [#188](https://github.com/polynaut/dth-character-studio/pull/188) [`198ea5a`](https://github.com/polynaut/dth-character-studio/commit/198ea5a43a4bb5a626f2999954435d501f83d2b8) Thanks [@polynaut](https://github.com/polynaut)! - Notes integrity: autosave failures surface as a toast, and concurrent edits from a second window are detected instead of silently overwritten (reload option offered). Note media is garbage-collected — unreferenced files are removed after an hour on save, with a 7-day housekeeping backstop — and `.duf` preset decompression is bounded.
+
+- [#189](https://github.com/polynaut/dth-character-studio/pull/189) [`aace849`](https://github.com/polynaut/dth-character-studio/commit/aace849c42851c6c2e6dbadc225691fd494d9789) Thanks [@polynaut](https://github.com/polynaut)! - Performance: morph index / character lookup / product scans are cached with cheap staleness checks (no more full re-reads per navigation or window focus); the cross-project prefill list loads lazily instead of stalling the project page on cold network shares; morph autocomplete is indexed and deferred; large product reports skip offscreen rendering; the update dialog's markdown renderer no longer ships in the startup chunk; removed the unused TanStack Query dependency.
+
+- [#184](https://github.com/polynaut/dth-character-studio/pull/184) [`d821d34`](https://github.com/polynaut/dth-character-studio/commit/d821d3431fa5115081960ff0b9090fea822c7089) Thanks [@polynaut](https://github.com/polynaut)! - Internal: split the ROM sections editor into focused components (no behavior change).
+
+- [#186](https://github.com/polynaut/dth-character-studio/pull/186) [`f26a231`](https://github.com/polynaut/dth-character-studio/commit/f26a231e084da6af82815366742c2e95c1b82ee0) Thanks [@polynaut](https://github.com/polynaut)! - Internal: split the storage substrate into focused modules behind the existing barrel (no behavior change) and add baseline tests for settings + library scanning.
+
+- Updated dependencies [[`c3261bf`](https://github.com/polynaut/dth-character-studio/commit/c3261bfd824987ed2936b72c75d38a563a8bbc55)]:
+  - @dth/rom@0.36.3
+
 ## 0.36.2
 
 ### Patch Changes
