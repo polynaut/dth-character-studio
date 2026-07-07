@@ -61,6 +61,7 @@ import {
   mirrorGroup,
   newId,
   presetFrameCount,
+  sanitizePoseName,
 } from '@dth/rom'
 
 import type { ColumnDef } from '@tanstack/react-table'
@@ -549,13 +550,29 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
     },
   }),
   columnHelper.accessor('name', {
-    header: 'Name',
+    header: () => (
+      <span className="flex items-center gap-1">
+        Name
+        <InfoPopup label="Name — more information" className="-my-1">
+          The generated morph's name in <strong>Houdini</strong> and later{' '}
+          <strong>Unreal Engine</strong> — the one value that travels the whole pipeline.
+          Letters, numbers and underscores only — Houdini accepts nothing else, so
+          spaces/special characters are removed automatically. The group's Left/Right
+          suffix is appended for you (<code>_l</code>/<code>_r</code>).
+        </InfoPopup>
+      </span>
+    ),
     cell: ({ getValue, row, table }) => (
       <TextCell
         value={getValue()}
         placeholder="e.g. BodyTone"
         dataId={row.original.id}
-        onCommit={(name) => (table.options.meta as PoseTableMeta).update(row.index, { name })}
+        // Same rule the generator applies to the CSV (sanitizePoseName): Houdini
+        // only accepts [A-Za-z0-9_], so normalize at the source — what you type
+        // is what Houdini gets.
+        onCommit={(name) =>
+          (table.options.meta as PoseTableMeta).update(row.index, { name: sanitizePoseName(name) })
+        }
       />
     ),
   }),
@@ -563,7 +580,18 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
   // edited in the morphs expansion — it is constant for typical pose lists.
   columnHelper.accessor((pose) => pose.morphs[0]?.prop ?? '', {
     id: 'prop',
-    header: 'Morph name',
+    header: () => (
+      <span className="flex items-center gap-1">
+        Morph name
+        <InfoPopup label="Morph name — more information" className="-my-1">
+          <strong>Must exactly match the morph's internal name in Daz Studio</strong>{' '}
+          (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
+          dials it; a mismatch fails on that frame. See the guide for how to look the
+          internal name up in Daz, or import the exact names from a{' '}
+          <code>DthScanFrames</code> CSV.
+        </InfoPopup>
+      </span>
+    ),
     cell: ({ getValue, row, table }) =>
       row.original.morphs.length > 1 ? (
         <span className="px-2 text-sm text-muted-foreground italic">
@@ -581,7 +609,10 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
   }),
   columnHelper.accessor((pose) => pose.morphs[0]?.value ?? 1, {
     id: 'value',
-    header: () => 'Value',
+    // Mirror the NumberCell geometry (w-20 box, right-aligned digits, pr-5 "%"
+    // gutter) so the title sits flush over the numbers instead of floating at
+    // the column's left edge.
+    header: () => <span className="block w-20 pr-5 text-right">Value</span>,
     cell: ({ getValue, row, table }) =>
       row.original.morphs.length > 1 ? null : (
         <NumberCell

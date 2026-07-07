@@ -127,3 +127,31 @@ describe('insert frame between rows (the “+” behind the frame number)', () =
     expect(active.value).toBe('') // the freshly inserted (empty) pose's name field
   })
 })
+
+describe('pose Name sanitization (Houdini-safe)', () => {
+  it('strips spaces and special characters on commit, keeping underscores', () => {
+    let next: RomSectionsModel | null = null
+    render(
+      <RomSections
+        sections={sectionsWithMultiMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        onChange={(s) => {
+          next = s
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
+    fireEvent.change(nameInput, { target: { value: 'Glute Up-Down (v2)!' } })
+    fireEvent.blur(nameInput)
+    expect(next!.FBM.groups[0].poses[0].name).toBe('GluteUpDownv2')
+
+    fireEvent.change(nameInput, { target: { value: 'Belly_Muscular 2' } })
+    fireEvent.blur(nameInput)
+    expect(next!.FBM.groups[0].poses[0].name).toBe('Belly_Muscular2') // underscores survive
+  })
+})

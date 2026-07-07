@@ -39,6 +39,36 @@ work: open **Full Body (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
 key) — or import them from a `DthScanFrames` CSV (see [Tools](./tools.md)).
 
+Each pose row has two name fields with very different jobs:
+
+- **Name** — *your* name for the generated morph, the one value that travels to
+  **Houdini** and later **Unreal Engine**. Letters, numbers and underscores
+  **only** — Houdini rejects anything else, so the studio strips spaces and
+  special characters as you type. The group's Left/Right suffix is appended
+  automatically.
+- **Morph name** — must **exactly match the morph's internal name in Daz
+  Studio** (not its display label). A mismatch means that frame fails in the
+  ROM run.
+
+### Finding a morph's internal Daz name
+
+The internal name usually differs from the slider's label (label *Body Tone* →
+internal `body_bs_BodyTone`). Two ways to get it:
+
+1. **One morph — Parameter Settings:** in Daz's **Parameters** pane, find the
+   slider, open its **gear menu → Parameter Settings…** — the **Name** field is
+   the internal name. Copy it verbatim into the Morph name column.
+
+<!-- screenshot: Parameters pane, slider gear menu → Parameter Settings -->
+<!-- screenshot: Parameter Settings dialog — the internal "Name" field -->
+
+2. **All morphs at once — DthScanFrames:** run `DthScanFrames.dsa` on the open
+   scene (installed via [Tools → DazToHue-Scripts](./tools.md)) — it writes a
+   CSV of every morph on the figure with its exact internal name. Pull it in
+   with the section's **Import from CSV**.
+
+<!-- screenshot: Import from CSV with a DthScanFrames result -->
+
 Two G9 sliders above the sections — **FACS Detail Strength** and **Flexion
 Automatic Strength** — are keyed at frame 0 if your character needs them.
 
