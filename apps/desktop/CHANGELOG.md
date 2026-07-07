@@ -1,5 +1,17 @@
 # @dth/desktop
 
+## 0.32.1
+
+### Patch Changes
+
+- [#144](https://github.com/polynaut/dth-character-studio/pull/144) [`37cd0dc`](https://github.com/polynaut/dth-character-studio/commit/37cd0dcd50ddda8e8f9be99a4f234a49120bb1d0) Thanks [@polynaut](https://github.com/polynaut)! - **Webview hardening: strict Content-Security-Policy + asset protocol disabled.**
+  The webview previously ran with no CSP and an enabled asset protocol. Now: a
+  strict production CSP (`default-src 'self'`, images restricted to inlined `data:`
+  URLs, IPC-only network, no frames/objects) with a dev-only relaxation for Vite
+  HMR, and the asset protocol is fully disabled — the app inlines all images and
+  never used it. Defense-in-depth: an XSS would now be contained by the CSP instead
+  of inheriting the webview's full reach.
+
 ## 0.32.0
 
 ## 0.31.3
