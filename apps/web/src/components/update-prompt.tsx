@@ -1,7 +1,9 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import Markdown from 'react-markdown'
 
 import { Button } from '#/components/ui/button.tsx'
+import { openExternal } from '#/lib/desktop.ts'
 import {
   clearUpdatePrompt,
   getUpdatePrompt,
@@ -21,6 +23,58 @@ export function UpdatePromptHost() {
   const req = useSyncExternalStore(subscribeUpdatePrompt, getUpdatePrompt, getUpdatePrompt)
   if (!req) return null
   return <UpdatePromptDialog req={req} onClose={clearUpdatePrompt} />
+}
+
+/**
+ * The release notes (changesets CHANGELOG markdown) rendered as real markdown.
+ * react-markdown renders to React elements (no innerHTML) and fetches nothing,
+ * so it stays within the strict CSP. Links open EXTERNALLY via openExternal —
+ * never navigating the webview.
+ */
+export function ReleaseNotes({ markdown }: { markdown: string }) {
+  return (
+    <div className="space-y-2 [overflow-wrap:anywhere]">
+      <Markdown
+        components={{
+          h1: ({ children }) => (
+            <h3 className="pt-1 text-sm font-semibold text-foreground">{children}</h3>
+          ),
+          h2: ({ children }) => (
+            <h3 className="pt-1 text-sm font-semibold text-foreground">{children}</h3>
+          ),
+          h3: ({ children }) => (
+            <h4 className="pt-1 text-sm font-semibold text-foreground">{children}</h4>
+          ),
+          p: ({ children }) => <p className="leading-relaxed">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          strong: ({ children }) => (
+            <strong className="font-semibold text-foreground">{children}</strong>
+          ),
+          code: ({ children }) => (
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              className="text-primary underline underline-offset-2"
+              onClick={(e) => {
+                // Never navigate the webview — release notes link to GitHub.
+                e.preventDefault()
+                if (href) void openExternal(href)
+              }}
+            >
+              {children}
+            </a>
+          ),
+          hr: () => <hr className="my-2 border-border" />,
+        }}
+      >
+        {markdown}
+      </Markdown>
+    </div>
+  )
 }
 
 function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClose: () => void }) {
@@ -54,7 +108,7 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
       onClick={() => !busy && onClose()}
     >
       <div
-        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+        className="w-full max-w-2xl space-y-4 rounded-lg border bg-background p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold">Update available</h2>
@@ -63,8 +117,8 @@ function UpdatePromptDialog({ req, onClose }: { req: UpdatePromptRequest; onClos
           {busy ? 'Downloading and installing…' : 'The app will restart to finish.'}
         </p>
         {req.notes ? (
-          <div className="max-h-40 overflow-y-auto rounded-md border bg-card p-3 text-sm whitespace-pre-wrap text-muted-foreground">
-            {req.notes}
+          <div className="max-h-[55vh] overflow-y-auto rounded-md border bg-card p-4 text-sm text-muted-foreground">
+            <ReleaseNotes markdown={req.notes} />
           </div>
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
