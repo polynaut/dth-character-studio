@@ -1,5 +1,30 @@
 # @dth/web
 
+## 0.32.3
+
+### Patch Changes
+
+- [#155](https://github.com/polynaut/dth-character-studio/pull/155) [`ca93cfd`](https://github.com/polynaut/dth-character-studio/commit/ca93cfda17e084a5a48ea7409794a76de6e087f1) Thanks [@polynaut](https://github.com/polynaut)! - **ROM editor: insert frames in place + sticky section titles.**
+
+  - Every pose row has a small `+` behind its frame number opening **Add before /
+    Add after** right at the icon — a new frame slots in between existing ones
+    (inheriting the neighbor's node), the new row's name field is focused
+    immediately, and frame numbers simply renumber (computed from order, never
+    stored).
+  - The ROM section titles (RET, JCM, FAC, …) are now sticky iOS-contacts style:
+    the current section's title stays pinned below the page header while its rows
+    scroll, and the next section's title pushes it out as it arrives — pure CSS,
+    no scroll listeners.
+
+- [#154](https://github.com/polynaut/dth-character-studio/pull/154) [`86a7930`](https://github.com/polynaut/dth-character-studio/commit/86a7930dab6d0d37bf654018bcf1ddbfa271056b) Thanks [@polynaut](https://github.com/polynaut)! - **Settings and Tools got the character editor's sticky header.** The page title
+  and back navigation stay visible while the form scrolls, and **Discard / Save**
+  now ride the header (top right) — always one click away instead of buried at the
+  bottom of a tab. On Settings the header buttons cover both scopes at once: the
+  machine settings (General) and, in a project window, the project settings
+  (Project tab) — Save persists everything pending, Discard reverts it.
+- Updated dependencies []:
+  - @dth/rom@0.32.3
+
 ## 0.32.2
 
 ### Patch Changes
