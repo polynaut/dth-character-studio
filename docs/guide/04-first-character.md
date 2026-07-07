@@ -43,9 +43,8 @@ Each pose row has two name fields with very different jobs:
 
 - **Name** — *your* name for the generated morph, the one value that travels to
   **Houdini** and later **Unreal Engine**. Letters, numbers and underscores
-  **only** — Houdini rejects anything else, so the studio strips spaces and
-  special characters as you type. The group's Left/Right suffix is appended
-  automatically.
+  **only** — Houdini rejects anything else, and the field flags invalid
+  characters. The group's Left/Right suffix is appended automatically.
 - **Morph name** — must **exactly match the morph's internal name in Daz
   Studio** (not its display label). A mismatch means that frame fails in the
   ROM run.

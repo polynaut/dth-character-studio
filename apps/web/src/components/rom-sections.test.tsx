@@ -128,8 +128,8 @@ describe('insert frame between rows (the “+” behind the frame number)', () =
   })
 })
 
-describe('pose Name sanitization (Houdini-safe)', () => {
-  it('strips spaces and special characters on commit, keeping underscores', () => {
+describe('pose Name validation (Houdini-safe)', () => {
+  it('flags invalid characters without rewriting the value', () => {
     let next: RomSectionsModel | null = null
     render(
       <RomSections
@@ -146,12 +146,16 @@ describe('pose Name sanitization (Houdini-safe)', () => {
     )
     fireEvent.click(screen.getByText('Full Body'))
     const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
-    fireEvent.change(nameInput, { target: { value: 'Glute Up-Down (v2)!' } })
-    fireEvent.blur(nameInput)
-    expect(next!.FBM.groups[0].poses[0].name).toBe('GluteUpDownv2')
 
-    fireEvent.change(nameInput, { target: { value: 'Belly_Muscular 2' } })
+    // Invalid chars: flagged live, committed AS TYPED (never silently rewritten).
+    fireEvent.change(nameInput, { target: { value: 'Glute Up-Down (v2)!' } })
+    expect(nameInput.getAttribute('aria-invalid')).toBe('true')
+    expect(nameInput.title).toContain('letters, numbers and underscores')
     fireEvent.blur(nameInput)
-    expect(next!.FBM.groups[0].poses[0].name).toBe('Belly_Muscular2') // underscores survive
+    expect(next!.FBM.groups[0].poses[0].name).toBe('Glute Up-Down (v2)!')
+
+    // Underscores are fine — no flag.
+    fireEvent.change(nameInput, { target: { value: 'Belly_Muscular2' } })
+    expect(nameInput.getAttribute('aria-invalid')).toBeNull()
   })
 })

@@ -353,21 +353,30 @@ function TextCell({
   onCommit,
   placeholder,
   dataId,
+  validate,
 }: {
   value: string
   onCommit: (value: string) => void
   placeholder?: string
   /** Optional `data-pose-input` marker so a freshly inserted row can be focused. */
   dataId?: string
+  /** Live validation: return an error message ('' = valid). The value is NEVER
+   *  rewritten — an invalid entry stays as typed and is flagged instead. */
+  validate?: (value: string) => string
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
+  const error = validate?.(draft) ?? ''
   return (
     <input
-      className={`${cellInputClass} w-full`}
+      className={`${cellInputClass} w-full ${
+        error ? 'border-destructive ring-1 ring-destructive/40 focus:border-destructive' : ''
+      }`}
       value={draft}
       placeholder={placeholder}
       data-pose-input={dataId}
+      aria-invalid={error ? true : undefined}
+      title={error || undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft !== value && onCommit(draft)}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
@@ -556,9 +565,8 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
         <InfoPopup label="Name — more information" className="-my-1">
           The generated morph's name in <strong>Houdini</strong> and later{' '}
           <strong>Unreal Engine</strong> — the one value that travels the whole pipeline.
-          Letters, numbers and underscores only — Houdini accepts nothing else, so
-          spaces/special characters are removed automatically. The group's Left/Right
-          suffix is appended for you (<code>_l</code>/<code>_r</code>).
+          Letters, numbers and underscores only — Houdini accepts nothing else. The
+          group's Left/Right suffix is appended for you (<code>_l</code>/<code>_r</code>).
         </InfoPopup>
       </span>
     ),
@@ -567,12 +575,15 @@ const poseColumns: Array<ColumnDef<RomPose, any>> = [
         value={getValue()}
         placeholder="e.g. BodyTone"
         dataId={row.original.id}
-        // Same rule the generator applies to the CSV (sanitizePoseName): Houdini
-        // only accepts [A-Za-z0-9_], so normalize at the source — what you type
-        // is what Houdini gets.
-        onCommit={(name) =>
-          (table.options.meta as PoseTableMeta).update(row.index, { name: sanitizePoseName(name) })
+        // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
+        // silently rewriting what the user typed (same rule the generator's
+        // sanitizePoseName enforces on the CSV).
+        validate={(v) =>
+          v !== sanitizePoseName(v)
+            ? 'Only letters, numbers and underscores — Houdini rejects anything else.'
+            : ''
         }
+        onCommit={(name) => (table.options.meta as PoseTableMeta).update(row.index, { name })}
       />
     ),
   }),
