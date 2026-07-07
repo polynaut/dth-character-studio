@@ -99,8 +99,8 @@ drive/profile root or any folder that isn't Daz-owned.
 
 Re-generates the Daz scripts and PoseAsset CSVs so every generated file matches the
 **current** studio/runtime version. Run it after **updating the app** or
-**switching DTH release**. From a project window it covers that project; from the
-Home window it covers every recent project. **Your character definitions are never
+**switching DTH release**. It always covers **every known (recent) project**, no
+matter which window you run it from. **Your character definitions are never
 changed** — only their generated output. Problems per character are listed inline;
 the button pulses orange when a refresh is due.
 

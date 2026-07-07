@@ -294,7 +294,7 @@ describe('migrateProjects', () => {
   })
 })
 
-describe('refresh / detection scope (per window)', () => {
+describe('refresh / detection scope (uniform across windows)', () => {
   // Two known projects, each with one character. Characters parsed by
   // characterSchema carry the current schema, so they're never "stale"; we assert
   // on which projects the sweep covers, not on staleness. detectAssetVersions and
@@ -328,13 +328,33 @@ describe('refresh / detection scope (per window)', () => {
     expect(report.characters.map((c) => c.project).sort()).toEqual(['Alpha', 'Beta'])
   })
 
-  it('project window scopes to the active project only', async () => {
+  it('a project window ALSO spans every known project (same button, same meaning)', async () => {
     await seedProject('/games/Alpha', 'Alpha')
     await seedProject('/games/Beta', 'Beta')
     api.setActiveProjectDir('/games/Alpha')
 
     const report = await api.detectAssetVersions()
-    expect(report.total).toBe(1)
-    expect(report.characters.map((c) => c.project)).toEqual(['Alpha'])
+    expect(report.total).toBe(2)
+    expect(report.characters.map((c) => c.project).sort()).toEqual(['Alpha', 'Beta'])
+  })
+
+  it('the active project is swept even when it is missing from recents', async () => {
+    await seedProject('/games/Alpha', 'Alpha')
+    // Gamma exists on disk but was never remembered (e.g. recents pruned).
+    await storage.createProjectManifest('/games/Gamma', 'Gamma')
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'GammaChar',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    addDir('/games/Gamma/GammaChar')
+    files.set('/games/Gamma/GammaChar/GammaChar.json', JSON.stringify(c))
+    api.setActiveProjectDir('/games/Gamma')
+
+    const report = await api.detectAssetVersions()
+    expect(report.characters.map((r) => r.project).sort()).toEqual(['Alpha', 'Gamma'])
   })
 })
