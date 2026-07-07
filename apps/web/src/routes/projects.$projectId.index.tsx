@@ -61,6 +61,7 @@ import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 
+import type { CharacterWithProject } from '#/lib/rom/api.ts'
 import type { Gender, GenesisVersion } from '@dth/rom'
 
 /** Live preview of the picked Daz scene's tip thumbnail (read as a data URL). */
@@ -96,18 +97,18 @@ export const Route = createFileRoute('/projects/$projectId/')({
     setActiveProjectDir(params.projectId)
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
-    const [characters, allCharacters] = await Promise.all([
-      fetchCharacters({ data: { projectId: params.projectId } }),
-      fetchAllCharacters(),
-    ])
-    return { project, characters, allCharacters }
+    // Deliberately NOT fetching the cross-project prefill candidates here: that
+    // walks EVERY recent project's library, and one cold network share would
+    // stall this whole page. They load lazily when the prefill picker opens.
+    const characters = await fetchCharacters({ data: { projectId: params.projectId } })
+    return { project, characters }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters, allCharacters } = Route.useLoaderData()
+  const { project, characters } = Route.useLoaderData()
   // The reusable Daz-scene "assets" feature is opt-in per project (its manifest).
   // Off → the project shows characters only (no Assets tab).
   const assetsEnabled = project.assetsEnabled
@@ -118,6 +119,11 @@ function ProjectCharactersPage() {
   const [gender, setGender] = useState<Gender>('female')
   // 'empty' | an existing character's id (copy its ROM definitions).
   const [prefill, setPrefill] = useState<string>('empty')
+  // Cross-project ROM-prefill candidates. Loaded lazily the first time the
+  // prefill picker opens (null until then) — fetching them walks every recent
+  // project's library, which must never block opening the project page.
+  const [allCharacters, setAllCharacters] = useState<Array<CharacterWithProject> | null>(null)
+  const [prefillLoading, setPrefillLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // The create-character form lives in a slide-in side panel now. The panel and the
@@ -181,7 +187,20 @@ function ProjectCharactersPage() {
   const canCreate = Boolean(nameTrimmed) && !nameError
   // ROM-prefill candidates: characters from every project that match the chosen
   // G + gender (filtered for ROM compatibility; labelled with their project).
-  const prefillChars = allCharacters.filter((c) => c.genesis === genesis && c.gender === gender)
+  const prefillChars = (allCharacters ?? []).filter(
+    (c) => c.genesis === genesis && c.gender === gender,
+  )
+
+  // First open of the prefill picker kicks off the cross-project fetch; later
+  // opens reuse the loaded list (a failed fetch just leaves the picker empty).
+  function loadPrefillCandidates() {
+    if (allCharacters !== null || prefillLoading) return
+    setPrefillLoading(true)
+    fetchAllCharacters()
+      .then(setAllCharacters)
+      .catch(() => setAllCharacters([]))
+      .finally(() => setPrefillLoading(false))
+  }
 
   function applyScene(picked: string) {
     setScenePath(picked)
@@ -508,12 +527,21 @@ function ProjectCharactersPage() {
                     }
                     className="min-w-[12rem] flex-1"
                   >
-                    <Select value={prefill} onValueChange={setPrefill}>
+                    <Select
+                      value={prefill}
+                      onValueChange={setPrefill}
+                      onOpenChange={(isOpen) => isOpen && loadPrefillCandidates()}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="empty">Empty</SelectItem>
+                        {prefillLoading && (
+                          <SelectItem value="__loading" disabled>
+                            Loading characters…
+                          </SelectItem>
+                        )}
                         {prefillChars.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.projectName} - {c.name}

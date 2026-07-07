@@ -10,7 +10,8 @@ afterEach(cleanup)
 const openExternal = vi.fn()
 vi.mock('#/lib/desktop.ts', () => ({ openExternal: (url: string) => openExternal(url) }))
 
-import { ReleaseNotes, UpdatePromptHost } from './update-prompt'
+import { ReleaseNotes } from './release-notes'
+import { UpdatePromptHost } from './update-prompt'
 import {
   clearUpdatePrompt,
   requestUpdatePrompt,

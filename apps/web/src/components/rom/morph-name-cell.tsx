@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import type { ReactNode } from 'react'
 
@@ -6,6 +6,7 @@ import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 
 import { cellInputClass } from './cells.tsx'
 import { MorphIndexContext } from './contexts.ts'
+import type { IndexedMorphEntry } from './contexts.ts'
 
 /**
  * Wraps the first case-insensitive occurrence of the query in a highlight, so
@@ -48,15 +49,23 @@ export function MorphNameCell({
   const [draft, setDraft] = useState(value)
   const [open, setOpen] = useState(false)
   useEffect(() => setDraft(value), [value])
-  const q = draft.trim().toLowerCase()
-  const matches =
-    open && q.length >= 2 && index.length > 0
-      ? index
-          .filter(
-            (e) => e.name.toLowerCase().includes(q) || e.label.toLowerCase().includes(q),
-          )
-          .slice(0, 8)
-      : []
+  // The query is deferred so fast typing keeps the input responsive: React may
+  // render the keystroke first and catch the (memoized) filter up right after.
+  // The suggestions + highlights are computed from the SAME deferred value, so
+  // they always agree with each other. Matching semantics are unchanged — the
+  // index carries pre-lowercased keys, and the scan stops at the 8-result cap.
+  const q = useDeferredValue(draft.trim().toLowerCase())
+  const matches = useMemo<Array<IndexedMorphEntry>>(() => {
+    if (!open || q.length < 2 || index.length === 0) return []
+    const out: Array<IndexedMorphEntry> = []
+    for (const e of index) {
+      if (e.nameLower.includes(q) || e.labelLower.includes(q)) {
+        out.push(e)
+        if (out.length === 8) break
+      }
+    }
+    return out
+  }, [open, q, index])
   return (
     <div className="relative">
       <input
@@ -80,7 +89,7 @@ export function MorphNameCell({
       {matches.length > 0 && (
         <div className="absolute top-full left-0 z-30 mt-1 max-h-72 w-[30rem] max-w-[80vw] overflow-y-auto rounded-md border bg-popover text-popover-foreground p-1 shadow-lg">
           {matches.map((e) => {
-            const hitInternal = e.name.toLowerCase().includes(q)
+            const hitInternal = e.nameLower.includes(q)
             return (
               <button
                 type="button"
