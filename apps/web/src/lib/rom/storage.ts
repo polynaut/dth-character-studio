@@ -40,6 +40,7 @@ export {
   getCharacterFolder,
   getCharacterPath,
   listCharacters,
+  listNotesFiles,
   moveCharacter,
   moveCharactersRoot,
   moveFolder,

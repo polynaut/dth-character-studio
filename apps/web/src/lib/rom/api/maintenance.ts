@@ -2,15 +2,22 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
+import { projectsForSweep } from './core'
+import { gcNoteMedia } from './notes'
 
 // --- Housekeeping: keep app-generated data from filling the disk -------------
 // Product-scan CSVs (one per Daz scene, app-data) age out after
-// PRODUCT_SCAN_RETENTION_DAYS; the dedup quarantine (large, reversible backup) is
-// only ever emptied on the user's explicit request. deleteCharacter also prunes a
-// character's scan folder + avatar so nothing orphans going forward.
+// PRODUCT_SCAN_RETENTION_DAYS; unreferenced note media ages out after
+// NOTE_MEDIA_RETENTION_DAYS (the save-time GC usually gets there first); the
+// dedup quarantine (large, reversible backup) is only ever emptied on the
+// user's explicit request. deleteCharacter also prunes a character's scan
+// folder + avatar so nothing orphans going forward.
 
 /** Days a product-scan file is kept before the launch/manual sweep ages it out. */
 export const PRODUCT_SCAN_RETENTION_DAYS = 30
+
+/** Days an unreferenced note-media file is kept before the sweep removes it. */
+export const NOTE_MEDIA_RETENTION_DAYS = 7
 
 /** Files + bytes removed by a housekeeping action. */
 export interface HousekeepingResult {
@@ -19,17 +26,43 @@ export interface HousekeepingResult {
 }
 
 /**
+ * Backstop for the save-time note-media GC: for every known project, delete
+ * media files no notes file references anymore, once they're older than
+ * NOTE_MEDIA_RETENTION_DAYS. Covers projects whose notes are never saved
+ * again. A missing/offline project dir contributes nothing (skipped silently).
+ */
+export async function sweepNoteMedia(): Promise<HousekeepingResult> {
+  const total: HousekeepingResult = { filesDeleted: 0, bytesFreed: 0 }
+  for (const project of await projectsForSweep()) {
+    try {
+      const freed = await gcNoteMedia(project.path, NOTE_MEDIA_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+      total.filesDeleted += freed.filesDeleted
+      total.bytesFreed += freed.bytesFreed
+    } catch {
+      // an unreachable project — contributes nothing this sweep
+    }
+  }
+  return total
+}
+
+/**
  * Age-out stale product-scan files (not modified within the retention window)
- * under the app-data `product-scans` root, pruning folders they empty. Runs on
- * app launch and from the Tools "Clean up now" button. No-op in the plain web
- * build (no native layer).
+ * under the app-data `product-scans` root, pruning folders they empty, plus
+ * the note-media sweep across all known projects. Runs on app launch and from
+ * the Tools "Clean up now" button. No-op in the plain web build (no native
+ * layer).
  */
 export async function housekeepingSweep(): Promise<HousekeepingResult> {
   if (!isTauri()) return { filesDeleted: 0, bytesFreed: 0 }
+  const media = await sweepNoteMedia()
   const productScansDir = await storage.dataPath('product-scans')
-  return invoke<HousekeepingResult>('housekeeping_sweep', {
+  const scans = await invoke<HousekeepingResult>('housekeeping_sweep', {
     request: { productScansDir, maxAgeDays: PRODUCT_SCAN_RETENTION_DAYS },
   })
+  return {
+    filesDeleted: scans.filesDeleted + media.filesDeleted,
+    bytesFreed: scans.bytesFreed + media.bytesFreed,
+  }
 }
 
 /** The dedup quarantine folder's file count + size (Tools readout). Zeroed when

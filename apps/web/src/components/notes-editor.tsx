@@ -8,6 +8,7 @@ import { openExternal } from '#/lib/desktop.ts'
 import {
   addNoteMedia,
   fetchNotes,
+  NotesConflictError,
   openNoteMedia,
   resolveNoteMedia,
   saveNotes,
@@ -65,12 +66,21 @@ export function NotesEditor({
   // The latest text, for unmount-flush without re-subscribing the effect.
   const textRef = useRef(text)
   textRef.current = text
+  // The notes file's mtime as loaded / last written — threaded through every
+  // save so a concurrent edit from another window conflicts instead of being
+  // silently overwritten.
+  const mtimeRef = useRef<number | null>(null)
+  // One error toast per failure burst: debounced saves fire on every typing
+  // pause, and a persistent failure must not stack a toast per keystroke.
+  const saveFailedRef = useRef(false)
 
   useEffect(() => {
     let active = true
-    void fetchNotes({ data: { projectId, characterId } }).then((t) => {
+    void fetchNotes({ data: { projectId, characterId } }).then(({ text: stored, mtime }) => {
       if (!active) return
-      setText(t)
+      mtimeRef.current = mtime
+      saveFailedRef.current = false
+      setText(stored)
       setLoaded(true)
     })
     return () => {
@@ -78,14 +88,49 @@ export function NotesEditor({
     }
   }, [projectId, characterId])
 
+  /** Load the disk version into the editor, discarding the local draft. */
+  async function reloadFromDisk() {
+    window.clearTimeout(saveTimer.current)
+    saveTimer.current = 0
+    const { text: stored, mtime } = await fetchNotes({ data: { projectId, characterId } })
+    mtimeRef.current = mtime
+    saveFailedRef.current = false
+    setText(stored)
+    setSaveState('saved')
+  }
+
+  /** Toast a save failure (once per burst); a conflict offers Reload instead
+   *  of auto-clobbering (no reload offer from the unmount flush — there's no
+   *  editor left to reload into). */
+  function reportSaveError(e: unknown, offerReload: boolean) {
+    if (saveFailedRef.current) return
+    saveFailedRef.current = true
+    if (e instanceof NotesConflictError) {
+      toast.error(
+        'Notes changed on disk — probably another window.',
+        offerReload
+          ? {
+              duration: 10_000,
+              action: { label: 'Reload', onClick: () => void reloadFromDisk() },
+            }
+          : undefined,
+      )
+    } else {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   async function persist(value: string) {
     setSaveState('saving')
     try {
-      await saveNotes({ data: { projectId, characterId, text: value } })
+      mtimeRef.current = await saveNotes({
+        data: { projectId, characterId, text: value, expectedMtime: mtimeRef.current },
+      })
+      saveFailedRef.current = false
       setSaveState('saved')
     } catch (e) {
       setSaveState('error')
-      toast.error(e instanceof Error ? e.message : String(e))
+      reportSaveError(e, true)
     }
   }
 
@@ -101,7 +146,14 @@ export function NotesEditor({
     return () => {
       if (saveTimer.current) {
         window.clearTimeout(saveTimer.current)
-        void saveNotes({ data: { projectId, characterId, text: textRef.current } }).catch(() => {})
+        void saveNotes({
+          data: { projectId, characterId, text: textRef.current, expectedMtime: mtimeRef.current },
+        })
+          .then((mtime) => {
+            mtimeRef.current = mtime
+            saveFailedRef.current = false
+          })
+          .catch((e: unknown) => reportSaveError(e, false))
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
