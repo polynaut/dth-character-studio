@@ -91,7 +91,16 @@ async function ensureListening() {
           const matching = zone.acceptFolders
             ? p.paths
             : p.paths.filter((path) => zone.accept.includes(extOf(path)))
-          if (matching.length) zone.onDrop(matching)
+          if (matching.length) {
+            zone.onDrop(matching)
+            // An Explorer drop leaves the OS focus on Explorer while the app now
+            // shows the drop's result (e.g. the create-character drawer) — pull
+            // the window to the front so the user isn't left clicking into an
+            // unfocused window. Best-effort: Windows may deny focus stealing.
+            void getCurrentWebview()
+              .window.setFocus()
+              .catch(() => {})
+          }
         }
         draggedPaths = []
         setActive(null)

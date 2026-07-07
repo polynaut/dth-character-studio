@@ -6,6 +6,7 @@ import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import {
   characterSchema,
+  defaultSections,
   genderSchema,
   genesisVersionSchema,
   morphSchema,
@@ -18,6 +19,7 @@ import {
   charScopeInput,
   charsRoot,
   dirname,
+  fetchPoseAssets,
   joinPath,
   projectIdInput,
   resolveProject,
@@ -111,6 +113,29 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     createdAt: now,
     updatedAt: now,
     ...prefill,
+  }
+  // The stock defaults enable FAC in preset mode — only valid when the DTH
+  // release ships a FAC-variant base ROM for this generation (it doesn't for
+  // G8/G3). Start FAC disabled there; enabling it in the editor offers the
+  // custom morph list. Prefills copy a same-generation character, so they
+  // are already consistent and stay untouched.
+  if (!('sections' in prefill)) {
+    const catalog = await fetchPoseAssets()
+    const facAvailable =
+      catalog.error !== null ||
+      catalog.assets.length === 0 || // catalog unknown — don't restrict
+      catalog.assets.some(
+        (a) =>
+          (a.genesis === null || a.genesis === input.genesis) &&
+          a.section === 'JCM' &&
+          a.includesFac,
+      )
+    if (!facAvailable) {
+      const sections = defaultSections()
+      sections.FAC.enabled = false
+      sections.FAC.mode = 'custom'
+      base.sections = sections
+    }
   }
   // The picked scene's tip thumbnail becomes the avatar, and we record the scene
   // path as read-only provenance shown in the editor.

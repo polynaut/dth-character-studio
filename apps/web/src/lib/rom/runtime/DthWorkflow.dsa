@@ -23,10 +23,15 @@ function ApplyDTHWorkflow(options){
 	var oNode = Scene.getPrimarySelection();
 	var oNodeRoot = getNodeRoot(oNode);
 	if(!oNodeRoot || !oNodeRoot.inherits("DzNode")){
-		logRunError("Node `Genesis 9` not found in scene - select the figure and re-run. ROM aborted.");
+		logRunError("No figure selected - select the character's figure and re-run. ROM aborted.");
 		return false; }
+	// A separate mouth ROM (and mouth node) only exists on Genesis 9 - other
+	// generations keep their FAC frames in the base ROM. Only skip the mouth
+	// requirement when the config SAYS it's a non-G9 generation; a G9 (or
+	// legacy/hand-written) config keeps the fail-loud behavior.
+	var bMouthGeneration = !options["genesis"] || options["genesis"] == "G9";
 	var oNodeMouth = oNodeRoot.findNodeChildByLabel("Genesis 9 Mouth");
-	if(!oNodeMouth && options.bIncludeJCM && options.bIncludeFAC){
+	if(!oNodeMouth && options.bIncludeJCM && options.bIncludeFAC && bMouthGeneration){
 		logRunError("Node `Genesis 9 Mouth` not found in scene. ROM aborted.");
 		return false; }
 	var oNodeDk9 = oNodeRoot.findNodeChildByLabel("DicktatorG9");
@@ -220,7 +225,13 @@ function ApplyDefaultROMs(options, oNodeRoot, oNodeMouth){
 	// base ROM alone IS a successful load. The old flow only returned true from
 	// inside this branch, so JCM-without-FAC fell through to `return false` and
 	// silently aborted the whole workflow after loading the base.
-	if( options["bIncludeFAC"] ){
+	// On non-G9 generations a missing mouth ROM is NOT a failure: only Genesis 9
+	// ships one - elsewhere the FAC frames are part of the base ROM just loaded.
+	// A G9/legacy config without a mouth ROM still fails loud below.
+	var bMouthGeneration = !options["genesis"] || options["genesis"] == "G9";
+	if( options["bIncludeFAC"] && !bMouthGeneration && !sMouthROM ){
+		print("No mouth ROM for this generation - FAC frames are in the base ROM.");
+	} else if( options["bIncludeFAC"] ){
 		print("Loading Mouth ROM: ", sMouthROM);
 		setTotalFrames(iRomFrames);
 		if( !loadPreset(sMouthROM, oNodeMouth) ){
@@ -366,6 +377,7 @@ function ApplyDTHCharacter(config){
 	config = config || {};
 	// Override the shared defaults with whatever the character config supplies.
 	var keys = [
+		"genesis",
 		"bIncludeJCM", "bIncludeFAC", "bIncludeDK", "bIncludeGP", "bIncludePhysics", "bDQS",
 		"FACsDetailStrength", "FlexionStrength", "presetFrames",
 		"jcmRomPath", "mouthRomPath", "gpRomPath", "dkRomPath", "physRomPath",

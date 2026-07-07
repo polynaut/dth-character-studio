@@ -9,6 +9,22 @@ import { cn } from '#/lib/utils.ts'
 const ANIM_MS = 300
 
 /**
+ * Backdrop clicks that arrive right after the window gained OS focus are
+ * swallowed: when a file drop from Explorer opens the drawer while Explorer
+ * keeps focus, the user's next click into the app is just bringing the window
+ * to the front — closing the drawer on it would undo the drop they just made.
+ * (The window's focus event fires before the click is delivered, so "has focus
+ * right now" is always true by click time — recency is the reliable signal.)
+ */
+const FOCUS_CLICK_GRACE_MS = 400
+let lastWindowFocusAt = 0
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', () => {
+    lastWindowFocusAt = Date.now()
+  })
+}
+
+/**
  * A full-height overlay panel that slides in from the right (a "drawer"). The
  * backdrop fades in; the panel is `max-w-[50vw]` wide and scrolls its own body.
  * Esc or a backdrop click closes it. Portaled to <body> so a CSS-contained
@@ -71,7 +87,10 @@ export function SidePanel({
           'absolute inset-0 bg-black/50 transition-opacity duration-300',
           shown ? 'opacity-100' : 'opacity-0',
         )}
-        onClick={onClose}
+        onClick={() => {
+          if (Date.now() - lastWindowFocusAt < FOCUS_CLICK_GRACE_MS) return
+          onClose()
+        }}
       />
       <aside
         role="dialog"
