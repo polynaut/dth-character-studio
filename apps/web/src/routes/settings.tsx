@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, CircleCheck, Download, Save } from 'lucide-react'
+import { CircleCheck, Download } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
+import { FormHeader } from '#/components/form-header.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Switch } from '#/components/ui/switch.tsx'
@@ -616,20 +617,37 @@ function SettingsPage() {
     }
   }
 
+  // The sticky header's Save persists EVERY pending change — the machine settings
+  // (General tab) and, in a project window, the project manifest (Project tab) —
+  // one always-visible button regardless of which tab was edited.
+  const anyDirty = dirty || projectDirty
+  async function onSaveAll() {
+    if (dirty) await onSave()
+    if (projectDirty) await onSaveProjectSettings()
+  }
+  function onDiscardAll() {
+    setSettings(initial)
+    if (project) {
+      setPDazSubdir(project.dazSubdir ?? 'daz3d')
+      setPHoudiniSubdir(project.houdiniSubdir ?? 'houdini')
+      setPCreateHoudini(project.createHoudiniSubdir ?? true)
+      setPAssetsEnabled(project.assetsEnabled ?? false)
+      setPDazProductsEnabled(project.dazProductsEnabled ?? false)
+      setPCharactersSubdir(project.charactersSubdir ?? '')
+    }
+  }
+
   return (
     <main className="p-8">
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={goBack}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" /> {backLabel}
-        </button>
-      </div>
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold">Settings</h1>
-      </header>
+      <FormHeader
+        title="Settings"
+        backLabel={backLabel}
+        onBack={goBack}
+        dirty={anyDirty}
+        busy={busy || savingProject}
+        onDiscard={onDiscardAll}
+        onSave={() => void onSaveAll()}
+      />
 
       <Tabs defaultValue="general" className="max-w-3xl">
         <TabsList>
@@ -964,11 +982,6 @@ function SettingsPage() {
             </div>
           </section>
 
-          <div className="pt-1">
-            <Button onClick={onSave} disabled={busy || !dirty}>
-              <Save /> {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-            </Button>
-          </div>
         </TabsContent>
 
         {project && (
@@ -1079,9 +1092,6 @@ function SettingsPage() {
                   {detectingDim ? 'Detecting…' : 'Detect installed location'}
                 </Button>
               </div>
-              <Button onClick={onSaveProjectSettings} disabled={savingProject || !projectDirty}>
-                <Save /> {savingProject ? 'Saving…' : projectDirty ? 'Save' : 'Saved'}
-              </Button>
             </section>
           </TabsContent>
         )}
