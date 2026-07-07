@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { ChevronRight, FolderOpen, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -44,6 +44,7 @@ import type {
 
 import { ArtDirectionEditor } from './rom/art-direction.tsx'
 import { EMPTY_MORPH_INDEX, FigureNodeContext, MorphIndexContext } from './rom/contexts.ts'
+import type { IndexedMorphEntry } from './rom/contexts.ts'
 import { ImportCsvButton } from './rom/import-csv-button.tsx'
 import { PRESET_DESCRIPTIONS, PresetAssetPicker } from './rom/preset-asset-picker.tsx'
 import { PoseGroupsEditor, flatGroup } from './rom/pose-groups-editor.tsx'
@@ -103,6 +104,21 @@ export function RomSections({
     section: RomSection
     poses: Awaited<ReturnType<typeof importPosesFromCsv>>
   } | null>(null)
+
+  // Lowercase the autocomplete search keys ONCE per index (it can hold thousands
+  // of scanned morphs) — the per-keystroke filter in MorphNameCell then compares
+  // against these instead of re-lowercasing every entry on every character typed.
+  const indexedMorphs = useMemo<Array<IndexedMorphEntry>>(
+    () =>
+      morphIndex && morphIndex.length > 0
+        ? morphIndex.map((e) => ({
+            ...e,
+            nameLower: e.name.toLowerCase(),
+            labelLower: e.label.toLowerCase(),
+          }))
+        : EMPTY_MORPH_INDEX,
+    [morphIndex],
+  )
 
   // Absolute timeline frame of each custom group's first pose: the measured
   // preset ROM blocks (base, GP/DK, Physics) come first, then the custom
@@ -208,7 +224,7 @@ export function RomSections({
   }
 
   return (
-    <MorphIndexContext.Provider value={morphIndex ?? EMPTY_MORPH_INDEX}>
+    <MorphIndexContext.Provider value={indexedMorphs}>
     <FigureNodeContext.Provider value={genesisFigureNode(genesis, gender)}>
     <div className="space-y-2">
       {!presetFrames && (

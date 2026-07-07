@@ -356,7 +356,12 @@ export function CharacterProductsTab({
             )}
 
             {viewProducts.length > 0 ? (
-              <div className="overflow-x-auto">
+              // content-visibility skips layout/paint for the whole table while
+              // it's offscreen (big reports hold hundreds of rows). It sits on
+              // this wrapper because table rows can't carry size containment;
+              // `auto` in contain-intrinsic-size remembers the real height once
+              // rendered, so scrolling back up doesn't shift.
+              <div className="overflow-x-auto [contain-intrinsic-size:auto_40rem] [content-visibility:auto]">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-muted-foreground">
@@ -488,7 +493,12 @@ export function CharacterProductsTab({
                                 {assets.length ? (
                                   <ul className="space-y-0.5 text-sm">
                                     {assets.map((a, j) => (
-                                      <li key={`${a}-${j}`} className="text-foreground/80">
+                                      <li
+                                        key={`${a}-${j}`}
+                                        // Offscreen asset rows skip layout/paint
+                                        // (a product can be matched by hundreds).
+                                        className="text-foreground/80 [contain-intrinsic-size:auto_1.25rem] [content-visibility:auto]"
+                                      >
                                         {a}
                                       </li>
                                     ))}
@@ -521,7 +531,12 @@ export function CharacterProductsTab({
                 </summary>
                 <ul className="mt-2 space-y-1 text-sm">
                   {viewUnmatched.map((a, i) => (
-                    <li key={`${a.technicalName}-${a.name}-${i}`}>
+                    <li
+                      key={`${a.technicalName}-${a.name}-${i}`}
+                      // The unmatched list is the longest one on big scans —
+                      // offscreen rows skip layout/paint entirely.
+                      className="[contain-intrinsic-size:auto_1.25rem] [content-visibility:auto]"
+                    >
                       <span className="text-foreground/80">{a.name}</span>{' '}
                       <span className="text-muted-foreground">
                         ({a.assetType}

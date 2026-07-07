@@ -44,6 +44,7 @@ export {
   moveCharacter,
   moveCharactersRoot,
   moveFolder,
+  readCharacterAt,
   saveCharacter,
   setGeneratedDthVersion,
 } from './storage/characters'

@@ -1,7 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from '@tanstack/react-router'
-import { QueryClientProvider } from '@tanstack/react-query'
 
 import { isTauri } from '@tauri-apps/api/core'
 
@@ -26,9 +25,7 @@ if (!rootElement) throw new Error('Root element #root not found')
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={router.options.context.queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <RouterProvider router={router} />
   </StrictMode>,
 )
 

@@ -3,10 +3,16 @@ import { z } from 'zod'
 
 import * as storage from '../storage'
 
+// Type-only imports from the sibling modules that consume the session caches
+// below — erased at compile time, so they can't create a runtime import cycle
+// (characters.ts / products.ts import core.ts for real).
+import type { MorphIndexEntry } from './characters'
+import type { ProductScanResult } from './products'
+
 // Shared plumbing for the api/ modules: path helpers, the per-window active
 // project state, project→record resolution, the shared zod input schemas, and
-// the session-lived pose-asset catalog. All module-level mutable state lives
-// HERE (and only here) so the split modules stay stateless.
+// the session-lived pose-asset catalog + caches. All module-level mutable state
+// lives HERE (and only here) so the split modules stay stateless.
 
 export function joinPath(...parts: Array<string>): string {
   return parts
@@ -162,3 +168,34 @@ export async function rescanPoseAssets(): Promise<PoseAssets> {
   poseAssets = result.error ? null : result
   return result
 }
+
+// --- Session caches ----------------------------------------------------------
+// Plain Maps that skip the EXPENSIVE part of the hot loader paths (full library
+// walks, re-parsing big JSON/CSV files) while staying honest: every consumer
+// REVALIDATES cheaply before serving (a stat, an exists(), a dir listing), so
+// external changes are still picked up on the very next navigation or window
+// focus — nothing is served stale on trust. No TTLs, no library.
+
+/** Parsed + deduped morph index per generation, keyed on the source
+ *  `morphs_<G>.json`'s mtime+size — see {@link import('./characters').fetchMorphIndex}. */
+export const morphIndexCache = new Map<
+  string,
+  { stamp: string; entries: Array<MorphIndexEntry> }
+>()
+
+/**
+ * Where a character's definition lives, by `<charactersRoot>|<id>` — spares the
+ * full library scan on every character read. A hit is verified with one
+ * `exists()` before use; misses/stale entries fall back to the full scan and
+ * repopulate. Mutations that move/remove files clear the whole map (it only
+ * ever holds a handful of entries).
+ */
+export const characterLocationCache = new Map<string, storage.CharacterLocation>()
+
+export function invalidateCharacterLocations(): void {
+  characterLocationCache.clear()
+}
+
+/** Merged product-scan result per scan dir, keyed on the dir's CSV listing
+ *  (names + mtimes + sizes) — see {@link import('./products').fetchProductScan}. */
+export const productScanCache = new Map<string, { signature: string; result: ProductScanResult }>()

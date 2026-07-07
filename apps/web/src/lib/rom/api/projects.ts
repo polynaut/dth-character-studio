@@ -8,6 +8,7 @@ import {
   charsRoot,
   dirname,
   getActiveProjectDir,
+  invalidateCharacterLocations,
   joinPath,
   projectIdInput,
   projectPath,
@@ -131,6 +132,8 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
   if (nextCharactersSubdir !== manifest.charactersSubdir) {
     const oldRoot = manifest.charactersSubdir ? joinPath(dir, manifest.charactersSubdir) : dir
     const newRoot = nextCharactersSubdir ? joinPath(dir, nextCharactersSubdir) : dir
+    // Every character folder physically moves — the cached locations are all stale.
+    invalidateCharacterLocations()
     await storage.moveCharactersRoot(oldRoot, newRoot)
   }
   await storage.writeManifest(dir, {

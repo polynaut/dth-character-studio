@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useEffect } from 'react'
-import { Outlet, createRootRouteWithContext, useNavigate } from '@tanstack/react-router'
+import { Outlet, createRootRoute, useNavigate } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { Toaster, toast } from 'sonner'
@@ -12,16 +12,10 @@ import { checkForUpdates } from '#/lib/updater.ts'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import { TooltipHost } from '#/components/ui/tooltip-host.tsx'
 import { Button } from '#/components/ui/button.tsx'
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
-import type { QueryClient } from '@tanstack/react-query'
 import type { ErrorComponentProps } from '@tanstack/react-router'
 
-interface MyRouterContext {
-  queryClient: QueryClient
-}
-
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRoute({
   component: RootComponent,
   errorComponent: RootErrorComponent,
 })
@@ -130,7 +124,6 @@ function RootComponent() {
               name: 'Tanstack Router',
               render: <TanStackRouterDevtoolsPanel />,
             },
-            TanStackQueryDevtools,
           ]}
         />
       )}

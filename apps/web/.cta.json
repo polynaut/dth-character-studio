@@ -15,7 +15,6 @@
   "framework": "react",
   "chosenAddOns": [
     "table",
-    "tanstack-query",
     "form",
     "shadcn"
   ]
