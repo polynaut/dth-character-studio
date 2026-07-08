@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import Markdown, { defaultUrlTransform } from 'react-markdown'
+import { Check, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { Button } from '#/components/ui/button.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import { openExternal } from '#/lib/desktop.ts'
 import {
   addNoteMedia,
@@ -42,7 +43,8 @@ function NoteImage({ projectId, src, alt }: { projectId: string; src?: string; a
 }
 
 /**
- * Freeform markdown notes for a project or character — write/preview tabs, a
+ * Freeform markdown notes for a project or character — rendered markdown by
+ * default with a hover pencil to edit (Done/Esc returns to the view), a
  * debounced autosave, and native drag-and-drop for media: a dropped file is
  * stored in the project's `.dcsmeta/media/` (like avatar images) and the right
  * markdown tag (image or link) lands at the cursor. `media://` images resolve
@@ -59,7 +61,7 @@ export function NotesEditor({
 }) {
   const [text, setText] = useState('')
   const [loaded, setLoaded] = useState(false)
-  const [mode, setMode] = useState<'write' | 'preview'>('write')
+  const [mode, setMode] = useState<'write' | 'preview'>('preview')
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const saveTimer = useRef(0)
@@ -187,43 +189,51 @@ export function NotesEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <Tabs value={mode} onValueChange={(v) => setMode(v === 'preview' ? 'preview' : 'write')}>
-          <TabsList>
-            <TabsTrigger value="write">Write</TabsTrigger>
-            <TabsTrigger value="preview">Preview</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : loaded && text ? 'Saved' : ''}
-        </span>
-      </div>
       {mode === 'write' ? (
-        <FileDropZone
-          acceptFolders
-          onDrop={(paths) => void onDropMedia(paths)}
-          label="Drop images / media to embed"
-          className="rounded-md"
-        >
-          <textarea
-            ref={areaRef}
-            value={text}
-            disabled={!loaded}
-            placeholder={
-              placeholder ??
-              'Write notes in markdown — drop images or other files right into the editor…'
-            }
-            className="min-h-64 w-full resize-y rounded-md border bg-muted/40 p-3 font-mono text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring"
-            onChange={(e) => scheduleSave(e.target.value)}
-            onBlur={() => {
-              window.clearTimeout(saveTimer.current)
-              saveTimer.current = 0
-              void persist(textRef.current)
-            }}
-          />
-        </FileDropZone>
+        <>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              Markdown — drop images or other files right into the editor
+            </span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Saved'}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setMode('preview')}>
+              <Check /> Done
+            </Button>
+          </div>
+          <FileDropZone
+            acceptFolders
+            onDrop={(paths) => void onDropMedia(paths)}
+            label="Drop images / media to embed"
+            className="rounded-md"
+          >
+            <textarea
+              ref={areaRef}
+              value={text}
+              disabled={!loaded}
+              autoFocus
+              placeholder={
+                placeholder ??
+                'Write notes in markdown — drop images or other files right into the editor…'
+              }
+              className="min-h-64 w-full resize-y rounded-md border bg-muted/40 p-3 font-mono text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring"
+              onChange={(e) => scheduleSave(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setMode('preview')
+              }}
+              onBlur={() => {
+                window.clearTimeout(saveTimer.current)
+                saveTimer.current = 0
+                void persist(textRef.current)
+              }}
+            />
+          </FileDropZone>
+        </>
       ) : (
-        <div className="min-h-64 rounded-md border bg-card p-4 text-sm text-muted-foreground">
+        // Rendered markdown is the DEFAULT view; a small pencil appears on
+        // hover (an empty note is fully clickable) to switch into the editor.
+        <div className="group/notes relative min-h-32 rounded-md border bg-card p-4 text-sm text-muted-foreground">
           {text.trim() ? (
             <div className="space-y-2 [overflow-wrap:anywhere]">
               <Markdown
@@ -283,8 +293,24 @@ export function NotesEditor({
               </Markdown>
             </div>
           ) : (
-            <p className="text-xs">Nothing to preview yet.</p>
+            <button
+              type="button"
+              className="block w-full cursor-text py-6 text-left text-xs"
+              onClick={() => setMode('write')}
+            >
+              No notes yet — click to write (markdown, with drag-and-drop media).
+            </button>
           )}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            title="Edit notes"
+            aria-label="Edit notes"
+            className="absolute top-2 right-2 opacity-0 transition-opacity group-hover/notes:opacity-100 focus-visible:opacity-100"
+            onClick={() => setMode('write')}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
         </div>
       )}
     </div>
