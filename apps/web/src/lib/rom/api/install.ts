@@ -59,6 +59,7 @@ const settingsInput = z.object({
   currentDthExporterVersion: z.string().default(''),
   dazInstallFolder: z.string().default(''),
   houdiniDocsFolder: z.string().default(''),
+  extraHoudiniDocsFolders: z.array(z.string()).default([]),
   dimManifestsFolder: z.string().default(''),
   dazAssetsFolders: z.array(z.string()).default([]),
   dazMorphsSource: z.string().default(''),
@@ -105,10 +106,16 @@ export interface InstallReport {
  * previews without writing.
  */
 export async function installDthRelease({ data }: { data: unknown }): Promise<InstallReport> {
-  const { dryRun, target } = z
-    .object({ dryRun: z.boolean().optional(), target: z.enum(['daz', 'houdini']) })
+  const { dryRun, target, houdiniDocsFolder } = z
+    .object({
+      dryRun: z.boolean().optional(),
+      target: z.enum(['daz', 'houdini']),
+      /** Install the Houdini half into THIS folder instead of the primary one
+       *  (an extra Houdini version from Settings). */
+      houdiniDocsFolder: z.string().optional(),
+    })
     .parse(data ?? {})
-  const plan = await storage.resolveReleaseInstall(target)
+  const plan = await storage.resolveReleaseInstall(target, houdiniDocsFolder)
   if (plan.errors.length) throw new Error(plan.errors.join('\n'))
   return invoke<InstallReport>('install_dth_release', {
     request: {
