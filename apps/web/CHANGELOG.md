@@ -1,5 +1,28 @@
 # @dth/web
 
+## 0.38.0
+
+### Minor Changes
+
+- [#194](https://github.com/polynaut/dth-character-studio/pull/194) [`98228d1`](https://github.com/polynaut/dth-character-studio/commit/98228d1c66f4498bdb66a782d0e416600f751260) Thanks [@polynaut](https://github.com/polynaut)! - Multiple Houdini installations: Settings can now hold additional Houdini
+  documents folders (older/parallel Houdini versions), each with its own Dry
+  run/Install pair for the DTH release's Houdini assets. Pick an older release
+  in the version dropdown, install it into the old Houdini's folder, switch the
+  dropdown back — the old Houdini keeps the old DTH while your primary stays
+  current.
+
+- [#193](https://github.com/polynaut/dth-character-studio/pull/193) [`dbdc712`](https://github.com/polynaut/dth-character-studio/commit/dbdc7121ece1a21127abd3457d96769c502e8f0a) Thanks [@polynaut](https://github.com/polynaut)! - Opening a linked Daz scene now works while Daz Studio is already running. Daz
+  (DS 6) silently ignores scene files forwarded to a running instance — Explorer
+  double-click does nothing either. The studio detects the running instance and
+  routes the open through a one-shot script instead, which Daz forwards and
+  executes: the scene opens inside the running instance, with Daz's normal
+  unsaved-changes prompt. No instance running → unchanged direct open.
+
+### Patch Changes
+
+- Updated dependencies [[`98228d1`](https://github.com/polynaut/dth-character-studio/commit/98228d1c66f4498bdb66a782d0e416600f751260), [`dbdc712`](https://github.com/polynaut/dth-character-studio/commit/dbdc7121ece1a21127abd3457d96769c502e8f0a)]:
+  - @dth/rom@0.38.0
+
 ## 0.37.0
 
 ### Minor Changes
