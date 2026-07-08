@@ -11,7 +11,6 @@ import { Button } from '#/components/ui/button.tsx'
  */
 export function FormHeader({
   title,
-  backLabel = 'Back',
   onBack,
   dirty,
   busy,
@@ -19,7 +18,6 @@ export function FormHeader({
   onSave,
 }: {
   title: string
-  backLabel?: string
   onBack: () => void
   dirty: boolean
   busy: boolean
@@ -33,9 +31,9 @@ export function FormHeader({
       <button
         type="button"
         onClick={onBack}
-        className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="mb-2 flex items-center gap-1 text-sm text-primary hover:text-primary/80"
       >
-        <ArrowLeft className="size-4" /> {backLabel}
+        <ArrowLeft className="size-4" /> Back
       </button>
       <div className="flex items-center gap-4">
         <h1 className="text-3xl font-bold">{title}</h1>

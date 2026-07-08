@@ -289,8 +289,6 @@ function NetworkDrivesSection() {
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
   const router = useRouter()
-  const { from } = Route.useSearch()
-  const backLabel = from ? `Back to ${from}` : 'Back'
 
   // Reachable from several places, so return to wherever we came from (falling
   // back to the projects home if there's no history to pop) — like the About page.
@@ -647,7 +645,6 @@ function SettingsPage() {
     <main className="p-8">
       <FormHeader
         title="Settings"
-        backLabel={backLabel}
         onBack={goBack}
         dirty={anyDirty}
         busy={busy || savingProject}

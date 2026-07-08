@@ -226,7 +226,7 @@ export function UnrealProjectsBar({
         ))}
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void onPick()}>
           <Plus />
-          {busy ? 'Linking…' : project.unrealProjects.length ? 'Add' : 'Link Unreal project'}
+          {busy ? 'Linking…' : project.unrealProjects.length ? 'Add' : 'Link'}
         </Button>
       </div>
     </FileDropZone>
