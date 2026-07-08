@@ -118,6 +118,7 @@ pub fn run() {
             scripts::install_daztohue_scripts,
             scripts::latest_daztohue_commit,
             scripts::app_release_tags,
+            scripts::daz_studio_running,
             install::install_daz_merge,
             install::install_houdini_presets,
             drives::unc_for_path,
