@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { CircleCheck, Download } from 'lucide-react'
+import { CircleCheck, Download, Plus } from 'lucide-react'
 
 import { Button } from '#/components/ui/button.tsx'
 import { FormHeader } from '#/components/form-header.tsx'
@@ -513,7 +513,9 @@ function SettingsPage() {
     settings.dthExporterFolder !== initial.dthExporterFolder ||
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
-    settings.houdiniDocsFolder !== initial.houdiniDocsFolder
+    settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
+    JSON.stringify(settings.extraHoudiniDocsFolders) !==
+      JSON.stringify(initial.extraHoudiniDocsFolders)
   // Leaving with unsaved settings asks first (no programmatic navigations here —
   // the install flows save before acting, gated on this same dirty flag).
   useUnsavedChangesGuard(dirty, 'You have unsaved settings — leave and lose them?')
@@ -819,6 +821,98 @@ function SettingsPage() {
                   <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
                 </Button>
               </div>
+            </div>
+
+            {/* Additional Houdini versions: each folder is its own install target,
+                so an OLD Houdini can carry an OLD DTH release (pick that version
+                in the release dropdown above, install here, switch back) while
+                the primary folder stays on the current one. */}
+            {settings.extraHoudiniDocsFolders.map((folder, i) => (
+              <div key={i} className="border-t pt-4">
+                <FolderField
+                  label={`Additional Houdini documents folder ${i + 1}`}
+                  value={folder}
+                  placeholder="C:\Users\you\Documents\houdini19.5"
+                  onChange={(value) =>
+                    setSettings((s) => ({
+                      ...s,
+                      extraHoudiniDocsFolders: s.extraHoudiniDocsFolders.map((f, fi) =>
+                        fi === i ? value : f,
+                      ),
+                    }))
+                  }
+                  help={
+                    <>
+                      Another Houdini version's user folder — installs the release picked
+                      above into it, independent of the primary folder.
+                    </>
+                  }
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      runInstall(
+                        (args) =>
+                          installDthRelease({
+                            data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
+                          }),
+                        true,
+                        setReleaseInstalling,
+                        setReleaseReport,
+                      )
+                    }
+                    disabled={!releaseReady || !folder.trim() || releaseInstalling}
+                  >
+                    {releaseInstalling ? 'Working…' : 'Dry run'}
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      runInstall(
+                        (args) =>
+                          installDthRelease({
+                            data: { ...args.data, target: 'houdini', houdiniDocsFolder: folder },
+                          }),
+                        false,
+                        setReleaseInstalling,
+                        setReleaseReport,
+                      )
+                    }
+                    disabled={!releaseReady || !folder.trim() || releaseInstalling}
+                  >
+                    <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={() =>
+                      setSettings((s) => ({
+                        ...s,
+                        extraHoudiniDocsFolders: s.extraHoudiniDocsFolders.filter(
+                          (_, fi) => fi !== i,
+                        ),
+                      }))
+                    }
+                    disabled={releaseInstalling}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setSettings((s) => ({
+                    ...s,
+                    extraHoudiniDocsFolders: [...s.extraHoudiniDocsFolders, ''],
+                  }))
+                }
+              >
+                <Plus /> Add another Houdini folder
+              </Button>
             </div>
 
             {releaseReport && (
