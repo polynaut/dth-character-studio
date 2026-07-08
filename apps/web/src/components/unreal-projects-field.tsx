@@ -10,6 +10,7 @@ import unrealLogo from '#/assets/unreal-logo.svg'
 import {
   installUnrealDthContent,
   openScene,
+  revealPath,
   setUnrealProjects,
   unrealDthContentPresent,
 } from '#/lib/rom/api.ts'
@@ -37,7 +38,7 @@ function UnrealCard({
   /** undefined while the Content/DazToHue probe is still running. */
   dthPresent: boolean | undefined
   installing: boolean
-  onOpen: () => void
+  onOpen: (e: React.MouseEvent) => void
   onInstall: (e: React.MouseEvent) => void
   onRemove: () => void
 }) {
@@ -195,13 +196,18 @@ export function UnrealProjectsBar({
             uprojectPath={path}
             dthPresent={dthStatus[path]}
             installing={installingPath === path}
-            onOpen={() =>
-              // Surface failures — a scope/association problem otherwise looks
+            onOpen={(e) => {
+              // Shift+click = the app-wide "show in Explorer" hotkey (same as
+              // path chips); plain click opens the project in Unreal. Failures
+              // surface as toasts — a scope/association problem otherwise looks
               // like a dead button (exactly how the .uproject scope bug hid).
-              void openScene({ data: { scenePath: path } }).catch((e: unknown) =>
-                toast.error(e instanceof Error ? e.message : String(e)),
+              const action = e.shiftKey
+                ? revealPath({ data: { path } })
+                : openScene({ data: { scenePath: path } })
+              void action.catch((err: unknown) =>
+                toast.error(err instanceof Error ? err.message : String(err)),
               )
-            }
+            }}
             onInstall={(e) => void installDth(path, e)}
             onRemove={() =>
               void save(

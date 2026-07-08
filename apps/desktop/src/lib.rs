@@ -122,6 +122,7 @@ pub fn run() {
             install::install_daz_merge,
             install::install_houdini_presets,
             install::install_unreal_dth,
+            install::unreal_dth_present,
             drives::unc_for_path,
             drives::ensure_network_drives,
             poses::pose_asset_frames,
