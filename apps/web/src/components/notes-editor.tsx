@@ -233,7 +233,7 @@ export function NotesEditor({
       ) : (
         // Rendered markdown is the DEFAULT view; a small pencil appears on
         // hover (an empty note is fully clickable) to switch into the editor.
-        <div className="group/notes relative min-h-32 rounded-md border bg-card p-4 text-sm text-muted-foreground">
+        <div className="group/notes relative min-h-32 rounded-md border bg-card p-4 text-base text-muted-foreground">
           {text.trim() ? (
             <div className="space-y-2 [overflow-wrap:anywhere]">
               <Markdown
@@ -245,13 +245,13 @@ export function NotesEditor({
                 }
                 components={{
                   h1: ({ children }) => (
-                    <h3 className="pt-1 text-base font-semibold text-foreground">{children}</h3>
+                    <h3 className="pt-1 text-xl font-semibold text-foreground">{children}</h3>
                   ),
                   h2: ({ children }) => (
-                    <h4 className="pt-1 text-sm font-semibold text-foreground">{children}</h4>
+                    <h4 className="pt-1 text-lg font-semibold text-foreground">{children}</h4>
                   ),
                   h3: ({ children }) => (
-                    <h5 className="pt-1 text-sm font-semibold text-foreground">{children}</h5>
+                    <h5 className="pt-1 text-base font-semibold text-foreground">{children}</h5>
                   ),
                   p: ({ children }) => <p className="leading-relaxed">{children}</p>,
                   ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
@@ -263,7 +263,7 @@ export function NotesEditor({
                     <strong className="font-semibold text-foreground">{children}</strong>
                   ),
                   code: ({ children }) => (
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+                    <code className="rounded bg-muted px-1 py-0.5 text-sm">{children}</code>
                   ),
                   img: ({ src, alt }) => (
                     <NoteImage projectId={projectId} src={typeof src === 'string' ? src : undefined} alt={alt} />
