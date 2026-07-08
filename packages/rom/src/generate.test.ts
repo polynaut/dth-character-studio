@@ -895,9 +895,15 @@ describe('toPoseAssetCsv — G8.1 template (pre-2.0 / CTL era)', () => {
     expect(file.content).not.toContain('CURVEGROUP')
   })
 
-  it('stays experimental on the wrong era or an unexpected base length', () => {
+  it('emits the template under ANY active era (G8.1 targets the pre-2.0 HDA)', () => {
     const character = makeCharacter({ genesis: 'G8.1' })
-    expect(toPoseAssetCsv(character, G81_FRAMES, '2.0').experimental).toBe(true)
+    const file = toPoseAssetCsv(character, G81_FRAMES, '2.0')
+    expect(file.experimental).toBeUndefined()
+    expect(file.content).toContain('CTL,facWrinkle44_mat')
+  })
+
+  it('stays experimental on an unexpected base length', () => {
+    const character = makeCharacter({ genesis: 'G8.1' })
     expect(toPoseAssetCsv(character, { ...G81_FRAMES, base: 190 }, '').experimental).toBe(true)
   })
 
