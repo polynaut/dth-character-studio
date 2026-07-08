@@ -49,8 +49,8 @@ function UnrealCard({
 }) {
   const fileName = uprojectPath.split(/[\\/]/).pop() ?? uprojectPath
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
-  // Shift held → the open icon previews the alternate action (show in Explorer).
-  const shiftHeld = useModifierHeld('Shift')
+  // Alt held → the open icon previews the alternate action (show in Explorer).
+  const altHeld = useModifierHeld('Alt')
   const dir = displayPath(uprojectPath).replace(/[\\/][^\\/]*$/, '')
   return (
     <div className="group/card relative">
@@ -66,7 +66,7 @@ function UnrealCard({
             <span className="block truncate text-sm font-medium">{displayName}</span>
             <span className="block max-w-72 truncate text-xs text-muted-foreground">{dir}</span>
           </span>
-          {shiftHeld ? (
+          {altHeld ? (
             <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
           ) : (
             <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
@@ -210,11 +210,11 @@ export function UnrealProjectsBar({
             ctrlHeld={ctrlHeld || metaHeld}
             installing={installingPath === path}
             onOpen={(e) => {
-              // Shift+click = the app-wide "show in Explorer" hotkey (same as
+              // Alt+click = the app-wide "show in Explorer" hotkey (same as
               // path chips); plain click opens the project in Unreal. Failures
               // surface as toasts — a scope/association problem otherwise looks
               // like a dead button (exactly how the .uproject scope bug hid).
-              const action = e.shiftKey
+              const action = e.altKey
                 ? revealPath({ data: { path } })
                 : openScene({ data: { scenePath: path } })
               void action.catch((err: unknown) =>

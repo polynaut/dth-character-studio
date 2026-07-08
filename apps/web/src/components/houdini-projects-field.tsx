@@ -42,8 +42,8 @@ function HoudiniCard({
   const fileName = hipPath.split(/[\\/]/).pop() ?? hipPath
   // The heading shows the project name without its extension (e.g. ".hiplc").
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
-  // Shift held → the open icon previews the alternate action (show in Explorer).
-  const shiftHeld = useModifierHeld('Shift')
+  // Alt held → the open icon previews the alternate action (show in Explorer).
+  const altHeld = useModifierHeld('Alt')
   // The chip shows the project's folder; when it sits inside the character's own
   // folder, collapse that prefix to "%CHAR%" (like the Daz scene cards).
   const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
@@ -87,7 +87,7 @@ function HoudiniCard({
             </code>
           )}
         </div>
-        {shiftHeld ? (
+        {altHeld ? (
           <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
         ) : (
           <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
@@ -167,17 +167,17 @@ export function HoudiniProjectsField({
     </PathCode>
   )
 
-  // Shift+click = the app-wide "show in Explorer" hotkey (same as path chips
+  // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the project in Houdini.
   async function onOpen(hipPath: string, e?: React.MouseEvent) {
     setError('')
     try {
-      if (e?.shiftKey) await revealPath({ data: { path: hipPath } })
+      if (e?.altKey) await revealPath({ data: { path: hipPath } })
       else await openScene({ data: { scenePath: hipPath } })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
-      toast.error(e?.shiftKey ? msg : `Couldn't open in Houdini: ${msg}`)
+      toast.error(e?.altKey ? msg : `Couldn't open in Houdini: ${msg}`)
     }
   }
 

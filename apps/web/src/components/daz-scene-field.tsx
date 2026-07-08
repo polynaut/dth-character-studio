@@ -57,8 +57,8 @@ function SceneCard({
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The heading shows the scene name without its extension (e.g. ".duf").
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
-  // Shift held → the open icon previews the alternate action (show in Explorer).
-  const shiftHeld = useModifierHeld('Shift')
+  // Alt held → the open icon previews the alternate action (show in Explorer).
+  const altHeld = useModifierHeld('Alt')
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
   // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
   // nested. Empty for a scene linked outside the character folder.
@@ -107,7 +107,7 @@ function SceneCard({
             </div>
           )}
         </div>
-        {shiftHeld ? (
+        {altHeld ? (
           <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
         ) : (
           <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
@@ -214,17 +214,17 @@ export function DazSceneField({
       : defaultSubdir
   const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
 
-  // Shift+click = the app-wide "show in Explorer" hotkey (same as path chips
+  // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
   async function onOpen(scenePath: string, e?: React.MouseEvent) {
     setError('')
     try {
-      if (e?.shiftKey) await revealPath({ data: { path: scenePath } })
+      if (e?.altKey) await revealPath({ data: { path: scenePath } })
       else await openScene({ data: { scenePath } })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
-      toast.error(e?.shiftKey ? msg : `Couldn't open in Daz: ${msg}`)
+      toast.error(e?.altKey ? msg : `Couldn't open in Daz: ${msg}`)
     }
   }
 
