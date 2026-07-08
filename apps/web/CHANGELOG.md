@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.1
+
+### Patch Changes
+
+- [#203](https://github.com/polynaut/dth-character-studio/pull/203) [`69d0105`](https://github.com/polynaut/dth-character-studio/commit/69d01052a02439ba34ebed68e99c4eb418ddd838) Thanks [@polynaut](https://github.com/polynaut)! - Shift+click "show in Explorer" now also works on the Daz scene cards and the
+  Houdini project cards — the one hotkey everywhere: plain click opens the file
+  in its app, Shift+click reveals its folder.
+- Updated dependencies [[`69d0105`](https://github.com/polynaut/dth-character-studio/commit/69d01052a02439ba34ebed68e99c4eb418ddd838)]:
+  - @dth/rom@0.41.1
+
 ## 0.41.0
 
 ### Minor Changes
