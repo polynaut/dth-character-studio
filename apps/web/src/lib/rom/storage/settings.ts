@@ -48,6 +48,12 @@ export interface StudioSettings {
    */
   houdiniDocsFolder: string
   /**
+   * ADDITIONAL Houdini documents folders (older/parallel Houdini versions) -
+   * each is an alternative install target for a DTH release's Houdini assets,
+   * so an old Houdini can keep an old DTH while the primary stays current.
+   */
+  extraHoudiniDocsFolders: Array<string>
+  /**
    * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
    * by the Daz Products scan to resolve scene assets to installed products
    * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs
@@ -97,6 +103,7 @@ function defaultSettings(): StudioSettings {
     currentDthExporterVersion: '',
     dazInstallFolder: '',
     houdiniDocsFolder: '',
+    extraHoudiniDocsFolders: [],
     dimManifestsFolder: '',
     dazAssetsFolders: [],
     dazMorphsSource: '',
@@ -141,6 +148,9 @@ export async function getSettings(): Promise<StudioSettings> {
         typeof raw.houdiniDocsFolder === 'string'
           ? raw.houdiniDocsFolder
           : defaults.houdiniDocsFolder,
+      extraHoudiniDocsFolders: Array.isArray(raw.extraHoudiniDocsFolders)
+        ? raw.extraHoudiniDocsFolders.filter((p: unknown): p is string => typeof p === 'string')
+        : [],
       dimManifestsFolder:
         typeof raw.dimManifestsFolder === 'string'
           ? raw.dimManifestsFolder

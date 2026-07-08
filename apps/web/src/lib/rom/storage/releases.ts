@@ -341,6 +341,9 @@ export interface ReleaseInstall {
  */
 export async function resolveReleaseInstall(
   target: 'daz' | 'houdini' | 'all' = 'all',
+  /** Install the Houdini half into THIS docs folder instead of the primary one
+   *  (an "additional Houdini folder" from Settings - older/parallel versions). */
+  houdiniDocsOverride?: string,
 ): Promise<ReleaseInstall> {
   const s = await getSettings()
   const errors: Array<string> = []
@@ -348,14 +351,15 @@ export async function resolveReleaseInstall(
   if (release.error || !release.releaseRoot) {
     errors.push(release.error ?? 'No DTH release resolved — set the DTH release folder.')
   }
+  const houdiniDocs = houdiniDocsOverride?.trim() || s.houdiniDocsFolder
   if (target !== 'houdini' && !s.dazLibraryFolder) errors.push('Set “My DAZ 3D Library”.')
-  if (target === 'houdini' && !s.houdiniDocsFolder) errors.push('Set the Houdini documents folder.')
+  if (target === 'houdini' && !houdiniDocs) errors.push('Set the Houdini documents folder.')
   return {
     releaseRoot: release.releaseRoot,
     releaseName: release.name,
     releaseVersion: release.version,
     dazLibFolder: s.dazLibraryFolder,
-    houdiniDocsFolder: s.houdiniDocsFolder,
+    houdiniDocsFolder: houdiniDocs,
     errors,
   }
 }
