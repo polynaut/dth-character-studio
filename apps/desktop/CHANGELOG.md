@@ -1,5 +1,24 @@
 # @dth/desktop
 
+## 0.41.3
+
+### Patch Changes
+
+- [#207](https://github.com/polynaut/dth-character-studio/pull/207) [`2d3e0c0`](https://github.com/polynaut/dth-character-studio/commit/2d3e0c060a740a2e306e37331def93553081f02b) Thanks [@polynaut](https://github.com/polynaut)! - Back navigation aligned: every back link is simply "Back", always orange —
+  and the character page's sticky header grows its own Back link that fades in
+  as you scroll, so navigating back never requires scrolling up first. The
+  Unreal bar's empty-state button is just "+ Link" now.
+
+- [#207](https://github.com/polynaut/dth-character-studio/pull/207) [`2d3e0c0`](https://github.com/polynaut/dth-character-studio/commit/2d3e0c060a740a2e306e37331def93553081f02b) Thanks [@polynaut](https://github.com/polynaut)! - G8.1 characters no longer show the "experimental" tag when the standard
+  DQS + JCM/FAC preset setup matches — regardless of which DTH release is
+  active. G8.1 CSVs target the old-Houdini pipeline's HDA and the G8.1 assets
+  are identical across releases, so the validated 188-frame template applies
+  either way.
+
+- [#207](https://github.com/polynaut/dth-character-studio/pull/207) [`2d3e0c0`](https://github.com/polynaut/dth-character-studio/commit/2d3e0c060a740a2e306e37331def93553081f02b) Thanks [@polynaut](https://github.com/polynaut)! - Notes render as markdown by default — the Write/Preview tabs are gone. A small
+  pencil appears when hovering the notes (an empty note is fully clickable) to
+  switch into the editor; Done or Escape returns to the rendered view.
+
 ## 0.41.2
 
 ### Patch Changes
