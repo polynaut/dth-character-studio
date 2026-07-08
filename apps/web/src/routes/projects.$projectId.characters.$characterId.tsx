@@ -463,7 +463,7 @@ function CharacterPage() {
               swallowNavRef.current = false
             }
           }}
-          className="flex items-center gap-1 text-sm text-primary hover:text-primary/80"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" /> Back
         </Link>
@@ -478,7 +478,7 @@ function CharacterPage() {
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
-            className="backlink-scroll flex items-center gap-1 text-sm text-primary hover:text-primary/80"
+            className="backlink-scroll flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-4" /> Back
           </Link>

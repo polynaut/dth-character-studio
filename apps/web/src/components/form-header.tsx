@@ -31,7 +31,7 @@ export function FormHeader({
       <button
         type="button"
         onClick={onBack}
-        className="mb-2 flex items-center gap-1 text-sm text-primary hover:text-primary/80"
+        className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" /> Back
       </button>
