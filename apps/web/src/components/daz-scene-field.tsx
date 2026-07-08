@@ -19,6 +19,7 @@ import {
   deleteFiles,
   moveCharacterScenesFolder,
   openScene,
+  revealPath,
   relinkScene,
   saveCharacter,
 } from '#/lib/rom/api.ts'
@@ -45,7 +46,7 @@ function SceneCard({
   /** The character's folder; the scene's path relative to it (incl. the daz
    *  scenes folder) is shown as a chip, e.g. "%CHAR%\daz3d\Outfit_Summertide\". */
   charFolderAbs: string
-  onOpen: () => void
+  onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
   /** The character's original creation scene — gets a "primary" badge and is not
@@ -206,14 +207,17 @@ export function DazSceneField({
       : defaultSubdir
   const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
 
-  async function onOpen(scenePath: string) {
+  // Shift+click = the app-wide "show in Explorer" hotkey (same as path chips
+  // and the Unreal cards); plain click opens the scene in Daz.
+  async function onOpen(scenePath: string, e?: React.MouseEvent) {
     setError('')
     try {
-      await openScene({ data: { scenePath } })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      if (e?.shiftKey) await revealPath({ data: { path: scenePath } })
+      else await openScene({ data: { scenePath } })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
-      toast.error(`Couldn't open in Daz: ${msg}`)
+      toast.error(e?.shiftKey ? msg : `Couldn't open in Daz: ${msg}`)
     }
   }
 
@@ -514,7 +518,7 @@ export function DazSceneField({
                   scenePath={character.scenePath}
                   name={character.name}
                   charFolderAbs={charFolder}
-                  onOpen={() => void onOpen(character.scenePath)}
+                  onOpen={(e) => void onOpen(character.scenePath, e)}
                   primary
                 />
               ) : (
@@ -531,7 +535,7 @@ export function DazSceneField({
                   scenePath={scene}
                   name={character.name}
                   charFolderAbs={charFolder}
-                  onOpen={() => void onOpen(scene)}
+                  onOpen={(e) => void onOpen(scene, e)}
                   onRemove={() => askRemove(scene)}
                 />
               ))}

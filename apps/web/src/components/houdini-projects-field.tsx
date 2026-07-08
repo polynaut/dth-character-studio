@@ -11,7 +11,7 @@ import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
-import { openScene, saveCharacter } from '#/lib/rom/api.ts'
+import { openScene, revealPath, saveCharacter } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 
@@ -34,7 +34,7 @@ function HoudiniCard({
   charFolderAbs: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
-  onOpen: () => void
+  onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the project from the character. */
   onRemove?: () => void
 }) {
@@ -155,14 +155,17 @@ export function HoudiniProjectsField({
     </PathCode>
   )
 
-  async function onOpen(hipPath: string) {
+  // Shift+click = the app-wide "show in Explorer" hotkey (same as path chips
+  // and the Unreal cards); plain click opens the project in Houdini.
+  async function onOpen(hipPath: string, e?: React.MouseEvent) {
     setError('')
     try {
-      await openScene({ data: { scenePath: hipPath } })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      if (e?.shiftKey) await revealPath({ data: { path: hipPath } })
+      else await openScene({ data: { scenePath: hipPath } })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
-      toast.error(`Couldn't open in Houdini: ${msg}`)
+      toast.error(e?.shiftKey ? msg : `Couldn't open in Houdini: ${msg}`)
     }
   }
 
@@ -245,7 +248,7 @@ export function HoudiniProjectsField({
               hipPath={hip}
               charFolderAbs={charFolder}
               avatarSrc={placeholderSrc}
-              onOpen={() => void onOpen(hip)}
+              onOpen={(e) => void onOpen(hip, e)}
               onRemove={() => askRemove(hip)}
             />
           ))}
