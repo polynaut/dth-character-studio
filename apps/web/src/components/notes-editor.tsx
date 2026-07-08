@@ -293,13 +293,14 @@ export function NotesEditor({
               </Markdown>
             </div>
           ) : (
+            // Empty: the whole box is a silent click-to-write target (the pencil
+            // appears on hover; the textarea placeholder does the teaching).
             <button
               type="button"
-              className="block w-full cursor-text py-6 text-left text-xs"
+              aria-label="Write notes"
+              className="block h-24 w-full cursor-text"
               onClick={() => setMode('write')}
-            >
-              No notes yet — click to write (markdown, with drag-and-drop media).
-            </button>
+            />
           )}
           <Button
             variant="outline"
