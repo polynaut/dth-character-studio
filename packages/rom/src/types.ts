@@ -502,8 +502,14 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       selection, any generation works). Non-G9 generated configs zero the
  *       G9-only FACS-detail/flexion strengths so runs don't log a spurious
  *       "property not found" failure.
+ *  20 — ApplyDTHCharacter returns FULL success (finished AND zero run-log
+ *       problems) instead of just "didn't abort". The generated combined
+ *       script gates its export block on it, so a ROM with failed morphs no
+ *       longer ships a PoseAsset CSV/FBX as if it were good — fix and re-run.
+ *       Regenerate scripts (Tools → Refresh assets) to pick up the stricter
+ *       `=== true` gate.
  */
-export const RUNTIME_VERSION = 19
+export const RUNTIME_VERSION = 20
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

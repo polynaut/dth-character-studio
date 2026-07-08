@@ -421,7 +421,10 @@ function ApplyDTHCharacter(config){
 	} else if(bFinished) {
 		print("ROM run finished without problems.");
 	}
-	return bFinished;
+	// Full success only: failed morphs count as failure too, so the generated
+	// script's export gate skips the export - a ROM with broken frames must
+	// never ship a PoseAsset CSV / FBX as if it were good.
+	return bFinished && iProblems === 0;
 }
 
 

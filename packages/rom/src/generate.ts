@@ -851,9 +851,10 @@ if (typeof ApplyDTHCharacter != "function") {
 } else {
     try {
         var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);${exportBlock ? `
-        // Export only when the ROM build didn't abort (partial-morph problems
-        // still export — the timeline is complete; hard aborts don't).
-        if (dthRomOk !== false) {
+        // Export only when the ROM built CLEAN (runtime v20: failed morphs count
+        // as failure too, not just hard aborts) — a broken ROM must never ship
+        // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
+        if (dthRomOk === true) {
 ${exportBlock}        }` : ''}
     } catch (dthErr) {
         // Unexpected exception — ApplyDTHCharacter couldn't log/report it itself.
