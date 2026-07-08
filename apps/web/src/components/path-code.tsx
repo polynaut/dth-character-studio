@@ -68,6 +68,7 @@ export function PathCode({
     <span
       role="button"
       tabIndex={0}
+      data-alt-reveal=""
       // No tooltip by design — the chip behaviors (click = copy, Alt+click =
       // Explorer) are documented in the guide; the check overlay confirms a copy.
       aria-label={copied ? 'Copied' : 'Copy path'}
