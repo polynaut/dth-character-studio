@@ -1,5 +1,21 @@
 # @dth/web
 
+## 0.41.4
+
+### Patch Changes
+
+- [#209](https://github.com/polynaut/dth-character-studio/pull/209) [`4df5164`](https://github.com/polynaut/dth-character-studio/commit/4df5164c8d82d8f9b960272df4d182d4b55e7ec0) Thanks [@polynaut](https://github.com/polynaut)! - The character page's Back links are truly gray now (the global link color was
+  overriding them), and holding Alt over a Daz scene / Houdini / Unreal card
+  swaps its open icon for a folder icon — previewing the show-in-Explorer click,
+  same as the path chips. The Daz scenes / Houdini chips dim everything through
+  the character folder, so only the actual subfolder reads bright.
+
+  The reveal hotkey moved from Shift+click to **Alt+click** everywhere (chips and
+  cards) — Shift+click was selecting text along the way.
+
+- Updated dependencies [[`4df5164`](https://github.com/polynaut/dth-character-studio/commit/4df5164c8d82d8f9b960272df4d182d4b55e7ec0)]:
+  - @dth/rom@0.41.4
+
 ## 0.41.3
 
 ### Patch Changes
