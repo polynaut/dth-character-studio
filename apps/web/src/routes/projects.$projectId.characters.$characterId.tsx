@@ -54,7 +54,6 @@ import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { JcmModsEditor } from '#/components/jcm-mods-editor.tsx'
 import { NumberField } from '#/components/number-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
 import { Tag } from '#/components/tag.tsx'
@@ -1020,13 +1019,6 @@ function CharacterPage() {
               </Button>
             </div>
           </div>
-          <div>
-            <Label className="mb-2 block">JCM morph modifications</Label>
-            <JcmModsEditor
-              value={character.jcmMorphMods}
-              onCommit={(jcmMorphMods) => patch({ jcmMorphMods })}
-            />
-          </div>
           </div>
         </div>
       </details>
@@ -1051,6 +1043,8 @@ function CharacterPage() {
           failedFrames={failedFrames}
           revealFrame={revealFrame}
           morphIndex={morphIndex}
+          jcmMorphMods={character.jcmMorphMods}
+          onJcmMorphModsChange={(jcmMorphMods) => patch({ jcmMorphMods })}
           onChange={(sections) => patch({ sections })}
         />
       </section>

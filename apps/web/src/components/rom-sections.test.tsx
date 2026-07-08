@@ -326,3 +326,48 @@ describe('pose Name validation (Houdini-safe)', () => {
     expect(nameInput.getAttribute('aria-invalid')).toBeNull()
   })
 })
+
+describe('Modify JCM frames (jcmMorphMods grid)', () => {
+  it('adds a rule and edits a drive through the grid', () => {
+    let mods: Array<import('@dth/rom').JcmMorphMod> = [
+      {
+        boneLabel: 'Left Thigh Bend',
+        axis: 'XRotate',
+        positive: [
+          { morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+        ],
+        negative: [],
+      },
+    ]
+    render(
+      <RomSections
+        sections={defaultSections()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 0, dk: 0, phys: 0 }}
+        jcmMorphMods={mods}
+        onJcmMorphModsChange={(next) => {
+          mods = next
+        }}
+        onChange={() => {}}
+      />,
+    )
+    // Open the JCM section, then the optional grid.
+    fireEvent.click(screen.getByText('Joint Corrective'))
+    fireEvent.click(screen.getByText('Modify JCM frames'))
+
+    // The existing rule renders: bone, axis, and the drive's morph-name cell.
+    expect(screen.getByDisplayValue('Left Thigh Bend')).toBeTruthy()
+    const morphInput = screen.getByPlaceholderText('body_bs_CalfFlex')
+    fireEvent.change(morphInput, { target: { value: 'body_cbs_ThighFlex' } })
+    fireEvent.blur(morphInput)
+    expect(mods[0].positive[0].morphName).toBe('body_cbs_ThighFlex')
+
+    // Add a second rule — an empty XRotate rule appears in the model.
+    fireEvent.click(screen.getByText('Add rule'))
+    expect(mods).toHaveLength(2)
+    expect(mods[1]).toEqual({ boneLabel: '', axis: 'XRotate', positive: [], negative: [] })
+  })
+})
