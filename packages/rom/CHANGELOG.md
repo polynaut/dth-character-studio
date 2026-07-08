@@ -1,5 +1,14 @@
 # @dth/rom
 
+## 0.41.5
+
+### Patch Changes
+
+- [#211](https://github.com/polynaut/dth-character-studio/pull/211) [`7b3b101`](https://github.com/polynaut/dth-character-studio/commit/7b3b101d0d490fb3cc941509b0d3f881c94ea374) Thanks [@polynaut](https://github.com/polynaut)! - Pressing Alt while hovering a reveal target (path chip, Daz/Houdini/Unreal
+  card) no longer arms the native menu bar — the key is treated as the
+  show-in-Explorer modifier there. Alt anywhere else keeps its normal menu
+  behavior.
+
 ## 0.41.4
 
 ### Patch Changes
