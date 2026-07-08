@@ -61,6 +61,7 @@ function HoudiniCard({
       <button
         type="button"
         onClick={onOpen}
+        data-alt-reveal=""
         title="Open in Houdini"
         className="houdini-card group relative flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors"
       >

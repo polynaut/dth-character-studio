@@ -58,6 +58,7 @@ function UnrealCard({
         <button
           type="button"
           onClick={onOpen}
+          data-alt-reveal=""
           title="Open in Unreal Engine"
           className="flex min-w-0 items-center gap-3 text-left"
         >
