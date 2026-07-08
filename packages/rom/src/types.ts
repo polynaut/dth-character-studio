@@ -519,14 +519,20 @@ export const RUNTIME_VERSION = 20
  * other. A character's CSV needs regenerating only when its era differs from the
  * active release's era.
  *
- *   2.4.3 — first DTH release with CSV import/export; today's baseline.
+ *   2.0 — the trailing control rows changed format: pre-2.0 nodes read/write
+ *         CTLGROUP/CTL rows, 2.0+ reads/writes CURVEGROUP/CURVE (verified
+ *         against the DazToHuePoseAsset.hda of every release on hand: 1.9.6 =
+ *         CTL, 2.0/2.1/2.2.1/2.4.3 = CURVE; import_from_csv exists in ALL of
+ *         them — an earlier note claiming 2.4.3 introduced CSV import was
+ *         wrong). Era '' (pre-2.0) is the old-Houdini pipeline: the G8.1
+ *         template targets it; the G9 template targets the 2.0 era.
  *
  * When a future release changes the CSV, add its version here AND teach
  * {@link toPoseAssetCsv} to emit the matching variant for that era — both shipped
  * in the same studio update, so a user switching to that release is flagged for a
  * refresh while everyone on an earlier release stays "all good".
  */
-export const POSEASSET_CSV_BREAKING_VERSIONS = ['2.4.3'] as const
+export const POSEASSET_CSV_BREAKING_VERSIONS = ['2.0'] as const
 
 /**
  * Compare two dotted version strings numerically (segment-wise; missing segments

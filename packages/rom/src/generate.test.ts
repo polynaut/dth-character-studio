@@ -589,7 +589,7 @@ describe('toArtDirectionJsons', () => {
 
 describe('toPoseAssetCsv', () => {
   it('uses the ground-truth template for the validated config without GEN', () => {
-    const file = toPoseAssetCsv(makeCharacter(), FRAMES)
+    const file = toPoseAssetCsv(makeCharacter(), FRAMES, '2.0')
     expect(file.experimental).toBeUndefined()
     expect(file.target).toBe('houdini')
     const lines = file.content.trimEnd().split('\n')
@@ -607,7 +607,7 @@ describe('toPoseAssetCsv', () => {
   it('keeps the GP block and starts custom frames at 432 when GEN is enabled', () => {
     const sections = makeSections()
     sections.GEN.enabled = true
-    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES, '2.0')
     const lines = file.content.trimEnd().split('\n')
     expect(file.experimental).toBeUndefined()
     expect(lines).toContain('GEN,328,Fence01')
@@ -621,7 +621,7 @@ describe('toPoseAssetCsv', () => {
     sections.GEN.enabled = true
     sections.PHY.enabled = true
     sections.PHY.mode = 'preset'
-    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES)
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES, '2.0')
     const lines = file.content.trimEnd().split('\n')
     expect(file.experimental).toBeUndefined()
     // base 0-327, GP 328-431, PHY 432-474, custom (FBM) 475+.
@@ -876,5 +876,32 @@ describe('exporter integration', () => {
       'ROM_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+})
+
+describe('toPoseAssetCsv — G8.1 template (pre-2.0 / CTL era)', () => {
+  const G81_FRAMES = { base: 188, gp: 0, dk: 0, phys: 0 }
+
+  it('splices the ground-truth template; custom frames continue at 188', () => {
+    const file = toPoseAssetCsv(makeCharacter({ genesis: 'G8.1' }), G81_FRAMES, '')
+    expect(file.experimental).toBeUndefined()
+    const lines = file.content.trimEnd().split('\n')
+    expect(lines[0]).toBe('RET,0,RestPose')
+    expect(lines).toContain('JCM,99,HeadBB30')
+    expect(lines).toContain('FAC,187,TongueTwistLeft')
+    expect(lines).toContain('FBM,188,BodyTone,')
+    // Pre-2.0 nodes read CTL control rows — CURVE would import broken there.
+    expect(lines).toContain('CTL,facWrinkle44_mat')
+    expect(file.content).not.toContain('CURVEGROUP')
+  })
+
+  it('stays experimental on the wrong era or an unexpected base length', () => {
+    const character = makeCharacter({ genesis: 'G8.1' })
+    expect(toPoseAssetCsv(character, G81_FRAMES, '2.0').experimental).toBe(true)
+    expect(toPoseAssetCsv(character, { ...G81_FRAMES, base: 190 }, '').experimental).toBe(true)
+  })
+
+  it('G9 on the pre-2.0 era is experimental too (its template carries CURVE rows)', () => {
+    expect(toPoseAssetCsv(makeCharacter(), FRAMES, '').experimental).toBe(true)
   })
 })
