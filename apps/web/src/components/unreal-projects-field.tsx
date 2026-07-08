@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, HardDriveDownload, Plus, X } from 'lucide-react'
+import { ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -49,6 +49,8 @@ function UnrealCard({
 }) {
   const fileName = uprojectPath.split(/[\\/]/).pop() ?? uprojectPath
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  // Shift held → the open icon previews the alternate action (show in Explorer).
+  const shiftHeld = useModifierHeld('Shift')
   const dir = displayPath(uprojectPath).replace(/[\\/][^\\/]*$/, '')
   return (
     <div className="group/card relative">
@@ -64,7 +66,11 @@ function UnrealCard({
             <span className="block truncate text-sm font-medium">{displayName}</span>
             <span className="block max-w-72 truncate text-xs text-muted-foreground">{dir}</span>
           </span>
-          <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+          {shiftHeld ? (
+            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+          )}
         </button>
         <button
           type="button"

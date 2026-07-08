@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, Plus, Trash2 } from 'lucide-react'
+import { ExternalLink, FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
@@ -13,6 +13,7 @@ import { InfoPopup } from '#/components/ui/info-popup.tsx'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { openScene, revealPath, saveCharacter } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
+import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -41,6 +42,8 @@ function HoudiniCard({
   const fileName = hipPath.split(/[\\/]/).pop() ?? hipPath
   // The heading shows the project name without its extension (e.g. ".hiplc").
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  // Shift held → the open icon previews the alternate action (show in Explorer).
+  const shiftHeld = useModifierHeld('Shift')
   // The chip shows the project's folder; when it sits inside the character's own
   // folder, collapse that prefix to "%CHAR%" (like the Daz scene cards).
   const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
@@ -84,7 +87,11 @@ function HoudiniCard({
             </code>
           )}
         </div>
-        <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
+        {shiftHeld ? (
+          <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
+        ) : (
+          <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
+        )}
       </button>
       {onRemove && (
         <Button

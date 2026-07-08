@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, FolderInput, Link2, Plus, Trash2 } from 'lucide-react'
+import { ExternalLink, FolderInput, FolderOpen, Link2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
@@ -24,6 +24,7 @@ import {
   saveCharacter,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
+import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -56,6 +57,8 @@ function SceneCard({
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The heading shows the scene name without its extension (e.g. ".duf").
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  // Shift held → the open icon previews the alternate action (show in Explorer).
+  const shiftHeld = useModifierHeld('Shift')
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
   // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
   // nested. Empty for a scene linked outside the character folder.
@@ -104,7 +107,11 @@ function SceneCard({
             </div>
           )}
         </div>
-        <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        {shiftHeld ? (
+          <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        ) : (
+          <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        )}
       </button>
       {onRemove && (
         <Button
