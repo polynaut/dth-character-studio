@@ -1,5 +1,23 @@
 # @dth/desktop
 
+## 0.37.0
+
+### Minor Changes
+
+- [#191](https://github.com/polynaut/dth-character-studio/pull/191) [`910f80f`](https://github.com/polynaut/dth-character-studio/commit/910f80f20d8a6e1d7c6614883f5b306e8254cd96) Thanks [@polynaut](https://github.com/polynaut)! - "Run the export with the ROM script" no longer exports when the ROM build had
+  ANY problem. Runtime v20: failed morphs count as failure too (not just hard
+  aborts), so a ROM with broken frames can never ship a PoseAsset CSV/FBX as if
+  it were good — fix the problem and re-run. Regenerate scripts via Tools →
+  Refresh assets (or any character save).
+
+### Patch Changes
+
+- [#190](https://github.com/polynaut/dth-character-studio/pull/190) [`2efabc0`](https://github.com/polynaut/dth-character-studio/commit/2efabc06c603eff60fe697c319fa35b072966285) Thanks [@polynaut](https://github.com/polynaut)! - Confirming "Yes" on the unsaved-changes dialog when closing the window now
+  actually closes it. Registering a close-requested listener makes Tauri hold
+  every close and destroy the window from the JS side afterwards — and that
+  destroy call needed a permission the app never granted, so the window
+  silently stayed open.
+
 ## 0.36.3
 
 ### Patch Changes
