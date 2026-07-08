@@ -144,15 +144,20 @@ export function HoudiniProjectsField({
   const placeholderSrc =
     character.gender === 'male' ? '/charPlaceholderMale.png' : '/charPlaceholderFemale.png'
 
-  // Folder chip for the linked projects (the first project's directory), with the
-  // project-root prefix dimmed and the rest emphasized — matching the Daz scenes chip.
+  // Folder chip for the linked projects (the first project's directory):
+  // everything through the CHARACTER folder is dimmed — only the actual
+  // subfolder ("\houdini") reads bright, matching the Daz scenes chip. A
+  // project outside the character folder falls back to the project root.
   const projectRoot = displayPath(location.libraryFolder)
+  const charFolderDisplay = displayPath(charFolder)
   const firstHipAbs = displayPath(projects[0] ?? '')
   const hipLastSep = Math.max(firstHipAbs.lastIndexOf('\\'), firstHipAbs.lastIndexOf('/'))
   const projectDir = hipLastSep >= 0 ? firstHipAbs.slice(0, hipLastSep) : ''
-  const projectRootLen = projectDir.toLowerCase().startsWith(projectRoot.toLowerCase())
-    ? projectRoot.length
-    : 0
+  const projectRootLen = projectDir.toLowerCase().startsWith(charFolderDisplay.toLowerCase())
+    ? charFolderDisplay.length
+    : projectDir.toLowerCase().startsWith(projectRoot.toLowerCase())
+      ? projectRoot.length
+      : 0
   const projectDirChip = (
     <PathCode path={projectDir}>
       {projectRootLen > 0 && (

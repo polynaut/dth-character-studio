@@ -414,15 +414,20 @@ export function DazSceneField({
     }
   }
 
-  // Two-tone path chip for the scenes' folder (the primary scene's directory) —
-  // the project-root prefix dimmed, the rest emphasized.
+  // Two-tone path chip for the scenes' folder (the primary scene's directory):
+  // everything through the CHARACTER folder is dimmed — we're already inside the
+  // character here, so only the actual scenes subfolder ("\daz3d") reads bright.
+  // A scene outside the character folder falls back to dimming the project root.
   const sceneAbs = displayPath(character.scenePath)
   const projectRoot = displayPath(location.libraryFolder)
+  const charFolderDisplay = displayPath(charFolder)
   const lastSep = Math.max(sceneAbs.lastIndexOf('\\'), sceneAbs.lastIndexOf('/'))
   const sceneDir = lastSep >= 0 ? sceneAbs.slice(0, lastSep) : ''
-  const dirRootLen = sceneDir.toLowerCase().startsWith(projectRoot.toLowerCase())
-    ? projectRoot.length
-    : 0
+  const dirRootLen = sceneDir.toLowerCase().startsWith(charFolderDisplay.toLowerCase())
+    ? charFolderDisplay.length
+    : sceneDir.toLowerCase().startsWith(projectRoot.toLowerCase())
+      ? projectRoot.length
+      : 0
   // The scenes subfolder relative to the character folder ('' when the scene is
   // linked from outside it) — that's the editable part of the chip.
   const sceneDirAbs = norm(character.scenePath).replace(/\/[^/]*$/, '')
