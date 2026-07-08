@@ -62,7 +62,7 @@ import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
-import { characterSkinning, countPoses } from '@dth/rom'
+import { characterSkinning, countPoses, poseAssetCsvEra, poseAssetCsvValidated } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
@@ -175,6 +175,9 @@ function CharacterPage() {
   // preset/custom selections change (kept from the last good measure during a
   // re-measure; null only when an included asset can't be read).
   const [presetFrames, setPresetFrames] = useState<PresetFrames | null>(initialFrames)
+  // The active release's CSV era — drives which validated template (if any)
+  // this character's PoseAsset CSV can use (the "experimental" tag mirrors it).
+  const csvEra = poseAssetCsvEra(catalog.error ? '' : catalog.version)
   // The last-persisted character. `dirty` compares against this — NOT the loader
   // data — so saving can settle the buttons in a single paint instead of waiting
   // on router.invalidate() to complete in a second, separate render.
@@ -642,10 +645,10 @@ function CharacterPage() {
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <Label>Genesis</Label>
-                  {character.genesis !== 'G9' && (
+                  {!poseAssetCsvValidated(character, csvEra, presetFrames?.base) && (
                     <Tag
                       tone="orange"
-                      title={`${GENESIS_LABELS[character.genesis]} PoseAsset CSVs use the custom-only layout, which hasn't been validated in Houdini yet. The Daz-side ROM works; the HDA import may still need adjustments.`}
+                      title={`This configuration's PoseAsset CSV uses the custom-only layout, which hasn't been validated in Houdini. Validated setups: G9 (DQS, JCM+FAC presets, DTH 2.x) and G8.1 (DQS, JCM+FAC presets, DTH 1.9.x — the old Houdini pipeline). The Daz-side ROM works either way.`}
                     >
                       experimental
                     </Tag>
