@@ -1,43 +1,86 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, Plus, X } from 'lucide-react'
+import { ExternalLink, HardDriveDownload, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Button } from '#/components/ui/button.tsx'
+import { cn } from '#/lib/utils.ts'
 import unrealLogo from '#/assets/unreal-logo.svg'
-import { openScene, setUnrealProjects } from '#/lib/rom/api.ts'
+import {
+  installUnrealDthContent,
+  openScene,
+  setUnrealProjects,
+  unrealDthContentPresent,
+} from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
-/** A linked Unreal project as a compact footer chip: the U mark + name — the
- *  chip opens the `.uproject` (OS file association → Unreal), the folder shows
- *  as its tooltip, a hover ✕ only unlinks (files are never touched). */
-function UnrealChip({
+/**
+ * A linked Unreal project card in the footer bar: the U mark, name + folder —
+ * clicking opens the `.uproject` (OS association → Unreal). The tiny install
+ * button bootstraps the project with the ACTIVE DTH release's Unreal content
+ * (`Content/DazToHue`): dimmed once present; Ctrl+click overwrites anyway
+ * (e.g. after switching the release in Settings). The hover ✕ only unlinks.
+ */
+function UnrealCard({
   uprojectPath,
+  dthPresent,
+  installing,
   onOpen,
+  onInstall,
   onRemove,
 }: {
   uprojectPath: string
+  /** undefined while the Content/DazToHue probe is still running. */
+  dthPresent: boolean | undefined
+  installing: boolean
   onOpen: () => void
+  onInstall: (e: React.MouseEvent) => void
   onRemove: () => void
 }) {
   const fileName = uprojectPath.split(/[\\/]/).pop() ?? uprojectPath
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  const dir = displayPath(uprojectPath).replace(/[\\/][^\\/]*$/, '')
   return (
     <div className="group/card relative">
-      <button
-        type="button"
-        onClick={onOpen}
-        title={`Open in Unreal Engine — ${displayPath(uprojectPath)}`}
-        className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors hover:border-foreground/40"
-      >
-        <img src={unrealLogo} alt="" aria-hidden className="size-5 shrink-0 object-contain" />
-        <span className="max-w-56 truncate font-medium">{displayName}</span>
-        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
-      </button>
+      <div className="flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors hover:border-foreground/40">
+        <button
+          type="button"
+          onClick={onOpen}
+          title="Open in Unreal Engine"
+          className="flex min-w-0 items-center gap-3 text-left"
+        >
+          <img src={unrealLogo} alt="" aria-hidden className="size-9 shrink-0 object-contain" />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{displayName}</span>
+            <span className="block max-w-72 truncate text-xs text-muted-foreground">{dir}</span>
+          </span>
+          <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+        <button
+          type="button"
+          onClick={onInstall}
+          disabled={installing || dthPresent === undefined}
+          aria-label={`Install DTH content into ${displayName}`}
+          title={
+            dthPresent
+              ? 'DTH content is already installed (Content/DazToHue) — Ctrl+click to overwrite it with the linked release from Settings'
+              : "Install the linked DTH release's Unreal content into this project (Content/DazToHue)"
+          }
+          className={cn(
+            'shrink-0 rounded-md border p-1.5 transition-colors',
+            dthPresent
+              ? 'text-muted-foreground/50'
+              : 'text-primary hover:bg-accent hover:text-primary',
+            installing && 'animate-pulse',
+          )}
+        >
+          <HardDriveDownload className="size-4" />
+        </button>
+      </div>
       <button
         type="button"
         title="Unlink from project (the file is kept)"
@@ -67,6 +110,45 @@ export function UnrealProjectsBar({
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  // Per-project `Content/DazToHue` presence (undefined = probe in flight) and
+  // which card's install is currently running.
+  const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
+  const [installingPath, setInstallingPath] = useState('')
+
+  useEffect(() => {
+    let active = true
+    for (const path of project.unrealProjects) {
+      void unrealDthContentPresent({ data: { uprojectPath: path } }).then((present) => {
+        if (active) setDthStatus((s) => ({ ...s, [path]: present }))
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [project.unrealProjects])
+
+  async function installDth(path: string, e: React.MouseEvent) {
+    const present = dthStatus[path]
+    // Present → the button is a no-op unless Ctrl/Cmd is held (explicit overwrite).
+    if (present && !(e.ctrlKey || e.metaKey)) {
+      toast.info('DTH content is already installed — Ctrl+click to overwrite it.')
+      return
+    }
+    setInstallingPath(path)
+    try {
+      const files = await installUnrealDthContent({
+        data: { uprojectPath: path, overwrite: !!present },
+      })
+      toast.success(
+        `${present ? 'Overwrote' : 'Installed'} DTH Unreal content — ${files} file(s)`,
+      )
+      setDthStatus((s) => ({ ...s, [path]: true }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setInstallingPath('')
+    }
+  }
 
   async function save(paths: Array<string>, okMessage: string) {
     setBusy(true)
@@ -108,9 +190,11 @@ export function UnrealProjectsBar({
           Unreal projects
         </span>
         {project.unrealProjects.map((path) => (
-          <UnrealChip
+          <UnrealCard
             key={path}
             uprojectPath={path}
+            dthPresent={dthStatus[path]}
+            installing={installingPath === path}
             onOpen={() =>
               // Surface failures — a scope/association problem otherwise looks
               // like a dead button (exactly how the .uproject scope bug hid).
@@ -118,6 +202,7 @@ export function UnrealProjectsBar({
                 toast.error(e instanceof Error ? e.message : String(e)),
               )
             }
+            onInstall={(e) => void installDth(path, e)}
             onRemove={() =>
               void save(
                 project.unrealProjects.filter((p) => p !== path),

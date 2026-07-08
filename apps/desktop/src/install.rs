@@ -322,3 +322,48 @@ pub fn install_houdini_presets(request: HoudiniPresetsRequest) -> InstallReport 
     let total_files = steps.iter().map(|s| s.files).sum();
     InstallReport { dry_run: dry, steps, total_files }
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UnrealInstallRequest {
+    /// Release root holding `Unreal Engine Content/DazToHue`.
+    release_root: String,
+    /// The linked `.uproject` file — content lands in its folder's `Content/DazToHue`.
+    uproject_path: String,
+    /// Copy over an existing `Content/DazToHue` (the UI's Ctrl+click).
+    overwrite: bool,
+}
+
+/// Install the release's Unreal Engine content (`Unreal Engine Content/DazToHue`)
+/// into the linked project's `Content/DazToHue` — the instant DTH bootstrap for a
+/// fresh Unreal project. Refuses when the path isn't a real `.uproject` file,
+/// when the release ships no Unreal content, or when the content already exists
+/// and `overwrite` is off. Overwrite copies files over — it never deletes first,
+/// so project-local additions inside the folder survive. Returns files copied.
+#[tauri::command]
+pub fn install_unreal_dth(request: UnrealInstallRequest) -> Result<u64, String> {
+    let uproject = Path::new(&request.uproject_path);
+    let is_uproject = uproject
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("uproject"))
+        .unwrap_or(false);
+    if !is_uproject || !uproject.is_file() {
+        return Err("Not an Unreal project file (.uproject).".into());
+    }
+    let project_dir = uproject
+        .parent()
+        .ok_or_else(|| "The .uproject has no parent folder.".to_string())?;
+    let src = Path::new(&request.release_root)
+        .join("Unreal Engine Content")
+        .join("DazToHue");
+    if !src.is_dir() {
+        return Err("This DTH release ships no Unreal Engine Content.".into());
+    }
+    let dest = project_dir.join("Content").join("DazToHue");
+    if dest.exists() && !request.overwrite {
+        return Err(
+            "Content/DazToHue already exists in this project — Ctrl+click to overwrite.".into(),
+        );
+    }
+    copy_dir(&src, &dest).map_err(|e| e.to_string())
+}

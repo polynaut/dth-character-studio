@@ -77,6 +77,7 @@ export {
   installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
+  resolveActiveReleaseRoot,
   resolvePluginInstall,
   resolveReleaseInstall,
 } from './storage/releases'
