@@ -23,6 +23,11 @@ import type {
 // UE5 configuration, exported from a fully set-up DazToHuePoseAsset node.
 // The placeholder marks where the character's custom sections go.
 import poseAssetTemplateG9DqsFacGp from './templates/poseasset-g9-dqs-jcmfac-gp-ue5.csv?raw'
+// Ground-truth PoseAsset rows for the G8.1 / DQS / JCM+FAC / UE5 configuration
+// on the PRE-2.0 CSV era (CTL control rows) - exported from a working DTH 1.9.6
+// node (old Houdini pipeline). The G8.1 assets are byte-identical across DTH
+// releases, so the fixed 188 preset frames hold for any of them.
+import poseAssetTemplateG81DqsFac from './templates/poseasset-g8.1-dqs-jcmfac-ue5.csv?raw'
 // The fixed PHY preset block (G9 Physics Example ROM) — bones, pose names,
 // push-direction XYZ and group offset/radius, ground-truth from a node export.
 // Relative frames 0-42; renumbered to absolute on emit.
@@ -483,28 +488,56 @@ function physicsPoseAssetRows(startFrame: number): Array<string> {
 }
 
 /**
+ * Whether this character + CSV era combination hits a VALIDATED PoseAsset
+ * template (false → the custom-only experimental layout). The single source
+ * for {@link toPoseAssetCsv}'s template gates and the editor's "experimental"
+ * tag. `baseFrames` is the measured base-ROM length — only the G8.1 gate pins
+ * it (188); pass undefined while unmeasured (counts as not validated).
+ */
+export function poseAssetCsvValidated(
+  character: Character,
+  era: string,
+  baseFrames?: number,
+): boolean {
+  const { sections } = character
+  const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
+  const facPreset = sections.FAC.enabled && sections.FAC.mode === 'preset'
+  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
+  const includeDk = genPreset && genRomIncludes(character.gender, sections.GEN.presetAssets).dk
+  const physPreset = sections.PHY.enabled && sections.PHY.mode === 'preset'
+  if (characterSkinning(character) !== 'dqs' || !jcmPreset || !facPreset) return false
+  if (character.genesis === 'G9') return era === '2.0' && !includeDk
+  if (character.genesis === 'G8.1') {
+    return era === '' && !genPreset && !physPreset && baseFrames === 188
+  }
+  return false
+}
+
+/**
  * PoseAsset node CSV for Houdini/DTH (import format reverse-engineered from
  * the node's parser, see docs/poseasset-csv-spec.md).
  *
- * For the validated G9/DQS/JCM+FAC(+GP)/UE5 configuration the preset
- * sections come verbatim from a ground-truth export of a working node; the
- * character's custom sections are spliced in with continuing frame numbers.
- * Other configurations fall back to generating only the custom sections and
- * stay flagged experimental.
+ * Two validated template configurations exist, each tied to the CSV era its
+ * ground-truth export came from (the trailing control rows changed CTL→CURVE
+ * at DTH 2.0):
+ *  - G9 / DQS / JCM+FAC(+GP) / UE5 on the 2.0+ era (CURVE rows), and
+ *  - G8.1 / DQS / JCM+FAC / UE5 on the pre-2.0 era (CTL rows) — the old
+ *    Houdini + old DTH pipeline; assets are byte-identical across releases.
+ * The character's custom sections are spliced in with continuing frame
+ * numbers. Other configurations fall back to generating only the custom
+ * sections and stay flagged experimental.
  */
 export function toPoseAssetCsv(
   character: Character,
   frames: PresetFrames,
   /**
-   * CSV era from {@link poseAssetCsvEra} — selects the output variant. Today only
-   * the baseline era exists, so every recognised era uses the generator below;
-   * this parameter is the seam where a future breaking era (e.g. 2.5.x) branches
-   * to a different layout, shipped together with adding that release to
+   * CSV era from {@link poseAssetCsvEra} — selects the output variant (which
+   * template's control-row format is valid). A future breaking era (e.g.
+   * 2.5.x) branches here, shipped together with adding that release to
    * {@link POSEASSET_CSV_BREAKING_VERSIONS}.
    */
   era: string = '',
 ): GeneratedFile {
-  void era // single CSV variant today; `era` is the seam for future variants
   const { sections } = character
   const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
   // A custom JCM asset (user .duf path) occupies the same base-ROM block as a
@@ -514,24 +547,21 @@ export function toPoseAssetCsv(
     (sections.JCM.enabled &&
       sections.JCM.mode === 'custom' &&
       sections.JCM.customAssetPath.trim() !== '')
-  const facPreset = sections.FAC.enabled && sections.FAC.mode === 'preset'
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
   const roms = genRomIncludes(character.gender, sections.GEN.presetAssets)
   const includeGp = genPreset && roms.gp
   const includeDk = genPreset && roms.dk
   const includePhys = sections.PHY.enabled && sections.PHY.mode === 'preset'
 
-  // The ground-truth template bakes the *preset* base ROM rows at fixed frames,
-  // so it only fits the all-preset validated config — a custom JCM base goes
-  // through the fully-measured path below instead.
-  const matchesTemplate =
-    character.genesis === 'G9' &&
-    characterSkinning(character) === 'dqs' &&
-    jcmPreset &&
-    facPreset &&
-    !includeDk
+  // The ground-truth templates bake the *preset* base ROM rows at fixed frames,
+  // so each only fits its all-preset validated config — a custom JCM base goes
+  // through the fully-measured path below instead. Each template is also tied
+  // to the CSV era its export came from (CTL vs CURVE control rows, see the
+  // function doc): emitting a template into the wrong era's HDA would import
+  // broken control rows.
+  const matchesG9Template = poseAssetCsvValidated(character, era, frames.base) && character.genesis === 'G9'
 
-  if (matchesTemplate) {
+  if (matchesG9Template) {
     const lines = poseAssetTemplateG9DqsFacGp.replace(/\r\n/g, '\n').trimEnd().split('\n')
     const placeholder = lines.indexOf(CUSTOM_SECTIONS_PLACEHOLDER)
     let head = lines.slice(0, placeholder)
@@ -549,6 +579,28 @@ export function toPoseAssetCsv(
     return {
       fileName: poseAssetFileName(character),
       content: [...head, ...physRows, ...customRows, ...tail].join('\n') + '\n',
+      target: 'houdini',
+    }
+  }
+
+  // G8.1 on the pre-2.0 era (the old Houdini + old DTH pipeline): ground truth
+  // exported from a working DTH 1.9.6 PoseAsset node; the G8.1 base assets are
+  // byte-identical across releases, so the 188 fixed preset frames (RET 0-2,
+  // JCM 3-99, FAC 100-187) hold wherever the .duf came from — the length gate
+  // fails loud into the experimental path if a future asset ever disagrees.
+  // No GEN/PHY here: no DTH release ships them for G8.1.
+  const matchesG81Template =
+    poseAssetCsvValidated(character, era, frames.base) && character.genesis === 'G8.1'
+
+  if (matchesG81Template) {
+    const lines = poseAssetTemplateG81DqsFac.replace(/\r\n/g, '\n').trimEnd().split('\n')
+    const placeholder = lines.indexOf(CUSTOM_SECTIONS_PLACEHOLDER)
+    const head = lines.slice(0, placeholder)
+    const tail = lines.slice(placeholder + 1)
+    const customRows = customPoseAssetRows(character, frames.base - 1)
+    return {
+      fileName: poseAssetFileName(character),
+      content: [...head, ...customRows, ...tail].join('\n') + '\n',
       target: 'houdini',
     }
   }

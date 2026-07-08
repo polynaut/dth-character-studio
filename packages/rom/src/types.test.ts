@@ -119,13 +119,13 @@ describe('compareDthVersions', () => {
 
 describe('poseAssetCsvEra', () => {
   it('maps releases at/after a breaking version to that era', () => {
-    expect(poseAssetCsvEra('2.4.3')).toBe('2.4.3')
-    expect(poseAssetCsvEra('2.4.4')).toBe('2.4.3') // not a breaking release → same era
-    expect(poseAssetCsvEra('2.9.0')).toBe('2.4.3') // until a newer breaking version is added
+    expect(poseAssetCsvEra('2.0')).toBe('2.0')
+    expect(poseAssetCsvEra('2.4.3')).toBe('2.0') // not a breaking release → same era
+    expect(poseAssetCsvEra('2.9.0')).toBe('2.0') // until a newer breaking version is added
   })
 
   it('is empty for a release before the first baseline or when none is given', () => {
-    expect(poseAssetCsvEra('2.4.2')).toBe('')
+    expect(poseAssetCsvEra('1.9.6')).toBe('') // the pre-2.0 (CTL-rows) era — the old Houdini pipeline
     expect(poseAssetCsvEra('')).toBe('')
   })
 })
