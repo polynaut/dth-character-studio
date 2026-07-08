@@ -192,9 +192,6 @@ export function NotesEditor({
       {mode === 'write' ? (
         <>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              Markdown — drop images or other files right into the editor
-            </span>
             <span className="ml-auto text-xs text-muted-foreground">
               {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Saved'}
             </span>
