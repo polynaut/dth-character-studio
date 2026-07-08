@@ -16,6 +16,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
+import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
@@ -29,6 +30,7 @@ import type { ProjectInfo } from '#/lib/rom/api.ts'
 function UnrealCard({
   uprojectPath,
   dthPresent,
+  ctrlHeld,
   installing,
   onOpen,
   onInstall,
@@ -37,6 +39,9 @@ function UnrealCard({
   uprojectPath: string
   /** undefined while the Content/DazToHue probe is still running. */
   dthPresent: boolean | undefined
+  /** Ctrl/Cmd is held — an installed project's dimmed install button wakes up
+   *  to hint that a click now re-installs (overwrite). */
+  ctrlHeld: boolean
   installing: boolean
   onOpen: (e: React.MouseEvent) => void
   onInstall: (e: React.MouseEvent) => void
@@ -66,14 +71,12 @@ function UnrealCard({
           onClick={onInstall}
           disabled={installing || dthPresent === undefined}
           aria-label={`Install DTH content into ${displayName}`}
-          title={
-            dthPresent
-              ? 'DTH content is already installed (Content/DazToHue) — Ctrl+click to overwrite it with the linked release from Settings'
-              : "Install the linked DTH release's Unreal content into this project (Content/DazToHue)"
-          }
+          title="Install DTH Content"
           className={cn(
             'shrink-0 rounded-md border p-1.5 transition-colors',
-            dthPresent
+            // Installed → dimmed; holding Ctrl/Cmd wakes it up as the hint
+            // that a click now re-installs (overwrite from the active release).
+            dthPresent && !ctrlHeld
               ? 'text-muted-foreground/50'
               : 'text-primary hover:bg-accent hover:text-primary',
             installing && 'animate-pulse',
@@ -115,6 +118,9 @@ export function UnrealProjectsBar({
   // which card's install is currently running.
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
   const [installingPath, setInstallingPath] = useState('')
+  // Ctrl/Cmd held → installed cards' dimmed install buttons light up (re-install).
+  const ctrlHeld = useModifierHeld('Control')
+  const metaHeld = useModifierHeld('Meta')
 
   useEffect(() => {
     let active = true
@@ -195,6 +201,7 @@ export function UnrealProjectsBar({
             key={path}
             uprojectPath={path}
             dthPresent={dthStatus[path]}
+            ctrlHeld={ctrlHeld || metaHeld}
             installing={installingPath === path}
             onOpen={(e) => {
               // Shift+click = the app-wide "show in Explorer" hotkey (same as
