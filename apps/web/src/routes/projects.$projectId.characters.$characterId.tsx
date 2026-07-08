@@ -473,7 +473,8 @@ function CharacterPage() {
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}
-        <div className="absolute top-2 left-[150px] z-20">
+        {/* top-5 matches the avatar's mt-5, so the link tops align. */}
+        <div className="absolute top-5 left-[150px] z-20">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
