@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import Markdown, { defaultUrlTransform } from 'react-markdown'
+import { Check, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { Button } from '#/components/ui/button.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import { openExternal } from '#/lib/desktop.ts'
 import {
   addNoteMedia,
@@ -42,7 +43,8 @@ function NoteImage({ projectId, src, alt }: { projectId: string; src?: string; a
 }
 
 /**
- * Freeform markdown notes for a project or character — write/preview tabs, a
+ * Freeform markdown notes for a project or character — rendered markdown by
+ * default with a hover pencil to edit (Done/Esc returns to the view), a
  * debounced autosave, and native drag-and-drop for media: a dropped file is
  * stored in the project's `.dcsmeta/media/` (like avatar images) and the right
  * markdown tag (image or link) lands at the cursor. `media://` images resolve
@@ -59,7 +61,7 @@ export function NotesEditor({
 }) {
   const [text, setText] = useState('')
   const [loaded, setLoaded] = useState(false)
-  const [mode, setMode] = useState<'write' | 'preview'>('write')
+  const [mode, setMode] = useState<'write' | 'preview'>('preview')
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const saveTimer = useRef(0)
@@ -187,43 +189,48 @@ export function NotesEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <Tabs value={mode} onValueChange={(v) => setMode(v === 'preview' ? 'preview' : 'write')}>
-          <TabsList>
-            <TabsTrigger value="write">Write</TabsTrigger>
-            <TabsTrigger value="preview">Preview</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : loaded && text ? 'Saved' : ''}
-        </span>
-      </div>
       {mode === 'write' ? (
-        <FileDropZone
-          acceptFolders
-          onDrop={(paths) => void onDropMedia(paths)}
-          label="Drop images / media to embed"
-          className="rounded-md"
-        >
-          <textarea
-            ref={areaRef}
-            value={text}
-            disabled={!loaded}
-            placeholder={
-              placeholder ??
-              'Write notes in markdown — drop images or other files right into the editor…'
-            }
-            className="min-h-64 w-full resize-y rounded-md border bg-muted/40 p-3 font-mono text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring"
-            onChange={(e) => scheduleSave(e.target.value)}
-            onBlur={() => {
-              window.clearTimeout(saveTimer.current)
-              saveTimer.current = 0
-              void persist(textRef.current)
-            }}
-          />
-        </FileDropZone>
+        <>
+          <div className="flex items-center gap-3">
+            <span className="ml-auto text-xs text-muted-foreground">
+              {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Saved'}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setMode('preview')}>
+              <Check /> Done
+            </Button>
+          </div>
+          <FileDropZone
+            acceptFolders
+            onDrop={(paths) => void onDropMedia(paths)}
+            label="Drop images / media to embed"
+            className="rounded-md"
+          >
+            <textarea
+              ref={areaRef}
+              value={text}
+              disabled={!loaded}
+              autoFocus
+              placeholder={
+                placeholder ??
+                'Write notes in markdown — drop images or other files right into the editor…'
+              }
+              className="min-h-64 w-full resize-y rounded-md border bg-muted/40 p-3 font-mono text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring"
+              onChange={(e) => scheduleSave(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setMode('preview')
+              }}
+              onBlur={() => {
+                window.clearTimeout(saveTimer.current)
+                saveTimer.current = 0
+                void persist(textRef.current)
+              }}
+            />
+          </FileDropZone>
+        </>
       ) : (
-        <div className="min-h-64 rounded-md border bg-card p-4 text-sm text-muted-foreground">
+        // Rendered markdown is the DEFAULT view; a small pencil appears on
+        // hover (an empty note is fully clickable) to switch into the editor.
+        <div className="group/notes relative min-h-32 rounded-md border bg-card p-4 text-base text-muted-foreground">
           {text.trim() ? (
             <div className="space-y-2 [overflow-wrap:anywhere]">
               <Markdown
@@ -235,13 +242,13 @@ export function NotesEditor({
                 }
                 components={{
                   h1: ({ children }) => (
-                    <h3 className="pt-1 text-base font-semibold text-foreground">{children}</h3>
+                    <h3 className="pt-1 text-xl font-semibold text-foreground">{children}</h3>
                   ),
                   h2: ({ children }) => (
-                    <h4 className="pt-1 text-sm font-semibold text-foreground">{children}</h4>
+                    <h4 className="pt-1 text-lg font-semibold text-foreground">{children}</h4>
                   ),
                   h3: ({ children }) => (
-                    <h5 className="pt-1 text-sm font-semibold text-foreground">{children}</h5>
+                    <h5 className="pt-1 text-base font-semibold text-foreground">{children}</h5>
                   ),
                   p: ({ children }) => <p className="leading-relaxed">{children}</p>,
                   ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
@@ -253,7 +260,7 @@ export function NotesEditor({
                     <strong className="font-semibold text-foreground">{children}</strong>
                   ),
                   code: ({ children }) => (
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+                    <code className="rounded bg-muted px-1 py-0.5 text-sm">{children}</code>
                   ),
                   img: ({ src, alt }) => (
                     <NoteImage projectId={projectId} src={typeof src === 'string' ? src : undefined} alt={alt} />
@@ -283,8 +290,25 @@ export function NotesEditor({
               </Markdown>
             </div>
           ) : (
-            <p className="text-xs">Nothing to preview yet.</p>
+            // Empty: the whole box is a silent click-to-write target (the pencil
+            // appears on hover; the textarea placeholder does the teaching).
+            <button
+              type="button"
+              aria-label="Write notes"
+              className="block h-24 w-full cursor-text"
+              onClick={() => setMode('write')}
+            />
           )}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            title="Edit notes"
+            aria-label="Edit notes"
+            className="absolute top-2 right-2 opacity-0 transition-opacity group-hover/notes:opacity-100 focus-visible:opacity-100"
+            onClick={() => setMode('write')}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
         </div>
       )}
     </div>

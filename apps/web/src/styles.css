@@ -291,6 +291,14 @@ a {
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }
+  /* The sticky header's "Back" link: hidden at the top (the page's own Back
+     link is visible there), fades/slides in as the header collapses so the
+     navigation stays reachable however far the form is scrolled. */
+  .backlink-scroll {
+    animation: dth-runhint-appear linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
 }
 
 /* The Discard / Save actions start a little larger — taller, more horizontal
