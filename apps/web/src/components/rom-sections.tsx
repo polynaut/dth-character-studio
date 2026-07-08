@@ -33,6 +33,7 @@ import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type {
   Gender,
   GenesisVersion,
+  JcmMorphMod,
   PresetFrames,
   RomGroup,
   RomPose,
@@ -43,6 +44,7 @@ import type {
 } from '@dth/rom'
 
 import { ArtDirectionEditor } from './rom/art-direction.tsx'
+import { JcmModsGrid } from './rom/jcm-mods-grid.tsx'
 import { EMPTY_MORPH_INDEX, FigureNodeContext, MorphIndexContext } from './rom/contexts.ts'
 import type { IndexedMorphEntry } from './rom/contexts.ts'
 import { ImportCsvButton } from './rom/import-csv-button.tsx'
@@ -76,6 +78,10 @@ interface RomSectionsProps {
   /** Set (with a fresh nonce) to open the section holding `frame` and scroll its
    *  pose row into view — driven by clicking a failed morph in the run report. */
   revealFrame?: { frame: number; nonce: number } | null
+  /** Bone-rotation morph drives along the JCM ROM (character.jcmMorphMods) —
+   *  both must be passed for the JCM section's "Modify JCM frames" grid. */
+  jcmMorphMods?: Array<JcmMorphMod>
+  onJcmMorphModsChange?: (mods: Array<JcmMorphMod>) => void
   onChange: (sections: RomSectionsModel) => void
 }
 
@@ -96,6 +102,8 @@ export function RomSections({
   failedFrames,
   revealFrame,
   morphIndex,
+  jcmMorphMods,
+  onJcmMorphModsChange,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
@@ -467,6 +475,13 @@ export function RomSections({
                       <ImportCsvButton onImport={() => void importCsv(section)} />
                     </div>
                   </div>
+                )}
+
+                {/* Optional bone-rotation morph drives along the JCM ROM — the
+                    grid UI over character.jcmMorphMods (works with a preset OR
+                    a custom base ROM; the runtime applies it after either). */}
+                {section === 'JCM' && jcmMorphMods && onJcmMorphModsChange && (
+                  <JcmModsGrid mods={jcmMorphMods} onChange={onJcmMorphModsChange} />
                 )}
               </div>
             )}
