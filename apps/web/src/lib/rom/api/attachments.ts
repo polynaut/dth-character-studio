@@ -1,5 +1,6 @@
-import { exists, mkdir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readFile, remove, stat, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
+import { invoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { characterSchema, newId } from '@dth/rom'
@@ -172,6 +173,26 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
   return storage.saveCharacter(project, next, charsRoot(project))
 }
 
+/**
+ * Open a `.duf` in the ALREADY-RUNNING Daz Studio instance. Since DS 4.12 a
+ * second launch forwards the file to the running instance — but DS 6 silently
+ * ignores forwarded scene opens (Explorer double-click does nothing either).
+ * Forwarded SCRIPT files still execute there, so the bridge is a one-shot
+ * `.dsa` in app-data that opens the scene from INSIDE the running instance
+ * (with Daz's normal unsaved-changes prompt).
+ */
+async function openSceneInRunningDaz(scenePath: string): Promise<void> {
+  const script = [
+    '// Written by DTH Character Studio - opens a scene in the already-running',
+    '// Daz Studio instance (it ignores a forwarded .duf open; a script runs).',
+    `App.getContentMgr().openFile(${JSON.stringify(scenePath.replace(/\\/g, '/'))});`,
+    '',
+  ].join('\n')
+  const bridge = await storage.dataPath('dth_open_scene.dsa')
+  await writeTextFile(bridge, script)
+  await shellOpen(bridge)
+}
+
 /** Open a scene/project file with its OS-default application (a `.duf` opens in
  *  Daz Studio, a `.hip` in Houdini). Only LOCAL files with an expected extension
  *  are opened — a character definition is shareable, so a crafted `scenePath`
@@ -185,6 +206,13 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
     throw new Error(
       'Refusing to open — not a recognised scene/project file (.duf/.hip/.uproject).',
     )
+  }
+  // A running Daz ignores forwarded .duf opens — route through the script bridge.
+  if (
+    /\.duf$/i.test(scenePath) &&
+    (await invoke<boolean>('daz_studio_running').catch(() => false))
+  ) {
+    return openSceneInRunningDaz(scenePath)
   }
   await shellOpen(scenePath)
 }
