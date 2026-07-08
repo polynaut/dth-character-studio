@@ -465,11 +465,24 @@ function CharacterPage() {
           }}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> Back to overview
+          <ArrowLeft className="size-4" /> Back
         </Link>
       </div>
 
       <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background">
+        {/* Back stays reachable while scrolled: the page's own Back link lives
+            above this sticky header, so a second one fades in here (same
+            scroll-timeline as the header collapse) once that one is gone. */}
+        {/* top-5 matches the avatar's mt-5, so the link tops align. */}
+        <div className="absolute top-5 left-[150px] z-20">
+          <Link
+            to="/projects/$projectId"
+            params={{ projectId }}
+            className="backlink-scroll flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" /> Back
+          </Link>
+        </div>
         {/* Top-centered, its own standalone element. The full-width wrapper
             centers it via flexbox (robust regardless of the containing block);
             the button fades/slides in on scroll (scroll-timeline, same range as

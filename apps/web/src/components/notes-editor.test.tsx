@@ -27,8 +27,11 @@ afterEach(() => {
 })
 
 describe('NotesEditor', () => {
-  it('loads the stored notes, saves on blur with the loaded mtime, and previews the markdown', async () => {
+  it('loads the stored notes, saves on blur with the loaded mtime, and renders by default', async () => {
     render(<NotesEditor projectId="X:/proj" />)
+    // Rendered markdown IS the default view - the heading proves real markdown.
+    expect(await screen.findByText('Elyra')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Edit notes'))
     const area = await screen.findByRole('textbox')
     await waitFor(() =>
       expect((area as HTMLTextAreaElement).value).toContain('Raised in the wastes.'),
@@ -63,19 +66,16 @@ describe('NotesEditor', () => {
       }),
     )
 
-    // Preview renders real markdown (heading), not the raw text.
-    fireEvent.mouseDown(screen.getByText('Preview'))
-    fireEvent.click(screen.getByText('Preview'))
+    // Done returns to the rendered view.
+    fireEvent.click(screen.getByText('Done'))
     expect(await screen.findByText('Elyra')).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
   })
 
-  it('resolves media:// images in the preview via the api', async () => {
+  it('resolves media:// images in the default rendered view via the api', async () => {
     const { fetchNotes } = await import('#/lib/rom/api.ts')
     vi.mocked(fetchNotes).mockResolvedValueOnce({ text: '![ref](media://123-ref.png)', mtime: 5 })
     render(<NotesEditor projectId="X:/proj" />)
-    await screen.findByRole('textbox')
-    fireEvent.mouseDown(screen.getByText('Preview'))
-    fireEvent.click(screen.getByText('Preview'))
     await waitFor(() =>
       expect(resolveNoteMedia).toHaveBeenCalledWith({
         data: { projectId: 'X:/proj', fileName: '123-ref.png' },
@@ -90,6 +90,7 @@ describe('NotesEditor', () => {
       .mockRejectedValueOnce(new Error('disk full'))
       .mockRejectedValueOnce(new Error('disk full'))
     render(<NotesEditor projectId="X:/proj" />)
+    fireEvent.click(await screen.findByLabelText('Edit notes'))
     const area = await screen.findByRole('textbox')
 
     fireEvent.change(area, { target: { value: 'a' } })
@@ -118,6 +119,7 @@ describe('NotesEditor', () => {
     const { fetchNotes } = await import('#/lib/rom/api.ts')
     vi.mocked(saveNotes).mockRejectedValueOnce(new NotesConflictError())
     render(<NotesEditor projectId="X:/proj" />)
+    fireEvent.click(await screen.findByLabelText('Edit notes'))
     const area = await screen.findByRole('textbox')
 
     fireEvent.change(area, { target: { value: 'my local draft' } })

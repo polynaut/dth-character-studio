@@ -508,7 +508,11 @@ export function poseAssetCsvValidated(
   if (characterSkinning(character) !== 'dqs' || !jcmPreset || !facPreset) return false
   if (character.genesis === 'G9') return era === '2.0' && !includeDk
   if (character.genesis === 'G8.1') {
-    return era === '' && !genPreset && !physPreset && baseFrames === 188
+    // Era-independent on purpose: G8.1 CSVs are consumed by the pre-2.0 HDA
+    // (the old-Houdini pipeline — the CTL-tail template targets it), and the
+    // G8.1 base assets are byte-identical across every DTH release, so the
+    // 188-frame layout holds no matter which release is active in Settings.
+    return !genPreset && !physPreset && baseFrames === 188
   }
   return false
 }
