@@ -42,3 +42,15 @@ describe('PathCode edit affordance', () => {
     expect(writeText).not.toHaveBeenCalled() // stopPropagation kept the copy away
   })
 })
+
+describe('PathCode shift-hover preview', () => {
+  it('swaps the copy overlay to an open-folder icon while Shift is held', () => {
+    const { container } = render(<PathCode path="C:/proj/char" />)
+    expect(container.querySelector('.lucide-copy')).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'Shift' })
+    expect(container.querySelector('.lucide-folder-open')).toBeTruthy()
+    expect(container.querySelector('.lucide-copy')).toBeNull()
+    fireEvent.keyUp(window, { key: 'Shift' })
+    expect(container.querySelector('.lucide-copy')).toBeTruthy()
+  })
+})

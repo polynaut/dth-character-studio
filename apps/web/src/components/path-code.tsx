@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, Copy, Pencil } from 'lucide-react'
+import { Check, Copy, FolderOpen, Pencil } from 'lucide-react'
 
 import { cn } from '#/lib/utils.ts'
 import { revealPath } from '#/lib/rom/api.ts'
+import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 
 /**
  * Renders a filesystem path as an inline code chip (the app's "backtick" style).
@@ -41,6 +42,8 @@ export function PathCode({
   onEdit?: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  // Shift held → the hover overlay previews the alternate action (open folder).
+  const shiftHeld = useModifierHeld('Shift')
 
   async function copy() {
     try {
@@ -110,6 +113,9 @@ export function PathCode({
       >
         {copied ? (
           <Check className="size-3 text-primary" />
+        ) : shiftHeld ? (
+          // Shift is down: the click will OPEN the folder, not copy - preview it.
+          <FolderOpen className="size-3 text-primary" />
         ) : (
           <Copy className="size-3 text-muted-foreground" />
         )}
