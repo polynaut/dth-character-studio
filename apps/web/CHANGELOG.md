@@ -1,5 +1,35 @@
 # @dth/web
 
+## 0.41.0
+
+### Minor Changes
+
+- [#200](https://github.com/polynaut/dth-character-studio/pull/200) [`00912f4`](https://github.com/polynaut/dth-character-studio/commit/00912f4e02bda8aa62a2e0ab2d67f3961362970f) Thanks [@polynaut](https://github.com/polynaut)! - "Modify JCM frames" — a proper grid UI in the JCM section for bone-rotation
+  morph drives (formerly a raw JSON array buried in Advanced Options). Add rules
+  (bone + rotation axis) and per-rule morph drives with angle→value ranges split
+  by rotation direction; the Morph name field autocompletes from the scanned
+  morph index. The old JSON textarea is gone.
+
+- [#200](https://github.com/polynaut/dth-character-studio/pull/200) [`00912f4`](https://github.com/polynaut/dth-character-studio/commit/00912f4e02bda8aa62a2e0ab2d67f3961362970f) Thanks [@polynaut](https://github.com/polynaut)! - Unreal project cards grew up: bigger cards (name + folder) in the footer bar,
+  each with a tiny install button that bootstraps the Unreal project with DTH —
+  one click copies the linked DTH release's Unreal Engine content into the
+  project's `Content/DazToHue`, making a fresh Unreal project DTH-ready in an
+  instant. The button dims once the content exists; Ctrl+click always installs
+  (overwrite from the currently selected release — files are copied over, never
+  deleted first). Unreal linking + content syncing is now in the getting-started
+  guide.
+
+### Patch Changes
+
+- [#201](https://github.com/polynaut/dth-character-studio/pull/201) [`635ce6f`](https://github.com/polynaut/dth-character-studio/commit/635ce6f3fff7f57b86f9a3873bb8fee7192ba1aa) Thanks [@polynaut](https://github.com/polynaut)! - Unreal cards now correctly detect installed DTH content (the check always read
+  "missing" for normal Windows paths, leaving the install button hot on projects
+  that already had `Content/DazToHue` — it re-checks natively now). And
+  Shift+click is the app-wide "show in Explorer" hotkey: on an Unreal card it
+  opens the project's folder, on any path chip it replaces the old Ctrl+click.
+  The chips' hover tooltip is gone — the behaviors are documented in the guide.
+- Updated dependencies [[`00912f4`](https://github.com/polynaut/dth-character-studio/commit/00912f4e02bda8aa62a2e0ab2d67f3961362970f), [`00912f4`](https://github.com/polynaut/dth-character-studio/commit/00912f4e02bda8aa62a2e0ab2d67f3961362970f), [`635ce6f`](https://github.com/polynaut/dth-character-studio/commit/635ce6f3fff7f57b86f9a3873bb8fee7192ba1aa)]:
+  - @dth/rom@0.41.0
+
 ## 0.40.0
 
 ### Minor Changes
