@@ -42,8 +42,8 @@ export function PathCode({
   onEdit?: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  // Shift held → the hover overlay previews the alternate action (open folder).
-  const shiftHeld = useModifierHeld('Shift')
+  // Alt held → the hover overlay previews the alternate action (open folder).
+  const altHeld = useModifierHeld('Alt')
 
   async function copy() {
     try {
@@ -57,7 +57,7 @@ export function PathCode({
   }
 
   function reveal() {
-    // Shift+click: jump to the path in the OS file manager instead of copying
+    // Alt+click: jump to the path in the OS file manager instead of copying
     // (a file path opens its parent folder) — the app-wide "show in Explorer"
     // hotkey, same as on the Unreal cards. Errors surface as a toast-less
     // no-op — the path may be gone; copying still works either way.
@@ -68,14 +68,14 @@ export function PathCode({
     <span
       role="button"
       tabIndex={0}
-      // No tooltip by design — the chip behaviors (click = copy, Shift+click =
+      // No tooltip by design — the chip behaviors (click = copy, Alt+click =
       // Explorer) are documented in the guide; the check overlay confirms a copy.
       aria-label={copied ? 'Copied' : 'Copy path'}
-      onClick={(e) => (e.shiftKey ? reveal() : void copy())}
+      onClick={(e) => (e.altKey ? reveal() : void copy())}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          if (e.shiftKey) reveal()
+          if (e.altKey) reveal()
           else void copy()
         }
       }}
@@ -113,8 +113,8 @@ export function PathCode({
       >
         {copied ? (
           <Check className="size-3 text-primary" />
-        ) : shiftHeld ? (
-          // Shift is down: the click will OPEN the folder, not copy - preview it.
+        ) : altHeld ? (
+          // Alt is down: the click will OPEN the folder, not copy - preview it.
           <FolderOpen className="size-3 text-primary" />
         ) : (
           <Copy className="size-3 text-muted-foreground" />
