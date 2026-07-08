@@ -5,6 +5,7 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
+    "core:window:allow-destroy",
     "dialog:default",
     "shell:default",
     "os:default",
