@@ -2,14 +2,28 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('#/lib/rom/api.ts', () => ({ revealPath: vi.fn().mockResolvedValue(undefined) }))
+
 afterEach(cleanup)
 
 import { PathCode } from './path-code'
+import { revealPath } from '#/lib/rom/api.ts'
 
 describe('PathCode edit affordance', () => {
   it('shows no pencil without onEdit', () => {
     render(<PathCode path="C:/proj/char/daz3d" />)
     expect(screen.queryByLabelText('Edit path')).toBeNull()
+  })
+
+  it('Shift+click reveals in Explorer instead of copying (no tooltip on the chip)', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    render(<PathCode path="C:/proj/char/daz3d" />)
+    const chip = screen.getByLabelText('Copy path')
+    expect(chip.getAttribute('title')).toBeNull() // behavior lives in the guide docs
+    fireEvent.click(chip, { shiftKey: true })
+    expect(revealPath).toHaveBeenCalledWith({ data: { path: 'C:/proj/char/daz3d' } })
+    expect(writeText).not.toHaveBeenCalled()
   })
 
   it('renders the pencil in front and clicking it edits WITHOUT copying', () => {

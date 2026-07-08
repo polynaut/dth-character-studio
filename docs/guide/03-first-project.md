@@ -24,6 +24,10 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
   self-contained and portable.
 - Per-project options (folder layout, optional Assets and Daz Products features)
   live in **Settings → Project** — the defaults are fine for a first run.
+- **Path chips** — the monospace path badges all over the app — **copy the full
+  path on click** (a check mark confirms it); **Shift+click opens the location
+  in Explorer** (for a file, its folder). Where a chip carries a pencil, it
+  edits the value in place.
 
 ## Linking Unreal projects
 
@@ -32,7 +36,8 @@ this studio project feeds. Link one or more `.uproject` files with the button or
 by dropping them onto the bar — links only: the files stay where they are, and
 unlinking never deletes anything.
 
-- **Click a card** to open that project in Unreal Engine.
+- **Click a card** to open that project in Unreal Engine — **Shift+click** shows it
+  in Explorer instead.
 - **The small install button** on each card bootstraps the Unreal project with
   DTH: it copies the linked DTH release's *Unreal Engine Content* into the
   project's `Content/DazToHue` — a fresh Unreal project is DTH-ready in one

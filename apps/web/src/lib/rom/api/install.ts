@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core'
-import { exists } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import * as storage from '../storage'
@@ -423,15 +422,16 @@ const unrealContentInput = z.object({
   uprojectPath: z.string().min(1),
 })
 
-/** Whether the linked Unreal project already carries `Content/DazToHue`. */
+/**
+ * Whether the linked Unreal project already carries `Content/DazToHue`.
+ * Rust-side (`unreal_dth_present`) on purpose: the old JS probe's separator
+ * regex had lost its backslash, so backslash paths never stripped to the
+ * parent folder and every project read as "missing" — and Rust keeps the
+ * check symmetric with `install_unreal_dth`'s own path derivation.
+ */
 export async function unrealDthContentPresent({ data }: { data: unknown }): Promise<boolean> {
   const { uprojectPath } = unrealContentInput.parse(data)
-  const dir = uprojectPath.replace(/[\/][^\/]*$/, '')
-  try {
-    return await exists(`${dir}/Content/DazToHue`)
-  } catch {
-    return false // unreadable project folder — offer the install, Rust re-checks
-  }
+  return invoke<boolean>('unreal_dth_present', { uprojectPath })
 }
 
 /**

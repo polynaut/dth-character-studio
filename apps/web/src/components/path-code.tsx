@@ -54,8 +54,9 @@ export function PathCode({
   }
 
   function reveal() {
-    // Ctrl+click: jump to the path in the OS file manager instead of copying
-    // (a file path opens its parent folder). Errors surface as a toast-less
+    // Shift+click: jump to the path in the OS file manager instead of copying
+    // (a file path opens its parent folder) — the app-wide "show in Explorer"
+    // hotkey, same as on the Unreal cards. Errors surface as a toast-less
     // no-op — the path may be gone; copying still works either way.
     void revealPath({ data: { path } }).catch(() => {})
   }
@@ -64,12 +65,14 @@ export function PathCode({
     <span
       role="button"
       tabIndex={0}
-      title={copied ? 'Copied!' : 'Click to copy — Ctrl+click to show in Explorer'}
-      onClick={(e) => (e.ctrlKey || e.metaKey ? reveal() : void copy())}
+      // No tooltip by design — the chip behaviors (click = copy, Shift+click =
+      // Explorer) are documented in the guide; the check overlay confirms a copy.
+      aria-label={copied ? 'Copied' : 'Copy path'}
+      onClick={(e) => (e.shiftKey ? reveal() : void copy())}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          if (e.ctrlKey || e.metaKey) reveal()
+          if (e.shiftKey) reveal()
           else void copy()
         }
       }}

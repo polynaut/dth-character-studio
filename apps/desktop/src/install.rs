@@ -367,3 +367,15 @@ pub fn install_unreal_dth(request: UnrealInstallRequest) -> Result<u64, String> 
     }
     copy_dir(&src, &dest).map_err(|e| e.to_string())
 }
+
+/// Whether a linked Unreal project already carries `Content/DazToHue`. Rust-side
+/// on purpose: the JS fs plugin's `exists` proved unreliable for this probe (it
+/// silently reported the folder missing on a real project), and this stays
+/// symmetric with `install_unreal_dth`'s own path derivation.
+#[tauri::command]
+pub fn unreal_dth_present(uproject_path: String) -> bool {
+    Path::new(&uproject_path)
+        .parent()
+        .map(|dir| dir.join("Content").join("DazToHue").is_dir())
+        .unwrap_or(false)
+}
