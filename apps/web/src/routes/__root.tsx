@@ -11,6 +11,7 @@ import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import { TooltipHost } from '#/components/ui/tooltip-host.tsx'
+import { installAltMenuGuard } from '#/lib/alt-menu-guard.ts'
 import { Button } from '#/components/ui/button.tsx'
 
 import type { ErrorComponentProps } from '@tanstack/react-router'
@@ -51,6 +52,10 @@ function RootErrorComponent({ error }: ErrorComponentProps) {
 
 function RootComponent() {
   const navigate = useNavigate()
+
+  // Alt over a reveal target must not arm the native menu bar (Alt+click is
+  // the "show in Explorer" hotkey there) — bare Alt elsewhere still does.
+  useEffect(() => installAltMenuGuard(), [])
 
   // On launch, re-map any known network drives that aren't currently available
   // (an elevated relaunch doesn't inherit the user's interactive mappings).

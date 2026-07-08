@@ -74,6 +74,7 @@ function SceneCard({
       <button
         type="button"
         onClick={onOpen}
+        data-alt-reveal=""
         title="Open in Daz"
         className="daz-card group relative flex h-full w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors"
       >
