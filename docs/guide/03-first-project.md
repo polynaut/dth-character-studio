@@ -27,7 +27,8 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
 - **Path chips** — the monospace path badges all over the app — **copy the full
   path on click** (a check mark confirms it); **Shift+click opens the location
   in Explorer** (for a file, its folder). Where a chip carries a pencil, it
-  edits the value in place.
+  edits the value in place. The same Shift+click works on every linked card —
+  Daz scenes, Houdini projects and Unreal projects.
 
 ## Linking Unreal projects
 
