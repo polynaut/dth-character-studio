@@ -121,6 +121,7 @@ pub fn run() {
             scripts::daz_studio_running,
             install::install_daz_merge,
             install::install_houdini_presets,
+            install::install_unreal_dth,
             drives::unc_for_path,
             drives::ensure_network_drives,
             poses::pose_asset_frames,
