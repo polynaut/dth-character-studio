@@ -16,6 +16,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
+import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
@@ -118,24 +119,8 @@ export function UnrealProjectsBar({
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
   const [installingPath, setInstallingPath] = useState('')
   // Ctrl/Cmd held → installed cards' dimmed install buttons light up (re-install).
-  const [ctrlHeld, setCtrlHeld] = useState(false)
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(true)
-    }
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(false)
-    }
-    const clear = () => setCtrlHeld(false)
-    window.addEventListener('keydown', down)
-    window.addEventListener('keyup', up)
-    window.addEventListener('blur', clear)
-    return () => {
-      window.removeEventListener('keydown', down)
-      window.removeEventListener('keyup', up)
-      window.removeEventListener('blur', clear)
-    }
-  }, [])
+  const ctrlHeld = useModifierHeld('Control')
+  const metaHeld = useModifierHeld('Meta')
 
   useEffect(() => {
     let active = true
@@ -216,7 +201,7 @@ export function UnrealProjectsBar({
             key={path}
             uprojectPath={path}
             dthPresent={dthStatus[path]}
-            ctrlHeld={ctrlHeld}
+            ctrlHeld={ctrlHeld || metaHeld}
             installing={installingPath === path}
             onOpen={(e) => {
               // Shift+click = the app-wide "show in Explorer" hotkey (same as
