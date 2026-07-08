@@ -1,5 +1,15 @@
 # @dth/rom
 
+## 0.41.2
+
+### Patch Changes
+
+- [#205](https://github.com/polynaut/dth-character-studio/pull/205) [`cb72bf3`](https://github.com/polynaut/dth-character-studio/commit/cb72bf3ec92d0f0d46e0590d14ae85e6529201c8) Thanks [@polynaut](https://github.com/polynaut)! - The Unreal card's install button keeps it short — tooltip is just "Install DTH
+  Content" — and holding Ctrl lights the dimmed button back up on already-
+  bootstrapped projects, hinting that a click now re-installs. Path chips
+  preview their alternate action too: holding Shift swaps the hover copy icon
+  for an open-folder icon.
+
 ## 0.41.1
 
 ### Patch Changes
