@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, FolderInput, Link2, Plus, Trash2 } from 'lucide-react'
+import { ExternalLink, FolderInput, FolderOpen, Link2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
@@ -24,6 +24,7 @@ import {
   saveCharacter,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
+import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -56,6 +57,8 @@ function SceneCard({
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The heading shows the scene name without its extension (e.g. ".duf").
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  // Alt held → the open icon previews the alternate action (show in Explorer).
+  const altHeld = useModifierHeld('Alt')
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
   // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
   // nested. Empty for a scene linked outside the character folder.
@@ -104,7 +107,11 @@ function SceneCard({
             </div>
           )}
         </div>
-        <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        {altHeld ? (
+          <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        ) : (
+          <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
+        )}
       </button>
       {onRemove && (
         <Button
@@ -207,17 +214,17 @@ export function DazSceneField({
       : defaultSubdir
   const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
 
-  // Shift+click = the app-wide "show in Explorer" hotkey (same as path chips
+  // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
   async function onOpen(scenePath: string, e?: React.MouseEvent) {
     setError('')
     try {
-      if (e?.shiftKey) await revealPath({ data: { path: scenePath } })
+      if (e?.altKey) await revealPath({ data: { path: scenePath } })
       else await openScene({ data: { scenePath } })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
-      toast.error(e?.shiftKey ? msg : `Couldn't open in Daz: ${msg}`)
+      toast.error(e?.altKey ? msg : `Couldn't open in Daz: ${msg}`)
     }
   }
 
@@ -407,15 +414,20 @@ export function DazSceneField({
     }
   }
 
-  // Two-tone path chip for the scenes' folder (the primary scene's directory) —
-  // the project-root prefix dimmed, the rest emphasized.
+  // Two-tone path chip for the scenes' folder (the primary scene's directory):
+  // everything through the CHARACTER folder is dimmed — we're already inside the
+  // character here, so only the actual scenes subfolder ("\daz3d") reads bright.
+  // A scene outside the character folder falls back to dimming the project root.
   const sceneAbs = displayPath(character.scenePath)
   const projectRoot = displayPath(location.libraryFolder)
+  const charFolderDisplay = displayPath(charFolder)
   const lastSep = Math.max(sceneAbs.lastIndexOf('\\'), sceneAbs.lastIndexOf('/'))
   const sceneDir = lastSep >= 0 ? sceneAbs.slice(0, lastSep) : ''
-  const dirRootLen = sceneDir.toLowerCase().startsWith(projectRoot.toLowerCase())
-    ? projectRoot.length
-    : 0
+  const dirRootLen = sceneDir.toLowerCase().startsWith(charFolderDisplay.toLowerCase())
+    ? charFolderDisplay.length
+    : sceneDir.toLowerCase().startsWith(projectRoot.toLowerCase())
+      ? projectRoot.length
+      : 0
   // The scenes subfolder relative to the character folder ('' when the scene is
   // linked from outside it) — that's the editable part of the chip.
   const sceneDirAbs = norm(character.scenePath).replace(/\/[^/]*$/, '')

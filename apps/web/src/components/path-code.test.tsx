@@ -15,13 +15,13 @@ describe('PathCode edit affordance', () => {
     expect(screen.queryByLabelText('Edit path')).toBeNull()
   })
 
-  it('Shift+click reveals in Explorer instead of copying (no tooltip on the chip)', () => {
+  it('Alt+click reveals in Explorer instead of copying (no tooltip on the chip)', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     render(<PathCode path="C:/proj/char/daz3d" />)
     const chip = screen.getByLabelText('Copy path')
     expect(chip.getAttribute('title')).toBeNull() // behavior lives in the guide docs
-    fireEvent.click(chip, { shiftKey: true })
+    fireEvent.click(chip, { altKey: true })
     expect(revealPath).toHaveBeenCalledWith({ data: { path: 'C:/proj/char/daz3d' } })
     expect(writeText).not.toHaveBeenCalled()
   })
@@ -44,13 +44,13 @@ describe('PathCode edit affordance', () => {
 })
 
 describe('PathCode shift-hover preview', () => {
-  it('swaps the copy overlay to an open-folder icon while Shift is held', () => {
+  it('swaps the copy overlay to an open-folder icon while Alt is held', () => {
     const { container } = render(<PathCode path="C:/proj/char" />)
     expect(container.querySelector('.lucide-copy')).toBeTruthy()
-    fireEvent.keyDown(window, { key: 'Shift' })
+    fireEvent.keyDown(window, { key: 'Alt' })
     expect(container.querySelector('.lucide-folder-open')).toBeTruthy()
     expect(container.querySelector('.lucide-copy')).toBeNull()
-    fireEvent.keyUp(window, { key: 'Shift' })
+    fireEvent.keyUp(window, { key: 'Alt' })
     expect(container.querySelector('.lucide-copy')).toBeTruthy()
   })
 })
