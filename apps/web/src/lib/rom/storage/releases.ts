@@ -265,7 +265,7 @@ export async function resolveActiveRelease(
  * install counterpart to {@link resolveActiveRelease}, which returns the Poses
  * subfolder instead.
  */
-async function resolveActiveReleaseRoot(
+export async function resolveActiveReleaseRoot(
   folder: string,
   currentVersion: string,
 ): Promise<{ releaseRoot: string; version: string; name: string; error: string | null }> {

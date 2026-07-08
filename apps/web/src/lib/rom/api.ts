@@ -124,6 +124,8 @@ export {
   installDazToHueScripts,
   installDthPlugin,
   installDthRelease,
+  installUnrealDthContent,
+  unrealDthContentPresent,
   installHoudiniPresets,
   installedExporterVersion,
   latestDazToHueCommit,

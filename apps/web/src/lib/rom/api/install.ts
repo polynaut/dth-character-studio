@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { exists } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import * as storage from '../storage'
@@ -415,4 +416,41 @@ export async function installedExporterVersion(dazInstallFolder: string): Promis
   } catch {
     return ''
   }
+}
+
+const unrealContentInput = z.object({
+  /** The linked `.uproject` file (absolute). */
+  uprojectPath: z.string().min(1),
+})
+
+/** Whether the linked Unreal project already carries `Content/DazToHue`. */
+export async function unrealDthContentPresent({ data }: { data: unknown }): Promise<boolean> {
+  const { uprojectPath } = unrealContentInput.parse(data)
+  const dir = uprojectPath.replace(/[\/][^\/]*$/, '')
+  try {
+    return await exists(`${dir}/Content/DazToHue`)
+  } catch {
+    return false // unreadable project folder — offer the install, Rust re-checks
+  }
+}
+
+/**
+ * Install the ACTIVE DTH release's Unreal Engine content into the linked
+ * project's `Content/DazToHue` (native copy, `install_unreal_dth`) — the
+ * instant bootstrap for a fresh Unreal project. `overwrite` copies over an
+ * existing folder (the UI's Ctrl+click); never deletes first. Returns the
+ * number of files copied.
+ */
+export async function installUnrealDthContent({ data }: { data: unknown }): Promise<number> {
+  const { uprojectPath, overwrite } = unrealContentInput
+    .extend({ overwrite: z.boolean().optional() })
+    .parse(data)
+  const s = await storage.getSettings()
+  const release = await storage.resolveActiveReleaseRoot(s.dthPosesFolder, s.currentDthVersion)
+  if (release.error || !release.releaseRoot) {
+    throw new Error(release.error ?? 'No DTH release resolved — set the DTH release folder in Settings.')
+  }
+  return invoke<number>('install_unreal_dth', {
+    request: { releaseRoot: release.releaseRoot, uprojectPath, overwrite: overwrite ?? false },
+  })
 }
