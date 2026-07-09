@@ -1,5 +1,27 @@
 # @dth/web
 
+## 0.41.6
+
+### Patch Changes
+
+- [#213](https://github.com/polynaut/dth-character-studio/pull/213) [`42310c2`](https://github.com/polynaut/dth-character-studio/commit/42310c2bedd7827159c26b9f3a7d3ac2fbabb1c3) Thanks [@polynaut](https://github.com/polynaut)! - Internal architecture hardening (no user-facing behaviour change):
+
+  - Adopt **oxlint** (type-aware) as the lint gate — fixes a handful of real
+    latent bugs it surfaced (fire-and-forget promises, object-to-string coercions).
+  - CI: the "version packages" PR is now authored with a dedicated token so its
+    checks run on their own; PRs must carry a changeset; the release is split into
+    a self-hosted **sign** step and a hosted **publish** step.
+  - Extract a new **`@dth/ui`** package — an app-agnostic React kit (primitives,
+    hooks, and composable components with no Tauri/router/filesystem coupling) so
+    the UI is reusable by a future online build and the app stops carrying
+    thousand-line god-files.
+  - Core (`@dth/rom`) and the Rust backend get cohesion + safety cleanups
+    (single frame-offset source, typed FFI returns, env-derived paths).
+
+- Updated dependencies []:
+  - @dth/rom@0.41.6
+  - @dth/ui@0.41.6
+
 ## 0.41.5
 
 ### Patch Changes
