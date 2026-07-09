@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, FolderOpen, Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Button, InfoPopup, Label, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { Button, InfoPopup, Label, LinkedAssetCard, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { openScene, revealPath, saveCharacter } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
@@ -53,55 +53,42 @@ function HoudiniCard({
     ? '%CHAR%' + hipDir.slice(base.length).split('/').join(pathSeparator())
     : displayPath(hipDir)
   return (
-    <div className="group/card relative w-80">
-      <button
-        type="button"
-        onClick={onOpen}
-        data-alt-reveal=""
-        title="Open in Houdini"
-        className="houdini-card group relative flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors"
-      >
+    <LinkedAssetCard
+      title={displayName}
+      media={
         <Portrait
           src={avatarSrc}
           name={displayName}
           className="aspect-[3/4] w-14 shrink-0 rounded-md"
           fallbackClassName="text-xl"
         />
-        {/* Houdini brand mark, floating bottom-left as a badge on the avatar. */}
+      }
+      // Houdini brand mark, floating bottom-left as a badge on the avatar.
+      badge={
         <img
           src={houdiniLogo}
           alt=""
           aria-hidden
           className="pointer-events-none absolute bottom-1 left-1 size-8 object-contain drop-shadow-md"
         />
-        <div className="min-w-0 text-xs">
-          <div className="truncate text-sm font-medium">{displayName}</div>
-          {dir && (
-            <code
-              className={`${pathChipClass('secondary')} mt-1 inline-block max-w-full truncate align-middle`}
-            >
-              {dir}
-            </code>
-          )}
-        </div>
-        {altHeld ? (
-          <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
-        ) : (
-          <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-houdini-orange" />
-        )}
-      </button>
-      {onRemove && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-1.5 right-1.5 size-7 opacity-0 transition-opacity group-hover/card:opacity-100"
-          title="Unlink from character"
-          onClick={onRemove}
-        >
-          <Trash2 className="size-3.5 text-destructive" />
-        </Button>
-      )}
-    </div>
+      }
+      chip={
+        dir ? (
+          <code
+            className={`${pathChipClass('secondary')} inline-block max-w-full truncate align-middle`}
+          >
+            {dir}
+          </code>
+        ) : undefined
+      }
+      altHeld={altHeld}
+      openTitle="Open in Houdini"
+      accentClass="group-hover:text-houdini-orange"
+      cardClass="houdini-card"
+      onOpen={onOpen}
+      onRemove={onRemove}
+      removeTitle="Unlink from character"
+    />
   )
 }
 

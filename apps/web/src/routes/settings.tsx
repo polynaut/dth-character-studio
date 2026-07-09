@@ -272,6 +272,32 @@ function NetworkDrivesSection() {
   )
 }
 
+/**
+ * The editable per-project `.dcsp` manifest fields, held on the Project tab as one
+ * state object (see {@link SettingsPage}). A new manifest field is added here and
+ * flows through patch/dirty/save uniformly — no parallel `useState` to thread.
+ */
+interface ProjectSettings {
+  dazSubdir: string
+  houdiniSubdir: string
+  createHoudiniSubdir: boolean
+  assetsEnabled: boolean
+  dazProductsEnabled: boolean
+  charactersSubdir: string
+}
+
+/** The project's saved values (with the same per-field defaults the fields use). */
+function projectSettingsFrom(project: Partial<ProjectSettings> | null | undefined): ProjectSettings {
+  return {
+    dazSubdir: project?.dazSubdir ?? 'daz3d',
+    houdiniSubdir: project?.houdiniSubdir ?? 'houdini',
+    createHoudiniSubdir: project?.createHoudiniSubdir ?? true,
+    assetsEnabled: project?.assetsEnabled ?? false,
+    dazProductsEnabled: project?.dazProductsEnabled ?? false,
+    charactersSubdir: project?.charactersSubdir ?? '',
+  }
+}
+
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
   const router = useRouter()
@@ -312,14 +338,17 @@ function SettingsPage() {
 
   // Project tab — per-project `.dcsp` behaviour defaults (only present when this
   // window is on a project). Saved independently of the machine settings below.
-  const [pDazSubdir, setPDazSubdir] = useState(project?.dazSubdir ?? 'daz3d')
-  const [pHoudiniSubdir, setPHoudiniSubdir] = useState(project?.houdiniSubdir ?? 'houdini')
-  const [pCreateHoudini, setPCreateHoudini] = useState(project?.createHoudiniSubdir ?? true)
-  const [pAssetsEnabled, setPAssetsEnabled] = useState(project?.assetsEnabled ?? false)
-  const [pDazProductsEnabled, setPDazProductsEnabled] = useState(
-    project?.dazProductsEnabled ?? false,
+  // Held as one object + patch updater (mirrors the character route) so a new
+  // manifest field is a one-line addition rather than another parallel `useState`.
+  const [projectSettings, setProjectSettings] = useState<ProjectSettings>(() =>
+    projectSettingsFrom(project),
   )
-  const [pCharactersSubdir, setPCharactersSubdir] = useState(project?.charactersSubdir ?? '')
+  const patchProject = (partial: Partial<ProjectSettings>) =>
+    setProjectSettings((s) => ({ ...s, ...partial }))
+  // The saved-on-disk values, refreshed by `router.invalidate()` after a save —
+  // dirty is `projectSettings` measured against this (matching the old per-field
+  // comparison against the live `project`).
+  const projectBaseline = projectSettingsFrom(project)
   const [savingProject, setSavingProject] = useState(false)
   const [detectingDim, setDetectingDim] = useState(false)
 
@@ -339,12 +368,7 @@ function SettingsPage() {
   }
   const projectDirty =
     !!project &&
-    (pDazSubdir !== project.dazSubdir ||
-      pHoudiniSubdir !== project.houdiniSubdir ||
-      pCreateHoudini !== project.createHoudiniSubdir ||
-      pAssetsEnabled !== project.assetsEnabled ||
-      pDazProductsEnabled !== project.dazProductsEnabled ||
-      pCharactersSubdir !== project.charactersSubdir ||
+    (JSON.stringify(projectSettings) !== JSON.stringify(projectBaseline) ||
       // Edited on the Project tab (under the Daz Products toggle) but stored in
       // the machine settings — saved by onSaveProjectSettings alongside the manifest.
       settings.dimManifestsFolder !== initial.dimManifestsFolder)
@@ -353,7 +377,7 @@ function SettingsPage() {
     if (!project) return
     // Changing the characters subfolder physically MOVES every existing character
     // folder to the new root — confirm before that destructive, non-trivial move.
-    const subdirChanged = pCharactersSubdir.trim() !== (project.charactersSubdir ?? '')
+    const subdirChanged = projectSettings.charactersSubdir.trim() !== (project.charactersSubdir ?? '')
     if (subdirChanged) {
       const ok = await confirmDialog(
         'Change the characters subfolder?\n\nThis moves all existing character folders to the new location and repoints their scene/Houdini paths. Make sure no character files are open elsewhere.',
@@ -371,12 +395,12 @@ function SettingsPage() {
       await saveProjectSettings({
         data: {
           projectId: project.path,
-          dazSubdir: pDazSubdir.trim() || 'daz3d',
-          houdiniSubdir: pHoudiniSubdir.trim() || 'houdini',
-          createHoudiniSubdir: pCreateHoudini,
-          assetsEnabled: pAssetsEnabled,
-          dazProductsEnabled: pDazProductsEnabled,
-          charactersSubdir: pCharactersSubdir.trim(),
+          dazSubdir: projectSettings.dazSubdir.trim() || 'daz3d',
+          houdiniSubdir: projectSettings.houdiniSubdir.trim() || 'houdini',
+          createHoudiniSubdir: projectSettings.createHoudiniSubdir,
+          assetsEnabled: projectSettings.assetsEnabled,
+          dazProductsEnabled: projectSettings.dazProductsEnabled,
+          charactersSubdir: projectSettings.charactersSubdir.trim(),
         },
       })
       await router.invalidate()
@@ -617,14 +641,7 @@ function SettingsPage() {
   }
   function onDiscardAll() {
     setSettings(initial)
-    if (project) {
-      setPDazSubdir(project.dazSubdir ?? 'daz3d')
-      setPHoudiniSubdir(project.houdiniSubdir ?? 'houdini')
-      setPCreateHoudini(project.createHoudiniSubdir ?? true)
-      setPAssetsEnabled(project.assetsEnabled ?? false)
-      setPDazProductsEnabled(project.dazProductsEnabled ?? false)
-      setPCharactersSubdir(project.charactersSubdir ?? '')
-    }
+    if (project) setProjectSettings(projectSettingsFrom(project))
   }
 
   return (
@@ -1095,29 +1112,32 @@ function SettingsPage() {
                   </InfoPopup>
                 </Label>
                 <Input
-                  value={pCharactersSubdir}
+                  value={projectSettings.charactersSubdir}
                   placeholder="(project root)"
-                  onChange={(e) => setPCharactersSubdir(e.target.value)}
+                  onChange={(e) => patchProject({ charactersSubdir: e.target.value })}
                 />
               </div>
               <Field label="Daz scenes subfolder">
                 <Input
-                  value={pDazSubdir}
+                  value={projectSettings.dazSubdir}
                   placeholder="daz3d"
-                  onChange={(e) => setPDazSubdir(e.target.value)}
+                  onChange={(e) => patchProject({ dazSubdir: e.target.value })}
                 />
               </Field>
               <Field label="Houdini projects subfolder">
                 <Input
-                  value={pHoudiniSubdir}
+                  value={projectSettings.houdiniSubdir}
                   placeholder="houdini"
-                  disabled={!pCreateHoudini}
-                  onChange={(e) => setPHoudiniSubdir(e.target.value)}
+                  disabled={!projectSettings.createHoudiniSubdir}
+                  onChange={(e) => patchProject({ houdiniSubdir: e.target.value })}
                 />
               </Field>
               <label className="flex items-center justify-between gap-3 text-sm">
                 <span>Create the Houdini subfolder in new characters</span>
-                <Switch checked={pCreateHoudini} onCheckedChange={setPCreateHoudini} />
+                <Switch
+                  checked={projectSettings.createHoudiniSubdir}
+                  onCheckedChange={(v) => patchProject({ createHoudiniSubdir: v })}
+                />
               </label>
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
@@ -1128,7 +1148,10 @@ function SettingsPage() {
                     characters only.
                   </InfoPopup>
                 </span>
-                <Switch checked={pAssetsEnabled} onCheckedChange={setPAssetsEnabled} />
+                <Switch
+                  checked={projectSettings.assetsEnabled}
+                  onCheckedChange={(v) => patchProject({ assetsEnabled: v })}
+                />
               </div>
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
@@ -1142,7 +1165,10 @@ function SettingsPage() {
                     &amp; SKUs. Off by default.
                   </InfoPopup>
                 </span>
-                <Switch checked={pDazProductsEnabled} onCheckedChange={setPDazProductsEnabled} />
+                <Switch
+                  checked={projectSettings.dazProductsEnabled}
+                  onCheckedChange={(v) => patchProject({ dazProductsEnabled: v })}
+                />
               </div>
               <div>
                 <FolderField
