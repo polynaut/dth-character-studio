@@ -1,10 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
-import { Switch } from '#/components/ui/switch.tsx'
+import { Button, Input, Label, Switch } from '@dth/ui'
 
 /**
  * The "this Daz scene lives outside — copy it in?" modal, shared by the create

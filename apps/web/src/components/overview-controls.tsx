@@ -1,15 +1,7 @@
 import { createPortal } from 'react-dom'
 import { Check, CheckCheck, LayoutGrid, List, Trash2, X } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
-import { cn } from '#/lib/utils.ts'
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, cn } from '@dth/ui'
 
 /** Card layout for an overview. */
 export type ViewMode = 'grid' | 'list'

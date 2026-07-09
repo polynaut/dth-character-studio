@@ -1,10 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronRight, CircleCheck, CircleSlash, CircleX, FolderOpen, X } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
+import { Button, InfoPopup, Input, Label } from '@dth/ui'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 

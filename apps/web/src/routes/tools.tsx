@@ -14,11 +14,8 @@ import {
 } from 'lucide-react'
 import { poseAssetCsvEra } from '@dth/rom'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button, InfoPopup, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import {
   DAZTOHUE_SCRIPTS_REPO,
   dazToHueScriptsStatus,

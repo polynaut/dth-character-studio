@@ -1,9 +1,9 @@
 import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Button } from '#/components/ui/button.tsx'
-import { Switch } from '#/components/ui/switch.tsx'
-import { cn } from '#/lib/utils.ts'
+import { Button } from '../primitives/button.tsx'
+import { Switch } from '../primitives/switch.tsx'
+import { cn } from '../cn.ts'
 
 /**
  * Confirm unlinking an asset (a Daz scene / Houdini project) from a character.

@@ -5,7 +5,6 @@ import {
   CircleX,
   FolderOpen,
   Pencil,
-  Plus,
   Save,
   Trash2,
   Undo2,
@@ -13,23 +12,10 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { EditableTitle } from '#/components/editable-title.tsx'
+import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, Tag, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
-import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
-import { Switch } from '#/components/ui/switch.tsx'
 import {
   characterKeepFolders,
   deleteCharacter,
@@ -50,13 +36,13 @@ import {
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
+import { PreserveFields } from '#/components/character/preserve-fields.tsx'
+import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { NumberField } from '#/components/number-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
-import { Tag } from '#/components/tag.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
@@ -191,27 +177,21 @@ function CharacterPage() {
   // own store on read). Re-read whenever the window regains focus, so problems
   // from a run surface the moment the user switches back from Daz to the studio.
   const [romRunLog, setRomRunLog] = useState(initialRomRunLog)
-  useEffect(() => {
-    const refetch = () => {
-      void fetchRomRunLog({ data: { projectId, id: initial.id } }).then(setRomRunLog)
-    }
-    window.addEventListener('focus', refetch)
-    return () => window.removeEventListener('focus', refetch)
+  useRefetchOnFocus(() => {
+    void fetchRomRunLog({ data: { projectId, id: initial.id } }).then(setRomRunLog)
   }, [projectId, initial.id])
 
   // The scanned morph index for this generation (Scan_Morphs_<Genesis>.dsa →
   // app-data JSON) powering the Morph-name autocomplete. Loaded on mount and
   // re-read on window focus, so a scan just run in Daz is offered immediately.
   const [morphIndex, setMorphIndex] = useState<Array<MorphIndexEntry>>([])
-  useEffect(() => {
-    const load = () => {
+  useRefetchOnFocus(
+    () => {
       void fetchMorphIndex(character.genesis).then(setMorphIndex)
-    }
-    load()
-    window.addEventListener('focus', load)
-    return () => window.removeEventListener('focus', load)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character.genesis])
+    },
+    [character.genesis],
+    { immediate: true },
+  )
   async function onDismissRomRunLog() {
     setRomRunLog(null)
     await dismissRomRunLog({ data: { projectId, id: initial.id } })
@@ -232,20 +212,7 @@ function CharacterPage() {
   const swallowNavRef = useRef(false)
   // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
   // disk even when nothing changed (handy during development).
-  const [ctrlHeld, setCtrlHeld] = useState(false)
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => e.key === 'Control' && setCtrlHeld(true)
-    const up = (e: KeyboardEvent) => e.key === 'Control' && setCtrlHeld(false)
-    const reset = () => setCtrlHeld(false) // don't get stuck "held" after alt-tab
-    window.addEventListener('keydown', down)
-    window.addEventListener('keyup', up)
-    window.addEventListener('blur', reset)
-    return () => {
-      window.removeEventListener('keydown', down)
-      window.removeEventListener('keyup', up)
-      window.removeEventListener('blur', reset)
-    }
-  }, [])
+  const ctrlHeld = useModifierHeld('Control')
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
   // Leaving with unsaved edits asks first; delete bypasses (see onDeleteCharacter).
@@ -570,56 +537,11 @@ function CharacterPage() {
       <div className="contain-editor-body">
       {/* Above the tabs, so the report is visible from the Products tab too. */}
       {romRunLog && !romRunLog.ok && (
-        <section className="mb-8 rounded-lg border border-destructive/50 bg-destructive/10 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="flex items-center gap-2 font-semibold">
-              <CircleX className="size-5 shrink-0 text-destructive" />
-              The last ROM run in Daz reported{' '}
-              {romRunLog.errors.length + romRunLog.failedMorphs.length} problem
-              {romRunLog.errors.length + romRunLog.failedMorphs.length === 1 ? '' : 's'}
-            </h2>
-            <Button variant="outline" size="sm" onClick={() => void onDismissRomRunLog()}>
-              <X /> Dismiss
-            </Button>
-          </div>
-          {romRunLog.finishedAt && (
-            <p className="mt-1 text-xs text-muted-foreground">Run finished: {romRunLog.finishedAt}</p>
-          )}
-          {romRunLog.errors.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm">
-              {romRunLog.errors.map((error, i) => (
-                <li key={i} className="text-destructive">
-                  {error}
-                </li>
-              ))}
-            </ul>
-          )}
-          {romRunLog.failedMorphs.length > 0 && (
-            <div className="mt-3">
-              <p className="text-sm">
-                These morphs could not be applied — their frames stay in the ROM (empty), so the
-                rest of the character is unaffected. The matching rows in the ROM sections below
-                are marked red. Click one to jump to it, then fix the morph name or add the
-                missing content, Save, and re-run the script:
-              </p>
-              <ul className="mt-2 max-h-56 space-y-0.5 overflow-y-auto font-mono text-xs">
-                {romRunLog.failedMorphs.map((morph, i) => (
-                  <li key={i}>
-                    <button
-                      type="button"
-                      onClick={() => revealFailedFrame(morph.frame)}
-                      className="text-left hover:underline"
-                      title="Jump to this morph in the ROM editor"
-                    >
-                      frame {morph.frame} · {morph.node} / <strong>{morph.prop}</strong> —{' '}
-                      {morph.reason}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
+        <RomRunLogReport
+          romRunLog={romRunLog}
+          onDismiss={() => void onDismissRomRunLog()}
+          onRevealFrame={revealFailedFrame}
+        />
       )}
 
       <Tabs
@@ -923,116 +845,7 @@ function CharacterPage() {
               </InfoPopup>
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="space-y-5">
-            <div>
-              <Label className="mb-2 flex w-fit items-center gap-1">
-                Preserve morphs after ROM loading
-                <InfoPopup label="Preserve morphs after ROM loading — more information">
-                  Morphs listed here are restored to the value you set after the DTH ROM loads —
-                  which otherwise zeroes them. Use it for body-shaping controls (e.g. breast or
-                  muscle morphs) you want to keep across the ROM. Enter the morph's property name
-                  and its hold value.
-                </InfoPopup>
-              </Label>
-              {character.preserveMorphs.map((morph, i) => (
-                <div key={i} className="mb-2 flex items-center gap-2">
-                  <Input
-                    value={morph.name}
-                    placeholder="body_ctrl_BreastsUp-Down"
-                    onChange={(e) =>
-                      patch({
-                        preserveMorphs: character.preserveMorphs.map((m, mi) =>
-                          mi === i ? { ...m, name: e.target.value } : m,
-                        ),
-                      })
-                    }
-                  />
-                  <NumberField
-                    className="w-24"
-                    value={morph.keepValue}
-                    onCommit={(keepValue) =>
-                      patch({
-                        preserveMorphs: character.preserveMorphs.map((m, mi) =>
-                          mi === i ? { ...m, keepValue } : m,
-                        ),
-                      })
-                    }
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0"
-                    onClick={() =>
-                      patch({ preserveMorphs: character.preserveMorphs.filter((_, mi) => mi !== i) })
-                    }
-                  >
-                    <Trash2 className="size-3.5 text-destructive" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  patch({ preserveMorphs: [...character.preserveMorphs, { name: '', keepValue: 1 }] })
-                }
-              >
-                <Plus /> Add morph
-              </Button>
-            </div>
-            <div>
-              <Label className="mb-2 flex w-fit items-center gap-1">
-                Preserve node transforms (e.g. eyes)
-                <InfoPopup label="Preserve node transforms — more information">
-                  A node's transform is memorized before the ROM loads and restored afterwards, so
-                  posed nodes (e.g. eyes) keep their orientation instead of being reset. Enter the
-                  node's label as it appears in Daz.
-                </InfoPopup>
-              </Label>
-              {character.preserveNodeTransforms.map((transform, i) => (
-                <div key={i} className="mb-2 flex items-center gap-2">
-                  <Input
-                    value={transform.nodeLabel}
-                    placeholder="Left Eye"
-                    onChange={(e) =>
-                      patch({
-                        preserveNodeTransforms: character.preserveNodeTransforms.map((t, ti) =>
-                          ti === i ? { nodeLabel: e.target.value } : t,
-                        ),
-                      })
-                    }
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0"
-                    onClick={() =>
-                      patch({
-                        preserveNodeTransforms: character.preserveNodeTransforms.filter(
-                          (_, ti) => ti !== i,
-                        ),
-                      })
-                    }
-                  >
-                    <Trash2 className="size-3.5 text-destructive" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  patch({
-                    preserveNodeTransforms: [...character.preserveNodeTransforms, { nodeLabel: '' }],
-                  })
-                }
-              >
-                <Plus /> Add node
-              </Button>
-            </div>
-          </div>
-          </div>
+          <PreserveFields character={character} patch={patch} />
         </div>
       </details>
 

@@ -53,8 +53,9 @@ Tauri plugins instead of a Node backend:
   and back up.
 
 The native boundary is concentrated in `apps/web/src/lib/rom/{api,storage}.ts`
-and `lib/desktop.ts`, which keeps the SPA runnable in a plain browser (and lets
-web-only e2e tests mock that layer).
+and `lib/desktop.ts`, each `isTauri()`-guarded so the SPA still runs in a plain
+browser (native features no-op there). That boundary is also what makes a future
+online deployment — or web-only e2e that mocks the native layer — possible.
 
 ## Releases & auto-update
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { cn } from '#/lib/utils.ts'
+import { cn } from '../cn.ts'
 
 /** Tone → border / background / text classes. Backgrounds carry 60% alpha so they
  *  sit softly on any surface; the border is a darker shade of the same hue and the

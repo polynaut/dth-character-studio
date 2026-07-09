@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Button } from '#/components/ui/button.tsx'
-import { Switch } from '#/components/ui/switch.tsx'
+import { Button, Switch } from '@dth/ui'
 
 /**
  * The "really delete?" confirm for an overview's bulk delete and the character

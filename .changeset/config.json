@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
   "changelog": ["@changesets/changelog-github", { "repo": "polynaut/dth-character-studio" }],
   "commit": false,
-  "fixed": [["@dth/web", "@dth/desktop", "@dth/rom"]],
+  "fixed": [["@dth/web", "@dth/desktop", "@dth/rom", "@dth/ui"]],
   "linked": [],
   "access": "restricted",
   "baseBranch": "main",

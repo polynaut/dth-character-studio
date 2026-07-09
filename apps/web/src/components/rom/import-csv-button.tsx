@@ -2,8 +2,7 @@ import { Upload } from 'lucide-react'
 
 import { useNavigate } from '@tanstack/react-router'
 
-import { Button } from '#/components/ui/button.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
+import { Button, InfoPopup } from '@dth/ui'
 
 /**
  * "Import from CSV" plus an info popup explaining where the CSV comes from:

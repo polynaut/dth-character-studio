@@ -3,7 +3,7 @@ import Markdown, { defaultUrlTransform } from 'react-markdown'
 import { Check, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button } from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { openExternal } from '#/lib/desktop.ts'
 import {

@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildArtDirectionData,
+  buildFbmData,
   generateAll,
+  poseAssetCsvValidated,
   referenceFrames,
   resolveRomPaths,
-  toArtDirectionJsons,
   toCharacterScriptDsa,
-  toDazFbmCsv,
-  toDazFbmJson,
   toExportScriptDsa,
   toPoseAssetCsv,
   toScanProductsScriptDsa,
-  toWorkflowDsa,
 } from './generate'
+import poseAssetTemplateG9 from './templates/poseasset-g9-dqs-jcmfac-gp-ue5.csv?raw'
+import poseAssetTemplateG81 from './templates/poseasset-g8.1-dqs-jcmfac-ue5.csv?raw'
 
 /** Parse the JSON argument of the single `ApplyDTHCharacter(...)` call. The
  *  marker also appears in a comment, so anchor on the last occurrence (the call). */
@@ -163,20 +164,18 @@ describe('mirrorGroup', () => {
   })
 })
 
-describe('toDazFbmJson', () => {
-  it('produces the DazToHue-Scripts FBM JSON format with 0-based frames', () => {
-    const file = toDazFbmJson(makeCharacter())
-    expect(file.fileName).toBe('ElectraG9_FBMs.json')
-    const json = JSON.parse(file.content)
-    expect(json.meta.version).toBe('1.0')
-    expect(json.meta.resetGPBeforeApplying).toBe(true)
-    expect(json.frames[0]).toEqual({
+describe('buildFbmData', () => {
+  it('builds the inline extra-frame payload with 0-based frames', () => {
+    const data = buildFbmData(makeCharacter())
+    expect(data.meta.version).toBe('1.0')
+    expect(data.meta.resetGPBeforeApplying).toBe(true)
+    expect(data.frames[0]).toEqual({
       frame: 0,
       section: 'FBM',
       name: 'BodyTone',
       morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
     })
-    expect(json.frames[1].frame).toBe(1)
+    expect(data.frames[1].frame).toBe(1)
   })
 
   it('keeps base and autoBase morph fields, omitting them when unset', () => {
@@ -191,122 +190,37 @@ describe('toDazFbmJson', () => {
       ...sections.FBM.groups[0].poses[1].morphs[0],
       autoBase: true,
     }
-    const json = JSON.parse(toDazFbmJson(makeCharacter({ sections })).content)
-    expect(json.frames[0].morphs[0]).toEqual({
+    const data = buildFbmData(makeCharacter({ sections }))
+    expect(data.frames[0].morphs[0]).toEqual({
       node: 'GoldenPalace_G9',
       prop: 'GP9_Anus_Depth',
       value: 0.5,
       base: 0.2,
     })
-    expect(json.frames[1].morphs[0].autoBase).toBe(true)
-    expect('base' in json.frames[1].morphs[0]).toBe(false)
+    // toEqual is exact: asserts autoBase is present AND base is absent.
+    expect(data.frames[1].morphs[0]).toEqual({
+      node: 'Genesis9',
+      prop: 'SS_body_bs_Glute UpDown',
+      value: -1,
+      autoBase: true,
+    })
   })
 })
 
-describe('toDazFbmCsv', () => {
-  it('matches the flat CSV format, 0-based (first morph at frame 0)', () => {
-    const file = toDazFbmCsv(makeCharacter())
-    const lines = file.content.trimEnd().split('\n')
-    expect(lines[0]).toBe('0,FBM,BodyTone,Genesis9,body_bs_BodyTone,1')
-    expect(lines[1]).toBe('1,FBM,Glute UpDown,Genesis9,SS_body_bs_Glute UpDown,-1')
-  })
-})
+describe('PoseAsset templates', () => {
+  const templates = [
+    ['G9 CURVE-tail', poseAssetTemplateG9],
+    ['G8.1 CTL-tail', poseAssetTemplateG81],
+  ] as const
 
-describe('toWorkflowDsa', () => {
-  it('derives the include flags from the section configuration', () => {
-    const file = toWorkflowDsa(makeCharacter())
-    expect(file.fileName).toBe('DthWorkflowElectraG9.dsa')
-    // Defaults: JCM/FAC enabled preset, GEN disabled.
-    expect(file.content).toContain('options.bIncludeJCM = true;')
-    expect(file.content).toContain('options.bIncludeFAC = true;')
-    expect(file.content).toContain('options.bIncludeGP = false;')
-    expect(file.content).toContain('options.bIncludeDK = false;')
-    expect(file.content).toContain('options.bDQS = true;')
-    expect(file.content).toContain('dir_self.filePath("ElectraG9_FBMs.json")')
-    expect(file.content).toContain('ApplyDTHWorkflow(options);')
-    expect(file.content).not.toContain('preserveMorphs')
-  })
-
-  it('maps the selected GEN preset assets onto bIncludeGP/bIncludeDK', () => {
-    const sections = makeSections()
-    sections.GEN.enabled = true
-    sections.GEN.presetAssets = ['GP9 - Golden Palace.duf', 'DK9 - Dicktator.duf']
-    const file = toWorkflowDsa(makeCharacter({ sections }))
-    expect(file.content).toContain('options.bIncludeGP = true;')
-    expect(file.content).toContain('options.bIncludeDK = true;')
-  })
-
-  it('defaults the GEN preset by gender when nothing is selected', () => {
-    const sections = makeSections()
-    sections.GEN.enabled = true
-    const female = toWorkflowDsa(makeCharacter({ sections }))
-    expect(female.content).toContain('options.bIncludeGP = true;')
-    expect(female.content).toContain('options.bIncludeDK = false;')
-    const male = toWorkflowDsa(makeCharacter({ sections, gender: 'male' }))
-    expect(male.content).toContain('options.bIncludeGP = false;')
-    expect(male.content).toContain('options.bIncludeDK = true;')
-  })
-
-  it('selects only Dicktator when only the DK asset is picked', () => {
-    const sections = makeSections()
-    sections.GEN.enabled = true
-    sections.GEN.presetAssets = ['DK9 - Dicktator.duf']
-    const file = toWorkflowDsa(makeCharacter({ sections }))
-    expect(file.content).toContain('options.bIncludeGP = false;')
-    expect(file.content).toContain('options.bIncludeDK = true;')
-  })
-
-  it('derives bDQS from the selected JCM asset', () => {
-    const sections = makeSections()
-    sections.JCM.presetAssets = ['G9 LINEAR JCM FAC - Base.duf']
-    const file = toWorkflowDsa(makeCharacter({ sections }))
-    expect(file.content).toContain('options.bDQS = false;')
-    // No selection defaults to DQS (the DTH recommendation).
-    expect(toWorkflowDsa(makeCharacter()).content).toContain('options.bDQS = true;')
-  })
-
-  it('disables the JCM flag when the section is custom or disabled', () => {
-    const sections = makeSections()
-    sections.JCM.mode = 'custom'
-    const file = toWorkflowDsa(makeCharacter({ sections }))
-    expect(file.content).toContain('options.bIncludeJCM = false;')
-  })
-
-  it('includes preserveMorphs when set', () => {
-    const file = toWorkflowDsa(
-      makeCharacter({ preserveMorphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }] }),
-    )
-    expect(file.content).toContain(
-      '{ name: "body_ctrl_BreastsUp-Down", keepValue: 0.6 }',
-    )
-  })
-
-  it('emits strengths and the advanced options when set', () => {
-    const file = toWorkflowDsa(
-      makeCharacter({
-        facsDetailStrength: 0.8,
-        preserveNodeTransforms: [{ nodeLabel: 'Left Eye' }],
-        jcmMorphMods: [
-          {
-            boneLabel: 'Left Thigh',
-            axis: 'XRotate',
-            positive: [],
-            negative: [
-              {
-                morphName: 'SL_Glutes SS Left',
-                range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } },
-              },
-            ],
-          },
-        ],
-      }),
-    )
-    expect(file.content).toContain('options.FACsDetailStrength = 0.8;')
-    expect(file.content).toContain('options.FlexionStrength = 1;')
-    expect(file.content).toContain('{ nodeLabel: "Left Eye" }')
-    expect(file.content).toContain('options.jcmMorphMods = [')
-    expect(file.content).toContain('"morphName": "SL_Glutes SS Left"')
-  })
+  for (const [label, csv] of templates) {
+    it(`the ${label} template carries the custom-sections sentinel exactly once`, () => {
+      // spliceTemplate throws if it's missing — so a template that loses it can't
+      // silently ship a corrupt CSV.
+      const count = csv.split(/\r?\n/).filter((l) => l.trim() === 'CUSTOM_SECTIONS_PLACEHOLDER').length
+      expect(count).toBe(1)
+    })
+  }
 })
 
 describe('toCharacterScriptDsa', () => {
@@ -499,26 +413,30 @@ describe('resolveRomPaths', () => {
     expect(paths.mouth).toContain('Mouth.duf')
   })
 
-  it('returns nothing without a catalog and the wrapper omits the path options', () => {
+  it('returns nothing without a catalog and the script config omits the path options', () => {
     expect(resolveRomPaths(makeCharacter(), { folder: '', assets: [] })).toEqual({})
-    expect(toWorkflowDsa(makeCharacter()).content).not.toContain('RomPath')
+    const config = characterConfig(toCharacterScriptDsa(makeCharacter()).content)
+    expect(config.jcmRomPath).toBeUndefined()
+    expect(config.mouthRomPath).toBeUndefined()
   })
 
-  it('emits the resolved paths in the wrapper', () => {
+  it('emits the resolved paths into the character-script config', () => {
     const sections = makeSections()
     sections.GEN.enabled = true
     const character = makeCharacter({ sections })
-    const dsa = toWorkflowDsa(character, resolveRomPaths(character, catalog))
-    expect(dsa.content).toContain(
-      'options.jcmRomPath = "D:/DAZ 3D/My DAZ 3D Library/DazToHue/Poses/Genesis 9/DQS/G9 DQS JCM FAC - Base.duf";',
+    const config = characterConfig(
+      toCharacterScriptDsa(character, resolveRomPaths(character, catalog)).content,
     )
-    expect(dsa.content).toContain('options.mouthRomPath = ')
-    expect(dsa.content).toContain('options.gpRomPath = ')
-    expect(dsa.content).not.toContain('options.dkRomPath')
+    expect(config.jcmRomPath).toBe(
+      'D:/DAZ 3D/My DAZ 3D Library/DazToHue/Poses/Genesis 9/DQS/G9 DQS JCM FAC - Base.duf',
+    )
+    expect(config.mouthRomPath).toBeDefined()
+    expect(config.gpRomPath).toBeDefined()
+    expect(config.dkRomPath).toBeUndefined()
   })
 })
 
-describe('generation method groups in the FBM JSON', () => {
+describe('generation method groups in the FBM data', () => {
   it('emits a groups array for additive/cumulative groups with correct frame ranges', () => {
     const sections = makeSections()
     sections.EXP.enabled = true
@@ -526,8 +444,9 @@ describe('generation method groups in the FBM JSON', () => {
       { ...fbmGroup(), id: 'cum', label: 'AnusOpen', method: 'cumulative' },
     ]
     // FBM group stays individual → not in the groups array.
-    const json = JSON.parse(toDazFbmJson(makeCharacter({ sections })).content)
-    expect(json.groups).toEqual([
+    const data = buildFbmData(makeCharacter({ sections }))
+    expect('groups' in data).toBe(true)
+    expect((data as { groups?: unknown }).groups).toEqual([
       {
         section: 'EXP',
         name: 'AnusOpen',
@@ -539,13 +458,12 @@ describe('generation method groups in the FBM JSON', () => {
   })
 
   it('omits the groups key entirely when all groups are individual/default', () => {
-    const json = JSON.parse(toDazFbmJson(makeCharacter()).content)
-    expect('groups' in json).toBe(false)
+    expect('groups' in buildFbmData(makeCharacter())).toBe(false)
   })
 })
 
-describe('toArtDirectionJsons', () => {
-  it('generates the per-character GP art direction file and wires it into the wrapper', () => {
+describe('buildArtDirectionData', () => {
+  it('keeps only the frames that have morphs, sorted by frame, and inlines them into the script', () => {
     const sections = makeSections()
     sections.GEN.enabled = true
     sections.GEN.artDirection = [
@@ -559,31 +477,29 @@ describe('toArtDirectionJsons', () => {
       { id: 'a2', rom: 'gp', frame: 96, name: 'VaginaOpen', morphs: [] },
     ]
     const character = makeCharacter({ sections })
-    const files = toArtDirectionJsons(character)
-    expect(files).toHaveLength(1)
-    expect(files[0].fileName).toBe('ElectraG9_GP9ArtDirection.json')
-    const json = JSON.parse(files[0].content)
-    // Empty frames are skipped — only AnusOpen makes it into the file.
-    expect(json.frames).toHaveLength(1)
-    expect(json.frames[0]).toEqual({
+    const json = buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace')
+    // Empty frames are skipped — only AnusOpen survives.
+    expect(json?.frames).toHaveLength(1)
+    expect(json?.frames[0]).toEqual({
       frame: 100,
       section: 'GP9',
       name: 'AnusOpen',
       morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
     })
-    const dsa = toWorkflowDsa(character)
-    expect(dsa.content).toContain(
-      'options.gpArtDirectionPath = dir_self.filePath("ElectraG9_GP9ArtDirection.json");',
-    )
-    expect(dsa.content).not.toContain('dkArtDirectionPath')
+    // The character script inlines the same data as config.gpArtDirection (no DK).
+    const config = characterConfig(toCharacterScriptDsa(character).content)
+    expect(config.gpArtDirection.frames[0].name).toBe('AnusOpen')
+    expect(config.dkArtDirection).toBeUndefined()
   })
 
-  it('emits nothing without art direction morphs', () => {
+  it('returns null without art direction morphs, and the script inlines nothing', () => {
     const sections = makeSections()
     sections.GEN.enabled = true
     const character = makeCharacter({ sections })
-    expect(toArtDirectionJsons(character)).toHaveLength(0)
-    expect(toWorkflowDsa(character).content).not.toContain('ArtDirection')
+    expect(buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace')).toBeNull()
+    const config = characterConfig(toCharacterScriptDsa(character).content)
+    expect(config.gpArtDirection).toBeUndefined()
+    expect(config.dkArtDirection).toBeUndefined()
   })
 })
 
@@ -722,6 +638,34 @@ describe('toPoseAssetCsv', () => {
     const group = rows.find((r) => r.startsWith('JCMGROUP')) ?? ''
     expect(group).toBe('JCMGROUP,1,0,evil label injected') // comma + newline → space
     expect(rows.every((r) => !r.includes('\n'))).toBe(true)
+  })
+})
+
+// Finding 2: the G9 gate pins the baked block lengths (base 328, GP 104) the same
+// way the G8.1 gate pins 188 — a base/GP that measures differently (a future or
+// custom asset) can't silently splice custom rows at the wrong offset; it falls to
+// the experimental custom-only path instead.
+describe('toPoseAssetCsv — G9 baked-length guard', () => {
+  it('stays experimental on an unexpected base length', () => {
+    expect(toPoseAssetCsv(makeCharacter(), { ...FRAMES, base: 330 }, '2.0').experimental).toBe(true)
+  })
+
+  it('stays experimental when GP is included but the GP block measures ≠ 104', () => {
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    const file = toPoseAssetCsv(makeCharacter({ sections }), { ...FRAMES, gp: 96 }, '2.0')
+    expect(file.experimental).toBe(true)
+  })
+
+  it('ignores GP length when GP is not included (the baked GP rows are stripped)', () => {
+    // GEN off → the wrong gp measurement is irrelevant, still validated.
+    expect(toPoseAssetCsv(makeCharacter(), { ...FRAMES, gp: 96 }, '2.0').experimental).toBeUndefined()
+  })
+
+  it('is experimental until the base length is measured (undefined = not validated)', () => {
+    // poseAssetCsvValidated with no measured base — symmetric with G8.1.
+    expect(poseAssetCsvValidated(makeCharacter(), '2.0')).toBe(false)
+    expect(poseAssetCsvValidated(makeCharacter(), '2.0', 328)).toBe(true)
   })
 })
 

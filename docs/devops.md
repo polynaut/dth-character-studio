@@ -195,6 +195,34 @@ dropbox/rust-brotli#256. Re-pin if a `cargo update` reverts it:
 `cargo update -p alloc-stdlib --precise 0.2.2 -p alloc-no-stdlib --precise 2.0.4`.
 Remove once upstream ships a fix.
 
+## Security posture (fs capability scope + the recursive-delete rails)
+
+`apps/desktop/capabilities/default.json` grants the fs plugin `{ "path": "**" }`
+for read/write/delete/rename/mkdir/stat/exists/scope. That is deliberate and is
+**accepted risk** (see the note in `CLAUDE.md`): the studio installs into arbitrary
+user-chosen locations — the Daz library, Houdini docs, Program Files, project
+folders on network drives — so a narrower allowlist can't express where the app
+legitimately writes. Don't tighten these scopes without re-checking every native
+install/uninstall/housekeeping path.
+
+The consequence to keep in mind when reading the Rust: **the webview can already
+read, write, and delete anywhere through the fs plugin, without going through
+Rust.** So the recursive-delete rails in the Rust commands
+(`fsutil::unsafe_recursive_target` / `looks_like_daz_folder` /
+`rail_target`, used by `uninstall_daz`, `empty_folder`, and dedup quarantine) are
+**not** a defense against the webview — the webview needs no Rust command to do
+damage. They are defense-in-depth against a **poisoned `settings.json` or `.dcsp`**
+feeding a dangerous path (a drive/profile root, a non-Daz folder) into a command
+that then recursively deletes it. The rail refuses roots/too-shallow paths and
+(for the uninstall) anything without "DAZ" in the canonicalized path.
+
+The real mitigation against a hostile page driving those broad fs scopes is the
+**strict CSP** in `tauri.conf.json` (`default-src 'self'`, `connect-src` limited to
+`self`/`ipc:`, `object-src 'none'`, no remote script/style/frame): nothing
+third-party executes in the webview, so there is no untrusted code positioned to
+abuse the fs plugin in the first place. Keep the CSP strict; treat the Rust rails
+as the second layer, not the primary one.
+
 ## Later: macOS
 
 Windows-first for now. macOS needs Apple signing + notarization (Developer ID

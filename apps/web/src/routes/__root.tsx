@@ -9,10 +9,9 @@ import { listen } from '@tauri-apps/api/event'
 
 import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
+import { openExternal } from '#/lib/desktop.ts'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
-import { TooltipHost } from '#/components/ui/tooltip-host.tsx'
-import { installAltMenuGuard } from '#/lib/alt-menu-guard.ts'
-import { Button } from '#/components/ui/button.tsx'
+import { Button, TooltipHost, UiConfigProvider, installAltMenuGuard } from '@dth/ui'
 
 import type { ErrorComponentProps } from '@tanstack/react-router'
 
@@ -89,7 +88,14 @@ function RootComponent() {
   }, [navigate])
 
   return (
-    <>
+    <UiConfigProvider
+      value={{
+        // In-app links (InfoPopup) go through the router; external URLs open in
+        // the OS browser (Tauri) — the seam that keeps @dth/ui native-free.
+        onNavigate: (path) => void (navigate as (opts: { to: string }) => unknown)({ to: path }),
+        onOpenExternal: (url) => void openExternal(url),
+      }}
+    >
       <Outlet />
       <Toaster
         theme="light"
@@ -132,6 +138,6 @@ function RootComponent() {
           ]}
         />
       )}
-    </>
+    </UiConfigProvider>
   )
 }

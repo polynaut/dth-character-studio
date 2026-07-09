@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ExternalLink, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { deleteAsset, listAssets, openScene } from '#/lib/rom/api.ts'

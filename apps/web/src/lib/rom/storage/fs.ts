@@ -93,7 +93,7 @@ export async function walkFiles(root: string, rel = ''): Promise<Array<string>> 
     // "forbidden path" because it can't canonicalize the path for its scope
     // check. Skip the subtree so one unreadable folder can't blank the whole
     // library overview.
-    console.warn(`Skipping unreadable folder ${here}: ${err}`)
+    console.warn(`Skipping unreadable folder ${here}: ${String(err)}`)
     return []
   }
   const out: Array<string> = []

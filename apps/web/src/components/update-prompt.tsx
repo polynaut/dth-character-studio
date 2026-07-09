@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button } from '@dth/ui'
 import { openExternal } from '#/lib/desktop.ts'
 import {
   clearUpdatePrompt,

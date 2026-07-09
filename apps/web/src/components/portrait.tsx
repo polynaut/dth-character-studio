@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { resolveImageSrc, resolveScenePreview } from '#/lib/rom/api.ts'
-import { cn } from '#/lib/utils.ts'
+import { cn } from '@dth/ui'
 
 /**
  * Resolve a portrait's source URL from EITHER a stored avatar `image` reference

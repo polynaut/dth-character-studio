@@ -2,9 +2,8 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check, Copy, FolderOpen, Pencil } from 'lucide-react'
 
-import { cn } from '#/lib/utils.ts'
+import { cn, useModifierHeld } from '@dth/ui'
 import { revealPath } from '#/lib/rom/api.ts'
-import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 
 /**
  * Renders a filesystem path as an inline code chip (the app's "backtick" style).

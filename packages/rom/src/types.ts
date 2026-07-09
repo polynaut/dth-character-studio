@@ -313,14 +313,88 @@ export function genDefaultNode(gender: Gender): string {
 }
 
 /**
+ * The validated PoseAsset-CSV template a generation ships, described by the
+ * BAKED lengths its ground-truth export fixed. The gate
+ * ({@link poseAssetCsvValidated}) and the splice read the SAME numbers from
+ * here, so a base/GP that measures differently (a future or custom asset)
+ * can't silently desync the CSV — it falls to the experimental path instead.
+ */
+export interface GenerationTemplate {
+  /** Baked base-ROM length (RET+JCM+FAC); the custom sections continue after it. */
+  baseFrames: number
+  /** Baked GP (Golden Palace) block length, when the template bakes one. */
+  gpFrames?: number
+  /**
+   * CSV era the template's control rows target, or `null` when era-independent
+   * (G8.1 targets the pre-2.0 HDA and is byte-identical across releases).
+   */
+  era: PoseAssetCsvEra | null
+  /** The template bakes a GP (GEN) block (stripped when GP is off). */
+  allowGen: boolean
+  /** A fixed PHY preset block can be spliced in after the GP block. */
+  allowPhys: boolean
+}
+
+/**
+ * Per-generation facts, so a new generation is one table row (+ one template
+ * file in generate.ts) instead of a literal string-compare scattered across the
+ * figure-node, skinning, strength-dial and template-splice code. Keyed by
+ * {@link GenesisVersion}, so the compiler forces a row for every enum member.
+ */
+export interface GenerationDescriptor {
+  /** Base scene-node name of the unrenamed figure. */
+  figureBase: string
+  /** Earlier generations ship per-gender figures; G9 is gender-neutral. */
+  figureHasGender: boolean
+  /** DTH-recommended skinning when the JCM asset doesn't state one. */
+  skinningDefault: 'linear' | 'dqs'
+  /** The FACS-detail / flexion strength dials exist only on Genesis 9 figures. */
+  hasStrengthDials: boolean
+  /** The validated PoseAsset-CSV template, or `null` when none ships. */
+  template: GenerationTemplate | null
+}
+
+export const GENERATIONS: Record<GenesisVersion, GenerationDescriptor> = {
+  G9: {
+    figureBase: 'Genesis9',
+    figureHasGender: false,
+    skinningDefault: 'dqs',
+    hasStrengthDials: true,
+    template: { baseFrames: 328, gpFrames: 104, era: '2.0', allowGen: true, allowPhys: true },
+  },
+  'G8.1': {
+    figureBase: 'Genesis8_1',
+    figureHasGender: true,
+    skinningDefault: 'dqs',
+    hasStrengthDials: false,
+    // Era-independent: the G8.1 CTL-tail template targets the pre-2.0 HDA and
+    // the base assets are byte-identical across releases (188 frames anywhere).
+    template: { baseFrames: 188, era: null, allowGen: false, allowPhys: false },
+  },
+  G8: {
+    figureBase: 'Genesis8',
+    figureHasGender: true,
+    skinningDefault: 'linear',
+    hasStrengthDials: false,
+    template: null,
+  },
+  G3: {
+    figureBase: 'Genesis3',
+    figureHasGender: true,
+    skinningDefault: 'linear',
+    hasStrengthDials: false,
+    template: null,
+  },
+}
+
+/**
  * The scene-node name of an unrenamed base figure — the default `node` for new
  * ROM entries. G9 is gender-neutral; earlier generations ship per-gender
  * figures (Daz node names have no dots/spaces: Genesis8_1Female).
  */
 export function genesisFigureNode(genesis: GenesisVersion, gender: Gender): string {
-  if (genesis === 'G9') return 'Genesis9'
-  const base = genesis === 'G8.1' ? 'Genesis8_1' : genesis === 'G8' ? 'Genesis8' : 'Genesis3'
-  return `${base}${gender === 'female' ? 'Female' : 'Male'}`
+  const d = GENERATIONS[genesis]
+  return d.figureHasGender ? `${d.figureBase}${gender === 'female' ? 'Female' : 'Male'}` : d.figureBase
 }
 
 /**
@@ -535,6 +609,14 @@ export const RUNTIME_VERSION = 20
 export const POSEASSET_CSV_BREAKING_VERSIONS = ['2.0'] as const
 
 /**
+ * The CSV era of a generated PoseAsset file: `''` (pre-2.0, the CTL-rows /
+ * old-Houdini pipeline) or one of the {@link POSEASSET_CSV_BREAKING_VERSIONS}
+ * baselines. The domain of {@link poseAssetCsvEra} and the era arguments the
+ * generators take.
+ */
+export type PoseAssetCsvEra = '' | (typeof POSEASSET_CSV_BREAKING_VERSIONS)[number]
+
+/**
  * Compare two dotted version strings numerically (segment-wise; missing segments
  * count as 0; '' sorts below everything). Returns >0 when `a` > `b`, <0 when
  * `a` < `b`, 0 when equal. e.g. `compareDthVersions('2.4.10', '2.4.3') > 0`.
@@ -556,9 +638,9 @@ export function compareDthVersions(a: string, b: string): number {
  * PoseAsset CSVs — the studio uses this to decide both which CSV variant to emit
  * and whether an already-generated CSV is out of date.
  */
-export function poseAssetCsvEra(release: string): string {
+export function poseAssetCsvEra(release: string): PoseAssetCsvEra {
   if (!release) return ''
-  let era = ''
+  let era: PoseAssetCsvEra = ''
   for (const v of POSEASSET_CSV_BREAKING_VERSIONS) {
     if (compareDthVersions(release, v) >= 0) era = v
   }
@@ -762,7 +844,7 @@ export function characterSkinning(
   const asset =
     jcm.mode === 'preset' ? jcm.presetAssets[0] : jcm.mode === 'custom' ? jcm.customAssetPath : undefined
   if (asset) return /\bDQS\b/i.test(asset) ? 'dqs' : 'linear'
-  return character.genesis === 'G8' || character.genesis === 'G3' ? 'linear' : 'dqs'
+  return GENERATIONS[character.genesis ?? 'G9'].skinningDefault
 }
 
 /** The sections whose frames the studio generates (enabled custom sections, in ROM order). */
@@ -798,27 +880,43 @@ export function jcmIsBaseRom(sections: RomSections): boolean {
 }
 
 /**
- * Absolute timeline frame of the first custom pose — the sum of the measured
- * preset ROM blocks preceding the custom sequence (base ROM when JCM is a base,
- * then GP / DK / Physics when included). Mirrors the lastPresetFrame math in
- * generate.ts so the editor shows the same absolute frames it generates.
+ * THE single source of the preset-block frame math: the last preset frame on the
+ * timeline — the frame the custom sections continue after — as the sum of the
+ * measured preset ROM blocks (base ROM when JCM is a base, then GP / DK / Physics
+ * when included). Returns **-1** when there is NO preset block, so the first
+ * custom pose lands at frame 0 (matching the Daz runtime's `startFrame = 0` for a
+ * base-less ROM). NEVER clamp the -1 to 0 — that desyncs the CSV from Daz.
+ *
+ * Every other preset-offset in the codebase derives from this: {@link presetFrameCount}
+ * (+1), {@link genRomStartFrame}, and generate.ts's CSV splice / reference-frame /
+ * custom-row placement all call it, so the Daz and Houdini artifacts can't drift.
  */
-export function presetFrameCount(
+export function presetEndFrame(
   sections: RomSections,
   gender: Gender,
   frames: PresetFrames,
 ): number {
   const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
   const roms = genRomIncludes(gender, sections.GEN.presetAssets)
-  const lastPresetFrame =
+  return (
     (jcmIsBaseRom(sections) ? frames.base - 1 : -1) +
     (genPreset && roms.gp ? frames.gp : 0) +
     (genPreset && roms.dk ? frames.dk : 0) +
     (sections.PHY.enabled && sections.PHY.mode === 'preset' ? frames.phys : 0)
-  // No preset block → lastPresetFrame is -1 and custom frames start at 0, so the
-  // count is 0. Clamping to 0 before +1 wrongly reported 1 and shifted the editor's
-  // frame numbers out of sync with Daz — keep the raw -1.
-  return lastPresetFrame + 1
+  )
+}
+
+/**
+ * Absolute timeline frame of the first custom pose — one past {@link presetEndFrame}.
+ * Mirrors the offset generate.ts applies so the editor shows the same absolute
+ * frames it generates. A base-less ROM has presetEndFrame -1, so the count is 0.
+ */
+export function presetFrameCount(
+  sections: RomSections,
+  gender: Gender,
+  frames: PresetFrames,
+): number {
+  return presetEndFrame(sections, gender, frames) + 1
 }
 
 /**
@@ -838,6 +936,39 @@ export function genRomStartFrame(
   return rom === 'dk' ? base : base + (roms.dk ? frames.dk : 0)
 }
 
+/** One pose visited by {@link walkCustomPoses}. */
+export interface CustomPoseWalk {
+  section: RomSection
+  config: RomSectionConfig
+  group: RomGroup
+  pose: RomPose
+  /** 0-based index across all enabled custom sections in canonical order — the
+   *  single source of relative frame numbers (the first custom pose is 0). */
+  relativeFrame: number
+  /** True for the first pose of its group — where a CSV GROUP header is emitted. */
+  firstInGroup: boolean
+}
+
+/**
+ * THE single walk over the enabled custom sections → groups → poses, in canonical
+ * order, numbering each pose 0-based. `flattenRom`, the PoseAsset CSV custom rows
+ * and the exporter reference frames all consume this, so they agree on which pose
+ * sits at which frame by construction (empty groups yield nothing).
+ */
+export function* walkCustomPoses(sections: RomSections): Generator<CustomPoseWalk> {
+  let relativeFrame = 0
+  for (const { section, config } of customSections(sections)) {
+    for (const group of config.groups) {
+      let firstInGroup = true
+      for (const pose of group.poses) {
+        yield { section, config, group, pose, relativeFrame, firstInGroup }
+        relativeFrame++
+        firstInGroup = false
+      }
+    }
+  }
+}
+
 export interface FlatFrame {
   /** 0-based: the first custom frame is 0 (Daz timelines are 0-based). */
   frame: number
@@ -851,20 +982,15 @@ export interface FlatFrame {
 /** Flattens the enabled custom sections into the frame sequence — the single source of frame numbers. */
 export function flattenRom(sections: RomSections): Array<FlatFrame> {
   const frames: Array<FlatFrame> = []
-  let frame = 0
-  for (const { section, config } of customSections(sections)) {
-    for (const group of config.groups) {
-      for (const pose of group.poses) {
-        frames.push({
-          frame: frame++,
-          section,
-          name: pose.name,
-          morphs: pose.morphs,
-          group,
-          pose,
-        })
-      }
-    }
+  for (const { section, group, pose, relativeFrame } of walkCustomPoses(sections)) {
+    frames.push({
+      frame: relativeFrame,
+      section,
+      name: pose.name,
+      morphs: pose.morphs,
+      group,
+      pose,
+    })
   }
   return frames
 }
