@@ -4,8 +4,7 @@ import { ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-rea
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { cn } from '#/lib/utils.ts'
+import { Button, cn, useModifierHeld } from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
 import {
   installUnrealDthContent,
@@ -16,7 +15,6 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
-import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 

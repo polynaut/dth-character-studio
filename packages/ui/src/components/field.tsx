@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
-import { Label } from '#/components/ui/label.tsx'
-import { cn } from '#/lib/utils.ts'
+import { Label } from '../primitives/label.tsx'
+import { cn } from '../cn.ts'
 
 /**
  * A labelled form field with inline validation. Pass `error` to show a small

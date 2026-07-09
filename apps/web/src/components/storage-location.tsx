@@ -3,9 +3,7 @@ import { useRouter } from '@tanstack/react-router'
 import { FolderInput } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Field } from '#/components/field.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
+import { Button, Field, Input } from '@dth/ui'
 import { moveCharacter } from '#/lib/rom/api.ts'
 import { displayPath } from '#/lib/path.ts'
 

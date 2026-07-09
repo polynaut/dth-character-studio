@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { resolveImageSrc } from '#/lib/rom/api.ts'
-import { cn } from '#/lib/utils.ts'
+import { cn } from '@dth/ui'
 
 /** Resolve a stored avatar reference to a loadable URL (see lib/rom/api). */
 export function useResolvedImage(image: string): string {

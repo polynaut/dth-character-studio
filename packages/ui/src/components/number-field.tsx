@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { Input } from '#/components/ui/input.tsx'
+import { Input } from '../primitives/input.tsx'
 
 export function NumberField({
   value,

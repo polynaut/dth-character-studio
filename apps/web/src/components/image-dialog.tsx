@@ -5,8 +5,7 @@ import { X } from 'lucide-react'
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
+import { Button, Input } from '@dth/ui'
 import {
   setAvatarFromScene,
   uploadCharacterImage,
@@ -46,7 +45,7 @@ export function ImageDialog({
     try {
       const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
       setUrl(served)
-      onApply(served)
+      void onApply(served)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -68,7 +67,7 @@ export function ImageDialog({
     try {
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
         reader.onerror = () => reject(new Error('Could not read the file'))
         reader.readAsDataURL(file)
       })
@@ -80,7 +79,7 @@ export function ImageDialog({
         },
       })
       setUrl(served)
-      onApply(served)
+      void onApply(served)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -182,7 +181,7 @@ export function ImageDialog({
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                onApply(url)
+                void onApply(url)
                 onClose()
               }
             }}
@@ -190,7 +189,7 @@ export function ImageDialog({
           <Button
             variant="outline"
             onClick={() => {
-              onApply(url)
+              void onApply(url)
               onClose()
             }}
           >
@@ -206,7 +205,7 @@ export function ImageDialog({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) uploadFile(file)
+          if (file) void uploadFile(file)
           e.target.value = ''
         }}
       />

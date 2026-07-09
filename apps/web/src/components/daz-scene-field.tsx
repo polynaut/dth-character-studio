@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, FolderInput, FolderOpen, Link2, Plus, Trash2 } from 'lucide-react'
+import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Tag } from '#/components/tag.tsx'
+import { Button, Input, Label, LinkedAssetCard, RemoveAssetDialog, Tag, useModifierHeld } from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { RemoveAssetDialog } from '#/components/remove-asset-dialog.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
 import dazLogo from '#/assets/daz-logo.png'
 import {
   copyDazScene,
@@ -24,7 +20,6 @@ import {
   saveCharacter,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
-import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
@@ -70,62 +65,49 @@ function SceneCard({
       ? sceneDir.slice(base.length + 1)
       : ''
   return (
-    <div className="group/card relative w-80">
-      <button
-        type="button"
-        onClick={onOpen}
-        data-alt-reveal=""
-        title="Open in Daz"
-        className="daz-card group relative flex h-full w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors"
-      >
+    <LinkedAssetCard
+      title={displayName}
+      media={
         <Portrait
           scenePath={scenePath}
           name={name}
           className="aspect-[3/4] w-14 shrink-0 rounded-md"
           fallbackClassName="text-xl"
         />
-        {/* Daz brand mark, floating bottom-left as a badge on the portrait. */}
+      }
+      // Daz brand mark, floating bottom-left as a badge on the portrait.
+      badge={
         <img
           src={dazLogo}
           alt=""
           aria-hidden
           className="pointer-events-none absolute bottom-1 left-1 size-8 object-contain drop-shadow-md"
         />
-        <div className="min-w-0 text-xs">
-          <div className="truncate text-sm font-medium">{displayName}</div>
-          {relSub && (
-            <code
-              className={`${pathChipClass('secondary')} mt-1 inline-block max-w-full truncate align-middle`}
-            >
-              {`%CHAR%${pathSeparator()}${displayPath(relSub)}${pathSeparator()}`}
-            </code>
-          )}
-          {primary && (
-            <div className="mt-1">
-              <Tag tone="green" title="The character's original scene — it can't be unlinked">
-                primary
-              </Tag>
-            </div>
-          )}
-        </div>
-        {altHeld ? (
-          <FolderOpen className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
-        ) : (
-          <ExternalLink className="absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors group-hover:text-daz-green" />
-        )}
-      </button>
-      {onRemove && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-1.5 right-1.5 size-7 opacity-0 transition-opacity group-hover/card:opacity-100"
-          title="Unlink from character"
-          onClick={onRemove}
-        >
-          <Trash2 className="size-3.5 text-destructive" />
-        </Button>
-      )}
-    </div>
+      }
+      chip={
+        relSub ? (
+          <code
+            className={`${pathChipClass('secondary')} inline-block max-w-full truncate align-middle`}
+          >
+            {`%CHAR%${pathSeparator()}${displayPath(relSub)}${pathSeparator()}`}
+          </code>
+        ) : undefined
+      }
+      extra={
+        primary ? (
+          <Tag tone="green" title="The character's original scene — it can't be unlinked">
+            primary
+          </Tag>
+        ) : undefined
+      }
+      altHeld={altHeld}
+      openTitle="Open in Daz"
+      accentClass="group-hover:text-daz-green"
+      cardClass="daz-card"
+      onOpen={onOpen}
+      onRemove={onRemove}
+      removeTitle="Unlink from character"
+    />
   )
 }
 

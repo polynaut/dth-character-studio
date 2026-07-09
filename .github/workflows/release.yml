@@ -5,13 +5,21 @@ name: Release
 # AND that version has no tag yet. Feature merges (which still carry changesets)
 # are skipped — they only feed the version packages PR.
 #
-# Two stages (see docs/devops.md → "Code signing"):
-#   build         hosted Windows runner — builds the NSIS installer (unsigned)
-#   sign-publish  self-hosted Certum signer (the NAS runner beside the always-on
-#                 certum-container/SimplySign session) — Authenticode-signs the
-#                 installer through the shared p11-kit socket, regenerates the
-#                 updater .sig over the SIGNED bytes, and publishes the GitHub
-#                 Release (installer + .sig + latest.json).
+# Three stages (see docs/devops.md → "Code signing"):
+#   build    hosted Windows runner — builds the NSIS installer (unsigned)
+#   sign     self-hosted Certum signer (the NAS runner beside the always-on
+#            certum-container/SimplySign session) — Authenticode-signs the
+#            installer through the shared p11-kit socket and regenerates the
+#            updater .sig over the SIGNED bytes. Uploads signed installer + .sig.
+#   publish  hosted runner — downloads the signed artifacts, builds latest.json,
+#            and creates the GitHub Release.
+#
+# Why sign and publish are separate jobs: the NAS is the single point of failure
+# in this pipeline (it holds the SimplySign session), so the NAS job is kept as
+# small as possible — ONLY the two operations that need the real key/cert. The
+# GitHub publish (which needs no signing secret, just GITHUB_TOKEN) runs on a
+# reliable hosted runner, so a publish hiccup can be re-run without re-signing,
+# and the real updater key never has to leave the self-hosted signer.
 #
 # Order matters: the updater signature and latest.json must be computed AFTER
 # Authenticode signing, because signing changes the installer bytes.
@@ -122,7 +130,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  sign-publish:
+  sign:
     needs: [check, build]
     runs-on: [self-hosted, linux, certum-signer]
     # Protected environment (required reviewer): every release PAUSES here for
@@ -177,7 +185,9 @@ jobs:
             -in "$exe" || true
 
       # The updater verifies the minisign signature over the exact bytes it
-      # downloads — regenerate the .sig now that the installer is signed.
+      # downloads — regenerate the .sig now that the installer is signed. This
+      # stays on the signer (not the hosted publish job) so the real updater key
+      # never leaves the self-hosted runner.
       - name: Regenerate updater signature (over the signed installer)
         shell: bash
         env:
@@ -193,6 +203,31 @@ jobs:
             --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
             "$exe"
           test -s "$exe.sig"
+
+      # Hand the SIGNED installer + its .sig to the hosted publish job. The
+      # artifact round-trip is byte-exact, so the updater .sig still verifies.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-release
+          path: |
+            dist/*_${{ needs.check.outputs.version }}_*-setup.exe
+            dist/*_${{ needs.check.outputs.version }}_*-setup.exe.sig
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: [check, sign]
+    # Publishing needs no signing secret — only GITHUB_TOKEN — so it runs on a
+    # reliable hosted runner. Keeping it off the NAS means a GitHub API hiccup
+    # can be re-run without re-signing, and shrinks the NAS's job to signing only.
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signed-release
+          path: dist
 
       - name: Publish release (installer + .sig + latest.json)
         shell: bash

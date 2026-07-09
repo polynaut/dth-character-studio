@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { useFileDrop } from '#/lib/file-drop.ts'
-import { cn } from '#/lib/utils.ts'
+import { cn } from '@dth/ui'
 
 /**
  * Wraps a pane so a supported OS file dropped anywhere over it is accepted (no

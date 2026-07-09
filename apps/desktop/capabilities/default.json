@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for every DTH Character Studio window (Home + per-project).",
+  "description": "Default capabilities for every DTH Character Studio window (Home + per-project). NOTE: the fs `{ \"path\": \"**\" }` scopes below let the webview read/write/delete anywhere via the fs plugin WITHOUT any Rust command, so the Rust recursive-delete rails are defense against a poisoned settings.json/.dcsp, not against the webview — the real mitigation is the strict CSP in tauri.conf.json. This breadth is accepted risk (see CLAUDE.md); do not weaken the scopes. Full write-up: docs/devops.md → 'Security posture'.",
   "windows": ["*"],
   "permissions": [
     "core:default",

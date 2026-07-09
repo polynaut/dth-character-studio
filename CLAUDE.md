@@ -21,6 +21,7 @@ pnpm build               # web production build
 pnpm build:desktop       # NSIS installer → apps/desktop/target/release/bundle
 pnpm -r test             # all JS tests (vitest)
 pnpm -r typecheck        # tsc --noEmit across packages
+pnpm lint                # oxlint (type-aware) — the CI lint gate; `pnpm lint:fix` autofixes
 pnpm generate-routes     # regenerate apps/web/src/routeTree.gen.ts (tsr generate)
 pnpm changeset           # add a changeset (required on every feature PR; see Releases)
 ```
@@ -38,15 +39,23 @@ Rust (desktop crate, `apps/desktop`): `cargo check`, `cargo test`. The shell her
 
 ## Architecture
 
-Three workspace packages, two layers — the generation core is pure TypeScript and is where the
-value lives; the apps are thin shells.
+Four workspace packages, two layers — the generation core is pure TypeScript and is where the
+value lives; the apps are thin shells. Two packages (`@dth/rom`, `@dth/ui`) are pure and
+app-agnostic; all consumed **as source** (their `exports` point at `src/`, so Vite/tsc compile them
+inline — no build step, no stale `dist`).
 
 - **`packages/rom` (`@dth/rom`)** — framework-agnostic, **no I/O**. The full pipeline: a `Character`
   definition (`types.ts`, zod-validated) → `generateAll()` (`generate.ts`) → the Daz `.dsa` script
   text + the Houdini PoseAsset CSV. Ground-truth CSV/`.dsa` templates live in `src/templates`. Also
   parses DAZ-exported morph CSVs into poses (`daz-csv.ts`).
+- **`packages/ui` (`@dth/ui`)** — app-agnostic React UI kit: primitives (button, input, select…),
+  presentational components (`LinkedAssetCard`, `KeyedListEditor`, `Tag`, `Field`…), and hooks
+  (`useModifierHeld`, `installAltMenuGuard`, `useRefetchOnFocus`). **No Tauri / router / filesystem
+  imports** — host behaviour (link navigation, external-open) is injected via `UiConfigProvider`
+  (see `config.tsx`), so a future online build can reuse it. The desktop app supplies the config in
+  `routes/__root.tsx`. Tailwind scans it via an `@source` in `apps/web/src/styles.css`.
 - **`apps/web` (`@dth/web`)** — React SPA (Vite + TanStack **file-based** Router). Routes in
-  `src/routes`; UI runs the pure `@dth/rom` generation in the webview.
+  `src/routes`; UI runs the pure `@dth/rom` generation in the webview and composes `@dth/ui`.
 - **`apps/desktop` (`@dth/desktop`)** — Tauri 2 shell (Rust, `src/lib.rs`). Loads `apps/web` and
   provides native file/dialog/updater access instead of a Node backend.
 
@@ -65,7 +74,8 @@ Native access lives in the **`lib/` layer**, not in routes/components: primarily
 **`apps/web/src/lib/rom/{api,storage}.ts`** + **`lib/desktop.ts`** (the bulk of it), plus a few
 focused helpers that legitimately touch Tauri APIs — `lib/updater.ts`, `lib/file-drop.ts`,
 `lib/path.ts`, `lib/rom/migrate-projects.ts`, and the app shell (`routes/__root.tsx`, `main.tsx`).
-Each is `isTauri()`-guarded so the SPA still runs in a plain browser (web-only e2e mocks this layer);
+Each is `isTauri()`-guarded so the SPA still runs in a plain browser (native features no-op there —
+which is also what a future online deployment or a web-only e2e mock of this layer would rely on).
 UI code opens external links via `desktop.openExternal`, never `@tauri-apps/plugin-shell` directly.
 `api.ts` is the primary bridge between the React UI and the filesystem; it keeps the `{ data }` call
 convention the routes use, validates input with zod, and `invoke()`s Rust commands. When adding a
@@ -122,8 +132,9 @@ Two scopes now:
 - **Import alias:** `#/*` → `apps/web/src/*` (see `imports` in `apps/web/package.json`).
 - **Routing:** routes are file-based; `routeTree.gen.ts` is generated. Adding/removing a route **file**
   requires `pnpm generate-routes` (adding a tab inside an existing route does not).
-- **Versioning:** Changesets. `@dth/web` / `@dth/desktop` / `@dth/rom` are a **fixed group** — one
-  product version, bumped in lockstep. Every feature PR needs a changeset.
+- **Versioning:** Changesets. `@dth/web` / `@dth/desktop` / `@dth/rom` / `@dth/ui` are a **fixed
+  group** — one product version, bumped in lockstep. Every feature PR needs a changeset (a CI check
+  enforces this; a docs/CI-only PR can satisfy it with `pnpm changeset --empty`).
 - **Character-schema changes:** the persisted `Character` shape is versioned by
   `CHARACTER_SCHEMA_VERSION` (`packages/rom/src/types.ts`); old JSONs are migrated on read by
   `migrateCharacterData` (`packages/rom/src/migrate.ts`). To change the shape: edit `characterSchema`,

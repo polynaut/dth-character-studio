@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { cn } from '#/lib/utils.ts'
+import { cn } from '@dth/ui'
 
 /**
  * A destructive configuration error with a trailing "change in Settings" link

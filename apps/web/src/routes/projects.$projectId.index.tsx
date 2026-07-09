@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { FolderOpen, UserPlus } from 'lucide-react'
 
-import { Field } from '#/components/field.tsx'
+import { Button, EditableTitle, Field, InfoPopup, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
 import { AssetsGrid } from '#/components/assets-grid.tsx'
 import { AssetForm } from '#/components/asset-form.tsx'
 import {
@@ -20,20 +19,9 @@ import {
   type SortKey,
   type ViewMode,
 } from '#/components/overview-controls.tsx'
-import { cn } from '#/lib/utils.ts'
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
 import { useSelection } from '#/lib/use-selection.ts'
-import { EditableTitle } from '#/components/editable-title.tsx'
 import { toast } from 'sonner'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
 import {
   characterKeepFolders,
   copyDazScene,
@@ -50,14 +38,11 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
-import { SidePanel } from '#/components/ui/side-panel.tsx'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
-import { Tag } from '#/components/tag.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
 
 import { characterSkinning, countPoses } from '@dth/rom'
 

@@ -16,10 +16,8 @@ import {
   useRole,
   useTransitionStyles,
 } from '@floating-ui/react'
-import { useNavigate } from '@tanstack/react-router'
-import { openExternal } from '#/lib/desktop.ts'
-
-import { cn } from '#/lib/utils.ts'
+import { cn } from '../cn.ts'
+import { useUiConfig } from '../config.tsx'
 
 const ARROW_HEIGHT = 7
 /** Gap between the "i" and the popup, on top of the arrow's own height. */
@@ -54,7 +52,7 @@ export function InfoPopup({
   const [open, setOpen] = React.useState(false)
   const [pinned, setPinned] = React.useState(false)
   const arrowRef = React.useRef<SVGSVGElement>(null)
-  const navigate = useNavigate()
+  const { onNavigate, onOpenExternal } = useUiConfig()
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
@@ -114,10 +112,10 @@ export function InfoPopup({
       event.preventDefault()
       setPinned(false)
       setOpen(false)
-      void (navigate as (opts: { to: string }) => unknown)({ to: href })
+      onNavigate(href)
     } else if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
       event.preventDefault()
-      void openExternal(href)
+      onOpenExternal(href)
     }
   }
 

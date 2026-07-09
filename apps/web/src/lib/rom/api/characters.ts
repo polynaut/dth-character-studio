@@ -241,9 +241,9 @@ function parseRomRunLogText(text: string): RomRunLog {
           const entry = (m ?? {}) as Record<string, unknown>
           return {
             frame: typeof entry.frame === 'number' ? entry.frame : -1,
-            node: String(entry.node ?? ''),
-            prop: String(entry.prop ?? ''),
-            reason: String(entry.reason ?? ''),
+            node: typeof entry.node === 'string' ? entry.node : '',
+            prop: typeof entry.prop === 'string' ? entry.prop : '',
+            reason: typeof entry.reason === 'string' ? entry.reason : '',
           }
         })
       : [],
