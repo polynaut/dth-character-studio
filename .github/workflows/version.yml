@@ -35,4 +35,11 @@ jobs:
           title: 'chore: version packages'
           commit: 'chore: version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer a PAT / GitHub App token (secret CHANGESETS_TOKEN) over the
+          # default GITHUB_TOKEN. GitHub deliberately does NOT re-trigger
+          # `on: pull_request` workflows for PRs opened by GITHUB_TOKEN, so the
+          # version PR gets no CI runs and (with required checks on main) can't
+          # be merged without manually closing/reopening it. A PAT-authored PR
+          # fires the checks normally — no babysitting. Falls back to
+          # GITHUB_TOKEN when the secret is absent (old behaviour). See docs/devops.md.
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}

@@ -65,7 +65,8 @@ Native access lives in the **`lib/` layer**, not in routes/components: primarily
 **`apps/web/src/lib/rom/{api,storage}.ts`** + **`lib/desktop.ts`** (the bulk of it), plus a few
 focused helpers that legitimately touch Tauri APIs — `lib/updater.ts`, `lib/file-drop.ts`,
 `lib/path.ts`, `lib/rom/migrate-projects.ts`, and the app shell (`routes/__root.tsx`, `main.tsx`).
-Each is `isTauri()`-guarded so the SPA still runs in a plain browser (web-only e2e mocks this layer);
+Each is `isTauri()`-guarded so the SPA still runs in a plain browser (native features no-op there —
+which is also what a future online deployment or a web-only e2e mock of this layer would rely on).
 UI code opens external links via `desktop.openExternal`, never `@tauri-apps/plugin-shell` directly.
 `api.ts` is the primary bridge between the React UI and the filesystem; it keeps the `{ data }` call
 convention the routes use, validates input with zod, and `invoke()`s Rust commands. When adding a

@@ -4,8 +4,7 @@ import { Check, ChevronDown, ChevronRight, ExternalLink, RefreshCw, Save } from 
 import { toast } from 'sonner'
 
 import { PathCode } from '#/components/path-code.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
+import { Button, InfoPopup } from '@dth/ui'
 import { clearProductScan, fetchProductScan, saveCharacter } from '#/lib/rom/api.ts'
 import { openExternal } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'

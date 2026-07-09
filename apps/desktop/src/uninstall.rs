@@ -14,10 +14,15 @@ pub(crate) struct UninstallDefaultsRequest {
 }
 
 /// The default leftover-folder list (ported from the dth-cli `uninstall-daz`): the
-/// user's DAZ library folder, the common Documents / Public library spots, and the
-/// APPDATA `DAZ 3D` + Start-Menu folders. NB: we push the library folder ITSELF,
-/// never its parent — the parent is typically the whole Documents folder, and this
-/// list is prefilled straight into a recursive delete.
+/// user's DAZ library folder, the common Documents / Public library spots, the
+/// DAZStudio install dirs, and the APPDATA `DAZ 3D` + Start-Menu folders.
+///
+/// Every default is derived from a standard Windows environment variable
+/// (`%USERPROFILE%`, `%PUBLIC%`, `%PROGRAMFILES%`, `%PROGRAMFILES(X86)%`,
+/// `%APPDATA%`) rather than any hardcoded drive layout, so the list is meaningful
+/// on any machine — a var that isn't set simply contributes nothing. NB: we push
+/// the library folder ITSELF, never its parent — the parent is typically the whole
+/// Documents folder, and this list is prefilled straight into a recursive delete.
 #[tauri::command]
 pub fn default_daz_uninstall_folders(request: UninstallDefaultsRequest) -> Vec<String> {
     let mut folders: Vec<String> = Vec::new();
@@ -25,15 +30,29 @@ pub fn default_daz_uninstall_folders(request: UninstallDefaultsRequest) -> Vec<S
     if !lib.is_empty() {
         folders.push(lib.to_string());
     }
-    folders.push("D:\\User Data\\Documents\\DAZ 3D".into());
-    folders.push("E:\\User Data\\Documents\\DAZ 3D".into());
-    folders.push("C:\\Users\\Public\\Documents\\My DAZ 3D Library".into());
-    folders.push("C:\\Program Files\\DAZ 3D\\DAZStudio6".into());
-    folders.push("C:\\Program Files\\DAZ 3D\\DAZStudio4".into());
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        folders.push(format!("{appdata}\\DAZ 3D"));
-        folders.push(format!("{appdata}\\Microsoft\\Windows\\Start Menu\\Programs\\DAZ 3D"));
-    }
+    // Append `<%var%>\suffix` when `var` is set (trailing separators trimmed so we
+    // never emit a doubled `\\`). No-op for an unset/empty var.
+    let mut push_env = |var: &str, suffix: &str| {
+        if let Ok(base) = std::env::var(var) {
+            let base = base.trim().trim_end_matches(['\\', '/']);
+            if !base.is_empty() {
+                folders.push(format!("{base}\\{suffix}"));
+            }
+        }
+    };
+    // Per-user content library + Daz data folder under Documents.
+    push_env("USERPROFILE", "Documents\\DAZ 3D");
+    push_env("USERPROFILE", "Documents\\My DAZ 3D Library");
+    // The shared (all-users) content library under Public Documents.
+    push_env("PUBLIC", "Documents\\My DAZ 3D Library");
+    // Daz Studio itself — 64-bit and 32-bit Program Files install roots.
+    push_env("PROGRAMFILES", "DAZ 3D\\DAZStudio4");
+    push_env("PROGRAMFILES", "DAZ 3D\\DAZStudio6");
+    push_env("ProgramFiles(x86)", "DAZ 3D\\DAZStudio4");
+    push_env("ProgramFiles(x86)", "DAZ 3D\\DAZStudio6");
+    // Per-user app data + the Start-Menu shortcuts.
+    push_env("APPDATA", "DAZ 3D");
+    push_env("APPDATA", "Microsoft\\Windows\\Start Menu\\Programs\\DAZ 3D");
     // The full candidate list — NOT filtered by existence. Whether a folder is there
     // is checked at delete time (the uninstall reports missing ones as "not found"),
     // so the list stays complete regardless of Daz's install state when prefilled.

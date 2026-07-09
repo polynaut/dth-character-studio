@@ -13,23 +13,10 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { EditableTitle } from '#/components/editable-title.tsx'
+import { Button, EditableTitle, InfoPopup, Input, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, Tag } from '@dth/ui'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
-import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
-import { Switch } from '#/components/ui/switch.tsx'
 import {
   characterKeepFolders,
   deleteCharacter,
@@ -54,9 +41,7 @@ import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { NumberField } from '#/components/number-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
-import { Tag } from '#/components/tag.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'

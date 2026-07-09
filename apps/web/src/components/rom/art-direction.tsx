@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button } from '@dth/ui'
 import {
   ART_DIRECTION_CATALOG,
   genRomIncludes,

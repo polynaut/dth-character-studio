@@ -2,21 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { CircleCheck, Download, Plus } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
-import { Label } from '#/components/ui/label.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Switch } from '#/components/ui/switch.tsx'
-import { Field } from '#/components/field.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
 import {
   detectDimManifestsFolder,
   ensureNetworkDrives,
@@ -38,7 +25,6 @@ import {
 import { confirmDialog } from '#/lib/desktop.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
-import { cn } from '#/lib/utils.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 import { toast } from 'sonner'

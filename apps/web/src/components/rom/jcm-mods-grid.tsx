@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
+import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 
 import { cellInputClass } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'

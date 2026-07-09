@@ -1,13 +1,13 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-#[cfg(desktop)]
-use std::sync::OnceLock;
 
 #[cfg(desktop)]
 use crate::archive::{extract_archive, InflateBudget};
 #[cfg(desktop)]
 use crate::fsutil::copy_dir;
+#[cfg(desktop)]
+use crate::github::{ensure_crypto_provider, fetch_daztohue_head_sha};
 #[cfg(desktop)]
 use crate::report::{io_detail, step_ok};
 use crate::report::{one_step_report, step_err, InstallReport};
@@ -17,6 +17,7 @@ use crate::report::{one_step_report, step_err, InstallReport};
 // straight from GitHub and unpacked into `<My DAZ 3D Library>/Scripts/DazToHue-Scripts`.
 // The download runs natively (the webview can't — codeload's CORS only allows
 // render.githubusercontent.com); reqwest follows the github→codeload redirect.
+// The GitHub-API version check + shared reqwest client live in `github.rs`.
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,13 +27,6 @@ pub(crate) struct ScriptsInstallRequest {
     /// Download + count only, writing nothing into the library.
     dry_run: bool,
 }
-
-/// GitHub API for the HEAD commit of `main`. With the `.sha` media type the
-/// response body IS the 40-char commit SHA (no JSON parsing). Unauthenticated
-/// calls are rate-limited to 60/hr per IP — fine for the occasional install/check.
-#[cfg(desktop)]
-const DAZTOHUE_SCRIPTS_COMMITS_API: &str =
-    "https://api.github.com/repos/soltude/DazToHue-Scripts/commits/main";
 
 /// Base for the per-commit source zip: `<base><sha>.zip` downloads exactly that
 /// commit's tree, so the installed files always match the SHA we record in the
@@ -52,19 +46,6 @@ fn single_child_dir(dir: &Path) -> Option<PathBuf> {
     first.is_dir().then_some(first)
 }
 
-/// Install ring as the process-default rustls crypto provider, once. reqwest's
-/// default Client needs one but the unified build only has rustls' `no-provider`
-/// variant (the updater configures its own client), so without this `reqwest::get`
-/// panics with "No rustls crypto provider is configured".
-#[cfg(desktop)]
-fn ensure_crypto_provider() {
-    static INIT: OnceLock<()> = OnceLock::new();
-    INIT.get_or_init(|| {
-        // Err just means another provider was already installed — fine either way.
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-}
-
 /// Fetch a URL server-side (following redirects) and return the body bytes.
 #[cfg(desktop)]
 async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
@@ -73,93 +54,6 @@ async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
     let resp = resp.error_for_status().map_err(|e| format!("download failed: {e}"))?;
     let bytes = resp.bytes().await.map_err(|e| format!("reading the download failed: {e}"))?;
     Ok(bytes.to_vec())
-}
-
-/// The HEAD commit SHA of soltude/DazToHue-Scripts `main`, via the GitHub API. The
-/// `.sha` Accept type returns the bare SHA; GitHub requires a User-Agent. Errors
-/// (offline, 404, rate-limited) surface as a message the caller can show.
-#[cfg(desktop)]
-async fn fetch_daztohue_head_sha() -> Result<String, String> {
-    ensure_crypto_provider();
-    let client = reqwest::Client::builder()
-        .user_agent("DTH-Character-Studio")
-        .build()
-        .map_err(|e| format!("http client failed: {e}"))?;
-    let resp = client
-        .get(DAZTOHUE_SCRIPTS_COMMITS_API)
-        .header("Accept", "application/vnd.github.sha")
-        .send()
-        .await
-        .map_err(|e| format!("checking the latest version failed: {e}"))?;
-    let resp = resp
-        .error_for_status()
-        .map_err(|e| format!("checking the latest version failed: {e}"))?;
-    let sha = resp
-        .text()
-        .await
-        .map_err(|e| format!("reading the version failed: {e}"))?
-        .trim()
-        .to_string();
-    // A valid response is a hex SHA; anything else (an HTML error page, a JSON blob)
-    // would poison the marker, so reject it.
-    if sha.len() < 7 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(format!("unexpected version response: {sha}"));
-    }
-    Ok(sha)
-}
-
-/// The latest available DazToHue-Scripts commit SHA — for the "is my install
-/// outdated?" check. Compared against the `.dth-version.json` marker the installer
-/// writes. Returns an error message (not a panic) when the check can't run.
-#[cfg(desktop)]
-#[tauri::command]
-pub async fn latest_daztohue_commit() -> Result<String, String> {
-    fetch_daztohue_head_sha().await
-}
-
-/// Web/mobile builds have no native HTTP (reqwest is desktop-only).
-#[cfg(not(desktop))]
-#[tauri::command]
-pub async fn latest_daztohue_commit() -> Result<String, String> {
-    Err("only available on the desktop app".into())
-}
-
-/// Tag names of the app's own GitHub releases, newest first (one page). Feeds
-/// the update dialog's "versions you skipped" link list — the webview can't
-/// query GitHub itself (the strict CSP allows IPC only). Errors surface as a
-/// message; the caller degrades to showing no list.
-#[cfg(desktop)]
-#[tauri::command]
-pub async fn app_release_tags() -> Result<Vec<String>, String> {
-    ensure_crypto_provider();
-    let client = reqwest::Client::builder()
-        .user_agent("DTH-Character-Studio")
-        .build()
-        .map_err(|e| format!("http client failed: {e}"))?;
-    let resp = client
-        .get("https://api.github.com/repos/polynaut/dth-character-studio/releases?per_page=30")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| format!("listing releases failed: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("listing releases failed: {e}"))?;
-    #[derive(serde::Deserialize)]
-    struct Release {
-        tag_name: String,
-    }
-    let releases: Vec<Release> = resp
-        .json()
-        .await
-        .map_err(|e| format!("reading the releases failed: {e}"))?;
-    Ok(releases.into_iter().map(|r| r.tag_name).collect())
-}
-
-/// Web/mobile builds have no native HTTP (reqwest is desktop-only).
-#[cfg(not(desktop))]
-#[tauri::command]
-pub async fn app_release_tags() -> Result<Vec<String>, String> {
-    Err("only available on the desktop app".into())
 }
 
 /// Download the soltude/DazToHue-Scripts repo as a zip and install its contents
@@ -271,32 +165,4 @@ pub async fn install_daztohue_scripts(request: ScriptsInstallRequest) -> Install
 #[tauri::command]
 pub async fn install_daztohue_scripts(_request: ScriptsInstallRequest) -> InstallReport {
     one_step_report(false, step_err("DazToHue-Scripts", "only available on the desktop app".into()))
-}
-
-/// Whether a Daz Studio instance is currently running (Windows: `tasklist`,
-/// spawned without a console window). Drives the web side's scene-open bridge:
-/// a running Daz (DS6) silently ignores forwarded `.duf` opens, but forwarded
-/// SCRIPT files still execute — so the studio opens scenes through a one-shot
-/// `.dsa` when an instance is up.
-#[tauri::command]
-pub fn daz_studio_running() -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        std::process::Command::new("tasklist")
-            .args(["/FI", "IMAGENAME eq DAZStudio.exe", "/NH", "/FO", "CSV"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .map(|o| {
-                String::from_utf8_lossy(&o.stdout)
-                    .to_ascii_lowercase()
-                    .contains("dazstudio.exe")
-            })
-            .unwrap_or(false)
-    }
-    #[cfg(not(windows))]
-    {
-        false
-    }
 }

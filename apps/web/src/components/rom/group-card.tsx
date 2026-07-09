@@ -5,14 +5,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { Copy, Plus, Trash2 } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 import {
   BONE_LABEL_SECTIONS,
   CALC_FROM_SECTIONS,

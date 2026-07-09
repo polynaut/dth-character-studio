@@ -1,9 +1,11 @@
 mod archive;
 mod assets;
 mod content;
+mod daz;
 mod dedup;
 mod drives;
 mod fsutil;
+mod github;
 mod housekeeping;
 mod install;
 mod poses;
@@ -116,9 +118,9 @@ pub fn run() {
             uninstall::default_daz_uninstall_folders,
             uninstall::uninstall_daz,
             scripts::install_daztohue_scripts,
-            scripts::latest_daztohue_commit,
-            scripts::app_release_tags,
-            scripts::daz_studio_running,
+            github::latest_daztohue_commit,
+            github::app_release_tags,
+            daz::daz_studio_running,
             install::install_daz_merge,
             install::install_houdini_presets,
             install::install_unreal_dth,

@@ -1,11 +1,5 @@
 import { ConfigError } from '#/components/config-error.tsx'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select.tsx'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 import { genAssetGender } from '@dth/rom'
 
 import type {

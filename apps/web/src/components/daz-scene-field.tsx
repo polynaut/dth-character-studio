@@ -6,13 +6,9 @@ import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Tag } from '#/components/tag.tsx'
+import { Button, Input, Label, RemoveAssetDialog, Tag, useModifierHeld } from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { RemoveAssetDialog } from '#/components/remove-asset-dialog.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
 import dazLogo from '#/assets/daz-logo.png'
 import {
   copyDazScene,
@@ -24,7 +20,6 @@ import {
   saveCharacter,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
-import { useModifierHeld } from '#/lib/use-modifier-held.ts'
 import { displayPath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'

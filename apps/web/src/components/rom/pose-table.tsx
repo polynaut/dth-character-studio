@@ -9,8 +9,7 @@ import { pickFbxPath } from '#/lib/desktop.ts'
 
 import type { Row } from '@tanstack/react-table'
 
-import { Button } from '#/components/ui/button.tsx'
-import { InfoPopup } from '#/components/ui/info-popup.tsx'
+import { Button, InfoPopup } from '@dth/ui'
 import { sanitizePoseName } from '@dth/rom'
 
 import type { ColumnDef } from '@tanstack/react-table'

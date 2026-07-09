@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "import", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "perf": "warn",
+    "suspicious": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "warn",
+    "import/no-cycle": "error",
+    "no-console": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/no-array-index-key": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/no-unnecessary-boolean-literal-compare": "off",
+    "typescript/consistent-return": "off",
+    "no-control-regex": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/testutil.*", "**/*.gen.ts"],
+      "rules": {
+        "typescript/no-floating-promises": "off",
+        "typescript/no-misused-promises": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/routeTree.gen.ts",
+    "**/*.gen.ts",
+    "**/dist/**",
+    "**/target/**",
+    "**/node_modules/**"
+  ]
+}

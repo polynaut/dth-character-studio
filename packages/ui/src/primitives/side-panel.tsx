@@ -2,8 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
-import { cn } from '#/lib/utils.ts'
+import { Button } from './button.tsx'
+import { cn } from '../cn.ts'
 
 /** How long the slide / fade runs — keep in sync with the `duration-300` classes. */
 const ANIM_MS = 300

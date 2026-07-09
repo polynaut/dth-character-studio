@@ -1,6 +1,6 @@
 import { ArrowLeft, Save, Undo2 } from 'lucide-react'
 
-import { Button } from '#/components/ui/button.tsx'
+import { Button } from '@dth/ui'
 
 /**
  * Sticky page header for the form pages (Settings / Tools) — the same trick as

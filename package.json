@@ -16,12 +16,16 @@
     "generate-routes": "pnpm --filter @dth/web generate-routes",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "lint": "oxlint --config .oxlintrc.json --type-aware apps packages",
+    "lint:fix": "oxlint --config .oxlintrc.json --type-aware --fix apps packages",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",
-    "@changesets/cli": "^2.29.7"
+    "@changesets/cli": "^2.29.7",
+    "oxlint": "^1.73.0",
+    "oxlint-tsgolint": "^0.24.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
+import { Button, Input, Label } from '@dth/ui'
 
 /**
  * Frame-range picker shown after choosing a DAZ morph CSV. A full scene scan
