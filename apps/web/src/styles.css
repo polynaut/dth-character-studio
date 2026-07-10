@@ -2,6 +2,13 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+/* The @dth/ui package is a linked workspace dir outside this app's tree, so
+ * Tailwind's automatic content detection doesn't reach it — scan its sources
+ * explicitly so utility classes used ONLY in the kit (e.g. the linked-asset
+ * card's `w-80`, `group/card`) are generated. Without this the cards render
+ * unstyled/narrow. Glob form is used so the path can't silently no-op. */
+@source '../../../packages/ui/src/**/*.{ts,tsx}';
+
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
