@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.9
+
+### Patch Changes
+
+- [#219](https://github.com/polynaut/dth-character-studio/pull/219) [`74f2203`](https://github.com/polynaut/dth-character-studio/commit/74f220345b1c2eeeeb51ee2ad4937b955c657f56) Thanks [@polynaut](https://github.com/polynaut)! - JCM "Modify JCM frames": add a **Mirror** button on each rule that copies it to
+  the other side — swapping Left/Right and L/R side tokens in the bone label and
+  morph names (shared centre controllers like `!Hip Bend Controller` are left
+  untouched; angles/values are copied verbatim). Also set the grid off from the
+  base-ROM fields above with a divider + spacing.
+- Updated dependencies []:
+  - @dth/rom@0.41.9
+  - @dth/ui@0.41.9
+
 ## 0.41.8
 
 ### Patch Changes
