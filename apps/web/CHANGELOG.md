@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.7
+
+### Patch Changes
+
+- [#215](https://github.com/polynaut/dth-character-studio/pull/215) [`8333af9`](https://github.com/polynaut/dth-character-studio/commit/8333af9416d2e461eec2152c5f15dbd200dce350) Thanks [@polynaut](https://github.com/polynaut)! - Follow-up cleanup (no user-facing change): route native app-menu actions through
+  a new `desktop.onMenu()` helper so the last raw `@tauri-apps/api/event` import
+  leaves the routes (`__root.tsx`, `index.tsx`) — the native boundary is now fully
+  concentrated in `lib/desktop.ts`. Also consolidate the reinvented path-normalize
+  lambdas into `normalizePath` / `normalizePathLower` in `lib/path.ts`.
+- Updated dependencies []:
+  - @dth/rom@0.41.7
+  - @dth/ui@0.41.7
+
 ## 0.41.6
 
 ### Patch Changes
