@@ -470,9 +470,12 @@ export function RomSections({
 
                 {/* Optional bone-rotation morph drives along the JCM ROM — the
                     grid UI over character.jcmMorphMods (works with a preset OR
-                    a custom base ROM; the runtime applies it after either). */}
+                    a custom base ROM; the runtime applies it after either). Set
+                    off from the base-ROM fields above with a divider + spacing. */}
                 {section === 'JCM' && jcmMorphMods && onJcmMorphModsChange && (
-                  <JcmModsGrid mods={jcmMorphMods} onChange={onJcmMorphModsChange} />
+                  <div className="mt-5 border-t pt-5">
+                    <JcmModsGrid mods={jcmMorphMods} onChange={onJcmMorphModsChange} />
+                  </div>
                 )}
               </div>
             )}

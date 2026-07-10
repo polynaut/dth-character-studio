@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, FlipHorizontal2, Plus, Trash2 } from 'lucide-react'
 
 import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 
@@ -15,6 +15,54 @@ const AXES = ['XRotate', 'YRotate', 'ZRotate'] as const
 
 function emptyDrive(): Drive {
   return { morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } }
+}
+
+/** Flip a case-preserving Left/Right word. */
+function flipWord(word: string): string {
+  const lower = word.toLowerCase()
+  const to = lower === 'left' ? 'right' : lower === 'right' ? 'left' : ''
+  if (!to) return word
+  if (word === word.toUpperCase()) return to.toUpperCase()
+  if (word[0] === word[0].toUpperCase()) return to[0].toUpperCase() + to.slice(1)
+  return to
+}
+
+/**
+ * Swap the left/right side token in a bone label or morph name, for the Mirror
+ * feature — e.g. "Left Thigh Bend" → "Right Thigh Bend", "Hip Adjuster L" →
+ * "Hip Adjuster R", "body_l_calf" → "body_r_calf". A side-less name (a shared
+ * centre controller like "!Hip Bend Controller") is returned unchanged. Both
+ * `.replace` passes target disjoint forms (Left/Right words vs a separator-led
+ * single L/R), so a mixed name can't cancel itself out. No angle/value change.
+ */
+export function mirrorSide(name: string): string {
+  return name
+    .replace(/left|right/gi, flipWord)
+    // A single side letter after a separator: "_l", "-r", ".L", " R" — but not
+    // the start of a longer word ("_lower"), guarded by the trailing lookahead.
+    .replace(/([_\-. ])([lr])(?![a-z])/gi, (_m, sep: string, side: string) =>
+      sep + (side.toLowerCase() === 'l' ? (side === 'l' ? 'r' : 'R') : side === 'r' ? 'l' : 'L'),
+    )
+}
+
+function mirrorDrive(drive: Drive): Drive {
+  return {
+    morphName: mirrorSide(drive.morphName),
+    range: {
+      angle: { start: drive.range.angle.start, end: drive.range.angle.end },
+      value: { start: drive.range.value.start, end: drive.range.value.end },
+    },
+  }
+}
+
+/** A deep copy of a rule with every side token flipped — the "other side". */
+export function mirrorMod(mod: JcmMorphMod): JcmMorphMod {
+  return {
+    ...mod,
+    boneLabel: mirrorSide(mod.boneLabel),
+    positive: mod.positive.map(mirrorDrive),
+    negative: mod.negative.map(mirrorDrive),
+  }
 }
 
 /** A plain-number cell (commit on blur/Enter) — morph values and angles are RAW
@@ -159,7 +207,19 @@ export function JcmModsGrid({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="ml-auto text-muted-foreground hover:text-destructive"
+                  className="ml-auto text-muted-foreground hover:text-foreground"
+                  title="Mirror to the other side — copies this rule, swapping Left/Right and L/R side tokens in the bone and morph names"
+                  aria-label={`Mirror rule ${i + 1} to the other side`}
+                  onClick={() =>
+                    onChange([...mods.slice(0, i + 1), mirrorMod(mod), ...mods.slice(i + 1)])
+                  }
+                >
+                  <FlipHorizontal2 className="size-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-destructive"
                   title="Remove this rule"
                   aria-label={`Remove rule ${i + 1}`}
                   onClick={() => onChange(mods.filter((_, mi) => mi !== i))}
