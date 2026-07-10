@@ -4,7 +4,7 @@ import { FolderOpen } from 'lucide-react'
 
 import { Button, Input, Label } from '@dth/ui'
 import { pickFolder } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { displayPath, normalizePathLower } from '#/lib/path.ts'
 
 function Backdrop({
   busy,
@@ -100,8 +100,7 @@ export function ProjectMoveDialog({
   onClose: () => void
 }) {
   const [path, setPath] = useState(project.path)
-  const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-  const changed = norm(path) !== norm(project.path)
+  const changed = normalizePathLower(path) !== normalizePathLower(project.path)
 
   async function choose() {
     const picked = await pickFolder('Choose the new project folder')

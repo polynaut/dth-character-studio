@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { isTauri } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import { FolderOpen, FolderPlus, Trash2 } from 'lucide-react'
 
 import { Button, Input, SidePanel } from '@dth/ui'
@@ -10,7 +8,7 @@ import { HeaderNav } from '#/components/header-nav.tsx'
 import { formatDate } from '#/components/overview-controls.tsx'
 import { createProject, fetchRecents, forgetRecent, openProject } from '#/lib/rom/api.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
-import { pickDcspPath, pickFolder } from '#/lib/desktop.ts'
+import { onMenu, pickDcspPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { toast } from 'sonner'
 
@@ -75,13 +73,8 @@ function HomePage() {
     void router.navigate({ to: '/', search: {}, replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startNew])
-  useEffect(() => {
-    if (!isTauri()) return
-    const unlisten: Array<() => void> = []
-    void listen('menu-new-project', () => openCreatePanel()).then((u) => unlisten.push(u))
-    return () => unlisten.forEach((u) => u())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => onMenu('menu-new-project', () => openCreatePanel()), [])
 
   async function onChooseFolder() {
     const picked = await pickFolder('Choose the project folder')

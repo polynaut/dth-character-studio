@@ -4,12 +4,10 @@ import { Outlet, createRootRoute, useNavigate } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { Toaster, toast } from 'sonner'
-import { isTauri } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 
 import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
-import { openExternal } from '#/lib/desktop.ts'
+import { onMenu, openExternal } from '#/lib/desktop.ts'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import { Button, TooltipHost, UiConfigProvider, installAltMenuGuard } from '@dth/ui'
 
@@ -78,13 +76,12 @@ function RootComponent() {
   // Exit; Help → About / Check for Updates. Exit quits natively; the rest emit an
   // event handled here. No-op in the plain web build (no Tauri).
   useEffect(() => {
-    if (!isTauri()) return
-    const unlisten: Array<() => void> = []
-    const add = (p: Promise<() => void>) => void p.then((u) => unlisten.push(u))
-    add(listen('menu-about', () => void navigate({ to: '/about' })))
-    add(listen('menu-refresh-assets', () => void navigate({ to: '/tools', search: { tab: 'refresh' } })))
-    add(listen('menu-check-updates', () => void checkForUpdates({ manual: true })))
-    return () => unlisten.forEach((u) => u())
+    const unsub = [
+      onMenu('menu-about', () => void navigate({ to: '/about' })),
+      onMenu('menu-refresh-assets', () => void navigate({ to: '/tools', search: { tab: 'refresh' } })),
+      onMenu('menu-check-updates', () => void checkForUpdates({ manual: true })),
+    ]
+    return () => unsub.forEach((u) => u())
   }, [navigate])
 
   return (
