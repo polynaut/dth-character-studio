@@ -1,6 +1,7 @@
 import { ask, open } from '@tauri-apps/plugin-dialog'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import { rememberNetworkPath } from './rom/api.ts'
@@ -39,6 +40,27 @@ export function onWindowCloseRequested(
       if (disposed) fn()
       else unlisten = fn
     })
+  return () => {
+    disposed = true
+    unlisten?.()
+  }
+}
+
+/**
+ * Subscribe to a native app-menu action emitted by the Rust menu (see `lib.rs` —
+ * e.g. `menu-about`, `menu-refresh-assets`, `menu-new-project`). Returns an
+ * unsubscribe. No-op in a plain browser (no native menu), so callers don't need
+ * their own `isTauri()` guard — keeping the raw `@tauri-apps/api/event` import
+ * out of routes/pages, inside the desktop boundary.
+ */
+export function onMenu(name: string, handler: () => void): () => void {
+  if (!isTauri()) return () => {}
+  let unlisten: (() => void) | null = null
+  let disposed = false
+  void listen(name, () => handler()).then((fn) => {
+    if (disposed) fn()
+    else unlisten = fn
+  })
   return () => {
     disposed = true
     unlisten?.()

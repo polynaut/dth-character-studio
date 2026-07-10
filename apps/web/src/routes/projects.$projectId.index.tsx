@@ -38,7 +38,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
-import { displayPath, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePathLower, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
@@ -236,8 +236,7 @@ function ProjectCharactersPage() {
 
   /** Is the picked scene located inside the project folder? */
   function sceneInsideProject(): boolean {
-    const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-    return norm(scenePath).startsWith(norm(project.path) + '/')
+    return normalizePathLower(scenePath).startsWith(normalizePathLower(project.path) + '/')
   }
 
   async function onCreate() {

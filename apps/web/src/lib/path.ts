@@ -14,6 +14,22 @@ export function pathSeparator(): string {
 }
 
 /**
+ * Canonicalize a path for comparison: collapse every run of `/` or `\` to a
+ * single `/` and drop any trailing separator. Use it when comparing whether one
+ * path sits inside another regardless of how each was stored (the frontend mixes
+ * separators freely). Not for display — use {@link displayPath} for that.
+ */
+export function normalizePath(path: string): string {
+  return path.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+}
+
+/** {@link normalizePath} plus lower-casing, for case-insensitive path compares
+ *  (Windows semantics). */
+export function normalizePathLower(path: string): string {
+  return normalizePath(path).toLowerCase()
+}
+
+/**
  * Normalize a filesystem path for display: rewrite every `/` or `\` to the
  * current OS separator. Backend paths come back with the OS separator, but
  * anywhere the frontend joins or splits them we end up with a wild mix — run

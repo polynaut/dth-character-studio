@@ -10,7 +10,7 @@ import { Button, InfoPopup, Label, LinkedAssetCard, RemoveAssetDialog, useModifi
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { openScene, revealPath, saveCharacter } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
-import { displayPath, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
@@ -42,9 +42,8 @@ function HoudiniCard({
   const altHeld = useModifierHeld('Alt')
   // The chip shows the project's folder; when it sits inside the character's own
   // folder, collapse that prefix to "%CHAR%" (like the Daz scene cards).
-  const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-  const hipDir = norm(hipPath).replace(/\/[^/]*$/, '')
-  const base = norm(charFolderAbs)
+  const hipDir = normalizePath(hipPath).replace(/\/[^/]*$/, '')
+  const base = normalizePath(charFolderAbs)
   const inChar =
     !!base &&
     (hipDir.toLowerCase() === base.toLowerCase() ||
