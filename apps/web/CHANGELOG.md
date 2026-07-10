@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.8
+
+### Patch Changes
+
+- [#217](https://github.com/polynaut/dth-character-studio/pull/217) [`05e9f34`](https://github.com/polynaut/dth-character-studio/commit/05e9f342a05620c5437ebaa93812e21c973e5448) Thanks [@polynaut](https://github.com/polynaut)! - Fix broken linked-asset cards (Daz scene / Houdini project cards rendered too
+  narrow with the open icon misplaced). The `@dth/ui` package's Tailwind `@source`
+  directive was missing, so utility classes used only in the kit — notably the
+  card's `w-80` and `group/card` — were never generated, collapsing the cards to
+  content width. Re-added the `@source` scan of `packages/ui/src`.
+- Updated dependencies []:
+  - @dth/rom@0.41.8
+  - @dth/ui@0.41.8
+
 ## 0.41.7
 
 ### Patch Changes
