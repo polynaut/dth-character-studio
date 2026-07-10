@@ -20,7 +20,7 @@ import {
   saveCharacter,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
-import { displayPath, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
@@ -57,9 +57,8 @@ function SceneCard({
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
   // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
   // nested. Empty for a scene linked outside the character folder.
-  const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-  const sceneDir = norm(scenePath).replace(/\/[^/]*$/, '')
-  const base = norm(charFolderAbs)
+  const sceneDir = normalizePath(scenePath).replace(/\/[^/]*$/, '')
+  const base = normalizePath(charFolderAbs)
   const relSub =
     base && sceneDir.toLowerCase().startsWith(base.toLowerCase() + '/')
       ? sceneDir.slice(base.length + 1)
@@ -172,25 +171,23 @@ export function DazSceneField({
   // The whole scenes folder is gone (renamed/moved outside the app) — offer to
   // re-link it, which re-points every scene path to the folder's new location.
   const folderMissing = linked && !sceneFolderExists
-
-  const norm = (s: string) => s.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
   function insideProject(p: string): boolean {
-    return norm(p).toLowerCase().startsWith(norm(location.libraryFolder).toLowerCase() + '/')
+    return normalizePath(p).toLowerCase().startsWith(normalizePath(location.libraryFolder).toLowerCase() + '/')
   }
   // The character's own folder, and the primary scene's folder relative to it
   // (e.g. "daz3d") — added scenes are copied there; the modal subdir nests inside.
-  const charFolder = norm(location.definitionAbs).replace(/\/[^/]*$/, '')
+  const charFolder = normalizePath(location.definitionAbs).replace(/\/[^/]*$/, '')
   function insideCharFolder(p: string): boolean {
-    return norm(p).toLowerCase().startsWith(charFolder.toLowerCase() + '/')
+    return normalizePath(p).toLowerCase().startsWith(charFolder.toLowerCase() + '/')
   }
   // Every scene already attached to this character (primary + extras). A scene is
   // linked at most once, so a pick/drop that repeats one is rejected up front.
   const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
   function isAlreadyLinked(p: string): boolean {
-    const target = norm(p).toLowerCase()
-    return linkedScenes.some((s) => norm(s).toLowerCase() === target)
+    const target = normalizePath(p).toLowerCase()
+    return linkedScenes.some((s) => normalizePath(s).toLowerCase() === target)
   }
-  const primaryDir = character.scenePath ? norm(character.scenePath).replace(/\/[^/]*$/, '') : ''
+  const primaryDir = character.scenePath ? normalizePath(character.scenePath).replace(/\/[^/]*$/, '') : ''
   const baseDazRel =
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
       ? primaryDir.slice(charFolder.length + 1)
@@ -220,10 +217,10 @@ export function DazSceneField({
     setBusy(true)
     setError('')
     try {
-      const oldBase = norm(character.scenePath).replace(/\/[^/]*$/, '')
-      const newBase = norm(picked)
+      const oldBase = normalizePath(character.scenePath).replace(/\/[^/]*$/, '')
+      const newBase = normalizePath(picked)
       const repoint = (p: string) => {
-        const rel = norm(p)
+        const rel = normalizePath(p)
         return rel.toLowerCase().startsWith(oldBase.toLowerCase() + '/')
           ? `${newBase}/${rel.slice(oldBase.length + 1)}`
           : p // a scene linked outside the folder is left untouched
@@ -413,7 +410,7 @@ export function DazSceneField({
       : 0
   // The scenes subfolder relative to the character folder ('' when the scene is
   // linked from outside it) — that's the editable part of the chip.
-  const sceneDirAbs = norm(character.scenePath).replace(/\/[^/]*$/, '')
+  const sceneDirAbs = normalizePath(character.scenePath).replace(/\/[^/]*$/, '')
   const sceneDirRel = insideCharFolder(character.scenePath)
     ? sceneDirAbs.slice(charFolder.length + 1)
     : ''
