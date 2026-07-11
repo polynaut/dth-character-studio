@@ -16,6 +16,7 @@ import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectCon
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
+import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
 import {
   characterKeepFolders,
   deleteCharacter,
@@ -53,6 +54,7 @@ import {
   GENERATIONS,
   poseAssetCsvEra,
   poseAssetCsvValidated,
+  romTimeline,
 } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
@@ -866,6 +868,13 @@ function CharacterPage() {
             automatically.
           </InfoPopup>
         </h2>
+        {presetFrames && (
+          <div className="mb-4 rounded-lg border bg-card p-3">
+            <RomTimeline
+              segments={romTimeline(character.sections, character.gender, presetFrames)}
+            />
+          </div>
+        )}
         <RomSections
           sections={character.sections}
           genesis={character.genesis}
