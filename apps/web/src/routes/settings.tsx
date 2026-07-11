@@ -524,9 +524,13 @@ function SettingsPage() {
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders)
-  // Leaving with unsaved settings asks first (no programmatic navigations here —
-  // the install flows save before acting, gated on this same dirty flag).
-  useUnsavedChangesGuard(dirty, 'You have unsaved settings — leave and lose them?')
+  // Leaving with unsaved settings asks first — covers BOTH the machine settings
+  // and the Project-tab manifest edits (install flows save before acting; they
+  // gate on `dirty` for the machine half specifically).
+  useUnsavedChangesGuard(
+    dirty || projectDirty,
+    'You have unsaved settings — leave and lose them?',
+  )
 
   // Re-scan the active release's poses and refresh dependent routes. The studio
   // keeps the pose list in memory (no on-disk cache), so this just re-runs the

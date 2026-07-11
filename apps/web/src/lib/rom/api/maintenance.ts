@@ -4,6 +4,10 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import { projectsForSweep } from './core'
 import { gcNoteMedia } from './notes'
+import { housekeepingResultSchema } from './native-types.ts'
+// Inferred from the zod schema (parsed at the invoke boundary below) + re-exported.
+import type { HousekeepingResult } from './native-types.ts'
+export type { HousekeepingResult }
 
 // --- Housekeeping: keep app-generated data from filling the disk -------------
 // Product-scan CSVs (one per Daz scene, app-data) age out after
@@ -18,12 +22,6 @@ export const PRODUCT_SCAN_RETENTION_DAYS = 30
 
 /** Days an unreferenced note-media file is kept before the sweep removes it. */
 export const NOTE_MEDIA_RETENTION_DAYS = 7
-
-/** Files + bytes removed by a housekeeping action. */
-export interface HousekeepingResult {
-  filesDeleted: number
-  bytesFreed: number
-}
 
 /**
  * Backstop for the save-time note-media GC: for every known project, delete
@@ -56,9 +54,11 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
   if (!isTauri()) return { filesDeleted: 0, bytesFreed: 0 }
   const media = await sweepNoteMedia()
   const productScansDir = await storage.dataPath('product-scans')
-  const scans = await invoke<HousekeepingResult>('housekeeping_sweep', {
-    request: { productScansDir, maxAgeDays: PRODUCT_SCAN_RETENTION_DAYS },
-  })
+  const scans = housekeepingResultSchema.parse(
+    await invoke('housekeeping_sweep', {
+      request: { productScansDir, maxAgeDays: PRODUCT_SCAN_RETENTION_DAYS },
+    }),
+  )
   return {
     filesDeleted: scans.filesDeleted + media.filesDeleted,
     bytesFreed: scans.bytesFreed + media.bytesFreed,
@@ -83,7 +83,9 @@ export async function quarantineStats(): Promise<{
 export async function emptyQuarantine(): Promise<HousekeepingResult> {
   const { dedupQuarantineFolder } = await storage.getSettings()
   if (!dedupQuarantineFolder.trim()) throw new Error('No quarantine folder is set.')
-  return invoke<HousekeepingResult>('empty_folder', { path: dedupQuarantineFolder })
+  return housekeepingResultSchema.parse(
+    await invoke('empty_folder', { path: dedupQuarantineFolder }),
+  )
 }
 
 // --- Network drives -------------------------------------------------------

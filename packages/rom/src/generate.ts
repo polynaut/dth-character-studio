@@ -254,8 +254,6 @@ function csvSafe(value: string): string {
   return value.replace(/[\r\n,]+/g, ' ')
 }
 
-/** Frame counts of the pre-made ROM blocks on the timeline. */
-
 /**
  * CSV rows for the enabled custom sections, with absolute timeline frames
  * continuing after the preset blocks. FBM/MISC are flat lists in the node;

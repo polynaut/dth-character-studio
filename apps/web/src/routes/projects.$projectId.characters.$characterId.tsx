@@ -47,7 +47,13 @@ import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
-import { characterSkinning, countPoses, poseAssetCsvEra, poseAssetCsvValidated } from '@dth/rom'
+import {
+  characterSkinning,
+  countPoses,
+  GENERATIONS,
+  poseAssetCsvEra,
+  poseAssetCsvValidated,
+} from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { GeneratedFile, PresetFrames } from '@dth/rom'
@@ -579,7 +585,7 @@ function CharacterPage() {
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <Label>Genesis</Label>
-                  {!poseAssetCsvValidated(character, csvEra, presetFrames?.base) && (
+                  {!poseAssetCsvValidated(character, csvEra, presetFrames?.base, presetFrames?.gp) && (
                     <Tag
                       tone="orange"
                       title={`This configuration's PoseAsset CSV uses the custom-only layout, which hasn't been validated in Houdini. Validated setups: G9 (DQS, JCM+FAC presets, DTH 2.x) and G8.1 (DQS, JCM+FAC presets, DTH 1.9.x — the old Houdini pipeline). The Daz-side ROM works either way.`}
@@ -627,9 +633,10 @@ function CharacterPage() {
               doesn't consume a row of flow — that keeps the FACS / Flexion fields
               on the same baseline as the Genesis row on the left. -mt-2 + pt-2
               lift the box so its fields start at the same y as the left column.
-              The dials only exist on Genesis 9 figures — other generations have
-              no generation-specific settings (yet), so the box disappears. */}
-          {character.genesis === 'G9' && (
+              The dials only exist on generations flagged hasStrengthDials (G9
+              today) — other generations have no generation-specific settings
+              (yet), so the box disappears. */}
+          {GENERATIONS[character.genesis].hasStrengthDials && (
             <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4">
               <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
                 {GENESIS_LABELS[character.genesis]} Specific
@@ -732,7 +739,7 @@ function CharacterPage() {
         </div>
       )}
 
-      <div className={onProductsTab ? 'hidden' : undefined}>
+      <div className={activeTab !== 'character' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
           Export directory
@@ -886,11 +893,17 @@ function CharacterPage() {
             // should survive a reload without needing the Save button.
             const updated = { ...character, image }
             setCharacter(updated)
-            const saved = await saveCharacter({ data: { projectId, character: updated } })
-            setCharacter(saved)
-            setBaseline(saved)
-            void router.invalidate()
-            toast.success('Image updated')
+            try {
+              const saved = await saveCharacter({ data: { projectId, character: updated } })
+              setCharacter(saved)
+              setBaseline(saved)
+              void router.invalidate()
+              toast.success('Image updated')
+            } catch (e) {
+              // Roll the optimistic update back so the editor isn't stuck dirty.
+              setCharacter(character)
+              toast.error(e instanceof Error ? e.message : String(e))
+            }
           }}
           onClose={() => setImageDialogOpen(false)}
         />
