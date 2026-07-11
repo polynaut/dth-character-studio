@@ -3,8 +3,32 @@ import { z } from 'zod'
 
 import * as storage from '../storage'
 import { dataPath } from '../storage'
+import { dedupReportSchema, installReportSchema } from './native-types.ts'
 
 import type { StudioSettings } from '../storage'
+// The structured native-command RETURN types are inferred from the zod schemas
+// in native-types.ts (parsed at each `invoke` boundary below, so a Rust
+// serde-field rename throws where it happens instead of silently handing the UI
+// `undefined`). Imported for this module's own annotations AND re-exported so the
+// api.ts barrel + downstream (install-controls, tools) keep importing them here.
+import type {
+  AssetDup,
+  ConflictCopy,
+  DedupReport,
+  DupMember,
+  FileConflict,
+  InstallReport,
+  InstallStep,
+} from './native-types.ts'
+export type {
+  AssetDup,
+  ConflictCopy,
+  DedupReport,
+  DupMember,
+  FileConflict,
+  InstallReport,
+  InstallStep,
+}
 
 // App-global settings (settings.json) + the Tools-page install features: the DTH
 // release / Exporter plugin installs, the user's own Daz/Houdini content installs,
@@ -76,26 +100,6 @@ export async function saveSettings({ data }: { data: unknown }): Promise<StudioS
   return storage.saveSettings(settingsInput.parse(data))
 }
 
-/** One copy step of the DTH install (mirrors the Rust `InstallStep`). */
-export interface InstallStep {
-  label: string
-  files: number
-  status: 'ok' | 'skipped' | 'error' | 'header'
-  detail: string
-  /** For asset steps: the (capped) list of files an install would copy. */
-  filesList?: Array<string>
-  /** Set when this asset writes the same library files as another in the report
-   *  (e.g. a folder and its .zip) — a "same files as …" duplicate hint. */
-  note?: string
-}
-
-/** Outcome of a DTH install run (mirrors the Rust `InstallReport`). */
-export interface InstallReport {
-  dryRun: boolean
-  steps: Array<InstallStep>
-  totalFiles: number
-}
-
 /**
  * Install one half of the DTH *release* content — `target: 'daz'` copies the Daz
  * content into the local library, `'houdini'` merges the Houdini assets into the
@@ -117,7 +121,7 @@ export async function installDthRelease({ data }: { data: unknown }): Promise<In
     .parse(data ?? {})
   const plan = await storage.resolveReleaseInstall(target, houdiniDocsFolder)
   if (plan.errors.length) throw new Error(plan.errors.join('\n'))
-  return invoke<InstallReport>('install_dth_release', {
+  return installReportSchema.parse(await invoke('install_dth_release', {
     request: {
       releaseRoot: plan.releaseRoot,
       dazLibFolder: plan.dazLibFolder,
@@ -125,7 +129,7 @@ export async function installDthRelease({ data }: { data: unknown }): Promise<In
       dryRun: dryRun ?? false,
       target,
     },
-  })
+  }))
 }
 
 /**
@@ -137,13 +141,13 @@ export async function installDthPlugin({ data }: { data: unknown }): Promise<Ins
   const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
   const plan = await storage.resolvePluginInstall()
   if (plan.errors.length) throw new Error(plan.errors.join('\n'))
-  return invoke<InstallReport>('install_dth_plugin', {
+  return installReportSchema.parse(await invoke('install_dth_plugin', {
     request: {
       exporterFolder: plan.exporterFolder,
       dazInstallFolder: plan.dazInstallFolder,
       dryRun: dryRun ?? false,
     },
-  })
+  }))
 }
 
 // --- "Optional" tab: install your own Daz/Houdini content -----------------
@@ -170,7 +174,7 @@ export async function installDazAssets({ data }: { data: unknown }): Promise<Ins
   if (!sources.length) errors.push('Add at least one Daz assets folder')
   if (!s.dazLibraryFolder.trim()) errors.push('Set “My DAZ 3D Library”')
   if (errors.length) throw new Error(errors.join('\n'))
-  return invoke<InstallReport>('install_daz_assets', {
+  return installReportSchema.parse(await invoke('install_daz_assets', {
     request: {
       sources,
       dest: s.dazLibraryFolder.trim(),
@@ -179,7 +183,7 @@ export async function installDazAssets({ data }: { data: unknown }): Promise<Ins
       only: only ?? [],
       accepted: s.acceptedConflicts,
     },
-  })
+  }))
 }
 
 /** Read-only scan of the asset folders — what content each holds and whether it's
@@ -188,9 +192,9 @@ export async function listDazAssets(): Promise<InstallReport> {
   const s = await storage.getSettings()
   const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
   if (!sources.length) throw new Error('Add at least one Daz assets folder')
-  return invoke<InstallReport>('list_daz_assets', {
+  return installReportSchema.parse(await invoke('list_daz_assets', {
     request: { sources, dest: s.dazLibraryFolder.trim(), accepted: s.acceptedConflicts },
-  })
+  }))
 }
 
 /** Accept files as legitimately shared between products — they stop showing as
@@ -211,46 +215,6 @@ export async function setAcceptedConflicts(
   return acceptedConflicts
 }
 
-/** One copy of a conflicting shared file (mirrors Rust `ConflictCopy`). */
-export interface ConflictCopy {
-  label: string
-  /** Source folder the copy lives in (e.g. "_genesis 9"). */
-  source: string
-  size: number
-  inZip: boolean
-}
-/** A file shipped by 2+ different products at different sizes. Informational —
- *  resolved by Accept (never rewritten). */
-export interface FileConflict {
-  rel: string
-  copies: Array<ConflictCopy>
-}
-/** One copy in a duplicate group. */
-export interface DupMember {
-  label: string
-  /** Source folder the copy lives in (e.g. "_genesis 9"). */
-  source: string
-  fileCount: number
-  isZip: boolean
-  /** The copy kept (others are quarantined) — auto-picked, user-overridable. */
-  isKeeper: boolean
-}
-/** A set of assets that are the same content — identical ('exact') or the same
- *  product at a different version ('version', e.g. a …UD vs …UPDATE). */
-export interface AssetDup {
-  members: Array<DupMember>
-  kind: 'exact' | 'version'
-  fixed: boolean
-}
-/** Result of the dedup scan/apply (mirrors Rust `DedupReport`). */
-export interface DedupReport {
-  dryRun: boolean
-  conflicts: Array<FileConflict>
-  duplicates: Array<AssetDup>
-  assetsQuarantined: number
-  backupDir: string
-}
-
 /** Find (dry run) or resolve duplicate assets + conflicting shared files. Apply
  *  rewrites every smaller copy — and the library copy — to the largest version,
  *  and quarantines redundant duplicate assets. Reversible (originals backed up). */
@@ -261,7 +225,7 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
   const s = await storage.getSettings()
   const sources = s.dazAssetsFolders.map((f) => f.trim()).filter(Boolean)
   if (!sources.length) throw new Error('Add at least one Daz assets folder')
-  return invoke<DedupReport>('dedup_daz_assets', {
+  return dedupReportSchema.parse(await invoke('dedup_daz_assets', {
     request: {
       sources,
       dryRun: dryRun ?? false,
@@ -269,7 +233,7 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
       keepers: keepers ?? [],
       quarantine: s.dedupQuarantineFolder.trim(),
     },
-  })
+  }))
 }
 
 /** The default leftover-Daz-folder list (dth-cli `uninstall-daz` defaults: the
@@ -288,7 +252,7 @@ export async function uninstallDaz({ data }: { data: unknown }): Promise<Install
   const s = await storage.getSettings()
   const folders = s.dazUninstallFolders.map((f) => f.trim()).filter(Boolean)
   if (!folders.length) throw new Error('No folders to clean up')
-  return invoke<InstallReport>('uninstall_daz', { request: { folders, dryRun: dryRun ?? false } })
+  return installReportSchema.parse(await invoke('uninstall_daz', { request: { folders, dryRun: dryRun ?? false } }))
 }
 
 /** The companion DazToHue-Scripts repo (the runtime the studio co-owns). */
@@ -307,9 +271,9 @@ export async function installDazToHueScripts({ data }: { data: unknown }): Promi
   const s = await storage.getSettings()
   const lib = s.dazLibraryFolder.trim()
   if (!lib) throw new Error('Set “My DAZ 3D Library” first')
-  return invoke<InstallReport>('install_daztohue_scripts', {
+  return installReportSchema.parse(await invoke('install_daztohue_scripts', {
     request: { dest: storage.daztohueScriptsDir(lib), dryRun: dryRun ?? false },
-  })
+  }))
 }
 
 /** The latest available DazToHue-Scripts commit (HEAD of `main` on GitHub),
@@ -377,9 +341,9 @@ async function installMerge(
   if (!source) errors.push(`Set the ${label.toLowerCase()} source folder`)
   if (!dest) errors.push(`Set the ${label.toLowerCase()} destination folder`)
   if (errors.length) throw new Error(errors.join('\n'))
-  return invoke<InstallReport>('install_daz_merge', {
+  return installReportSchema.parse(await invoke('install_daz_merge', {
     request: { label, source, dest, dryRun },
-  })
+  }))
 }
 
 export async function installDazMorphs({ data }: { data: unknown }): Promise<InstallReport> {
@@ -399,13 +363,13 @@ export async function installHoudiniPresets({ data }: { data: unknown }): Promis
   if (!s.houdiniPresetsSource.trim()) errors.push('Set the Houdini presets source folder')
   if (!s.houdiniDocsFolder.trim()) errors.push('Set the Houdini documents folder')
   if (errors.length) throw new Error(errors.join('\n'))
-  return invoke<InstallReport>('install_houdini_presets', {
+  return installReportSchema.parse(await invoke('install_houdini_presets', {
     request: {
       source: s.houdiniPresetsSource.trim(),
       houdiniDocs: s.houdiniDocsFolder.trim(),
       dryRun: dryRun ?? false,
     },
-  })
+  }))
 }
 
 /** Version of the exporter DLL already installed in `<dazInstall>/plugins` (''=none). */

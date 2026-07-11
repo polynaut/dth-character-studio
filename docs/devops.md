@@ -51,8 +51,9 @@ pnpm --filter @dth/desktop tauri signer generate -w ./dth-updater.key
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | contents of the generated private key |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password set during generation |
+| `CHANGESETS_TOKEN` (optional) | a PAT / GitHub App token (`repo` + `pull-requests:write`) used by the **Version** workflow to author the "version packages" PR. Optional — falls back to `GITHUB_TOKEN`, but with the fallback GitHub does **not** fire PR checks on the bot's version PR (it can't satisfy required checks without a manual close/reopen). Set this and the version PR's checks run on their own. |
 
-`GITHUB_TOKEN` is provided automatically — no secret needed.
+`GITHUB_TOKEN` is provided automatically — no secret needed (used for release publishing).
 
 ### 3. Branch protection (main is PR-only)
 
@@ -100,19 +101,26 @@ token by **SimplySign Desktop**, which runs headless in a container on polynaut'
 
 ```
 release.yml
-  build         (windows-latest)             → unsigned NSIS installer artifact
-  sign-publish  (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over
-                                               the p11-kit socket shared from
-                                               certum-container)
-                                             → regenerate updater .sig over the
-                                               signed bytes + build latest.json
-                                             → gh release create (tag + assets)
+  build    (windows-latest)             → unsigned NSIS installer artifact
+  sign     (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over the
+                                          p11-kit socket shared from
+                                          certum-container)
+                                        → regenerate updater .sig over the
+                                          signed bytes
+                                        → upload signed installer + .sig artifact
+  publish  (ubuntu-latest, hosted)      → download the signed artifact
+                                        → build latest.json + gh release create
 ```
 
-Both signing jobs run in the protected **`release-signing` environment**
+Only the **`sign`** job runs in the protected **`release-signing` environment**
 (required reviewer: `polynaut`, deployments restricted to `main`) — every
 release and smoke test **pauses for manual approval** in the Actions UI before
-anything touches the SimplySign session.
+anything touches the SimplySign session. **`publish`** is a plain hosted job
+(needs only `GITHUB_TOKEN`, no signing secret), so a GitHub-API hiccup can be
+re-run without re-signing, and the real updater key never leaves the signer.
+The artifact round-trip is byte-exact, so the updater `.sig` still verifies
+against the released installer. The NAS remains the single point of failure
+**for signing** (it holds the SimplySign session) — but not for publishing.
 
 The NAS runs two containers:
 
@@ -175,11 +183,11 @@ error is NOT a PIN problem — check the container/keepalive state on the NAS.
   the p11-kit server still holds the dead session's module state and must be
   bounced (the runner talks to the p11-kit server, not to SimplySign Desktop) —
   and the keepalive must verify the token is visible *through the shared
-  socket* afterwards. If a `sign-publish` job ever fails on a dead session:
+  socket* afterwards. If a `sign` job ever fails on a dead session:
   check the keepalive robot on the NAS, then re-run the job (the release-signing
   gate can also simply be left unapproved until the session is confirmed fresh).
 - **The self-hosted runner's workspace persists between runs** — the
-  `sign-publish` job cleans `dist/` before downloading the artifact and matches
+  `sign` job cleans `dist/` before downloading the artifact and matches
   the installer by version; keep it that way or a previous release's installer
   gets picked up.
 - Only the **installer** is signed for now; the app `.exe` inside it is not

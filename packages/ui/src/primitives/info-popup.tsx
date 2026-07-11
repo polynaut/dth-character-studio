@@ -108,12 +108,15 @@ export function InfoPopup({
     const anchor = (event.target as HTMLElement).closest('a')
     const href = anchor?.getAttribute('href')
     if (!href) return
-    if (href.startsWith('/')) {
+    // A root-relative path ("/settings") navigates in-app — but NOT a
+    // protocol-relative "//host" (that's an external origin), which must fall
+    // through to the external-open branch.
+    if (href.startsWith('/') && !href.startsWith('//')) {
       event.preventDefault()
       setPinned(false)
       setOpen(false)
       onNavigate(href)
-    } else if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+    } else if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) {
       event.preventDefault()
       onOpenExternal(href)
     }

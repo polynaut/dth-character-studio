@@ -118,7 +118,7 @@ const createInput = z.object({
 
 /** ROM-definition fields copied when prefilling from another
  *  character — everything that shapes the ROM, minus identity / provenance. */
-function romFields(src: Record<string, unknown>): Record<string, unknown> {
+function romFields(src: Character): Partial<Character> {
   return {
     sections: src.sections,
     facsDetailStrength: src.facsDetailStrength,
@@ -137,11 +137,11 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   const now = new Date().toISOString()
   const id = newId()
   // ROM prefill: copied from an existing character (any project).
-  let prefill: Record<string, unknown> = {}
+  let prefill: Partial<Character> = {}
   if (input.prefillFromId) {
     // The source may live in any project (prefill lists characters globally).
     const source = await storage.findCharacterAcrossProjects(input.prefillFromId)
-    if (source) prefill = romFields(source as unknown as Record<string, unknown>)
+    if (source) prefill = romFields(source)
   }
   const base: Record<string, unknown> = {
     id,
