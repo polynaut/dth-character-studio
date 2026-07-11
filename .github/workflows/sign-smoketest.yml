@@ -69,12 +69,49 @@ jobs:
             "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"
           test -s smoke/test-signed.exe
 
-      - name: Verify signature (informational)
+      - name: Assert a signature is PRESENT (the gate to promote to release.yml)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Presence, not trust: extract-signature writes the PKCS#7 blob and
+          # exits non-zero (or produces nothing) when the PE carries NO signature
+          # — WITHOUT the offline chain anchoring that makes full `verify`
+          # unreliable on this runner. This is the exact assertion we want in
+          # release.yml so a silently-unsigned installer can't ship; this smoke
+          # test proves it (a) passes on a real signature and (b) discriminates.
+          has_signature() {
+            local out; out="$(mktemp)"
+            if osslsigncode extract-signature -in "$1" -out "$out" >/dev/null 2>&1 && [ -s "$out" ]; then
+              rm -f "$out"; return 0
+            fi
+            rm -f "$out"; return 1
+          }
+
+          # (a) The just-signed file MUST pass — else the gate would false-fail a
+          #     genuine release. This is the critical safety check.
+          if has_signature smoke/test-signed.exe; then
+            echo "signed file: signature present ✓"
+          else
+            echo "::error::signed installer carries NO signature blob — the signer silently no-op'd"
+            exit 1
+          fi
+
+          # (b) Negative control: strip the signature from a copy on THIS runner's
+          #     osslsigncode; the gate MUST then reject it — proving it actually
+          #     discriminates (isn't a no-op) before we rely on it in release.yml.
+          osslsigncode remove-signature -in smoke/test-signed.exe -out smoke/test-stripped.exe
+          if has_signature smoke/test-stripped.exe; then
+            echo "::error::presence gate did NOT discriminate — it passed on a signature-stripped file; DO NOT promote to release.yml"
+            exit 1
+          fi
+          echo "signature-stripped control: correctly rejected ✓ — gate is safe to promote"
+
+      - name: Verify signature chain (informational)
         shell: bash
         run: |
           # Offline chain-anchoring on Certum's cross-signed roots is fussy —
-          # a verification quirk here must not fail the probe; the produced
-          # file having a signature is the pass criterion (checked above).
+          # a verification quirk here must not fail the probe; the PRESENCE gate
+          # above is the hard pass criterion.
           osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
             -TSA-CAfile /etc/ssl/certs/ca-certificates.crt \
             -in smoke/test-signed.exe || true
