@@ -180,6 +180,22 @@ jobs:
           fi
           test -s "$exe.signed"
           mv "$exe.signed" "$exe"
+          # Presence gate (validated in sign-smoketest.yml on the same runner /
+          # osslsigncode 2.13): refuse to publish a silently-unsigned installer.
+          # Parses the signature COUNT from verify's output — verify's EXIT code
+          # is unreliable here (offline chain anchoring on Certum's cross-signed
+          # roots is fussy, hence the informational verify below), so we ignore
+          # it. `|| true` keeps the count pipeline's non-zero from tripping this
+          # step's `set -e`; an unsigned PE yields an empty count → 0 → fail.
+          sig_n="$(osslsigncode verify -in "$exe" 2>&1 \
+            | grep -oiE 'Number of (verified )?signatures *:? *[0-9]+' \
+            | grep -oE '[0-9]+' | head -1 || true)"
+          if [ "${sig_n:-0}" -ge 1 ] 2>/dev/null; then
+            echo "Authenticode signature present (count=$sig_n) ✓"
+          else
+            echo "::error::signed installer carries NO Authenticode signature — refusing to publish"
+            exit 1
+          fi
           osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
             -TSA-CAfile /etc/ssl/certs/ca-certificates.crt \
             -in "$exe" || true

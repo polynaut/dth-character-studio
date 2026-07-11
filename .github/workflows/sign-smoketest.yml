@@ -69,12 +69,65 @@ jobs:
             "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"
           test -s smoke/test-signed.exe
 
-      - name: Verify signature (informational)
+      - name: Assert a signature is PRESENT (the gate to promote to release.yml)
+        shell: bash
+        run: |
+          # We deliberately inspect command OUTPUT, not exit codes: osslsigncode
+          # verify's exit is unreliable (offline chain anchoring on Certum's
+          # cross-signed roots is fussy), and on an UNSIGNED file both verify and
+          # the grep chain exit non-zero BY DESIGN. GitHub's `shell: bash` runs
+          # with `-e -o pipefail`, which would abort on those expected non-zeros,
+          # so turn both OFF and drive control flow with explicit checks below.
+          set +e +o pipefail
+          echo "osslsigncode: $(osslsigncode --version 2>&1 | head -1)"
+
+          # Diagnostic: show exactly what verify prints for the signed file, so
+          # the count regex below is grounded in the real output on this runner.
+          echo "--- verify output (signed) ------------------------------------"
+          osslsigncode verify -in smoke/test-signed.exe 2>&1 | head -30 || true
+          echo "---------------------------------------------------------------"
+
+          # Presence, not trust: the FIRST "Number of signatures" line verify
+          # prints is the count of signatures embedded in the PE — independent of
+          # whether the chain anchors. Empty (unsigned) parses as 0.
+          sig_count() {
+            osslsigncode verify -in "$1" 2>&1 \
+              | grep -oiE 'Number of (verified )?signatures *:? *[0-9]+' \
+              | grep -oE '[0-9]+' | head -1
+          }
+
+          # (a) The just-signed file MUST report >= 1 — else the gate would
+          #     false-fail a genuine release.
+          signed_n="$(sig_count smoke/test-signed.exe)"
+          echo "signed file: signature count = '${signed_n:-<none>}'"
+          if [ "${signed_n:-0}" -ge 1 ] 2>/dev/null; then
+            echo "signed file: signature present ✓"
+          else
+            echo "::error::signed installer reports no signature (count='${signed_n}') — the signer silently no-op'd, or the count regex needs adjusting (see verify output above)"
+            exit 1
+          fi
+
+          # (b) Negative control: strip the signature; the count MUST drop to 0 —
+          #     proving the gate discriminates on this runner's osslsigncode.
+          if ! osslsigncode remove-signature -in smoke/test-signed.exe -out smoke/test-stripped.exe 2>&1 \
+               || [ ! -f smoke/test-stripped.exe ]; then
+            echo "::error::could not produce a signature-stripped control file (remove-signature failed)"
+            exit 1
+          fi
+          stripped_n="$(sig_count smoke/test-stripped.exe)"
+          echo "stripped control: signature count = '${stripped_n:-<none>}'"
+          if [ "${stripped_n:-0}" -ge 1 ] 2>/dev/null; then
+            echo "::error::gate did NOT discriminate — the signature-stripped file still reports a signature; DO NOT promote to release.yml"
+            exit 1
+          fi
+          echo "signature-stripped control: correctly rejected ✓ — gate is safe to promote"
+
+      - name: Verify signature chain (informational)
         shell: bash
         run: |
           # Offline chain-anchoring on Certum's cross-signed roots is fussy —
-          # a verification quirk here must not fail the probe; the produced
-          # file having a signature is the pass criterion (checked above).
+          # a verification quirk here must not fail the probe; the PRESENCE gate
+          # above is the hard pass criterion.
           osslsigncode verify -CAfile /etc/ssl/certs/ca-certificates.crt \
             -TSA-CAfile /etc/ssl/certs/ca-certificates.crt \
             -in smoke/test-signed.exe || true
