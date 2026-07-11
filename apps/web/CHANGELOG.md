@@ -1,5 +1,21 @@
 # @dth/web
 
+## 0.41.11
+
+### Patch Changes
+
+- [#224](https://github.com/polynaut/dth-character-studio/pull/224) [`562b541`](https://github.com/polynaut/dth-character-studio/commit/562b541981b18a4a20d2b8adbc90cc93a20f531e) Thanks [@polynaut](https://github.com/polynaut)! - - **ROM frame-timeline**: a proportional, labelled strip on the character page
+  showing the measured preset ROM blocks (base, GP/DK, Physics) and each custom
+  section at their exact frames — driven by the same frame math as generation,
+  so it visualises precisely what ships. Makes the frame-alignment invariant
+  visible and surfaces config mistakes at a glance.
+  - **Internal**: FFI integration tests (mockIPC) covering the invoke bridge's
+    request shape + zod return-validation, and `tools.tsx` (1580 lines) broken up
+    into `components/tools/*` — no behaviour change.
+- Updated dependencies []:
+  - @dth/rom@0.41.11
+  - @dth/ui@0.41.11
+
 ## 0.41.10
 
 ### Patch Changes
