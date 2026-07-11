@@ -72,11 +72,13 @@ jobs:
       - name: Assert a signature is PRESENT (the gate to promote to release.yml)
         shell: bash
         run: |
-          # NOTE: not `set -e` — we deliberately inspect command OUTPUT; the exit
-          # codes of osslsigncode verify are unreliable (offline chain anchoring
-          # on Certum's cross-signed roots is fussy, hence the informational
-          # verify below). Presence = a signature COUNT >= 1 in the verify output.
-          set -uo pipefail
+          # We deliberately inspect command OUTPUT, not exit codes: osslsigncode
+          # verify's exit is unreliable (offline chain anchoring on Certum's
+          # cross-signed roots is fussy), and on an UNSIGNED file both verify and
+          # the grep chain exit non-zero BY DESIGN. GitHub's `shell: bash` runs
+          # with `-e -o pipefail`, which would abort on those expected non-zeros,
+          # so turn both OFF and drive control flow with explicit checks below.
+          set +e +o pipefail
           echo "osslsigncode: $(osslsigncode --version 2>&1 | head -1)"
 
           # Diagnostic: show exactly what verify prints for the signed file, so
