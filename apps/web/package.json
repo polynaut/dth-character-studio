@@ -3,7 +3,7 @@
   "version": "0.41.9",
   "private": true,
   "type": "module",
-  "description": "DTH Character Studio frontend — client-rendered SPA (React + TanStack Router). Native file/dialog access via Tauri plugins; runnable standalone for web-only e2e with a mocked native layer.",
+  "description": "DTH Character Studio frontend — client-rendered SPA (React + TanStack Router). Native file/dialog access via Tauri plugins; the native layer is isTauri()-guarded so the SPA also runs standalone in a plain browser.",
   "license": "MIT",
   "repository": {
     "type": "git",
