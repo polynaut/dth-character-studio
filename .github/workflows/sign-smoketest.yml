@@ -72,36 +72,50 @@ jobs:
       - name: Assert a signature is PRESENT (the gate to promote to release.yml)
         shell: bash
         run: |
-          set -euo pipefail
-          # Presence, not trust: extract-signature writes the PKCS#7 blob and
-          # exits non-zero (or produces nothing) when the PE carries NO signature
-          # — WITHOUT the offline chain anchoring that makes full `verify`
-          # unreliable on this runner. This is the exact assertion we want in
-          # release.yml so a silently-unsigned installer can't ship; this smoke
-          # test proves it (a) passes on a real signature and (b) discriminates.
-          has_signature() {
-            local out; out="$(mktemp)"
-            if osslsigncode extract-signature -in "$1" -out "$out" >/dev/null 2>&1 && [ -s "$out" ]; then
-              rm -f "$out"; return 0
-            fi
-            rm -f "$out"; return 1
+          # NOTE: not `set -e` — we deliberately inspect command OUTPUT; the exit
+          # codes of osslsigncode verify are unreliable (offline chain anchoring
+          # on Certum's cross-signed roots is fussy, hence the informational
+          # verify below). Presence = a signature COUNT >= 1 in the verify output.
+          set -uo pipefail
+          echo "osslsigncode: $(osslsigncode --version 2>&1 | head -1)"
+
+          # Diagnostic: show exactly what verify prints for the signed file, so
+          # the count regex below is grounded in the real output on this runner.
+          echo "--- verify output (signed) ------------------------------------"
+          osslsigncode verify -in smoke/test-signed.exe 2>&1 | head -30 || true
+          echo "---------------------------------------------------------------"
+
+          # Presence, not trust: the FIRST "Number of signatures" line verify
+          # prints is the count of signatures embedded in the PE — independent of
+          # whether the chain anchors. Empty (unsigned) parses as 0.
+          sig_count() {
+            osslsigncode verify -in "$1" 2>&1 \
+              | grep -oiE 'Number of (verified )?signatures *:? *[0-9]+' \
+              | grep -oE '[0-9]+' | head -1
           }
 
-          # (a) The just-signed file MUST pass — else the gate would false-fail a
-          #     genuine release. This is the critical safety check.
-          if has_signature smoke/test-signed.exe; then
+          # (a) The just-signed file MUST report >= 1 — else the gate would
+          #     false-fail a genuine release.
+          signed_n="$(sig_count smoke/test-signed.exe)"
+          echo "signed file: signature count = '${signed_n:-<none>}'"
+          if [ "${signed_n:-0}" -ge 1 ] 2>/dev/null; then
             echo "signed file: signature present ✓"
           else
-            echo "::error::signed installer carries NO signature blob — the signer silently no-op'd"
+            echo "::error::signed installer reports no signature (count='${signed_n}') — the signer silently no-op'd, or the count regex needs adjusting (see verify output above)"
             exit 1
           fi
 
-          # (b) Negative control: strip the signature from a copy on THIS runner's
-          #     osslsigncode; the gate MUST then reject it — proving it actually
-          #     discriminates (isn't a no-op) before we rely on it in release.yml.
-          osslsigncode remove-signature -in smoke/test-signed.exe -out smoke/test-stripped.exe
-          if has_signature smoke/test-stripped.exe; then
-            echo "::error::presence gate did NOT discriminate — it passed on a signature-stripped file; DO NOT promote to release.yml"
+          # (b) Negative control: strip the signature; the count MUST drop to 0 —
+          #     proving the gate discriminates on this runner's osslsigncode.
+          if ! osslsigncode remove-signature -in smoke/test-signed.exe -out smoke/test-stripped.exe 2>&1 \
+               || [ ! -f smoke/test-stripped.exe ]; then
+            echo "::error::could not produce a signature-stripped control file (remove-signature failed)"
+            exit 1
+          fi
+          stripped_n="$(sig_count smoke/test-stripped.exe)"
+          echo "stripped control: signature count = '${stripped_n:-<none>}'"
+          if [ "${stripped_n:-0}" -ge 1 ] 2>/dev/null; then
+            echo "::error::gate did NOT discriminate — the signature-stripped file still reports a signature; DO NOT promote to release.yml"
             exit 1
           fi
           echo "signature-stripped control: correctly rejected ✓ — gate is safe to promote"
