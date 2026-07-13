@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.18
+
+### Patch Changes
+
+- [#248](https://github.com/polynaut/dth-character-studio/pull/248) [`d0dcec9`](https://github.com/polynaut/dth-character-studio/commit/d0dcec95e8dad7a81653819ca27d65c2d1189ba7) Thanks [@polynaut](https://github.com/polynaut)! - Self-host the Manrope font instead of loading it from Google Fonts. The packaged
+  app's CSP (`style-src 'self'`) blocked the external `@import`, so installed builds
+  silently fell back to a system font — and it added a network dependency to an
+  offline-capable desktop tool. Manrope is now bundled via `@fontsource-variable/manrope`,
+  so it renders correctly, works offline, and passes the CSP with no policy changes.
+- Updated dependencies []:
+  - @dth/rom@0.41.18
+  - @dth/ui@0.41.18
+
 ## 0.41.17
 
 ### Patch Changes
