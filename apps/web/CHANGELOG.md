@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.41.13
+
+### Patch Changes
+
+- [#234](https://github.com/polynaut/dth-character-studio/pull/234) [`0e6fc32`](https://github.com/polynaut/dth-character-studio/commit/0e6fc32344c8904a29085414e7416a2dfe1b99a4) Thanks [@polynaut](https://github.com/polynaut)! - Settings: hide the "Network drives" section entirely when no mapped network
+  drives are detected (previously it showed an explanatory paragraph). Users who
+  don't use network drives no longer see an empty, potentially confusing block.
+- Updated dependencies []:
+  - @dth/rom@0.41.13
+  - @dth/ui@0.41.13
+
 ## 0.41.12
 
 ### Patch Changes
