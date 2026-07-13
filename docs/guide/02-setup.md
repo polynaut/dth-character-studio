@@ -50,6 +50,7 @@ direct export.
    restarting the studio as administrator — the app tells you when that's the case.
 
    <img width="594" height="123" alt="Screenshot 2026-07-13 193734" src="https://github.com/user-attachments/assets/39eb5538-ac57-478f-9b1d-2cfa533a736d" />
+
    Usually, Daz Studio is installed in an admin protected folder on C: - in that case,
    just open DTH Character Studio as administrator:
 
