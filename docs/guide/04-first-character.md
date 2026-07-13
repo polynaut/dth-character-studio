@@ -45,7 +45,8 @@ frame, and the Daz and Houdini outputs can't drift apart.
 <img width="1014" height="700" alt="Screenshot 2026-07-13 204539" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
 
 
-### Golden Palace & Dicktator — the genitalia (GEN) section
+<details>
+<summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
 
 <!-- screenshot: character page, GEN section enabled in Preset mode -->
 
@@ -77,6 +78,8 @@ Want hand-picked genital morphs instead of the stock ROM? Switch GEN to **Custom
 and list them exactly like the FBM morphs below — but for most characters the
 Preset is all you need.
 
+</details>
+
 
 For this example we add some **Full Body (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
@@ -92,7 +95,8 @@ Each pose row has two name fields with very different jobs:
   Studio** (not its display label). A mismatch means that frame fails in the
   ROM run.
 
-### Combining several morphs into one output
+<details>
+<summary><strong>Combining several morphs into one output</strong></summary>
 
 A pose usually maps one Daz morph to one generated output — but it doesn't have to.
 Each row has a **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
@@ -117,6 +121,8 @@ Each entry in the expanded list carries its own:
 All the listed morphs are keyed together on that one frame, so they blend into the
 single output named in **Name**. **Add morph** piles on more; the trash icon drops
 one (a pose always keeps at least one).
+
+</details>
 
 ### Layering extra morphs onto JCM — "Modify JCM frames"
 
