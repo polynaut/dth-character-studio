@@ -213,15 +213,10 @@ function NetworkDrivesSection() {
     void load()
   }, [load])
 
-  if (drives.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Network drives are remembered automatically as you pick paths, then re-mapped on startup —
-        so the app keeps working after you relaunch it as administrator (when Windows hides your
-        mappings from the elevated session).
-      </p>
-    )
-  }
+  // No detected network drives → render nothing (the parent shows only this, so
+  // the whole "Network drives" block — separator, heading and all — disappears).
+  // Users who don't use mapped drives shouldn't see an empty, confusing section.
+  if (drives.length === 0) return null
 
   async function remap() {
     setBusy(true)
@@ -243,7 +238,15 @@ function NetworkDrivesSection() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="border-t pt-5">
+      <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
+        Network drives
+        <InfoPopup label="Network drives — more information">
+          Mapped drives are remembered as you pick paths and re-mapped on startup, so the app keeps
+          working after relaunching as administrator.
+        </InfoPopup>
+      </h2>
+      <div className="space-y-3">
       <ul className="space-y-2 text-sm">
         {drives.map((d) => (
           <li key={d.drive} className="flex items-center gap-2">
@@ -268,6 +271,7 @@ function NetworkDrivesSection() {
       <Button variant="outline" size="sm" onClick={() => void remap()} disabled={busy}>
         {busy ? 'Mapping…' : 'Re-map missing now'}
       </Button>
+      </div>
     </div>
   )
 }
@@ -1083,16 +1087,9 @@ function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Resolving…</p>
               )}
             </div>
-            <div className="border-t pt-5">
-              <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
-                Network drives
-                <InfoPopup label="Network drives — more information">
-                  Mapped drives are remembered as you pick paths and re-mapped on startup, so the app
-                  keeps working after relaunching as administrator.
-                </InfoPopup>
-              </h2>
-              <NetworkDrivesSection />
-            </div>
+            {/* Renders its own heading + separator, or nothing when no network
+                drives are detected — see NetworkDrivesSection. */}
+            <NetworkDrivesSection />
           </section>
 
         </TabsContent>
