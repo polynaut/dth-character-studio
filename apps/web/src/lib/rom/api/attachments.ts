@@ -188,6 +188,14 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
  * the executable can't be located we fall back to the shell-open so the feature
  * still works on machines where `.dsa` *is* associated with Daz.
  */
+// Rotate the bridge across a small pool of filenames so two consecutive opens
+// never hand Daz the SAME path — a running Daz can ignore a repeated "open" of an
+// identical path, leaving the scene unchanged (you clicked a new card but nothing
+// loaded). The pool is tiny and fixed, so these one-shot scripts can't pile up in
+// app-data.
+let bridgeSeq = 0
+const BRIDGE_POOL = 4
+
 async function openSceneInRunningDaz(scenePath: string): Promise<void> {
   // The bridge reports failures with a message box so the open isn't silent: if you
   // see NO box AND the scene doesn't load, the running Daz never executed this
@@ -208,7 +216,8 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
     '})();',
     '',
   ].join('\n')
-  const bridge = await storage.dataPath('dth_open_scene.dsa')
+  const bridge = await storage.dataPath(`dth_open_scene_${bridgeSeq}.dsa`)
+  bridgeSeq = (bridgeSeq + 1) % BRIDGE_POOL
   await writeTextFile(bridge, script)
   try {
     const exe = await invoke<string>('run_daz_script', { scriptPath: bridge })
