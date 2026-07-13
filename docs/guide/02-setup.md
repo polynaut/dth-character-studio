@@ -13,7 +13,8 @@ extract the downloaded archives somewhere permanent first.
 1. **DTH release(s) folder** — point it at the extracted DTH release (or a folder
    holding several release versions; then pick the version to use).
 
-   <img width="891" height="630" alt="Screenshot 2026-07-13 181638" src="https://github.com/user-attachments/assets/9a584bf1-c3e7-4890-81f9-7447124a5726" />
+   <img width="891" height="630" alt="release-folder" src="https://github.com/user-attachments/assets/742cf028-da3c-46bd-907c-ac1e062fa9b6" />
+
 
    After selecting a DTH Release(s) folder, if there are multiple versions detected,
    you can select the **active** one. Adding another release later to the folder won't change the selection!
@@ -56,7 +57,7 @@ direct export.
 
 ## Save
 
-Press **Save** at the bottom. The studio scans the release's pose presets — you're
+Press **Save** at the top. The studio scans the release's pose presets — you're
 ready to create a project.
 
 > **Extras (later):** the **Tools** page can also install your own Daz assets,
