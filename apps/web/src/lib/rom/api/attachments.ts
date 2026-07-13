@@ -180,6 +180,13 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
  * Forwarded SCRIPT files still execute there, so the bridge is a one-shot
  * `.dsa` in app-data that opens the scene from INSIDE the running instance
  * (with Daz's normal unsaved-changes prompt).
+ *
+ * The bridge is launched via `run_daz_script` (which invokes Daz's executable
+ * with the script as its argument), NOT by shell-opening the `.dsa`. A shell-open
+ * follows the OS file association, and on a dev box `.dsa` is often bound to a
+ * text editor (VS Code) — the script would just open as text and never run. If
+ * the executable can't be located we fall back to the shell-open so the feature
+ * still works on machines where `.dsa` *is* associated with Daz.
  */
 async function openSceneInRunningDaz(scenePath: string): Promise<void> {
   const script = [
@@ -190,7 +197,11 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
   ].join('\n')
   const bridge = await storage.dataPath('dth_open_scene.dsa')
   await writeTextFile(bridge, script)
-  await shellOpen(bridge)
+  try {
+    await invoke('run_daz_script', { scriptPath: bridge })
+  } catch {
+    await shellOpen(bridge)
+  }
 }
 
 /** Open a scene/project file with its OS-default application (a `.duf` opens in

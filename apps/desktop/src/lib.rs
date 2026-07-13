@@ -121,6 +121,7 @@ pub fn run() {
             github::latest_daztohue_commit,
             github::app_release_tags,
             daz::daz_studio_running,
+            daz::run_daz_script,
             install::install_daz_merge,
             install::install_houdini_presets,
             install::install_unreal_dth,
