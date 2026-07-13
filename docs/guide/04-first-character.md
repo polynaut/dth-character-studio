@@ -101,8 +101,9 @@ Run the one matching your generation, once per generation:
 
 That's the whole scan — it indexes **everything dialable** the figure carries:
 classic morphs *and* controller dials, across all products installed for that
-generation. The studio picks the index up automatically (repeat the scan for 
-every single Genesis version you want/need on the accordingly figure in the scene).
+generation. The studio picks the index up automatically — switch back to the
+studio window and it's live. Run the scan once per Genesis generation you work
+with, each on a figure of that generation loaded in the scene.
 
 From then on, every **Morph name** field autocompletes after two typed
 characters:
