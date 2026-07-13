@@ -21,7 +21,10 @@ tauri-build = { version = "2", features = [] }
 # --precise 0.2.2 -p alloc-no-stdlib --precise 2.0.4`). Don't `cargo update` those
 # back to latest until brotli/alloc-stdlib ship a compatible release.
 [dependencies]
-tauri = { version = "2", features = [] }
+# `devtools`: keep the WebView2 inspector (right-click → Inspect, F12) available in
+# release/installed builds too, not just dev — this is a self-hosted tool and the
+# author wants to debug the shipped app against a live Daz Studio.
+tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
