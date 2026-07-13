@@ -69,6 +69,9 @@ interface RomSectionsProps {
   /** Set (with a fresh nonce) to open the section holding `frame` and scroll its
    *  pose row into view — driven by clicking a failed morph in the run report. */
   revealFrame?: { frame: number; nonce: number } | null
+  /** A blocked-save validation error: open its section, scroll the pose row into
+   *  view and focus its first empty field. */
+  revealPose?: { section: RomSection; poseId: string; nonce: number } | null
   /** Bone-rotation morph drives along the JCM ROM (character.jcmMorphMods) —
    *  both must be passed for the JCM section's "Modify JCM frames" grid. */
   jcmMorphMods?: Array<JcmMorphMod>
@@ -92,6 +95,7 @@ export function RomSections({
   presetFrames,
   failedFrames,
   revealFrame,
+  revealPose,
   morphIndex,
   jcmMorphMods,
   onJcmMorphModsChange,
@@ -156,6 +160,24 @@ export function RomSections({
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealFrame?.nonce])
+
+  // A blocked-save validation error: open the section, scroll the offending pose
+  // row into view and focus its first empty input, so the fix is one keystroke away.
+  useEffect(() => {
+    if (!revealPose) return
+    setOpen((o) => ({ ...o, [revealPose.section]: true }))
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`[data-pose-id="${revealPose.poseId}"]`)
+        row?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const empty = row
+          ? Array.from(row.querySelectorAll('input')).find((i) => i.value.trim() === '')
+          : undefined
+        empty?.focus()
+      }),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealPose?.nonce])
 
   function patchSection(section: RomSection, patch: Partial<RomSectionConfig>) {
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })

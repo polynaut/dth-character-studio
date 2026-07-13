@@ -282,6 +282,7 @@ export function SortablePoseRow({
       <tr
         ref={setNodeRef}
         id={failed ? `dth-rom-frame-${absFrame}` : undefined}
+        data-pose-id={row.original.id}
         style={{ transform: CSS.Transform.toString(transform), transition }}
         title={failed ? 'This morph failed in the last ROM run — see the report above' : undefined}
         className={`border-b last:border-b-0 ${
