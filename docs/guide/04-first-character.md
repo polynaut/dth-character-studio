@@ -92,7 +92,12 @@ Run the one matching your generation, once per generation:
    it**.
 2. Select the figure root and run the scan script from the Content Library
    (`Scripts/DTH-Character-Studio/Scan_Morphs_<Genesis>`).
+
+  <img width="960" height="1044" alt="Screenshot 2026-07-13 214606" src="https://github.com/user-attachments/assets/1b381f07-38ae-46f2-8e84-d19e9ff65e1d" />
+  
 3. A summary tells you how many morphs were found across how many nodes.
+
+  <img width="342" height="91" alt="Screenshot 2026-07-13 214615" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />
 
 That's the whole scan — it indexes **everything dialable** the figure carries:
 classic morphs *and* controller dials, across all products installed for that
@@ -107,30 +112,13 @@ characters:
 - picking a suggestion fills in the exact internal name **and** selects the
   right node on that ROM entry — no more mismatched node/morph pairs.
 
+  <img width="638" height="178" alt="Screenshot 2026-07-13 214703" src="https://github.com/user-attachments/assets/3b5916c2-c664-4cb2-a6e1-68b5930264e8" />
+
 Installed new morph products since the last scan? Just run the scan script
 again — the index is replaced wholesale, and the studio refreshes it the next
 time its window gains focus.
 
 </details>
-
-Manual alternatives:
-
-1. **One morph — Parameter Settings:** in Daz's **Parameters** pane, find the
-   slider, open its **gear menu → Parameter Settings…** — the **Name** field is
-   the internal name. Copy it verbatim into the Morph name column.
-
-<!-- screenshot: Parameters pane, slider gear menu → Parameter Settings -->
-<!-- screenshot: Parameter Settings dialog — the internal "Name" field -->
-
-2. **All morphs at once — DthScanFrames:** run `DthScanFrames.dsa` on the open
-   scene (installed via [Tools → DazToHue-Scripts](./tools.md)) — it writes a
-   CSV of every morph on the figure with its exact internal name. Pull it in
-   with the section's **Import from CSV**.
-
-<!-- screenshot: Import from CSV with a DthScanFrames result -->
-
-Two G9 sliders above the sections — **FACS Detail Strength** and **Flexion
-Automatic Strength** — are keyed at frame 0 if your character needs them.
 
 ## Save = generate
 
@@ -140,7 +128,6 @@ Press **Save**. Every save regenerates the character's files in one go:
   Daz library under `Scripts/DTH-Character-Studio/<Project>/<Character>/`
 - **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
   character's folder
-- FBM helper files and (with an export folder set — see next step) an export script
 
 Change anything later — morphs, sections, export options — and simply Save again;
 both sides stay in sync by construction.
