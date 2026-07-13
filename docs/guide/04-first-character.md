@@ -45,6 +45,39 @@ frame, and the Daz and Houdini outputs can't drift apart.
 <img width="1014" height="700" alt="Screenshot 2026-07-13 204539" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
 
 
+### Golden Palace & Dicktator — the genitalia (GEN) section
+
+<!-- screenshot: character page, GEN section enabled in Preset mode -->
+
+**GEN** is the genital geograft's range of motion, and for most characters it's a
+ready-made preset with nothing to fill in. You don't even choose the product — the
+character's **Gender** (set when you created it) decides: a **female** character
+uses **Golden Palace**, a **male** character uses **Dicktator**. Our example is a
+G9 Female, so her GEN section covers Golden Palace.
+
+Enable GEN and leave it on **Preset** — that's the whole setup. The studio inserts
+the DTH release's stock Golden Palace (or Dicktator) ROM block: no morphs to list
+and no frames to count, dropped into the fixed GEN slot of the sequence (after
+EXP, before PHY) so the Daz and Houdini outputs stay frame-aligned like every
+other section.
+
+Two things worth knowing:
+
+- **The geograft has to be fitted to the figure in the character's Daz scene.**
+  The preset poses the geograft itself, so if Golden Palace / Dicktator isn't
+  loaded and fitted when you build the ROM, those frames fail. (It's the same
+  reason the morph scan below has you load your geografts — so their dials get
+  indexed too.)
+- **Preset only appears where the DTH release ships that asset.** If your release
+  carries no Golden Palace / Dicktator content for the character's Genesis
+  generation, the studio flags GEN's Preset as unavailable instead of letting you
+  generate a block that can't run.
+
+Want hand-picked genital morphs instead of the stock ROM? Switch GEN to **Custom**
+and list them exactly like the FBM morphs below — but for most characters the
+Preset is all you need.
+
+
 For this example we add some **Full Body (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
 key) — or import them from a `DthScanFrames` CSV (see [Tools](./tools.md)).
