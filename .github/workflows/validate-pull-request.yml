@@ -64,6 +64,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           components: clippy
+      # Cache the crate + registry so clippy/test don't rebuild from scratch every
+      # PR (this job was ~5.5 min uncached). Keyed on Cargo.lock automatically.
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: apps/desktop
       - name: Verify the brotli alloc pins are intact
         shell: bash
         working-directory: apps/desktop

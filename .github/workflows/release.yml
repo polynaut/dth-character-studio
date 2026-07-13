@@ -173,12 +173,19 @@ jobs:
           # SimplySign login (NAS keepalive robot) is the auth. Its own final verify is informational (offline anchoring
           # on Certum's cross-signed roots is fussy) — a produced file is a
           # valid signature.
+          orig=$(stat -c%s "$exe")
           if ! sign-installer.sh "$exe" "$exe.signed" \
             "DTH Character Studio" "https://github.com/polynaut/dth-character-studio"; then
             echo "::error::signing failed — if the log says 'Failed to enumerate slots', the SimplySign session has lapsed — check the NAS keepalive robot (it should refresh the session before the ~2 h expiry), then re-run this job."
             exit 1
           fi
-          test -s "$exe.signed"
+          # The signed file must be non-empty AND larger than the unsigned input:
+          # an Authenticode signature adds bytes, so if it didn't grow, signing
+          # silently no-op'd. A cheap early guard on top of the presence gate below.
+          if [ ! -s "$exe.signed" ] || [ "$(stat -c%s "$exe.signed")" -le "$orig" ]; then
+            echo "::error::signed installer is not larger than the unsigned input — no signature was embedded"
+            exit 1
+          fi
           mv "$exe.signed" "$exe"
           # Presence gate (validated in sign-smoketest.yml on the same runner /
           # osslsigncode 2.13): refuse to publish a silently-unsigned installer.
