@@ -1,5 +1,15 @@
 # @dth/desktop
 
+## 0.41.16
+
+### Patch Changes
+
+- [#242](https://github.com/polynaut/dth-character-studio/pull/242) [`0de21ad`](https://github.com/polynaut/dth-character-studio/commit/0de21ada2f04dd02f7583fa5fc3eaac80431fc6b) Thanks [@polynaut](https://github.com/polynaut)! - Show the native menu bar (Main / Help) on every window. Only the startup "main"
+  window received the app menu; project windows and any extra Home windows opened at
+  runtime came up with no menu bar. Each runtime window now builds and sets the same
+  menu itself, so New Project / Refresh assets / About / Check for Updates are
+  reachable from any window.
+
 ## 0.41.15
 
 ### Patch Changes
