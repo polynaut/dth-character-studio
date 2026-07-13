@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+/* Manrope is self-hosted via @fontsource-variable/manrope (imported in main.tsx)
+ * so it works offline and passes the packaged app's CSP — loading it from Google
+ * Fonts is blocked by `style-src 'self'` and silently fell back to a system font. */
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
@@ -59,7 +61,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Manrope Variable', 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
