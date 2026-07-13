@@ -41,9 +41,8 @@ pub fn run() {
     // Updater + relaunch + single-instance + the native app menu are desktop-only.
     #[cfg(desktop)]
     {
-        use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
         use tauri::Emitter;
-        use crate::windows::{open_home_window_impl, open_project_window_impl};
+        use crate::windows::{build_app_menu, open_home_window_impl, open_project_window_impl};
 
         builder = builder
             // A second launch (e.g. opening another `.dcsp` from Explorer) is routed
@@ -68,28 +67,10 @@ pub fn run() {
             // Main → New Project / Refresh assets / Exit; Help → About / Check for
             // Updates. New Project opens the Home window natively; the other
             // frontend-driven items emit an event the webview listens for (see
-            // __root.tsx); Exit is the predefined Quit.
-            .menu(|handle| {
-                let new_project =
-                    MenuItemBuilder::with_id("new_project", "New Project").build(handle)?;
-                let refresh =
-                    MenuItemBuilder::with_id("refresh_assets", "Refresh assets").build(handle)?;
-                let exit = PredefinedMenuItem::quit(handle, Some("Exit"))?;
-                let main = SubmenuBuilder::new(handle, "Main")
-                    .item(&new_project)
-                    .item(&refresh)
-                    .separator()
-                    .item(&exit)
-                    .build()?;
-                let about = MenuItemBuilder::with_id("about", "About").build(handle)?;
-                let updates =
-                    MenuItemBuilder::with_id("check_updates", "Check for Updates").build(handle)?;
-                let help = SubmenuBuilder::new(handle, "Help")
-                    .item(&about)
-                    .item(&updates)
-                    .build()?;
-                MenuBuilder::new(handle).item(&main).item(&help).build()
-            })
+            // __root.tsx); Exit is the predefined Quit. This sets the menu on the
+            // config "main" window; runtime windows set the same menu themselves
+            // (see windows::build_app_menu), so every window shows the bar.
+            .menu(build_app_menu)
             .on_menu_event(|app, event| match event.id().as_ref() {
                 "new_project" => {
                     // Focus/open Home AND open its create-project panel.
