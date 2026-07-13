@@ -92,6 +92,32 @@ Each pose row has two name fields with very different jobs:
   Studio** (not its display label). A mismatch means that frame fails in the
   ROM run.
 
+### Combining several morphs into one output
+
+A pose usually maps one Daz morph to one generated output — but it doesn't have to.
+Each row has a **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
+more); expand it to drive the **one** output morph from **several** Daz morphs or
+controllers at once. That's how you bake a shape that only exists as a combination
+of dials — or a controller plus its corrective — into a single clean morph for
+Houdini and Unreal.
+
+<!-- screenshot: a pose row expanded, showing several combined morphs -->
+
+Each entry in the expanded list carries its own:
+
+- **Node** — the scene node the morph lives on (`Genesis9`, `GoldenPalace_G9`, a
+  bone, …); autocomplete fills it in when you pick a suggestion.
+- **Property** — the morph's internal Daz name (same rule as the single Morph name).
+- **Value** — what this morph is dialed to at the pose's frame.
+- **Base** *(optional)* — the value it returns to on the frames around the pose
+  (default `0`). Set it for a morph that's already part of the character's base
+  shape so the ROM keys the delta instead of snapping from zero — or tick **Auto**
+  to read the base from the morph's current scene value when the script runs.
+
+All the listed morphs are keyed together on that one frame, so they blend into the
+single output named in **Name**. **Add morph** piles on more; the trash icon drops
+one (a pose always keeps at least one).
+
 ### Finding a morph's internal Daz name
 
 The internal name usually differs from the slider's label (label *Body Tone* →
