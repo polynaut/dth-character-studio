@@ -3,9 +3,16 @@ name: Validate Pull Request
 # Basic checks on every pull request: typecheck, tests, and a web build. The
 # version/release workflows only run on pushes to main, so this is the gate that
 # catches regressions before a PR is merged.
+#
+# Also runs the `rust` job on pushes to main — NOT for PR gating, but to warm the
+# Rust build cache on the default branch. GitHub only lets PR runs restore caches
+# from the default branch, so without this every PR's rust job is a cold rebuild.
+# (validate/changeset stay PR-only.)
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,6 +23,10 @@ concurrency:
 
 jobs:
   validate:
+    # PR-only: on a main push the merged PR already validated; this job just
+    # duplicates it. (The rust job below is the one that runs on main, to warm
+    # the cache.)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -41,7 +52,7 @@ jobs:
   # with an empty changeset: `pnpm changeset --empty`. The bot PR is exempt.
   changeset:
     runs-on: ubuntu-latest
-    if: github.head_ref != 'changeset-release/main'
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -69,6 +80,10 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: apps/desktop
+          # A fixed shared-key (instead of the default per-job key) so the cache
+          # the main-push run saves is the same one PR runs restore — otherwise
+          # the keys differ and PRs never hit it.
+          shared-key: dth-desktop
       - name: Verify the brotli alloc pins are intact
         shell: bash
         working-directory: apps/desktop
