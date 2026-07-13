@@ -326,7 +326,11 @@ function SettingsPage() {
   })
   const [exporterLoading, setExporterLoading] = useState(false)
   const [releaseInstalling, setReleaseInstalling] = useState(false)
-  const [releaseReport, setReleaseReport] = useState<InstallReport | null>(null)
+  // The release install report is split per target so each renders next to its
+  // own buttons: the Daz report under the "My DAZ 3D Library" install, the
+  // Houdini report at the bottom (shared by the primary + any extra folders).
+  const [dazReport, setDazReport] = useState<InstallReport | null>(null)
+  const [houdiniReport, setHoudiniReport] = useState<InstallReport | null>(null)
   const [pluginInstalling, setPluginInstalling] = useState(false)
   const [pluginReport, setPluginReport] = useState<InstallReport | null>(null)
   // Version of the exporter DLL already in <Daz install>/plugins. null = not yet
@@ -741,7 +745,7 @@ function SettingsPage() {
                       (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
                       true,
                       setReleaseInstalling,
-                      setReleaseReport,
+                      setDazReport,
                     )
                   }
                   disabled={!canInstallDaz || releaseInstalling}
@@ -754,7 +758,7 @@ function SettingsPage() {
                       (args) => installDthRelease({ data: { ...args.data, target: 'daz' } }),
                       false,
                       setReleaseInstalling,
-                      setReleaseReport,
+                      setDazReport,
                       undefined,
                       // Re-scan poses from the just-installed release so the studio
                       // can open/generate characters without a separate Save.
@@ -776,6 +780,9 @@ function SettingsPage() {
                   <Download /> {releaseInstalling ? 'Installing…' : 'Install'}
                 </Button>
               </div>
+              {dazReport && (
+                <InstallReportList report={dazReport} onClose={() => setDazReport(null)} />
+              )}
             </div>
 
             <div className="border-t pt-4">
@@ -804,7 +811,7 @@ function SettingsPage() {
                       (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
                       true,
                       setReleaseInstalling,
-                      setReleaseReport,
+                      setHoudiniReport,
                     )
                   }
                   disabled={!canInstallHoudini || releaseInstalling}
@@ -817,7 +824,7 @@ function SettingsPage() {
                       (args) => installDthRelease({ data: { ...args.data, target: 'houdini' } }),
                       false,
                       setReleaseInstalling,
-                      setReleaseReport,
+                      setHoudiniReport,
                     )
                   }
                   disabled={!canInstallHoudini || releaseInstalling}
@@ -863,7 +870,7 @@ function SettingsPage() {
                           }),
                         true,
                         setReleaseInstalling,
-                        setReleaseReport,
+                        setHoudiniReport,
                       )
                     }
                     disabled={!releaseReady || !folder.trim() || releaseInstalling}
@@ -879,7 +886,7 @@ function SettingsPage() {
                           }),
                         false,
                         setReleaseInstalling,
-                        setReleaseReport,
+                        setHoudiniReport,
                       )
                     }
                     disabled={!releaseReady || !folder.trim() || releaseInstalling}
@@ -919,8 +926,8 @@ function SettingsPage() {
               </Button>
             </div>
 
-            {releaseReport && (
-              <InstallReportList report={releaseReport} onClose={() => setReleaseReport(null)} />
+            {houdiniReport && (
+              <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
             )}
           </section>
 
