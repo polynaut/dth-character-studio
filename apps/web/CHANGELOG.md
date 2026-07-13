@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.20
+
+### Patch Changes
+
+- [#255](https://github.com/polynaut/dth-character-studio/pull/255) [`e2791bc`](https://github.com/polynaut/dth-character-studio/commit/e2791bc4b0aa171e039339c8619186c5f40289ab) Thanks [@polynaut](https://github.com/polynaut)! - Fix "Open in Daz" sometimes not loading the scene when Daz is already open. The
+  scene-open bridge always wrote the same `dth_open_scene.dsa`, and a running Daz can
+  ignore a repeated open of an identical path — so a second click looked like nothing
+  happened. The bridge filename now rotates across a small fixed pool, so consecutive
+  opens never hand Daz the same path twice.
+- Updated dependencies []:
+  - @dth/rom@0.41.20
+  - @dth/ui@0.41.20
+
 ## 0.41.19
 
 ### Patch Changes
