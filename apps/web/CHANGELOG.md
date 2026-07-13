@@ -1,5 +1,21 @@
 # @dth/web
 
+## 0.41.15
+
+### Patch Changes
+
+- [#240](https://github.com/polynaut/dth-character-studio/pull/240) [`0a66525`](https://github.com/polynaut/dth-character-studio/commit/0a66525d07d155dea9e04e1f996d4e2817a1f750) Thanks [@polynaut](https://github.com/polynaut)! - Fix "Open in Daz" launching the scene-open bridge script in a text editor instead
+  of Daz Studio. Opening a scene while Daz is already running writes a one-shot
+  `.dsa` and previously shell-opened it, which follows the OS file association — on
+  machines where `.dsa` is bound to an editor (e.g. VS Code on a dev box) the script
+  just opened as text and the scene never loaded. The bridge now launches the
+  running Daz instance's own executable with the script as its argument
+  (association-independent), and only falls back to the shell-open if the executable
+  can't be located.
+- Updated dependencies []:
+  - @dth/rom@0.41.15
+  - @dth/ui@0.41.15
+
 ## 0.41.14
 
 ### Patch Changes
