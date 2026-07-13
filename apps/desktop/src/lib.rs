@@ -4,6 +4,7 @@ mod content;
 mod daz;
 mod dedup;
 mod drives;
+mod foreground;
 mod fsutil;
 mod github;
 mod housekeeping;
@@ -103,6 +104,7 @@ pub fn run() {
             github::app_release_tags,
             daz::daz_studio_running,
             daz::run_daz_script,
+            foreground::focus_app_window,
             install::install_daz_merge,
             install::install_houdini_presets,
             install::install_unreal_dth,
