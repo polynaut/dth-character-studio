@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.19
+
+### Patch Changes
+
+- [#252](https://github.com/polynaut/dth-character-studio/pull/252) [`45ec4d4`](https://github.com/polynaut/dth-character-studio/commit/45ec4d4ee707dcd73aba47ec59468241a6567ad5) Thanks [@polynaut](https://github.com/polynaut)! - Bring the target app to the foreground after "Open in …". Opening a scene in an
+  already-running Daz Studio (or a Houdini `.hip` / Unreal `.uproject`) loaded it
+  behind the studio window; the studio now focuses the app's window afterwards. It's
+  best-effort and Windows-only — a no-op when the app isn't running yet (a fresh
+  launch focuses itself) or on other platforms.
+- Updated dependencies []:
+  - @dth/rom@0.41.19
+  - @dth/ui@0.41.19
+
 ## 0.41.18
 
 ### Patch Changes
