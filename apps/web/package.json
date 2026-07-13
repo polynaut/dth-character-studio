@@ -28,6 +28,7 @@
     "@dth/ui": "workspace:*",
     "@floating-ui/dom": "^1.7.6",
     "@floating-ui/react": "^0.27.19",
+    "@fontsource-variable/manrope": "^5.2.8",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-devtools": "^0.10.5",
     "@tanstack/react-form": "^1.33.0",
