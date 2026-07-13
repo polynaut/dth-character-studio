@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.12
+
+### Patch Changes
+
+- [#228](https://github.com/polynaut/dth-character-studio/pull/228) [`66fbb06`](https://github.com/polynaut/dth-character-studio/commit/66fbb062e02b2c5e28650587cec94a554df80069) Thanks [@polynaut](https://github.com/polynaut)! - Settings → DTH release install: the **Daz** install/dry-run report now appears
+  directly under the "My DAZ 3D Library" buttons (instead of at the bottom of the
+  whole section), while the **Houdini** report stays at the bottom. The single
+  shared report was split per target so each result shows next to the buttons that
+  produced it.
+- Updated dependencies []:
+  - @dth/rom@0.41.12
+  - @dth/ui@0.41.12
+
 ## 0.41.11
 
 ### Patch Changes
