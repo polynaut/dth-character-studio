@@ -41,8 +41,10 @@ pub fn daz_studio_running() -> bool {
 /// apps, so a DS6 exe can't forward into a running DS4 (it would spawn a second
 /// DS6). Falls back to a standard install-dir probe only if the running instance
 /// can't be located.
+/// Returns the executable it launched (so the caller can log which instance it
+/// targeted — useful when debugging why a running Daz did or didn't react).
 #[tauri::command]
-pub fn run_daz_script(script_path: String) -> Result<(), String> {
+pub fn run_daz_script(script_path: String) -> Result<String, String> {
     #[cfg(windows)]
     {
         let exe = running_daz_exe()
@@ -52,7 +54,7 @@ pub fn run_daz_script(script_path: String) -> Result<(), String> {
             .arg(&script_path)
             .spawn()
             .map_err(|e| format!("Failed to launch Daz Studio ({exe}): {e}"))?;
-        Ok(())
+        Ok(exe)
     }
     #[cfg(not(windows))]
     {

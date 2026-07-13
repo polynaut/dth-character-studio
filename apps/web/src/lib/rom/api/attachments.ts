@@ -189,17 +189,34 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
  * still works on machines where `.dsa` *is* associated with Daz.
  */
 async function openSceneInRunningDaz(scenePath: string): Promise<void> {
+  // The bridge reports failures with a message box so the open isn't silent: if you
+  // see NO box AND the scene doesn't load, the running Daz never executed this
+  // script (the forwarded-script assumption failed) — the key thing to know.
   const script = [
-    '// Written by DTH Character Studio - opens a scene in the already-running',
-    '// Daz Studio instance (it ignores a forwarded .duf open; a script runs).',
-    `App.getContentMgr().openFile(${JSON.stringify(scenePath.replace(/\\/g, '/'))});`,
+    '// Written by DTH Character Studio — opens a scene in the already-running Daz',
+    '// Studio instance. If nothing happens and no message box appears, Daz did not',
+    '// run this forwarded script.',
+    '(function () {',
+    `  var path = ${JSON.stringify(scenePath.replace(/\\/g, '/'))};`,
+    '  try {',
+    '    if (!App.getContentMgr().openFile(path)) {',
+    '      MessageBox.warning("DTH: could not open the scene:\\n" + path, "DTH Character Studio", "&OK");',
+    '    }',
+    '  } catch (e) {',
+    '    MessageBox.critical("DTH: error opening the scene:\\n" + e, "DTH Character Studio", "&OK");',
+    '  }',
+    '})();',
     '',
   ].join('\n')
   const bridge = await storage.dataPath('dth_open_scene.dsa')
   await writeTextFile(bridge, script)
   try {
-    await invoke('run_daz_script', { scriptPath: bridge })
-  } catch {
+    const exe = await invoke<string>('run_daz_script', { scriptPath: bridge })
+    // Visible in the (now enabled) devtools console — tells us which instance we
+    // asked to run the script when a running Daz doesn't react.
+    console.info('[DTH] ran open-scene script via', exe, '→', bridge)
+  } catch (err) {
+    console.warn('[DTH] run_daz_script failed, falling back to shell-open', err)
     await shellOpen(bridge)
   }
 }
