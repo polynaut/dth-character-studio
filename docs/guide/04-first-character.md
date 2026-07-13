@@ -4,15 +4,21 @@
 
 <!-- screenshot: project window, create character panel -->
 
-1. In the project window press **Add character** (or drop a `.duf` anywhere).
-2. **Choose Daz scene…** — the character's scene file.
+1. In the project window press **Add character** (or drop a `.duf` anywhere).   
+3. **Choose Daz scene…** — the character's scene file.
    **It must not contain an animation** — just the character itself.
-3. Name it (the name becomes its folder in the project), confirm **Genesis** (G9)
+4. Name it (the name becomes its folder in the project), confirm **Genesis** (G9)
    and **Gender**.
-4. **ROM prefill** — start **Empty** for a first character, or prefill from any
+5. **ROM prefill** — start **Empty** for a first character, or prefill from any
    of your own characters (across projects) to copy a working ROM definition.
-5. Press **Create**. The scene is copied into the character's folder — your
+
+  <img width="722" height="518" alt="Screenshot 2026-07-13 202915" src="https://github.com/user-attachments/assets/3446cc99-9884-416a-88b0-e6e6f7cc8368" />
+   
+6. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
+
+   <img width="1014" height="700" alt="Screenshot 2026-07-13 203443" src="https://github.com/user-attachments/assets/9e6b850e-9725-4f5c-9e18-64ee797ce18b" />
+
 
 ## The ROM definition
 
@@ -34,8 +40,12 @@ mode (your own poses and morphs):
 | MISC | Everything else |
 
 The studio computes every frame number from this structure — you never type a
-frame, and the Daz and Houdini outputs can't drift apart. Typical first-character
-work: open **Full Body (FBM)**, switch it to Custom, and list the morphs your
+frame, and the Daz and Houdini outputs can't drift apart. 
+
+<img width="1014" height="700" alt="Screenshot 2026-07-13 204539" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
+
+
+For this example we add some **Full Body (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
 key) — or import them from a `DthScanFrames` CSV (see [Tools](./tools.md)).
 
@@ -56,6 +66,11 @@ internal `body_bs_BodyTone`). The comfortable way is to let the studio
 **autocomplete** them for you — after a one-time scan per Genesis generation,
 every Morph name field offers matching suggestions as you type. Two manual
 routes still work when you just need a single name.
+
+
+<img width="504" height="154" alt="Screenshot 2026-07-13 205938" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />
+
+<img width="404" height="388" alt="Screenshot 2026-07-13 205952" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
 
 <details>
 <summary><strong>Recommended: scan your morphs once, then autocomplete</strong> — <code>Scan_Morphs_&lt;Genesis&gt;.dsa</code></summary>
