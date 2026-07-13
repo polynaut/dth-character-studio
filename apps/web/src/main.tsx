@@ -9,6 +9,7 @@ import { checkForUpdates } from './lib/updater'
 import { housekeepingSweep, isRefreshNeeded } from './lib/rom/api'
 import { activeProjectFile } from './lib/desktop'
 import { migrateProjects } from './lib/rom/migrate-projects'
+import '@fontsource-variable/manrope/index.css'
 import './styles.css'
 
 /** Everything but the last path segment ('/'-joined). */
