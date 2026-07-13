@@ -55,10 +55,11 @@ import {
   poseAssetCsvEra,
   poseAssetCsvValidated,
   romTimeline,
+  romValidationErrors,
 } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
-import type { GeneratedFile, PresetFrames } from '@dth/rom'
+import type { GeneratedFile, PresetFrames, RomSection } from '@dth/rom'
 import type { Character, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
@@ -217,6 +218,13 @@ function CharacterPage() {
   function revealFailedFrame(frame: number) {
     setRevealFrame((prev) => ({ frame, nonce: (prev?.nonce ?? 0) + 1 }))
   }
+  // A blocked-save validation error, sent to the ROM editor to open its section,
+  // scroll the offending pose row in and focus its first empty field.
+  const [revealPose, setRevealPose] = useState<{
+    section: RomSection
+    poseId: string
+    nonce: number
+  } | null>(null)
   const swallowNavRef = useRef(false)
   // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
   // disk even when nothing changed (handy during development).
@@ -309,6 +317,20 @@ function CharacterPage() {
 
   // Saving also (re)generates all DTH files in the same step.
   async function onSave() {
+    // Block the save on empty required custom-morph fields — and jump to the
+    // first one so it's obvious what to fix (RomSections opens the section,
+    // scrolls the row in and focuses the empty field).
+    const errors = romValidationErrors(character.sections)
+    if (errors.length > 0) {
+      const first = errors[0]
+      setRevealPose({ section: first.section, poseId: first.poseId, nonce: (revealPose?.nonce ?? 0) + 1 })
+      toast.error(
+        errors.length === 1
+          ? first.message
+          : `${errors.length} custom-morph fields are empty — fill them in before saving.`,
+      )
+      return
+    }
     setSaving(true)
     try {
       const saved = await saveCharacter({ data: { projectId, character } })
@@ -884,6 +906,7 @@ function CharacterPage() {
           presetFrames={presetFrames}
           failedFrames={failedFrames}
           revealFrame={revealFrame}
+          revealPose={revealPose}
           morphIndex={morphIndex}
           jcmMorphMods={character.jcmMorphMods}
           onJcmMorphModsChange={(jcmMorphMods) => patch({ jcmMorphMods })}
