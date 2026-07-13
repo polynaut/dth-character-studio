@@ -240,9 +240,32 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
     /\.duf$/i.test(scenePath) &&
     (await invoke<boolean>('daz_studio_running').catch(() => false))
   ) {
-    return openSceneInRunningDaz(scenePath)
+    await openSceneInRunningDaz(scenePath)
+  } else {
+    await shellOpen(scenePath)
   }
-  await shellOpen(scenePath)
+  await focusOpenedApp(scenePath)
+}
+
+/** The app executables that could own the window for an opened file, by type —
+ *  used to pull the target app forward after opening (see `focusOpenedApp`). */
+function appExesFor(scenePath: string): Array<string> {
+  if (/\.duf$/i.test(scenePath)) return ['DAZStudio.exe']
+  if (/\.(hip|hipnc|hiplc)$/i.test(scenePath))
+    return ['houdini.exe', 'houdinifx.exe', 'houdinicore.exe']
+  if (/\.uproject$/i.test(scenePath)) return ['UnrealEditor.exe', 'UE4Editor.exe']
+  return []
+}
+
+/** Best-effort: bring the app the scene just opened in to the foreground, so it
+ *  doesn't load hidden behind the studio window. A no-op when the app isn't
+ *  running yet (a fresh launch focuses itself) or off Windows. The short beat
+ *  lets a just-spawned launcher/forwarder settle before we grab focus back. */
+async function focusOpenedApp(scenePath: string): Promise<void> {
+  const exeNames = appExesFor(scenePath)
+  if (exeNames.length === 0) return
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await invoke('focus_app_window', { exeNames }).catch(() => {})
 }
 
 /**
