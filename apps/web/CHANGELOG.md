@@ -1,5 +1,22 @@
 # @dth/web
 
+## 0.41.17
+
+### Patch Changes
+
+- [#245](https://github.com/polynaut/dth-character-studio/pull/245) [`b8a4296`](https://github.com/polynaut/dth-character-studio/commit/b8a4296dcebb3a0f53890ab16a5f282d4b643c1b) Thanks [@polynaut](https://github.com/polynaut)! - Enable the WebView2 inspector (right-click → Inspect, F12) in installed/release
+  builds, not just dev — this is a self-hosted tool and it helps debug the shipped
+  app against a live Daz Studio.
+
+  Make "Open in Daz" observable when a running Daz doesn't react: the bridge script
+  now reports a failed open with a message box (so it's no longer silent — and if
+  no box appears at all, the running instance never executed the forwarded script),
+  and the web side logs which Daz executable it launched to the console.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.17
+  - @dth/ui@0.41.17
+
 ## 0.41.16
 
 ### Patch Changes
