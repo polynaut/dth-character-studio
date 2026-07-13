@@ -43,6 +43,31 @@ fn unique_window_label(app: &tauri::AppHandle, prefix: &str) -> String {
     unreachable!()
 }
 
+/// The native app menu (Main → New Project / Refresh assets / Exit; Help → About
+/// / Check for Updates). Built once per window: the config "main" window gets it
+/// via `Builder::menu`, and every runtime window (project windows, extra Home
+/// windows) sets its own here — otherwise only the first window shows a menu bar.
+/// Item IDs are shared, so clicks route to the app-global `on_menu_event`.
+#[cfg(desktop)]
+pub(crate) fn build_app_menu<R: tauri::Runtime>(
+    handle: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+    let new_project = MenuItemBuilder::with_id("new_project", "New Project").build(handle)?;
+    let refresh = MenuItemBuilder::with_id("refresh_assets", "Refresh assets").build(handle)?;
+    let exit = PredefinedMenuItem::quit(handle, Some("Exit"))?;
+    let main = SubmenuBuilder::new(handle, "Main")
+        .item(&new_project)
+        .item(&refresh)
+        .separator()
+        .item(&exit)
+        .build()?;
+    let about = MenuItemBuilder::with_id("about", "About").build(handle)?;
+    let updates = MenuItemBuilder::with_id("check_updates", "Check for Updates").build(handle)?;
+    let help = SubmenuBuilder::new(handle, "Help").item(&about).item(&updates).build()?;
+    MenuBuilder::new(handle).item(&main).item(&help).build()
+}
+
 /// Open a project in its own window — or focus the one already showing it.
 #[cfg(desktop)]
 pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result<()> {
@@ -87,6 +112,9 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
         // The app UI is dark; force it so tao applies dark-mode theming to the native
         // menu bar too (runtime windows otherwise render a light menu strip).
         .theme(Some(tauri::Theme::Dark))
+        // Runtime windows don't inherit the app menu (only the config "main" window
+        // does) — give this one its own so Main/Help show here too.
+        .menu(build_app_menu(app)?)
         .build()?;
     Ok(())
 }
@@ -118,6 +146,9 @@ pub(crate) fn open_home_window_impl(app: &tauri::AppHandle, new_project: bool) -
         .inner_size(1440.0, 920.0)
         .min_inner_size(960.0, 640.0)
         .theme(Some(tauri::Theme::Dark))
+        // As above: a runtime Home window needs its own menu (the config "main"
+        // window is the only one that inherits the app menu).
+        .menu(build_app_menu(app)?)
         .build()?;
     Ok(())
 }
