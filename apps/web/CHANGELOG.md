@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.14
+
+### Patch Changes
+
+- [#238](https://github.com/polynaut/dth-character-studio/pull/238) [`5df102a`](https://github.com/polynaut/dth-character-studio/commit/5df102a20ba8f1cd8a74a3f42829ed105eef2a33) Thanks [@polynaut](https://github.com/polynaut)! - Block saving a character while a custom section has empty required fields (a pose
+  with no name, no morph, or an empty morph name), and jump straight to the problem:
+  the offending section opens, its pose row scrolls into view and the first empty
+  field is focused. A toast names the first error (or the count when there are
+  several).
+- Updated dependencies [[`5df102a`](https://github.com/polynaut/dth-character-studio/commit/5df102a20ba8f1cd8a74a3f42829ed105eef2a33)]:
+  - @dth/rom@0.41.14
+  - @dth/ui@0.41.14
+
 ## 0.41.13
 
 ### Patch Changes
