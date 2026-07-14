@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.41.25
+
+### Patch Changes
+
+- [#275](https://github.com/polynaut/dth-character-studio/pull/275) [`90354b6`](https://github.com/polynaut/dth-character-studio/commit/90354b6bc1d71883ed5cb56dd3ca3f18a7f6ed82) Thanks [@polynaut](https://github.com/polynaut)! - Keep spellcheck on the Notes field. Spellcheck is disabled app-wide (the technical
+  fields hold morph names and paths), but Notes are freeform prose, so re-enable it
+  there with `spellCheck` on the textarea to override the inherited default.
+- Updated dependencies []:
+  - @dth/rom@0.41.25
+  - @dth/ui@0.41.25
+
 ## 0.41.24
 
 ### Patch Changes
