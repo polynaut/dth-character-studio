@@ -124,6 +124,7 @@ function romFields(src: Character): Partial<Character> {
     facsDetailStrength: src.facsDetailStrength,
     flexionStrength: src.flexionStrength,
     resetGenBeforeApplying: src.resetGenBeforeApplying,
+    applyUE5TearUV: src.applyUE5TearUV,
     preserveMorphs: src.preserveMorphs,
     preserveNodeTransforms: src.preserveNodeTransforms,
     jcmMorphMods: src.jcmMorphMods,
