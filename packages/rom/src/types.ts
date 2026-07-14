@@ -582,8 +582,12 @@ export const CHARACTER_SCHEMA_VERSION = 8
  *       longer ships a PoseAsset CSV/FBX as if it were good — fix and re-run.
  *       Regenerate scripts (Tools → Refresh assets) to pick up the stricter
  *       `=== true` gate.
+ *  21 — Generation now writes a per-character `Open_Scene_<Character>.dsa` (opens
+ *       the scene in an already-running Daz from the Content Library, since the
+ *       studio can't forward it in). No runtime `.dsa` change — bumped purely so
+ *       Refresh assets regenerates existing characters to install the new script.
  */
-export const RUNTIME_VERSION = 20
+export const RUNTIME_VERSION = 21
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
