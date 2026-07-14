@@ -47,7 +47,9 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
 1. On the character page, set an **Export directory** and Save.
 2. Run the script in Daz as above — after building the ROM it now runs the
    exporter automatically and writes everything the pipeline needs into your
-   export folder: **`<Name>.abc`**, **`<Name>.dth`**, and the **PoseAsset CSV**.
+   export folder: **`<Name>.abc`**, **`<Name>.dth`**, and the **PoseAsset CSV**
+   (plus a **reference-skeleton FBX** for each **Bone scale** frame, under a
+   `Reference Skeletons` subfolder — the CSV already points at each one).
 
 Two switches tune this:
 

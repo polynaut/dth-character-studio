@@ -172,6 +172,46 @@ one (a pose always keeps at least one).
 </td></tr></table>
 </details>
 
+<details>
+<summary><strong>Bone scale — morphs that move bones (reference skeletons)</strong></summary>
+<table><tr><td>
+
+Some morphs don't just push vertices — they **scale bones** (Torso Length,
+Proportion Height, and the like). Unreal Engine can't drive a bone's scale from a
+morph alone, so those frames need a **reference-skeleton FBX**: an export carrying
+the morph *and* its bone scale, which the Houdini PoseAsset points at for that
+frame.
+
+Building that FBX by hand used to be the only way. Now just tick **Bone scale** on
+the pose row and the studio handles the rest end to end:
+
+- the frame is handed to the **DTH Exporter Plugin**, which writes its
+  reference-skeleton FBX automatically — into a `Reference Skeletons` subfolder of
+  your export directory;
+- that FBX's path is filled into the PoseAsset CSV for you, resolved to the exact
+  absolute location the exporter wrote — so Houdini finds it with nothing to type.
+
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
+<p align="center">
+  <img width="900" alt="the Bone scale toggle on a pose row" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>Tick Bone scale on a bone-scaling morph — its reference-skeleton FBX is exported and referenced for you.</em></sub>
+</p>
+-->
+
+&nbsp;
+
+> [!NOTE]
+> Reference frames need an **Export directory** set (see [Build the ROM in
+> Daz](./05-rom-in-daz.md)) — that's where the exporter writes the FBX. The studio
+> warns you if you tick Bone scale without one.
+
+Only **GEN**, **FBM** and **MISC** poses can be reference frames — those are the
+sections whose morphs shape the body.
+
+</td></tr></table>
+</details>
+
 ### Finding a morph's internal Daz name
 
 The internal name usually differs from the slider's label (label *Body Tone* →
