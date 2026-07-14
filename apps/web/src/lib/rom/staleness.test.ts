@@ -197,7 +197,7 @@ async function seedProject(dir: string, name: string, opts: { stale: boolean }):
       suffix: 'centre',
       method: 'individual',
       calculateFrom: 'default',
-      poses: [{ id: 'p', name: 'BodyTone', morphs: [], referenceFbx: '' }],
+      poses: [{ id: 'p', name: 'BodyTone', morphs: [], boneScaleRef: false }],
     },
   ]
   const c = characterSchema.parse({

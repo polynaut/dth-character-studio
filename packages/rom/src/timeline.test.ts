@@ -19,7 +19,7 @@ function group(nPoses: number): RomGroup {
       id: `p${i}`,
       name: `P${i}`,
       morphs: [],
-      referenceFbx: '',
+      boneScaleRef: false,
     })),
   }
 }

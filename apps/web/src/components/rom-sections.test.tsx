@@ -25,7 +25,7 @@ function sectionsWithMultiMorphPose(): RomSectionsModel {
         {
           id: 'p1',
           name: 'SLGlutes SS',
-          referenceFbx: '',
+          boneScaleRef: false,
           morphs: [
             { node: 'Genesis9', prop: 'SL_Glutes SS Left', value: 1 },
             { node: 'Genesis9', prop: 'SL_Glutes SS Right', value: 1 },
@@ -144,7 +144,7 @@ describe('Morph name autocomplete (scanned index)', () => {
           {
             id: 'p1',
             name: 'BodyTone',
-            referenceFbx: '',
+            boneScaleRef: false,
             morphs: [{ node: 'Genesis9', prop: '', value: 1 }],
           },
         ],

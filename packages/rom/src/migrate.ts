@@ -42,15 +42,39 @@ import type { RomSection } from './types'
  * missing (and it makes the step idempotent for free).
  *
  * History: the authoritative per-version log lives atop
- * {@link CHARACTER_SCHEMA_VERSION} in types.ts. Through the current version every
- * bump has been additive / removal-only (handled by the zod schema), so there is
- * no migration STEP below — add one here only for a rename/restructure or a
- * computed value (see the templates).
+ * {@link CHARACTER_SCHEMA_VERSION} in types.ts. Bumps 1–9 were additive /
+ * removal-only (handled by the zod schema); v10 renamed the per-pose `referenceFbx`
+ * string to a `boneScaleRef` boolean, so it carries the step below — add one here
+ * only for a rename/restructure or a computed value (see the templates).
  */
 export const characterMigrations: Record<
   number,
   (data: Record<string, any>) => Record<string, any>
 > = {
+  // v10 — the free-text per-pose `referenceFbx` path became a `boneScaleRef`
+  // boolean (the exporter auto-generates the FBX + the studio computes its path
+  // now). A non-empty old path means the pose was a reference-skeleton frame.
+  10: (data) => {
+    const sections = data.sections
+    if (sections && typeof sections === 'object') {
+      for (const key of Object.keys(sections)) {
+        const groups = sections[key]?.groups
+        if (!Array.isArray(groups)) continue
+        for (const group of groups) {
+          if (!Array.isArray(group?.poses)) continue
+          for (const pose of group.poses) {
+            if (!pose) continue
+            if (pose.boneScaleRef === undefined) {
+              pose.boneScaleRef =
+                typeof pose.referenceFbx === 'string' && pose.referenceFbx.trim() !== ''
+            }
+            delete pose.referenceFbx
+          }
+        }
+      }
+    }
+    return data
+  },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────
   //
   // Case A — rename / restructure an existing field:
