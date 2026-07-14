@@ -24,6 +24,31 @@ import {
 import type { Character, PresetFrames } from '@dth/rom'
 import type { PoseAssets, ProjectInfo } from './core'
 
+/** A self-contained Daz script the user runs from the Content Library to open this
+ *  character's scene in an already-running Daz — which the studio itself can't do
+ *  (a forwarded open is dropped once a scene is loaded). It REPLACES the current
+ *  scene (merge=false) after a warning, since that call discards unsaved changes
+ *  without prompting. */
+function openSceneScript(scenePath: string): string {
+  const path = JSON.stringify(scenePath.replace(/\\/g, '/'))
+  return [
+    "// Written by DTH Character Studio — opens this character's scene in the",
+    "// already-running Daz Studio instance (the studio can't push it in itself).",
+    '(function () {',
+    `  var path = ${path};`,
+    '  var iBtn = MessageBox.question(',
+    '    "Open this scene?\\n" + path +',
+    '    "\\n\\nThis REPLACES the current scene — save any unsaved work first.",',
+    '    "DTH — Open scene", "&Open", "&Cancel");',
+    '  if (iBtn != 0) { return; }',
+    '  if (!App.getContentMgr().openFile(path, false)) {',
+    '    MessageBox.warning("Could not open the scene:\\n" + path, "DTH — Open scene", "&OK");',
+    '  }',
+    '})();',
+    '',
+  ].join('\n')
+}
+
 // Generating the DTH artifacts (Daz .dsa scripts + Houdini PoseAsset CSV) from a
 // character definition, plus the cross-project Refresh-assets sweep and the
 // asset-version (staleness) detection that drives it.
@@ -199,6 +224,16 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // The character script goes in its own <project>/<character>/ subfolder of the
   // shared scripts folder; the runtime it imports is installed once in the root.
   const dazFiles = files.filter((file) => file.target === 'daz')
+  // A per-character "open this scene" script for the Content Library: the studio
+  // can't push a scene into an already-running Daz (a forwarded open is dropped
+  // once a scene is loaded), so the user runs this from inside Daz to open it.
+  if (character.scenePath) {
+    dazFiles.push({
+      fileName: `Open_Scene_${characterScriptName(character)}.dsa`,
+      content: openSceneScript(character.scenePath),
+      target: 'daz',
+    })
+  }
   let scriptsDir: string | null = null
   let scriptsError: string | null = null
   if (writeDaz && !settings.dazLibraryFolder) {
@@ -220,6 +255,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           `${dazBase}.dsa`,
           `ROM_${dazBase}.dsa`,
           `Export_${dazBase}.dsa`,
+          `Open_Scene_${dazBase}.dsa`,
           `Scan_Products_${characterSlug(character)}.dsa`,
         ].filter((name) => !writtenDaz.includes(name)),
       )

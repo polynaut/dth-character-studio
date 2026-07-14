@@ -70,6 +70,7 @@ export {
 export {
   copyDazScene,
   createAsset,
+  dazStudioRunning,
   deleteAsset,
   deleteFiles,
   fileExists,
