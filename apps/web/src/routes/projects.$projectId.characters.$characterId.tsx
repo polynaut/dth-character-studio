@@ -317,9 +317,10 @@ function CharacterPage() {
 
   // Saving also (re)generates all DTH files in the same step.
   async function onSave() {
-    // Block the save on empty required custom-morph fields — and jump to the
-    // first one so it's obvious what to fix (RomSections opens the section,
-    // scrolls the row in and focuses the empty field).
+    // Block the save on invalid required custom-morph fields (empty, or a pose
+    // name with characters Houdini rejects) — and jump to the first one so it's
+    // obvious what to fix (RomSections opens the section, scrolls the row in and
+    // focuses the offending field).
     const errors = romValidationErrors(character.sections)
     if (errors.length > 0) {
       const first = errors[0]
@@ -327,7 +328,7 @@ function CharacterPage() {
       toast.error(
         errors.length === 1
           ? first.message
-          : `${errors.length} custom-morph fields are empty — fill them in before saving.`,
+          : `${errors.length} custom-morph fields need fixing before saving.`,
       )
       return
     }
