@@ -1,5 +1,14 @@
 # @dth/rom
 
+## 0.41.23
+
+### Patch Changes
+
+- [#261](https://github.com/polynaut/dth-character-studio/pull/261) [`543b7ce`](https://github.com/polynaut/dth-character-studio/commit/543b7ce6e093878ed07ad044f02fe5ae07de065c) Thanks [@polynaut](https://github.com/polynaut)! - Bump `RUNTIME_VERSION` (20 → 21) so **Refresh assets** flags every existing
+  character stale and regenerates it — installing the new per-character
+  `Open_Scene_<Character>.dsa` script for characters created before that feature. No
+  runtime `.dsa` file changed; the bump is purely to trigger regeneration.
+
 ## 0.41.22
 
 ## 0.41.21
