@@ -80,23 +80,28 @@ mode (your own poses and morphs):
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="character page, GEN section enabled in Preset mode" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Golden Palace art-direction frames in the GEN section" src="ADD_IMAGE_URL" />
   <br>
-  <sub><em>The GEN section enabled in Preset mode.</em></sub>
+  <sub><em>The GEN section's Golden Palace art-direction frames — a morph set per frame.</em></sub>
 </p>
 -->
 
-**GEN** is the genital geograft's range of motion, and for most characters it's a
-ready-made preset with nothing to fill in. You don't even choose the product — the
-character's **Gender** (set when you created it) decides: a **female** character
-uses **Golden Palace**, a **male** character uses **Dicktator**. Our example is a
-G9 Female, so her GEN section covers Golden Palace.
+**GEN** is the genital geograft's range of motion. You don't choose the product —
+the character's **Gender** (set when you created it) decides: a **female**
+character uses **Golden Palace**, a **male** character uses **Dicktator**. Our
+example is a G9 Female, so her GEN section covers Golden Palace.
 
-Enable GEN and leave it on **Preset** — that's the whole setup. The studio inserts
-the DTH release's stock Golden Palace (or Dicktator) ROM block: no morphs to list
-and no frames to count, dropped into the fixed GEN slot of the sequence (after
-EXP, before PHY) so the Daz and Houdini outputs stay frame-aligned like every
-other section.
+Enable GEN on **Preset** and the studio drops the DTH release's stock GP/DK ROM
+block into the fixed GEN slot (after EXP, before PHY), frame-aligned like every
+other section. But the preset only supplies the *motion* — the **look is yours to
+art-direct**. The section lists the block's **Art direction** frames; go through
+them and, for each frame, set the morph (or morphs) that give it the shape you
+want — node, morph name and value, exactly like any custom morph.
+
+Frames flagged **required — empty in the preset ROM** ship with no shape at all, so
+they do nothing until you set a morph there. Ones you leave alone keep the preset
+default. Your choices are written to a per-character art-direction JSON that's
+stamped onto those frames as the ROM loads.
 
 Two things worth knowing:
 
@@ -110,9 +115,9 @@ Two things worth knowing:
   generation, the studio flags GEN's Preset as unavailable instead of letting you
   generate a block that can't run.
 
-Want hand-picked genital morphs instead of the stock ROM? Switch GEN to **Custom**
-and list them exactly like the FBM morphs below — but for most characters the
-Preset is all you need.
+Prefer to build the genital ROM entirely by hand instead of art-directing the
+preset? Switch GEN to **Custom** and define its poses exactly like the FBM morphs
+below.
 
 </td></tr></table>
 </details>
