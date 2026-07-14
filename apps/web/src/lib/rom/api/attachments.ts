@@ -278,6 +278,13 @@ async function focusOpenedApp(scenePath: string): Promise<void> {
   await invoke('focus_app_window', { exeNames }).catch(() => {})
 }
 
+/** Whether a Daz Studio instance is currently running (false in a plain browser).
+ *  The scene-card UI uses it to warn — the studio can't switch the scene of an
+ *  already-running Daz, so it points the user at the per-character open script. */
+export async function dazStudioRunning(): Promise<boolean> {
+  return invoke<boolean>('daz_studio_running').catch(() => false)
+}
+
 /**
  * Delete files from disk (best-effort, each independently) — used when unlinking
  * a Daz scene / Houdini project with "Delete file on disk" on. The caller passes

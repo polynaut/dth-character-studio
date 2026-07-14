@@ -12,6 +12,7 @@ import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import dazLogo from '#/assets/daz-logo.png'
 import {
   copyDazScene,
+  dazStudioRunning,
   deleteFiles,
   moveCharacterScenesFolder,
   openScene,
@@ -21,6 +22,8 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
+
+import { characterScriptName } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
@@ -137,6 +140,9 @@ export function DazSceneField({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // A scene click while Daz is already running: the studio can't switch a running
+  // Daz's scene, so this holds the clicked scene path to drive the warning dialog.
+  const [dazWarn, setDazWarn] = useState<string | null>(null)
   // A picked scene outside the project pauses here awaiting the copy decision.
   const [pending, setPending] = useState('')
   const [subfolder, setSubfolder] = useState(() => defaultSubdir)
@@ -199,12 +205,35 @@ export function DazSceneField({
   async function onOpen(scenePath: string, e?: React.MouseEvent) {
     setError('')
     try {
-      if (e?.altKey) await revealPath({ data: { path: scenePath } })
-      else await openScene({ data: { scenePath } })
+      if (e?.altKey) {
+        await revealPath({ data: { path: scenePath } })
+        return
+      }
+      // The studio can't switch the scene of an already-running Daz (a forwarded
+      // open is dropped once a scene is loaded) — warn and point at the per-character
+      // open script. With Daz closed, opening launches it fresh, which works.
+      if (await dazStudioRunning()) {
+        setDazWarn(scenePath)
+        return
+      }
+      await openScene({ data: { scenePath } })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
       toast.error(e?.altKey ? msg : `Couldn't open in Daz: ${msg}`)
+    }
+  }
+
+  // Best-effort forward from the warning dialog — only actually opens when the
+  // running Daz has no scene loaded (otherwise it drops it; hence the warning).
+  async function openAnyway() {
+    const scene = dazWarn
+    setDazWarn(null)
+    if (!scene) return
+    try {
+      await openScene({ data: { scenePath: scene } })
+    } catch (err) {
+      toast.error(`Couldn't open in Daz: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -631,6 +660,40 @@ export function DazSceneField({
           onClose={() => setPendingRemove('')}
         />
       )}
+
+      {dazWarn !== null &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setDazWarn(null)}
+          >
+            <div
+              className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-lg font-semibold">Daz Studio is already open</h2>
+              <p className="text-sm text-muted-foreground">
+                The studio can't load a scene into a running Daz. To open{' '}
+                <strong>{character.name}</strong>, save your work in Daz, then run{' '}
+                <code className={pathChipClass('secondary')}>
+                  Open_Scene_{characterScriptName(character)}
+                </code>{' '}
+                from your Content Library (under <code>Scripts ▸ DTH-Character-Studio</code>). It
+                asks before discarding unsaved changes.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                “Open anyway” only works if Daz has no scene loaded.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => void openAnyway()}>
+                  Open anyway
+                </Button>
+                <Button onClick={() => setDazWarn(null)}>Got it</Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </FileDropZone>
   )
 }
