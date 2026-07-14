@@ -162,7 +162,10 @@ export function RomSections({
   }, [revealFrame?.nonce])
 
   // A blocked-save validation error: open the section, scroll the offending pose
-  // row into view and focus its first empty input, so the fix is one keystroke away.
+  // row into view and focus the field that's actually wrong, so the fix is one
+  // keystroke away. Prefer the red-bordered input (aria-invalid — a filled-but-
+  // invalid name), then fall back to the first empty input (an empty required
+  // field is flagged by emptiness, not aria-invalid).
   useEffect(() => {
     if (!revealPose) return
     setOpen((o) => ({ ...o, [revealPose.section]: true }))
@@ -170,10 +173,12 @@ export function RomSections({
       requestAnimationFrame(() => {
         const row = document.querySelector(`[data-pose-id="${revealPose.poseId}"]`)
         row?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        const empty = row
-          ? Array.from(row.querySelectorAll('input')).find((i) => i.value.trim() === '')
-          : undefined
-        empty?.focus()
+        if (!row) return
+        const inputs = Array.from(row.querySelectorAll('input'))
+        const target =
+          inputs.find((i) => i.getAttribute('aria-invalid') === 'true') ??
+          inputs.find((i) => i.value.trim() === '')
+        target?.focus()
       }),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
