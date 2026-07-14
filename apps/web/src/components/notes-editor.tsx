@@ -210,6 +210,9 @@ export function NotesEditor({
               value={text}
               disabled={!loaded}
               autoFocus
+              // Notes are prose — keep spellcheck on here, overriding the app-wide
+              // `spellcheck="false"` (index.html) that quiets the technical fields.
+              spellCheck
               placeholder={
                 placeholder ??
                 'Write notes in markdown — drop images or other files right into the editor…'
