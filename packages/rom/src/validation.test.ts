@@ -29,7 +29,7 @@ function customSection(section: RomSection, poses: Array<RomPose>): RomSections 
 
 describe('romValidationErrors', () => {
   it('passes a fully-filled custom pose', () => {
-    const s = customSection('FBM', [pose('Body Tone', ['body_bs_BodyTone'])])
+    const s = customSection('FBM', [pose('BodyTone', ['body_bs_BodyTone'])])
     expect(romValidationErrors(s)).toEqual([])
   })
 
@@ -40,15 +40,28 @@ describe('romValidationErrors', () => {
     expect(errs[0]).toMatchObject({ section: 'FBM', field: 'name', relativeFrame: 0 })
   })
 
+  it('flags a pose name with characters Houdini rejects (spaces, punctuation)', () => {
+    const s = customSection('FBM', [pose('Body Tone', ['body_bs_BodyTone'])])
+    const errs = romValidationErrors(s)
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatchObject({ section: 'FBM', field: 'name', relativeFrame: 0 })
+    expect(errs[0].message).toMatch(/Houdini rejects/)
+  })
+
+  it('accepts underscores in a pose name', () => {
+    const s = customSection('FBM', [pose('Body_Tone_2', ['body_bs_BodyTone'])])
+    expect(romValidationErrors(s)).toEqual([])
+  })
+
   it('flags an empty (or whitespace) morph name', () => {
-    const s = customSection('FBM', [pose('Body Tone', ['   '])])
+    const s = customSection('FBM', [pose('BodyTone', ['   '])])
     const errs = romValidationErrors(s)
     expect(errs).toHaveLength(1)
     expect(errs[0]).toMatchObject({ field: 'morphName', morphIndex: 0 })
   })
 
   it('flags a pose with no morphs', () => {
-    const s = customSection('FBM', [pose('Body Tone', [])])
+    const s = customSection('FBM', [pose('BodyTone', [])])
     const errs = romValidationErrors(s)
     expect(errs).toHaveLength(1)
     expect(errs[0]).toMatchObject({ field: 'morphName', morphIndex: 0 })
