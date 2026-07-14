@@ -157,10 +157,13 @@ Each entry in the expanded list carries its own:
   bone, …); autocomplete fills it in when you pick a suggestion.
 - **Property** — the morph's internal Daz name (same rule as the single Morph name).
 - **Value** — what this morph is dialed to at the pose's frame.
-- **Base** *(optional)* — the value it returns to on the frames around the pose
-  (default `0`). Set it for a morph that's already part of the character's base
-  shape so the ROM keys the delta instead of snapping from zero — or tick **Auto**
-  to read the base from the morph's current scene value when the script runs.
+- **Base** *(optional)* — the value the morph **returns to** on the frames around
+  the pose (default `0`). Set it for a morph that's already part of the character's
+  base shape, so the ROM keys the *delta* from that base instead of snapping the
+  morph up from zero.
+- **Auto** — instead of a fixed **Base**, tick this to read the base from the
+  morph's **current scene value** when the apply-script runs — handy when that
+  resting value differs from character to character.
 
 All the listed morphs are keyed together on that one frame, so they blend into the
 single output named in **Name**. **Add morph** piles on more; the trash icon drops
