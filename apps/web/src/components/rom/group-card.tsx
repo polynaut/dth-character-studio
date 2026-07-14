@@ -57,7 +57,7 @@ export function GroupCard({
   onRemove: () => void
   onMirror: () => void
 }) {
-  const showReferenceFbx = REFERENCE_FBX_SECTIONS.includes(section)
+  const showBoneScale = REFERENCE_FBX_SECTIONS.includes(section)
   const showBoneLabel = BONE_LABEL_SECTIONS.includes(section)
   const showSuffix = GROUPED_SECTIONS.includes(section)
   const showMethod = METHOD_SECTIONS.includes(section)
@@ -94,7 +94,7 @@ export function GroupCard({
   const meta: PoseTableMeta = {
     startFrame,
     failedFrames,
-    showReferenceFbx,
+    showBoneScale,
     expandedIds,
     toggleExpanded: onToggleExpanded,
     figureNode,
@@ -132,7 +132,7 @@ export function GroupCard({
         id,
         name: '',
         morphs: [{ node, prop: '', value: 1 }],
-        referenceFbx: '',
+        boneScaleRef: false,
       })
       onChange({ ...group, poses })
       // Focus the new row's name field as soon as it renders.
@@ -145,7 +145,7 @@ export function GroupCard({
     columns: poseColumns,
     getCoreRowModel: getCoreRowModel(),
     meta,
-    state: { columnVisibility: { referenceFbx: showReferenceFbx } },
+    state: { columnVisibility: { boneScaleRef: showBoneScale } },
   })
 
   function addPose() {
@@ -162,7 +162,7 @@ export function GroupCard({
           id: newId(),
           name: '',
           morphs: [{ node: lastNode, prop: '', value: 1 }],
-          referenceFbx: '',
+          boneScaleRef: false,
         },
       ],
     })

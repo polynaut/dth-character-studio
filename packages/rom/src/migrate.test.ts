@@ -118,6 +118,41 @@ describe('characterSchema — v9 applyUE5TearUV (additive)', () => {
   })
 })
 
+// v10 renamed the per-pose `referenceFbx` string to a `boneScaleRef` boolean — a
+// rename/restructure (Case A), so it carries a registered step. A non-empty old
+// path means the pose was a reference-skeleton frame.
+describe('migrateCharacterData — v10 (referenceFbx → boneScaleRef)', () => {
+  const poseWith = (referenceFbx: string) => ({
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [{ poses: [{ id: 'p', name: 'X', morphs: [], referenceFbx }] }],
+      },
+    },
+    schemaVersion: 9,
+  })
+
+  it('turns a non-empty reference FBX path into boneScaleRef: true', () => {
+    const pose = migrateCharacterData(poseWith('ProportionHeight.fbx')).sections.FBM.groups[0].poses[0]
+    expect(pose.boneScaleRef).toBe(true)
+    expect(pose.referenceFbx).toBeUndefined()
+  })
+
+  it('turns an empty (or whitespace) path into boneScaleRef: false', () => {
+    const pose = migrateCharacterData(poseWith('   ')).sections.FBM.groups[0].poses[0]
+    expect(pose.boneScaleRef).toBe(false)
+    expect(pose.referenceFbx).toBeUndefined()
+  })
+
+  it('is idempotent — migrating twice yields the same result', () => {
+    const once = migrateCharacterData(poseWith('a.fbx'))
+    const twice = migrateCharacterData(structuredClone(once))
+    expect(twice).toEqual(once)
+    expect(twice.sections.FBM.groups[0].poses[0].boneScaleRef).toBe(true)
+  })
+})
+
 describe('normalizeLegacyCharacter', () => {
   it('is exported for direct use and returns the same (mutated) object', () => {
     const input = { sections: { GEN: { presetVariant: 'gp' } } }

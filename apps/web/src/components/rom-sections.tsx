@@ -224,7 +224,7 @@ export function RomSections({
       id: newId(),
       name: pose.name,
       morphs: pose.morphs,
-      referenceFbx: '',
+      boneScaleRef: false,
     }))
     const config = sections[section]
     const newGroup = (): RomGroup => ({

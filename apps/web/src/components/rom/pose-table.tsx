@@ -3,9 +3,7 @@ import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { createColumnHelper, flexRender } from '@tanstack/react-table'
-import { ChevronDown, ChevronRight, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
-
-import { pickFbxPath } from '#/lib/desktop.ts'
+import { ChevronDown, ChevronRight, GripVertical, Plus, Trash2 } from 'lucide-react'
 
 import type { Row } from '@tanstack/react-table'
 
@@ -30,7 +28,7 @@ export interface PoseTableMeta {
   startFrame: number
   /** Absolute frames whose morphs failed in the last ROM run — rows marked red. */
   failedFrames?: Set<number>
-  showReferenceFbx: boolean
+  showBoneScale: boolean
   expandedIds: Set<string>
   toggleExpanded: (poseId: string) => void
   update: (rowIndex: number, patch: Partial<RomPose>) => void
@@ -196,30 +194,34 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         />
       ),
   }),
-  columnHelper.accessor('referenceFbx', {
-    id: 'referenceFbx',
-    header: 'Reference FBX',
+  columnHelper.accessor('boneScaleRef', {
+    id: 'boneScaleRef',
+    header: () => (
+      <span className="flex items-center gap-1">
+        Bone scale
+        <InfoPopup label="Bone scale — more information">
+          Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length,
+          Proportion Height). Unreal can't drive bone scale from a morph alone, so the DTH
+          Exporter writes a per-frame <strong>reference-skeleton FBX</strong> for this frame and
+          the studio fills its path into the PoseAsset CSV automatically. Needs an export
+          directory set.
+        </InfoPopup>
+      </span>
+    ),
     cell: ({ getValue, row, table }) => (
-      <div className="flex items-center gap-1">
-        <TextCell
-          value={getValue()}
-          placeholder="optional .fbx path"
-          onCommit={(referenceFbx) =>
-            (table.options.meta as PoseTableMeta).update(row.index, { referenceFbx })
+      <span className="flex justify-center">
+        <input
+          type="checkbox"
+          className="size-3.5 accent-primary"
+          title="This morph scales bones — export a reference-skeleton FBX for it"
+          checked={getValue()}
+          onChange={(e) =>
+            (table.options.meta as PoseTableMeta).update(row.index, {
+              boneScaleRef: e.target.checked,
+            })
           }
         />
-        <button
-          type="button"
-          className="flex shrink-0 items-center px-1 text-muted-foreground/60 hover:text-foreground"
-          title="Pick the reference FBX with a file dialog"
-          onClick={async () => {
-            const path = await pickFbxPath()
-            if (path) (table.options.meta as PoseTableMeta).update(row.index, { referenceFbx: path })
-          }}
-        >
-          <FolderOpen className="size-3.5" />
-        </button>
-      </div>
+      </span>
     ),
   }),
   columnHelper.display({

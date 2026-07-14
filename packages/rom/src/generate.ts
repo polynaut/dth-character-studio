@@ -268,7 +268,14 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
     // in the custom sequence (both artifacts derive from THIS shared offset).
     const frame = lastPresetFrame + 1 + relativeFrame
     const name = sanitizePoseName(pose.name)
-    const refFbx = csvSafe(pose.referenceFbx ?? '')
+    // A bone-scale frame's reference FBX: the studio can't know the absolute path
+    // at generation time (the export dir — scene subfolder included — is resolved
+    // in Daz at run time), so it writes a {{DTH_EXPORT_DIR}} token that the
+    // generated script substitutes when it copies the CSV. The filename matches
+    // what the DTH Exporter writes: <ExportDir>/Reference Skeletons/<Name>_frame_<N>.fbx.
+    const refFbx = pose.boneScaleRef
+      ? csvSafe(`{{DTH_EXPORT_DIR}}/Reference Skeletons/${character.name}_frame_${frame}.fbx`)
+      : ''
     if (section === 'FBM' || section === 'MISC') {
       rows.push(`${section === 'MISC' ? 'MIS' : 'FBM'},${frame},${name},${refFbx}`)
       continue
@@ -291,10 +298,10 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
 }
 
 /**
- * Absolute timeline frames of the poses that carry a reference-skeleton FBX
- * (`referenceFbx` — the bone-scaling poses in GEN/FBM/MISC). These are the DTH
- * Exporter's "reference frames". Frames are assigned in the same canonical order
- * as the PoseAsset CSV (both walk {@link walkCustomPoses} from the same
+ * Absolute timeline frames of the bone-scale poses (`boneScaleRef` in
+ * GEN/FBM/MISC). These are the DTH Exporter's "reference frames" — the ones it
+ * writes a reference-skeleton FBX for. Frames are assigned in the same canonical
+ * order as the PoseAsset CSV (both walk {@link walkCustomPoses} from the same
  * {@link presetEndFrame} offset), so they match the timeline `ApplyDTHCharacter`
  * builds.
  */
@@ -306,7 +313,7 @@ export function referenceFrames(character: Character, frames: PresetFrames): Arr
   const lastPresetFrame = presetEndFrame(character.sections, character.gender, frames)
   const out: Array<number> = []
   for (const { pose, relativeFrame } of walkCustomPoses(character.sections)) {
-    if ((pose.referenceFbx ?? '').trim()) out.push(lastPresetFrame + 1 + relativeFrame)
+    if (pose.boneScaleRef) out.push(lastPresetFrame + 1 + relativeFrame)
   }
   return out
 }
@@ -536,18 +543,29 @@ function buildExportBlock(
 `
     : ''
   const csvCopyBlock = charFolderAbs
-    ? `    // Copy the generated PoseAsset CSV next to the exporter output.
+    ? `    // Copy the generated PoseAsset CSV next to the exporter output, resolving
+    // the {{DTH_EXPORT_DIR}} token in any bone-scale reference-FBX path to the
+    // real (run-time) export dir — Houdini's PoseAsset wants absolute paths, and
+    // the dir (scene subfolder included) is only known now. Source is left intact
+    // so the next scene's export can reuse it.
     var dthCsvName = ${JSON.stringify(poseAssetFileName(character))};
     var dthCsvSrcDir = new DzDir(${JSON.stringify(charFolderAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
         if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
         var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
-        var dthCsvOld = new DzFile(dthCsvDst);
-        if (dthCsvOld.exists()) dthCsvOld.remove();
         var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
-        if (dthCsvSrc.copy(dthCsvDst)) print("Copied " + dthCsvName + " to " + dthCsvDst);
-        else print("Failed to copy " + dthCsvName + " to " + dthCsvDst);
+        if (dthCsvSrc.open(dthCsvSrc.ReadOnly)) {
+            var dthCsvText = String(dthCsvSrc.read());
+            dthCsvSrc.close();
+            dthCsvText = dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir);
+            var dthCsvOut = new DzFile(dthCsvDst);
+            if (dthCsvOut.open(dthCsvOut.WriteOnly | dthCsvOut.Truncate)) {
+                dthCsvOut.write(dthCsvText);
+                dthCsvOut.close();
+                print("Copied " + dthCsvName + " to " + dthCsvDst);
+            } else print("Failed to write " + dthCsvName + " to " + dthCsvDst);
+        } else print("Failed to read " + dthCsvName + " for copy.");
     } else {
         print("PoseAsset CSV not found in the character folder — nothing to copy.");
     }

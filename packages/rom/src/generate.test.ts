@@ -52,13 +52,13 @@ function fbmGroup(): RomGroup {
         id: 'p1',
         name: 'BodyTone',
         morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
-        referenceFbx: '',
+        boneScaleRef: false,
       },
       {
         id: 'p2',
         name: 'Glute UpDown',
         morphs: [{ node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1 }],
-        referenceFbx: '',
+        boneScaleRef: false,
       },
     ],
   }
@@ -152,7 +152,7 @@ describe('mirrorGroup', () => {
           id: 'pl',
           name: 'MajoraPush1',
           morphs: [{ node: 'Golden Palace', prop: 'GPL_Majora_Push 1_Left', value: 1 }],
-          referenceFbx: '',
+          boneScaleRef: false,
         },
       ],
     }
@@ -580,8 +580,8 @@ describe('toPoseAssetCsv', () => {
         method: 'individual',
         calculateFrom: 'default',
         poses: [
-          { id: 'p1', name: 'BallBD40', morphs: [], referenceFbx: '' },
-          { id: 'p2', name: 'BallBU60', morphs: [], referenceFbx: '' },
+          { id: 'p1', name: 'BallBD40', morphs: [], boneScaleRef: false },
+          { id: 'p2', name: 'BallBU60', morphs: [], boneScaleRef: false },
         ],
       },
     ]
@@ -619,7 +619,7 @@ describe('toPoseAssetCsv', () => {
               suffix: 'centre',
               method: 'individual',
               calculateFrom: 'default',
-              poses: [{ id: 'r', name: 'Ref', morphs: [], referenceFbx: 'ref.fbx' }],
+              poses: [{ id: 'r', name: 'Ref', morphs: [], boneScaleRef: true }],
             },
           ],
         },
@@ -640,7 +640,7 @@ describe('toPoseAssetCsv', () => {
     expect(content.split('\n').some((l) => l.trim().startsWith('DzFile('))).toBe(false)
   })
 
-  it('sanitizes commas/newlines out of CSV group labels + reference FBX', () => {
+  it('sanitizes commas/newlines out of CSV group labels', () => {
     const sections = makeSections()
     sections.JCM.mode = 'custom'
     sections.JCM.groups = [
@@ -650,13 +650,30 @@ describe('toPoseAssetCsv', () => {
         suffix: 'left',
         method: 'individual',
         calculateFrom: 'default',
-        poses: [{ id: 'p', name: 'Pose', morphs: [], referenceFbx: 'a,b\nc.fbx' }],
+        poses: [{ id: 'p', name: 'Pose', morphs: [], boneScaleRef: false }],
       },
     ]
     const rows = toPoseAssetCsv(makeCharacter({ sections }), FRAMES).content.split('\n')
     const group = rows.find((r) => r.startsWith('JCMGROUP')) ?? ''
     expect(group).toBe('JCMGROUP,1,0,evil label injected') // comma + newline → space
     expect(rows.every((r) => !r.includes('\n'))).toBe(true)
+  })
+
+  it('a bone-scale frame emits the reference-FBX token path in the CSV file column', () => {
+    const sections = makeSections()
+    sections.JCM.enabled = false
+    sections.GEN.enabled = false
+    sections.FBM.groups[0].poses[0].boneScaleRef = true
+    const character = makeCharacter({ name: 'Karen', sections })
+    const fbmRows = toPoseAssetCsv(character, FRAMES)
+      .content.split('\n')
+      .filter((r) => r.startsWith('FBM,'))
+    const ref = fbmRows.find((r) => r.includes('{{DTH_EXPORT_DIR}}')) ?? ''
+    const frame = ref.split(',')[1]
+    // Filename matches what the DTH Exporter writes, under a Reference Skeletons subdir.
+    expect(ref).toContain(`{{DTH_EXPORT_DIR}}/Reference Skeletons/Karen_frame_${frame}.fbx`)
+    // Non-bone-scale FBM rows keep an empty file column.
+    expect(fbmRows.filter((r) => r.endsWith(',')).length).toBeGreaterThan(0)
   })
 })
 
@@ -732,7 +749,7 @@ describe('exporter integration', () => {
   function withReferencePose(overrides: Partial<Character> = {}): Character {
     const sections = makeSections()
     sections.GEN.enabled = false
-    sections.FBM.groups[0].poses[0].referenceFbx = 'ProportionHeight.fbx'
+    sections.FBM.groups[0].poses[0].boneScaleRef = true
     return makeCharacter({ sections, ...overrides })
   }
 
@@ -783,8 +800,9 @@ describe('exporter integration', () => {
     const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra').content
     expect(content).toContain('var dthCsvName = "Electra_pose_asset.csv";')
     expect(content).toContain('var dthCsvSrcDir = new DzDir("D:/lib/Electra");')
-    // A copy (not a move) so the source survives for the next scene's export.
-    expect(content).toContain('dthCsvSrc.copy(dthCsvDst)')
+    // A read-replace-write (not a move): the source survives for the next scene's
+    // export, and the {{DTH_EXPORT_DIR}} token resolves to the real run-time dir.
+    expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir)')
     expect(content).not.toContain('.move(')
     // Destination is the resolved export dir (dthExportDir), so the scene
     // subfolder is included when that option is on.
@@ -822,7 +840,7 @@ describe('exporter integration', () => {
     expect(exportScript.fileName).toBe('Export_Electra_G9.dsa')
     expect(exportScript.content).not.toContain('ApplyDTHCharacter(') // no ROM rebuild
     expect(exportScript.content).toContain('doExport')
-    expect(exportScript.content).toContain('dthCsvSrc.copy(dthCsvDst)')
+    expect(exportScript.content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir)')
 
     expect(generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',

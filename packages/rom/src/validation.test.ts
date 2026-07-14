@@ -10,7 +10,7 @@ function pose(name: string, props: Array<string>): RomPose {
     id: `pose-${name}-${props.join('|')}`,
     name,
     morphs: props.map((prop) => ({ node: 'Genesis9', prop, value: 1 })),
-    referenceFbx: '',
+    boneScaleRef: false,
   }
 }
 
