@@ -4,10 +4,11 @@ An **attachment** is a reusable Daz scene (`.duf`) that **isn't a full character
 base figure, a prop, an outfit, a look you start from — that you keep organized
 inside a project alongside its characters. It's an **opt-in, per-project** feature.
 
-Think of it as a labelled shelf plus a one-click "open this in Daz" button, not a
-character generator. Adding an attachment does **not** create or pre-fill a character
-— the link to characters stays manual (open the scene in Daz, build your character
-from it, save its `.duf`, then add a character pointing at that scene).
+> [!NOTE]
+> Think of it as a labelled shelf plus a one-click "open this in Daz" button, not a
+> character generator. Adding an attachment does **not** create or pre-fill a character
+> — the link to characters stays manual (open the scene in Daz, build your character
+> from it, save its `.duf`, then add a character pointing at that scene).
 
 ---
 
@@ -18,7 +19,11 @@ shows inside a project window) and turn on **Enable attachments**, then Save. Th
 setting is stored in that project's `.dcsp` file, so you enable it per project that
 wants it.
 
-<!-- screenshot: Settings → Project → Enable attachments -->
+<p align="center">
+  <img width="900" alt="Settings → Project → Enable attachments" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>Enable attachments in Settings → Project.</em></sub>
+</p>
 
 With it **off**, the project shows characters only. With it **on**, the project page
 grows a **Characters / Attachments** tab bar, and the "Add" panel gains a **Character
@@ -40,7 +45,11 @@ On the **Attachments** tab, press **Add** and fill in:
    - Turn the copy switch **off** to **link in place** — the scene stays where it
      is and the attachment just records its path.
 
-<!-- screenshot: Add attachment panel -->
+<p align="center">
+  <img width="900" alt="Add attachment panel" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The Add attachment panel with its scene thumbnail preview.</em></sub>
+</p>
 
 **Copy vs link — the one thing to understand:**
 

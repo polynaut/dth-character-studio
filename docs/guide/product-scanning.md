@@ -6,8 +6,9 @@ assets to your installed products, and writes a CSV the studio reads back so you
 review and **store the product list on the character** (product name, SKU, artist,
 version). Useful for provenance, licensing notes, or rebuilding a character later.
 
-It's **opt-in, per project**, and completely optional — it never affects ROM
-generation.
+> [!NOTE]
+> It's **opt-in, per project**, and completely optional — it never affects ROM
+> generation.
 
 ---
 
@@ -20,7 +21,11 @@ the project's `.dcsp`). With it on:
   script, and
 - the character page gains a **Products** tab.
 
-<!-- screenshot: Settings → Project → Enable Daz Products -->
+<p align="center">
+  <img width="900" alt="Settings → Project → Enable Daz Products" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>Enable Daz Products in Settings → Project.</em></sub>
+</p>
 
 ## Set the DIM manifests folder (for names, SKUs, artists)
 
@@ -34,7 +39,11 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 - **Leave it empty and the scan still runs** — it just lists the used assets without
   naming products. A reminder appears on the Products tab when it's unset.
 
-<!-- screenshot: DIM manifests folder field + Detect button -->
+<p align="center">
+  <img width="900" alt="DIM manifests folder field + Detect button" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The DIM manifests folder field with its Detect button.</em></sub>
+</p>
 
 ---
 
@@ -46,12 +55,17 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
    script under `Scripts/DTH-Character-Studio/<Project>/<Character>/`).
 4. It analyses the **currently-open** scene and writes a CSV named after that scene.
 
-<!-- screenshot: running the scan in Daz -->
+<p align="center">
+  <img width="900" alt="running the scan in Daz" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>Running the product scan on the open scene in Daz.</em></sub>
+</p>
 
-**Per-scene by design.** The CSV is named after the open scene, so scanning an
-outfit variant, a different look, etc. produces **separate** CSVs that don't
-overwrite each other — run the script once per scene you want covered, and the
-studio merges them, attributing each product to the scene(s) it appeared in.
+> [!NOTE]
+> **Per-scene by design.** The CSV is named after the open scene, so scanning an
+> outfit variant, a different look, etc. produces **separate** CSVs that don't
+> overwrite each other — run the script once per scene you want covered, and the
+> studio merges them, attributing each product to the scene(s) it appeared in.
 
 Behind the scenes it matches assets strongest-first: the file the asset came from →
 its textures' folder → SKU → product keywords → known third-party products (e.g.
@@ -67,7 +81,11 @@ you delete the character) — see [Storage & housekeeping](./tools.md).
 Switch to the character's **Products** tab. **Check for scan results** re-reads the
 CSVs from disk.
 
-<!-- screenshot: Products tab, matched products table -->
+<p align="center">
+  <img width="900" alt="Products tab, matched products table" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The matched products table on the character's Products tab.</em></sub>
+</p>
 
 - **Matched products** — a table of **Product · Used as · SKU · Artist · Version ·
   Match** (with a per-scene filter when a character has several scanned scenes).

@@ -1,13 +1,18 @@
 # Advanced character options
 
-None of these are needed for a working ROM — reach for them when a character needs
-finer control over how the ROM is built or how its morphs behave. They live on the
-**character page**: an **Advanced options** panel (collapsed by default), plus the
-**Modify JCM frames** grid inside the JCM section.
+> [!NOTE]
+> None of these are needed for a working ROM — reach for them when a character needs
+> finer control over how the ROM is built or how its morphs behave. They live on the
+> **character page**: an **Advanced options** panel (collapsed by default), plus the
+> **Modify JCM frames** grid inside the JCM section.
 
 ## The "Advanced options" panel
 
-<!-- screenshot: character page, Advanced options panel expanded -->
+<p align="center">
+  <img width="900" alt="character page, Advanced options panel expanded" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The Advanced options panel expanded on the character page.</em></sub>
+</p>
 
 Expand **Advanced options** near the top of the character page for four settings:
 
@@ -44,7 +49,11 @@ through their range and the stock correctives fire. To ride *your own* morphs al
 with those bends, the JCM section has a **Modify JCM frames** grid: an optional
 power feature, collapsed by default.
 
-<!-- screenshot: JCM section, "Modify JCM frames" grid expanded -->
+<p align="center">
+  <img width="900" alt="JCM section, Modify JCM frames grid expanded" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The Modify JCM frames grid expanded in the JCM section.</em></sub>
+</p>
 
 You build it from **rules**, each watching **one bone's rotation axis** (XRotate /
 YRotate / ZRotate) across the JCM ROM. A rule's **drives** are the morphs it sets
