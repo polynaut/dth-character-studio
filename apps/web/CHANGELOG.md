@@ -1,5 +1,17 @@
 # @dth/web
 
+## 0.41.24
+
+### Patch Changes
+
+- [#272](https://github.com/polynaut/dth-character-studio/pull/272) [`c6d0167`](https://github.com/polynaut/dth-character-studio/commit/c6d01670bbf89b19ca3f812f6da838e63dff411e) Thanks [@polynaut](https://github.com/polynaut)! - Turn off browser spellcheck across the app. The text fields hold morph/property
+  names, node labels and paths (e.g. `GP_Vagina_Open_Stretch`), not prose, so the red
+  squiggly underline was pure noise. Set `spellcheck="false"` on `<body>` — it's an
+  inherited attribute, so it covers every input, including the raw ROM-cell fields.
+- Updated dependencies []:
+  - @dth/rom@0.41.24
+  - @dth/ui@0.41.24
+
 ## 0.41.23
 
 ### Patch Changes
