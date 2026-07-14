@@ -11,7 +11,9 @@
     <link rel="manifest" href="/manifest.json" />
     <title>DTH Character Studio</title>
   </head>
-  <body>
+  <!-- spellcheck is inherited, so this turns off the red squiggles on every input
+       in the app — the fields hold morph/property names and paths, not prose. -->
+  <body spellcheck="false">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
