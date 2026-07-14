@@ -8,11 +8,13 @@ Tools is for the extras beyond that.
 
 It has three tabs.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Tools page, three tabs" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Tools page and its three tabs.</em></sub>
 </p>
+-->
 
 ---
 
@@ -28,11 +30,13 @@ an open scene and it writes a CSV of *every* morph on the figure — then a ROM
 section's **Import from CSV** (in the character editor) pulls that morph list
 straight into the character, so you don't type morph names by hand.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="DazToHue-Scripts tab" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The DazToHue-Scripts tab with Dry run / Install.</em></sub>
 </p>
+-->
 
 ---
 
@@ -52,11 +56,13 @@ there**. When two products ship the same file, the winner is picked automaticall
 the **bigger file** — so only the winning copy installs. **Scan** lists what's
 found; **Install** copies only what changed.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Daz assets install section" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Daz assets install section.</em></sub>
 </p>
+-->
 
 ### Deduplicate
 
@@ -70,11 +76,13 @@ download) — you **Accept** them instead, which tells the scan they're legitima
 shared. See also the [nested-zip handling](./tools.md) for store "wrapper"
 downloads (a zip inside a zip) — the scan looks inside them automatically.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Deduplicate section" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Deduplicate section for redundant and conflicting assets.</em></sub>
 </p>
+-->
 
 ### Storage & housekeeping
 
@@ -86,11 +94,13 @@ The studio ages out **its own** generated data so it can't fill your disk:
 - **Empty quarantine** — shows the dedup quarantine's size and lets you reclaim it
   with a confirm. Never emptied automatically — it's your reversible backup.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Storage &amp; housekeeping section" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Storage &amp; housekeeping section.</em></sub>
 </p>
+-->
 
 ### Custom morphs · Daz presets
 
@@ -112,11 +122,13 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 > **always Dry run first**. As a safety rail the studio refuses to delete a
 > drive/profile root or any folder that isn't Daz-owned.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Danger zone" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Danger zone for removing leftover Daz folders.</em></sub>
 </p>
+-->
 
 ---
 
@@ -129,10 +141,12 @@ matter which window you run it from. **Your character definitions are never
 changed** — only their generated output. Problems per character are listed inline;
 the button pulses orange when a refresh is due.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Refresh assets tab" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Refresh assets tab.</em></sub>
 </p>
+-->
 
 [← Guide overview](./README.md)

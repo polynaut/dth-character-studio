@@ -21,11 +21,13 @@ the project's `.dcsp`). With it on:
   script, and
 - the character page gains a **Products** tab.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Settings → Project → Enable Daz Products" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>Enable Daz Products in Settings → Project.</em></sub>
 </p>
+-->
 
 ## Set the DIM manifests folder (for names, SKUs, artists)
 
@@ -39,11 +41,13 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 - **Leave it empty and the scan still runs** — it just lists the used assets without
   naming products. A reminder appears on the Products tab when it's unset.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="DIM manifests folder field + Detect button" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The DIM manifests folder field with its Detect button.</em></sub>
 </p>
+-->
 
 ---
 
@@ -55,11 +59,13 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
    script under `Scripts/DTH-Character-Studio/<Project>/<Character>/`).
 4. It analyses the **currently-open** scene and writes a CSV named after that scene.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="running the scan in Daz" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>Running the product scan on the open scene in Daz.</em></sub>
 </p>
+-->
 
 > [!NOTE]
 > **Per-scene by design.** The CSV is named after the open scene, so scanning an
@@ -81,11 +87,13 @@ you delete the character) — see [Storage & housekeeping](./tools.md).
 Switch to the character's **Products** tab. **Check for scan results** re-reads the
 CSVs from disk.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="Products tab, matched products table" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The matched products table on the character's Products tab.</em></sub>
 </p>
+-->
 
 - **Matched products** — a table of **Product · Used as · SKU · Artist · Version ·
   Match** (with a per-scene filter when a character has several scanned scenes).
