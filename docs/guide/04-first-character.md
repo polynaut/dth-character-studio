@@ -124,34 +124,6 @@ one (a pose always keeps at least one).
 
 </details>
 
-### Layering extra morphs onto JCM — "Modify JCM frames"
-
-The **JCM** section runs the shipped joint-corrective-morph poses — bones rotate
-through their range and the stock correctives fire. To ride *your own* morphs along
-with those bends, the JCM section has a **Modify JCM frames** grid: an optional
-power feature, collapsed by default.
-
-<!-- screenshot: JCM section, "Modify JCM frames" grid expanded -->
-
-You build it from **rules**, each watching **one bone's rotation axis** (XRotate /
-YRotate / ZRotate) across the JCM ROM. A rule's **drives** are the morphs it sets
-proportionally to the keyed angle — the **angle range maps linearly onto a value
-range** — and you list them separately for **positive** and **negative** rotation,
-so a bend each way can trigger different morphs. Example: layer a custom calf-flex
-morph on top of the shipped knee-bend poses.
-
-Each drive is one row:
-
-- **Rotation** — `positive` or `negative` (which way the bone turns).
-- **Morph name** — the morph to drive (autocompletes, same as everywhere else).
-- **Angle from / to** — the bone angles, in degrees, over which the morph ramps.
-- **Value from / to** — the morph's value at those angles (raw, `1` = 100%).
-
-**Add rule** starts a new bone/axis; **Add morph drive** adds a row to a rule. The
-**mirror** button copies a rule to the other side, flipping every Left/Right and
-`_L`/`_R` token in the bone and morph names while carrying the angles and values
-over unchanged — so you set a limb up once and mirror it.
-
 ### Finding a morph's internal Daz name
 
 The internal name usually differs from the slider's label (label *Body Tone* →
