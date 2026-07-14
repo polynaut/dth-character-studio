@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.31
+
+### Patch Changes
+
+- [#287](https://github.com/polynaut/dth-character-studio/pull/287) [`5b17fb9`](https://github.com/polynaut/dth-character-studio/commit/5b17fb956d00c417a505d0356dab99c12ea2137e) Thanks [@polynaut](https://github.com/polynaut)! - When a blocked Save jumps to the offending pose row, focus the field that's actually flagged. It used to focus the first _empty_ input in the row, which for a filled-but-invalid name (e.g. one with a space) landed on the empty optional Reference FBX field instead. It now prefers the red-bordered (`aria-invalid`) input and only falls back to the first empty one — so the cursor lands where the error is.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.31
+  - @dth/ui@0.41.31
+
 ## 0.41.30
 
 ### Patch Changes
