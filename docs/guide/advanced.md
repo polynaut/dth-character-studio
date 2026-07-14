@@ -35,6 +35,15 @@ first custom frame, so its morphs don't **leak** into your full-body and custom
 poses. Turn it on when a GEN preset and your own FBM/custom morphs are both enabled
 and you see genital shapes bleeding into later frames.
 
+### Set UE5 tear UV *(Genesis 9 only)*
+
+A toggle, shown only for **G9** characters. When on, the generated ROM script
+switches the **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the
+build — so DTH's **Lacrimal Fluid** material lines up without you doing the manual
+*Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only matters
+if you use that material, and an example UE5 tear UV only ships for Genesis 9 — so
+it's off by default and hidden on G8/G3 characters.
+
 ### Preserve morphs after ROM loading
 
 The DTH ROM zeroes morphs as it loads. Any morph you list here is **restored to the

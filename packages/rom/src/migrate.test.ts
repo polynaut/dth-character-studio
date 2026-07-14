@@ -102,6 +102,22 @@ describe('characterSchema — v8 product fields (additive)', () => {
   })
 })
 
+// v9 added `applyUE5TearUV` — additive with a `false` default, so there is no
+// migrate step; zod fills it when reading an older (v8-shaped) definition.
+describe('characterSchema — v9 applyUE5TearUV (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('defaults applyUE5TearUV to false for a v8-shaped definition', () => {
+    const parsed = characterSchema.parse({ ...base, schemaVersion: 8 })
+    expect(parsed.applyUE5TearUV).toBe(false)
+  })
+
+  it('round-trips a stored true value', () => {
+    const parsed = characterSchema.parse({ ...base, applyUE5TearUV: true })
+    expect(parsed.applyUE5TearUV).toBe(true)
+  })
+})
+
 describe('normalizeLegacyCharacter', () => {
   it('is exported for direct use and returns the same (mutated) object', () => {
     const input = { sections: { GEN: { presetVariant: 'gp' } } }

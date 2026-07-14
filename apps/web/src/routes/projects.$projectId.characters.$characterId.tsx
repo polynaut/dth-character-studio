@@ -876,6 +876,22 @@ function CharacterPage() {
               </InfoPopup>
             </span>
           </div>
+          {character.genesis === 'G9' && (
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={character.applyUE5TearUV}
+                onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
+              />
+              <span className="flex items-center gap-1 text-sm">
+                Set UE5 tear UV
+                <InfoPopup label="Set UE5 tear UV — more information">
+                  Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the ROM
+                  build, so DTH's Lacrimal Fluid material lines up without the manual
+                  Surfaces-tab step. Genesis 9 only.
+                </InfoPopup>
+              </span>
+            </div>
+          )}
           <PreserveFields character={character} patch={patch} />
         </div>
       </details>
