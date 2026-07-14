@@ -8,11 +8,13 @@
    **Scripts → DTH-Character-Studio → \<Project\> → \<Character\>**.
 3. Double-click **`ROM_<Name>_G9`**.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="daz content library, character script" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The character's ROM script in Daz's Content Library.</em></sub>
 </p>
+-->
 
 The script builds the entire ROM on the timeline — every section you enabled,
 every morph on its exact frame. Depending on the ROM's size this takes a moment;
@@ -30,11 +32,13 @@ the script reports what it did when it finishes.
 Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
 (v1.8.1+, installed in step 2):
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="character page, export directory section" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The export directory section on the character page.</em></sub>
 </p>
+-->
 
 1. On the character page, set an **Export directory** and Save.
 2. Run the script in Daz as above — after building the ROM it now runs the

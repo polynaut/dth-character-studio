@@ -16,11 +16,13 @@ covers the network in depth; this page is just the hand-off.
 In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="houdini, daztohue hda poseasset import" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>Point the DazToHue HDA's PoseAsset import at the character's CSV.</em></sub>
 </p>
+-->
 
 > [!NOTE]
 > That's the whole trick: the CSV was generated from the **same definition** as the
