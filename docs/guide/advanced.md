@@ -1,10 +1,14 @@
 # Advanced character options
 
+&nbsp;
+
 > [!NOTE]
 > None of these are needed for a working ROM — reach for them when a character needs
 > finer control over how the ROM is built or how its morphs behave. They live on the
 > **character page**: an **Advanced options** panel (collapsed by default), plus the
 > **Modify JCM frames** grid inside the JCM section.
+
+&nbsp;
 
 ## The "Advanced options" panel
 

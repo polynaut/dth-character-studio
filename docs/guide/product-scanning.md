@@ -6,9 +6,13 @@ assets to your installed products, and writes a CSV the studio reads back so you
 review and **store the product list on the character** (product name, SKU, artist,
 version). Useful for provenance, licensing notes, or rebuilding a character later.
 
+&nbsp;
+
 > [!NOTE]
 > It's **opt-in, per project**, and completely optional — it never affects ROM
 > generation.
+
+&nbsp;
 
 ---
 
@@ -67,11 +71,15 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 </p>
 -->
 
+&nbsp;
+
 > [!NOTE]
 > **Per-scene by design.** The CSV is named after the open scene, so scanning an
 > outfit variant, a different look, etc. produces **separate** CSVs that don't
 > overwrite each other — run the script once per scene you want covered, and the
 > studio merges them, attributing each product to the scene(s) it appeared in.
+
+&nbsp;
 
 Behind the scenes it matches assets strongest-first: the file the asset came from →
 its textures' folder → SKU → product keywords → known third-party products (e.g.

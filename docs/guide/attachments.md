@@ -4,11 +4,15 @@ An **attachment** is a reusable Daz scene (`.duf`) that **isn't a full character
 base figure, a prop, an outfit, a look you start from — that you keep organized
 inside a project alongside its characters. It's an **opt-in, per-project** feature.
 
+&nbsp;
+
 > [!NOTE]
 > Think of it as a labelled shelf plus a one-click "open this in Daz" button, not a
 > character generator. Adding an attachment does **not** create or pre-fill a character
 > — the link to characters stays manual (open the scene in Daz, build your character
 > from it, save its `.duf`, then add a character pointing at that scene).
+
+&nbsp;
 
 ---
 

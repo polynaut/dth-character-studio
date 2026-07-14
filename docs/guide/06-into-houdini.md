@@ -24,11 +24,15 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 </p>
 -->
 
+&nbsp;
+
 > [!NOTE]
 > That's the whole trick: the CSV was generated from the **same definition** as the
 > Daz script you just ran, so every frame Houdini expects is exactly where Daz put
 > it. Change the character in the studio later, Save, re-run the script, re-export —
 > both sides move together.
+
+&nbsp;
 
 From here, continue with the [DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)
 documentation for the Houdini → Unreal leg.

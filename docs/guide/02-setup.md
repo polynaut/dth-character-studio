@@ -93,9 +93,13 @@ direct export.
 Press **Save** at the top. The studio scans the release's pose presets — you're
 ready to create a project.
 
+&nbsp;
+
 > [!NOTE]
 > **Extras (later):** the **Tools** page can also install your own Daz assets,
 > custom morphs, and Daz/Houdini presets into the right places — none of it is
 > needed for your first character.
+
+&nbsp;
 
 [← Install the app](./01-installation.md) · [Next: Your first project →](./03-first-project.md)

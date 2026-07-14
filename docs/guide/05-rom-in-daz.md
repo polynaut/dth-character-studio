@@ -20,12 +20,16 @@ The script builds the entire ROM on the timeline — every section you enabled,
 every morph on its exact frame. Depending on the ROM's size this takes a moment;
 the script reports what it did when it finishes.
 
+&nbsp;
+
 > [!NOTE]
 > If anything couldn't be applied — a morph missing from the scene, a preset that
 > failed to load — the script says so in a dialog at the end, and the studio shows
 > the exact list the moment you switch back to it. The ROM's frame count is never
 > affected: a missing morph leaves its frames empty instead of shifting everything
 > after it.
+
+&nbsp;
 
 ## Direct export (optional, recommended)
 
@@ -55,9 +59,13 @@ Two switches tune this:
   **`Export_<Name>_G9.dsa`** — run it after the ROM script; handy for
   re-exporting (another scene, or after a hiccup) without rebuilding the ROM.
 
+&nbsp;
+
 > [!NOTE]
 > No export directory set? The ROM is still built in Daz — export manually with the
 > DTH Exporter as described in the DazToHue docs; the PoseAsset CSV is waiting in
 > the character's folder.
+
+&nbsp;
 
 [← Your first character](./04-first-character.md) · [Next: Into Houdini →](./06-into-houdini.md)
