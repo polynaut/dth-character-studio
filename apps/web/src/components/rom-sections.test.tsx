@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 afterEach(cleanup)
@@ -324,6 +324,33 @@ describe('pose Name validation (Houdini-safe)', () => {
     // Underscores are fine — no flag.
     fireEvent.change(nameInput, { target: { value: 'Belly_Muscular2' } })
     expect(nameInput.getAttribute('aria-invalid')).toBeNull()
+  })
+
+  it('a blocked save focuses the flagged name, not the first empty (optional FBX) field', async () => {
+    // A pose whose name is non-empty but Houdini-invalid (a space) — the old
+    // "focus the first empty input" jumped to the empty FBX field instead.
+    const sections = sectionsWithMultiMorphPose()
+    sections.FBM.groups[0].poses[0].name = 'Body Tone'
+    // jsdom has no real layout; stub scrollIntoView so the reveal effect runs.
+    Element.prototype.scrollIntoView = () => {}
+    render(
+      <RomSections
+        sections={sections}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        revealPose={{ section: 'FBM', poseId: 'p1', nonce: 1 }}
+        onChange={() => {}}
+      />,
+    )
+    // The reveal effect opens the section and focuses through a double rAF.
+    await waitFor(() => {
+      const active = document.activeElement as HTMLElement | null
+      expect(active?.getAttribute('aria-invalid')).toBe('true')
+      expect(active?.getAttribute('data-pose-input')).toBe('p1')
+    })
   })
 })
 
