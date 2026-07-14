@@ -59,9 +59,13 @@ mode (your own poses and morphs):
 | FBM | Full-body morphs — where your character's custom morphs go |
 | MISC | Everything else |
 
+&nbsp;
+
 > [!NOTE]
 > The studio computes every frame number from this structure — you never type a
 > frame, and the Daz and Houdini outputs can't drift apart.
+
+&nbsp;
 
 <p align="center">
   <img width="1014" alt="The ROM's eight fixed sections" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
@@ -252,8 +256,12 @@ Press **Save**. Every save regenerates the character's files in one go:
 - **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
   character's folder
 
+&nbsp;
+
 > [!TIP]
 > Change anything later — morphs, sections, export options — and simply Save again;
 > both sides stay in sync by construction.
+
+&nbsp;
 
 [← Your first project](./03-first-project.md) · [Next: Build the ROM in Daz →](./05-rom-in-daz.md)
