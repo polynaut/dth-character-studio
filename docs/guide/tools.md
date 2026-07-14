@@ -115,12 +115,16 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 
 ### Danger zone
 
+&nbsp;
+
 > [!CAUTION]
 > After you uninstall Daz Studio / DIM via Windows "Add or remove programs", leftover
 > folders remain. This **permanently deletes** each listed folder recursively. Use
 > **Prefill folder paths** to add the standard Daz locations, edit the list, and
 > **always Dry run first**. As a safety rail the studio refuses to delete a
 > drive/profile root or any folder that isn't Daz-owned.
+
+&nbsp;
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
