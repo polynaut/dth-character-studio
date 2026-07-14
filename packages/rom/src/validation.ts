@@ -1,7 +1,9 @@
+import { sanitizePoseName } from './generate.ts'
 import { SECTION_LABELS, walkCustomPoses } from './types.ts'
 import type { RomSection, RomSections } from './types.ts'
 
-/** A required field left empty in a custom section — blocks generation/save. */
+/** A required custom-section field that's empty, or a pose name Houdini can't
+ *  accept — either blocks generation/save. */
 export interface RomValidationError {
   section: RomSection
   groupId: string
@@ -16,11 +18,15 @@ export interface RomValidationError {
 }
 
 /**
- * Every empty required field across the enabled custom sections, in canonical
+ * Every invalid required field across the enabled custom sections, in canonical
  * (frame) order — so `errors[0]` is the first offending field on the timeline. A
  * custom pose needs a name and at least one morph, and every morph needs a
  * property name; those are the fields the user types and the generator can't
- * invent. Preset sections have nothing to fill in, so they never error.
+ * invent. The name must also be Houdini-safe (letters, numbers, underscores) —
+ * anything else the generator would silently strip, so it's flagged to save
+ * instead. This mirrors the live cell validation so a red-bordered field can
+ * never slip past Save. Preset sections have nothing to fill in, so they never
+ * error.
  */
 export function romValidationErrors(sections: RomSections): Array<RomValidationError> {
   const errors: Array<RomValidationError> = []
@@ -34,6 +40,15 @@ export function romValidationErrors(sections: RomSections): Array<RomValidationE
         field: 'name',
         relativeFrame,
         message: `${at}: the pose name is empty.`,
+      })
+    } else if (pose.name !== sanitizePoseName(pose.name)) {
+      errors.push({
+        section,
+        groupId: group.id,
+        poseId: pose.id,
+        field: 'name',
+        relativeFrame,
+        message: `${at}: the pose name has characters Houdini rejects — use letters, numbers and underscores only.`,
       })
     }
     if (pose.morphs.length === 0) {
