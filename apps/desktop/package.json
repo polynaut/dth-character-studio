@@ -1,6 +1,6 @@
 {
   "name": "@dth/desktop",
-  "version": "0.41.26",
+  "version": "0.41.27",
   "private": true,
   "description": "Tauri desktop shell for DTH Character Studio — loads the @dth/web SPA and provides native file/dialog/updater access.",
   "scripts": {
