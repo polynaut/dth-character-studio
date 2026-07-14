@@ -31,6 +31,7 @@ import {
   fileExists,
   generateCharacterFiles,
   getCharacterPath,
+  isDirectory,
   setActiveProjectDir,
   resolvePresetFrames,
   saveCharacter,
@@ -47,7 +48,7 @@ import { StorageLocation } from '#/components/storage-location.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
-import { displayPath } from '#/lib/path.ts'
+import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
   characterSkinning,
   countPoses,
@@ -425,8 +426,28 @@ function CharacterPage() {
     }
   }, [deleteOpen, projectId, character.id])
 
+  // Guide the export-folder picker to where the export usually lands: re-choosing
+  // starts at the current dir; a first pick opens in the character's folder —
+  // already inside its Houdini subfolder when that subfolder exists on disk. The
+  // user can still browse elsewhere; this is only where the dialog opens.
+  async function defaultExportDir(): Promise<string | undefined> {
+    if (character.exportPath.trim()) return character.exportPath
+    const defAbs = location?.definitionAbs
+    if (!defAbs) return undefined
+    const charDir = normalizePath(defAbs).replace(/\/[^/]*$/, '')
+    const houSub = project?.houdiniSubdir?.trim()
+    if (houSub) {
+      const houDir = `${charDir}/${houSub}`
+      if (await isDirectory(houDir)) return houDir
+    }
+    return charDir
+  }
+
   async function onPickExportDir() {
-    const picked = await pickFolder('Choose the export directory for the DTH Exporter')
+    const picked = await pickFolder(
+      'Choose the export directory for the DTH Exporter',
+      await defaultExportDir(),
+    )
     if (picked) await patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
   }
 
