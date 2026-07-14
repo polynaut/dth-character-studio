@@ -311,8 +311,15 @@ export function GroupCard({
               ))}
               {group.poses.length === 0 && (
                 <tr>
-                  <td colSpan={poseColumns.length + 1} className="px-4 py-4 text-center text-sm text-muted-foreground">
-                    No poses in this group yet.
+                  {/* Match a pose row's height (td py-0.5 + ~2rem content) so adding
+                      the first morph doesn't shift the layout. */}
+                  <td
+                    colSpan={poseColumns.length + 1}
+                    className="px-4 py-0.5 text-center text-sm text-muted-foreground"
+                  >
+                    <div className="flex min-h-[2rem] items-center justify-center">
+                      No poses in this group yet.
+                    </div>
                   </td>
                 </tr>
               )}
