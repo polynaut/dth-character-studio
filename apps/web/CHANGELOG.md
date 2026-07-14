@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.41.26
+
+### Patch Changes
+
+- [#277](https://github.com/polynaut/dth-character-studio/pull/277) [`2a125ef`](https://github.com/polynaut/dth-character-studio/commit/2a125ef49d35d60fde8437fcabcf31ba8de29643) Thanks [@polynaut](https://github.com/polynaut)! - Add a **Set UE5 tear UV** toggle to a character's Advanced options (Genesis 9 only,
+  opt-in, off by default). When enabled, the generated ROM script switches the
+  Genesis 9 Tear figure's shader UV set to "UE5" during the build — so DTH's Lacrimal
+  Fluid material lines up without the manual Surfaces-tab step, and it can't be
+  forgotten. Character schema → v9 (additive `applyUE5TearUV`, no migration step).
+- Updated dependencies [[`2a125ef`](https://github.com/polynaut/dth-character-studio/commit/2a125ef49d35d60fde8437fcabcf31ba8de29643)]:
+  - @dth/rom@0.41.26
+  - @dth/ui@0.41.26
+
 ## 0.41.25
 
 ### Patch Changes
