@@ -42,8 +42,9 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
 - Every character you create becomes a **subfolder of the project** — definition,
   scenes, and generated files live together, so the project folder is fully
   self-contained and portable.  
-- Per-project options (folder layout, optional Assets and Daz Products features)
-  live in **Settings → Project** — the defaults are fine for a first run.
+- Per-project options (folder layout, optional [Assets](./attachments.md) and
+  [Daz Products](./product-scanning.md) features) live in **Settings → Project** —
+  the defaults are fine for a first run.
   
    <p align="center">
      <img width="722" alt="Settings → Project tab" src="https://github.com/user-attachments/assets/8a59ab2a-9cc6-4499-86ad-bb6e51b82c03" />

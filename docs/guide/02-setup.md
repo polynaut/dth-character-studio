@@ -96,7 +96,7 @@ ready to create a project.
 &nbsp;
 
 > [!NOTE]
-> **Extras (later):** the **Tools** page can also install your own Daz assets,
+> **Extras (later):** the **[Tools](./tools.md)** page can also install your own Daz assets,
 > custom morphs, and Daz/Houdini presets into the right places — none of it is
 > needed for your first character.
 
