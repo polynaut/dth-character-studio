@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.33
+
+### Patch Changes
+
+- [#292](https://github.com/polynaut/dth-character-studio/pull/292) [`065544c`](https://github.com/polynaut/dth-character-studio/commit/065544c7fcc626646898d8ef04f494fa4f1b6a47) Thanks [@polynaut](https://github.com/polynaut)! - Guide the export-directory picker to a sensible starting folder. When no export directory is set yet, the **Choose folder…** dialog now opens in the character's own folder — already inside its Houdini subfolder when that exists — so the export lands where it usually should with one click. Re-choosing an existing directory opens at the current one. You can still browse anywhere; it only changes where the dialog starts.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.33
+  - @dth/ui@0.41.33
+
 ## 0.41.32
 
 ### Patch Changes
