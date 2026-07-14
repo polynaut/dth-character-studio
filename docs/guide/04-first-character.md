@@ -134,6 +134,7 @@ Each pose row has two name fields with very different jobs:
 
 <details>
 <summary><strong>Combining several morphs into one output</strong></summary>
+<table><tr><td>
 
 A pose usually maps one Daz morph to one generated output — but it doesn't have to.
 Each row has a **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
@@ -165,6 +166,7 @@ All the listed morphs are keyed together on that one frame, so they blend into t
 single output named in **Name**. **Add morph** piles on more; the trash icon drops
 one (a pose always keeps at least one).
 
+</td></tr></table>
 </details>
 
 ### Finding a morph's internal Daz name
@@ -190,6 +192,7 @@ routes still work when you just need a single name.
 
 <details>
 <summary><strong>Recommended: scan your morphs once, then autocomplete</strong> — <code>Scan_Morphs_&lt;Genesis&gt;.dsa</code></summary>
+<table><tr><td>
 
 The runtime installation (see [Tools](./tools.md)) puts four visible scan
 scripts into your Daz library at `Scripts/DTH-Character-Studio/`:
@@ -247,6 +250,7 @@ Installed new morph products since the last scan? Just run the scan script
 again — the index is replaced wholesale, and the studio refreshes it the next
 time its window gains focus.
 
+</td></tr></table>
 </details>
 
 ## Save = generate
