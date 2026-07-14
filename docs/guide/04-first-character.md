@@ -2,7 +2,11 @@
 
 ## Create it
 
-<!-- screenshot: project window, create character panel -->
+<p align="center">
+  <img width="900" alt="project window, create character panel" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The Add character panel in the project window.</em></sub>
+</p>
 
 1. In the project window press **Add character** (or drop a `.duf` anywhere).   
 3. **Choose Daz scene…** — the character's scene file.
@@ -12,17 +16,29 @@
 5. **ROM prefill** — start **Empty** for a first character, or prefill from any
    of your own characters (across projects) to copy a working ROM definition.
 
-  <img width="722" height="518" alt="Screenshot 2026-07-13 202915" src="https://github.com/user-attachments/assets/3446cc99-9884-416a-88b0-e6e6f7cc8368" />
+  <p align="center">
+    <img width="722" alt="Character details and ROM prefill" src="https://github.com/user-attachments/assets/3446cc99-9884-416a-88b0-e6e6f7cc8368" />
+    <br>
+    <sub><em>Set Genesis, gender, and the ROM prefill for the new character.</em></sub>
+  </p>
    
 6. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
-   <img width="1014" height="700" alt="Screenshot 2026-07-13 203443" src="https://github.com/user-attachments/assets/9e6b850e-9725-4f5c-9e18-64ee797ce18b" />
+   <p align="center">
+     <img width="1014" alt="The new character's page" src="https://github.com/user-attachments/assets/9e6b850e-9725-4f5c-9e18-64ee797ce18b" />
+     <br>
+     <sub><em>After Create, the scene is copied into the character's folder.</em></sub>
+   </p>
 
 
 ## The ROM definition
 
-<!-- screenshot: character page, ROM sections -->
+<p align="center">
+  <img width="900" alt="character page, ROM sections" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The ROM sections on the character page.</em></sub>
+</p>
 
 A ROM is a fixed sequence of eight sections. Each can be **enabled or disabled**,
 and runs in **Preset** mode (the DTH release's stock pose assets) or **Custom**
@@ -39,16 +55,25 @@ mode (your own poses and morphs):
 | FBM | Full-body morphs — where your character's custom morphs go |
 | MISC | Everything else |
 
-The studio computes every frame number from this structure — you never type a
-frame, and the Daz and Houdini outputs can't drift apart. 
+> [!NOTE]
+> The studio computes every frame number from this structure — you never type a
+> frame, and the Daz and Houdini outputs can't drift apart.
 
-<img width="1014" height="700" alt="Screenshot 2026-07-13 204539" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
+<p align="center">
+  <img width="1014" alt="The ROM's eight fixed sections" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
+  <br>
+  <sub><em>The ROM's eight sections, each enabled and set to Preset or Custom.</em></sub>
+</p>
 
 
 <details>
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
 
-<!-- screenshot: character page, GEN section enabled in Preset mode -->
+<p align="center">
+  <img width="900" alt="character page, GEN section enabled in Preset mode" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The GEN section enabled in Preset mode.</em></sub>
+</p>
 
 **GEN** is the genital geograft's range of motion, and for most characters it's a
 ready-made preset with nothing to fill in. You don't even choose the product — the
@@ -105,7 +130,11 @@ controllers at once. That's how you bake a shape that only exists as a combinati
 of dials — or a controller plus its corrective — into a single clean morph for
 Houdini and Unreal.
 
-<!-- screenshot: a pose row expanded, showing several combined morphs -->
+<p align="center">
+  <img width="900" alt="a pose row expanded, showing several combined morphs" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>A pose row expanded to drive one output from several morphs.</em></sub>
+</p>
 
 Each entry in the expanded list carries its own:
 
@@ -133,9 +162,17 @@ every Morph name field offers matching suggestions as you type. Two manual
 routes still work when you just need a single name.
 
 
-<img width="504" height="154" alt="Screenshot 2026-07-13 205938" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />
+<p align="center">
+  <img width="504" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />
+  <br>
+  <sub><em>A morph's internal name differs from its slider label.</em></sub>
+</p>
 
-<img width="404" height="388" alt="Screenshot 2026-07-13 205952" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
+<p align="center">
+  <img width="404" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
+  <br>
+  <sub><em>A manual route to a morph's internal Daz name.</em></sub>
+</p>
 
 <details>
 <summary><strong>Recommended: scan your morphs once, then autocomplete</strong> — <code>Scan_Morphs_&lt;Genesis&gt;.dsa</code></summary>
@@ -158,11 +195,19 @@ Run the one matching your generation, once per generation:
 2. Select the figure root and run the scan script from the Content Library
    (`Scripts/DTH-Character-Studio/Scan_Morphs_<Genesis>`).
 
-  <img width="960" height="1044" alt="Screenshot 2026-07-13 214606" src="https://github.com/user-attachments/assets/1b381f07-38ae-46f2-8e84-d19e9ff65e1d" />
+  <p align="center">
+    <img width="960" alt="Running the scan script in Daz" src="https://github.com/user-attachments/assets/1b381f07-38ae-46f2-8e84-d19e9ff65e1d" />
+    <br>
+    <sub><em>Select the figure root and run the scan script.</em></sub>
+  </p>
   
 3. A summary tells you how many morphs were found across how many nodes.
 
-  <img width="342" height="91" alt="Screenshot 2026-07-13 214615" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />
+  <p align="center">
+    <img width="342" alt="Scan summary" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />
+    <br>
+    <sub><em>The scan reports how many morphs were found across how many nodes.</em></sub>
+  </p>
 
 That's the whole scan — it indexes **everything dialable** the figure carries:
 classic morphs *and* controller dials, across all products installed for that
@@ -178,7 +223,11 @@ characters:
 - picking a suggestion fills in the exact internal name **and** selects the
   right node on that ROM entry — no more mismatched node/morph pairs.
 
-  <img width="638" height="178" alt="Screenshot 2026-07-13 214703" src="https://github.com/user-attachments/assets/3b5916c2-c664-4cb2-a6e1-68b5930264e8" />
+  <p align="center">
+    <img width="638" alt="Morph name autocomplete suggestions" src="https://github.com/user-attachments/assets/3b5916c2-c664-4cb2-a6e1-68b5930264e8" />
+    <br>
+    <sub><em>Each Morph name field autocompletes from the scanned index.</em></sub>
+  </p>
 
 Installed new morph products since the last scan? Just run the scan script
 again — the index is replaced wholesale, and the studio refreshes it the next
@@ -195,7 +244,8 @@ Press **Save**. Every save regenerates the character's files in one go:
 - **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
   character's folder
 
-Change anything later — morphs, sections, export options — and simply Save again;
-both sides stay in sync by construction.
+> [!TIP]
+> Change anything later — morphs, sections, export options — and simply Save again;
+> both sides stay in sync by construction.
 
 [← Your first project](./03-first-project.md) · [Next: Build the ROM in Daz →](./05-rom-in-daz.md)

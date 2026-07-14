@@ -16,12 +16,17 @@ covers the network in depth; this page is just the hand-off.
 In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
-<!-- screenshot: houdini, daztohue hda poseasset import -->
+<p align="center">
+  <img width="900" alt="houdini, daztohue hda poseasset import" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>Point the DazToHue HDA's PoseAsset import at the character's CSV.</em></sub>
+</p>
 
-That's the whole trick: the CSV was generated from the **same definition** as the
-Daz script you just ran, so every frame Houdini expects is exactly where Daz put
-it. Change the character in the studio later, Save, re-run the script, re-export —
-both sides move together.
+> [!NOTE]
+> That's the whole trick: the CSV was generated from the **same definition** as the
+> Daz script you just ran, so every frame Houdini expects is exactly where Daz put
+> it. Change the character in the studio later, Save, re-run the script, re-export —
+> both sides move together.
 
 From here, continue with the [DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)
 documentation for the Houdini → Unreal leg.

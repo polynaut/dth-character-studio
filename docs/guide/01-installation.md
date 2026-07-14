@@ -4,7 +4,11 @@ Download the Windows installer from the
 [latest release](https://github.com/polynaut/dth-character-studio/releases/latest)
 (`DTH.Character.Studio_<version>_x64-setup.exe`) and run it.
 
-<!-- screenshot: installer -->
+<p align="center">
+  <img width="900" alt="installer" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The code-signed Windows installer for DTH Character Studio.</em></sub>
+</p>
 
 - The installer is **code-signed** (publisher: *Open Source Developer Remo Vincenzo Vetere*),
   so Windows SmartScreen lets it through without drama.
