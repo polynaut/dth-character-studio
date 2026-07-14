@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.41.28
+
+### Patch Changes
+
+- [#281](https://github.com/polynaut/dth-character-studio/pull/281) [`690844d`](https://github.com/polynaut/dth-character-studio/commit/690844d6e3ae0a38448892581eb2e4d25f2b04fb) Thanks [@polynaut](https://github.com/polynaut)! - Make input validation errors clearer. Invalid fields now show a **more visible red
+  border** (a 2px destructive ring instead of a faint 1px border — both the ROM cell
+  inputs and the shared `Input` primitive), and a field whose error lived in a `title`
+  attribute (the ROM name/morph cells) now shows it in a proper **alert-style tooltip**
+  (red background, light text) via a new `data-tooltip-variant="error"` on the global
+  tooltip.
+- Updated dependencies [[`690844d`](https://github.com/polynaut/dth-character-studio/commit/690844d6e3ae0a38448892581eb2e4d25f2b04fb)]:
+  - @dth/ui@0.41.28
+  - @dth/rom@0.41.28
+
 ## 0.41.27
 
 ### Patch Changes
