@@ -2,11 +2,13 @@
 
 ## Create it
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="project window, create character panel" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Add character panel in the project window.</em></sub>
 </p>
+-->
 
 1. In the project window press **Add character** (or drop a `.duf` anywhere).   
 3. **Choose Daz scene…** — the character's scene file.
@@ -34,11 +36,13 @@
 
 ## The ROM definition
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="character page, ROM sections" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The ROM sections on the character page.</em></sub>
 </p>
+-->
 
 A ROM is a fixed sequence of eight sections. Each can be **enabled or disabled**,
 and runs in **Preset** mode (the DTH release's stock pose assets) or **Custom**
@@ -69,11 +73,13 @@ mode (your own poses and morphs):
 <details>
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="character page, GEN section enabled in Preset mode" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The GEN section enabled in Preset mode.</em></sub>
 </p>
+-->
 
 **GEN** is the genital geograft's range of motion, and for most characters it's a
 ready-made preset with nothing to fill in. You don't even choose the product — the
@@ -130,11 +136,13 @@ controllers at once. That's how you bake a shape that only exists as a combinati
 of dials — or a controller plus its corrective — into a single clean morph for
 Houdini and Unreal.
 
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="a pose row expanded, showing several combined morphs" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>A pose row expanded to drive one output from several morphs.</em></sub>
 </p>
+-->
 
 Each entry in the expanded list carries its own:
 
