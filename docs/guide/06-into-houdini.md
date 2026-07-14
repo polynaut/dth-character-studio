@@ -10,6 +10,9 @@ covers the network in depth; this page is just the hand-off.
 - Your character's **`<Name>_pose_asset.csv`** — in the export folder if you used
   direct export, otherwise in the character's folder in the project.
 - The exporter's **`<Name>.abc`** / **`<Name>.dth`** next to it.
+- For any **[Bone scale](./04-first-character.md)** frames, a **reference-skeleton
+  FBX** each (in a `Reference Skeletons` subfolder) — the PoseAsset CSV already
+  points at them by absolute path, so there's nothing extra to wire up.
 
 ## Hook it up
 

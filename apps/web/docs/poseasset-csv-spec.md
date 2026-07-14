@@ -38,7 +38,11 @@ Notes:
   their own (the node has a separate *Global Generation Method*).
 - **PHY groups have no generation method**; instead they carry physics
   parameters (offset distance, radius) and each pose has an XYZ offset.
-- `file` on GEN/FBM/MIS poses = the per-pose **reference skeleton FBX**.
+- `file` on GEN/FBM/MIS poses = the per-pose **reference skeleton FBX** (an
+  absolute path). The studio fills this automatically for a pose flagged **Bone
+  scale**: it emits a `{{DTH_EXPORT_DIR}}` token + the `Reference Skeletons/<Name>_frame_<N>.fbx`
+  tail, and the generated Daz script resolves the token to the real (run-time)
+  export dir when it copies the CSV next to the exporter output.
 - The section keyword for Miscellaneous is **`MIS`**, not `MISC`.
 - `CURVEGROUP`/`CURVE` is an additional category (animation/material curves)
   the studio does not model yet.
