@@ -16,9 +16,9 @@ back it up with them, and you're done.
 -->
 
 1. On the **Home** screen press **New project**.
-2. **Choose folder…** — pick (or create) the folder the project should live in.
+2. **Choose folder…** — pick the folder the project should live in.
    You can also just drop a folder anywhere onto the Home screen.
-3. Give it a **Project name** and press **Create**.
+4. Give it a **Project name** and press **Create**.
 
    <p align="center">
      <img width="722" alt="Naming the new project" src="https://github.com/user-attachments/assets/d3ce515a-3976-4d30-9451-4ba3019f901a" />
@@ -59,7 +59,7 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
   Daz scenes, Houdini projects and Unreal projects.
 
   <p align="center">
-    <img width="119" alt="A path chip" src="https://github.com/user-attachments/assets/959dcba5-8245-470d-99d7-c7a7b8507aed" />
+    <img width="238" alt="A path chip" src="https://github.com/user-attachments/assets/959dcba5-8245-470d-99d7-c7a7b8507aed" />
     <br>
     <sub><em>A path chip copies its full path on click.</em></sub>
   </p>
