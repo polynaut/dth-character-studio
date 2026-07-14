@@ -5,6 +5,13 @@ import { computePosition, flip, offset, shift } from '@floating-ui/dom'
 /** Hover delay before the tooltip appears (keyboard focus shows immediately). */
 const SHOW_DELAY_MS = 350
 
+const TIP_BASE =
+  'pointer-events-none fixed top-0 left-0 z-[100] w-max max-w-xs rounded-md px-2.5 py-1.5 text-xs leading-relaxed whitespace-pre-line shadow-lg'
+const TIP_DEFAULT = `${TIP_BASE} border bg-popover text-popover-foreground`
+// An element with data-tooltip-variant="error" (e.g. an invalid input) gets an
+// alert-style tooltip: red background, light text.
+const TIP_ERROR = `${TIP_BASE} border border-destructive bg-destructive text-white`
+
 /**
  * App-styled tooltips for EVERY `title` attribute, mounted once in the app
  * shell. Instead of wrapping each call site in a tooltip component, one
@@ -55,6 +62,7 @@ export function TooltipHost() {
       }
       anchor = el
       tip.textContent = text
+      tip.className = el.getAttribute('data-tooltip-variant') === 'error' ? TIP_ERROR : TIP_DEFAULT
       tip.style.display = 'block'
       void computePosition(el, tip, {
         placement: 'top',
@@ -164,7 +172,7 @@ export function TooltipHost() {
       ref={tipRef}
       role="tooltip"
       style={{ display: 'none' }}
-      className="pointer-events-none fixed top-0 left-0 z-[100] w-max max-w-xs rounded-md border bg-popover px-2.5 py-1.5 text-xs leading-relaxed whitespace-pre-line text-popover-foreground shadow-lg"
+      className={TIP_DEFAULT}
     />,
     document.body,
   )
