@@ -202,12 +202,13 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
   // script (the forwarded-script assumption failed) — the key thing to know.
   const script = [
     '// Written by DTH Character Studio — opens a scene in the already-running Daz',
-    '// Studio instance. If nothing happens and no message box appears, Daz did not',
-    '// run this forwarded script.',
+    '// Studio instance. openFile(path, false): merge=false REPLACES the current scene',
+    '// (clears it, then opens the file). With the default it merges into the open',
+    '// scene, so opening a new card when a scene was already loaded did nothing visible.',
     '(function () {',
     `  var path = ${JSON.stringify(scenePath.replace(/\\/g, '/'))};`,
     '  try {',
-    '    if (!App.getContentMgr().openFile(path)) {',
+    '    if (!App.getContentMgr().openFile(path, false)) {',
     '      MessageBox.warning("DTH: could not open the scene:\\n" + path, "DTH Character Studio", "&OK");',
     '    }',
     '  } catch (e) {',
