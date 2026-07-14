@@ -1,6 +1,6 @@
 {
   "name": "@dth/web",
-  "version": "0.41.23",
+  "version": "0.41.24",
   "private": true,
   "type": "module",
   "description": "DTH Character Studio frontend — client-rendered SPA (React + TanStack Router). Native file/dialog access via Tauri plugins; the native layer is isTauri()-guarded so the SPA also runs standalone in a plain browser.",
