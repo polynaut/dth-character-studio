@@ -622,6 +622,9 @@ export function toCharacterScriptDsa(
       ? character.facsDetailStrength
       : 0,
     FlexionStrength: GENERATIONS[character.genesis].hasStrengthDials ? character.flexionStrength : 0,
+    // G9 only: switch the Genesis 9 Tear shader's UV set to "UE5" during the build
+    // (an example UE5 tear UV only ships for Genesis 9).
+    bApplyUE5TearUV: character.genesis === 'G9' && character.applyUE5TearUV,
   }
   // Measured preset-block lengths (base/gp/dk/phys), so the Daz runtime sizes
   // each block from the real .duf frame counts instead of hard-coded literals —
@@ -707,6 +710,28 @@ function dthFailureDialog() {
         "DTH Character Studio", "&OK");
 }
 
+// G9 only: switch the Genesis 9 Tear shader's UV set to "UE5" so DTH's Lacrimal
+// Fluid material lines up (the UV set is a DzEnumProperty — set it by name through
+// the material's UV-set control). Non-fatal: the ROM build proceeds regardless.
+function dthApplyUE5TearUV() {
+    try {
+        var oTear = Scene.findNodeByLabel("Genesis 9 Tear");
+        if (!oTear) {
+            for (var i = 0; i < Scene.getNumNodes(); i++) {
+                var oNode = Scene.getNode(i);
+                if (String(oNode.getLabel()).toLowerCase().indexOf("tear") >= 0) { oTear = oNode; break; }
+            }
+        }
+        if (!oTear || !oTear.getObject()) return;
+        var oShape = oTear.getObject().getCurrentShape();
+        if (!oShape) return;
+        for (var m = 0; m < oShape.getNumMaterials(); m++) {
+            var oCtrl = oShape.getMaterial(m).getUVSetControl();
+            if (oCtrl) oCtrl.setValueFromString("UE5");
+        }
+    } catch (dthUvErr) { /* leave the tear UV as-is; the ROM build continues */ }
+}
+
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
@@ -718,7 +743,10 @@ if (typeof ApplyDTHCharacter != "function") {
     dthFailureDialog();
 } else {
     try {
-        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);${exportBlock ? `
+        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
+        // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
+        // export). No-op unless the character opted in.
+        if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }${exportBlock ? `
         // Export only when the ROM built CLEAN (runtime v20: failed morphs count
         // as failure too, not just hard aborts) — a broken ROM must never ship
         // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.

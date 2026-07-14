@@ -244,6 +244,25 @@ describe('toCharacterScriptDsa', () => {
     expect(file.content).not.toContain('_FBMs.json')
   })
 
+  it('adds the tear-UV step + flag for a G9 character that opted in', () => {
+    const file = toCharacterScriptDsa(makeCharacter({ genesis: 'G9', applyUE5TearUV: true }))
+    expect(characterConfig(file.content).bApplyUE5TearUV).toBe(true)
+    expect(file.content).toContain('function dthApplyUE5TearUV()')
+    expect(file.content).toContain('if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }')
+    expect(file.content).toContain('setValueFromString("UE5")')
+  })
+
+  it('keeps the tear-UV flag false when not opted in, and forces it off on non-G9', () => {
+    expect(
+      characterConfig(toCharacterScriptDsa(makeCharacter({ genesis: 'G9', applyUE5TearUV: false })).content)
+        .bApplyUE5TearUV,
+    ).toBe(false)
+    expect(
+      characterConfig(toCharacterScriptDsa(makeCharacter({ genesis: 'G8', applyUE5TearUV: true })).content)
+        .bApplyUE5TearUV,
+    ).toBe(false)
+  })
+
   it('inlines GP art direction when GEN/GP is enabled', () => {
     const sections = makeSections()
     sections.GEN.enabled = true

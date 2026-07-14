@@ -470,8 +470,10 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       generated for; additive with a '' default — no migration step needed).
  *   8 — added `products` / `productsUnmatched` / `productsScannedAt` (the Daz
  *       Products scan; additive with [] / '' defaults — no migration step needed).
+ *   9 — added `applyUE5TearUV` (G9 tear-UV toggle; additive with a `false` default
+ *       — no migration step needed).
  */
-export const CHARACTER_SCHEMA_VERSION = 8
+export const CHARACTER_SCHEMA_VERSION = 9
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -736,6 +738,10 @@ export const characterSchema = z.object({
   /** Zero the active genital ROM's morphs (Golden Palace or Dicktator) at the
    *  first custom frame, so they don't leak into the full-body/custom poses. */
   resetGenBeforeApplying: z.boolean().default(true),
+  /** G9 only: switch the Genesis 9 Tear figure's shader UV set to "UE5" during the
+   *  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
+   *  Surfaces-tab step. No-op on non-G9 figures (no UE5 tear UV ships for them). */
+  applyUE5TearUV: z.boolean().default(false),
   /** Morph values restored after ROM loading (e.g. breast position). */
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
