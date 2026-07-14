@@ -1,5 +1,15 @@
 # @dth/ui
 
+## 0.41.27
+
+### Patch Changes
+
+- [#279](https://github.com/polynaut/dth-character-studio/pull/279) [`b0125f0`](https://github.com/polynaut/dth-character-studio/commit/b0125f0baa6191c188f95a5fa6575b77ce7fb150) Thanks [@polynaut](https://github.com/polynaut)! - Stop tooltips floating above modal dialogs. The global tooltip (`z-100`) could show
+  over a dialog (`z-50`) — e.g. the "Open in Daz" tooltip lingering above the
+  "Daz Studio is already open" modal. The tooltip now stays hidden when its anchor is
+  covered by an element in another subtree (a dialog overlay), while tooltips on
+  elements inside a dialog still work.
+
 ## 0.41.26
 
 ## 0.41.25
