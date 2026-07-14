@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.34
+
+### Patch Changes
+
+- [#294](https://github.com/polynaut/dth-character-studio/pull/294) [`9478e53`](https://github.com/polynaut/dth-character-studio/commit/9478e533275a64ac02f984880171777799a46658) Thanks [@polynaut](https://github.com/polynaut)! - Fix a layout shift when adding the first pose to an empty ROM group. The "No poses in this group yet." placeholder was taller than a real pose row, so adding the first morph made the list jump. The empty state now matches a pose row's height.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.34
+  - @dth/ui@0.41.34
+
 ## 0.41.33
 
 ### Patch Changes
