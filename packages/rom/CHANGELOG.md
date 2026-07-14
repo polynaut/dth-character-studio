@@ -1,5 +1,11 @@
 # @dth/rom
 
+## 0.41.30
+
+### Patch Changes
+
+- [#285](https://github.com/polynaut/dth-character-studio/pull/285) [`1f56e4c`](https://github.com/polynaut/dth-character-studio/commit/1f56e4cb152c32b201bb09634268543faafb6689) Thanks [@polynaut](https://github.com/polynaut)! - Block Save (and generation) on a custom pose name that isn't Houdini-safe, not just on empty fields. The Name cell already flags spaces/punctuation with a red border (Houdini accepts only letters, numbers and underscores), but the save gate only checked for empty fields — so a red-bordered name could still be saved. `romValidationErrors` now mirrors the cell rule, so a flagged field can't slip past Save.
+
 ## 0.41.29
 
 ### Patch Changes
