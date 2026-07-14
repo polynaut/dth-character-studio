@@ -78,13 +78,12 @@ mode (your own poses and morphs):
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
 <table><tr><td>
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Golden Palace art-direction frames in the GEN section" src="ADD_IMAGE_URL" />
+  <img width="1028" height="449" alt="Screenshot 2026-07-14 115129" src="https://github.com/user-attachments/assets/dc32ca32-ce39-4374-b71d-112329b83013" />
   <br>
   <sub><em>The GEN section's Golden Palace art-direction frames — a morph set per frame.</em></sub>
 </p>
--->
+
 
 **GEN** is the genital geograft's range of motion. You don't choose the product —
 the character's **Gender** (set when you created it) decides: a **female**
@@ -107,23 +106,20 @@ Two things worth knowing:
 
 - **The geograft has to be fitted to the figure in the character's Daz scene.**
   The preset poses the geograft itself, so if Golden Palace / Dicktator isn't
-  loaded and fitted when you build the ROM, those frames fail. (It's the same
-  reason the morph scan below has you load your geografts — so their dials get
-  indexed too.)
+  loaded and fitted when you build the ROM, those frames fail.
 - **Preset only appears where the DTH release ships that asset.** If your release
   carries no Golden Palace / Dicktator content for the character's Genesis
   generation, the studio flags GEN's Preset as unavailable instead of letting you
   generate a block that can't run.
 
-Prefer to build the genital ROM entirely by hand instead of art-directing the
-preset? Switch GEN to **Custom** and define its poses exactly like the FBM morphs
-below.
+You built your own pose asset for the genital graft? Switch GEN to **Custom** and
+use your own asset!
 
 </td></tr></table>
 </details>
 
 
-For this example we add some **Full Body (FBM)**, switch it to Custom, and list the morphs your
+For this example we add some **Full Body Morphs (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
 key) — or import them from a `DthScanFrames` CSV (see [Tools](./tools.md)).
 
@@ -148,13 +144,12 @@ controllers at once. That's how you bake a shape that only exists as a combinati
 of dials — or a controller plus its corrective — into a single clean morph for
 Houdini and Unreal.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
+
 <p align="center">
-  <img width="900" alt="a pose row expanded, showing several combined morphs" src="ADD_IMAGE_URL" />
+  <img width="1030" height="343" alt="Screenshot 2026-07-14 115731" src="https://github.com/user-attachments/assets/339bafa8-5fbf-487a-8cc0-29142629c04b" />
   <br>
   <sub><em>A pose row expanded to drive one output from several morphs.</em></sub>
 </p>
--->
 
 Each entry in the expanded list carries its own:
 
