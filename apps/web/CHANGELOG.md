@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.41.21
+
+### Patch Changes
+
+- [#257](https://github.com/polynaut/dth-character-studio/pull/257) [`58d6219`](https://github.com/polynaut/dth-character-studio/commit/58d6219bf47d5365fd5f62eb22f1285e9226af21) Thanks [@polynaut](https://github.com/polynaut)! - Fix "Open in Daz" not loading the scene when Daz already has one open. The bridge
+  called `openFile(path)` without the `merge` argument, which merges the character
+  into the current scene instead of replacing it — so opening a new card looked like
+  nothing happened (into an empty Daz there was nothing to merge with, so it seemed
+  fine). It now calls `openFile(path, false)`, which clears the scene and opens the
+  file fresh.
+- Updated dependencies []:
+  - @dth/rom@0.41.21
+  - @dth/ui@0.41.21
+
 ## 0.41.20
 
 ### Patch Changes
