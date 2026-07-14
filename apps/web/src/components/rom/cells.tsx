@@ -30,13 +30,17 @@ export function TextCell({
   return (
     <input
       className={`${cellInputClass} w-full ${
-        error ? 'border-destructive ring-1 ring-destructive/40 focus:border-destructive' : ''
+        error
+          ? 'border-destructive bg-destructive/10 ring-2 ring-destructive/60 focus:border-destructive'
+          : ''
       }`}
       value={draft}
       placeholder={placeholder}
       data-pose-input={dataId}
       aria-invalid={error ? true : undefined}
       title={error || undefined}
+      // Route the validation message through the alert-styled tooltip (red).
+      data-tooltip-variant={error ? 'error' : undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft !== value && onCommit(draft)}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
