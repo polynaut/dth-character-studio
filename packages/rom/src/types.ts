@@ -124,10 +124,14 @@ export const romPoseSchema = z.object({
   name: z.string().max(MAX_NAME_LENGTH),
   morphs: z.array(morphSchema),
   /**
-   * Optional reference skeleton FBX for poses that scale bones (e.g.
-   * Proportion Height). Only meaningful in GEN and FBM categories.
+   * Whether this pose scales bones (e.g. Torso Length, Proportion Height). Unreal
+   * can't drive bone scale from a morph alone, so the DTH Exporter writes a
+   * per-frame reference-skeleton FBX for such a frame and the studio fills that
+   * FBX's path into the PoseAsset CSV automatically (a `{{DTH_EXPORT_DIR}}` token
+   * the generated Daz script resolves against the real export dir at run time).
+   * Only meaningful in GEN/FBM/MISC categories (see {@link REFERENCE_FBX_SECTIONS}).
    */
-  referenceFbx: z.string().max(MAX_PATH_LENGTH).default(''),
+  boneScaleRef: z.boolean().default(false),
 })
 export type RomPose = z.infer<typeof romPoseSchema>
 
@@ -472,8 +476,12 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       Products scan; additive with [] / '' defaults — no migration step needed).
  *   9 — added `applyUE5TearUV` (G9 tear-UV toggle; additive with a `false` default
  *       — no migration step needed).
+ *  10 — replaced the per-pose free-text `referenceFbx` path with a `boneScaleRef`
+ *       boolean. The DTH Exporter now auto-generates the reference-skeleton FBXs and
+ *       the studio computes their CSV paths, so the manual path is gone (migration
+ *       step: a non-empty old path → `true`).
  */
-export const CHARACTER_SCHEMA_VERSION = 9
+export const CHARACTER_SCHEMA_VERSION = 10
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -591,8 +599,13 @@ export const CHARACTER_SCHEMA_VERSION = 9
  *  22 — Removed the `Open_Scene_<Character>.dsa` script again (a plugin-based
  *       solution is coming instead). No runtime `.dsa` change — bumped so Refresh
  *       assets regenerates existing characters and cleans up the leftover script.
+ *  23 — Bone-scale reference frames: the PoseAsset CSV's `file` column now carries
+ *       a `{{DTH_EXPORT_DIR}}` token for bone-scale frames, and the generated
+ *       script resolves it to the real export dir when it copies the CSV (was a
+ *       plain file copy). No runtime `.dsa` change — bumped so Refresh assets
+ *       regenerates existing scripts with the token-aware copy.
  */
-export const RUNTIME_VERSION = 22
+export const RUNTIME_VERSION = 23
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1036,7 +1049,7 @@ export function sectionsFromFlatFrames(
       id: newId(),
       name: frame.name,
       morphs: frame.morphs,
-      referenceFbx: '',
+      boneScaleRef: false,
     }
     const lastGroup = config.groups[config.groups.length - 1]
     if (section === lastSection && lastGroup) {
@@ -1075,7 +1088,7 @@ export function mirrorGroup(group: RomGroup): RomGroup {
     poses: group.poses.map((pose) => ({
       id: newId(),
       name: pose.name,
-      referenceFbx: pose.referenceFbx,
+      boneScaleRef: pose.boneScaleRef,
       morphs: pose.morphs.map((morph) => ({ ...morph, prop: swap(morph.prop) })),
     })),
   }

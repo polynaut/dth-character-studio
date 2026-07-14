@@ -231,6 +231,15 @@ function CharacterPage() {
   const ctrlHeld = useModifierHeld('Control')
 
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
+  // Bone-scale frames need the exporter (an export dir) to produce their reference
+  // FBX and resolve its CSV path — flag when some are set but no export dir is.
+  const boneScaleFrames = Object.values(character.sections).reduce(
+    (n, s) =>
+      s.enabled && s.mode === 'custom'
+        ? n + s.groups.reduce((m, g) => m + g.poses.filter((p) => p.boneScaleRef).length, 0)
+        : n,
+    0,
+  )
   // Leaving with unsaved edits asks first; delete bypasses (see onDeleteCharacter).
   const unsavedGuard = useUnsavedChangesGuard(
     dirty,
@@ -800,6 +809,13 @@ function CharacterPage() {
             </>
           )}
         </div>
+        {!character.exportPath && boneScaleFrames > 0 && (
+          <p className="mt-3 text-sm text-amber-600 dark:text-amber-500">
+            {boneScaleFrames === 1 ? '1 frame is' : `${boneScaleFrames} frames are`} marked{' '}
+            <strong>bone scale</strong> — set an export directory so the DTH Exporter can generate
+            {boneScaleFrames === 1 ? ' its' : ' their'} reference-skeleton FBX.
+          </p>
+        )}
         <div className="mt-4 flex items-center gap-3">
           <Switch
             checked={character.exportSceneSubfolders}
