@@ -76,6 +76,7 @@ mode (your own poses and morphs):
 
 <details>
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
+<table><tr><td>
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
@@ -113,6 +114,7 @@ Want hand-picked genital morphs instead of the stock ROM? Switch GEN to **Custom
 and list them exactly like the FBM morphs below — but for most characters the
 Preset is all you need.
 
+</td></tr></table>
 </details>
 
 
