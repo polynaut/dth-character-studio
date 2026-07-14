@@ -40,6 +40,19 @@ export function TooltipHost() {
     }
 
     const show = (el: HTMLElement, text: string) => {
+      // Never float a tooltip above content that's been covered — e.g. a modal
+      // dialog that opened over the anchor (the tooltip is z-100, dialogs z-50).
+      // If the top-most element at the anchor's centre is in a different subtree
+      // (an overlay on top), stay hidden. Guarded on a real rect so it's a no-op
+      // where there's no layout (jsdom returns 0×0 and an unrelated hit-test).
+      const r = el.getBoundingClientRect()
+      if (r.width > 0 && r.height > 0) {
+        const topEl = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        if (topEl && topEl !== el && !el.contains(topEl) && !topEl.contains(el)) {
+          hide()
+          return
+        }
+      }
       anchor = el
       tip.textContent = text
       tip.style.display = 'block'
