@@ -26,9 +26,13 @@ Each step is short — the whole path takes about 15 minutes once the downloads 
 
 ## Optional & advanced
 
-None of these are needed to generate a ROM — reach for them once you want the studio
-to help maintain your Daz/Houdini content or organize a project beyond its characters:
+None of these are needed to generate a ROM — reach for them once you want finer
+control over a character, or want the studio to help maintain your Daz/Houdini
+content or organize a project beyond its characters:
 
+- [Advanced character options](./advanced.md) — preserve morphs and node transforms
+  across the ROM, reset genitalia morphs before custom frames, move a character's
+  folder, and drive extra morphs off bone rotations (Modify JCM frames).
 - [The Tools page](./tools.md) — install/maintain your own Daz & Houdini content,
   deduplicate downloads, storage housekeeping, and refresh generated files.
 - [Attachments](./attachments.md) — attach reusable Daz scenes (not full characters)
