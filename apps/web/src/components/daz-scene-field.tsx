@@ -23,7 +23,6 @@ import {
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
 
-import { characterScriptName } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
@@ -143,6 +142,10 @@ export function DazSceneField({
   // A scene click while Daz is already running: the studio can't switch a running
   // Daz's scene, so this holds the clicked scene path to drive the warning dialog.
   const [dazWarn, setDazWarn] = useState<string | null>(null)
+  // Polled while that dialog is up. Opening into a running Daz never works, so the
+  // dialog tells the user to close Daz; once it's closed this flips false and the
+  // button becomes "Open now" (which launches a fresh Daz with the scene).
+  const [dazStillRunning, setDazStillRunning] = useState(true)
   // A picked scene outside the project pauses here awaiting the copy decision.
   const [pending, setPending] = useState('')
   const [subfolder, setSubfolder] = useState(() => defaultSubdir)
@@ -224,8 +227,8 @@ export function DazSceneField({
     }
   }
 
-  // Best-effort forward from the warning dialog — only actually opens when the
-  // running Daz has no scene loaded (otherwise it drops it; hence the warning).
+  // Opens the clicked scene: reliably once Daz is closed (a fresh launch), or a
+  // best-effort forward while Daz is still up (which only lands in an idle Daz).
   async function openAnyway() {
     const scene = dazWarn
     setDazWarn(null)
@@ -236,6 +239,22 @@ export function DazSceneField({
       toast.error(`Couldn't open in Daz: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
+
+  // While the "already open" dialog is up, poll Daz's running state so the button
+  // can switch to "Open now" the moment the user closes Daz (it needs a few
+  // seconds to fully quit).
+  useEffect(() => {
+    if (dazWarn === null) return
+    setDazStillRunning(true)
+    let active = true
+    const id = window.setInterval(() => {
+      void dazStudioRunning().then((running) => active && setDazStillRunning(running))
+    }, 2000)
+    return () => {
+      active = false
+      window.clearInterval(id)
+    }
+  }, [dazWarn])
 
   // The scenes folder was renamed/moved on disk. Pick its new location (opening
   // in the character folder) and re-point every scene path under the old folder
@@ -674,21 +693,25 @@ export function DazSceneField({
               <h2 className="text-lg font-semibold">Daz Studio is already open</h2>
               <p className="text-sm text-muted-foreground">
                 The studio can't load a scene into a running Daz. To open{' '}
-                <strong>{character.name}</strong>, save your work in Daz, then run{' '}
-                <code className={pathChipClass('secondary')}>
-                  Open_Scene_{characterScriptName(character)}
-                </code>{' '}
-                from your Content Library (under <code>Scripts ▸ DTH-Character-Studio</code>). It
-                asks before discarding unsaved changes.
+                <strong>{character.name}</strong>, <strong>close Daz Studio</strong> and give it a
+                few seconds to fully quit — the button below then switches to <strong>Open now</strong>{' '}
+                and opens it in a fresh Daz.
               </p>
               <p className="text-xs text-muted-foreground">
-                “Open anyway” only works if Daz has no scene loaded.
+                {dazStillRunning
+                  ? 'Waiting for Daz Studio to close…'
+                  : 'Daz Studio is closed — ready to open.'}
               </p>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => void openAnyway()}>
-                  Open anyway
+                <Button
+                  variant={dazStillRunning ? 'outline' : 'default'}
+                  onClick={() => void openAnyway()}
+                >
+                  {dazStillRunning ? 'Open anyway' : 'Open now'}
                 </Button>
-                <Button onClick={() => setDazWarn(null)}>Got it</Button>
+                <Button variant="outline" onClick={() => setDazWarn(null)}>
+                  Got it
+                </Button>
               </div>
             </div>
           </div>,

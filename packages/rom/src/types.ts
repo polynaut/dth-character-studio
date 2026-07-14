@@ -588,8 +588,11 @@ export const CHARACTER_SCHEMA_VERSION = 9
  *       the scene in an already-running Daz from the Content Library, since the
  *       studio can't forward it in). No runtime `.dsa` change — bumped purely so
  *       Refresh assets regenerates existing characters to install the new script.
+ *  22 — Removed the `Open_Scene_<Character>.dsa` script again (a plugin-based
+ *       solution is coming instead). No runtime `.dsa` change — bumped so Refresh
+ *       assets regenerates existing characters and cleans up the leftover script.
  */
-export const RUNTIME_VERSION = 21
+export const RUNTIME_VERSION = 22
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
