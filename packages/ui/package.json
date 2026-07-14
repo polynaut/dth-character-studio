@@ -1,6 +1,6 @@
 {
   "name": "@dth/ui",
-  "version": "0.41.20",
+  "version": "0.41.21",
   "private": true,
   "type": "module",
   "description": "App-agnostic React UI kit for DTH Character Studio — presentational primitives, hooks, and composable components with no Tauri/router/filesystem coupling. Consumed as source; reusable by a future online deployment.",
