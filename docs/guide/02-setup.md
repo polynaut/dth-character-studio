@@ -8,19 +8,31 @@ extract the downloaded archives somewhere permanent first.
 
 ## Setup DTH Release
 
-<!-- screenshot: settings general, DTH release section -->
+<p align="center">
+  <img width="900" alt="settings general, DTH release section" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The DTH release section in Settings → General.</em></sub>
+</p>
 
 1. **DTH release(s) folder** — point it at the extracted DTH release (or a folder
    holding several release versions; then pick the version to use).
 
-   <img width="891" height="630" alt="release-folder" src="https://github.com/user-attachments/assets/742cf028-da3c-46bd-907c-ac1e062fa9b6" />
+   <p align="center">
+     <img width="891" alt="release-folder" src="https://github.com/user-attachments/assets/742cf028-da3c-46bd-907c-ac1e062fa9b6" />
+     <br>
+     <sub><em>Point the DTH release(s) folder at your extracted release.</em></sub>
+   </p>
 
 
    After selecting a DTH Release(s) folder, if there are multiple versions detected,
    you can select the **active** one. Adding another release later to the folder won't change the selection!
    You need to actively select the new version in the dropdown and re-install the files for Daz and Houdini.
    
-   <img width="722" height="624" alt="Screenshot 2026-07-13 181744" src="https://github.com/user-attachments/assets/070c9f98-fcd8-4698-98b8-9a56bf51bc5c" />
+   <p align="center">
+     <img width="722" alt="Selecting the active DTH release version" src="https://github.com/user-attachments/assets/070c9f98-fcd8-4698-98b8-9a56bf51bc5c" />
+     <br>
+     <sub><em>Pick the active version when several releases are detected.</em></sub>
+   </p>
 
    
 3. **My DAZ 3D Library** — your Daz content library (where Daz Studio loads content
@@ -34,14 +46,22 @@ extract the downloaded archives somewhere permanent first.
 
 ## Setup DTH Exporter Plugin
 
-<!-- screenshot: settings general, exporter plugin section -->
+<p align="center">
+  <img width="900" alt="settings general, exporter plugin section" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The DTH Exporter Plugin section in Settings → General.</em></sub>
+</p>
 
 Needed for exporting the ROM out of Daz (step 5) — including the studio's automatic
 direct export.
 
 1. **DTH Exporter Plugin release(s) folder** — the extracted Exporter Plugin download.
 
-   <img width="725" height="296" alt="Screenshot 2026-07-13 192636" src="https://github.com/user-attachments/assets/980485af-0526-42db-8d5c-4723db8b069f" />
+   <p align="center">
+     <img width="725" alt="Exporter Plugin release folder field" src="https://github.com/user-attachments/assets/980485af-0526-42db-8d5c-4723db8b069f" />
+     <br>
+     <sub><em>Point it at the extracted DTH Exporter Plugin download.</em></sub>
+   </p>
 
 
 3. **Daz Studio install folder** — where Daz Studio itself is installed
@@ -49,18 +69,27 @@ direct export.
 4. Press **Install**. Writing into Program Files may require closing Daz and
    restarting the studio as administrator — the app tells you when that's the case.
 
-   <img width="594" height="123" alt="Screenshot 2026-07-13 193734" src="https://github.com/user-attachments/assets/39eb5538-ac57-478f-9b1d-2cfa533a736d" />
+   <p align="center">
+     <img width="594" alt="Administrator rights notice" src="https://github.com/user-attachments/assets/39eb5538-ac57-478f-9b1d-2cfa533a736d" />
+     <br>
+     <sub><em>The app warns when installing into Program Files needs admin rights.</em></sub>
+   </p>
 
    Usually, Daz Studio is installed in an admin protected folder on C: - in that case,
    just open DTH Character Studio as administrator:
 
-   <img width="623" height="122" alt="Screenshot 2026-07-13 192819" src="https://github.com/user-attachments/assets/aaf9403b-7f7a-4b1c-8214-ddba2991587a" />
+   <p align="center">
+     <img width="623" alt="Open the studio as administrator" src="https://github.com/user-attachments/assets/aaf9403b-7f7a-4b1c-8214-ddba2991587a" />
+     <br>
+     <sub><em>Open DTH Character Studio as administrator to install into a protected folder.</em></sub>
+   </p>
 
 ## Save
 
 Press **Save** at the top. The studio scans the release's pose presets — you're
 ready to create a project.
 
+> [!NOTE]
 > **Extras (later):** the **Tools** page can also install your own Daz assets,
 > custom morphs, and Daz/Houdini presets into the right places — none of it is
 > needed for your first character.
