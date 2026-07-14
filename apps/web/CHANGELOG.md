@@ -1,5 +1,21 @@
 # @dth/web
 
+## 0.41.22
+
+### Patch Changes
+
+- [#259](https://github.com/polynaut/dth-character-studio/pull/259) [`cfed18c`](https://github.com/polynaut/dth-character-studio/commit/cfed18ca90713f600dc25eb747707b4388c6b7fe) Thanks [@polynaut](https://github.com/polynaut)! - Add a reliable way to open a character's scene when Daz Studio is already running.
+  The studio can't switch a running Daz's scene itself (a forwarded open is dropped
+  once a scene is loaded), so generation now writes a per-character
+  `Open_Scene_<Character>.dsa` into the Content Library that opens the scene from
+  inside Daz (replacing the current one, after a save warning). Clicking a scene card
+  while Daz is open now shows a dialog pointing at that script, with an "Open anyway"
+  that still forwards (which works when Daz has no scene loaded). With Daz closed,
+  cards open as before.
+- Updated dependencies []:
+  - @dth/rom@0.41.22
+  - @dth/ui@0.41.22
+
 ## 0.41.21
 
 ### Patch Changes
