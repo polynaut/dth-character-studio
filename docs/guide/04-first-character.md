@@ -173,14 +173,16 @@ one (a pose always keeps at least one).
 </details>
 
 <details>
-<summary><strong>Bone scale — morphs that move bones (reference skeletons)</strong></summary>
+<summary><strong>Bone scale — morphs that scale bones (reference skeletons)</strong></summary>
 <table><tr><td>
 
 Some morphs don't just push vertices — they **scale bones** (Torso Length,
-Proportion Height, and the like). Unreal Engine can't drive a bone's scale from a
-morph alone, so those frames need a **reference-skeleton FBX**: an export carrying
-the morph *and* its bone scale, which the Houdini PoseAsset points at for that
-frame.
+Proportion Height, and the like). Morphs can only move vertices, and Daz's FBX
+export doesn't carry bone scales either — so on its own, the generated morph would
+reshape the body while the skeleton stays put. Those frames need a
+**reference-skeleton FBX**: an export carrying the morph *and* its bone scale,
+which the Houdini PoseAsset points at for that frame (its *Reference FBX File*
+input) to correct the skeleton to the pose.
 
 Building that FBX by hand used to be the only way. Now just tick **Bone scale** on
 the pose row and the studio handles the rest end to end:
@@ -206,8 +208,11 @@ the pose row and the studio handles the rest end to end:
 > Daz](./05-rom-in-daz.md)) — that's where the exporter writes the FBX. The studio
 > warns you if you tick Bone scale without one.
 
-Only **GEN**, **FBM** and **MISC** poses can be reference frames — those are the
-sections whose morphs shape the body.
+Only **GEN**, **FBM** and **MISC** poses can be reference frames — the categories
+whose PoseAsset rows carry a reference-FBX column. DTH's own
+[Guide To Creating Custom ROMs](https://docs.google.com/document/d/1e8B9uDSmiS-v5si0YLEnnAhcnhnfGl9m0RsgCE5EDWA/edit?tab=t.0)
+describes the feature in depth (it demonstrates it with Full Body and Genitalia
+morphs) — including the manual memorize/restore workflow the studio replaces.
 
 </td></tr></table>
 </details>
