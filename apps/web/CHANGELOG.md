@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.36
+
+### Patch Changes
+
+- [#299](https://github.com/polynaut/dth-character-studio/pull/299) [`4109c82`](https://github.com/polynaut/dth-character-studio/commit/4109c820ccc55a77e182e6b75f49db90af1e44f9) Thanks [@polynaut](https://github.com/polynaut)! - About page: a "Report a problem" link that opens a prefilled GitHub bug form (app version included), plus a pointer to the new Discussions Q&A. The repo also gains bug/feature issue templates, an honest per-figure support matrix in the README, and a release smoke checklist.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.36
+  - @dth/ui@0.41.36
+
 ## 0.41.35
 
 ### Patch Changes
