@@ -675,6 +675,32 @@ describe('toPoseAssetCsv', () => {
     // Non-bone-scale FBM rows keep an empty file column.
     expect(fbmRows.filter((r) => r.endsWith(',')).length).toBeGreaterThan(0)
   })
+
+  it('a bone-scale flag on a MISC pose stays inert — MIS rows never carry a file', () => {
+    // A non-empty file on a MIS row makes the HDA's import_from_csv fail (the
+    // parser reads the column but the node has no Misc reference-FBX parameter,
+    // measured on 2.4.3) — so only GEN/FBM may emit reference paths/frames.
+    const sections = makeSections()
+    sections.JCM.enabled = false
+    sections.GEN.enabled = false
+    sections.FBM.groups[0].poses[0].boneScaleRef = true
+    sections.MISC.enabled = true
+    sections.MISC.groups = [
+      {
+        ...fbmGroup(),
+        id: 'm1',
+        poses: [{ id: 'm', name: 'TorsoLength', morphs: [], boneScaleRef: true }],
+      },
+    ]
+    const character = makeCharacter({ name: 'Karen', sections })
+    const rows = toPoseAssetCsv(character, FRAMES).content.split('\n')
+    const misRows = rows.filter((r) => r.startsWith('MIS,'))
+    expect(misRows.length).toBeGreaterThan(0)
+    expect(misRows.every((r) => r.endsWith(','))).toBe(true) // empty file column
+    // The exporter gets only the FBM reference frame — the flagged MISC pose is excluded.
+    const fbmRef = rows.find((r) => r.startsWith('FBM,') && r.includes('{{DTH_EXPORT_DIR}}')) ?? ''
+    expect(referenceFrames(character, FRAMES)).toEqual([Number(fbmRef.split(',')[1])])
+  })
 })
 
 // Finding 2: the G9 gate pins the baked block lengths (base 328, GP 104) the same

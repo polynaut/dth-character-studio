@@ -7,6 +7,7 @@ import {
   genRomIncludes,
   poseAssetCsvEra,
   presetEndFrame,
+  REFERENCE_FBX_SECTIONS,
   RUNTIME_VERSION,
   walkCustomPoses,
 } from './types'
@@ -273,7 +274,9 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
     // in Daz at run time), so it writes a {{DTH_EXPORT_DIR}} token that the
     // generated script substitutes when it copies the CSV. The filename matches
     // what the DTH Exporter writes: <ExportDir>/Reference Skeletons/<Name>_frame_<N>.fbx.
-    const refFbx = pose.boneScaleRef
+    // Gated on REFERENCE_FBX_SECTIONS (GEN/FBM): a non-empty file on a MIS row
+    // makes the HDA's import_from_csv fail, so a stray flag elsewhere stays inert.
+    const refFbx = pose.boneScaleRef && REFERENCE_FBX_SECTIONS.includes(section)
       ? csvSafe(`{{DTH_EXPORT_DIR}}/Reference Skeletons/${character.name}_frame_${frame}.fbx`)
       : ''
     if (section === 'FBM' || section === 'MISC') {
@@ -299,7 +302,8 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
 
 /**
  * Absolute timeline frames of the bone-scale poses (`boneScaleRef` in
- * GEN/FBM/MISC). These are the DTH Exporter's "reference frames" — the ones it
+ * GEN/FBM — {@link REFERENCE_FBX_SECTIONS}). These are the DTH Exporter's
+ * "reference frames" — the ones it
  * writes a reference-skeleton FBX for. Frames are assigned in the same canonical
  * order as the PoseAsset CSV (both walk {@link walkCustomPoses} from the same
  * {@link presetEndFrame} offset), so they match the timeline `ApplyDTHCharacter`
@@ -312,8 +316,9 @@ export function referenceFrames(character: Character, frames: PresetFrames): Arr
   // CSV from Daz.
   const lastPresetFrame = presetEndFrame(character.sections, character.gender, frames)
   const out: Array<number> = []
-  for (const { pose, relativeFrame } of walkCustomPoses(character.sections)) {
-    if (pose.boneScaleRef) out.push(lastPresetFrame + 1 + relativeFrame)
+  for (const { section, pose, relativeFrame } of walkCustomPoses(character.sections)) {
+    if (pose.boneScaleRef && REFERENCE_FBX_SECTIONS.includes(section))
+      out.push(lastPresetFrame + 1 + relativeFrame)
   }
   return out
 }

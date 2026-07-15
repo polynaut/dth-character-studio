@@ -44,8 +44,14 @@ export const METHOD_SECTIONS: ReadonlyArray<RomSection> = ['JCM', 'FAC', 'EXP', 
 /** Groups carrying a Calculate From setting. */
 export const CALC_FROM_SECTIONS: ReadonlyArray<RomSection> = ['FAC', 'EXP', 'GEN', 'PHY']
 
-/** Categories whose poses carry a reference skeleton FBX (CSV `file` column). */
-export const REFERENCE_FBX_SECTIONS: ReadonlyArray<RomSection> = ['GEN', 'FBM', 'MISC']
+/**
+ * Categories whose poses carry a reference skeleton FBX (CSV `file` column).
+ * GEN and FBM only — matching the DTH Custom ROM Guide. The HDA's CSV parser
+ * *reads* a `file` column on MIS rows too, but the node has no matching
+ * parameter, so a non-empty MIS file makes the whole import fail (measured
+ * on HDA 2.4.3, July 15 2026). Never emit it there.
+ */
+export const REFERENCE_FBX_SECTIONS: ReadonlyArray<RomSection> = ['GEN', 'FBM']
 
 export const sectionModeSchema = z.enum(['preset', 'custom'])
 export type SectionMode = z.infer<typeof sectionModeSchema>
@@ -129,7 +135,9 @@ export const romPoseSchema = z.object({
    * per-frame reference-skeleton FBX for such a frame and the studio fills that
    * FBX's path into the PoseAsset CSV automatically (a `{{DTH_EXPORT_DIR}}` token
    * the generated Daz script resolves against the real export dir at run time).
-   * Only meaningful in GEN/FBM/MISC categories (see {@link REFERENCE_FBX_SECTIONS}).
+   * Only meaningful in GEN/FBM categories (see {@link REFERENCE_FBX_SECTIONS});
+   * ignored everywhere else — generation never emits a reference FBX for other
+   * sections (a stray flag on a MIS row would break the HDA's CSV import).
    */
   boneScaleRef: z.boolean().default(false),
 })
@@ -604,8 +612,13 @@ export const CHARACTER_SCHEMA_VERSION = 10
  *       script resolves it to the real export dir when it copies the CSV (was a
  *       plain file copy). No runtime `.dsa` change — bumped so Refresh assets
  *       regenerates existing scripts with the token-aware copy.
+ *  24 — Bone scale restricted to GEN/FBM: a non-empty `file` on a MIS row makes
+ *       the HDA's import_from_csv fail (no matching node parameter — measured on
+ *       2.4.3), so generation no longer emits reference FBX paths or exporter
+ *       reference frames for MISC poses. No runtime `.dsa` change — bumped so
+ *       Refresh assets regenerates any CSV that carried a MIS file entry.
  */
-export const RUNTIME_VERSION = 23
+export const RUNTIME_VERSION = 24
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

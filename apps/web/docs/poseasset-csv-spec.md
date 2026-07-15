@@ -38,11 +38,15 @@ Notes:
   their own (the node has a separate *Global Generation Method*).
 - **PHY groups have no generation method**; instead they carry physics
   parameters (offset distance, radius) and each pose has an XYZ offset.
-- `file` on GEN/FBM/MIS poses = the per-pose **reference skeleton FBX** (an
+- `file` on GEN/FBM poses = the per-pose **reference skeleton FBX** (an
   absolute path). The studio fills this automatically for a pose flagged **Bone
   scale**: it emits a `{{DTH_EXPORT_DIR}}` token + the `Reference Skeletons/<Name>_frame_<N>.fbx`
   tail, and the generated Daz script resolves the token to the real (run-time)
   export dir when it copies the CSV next to the exporter output.
+- **`MIS` rows must leave `file` empty.** The parser reads the column, but the
+  node has no matching parameter for Misc mappings, so a non-empty value makes
+  the whole import fail (`AttributeError: 'NoneType' object has no attribute
+  'set'`, line 255 — measured July 15 2026 on 2.4.3). The studio never emits it.
 - The section keyword for Miscellaneous is **`MIS`**, not `MISC`.
 - `CURVEGROUP`/`CURVE` is an additional category (animation/material curves)
   the studio does not model yet.
@@ -120,9 +124,9 @@ Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. The glut
 - The studio's method enum lacks `Default` and `Advanced Additive`.
 - Generation method applies to JCM/FAC/EXP/GEN groups — not PHY, not
   FBM/MIS (flat). The studio currently shows the select on all groups.
-- Reference FBX applies to GEN, FBM **and MIS** — the studio offers the **Bone
-  scale** toggle on all three (`REFERENCE_FBX_SECTIONS`). DTH's Custom ROM Guide
-  demonstrates the feature with Full Body and Genitalia morphs.
+- Reference FBX applies to GEN and FBM only (`REFERENCE_FBX_SECTIONS`), matching
+  DTH's Custom ROM Guide. The parser also reads a `file` column on MIS rows, but
+  a non-empty value there fails the import (see the note above) — never emit it.
 - PHY offset/radius group fields and per-pose XYZ offsets are now mapped from a
   node export (`poseasset-physics-g9.csv`) and emitted as a fixed preset block.
 - EXP is group-based in the node (studio currently treats it as flat).

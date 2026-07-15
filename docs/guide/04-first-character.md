@@ -208,11 +208,11 @@ the pose row and the studio handles the rest end to end:
 > Daz](./05-rom-in-daz.md)) — that's where the exporter writes the FBX. The studio
 > warns you if you tick Bone scale without one.
 
-Only **GEN**, **FBM** and **MISC** poses can be reference frames — the categories
-whose PoseAsset rows carry a reference-FBX column. DTH's own
+Only **GEN** and **FBM** poses can be reference frames — the two categories
+DazToHue supports reference skeletons in. DTH's own
 [Guide To Creating Custom ROMs](https://docs.google.com/document/d/1e8B9uDSmiS-v5si0YLEnnAhcnhnfGl9m0RsgCE5EDWA/edit?tab=t.0)
-describes the feature in depth (it demonstrates it with Full Body and Genitalia
-morphs) — including the manual memorize/restore workflow the studio replaces.
+describes the feature in depth — including the manual memorize/restore workflow
+the studio replaces.
 
 </td></tr></table>
 </details>
