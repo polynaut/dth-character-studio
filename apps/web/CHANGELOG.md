@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.37
+
+### Patch Changes
+
+- [#301](https://github.com/polynaut/dth-character-studio/pull/301) [`06f58ba`](https://github.com/polynaut/dth-character-studio/commit/06f58ba8a2fe485b066b10054e44221e118cabc7) Thanks [@polynaut](https://github.com/polynaut)! - Bone scale is now limited to GEN and FBM poses — a reference-FBX path on a MIS row breaks the DazToHue HDA's CSV import (verified in Houdini), so the toggle is hidden in MISC and generation never emits reference paths or exporter reference frames there. Refresh assets regenerates any CSV that carried one.
+
+- Updated dependencies [[`06f58ba`](https://github.com/polynaut/dth-character-studio/commit/06f58ba8a2fe485b066b10054e44221e118cabc7)]:
+  - @dth/rom@0.41.37
+  - @dth/ui@0.41.37
+
 ## 0.41.36
 
 ### Patch Changes
