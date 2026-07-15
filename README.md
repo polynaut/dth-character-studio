@@ -60,9 +60,15 @@ Because both come from the same source, the "hundreds of frames must match 100%"
 
 ## Status
 
-The **Genesis 9 female** path is feature-complete and validated end-to-end — in
-Daz Studio, in Houdini, and byte-for-byte against hand-built artifacts. Genesis
-8/8.1 and the male (Dicktator) path are on the roadmap.
+| Figure | Status |
+| --- | --- |
+| **Genesis 9 female** | ✅ Feature-complete, validated end-to-end — in Daz Studio, in Houdini, and byte-for-byte against hand-built artifacts |
+| **Genesis 9 male** (Dicktator) | 🧪 Implemented — end-to-end validation in progress; gates v1.0 |
+| **Genesis 8 / 8.1** | ✅ Usable today for full morph ROMs (the G8.1 preset path was validated against the DazToHue 1.9.x pipeline) — genital (GEN) sections wait on DazToHue itself adding G8 support |
+| **Genesis 3** | 🗓️ Planned — visible but disabled in the app |
+
+DTH Character Studio is a **Windows** app by design — the installer, updater and
+code signing are all Windows-built. A macOS port is not planned.
 
 ## Share definitions, not assets
 

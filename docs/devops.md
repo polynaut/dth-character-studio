@@ -27,6 +27,9 @@ feature PR (+ changeset)  ──►  main
 - **Auto-update:** `apps/web/src/lib/updater.ts` runs `check()` on startup
   (no-ops outside the packaged app), prompts, then `downloadAndInstall()` +
   `relaunch()`.
+- **Smoke checklist:** risky releases (schema/generation/native/updater work)
+  and milestones get the manual pass in
+  [release-checklist.md](./release-checklist.md) before shipping.
 
 ## One-time setup (required before the first real release)
 

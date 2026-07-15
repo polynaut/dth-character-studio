@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea, or a capability the studio is missing.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem or need?
+      description: What are you trying to do that the studio doesn't cover today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: How could it work?
+      description: Optional — your idea of a solution, if you have one.

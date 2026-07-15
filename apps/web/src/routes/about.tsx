@@ -5,6 +5,7 @@ import { openExternal } from '#/lib/desktop.ts'
 import { detectAssetVersions, fetchAppVersion } from '#/lib/rom/api.ts'
 
 const GITHUB_URL = 'https://github.com/polynaut/dth-character-studio'
+const DISCUSSIONS_URL = `${GITHUB_URL}/discussions`
 
 export const Route = createFileRoute('/about')({
   loader: async () => ({
@@ -18,6 +19,11 @@ export const Route = createFileRoute('/about')({
 function AboutPage() {
   const { version, assets } = Route.useLoaderData()
   const router = useRouter()
+
+  // The bug form's "App version" field (id: version) prefills via query param.
+  const reportUrl = `${GITHUB_URL}/issues/new?template=bug_report.yml${
+    version ? `&version=${encodeURIComponent(`v${version}`)}` : ''
+  }`
 
   // About is reachable from several places, so go back to wherever we came from
   // (falling back to the projects home if there's no history to pop).
@@ -100,6 +106,31 @@ function AboutPage() {
             className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
           >
             GitHub <ExternalLink className="size-3.5" />
+          </a>
+          .
+        </p>
+        <p className="mt-4 max-w-prose leading-relaxed text-muted-foreground">
+          Something broke?{' '}
+          <a
+            href={reportUrl}
+            onClick={(e) => {
+              e.preventDefault()
+              void openExternal(reportUrl)
+            }}
+            className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
+          >
+            Report a problem <ExternalLink className="size-3.5" />
+          </a>{' '}
+          — the form arrives prefilled with your app version. For how-to questions, head to{' '}
+          <a
+            href={DISCUSSIONS_URL}
+            onClick={(e) => {
+              e.preventDefault()
+              void openExternal(DISCUSSIONS_URL)
+            }}
+            className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
+          >
+            Discussions <ExternalLink className="size-3.5" />
           </a>
           .
         </p>
