@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & sharing
+    url: https://github.com/polynaut/dth-character-studio/discussions
+    about: How-to questions, setup help, and sharing character definitions.

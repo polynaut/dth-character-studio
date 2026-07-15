@@ -1,0 +1,45 @@
+name: Bug report
+description: Something broke — a failed ROM, a wrong frame, an export problem, a crash.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Tip: your **character definition** (`<Name>.json` in the
+        character's folder) is safe to attach — definitions reference assets by name only
+        and contain no licensed content. It's usually the fastest way to reproduce a problem.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: >-
+        What did you do, what did you expect, and what happened instead?
+        If a ROM run failed, paste the run report the studio shows.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown on the About page.
+      placeholder: v0.41.35
+    validations:
+      required: true
+  - type: input
+    id: daz
+    attributes:
+      label: Daz Studio version
+      placeholder: "4.24 / 6.0"
+  - type: input
+    id: exporter
+    attributes:
+      label: DTH Exporter / DazToHue version
+      description: Shown in Settings once detected.
+      placeholder: "Exporter 1.8.1, DazToHue 2.x"
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: >-
+        Screenshots, the character definition JSON, the generated CSV / .dsa —
+        whatever helps reproduce it.
