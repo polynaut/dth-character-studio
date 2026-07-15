@@ -311,13 +311,16 @@ export function GroupCard({
               ))}
               {group.poses.length === 0 && (
                 <tr>
-                  {/* Match a pose row's height (td py-0.5 + ~2rem content) so adding
-                      the first morph doesn't shift the layout. */}
+                  {/* Mirror a TextCell's vertical metrics (1px border + py-1 +
+                      a text-sm line) — a pose row's height is set by its name
+                      input, so copying its class stack keeps this placeholder
+                      exactly as tall as a pose row and adding the first morph
+                      doesn't shift the layout. */}
                   <td
                     colSpan={poseColumns.length + 1}
                     className="px-4 py-0.5 text-center text-sm text-muted-foreground"
                   >
-                    <div className="flex min-h-[2rem] items-center justify-center">
+                    <div className="border-y border-transparent py-1">
                       No poses in this group yet.
                     </div>
                   </td>
