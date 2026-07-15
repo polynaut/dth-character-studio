@@ -55,6 +55,7 @@ import {
   GENERATIONS,
   poseAssetCsvEra,
   poseAssetCsvValidated,
+  REFERENCE_FBX_SECTIONS,
   romTimeline,
   romValidationErrors,
 } from '@dth/rom'
@@ -234,9 +235,10 @@ function CharacterPage() {
   const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
   // Bone-scale frames need the exporter (an export dir) to produce their reference
   // FBX and resolve its CSV path — flag when some are set but no export dir is.
-  const boneScaleFrames = Object.values(character.sections).reduce(
-    (n, s) =>
-      s.enabled && s.mode === 'custom'
+  // Only GEN/FBM count: generation ignores the flag elsewhere (REFERENCE_FBX_SECTIONS).
+  const boneScaleFrames = Object.entries(character.sections).reduce(
+    (n, [section, s]) =>
+      s.enabled && s.mode === 'custom' && REFERENCE_FBX_SECTIONS.includes(section as RomSection)
         ? n + s.groups.reduce((m, g) => m + g.poses.filter((p) => p.boneScaleRef).length, 0)
         : n,
     0,
