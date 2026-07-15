@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.35
+
+### Patch Changes
+
+- [#296](https://github.com/polynaut/dth-character-studio/pull/296) [`0b3c955`](https://github.com/polynaut/dth-character-studio/commit/0b3c955131285eff5a34ce75042d7dad6103432e) Thanks [@polynaut](https://github.com/polynaut)! - Kill the last 1px layout shift between an empty group and its first morph row — the placeholder now mirrors the name input's exact vertical metrics instead of a hard-coded height.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.35
+  - @dth/ui@0.41.35
+
 ## 0.41.34
 
 ### Patch Changes
