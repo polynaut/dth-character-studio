@@ -120,7 +120,9 @@ Down, …) plus `HangForward` (`…,0,-5`). Left/right groups mirror X. The glut
 - The studio's method enum lacks `Default` and `Advanced Additive`.
 - Generation method applies to JCM/FAC/EXP/GEN groups — not PHY, not
   FBM/MIS (flat). The studio currently shows the select on all groups.
-- Reference FBX applies to GEN, FBM **and MIS** (studio currently GEN/FBM only).
+- Reference FBX applies to GEN, FBM **and MIS** — the studio offers the **Bone
+  scale** toggle on all three (`REFERENCE_FBX_SECTIONS`). DTH's Custom ROM Guide
+  demonstrates the feature with Full Body and Genitalia morphs.
 - PHY offset/radius group fields and per-pose XYZ offsets are now mapped from a
   node export (`poseasset-physics-g9.csv`) and emitted as a fixed preset block.
 - EXP is group-based in the node (studio currently treats it as flat).
