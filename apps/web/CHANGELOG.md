@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.38
+
+### Patch Changes
+
+- [#303](https://github.com/polynaut/dth-character-studio/pull/303) [`28dd7b2`](https://github.com/polynaut/dth-character-studio/commit/28dd7b2ef178732f804899341d110cae9cea4a99) Thanks [@polynaut](https://github.com/polynaut)! - The "Set UE5 tear UV" toggle moved from the Advanced options panel into the "Genesis 9 specific" box (above the FACS/Flexion strength dials) — it's a G9-only setting, so that's where it belongs.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.38
+  - @dth/ui@0.41.38
+
 ## 0.41.37
 
 ### Patch Changes
