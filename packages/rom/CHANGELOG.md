@@ -1,5 +1,13 @@
 # @dth/rom
 
+## 0.42.3
+
+### Patch Changes
+
+- [#322](https://github.com/polynaut/dth-character-studio/pull/322) [`da0f89e`](https://github.com/polynaut/dth-character-studio/commit/da0f89e61f6280ef53f5b3afce629f219a090fb6) Thanks [@polynaut](https://github.com/polynaut)! - Toggling the FAC section now re-measures the preset ROM block lengths in the character editor. The FAC preset steers which JCM base asset the ROM resolves to (with vs. without the facial block), but the editor's re-measure trigger didn't watch it — so the timeline and frame numbers could show the stale previous length until an unrelated change. The trigger's field list now lives in `@dth/rom` next to the path resolution itself (`presetFramesSignature`), with a test coupling the two so a future resolver input can't silently go missing again.
+
+- [#325](https://github.com/polynaut/dth-character-studio/pull/325) [`4a172dc`](https://github.com/polynaut/dth-character-studio/commit/4a172dce43131e9a3b491554ae64529b1cbd09fd) Thanks [@polynaut](https://github.com/polynaut)! - Internal refactor: the frame math + ROM walks (presetEndFrame, walkCustomPoses, flattenRom, …) moved out of types.ts into their own frames.ts module — the schemas and the `Character` model stay in types.ts. The `@dth/rom` export surface is unchanged; no behaviour change.
+
 ## 0.42.2
 
 ### Patch Changes
