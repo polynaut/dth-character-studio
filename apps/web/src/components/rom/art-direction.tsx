@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 
-import { Button } from '@dth/ui'
+import { Button, InfoPopup } from '@dth/ui'
 import {
   ART_DIRECTION_CATALOG,
   genRomIncludes,
@@ -69,11 +69,13 @@ export function ArtDirectionEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">Art direction</p>
-      <p className="text-xs text-muted-foreground">
-        Morph values stamped onto frames inside the pre-made ROM after loading — generated as a
-        per-character art direction JSON. Frames marked <em>required</em> ship empty in the
-        preset: without morphs here their generated morph does nothing.
+      <p className="flex w-fit items-center gap-1 text-sm font-medium">
+        Art direction
+        <InfoPopup label="Art direction — more information">
+          Morph values stamped onto frames inside the pre-made ROM after loading — generated as a
+          per-character art direction JSON. Frames marked <em>required</em> ship empty in the
+          preset: without morphs here their generated morph does nothing.
+        </InfoPopup>
       </p>
       {activeRoms.map(([rom, label]) => {
         const romStart = presetFrames ? genRomStartFrame(sections, gender, rom, presetFrames) : null

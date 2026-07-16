@@ -19,7 +19,7 @@ export interface PoseAssetCatalog {
 export const PRESET_DESCRIPTIONS: Partial<Record<RomSection, string>> = {
   RET: 'Covered by the pre-defined DTH base ROM (RestPose, UnrealPose, TPose, …). Loads together with the Joint Corrective base ROM.',
   JCM: 'Pre-defined DTH base ROM (DQS / linear).',
-  FAC: 'Pre-defined DTH face ROM (on Genesis 9 incl. the separate Mouth figure ROM).',
+  FAC: "Loads DTH's pre-defined face ROM. On Genesis 9 the mouth is a separate fitted figure, so its companion Mouth ROM is applied automatically at the same frames.",
   GEN: 'Pre-defined genitalia ROM.',
   PHY: 'Pre-defined physics example ROM. Map its poses in the PoseAsset node manually for now.',
 }
