@@ -12,6 +12,7 @@ use crate::fsutil::entry_is_real_dir;
 
 /// Files + bytes deleted by a housekeeping action (also the empty-quarantine result).
 #[derive(Serialize, Default)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SweepReport {
     files_deleted: u64,

@@ -1,0 +1,12 @@
+[
+  {
+    "path": "D:/Lib/DazToHue/Poses/Genesis 9/DQS/G9 DQS JCM FAC - Base.duf",
+    "frames": 328,
+    "error": ""
+  },
+  {
+    "path": "D:/Lib/DazToHue/Poses/Broken.duf",
+    "frames": 0,
+    "error": "not a gzip stream and not plain JSON"
+  }
+]

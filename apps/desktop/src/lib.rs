@@ -1,6 +1,8 @@
 mod archive;
 mod assets;
 mod content;
+#[cfg(test)]
+mod contract_tests;
 mod daz;
 mod dedup;
 mod drives;

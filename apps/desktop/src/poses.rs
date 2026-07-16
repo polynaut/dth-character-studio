@@ -40,6 +40,7 @@ fn gunzip_bounded(raw: &[u8], path: &Path, max_bytes: u64) -> Result<Vec<u8>, St
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PoseAssetFrames {
     path: String,
