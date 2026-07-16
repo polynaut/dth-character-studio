@@ -1,5 +1,11 @@
 # @dth/rom
 
+## 0.42.4
+
+### Patch Changes
+
+- [#328](https://github.com/polynaut/dth-character-studio/pull/328) [`1e768f4`](https://github.com/polynaut/dth-character-studio/commit/1e768f42efd0b94b0be77b4bbd6a63050127d22d) Thanks [@polynaut](https://github.com/polynaut)! - Hardening pass on hand-mirrored knowledge (the pattern behind the FAC staleness bug): the reference-FBX rule (`isBoneScaleRefPose`/`boneScaleRefPoses`) and the per-section preset availability (`sectionPresetAvailable`) now live once in `@dth/rom` — the editor's bone-scale warning, the CSV file column, the exporter frames and the "no asset" chip all derive from the same definitions, with tests coupling availability to path resolution. App settings collapse to ONE tolerant zod schema (`studioSettingsSchema`) covering the field list, defaults, the settings.json read and the save input; the per-project behaviour defaults are shared between the manifest and the save schema. No behaviour change.
+
 ## 0.42.3
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @dth/web
 
+## 0.42.4
+
+### Patch Changes
+
+- [#330](https://github.com/polynaut/dth-character-studio/pull/330) [`0b0805f`](https://github.com/polynaut/dth-character-studio/commit/0b0805f2af9127432643bd695272035d4165bdca) Thanks [@polynaut](https://github.com/polynaut)! - Two editor fixes: the sticky header's scroll-in "Back" link no longer shows up immediately on the Notes tab (on a page too short to scroll the scroll timeline is inactive, so the link fell back to its visible base state — it now defaults to hidden, and the run-error hint gets the same guard), and the "Modify JCM frames" header is no longer a button wrapping the info popup's button (invalid HTML that React flagged and assistive tech misreads). Under the hood, the Rust↔TS boundary is now pinned by shared contract fixtures — serde round-trips and the api layer's zod schemas validate the same JSON on both sides, and the frame-measurement result is parsed at the boundary instead of blindly cast.
+
+- [#328](https://github.com/polynaut/dth-character-studio/pull/328) [`1e768f4`](https://github.com/polynaut/dth-character-studio/commit/1e768f42efd0b94b0be77b4bbd6a63050127d22d) Thanks [@polynaut](https://github.com/polynaut)! - Hardening pass on hand-mirrored knowledge (the pattern behind the FAC staleness bug): the reference-FBX rule (`isBoneScaleRefPose`/`boneScaleRefPoses`) and the per-section preset availability (`sectionPresetAvailable`) now live once in `@dth/rom` — the editor's bone-scale warning, the CSV file column, the exporter frames and the "no asset" chip all derive from the same definitions, with tests coupling availability to path resolution. App settings collapse to ONE tolerant zod schema (`studioSettingsSchema`) covering the field list, defaults, the settings.json read and the save input; the per-project behaviour defaults are shared between the manifest and the save schema. No behaviour change.
+
+- Updated dependencies [[`1e768f4`](https://github.com/polynaut/dth-character-studio/commit/1e768f42efd0b94b0be77b4bbd6a63050127d22d)]:
+  - @dth/rom@0.42.4
+  - @dth/ui@0.42.4
+
 ## 0.42.3
 
 ### Patch Changes
