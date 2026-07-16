@@ -19,3 +19,7 @@ data/
 out/
 release/
 .claude/worktrees/
+
+# Playwright (e2e) run output
+test-results/
+playwright-report/
