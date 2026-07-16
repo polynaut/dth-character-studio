@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.42
+
+### Patch Changes
+
+- [#314](https://github.com/polynaut/dth-character-studio/pull/314) [`d1ab6e7`](https://github.com/polynaut/dth-character-studio/commit/d1ab6e7c355bd038c954959b6695ee4e1af4c98c) Thanks [@polynaut](https://github.com/polynaut)! - Character page polish: wider Genesis/Gender selects, the Genesis 9 box now stays visible with its fields disabled on non-G9 characters (instead of disappearing), the "experimental" tag is gone, and Genesis 3 is selectable — DazToHue ships a subset of G3 pose assets, so the studio offers what the release provides.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.42
+  - @dth/ui@0.41.42
+
 ## 0.41.41
 
 ### Patch Changes
