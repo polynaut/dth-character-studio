@@ -285,7 +285,9 @@ export function defaultSections(): Record<RomSection, RomSectionConfig> {
     FAC: config(true, 'preset'),
     EXP: config(false, 'custom'),
     GEN: config(false, 'preset'),
-    PHY: config(false, 'custom'),
+    // Preset-first like GEN — the editor drops to 'custom' on enable when the
+    // installed release ships no PHY asset for the character's generation.
+    PHY: config(false, 'preset'),
     // FBM (custom full-body morphs) starts disabled — a new character without a
     // pre-filled ROM has nothing to put there until the user adds morphs.
     FBM: config(false, 'custom'),

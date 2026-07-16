@@ -351,19 +351,26 @@ export function RomSections({
                         ? 'Disable this section'
                         : 'Enable this section'
                   }
-                  onCheckedChange={(enabled) =>
-                    // No preset asset for this generation → enabling goes
-                    // straight to the custom morph list (preset isn't offered).
-                    patchSection(
-                      section,
+                  onCheckedChange={(enabled) => {
+                    // Enabling picks the sensible mode: no preset asset for this
+                    // generation → straight to the custom morph list; preset
+                    // available and the section untouched (no custom groups yet)
+                    // → preset. A section the user already put groups into keeps
+                    // its mode — that's a deliberate choice, not a default.
+                    if (enabled && !presetAvailable && config.mode === 'preset' && modes.includes('custom')) {
+                      patchSection(section, { enabled, mode: 'custom' })
+                    } else if (
                       enabled &&
-                        !presetAvailable &&
-                        config.mode === 'preset' &&
-                        modes.includes('custom')
-                        ? { enabled, mode: 'custom' }
-                        : { enabled },
-                    )
-                  }
+                      presetAvailable &&
+                      config.mode === 'custom' &&
+                      config.groups.length === 0 &&
+                      modes.includes('preset')
+                    ) {
+                      patchSection(section, { enabled, mode: 'preset' })
+                    } else {
+                      patchSection(section, { enabled })
+                    }
+                  }}
                 />
               </span>
             </div>
