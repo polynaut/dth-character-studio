@@ -1,36 +1,25 @@
 import { Upload } from 'lucide-react'
 
-import { useNavigate } from '@tanstack/react-router'
-
 import { Button, InfoPopup } from '@dth/ui'
 
 /**
- * "Import from CSV" plus an info popup explaining where the CSV comes from:
- * DthScanFrames.dsa from the DazToHue-Scripts repo (installable in Tools), which
- * exports the full morph list of an open Daz scene as a CSV importable here.
+ * "Import from CSV" plus an info popup explaining where the CSV comes from: the
+ * bundled Scan_Frames.dsa (installed at the DTH-Character-Studio scripts root)
+ * exports the open Daz scene's keyed morph frames into the studio's scan
+ * folder, and the import picker lists those scans.
  */
 export function ImportCsvButton({ onImport }: { onImport: () => void }) {
-  const navigate = useNavigate()
   return (
     <span className="inline-flex items-center gap-1">
       <Button variant="outline" size="sm" onClick={onImport}>
         <Upload /> Import from CSV
       </Button>
       <InfoPopup label="Import from CSV — how to produce the CSV">
-        Import a DAZ morph CSV — each row becomes a pose. Generate it with{' '}
-        <strong>DthScanFrames.dsa</strong>, which exports the full morph list of an open Daz scene.
-        Install it from{' '}
-        <a
-          href="/tools"
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void navigate({ to: '/tools', search: { tab: 'daztohue' } })
-          }}
-        >
-          Tools → DazToHue-Scripts
-        </a>
-        , run it in Daz Studio on your scene, then import the CSV here.
+        Import a DAZ morph CSV — each row becomes a pose. Produce it with{' '}
+        <strong>Scan_Frames</strong> (installed with the studio's other scripts under{' '}
+        <code>Scripts&nbsp;›&nbsp;DTH-Character-Studio</code>): select your character's root node
+        in Daz Studio, run the script, and the scan shows up here automatically — one CSV per
+        scene. You can also browse to a CSV you curated yourself.
       </InfoPopup>
     </span>
   )

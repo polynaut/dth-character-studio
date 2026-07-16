@@ -11,7 +11,6 @@ mod housekeeping;
 mod install;
 mod poses;
 mod report;
-mod scripts;
 #[cfg(test)]
 mod testutil;
 mod uninstall;
@@ -99,8 +98,6 @@ pub fn run() {
             dedup::dedup_daz_assets,
             uninstall::default_daz_uninstall_folders,
             uninstall::uninstall_daz,
-            scripts::install_daztohue_scripts,
-            github::latest_daztohue_commit,
             github::app_release_tags,
             daz::daz_studio_running,
             daz::run_daz_script,

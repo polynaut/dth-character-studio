@@ -6,19 +6,18 @@ import { dirname, join } from 'node:path'
 import { RUNTIME_VERSION } from '@dth/rom'
 import { describe, expect, it } from 'vitest'
 
-// The DTH Daz runtime (.dsa) is co-owned: it lives here (bundled + installed by
-// the studio) AND as a byte-synced twin in the DazToHue-Scripts repo, kept in
-// sync by hand. Nothing else guards against an ACCIDENTAL edit to the bundled
-// copy. This test pins a hash of the runtime so any change is deliberate:
+// The DTH Daz runtime (.dsa) is bundled + installed by the studio; it descends
+// from soltude/DazToHue-Scripts but is studio-owned now (the upstream twin-sync
+// ended when the repo went dormant). Nothing else guards against an ACCIDENTAL
+// edit to the bundled copy. This test pins a hash of the runtime so any change
+// is deliberate:
 //
 //   When you intentionally change a runtime file you MUST, together:
 //     1. update EXPECTED_RUNTIME_HASH below to the value this test prints,
 //     2. bump RUNTIME_VERSION in packages/rom/src/types.ts (so Refresh assets
-//        reinstalls the runtime + regenerates character scripts),
-//     3. mirror the change into the DazToHue-Scripts checkout
-//        (see the dth-runtime-sync-workflow — diff --strip-trailing-cr).
+//        reinstalls the runtime + regenerates character scripts).
 //
-// A silent edit that skips any of these is exactly what this catches.
+// A silent edit that skips either is exactly what this catches.
 
 const RUNTIME_FILES = [
   'DthWorkflow.dsa',
@@ -26,15 +25,17 @@ const RUNTIME_FILES = [
   'DthOptions.dsa',
   'DthProducts.dsa',
   'DthScanMorphs.dsa',
+  'DthScanFrames.dsa',
   'Scan_Morphs_G9.dsa',
   'Scan_Morphs_G8.1.dsa',
   'Scan_Morphs_G8.dsa',
   'Scan_Morphs_G3.dsa',
+  'Scan_Frames.dsa',
 ]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = 'b716b9888bf87cadf3bc1a38fe5fe6e3cc49331d75b843ac495aab1d5837c6d4'
+const EXPECTED_RUNTIME_HASH = '36635a795456c73cc52eb431052f4040ca3ab15eff8a412c91bc74adc97311df'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -52,7 +53,7 @@ describe('bundled DTH runtime (.dsa)', () => {
     const actual = runtimeHash()
     expect(
       actual,
-      `The bundled runtime .dsa files changed. If intentional: set EXPECTED_RUNTIME_HASH = "${actual}", bump RUNTIME_VERSION (currently ${RUNTIME_VERSION}) in packages/rom/src/types.ts, and mirror into DazToHue-Scripts.`,
+      `The bundled runtime .dsa files changed. If intentional: set EXPECTED_RUNTIME_HASH = "${actual}" and bump RUNTIME_VERSION (currently ${RUNTIME_VERSION}) in packages/rom/src/types.ts.`,
     ).toBe(EXPECTED_RUNTIME_HASH)
   })
 

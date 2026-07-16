@@ -4,13 +4,11 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
-  dazToHueScriptsStatus,
   dedupDazAssets,
   fetchSettings,
   installDazAssets,
   installDazMorphs,
   installDazPresets,
-  installDazToHueScripts,
   installHoudiniPresets,
   listDazAssets,
   quarantineStats,
@@ -21,18 +19,16 @@ import { CustomMorphsSection } from '#/components/tools/custom-morphs-section.ts
 import { DangerZoneSection } from '#/components/tools/danger-zone-section.tsx'
 import { DazAssetsSection } from '#/components/tools/daz-assets-section.tsx'
 import { DazPresetsSection } from '#/components/tools/daz-presets-section.tsx'
-import { DazToHueScriptsSection } from '#/components/tools/daztohue-scripts-section.tsx'
 import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
 import { HousekeepingSection } from '#/components/tools/housekeeping-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
 import { toast } from 'sonner'
 
-import type { DazToHueScriptsStatus, DedupReport, InstallReport } from '#/lib/rom/api.ts'
+import type { DedupReport, InstallReport } from '#/lib/rom/api.ts'
 
 export const Route = createFileRoute('/tools')({
-  // Optional `?tab=` deep-link — the character editor's "Import from CSV" info
-  // popup points here at the DazToHue-Scripts installer (`?tab=daztohue`).
+  // Optional `?tab=` deep-link (e.g. `?tab=refresh` from the About page).
   validateSearch: (search: Record<string, unknown>): { tab?: string } =>
     typeof search.tab === 'string' ? { tab: search.tab } : {},
   loader: () => fetchSettings(),
@@ -66,15 +62,6 @@ function ToolsPage() {
   const [presetsReport, setPresetsReport] = useState<InstallReport | null>(null)
   const [houdiniBusy, setHoudiniBusy] = useState(false)
   const [houdiniReport, setHoudiniReport] = useState<InstallReport | null>(null)
-  // "DazToHue-Scripts" tab — download + install the companion repo.
-  const [scriptsBusy, setScriptsBusy] = useState(false)
-  const [scriptsReport, setScriptsReport] = useState<InstallReport | null>(null)
-  // Installed-vs-latest DazToHue-Scripts commit. null until the first check; the
-  // check never throws (a failed remote lookup → state 'unknown').
-  const [scriptsStatus, setScriptsStatus] = useState<DazToHueScriptsStatus | null>(null)
-  async function loadScriptsStatus() {
-    setScriptsStatus(await dazToHueScriptsStatus())
-  }
   // "Danger zone" — Daz uninstall cleanup.
   const [uninstallBusy, setUninstallBusy] = useState(false)
   const [uninstallReport, setUninstallReport] = useState<InstallReport | null>(null)
@@ -87,11 +74,9 @@ function ToolsPage() {
     setQuarantine(stats.exists ? { files: stats.files, bytes: stats.bytes } : null)
   }
 
-  // Check the installed-vs-latest scripts commit once on open (also re-checked
-  // after a successful install). Fire-and-forget — the check swallows its own
-  // errors, so there's nothing to catch here.
+  // Load the quarantine stats once on open. Fire-and-forget — the check
+  // swallows its own errors, so there's nothing to catch here.
   useEffect(() => {
-    void loadScriptsStatus()
     void loadQuarantineStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -290,12 +275,8 @@ function ToolsPage() {
         onSave={() => void onSave()}
       />
 
-      <Tabs
-        defaultValue={tab === 'install' ? 'install' : tab === 'refresh' ? 'refresh' : 'daztohue'}
-        className="max-w-3xl"
-      >
+      <Tabs defaultValue={tab === 'refresh' ? 'refresh' : 'install'} className="max-w-3xl">
         <TabsList>
-          <TabsTrigger value="daztohue">DazToHue-Scripts</TabsTrigger>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>
         </TabsList>
@@ -391,29 +372,6 @@ function ToolsPage() {
             onConfirmChange={setUninstallConfirm}
             onDryRun={() => void runUninstall(true)}
             onDelete={() => void runUninstall(false)}
-          />
-        </TabsContent>
-
-        <TabsContent value="daztohue" className="space-y-5">
-          <DazToHueScriptsSection
-            dazLibraryFolder={settings.dazLibraryFolder}
-            status={scriptsStatus}
-            busy={scriptsBusy}
-            report={scriptsReport}
-            onCloseReport={() => setScriptsReport(null)}
-            onDryRun={() =>
-              runInstall(installDazToHueScripts, true, setScriptsBusy, setScriptsReport)
-            }
-            onInstall={() =>
-              runInstall(
-                installDazToHueScripts,
-                false,
-                setScriptsBusy,
-                setScriptsReport,
-                undefined,
-                loadScriptsStatus, // re-check the installed-vs-latest commit
-              )
-            }
           />
         </TabsContent>
 

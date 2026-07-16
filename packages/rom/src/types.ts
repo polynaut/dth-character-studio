@@ -617,8 +617,15 @@ export const CHARACTER_SCHEMA_VERSION = 10
  *       2.4.3), so generation no longer emits reference FBX paths or exporter
  *       reference frames for MISC poses. No runtime `.dsa` change — bumped so
  *       Refresh assets regenerates any CSV that carried a MIS file entry.
+ *  25 — Scan_Frames.dsa ships with the studio: the keyframe-scan functions moved
+ *       out of DthWorkflow.dsa into the shared .DthScanFrames.dsa runtime
+ *       (DthWorkflow includes it; generated-script behaviour unchanged), and a
+ *       visible Scan_Frames.dsa wrapper exports the open scene's keyed frames
+ *       into the studio's app-data scan-frames folder for "Import from CSV" —
+ *       replacing the DazToHue-Scripts DthScanFrames workflow. Bumped so Refresh
+ *       assets installs the new scripts.
  */
-export const RUNTIME_VERSION = 24
+export const RUNTIME_VERSION = 25
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

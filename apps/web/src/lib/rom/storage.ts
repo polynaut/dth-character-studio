@@ -21,7 +21,7 @@
  */
 
 // --- App-data paths + studio version ---------------------------------------
-export { dataPath, productScanDir, studioVersion } from './storage/app-data'
+export { dataPath, productScanDir, scanFramesDir, studioVersion } from './storage/app-data'
 
 // --- Generic folder file ops (Generate writes through these) ----------------
 export { removeFilesFromFolder, writeFilesToFolder } from './storage/fs'
@@ -94,9 +94,6 @@ export { scanPoseAssets } from './storage/pose-assets'
 // --- DTH runtime install (bundled .dsa → the Daz library Scripts root) --------
 export {
   copyRuntimeFiles,
-  daztohueScriptsDir,
-  daztohueScriptsPresent,
-  readDazToHueScriptsCommit,
   readScriptRuntimeVersion,
   studioCharScriptsDir,
   studioScriptsDir,
