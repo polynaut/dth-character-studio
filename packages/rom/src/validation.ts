@@ -1,5 +1,6 @@
 import { sanitizePoseName } from './generate.ts'
-import { SECTION_LABELS, walkCustomPoses } from './types.ts'
+import { walkCustomPoses } from './frames.ts'
+import { SECTION_LABELS } from './types.ts'
 import type { RomSection, RomSections } from './types.ts'
 
 /** A required custom-section field that's empty, or a pose name Houdini can't

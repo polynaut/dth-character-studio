@@ -1,17 +1,16 @@
+import { flattenRom, presetEndFrame, walkCustomPoses } from './frames'
 import {
   characterSkinning,
   characterSlug,
-  flattenRom,
   genAssetGender,
   GENERATIONS,
   genRomIncludes,
   poseAssetCsvEra,
-  presetEndFrame,
   REFERENCE_FBX_SECTIONS,
   RUNTIME_VERSION,
-  walkCustomPoses,
 } from './types'
 
+import type { PresetFrames } from './frames'
 import type {
   ArtDirectionFrame,
   CalculateFrom,
@@ -21,7 +20,6 @@ import type {
   GenesisVersion,
   GroupSuffix,
   PoseAssetCsvEra,
-  PresetFrames,
 } from './types'
 
 // Ground-truth PoseAsset rows for the G9 / DQS / JCM+FAC / Golden Palace /
