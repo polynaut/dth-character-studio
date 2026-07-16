@@ -415,17 +415,14 @@ run clears it automatically.
 </details>
 
 <details>
-<summary><strong>The experimental tag</strong></summary>
+<summary><strong>Genesis &amp; Gender</strong></summary>
 <table><tr><td>
 
 The **Genesis** and **Gender** selects can be changed after creation — gender is
 what decides the GEN section's product (Golden Palace vs Dicktator, see above).
-
-An orange **experimental** tag next to Genesis means this *configuration's*
-PoseAsset CSV falls outside the validated layouts (G9 · DQS · JCM+FAC presets on
-DTH 2.x, and G8.1 · DQS · JCM+FAC on the 1.9.x pipeline) and uses the custom-only
-layout instead, which hasn't been byte-validated in Houdini. The **Daz-side ROM
-works either way** — the tag is about the Houdini import.
+All four generations are selectable; the deeply validated path is **G9** (and
+G8.1 on the old pipeline) — for the others, DTH ships a subset of pose assets and
+the studio offers whatever the active release actually provides.
 
 </td></tr></table>
 </details>
