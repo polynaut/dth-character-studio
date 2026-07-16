@@ -66,8 +66,9 @@ it's off by default and absent on other generations.
 ### FACS detail strength / Flexion strength
 
 The G9 strength dials — **FACS Detail Strength** and **Flexion Automatic
-Strength** — applied at frame 0 as the ROM builds. Leave them at `1` unless your
-character needs the stock correctives dialed up or down.
+Strength** — applied at frame 0 as the ROM builds. Daz-style percentages
+(0–100 %), like every morph value in the studio. Leave them at `100 %` unless
+your character needs the stock correctives dialed up or down.
 
 ## Modify JCM frames
 
