@@ -36,4 +36,12 @@ describe('NumberField', () => {
     expect(onCommit).not.toHaveBeenCalled()
     expect(input.value).toBe('5')
   })
+
+  it('renders the unit suffix inside the field when given', () => {
+    const { getByText, getByRole } = render(
+      <NumberField value={100} onCommit={vi.fn()} suffix="%" />,
+    )
+    expect(getByText('%')).toBeTruthy()
+    expect((getByRole('textbox') as HTMLInputElement).value).toBe('100')
+  })
 })

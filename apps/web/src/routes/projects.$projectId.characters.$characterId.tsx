@@ -697,7 +697,7 @@ function CharacterPage() {
               <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
                 {GENESIS_LABELS[character.genesis]} Specific
               </legend>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {character.genesis === 'G9' && (
                   <div className="flex items-center gap-3">
                     <Switch
@@ -714,15 +714,18 @@ function CharacterPage() {
                     </span>
                   </div>
                 )}
+                {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
+                    percentages, same as every morph value field. */}
                 <div className="flex flex-wrap gap-4">
                   <div>
                     <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
                       FACS detail strength
                     </Label>
                     <NumberField
-                      className="w-28"
-                      value={character.facsDetailStrength}
-                      onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
+                      className="w-28 pr-6 text-right tabular-nums"
+                      suffix="%"
+                      value={+(character.facsDetailStrength * 100).toFixed(4)}
+                      onCommit={(pct) => patch({ facsDetailStrength: +(pct / 100).toFixed(6) })}
                     />
                   </div>
                   <div>
@@ -730,9 +733,10 @@ function CharacterPage() {
                       Flexion strength
                     </Label>
                     <NumberField
-                      className="w-28"
-                      value={character.flexionStrength}
-                      onCommit={(flexionStrength) => patch({ flexionStrength })}
+                      className="w-28 pr-6 text-right tabular-nums"
+                      suffix="%"
+                      value={+(character.flexionStrength * 100).toFixed(4)}
+                      onCommit={(pct) => patch({ flexionStrength: +(pct / 100).toFixed(6) })}
                     />
                   </div>
                 </div>
