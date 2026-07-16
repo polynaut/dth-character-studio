@@ -1,5 +1,11 @@
 # @dth/rom
 
+## 0.42.2
+
+### Patch Changes
+
+- [#320](https://github.com/polynaut/dth-character-studio/pull/320) [`8a696af`](https://github.com/polynaut/dth-character-studio/commit/8a696af01729c03795373c6ac05a87d9bd3d31d4) Thanks [@polynaut](https://github.com/polynaut)! - Enabling a section now defaults to the pre-defined DTH asset when the installed release ships one for the character's generation (PHY included — it wrongly defaulted to the custom morph list), falling back to custom only when no asset exists or the section already carries your own groups. Also: the FAC preset description explains the Genesis 9 Mouth companion in plain words, and the Art direction explainer moved into an info popup next to its title.
+
 ## 0.42.1
 
 ## 0.42.0
