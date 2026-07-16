@@ -25,16 +25,11 @@ function characterConfig(content: string) {
   const close = content.indexOf('\n};', open) + 2
   return JSON.parse(content.slice(open, close))
 }
-import {
-  characterSchema,
-  defaultSections,
-  flattenRom,
-  mirrorGroup,
-  presetFrameCount,
-  sectionsFromFlatFrames,
-} from './types'
+import { flattenRom, mirrorGroup, presetFrameCount, sectionsFromFlatFrames } from './frames'
+import { characterSchema, defaultSections } from './types'
 
-import type { Character, PresetFrames, RomGroup, RomSections } from './types'
+import type { PresetFrames } from './frames'
+import type { Character, RomGroup, RomSections } from './types'
 
 /** Known preset-block lengths (the validated DTH G9 assets) — the pure frame
  *  math now takes measured frames explicitly instead of hard-coded constants. */

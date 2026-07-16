@@ -1,4 +1,5 @@
-import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections, sectionsFromFlatFrames } from './types'
+import { sectionsFromFlatFrames } from './frames'
+import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections } from './types'
 
 import type { RomSection } from './types'
 

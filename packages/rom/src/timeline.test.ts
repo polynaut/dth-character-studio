@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { defaultSections, presetFrameCount } from './types'
+import { presetFrameCount } from './frames'
+import { defaultSections } from './types'
 import { romTimeline, romTimelineLength } from './timeline'
 
-import type { PresetFrames, RomGroup, RomSection, RomSections } from './types'
+import type { PresetFrames } from './frames'
+import type { RomGroup, RomSection, RomSections } from './types'
 
 // The validated DTH G9 preset-block lengths (measured, not hard-coded).
 const FRAMES: PresetFrames = { base: 328, gp: 104, dk: 54, phys: 43 }
