@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, Tag, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
+import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
@@ -52,9 +52,6 @@ import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
   characterSkinning,
   countPoses,
-  GENERATIONS,
-  poseAssetCsvEra,
-  poseAssetCsvValidated,
   REFERENCE_FBX_SECTIONS,
   romTimeline,
   romValidationErrors,
@@ -141,15 +138,6 @@ interface GenerateResult {
   scriptsError: string | null
 }
 
-// Full display names per generation, used for the genesis-specific fieldset
-// legend. When G8 / G8.1 land, branch on the genesis to swap the fieldset body.
-const GENESIS_LABELS: Record<GenesisVersion, string> = {
-  G3: 'Genesis 3',
-  G8: 'Genesis 8',
-  'G8.1': 'Genesis 8.1',
-  G9: 'Genesis 9',
-}
-
 function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
@@ -171,9 +159,6 @@ function CharacterPage() {
   // preset/custom selections change (kept from the last good measure during a
   // re-measure; null only when an included asset can't be read).
   const [presetFrames, setPresetFrames] = useState<PresetFrames | null>(initialFrames)
-  // The active release's CSV era — drives which validated template (if any)
-  // this character's PoseAsset CSV can use (the "experimental" tag mirrors it).
-  const csvEra = poseAssetCsvEra(catalog.error ? '' : catalog.version)
   // The last-persisted character. `dirty` compares against this — NOT the loader
   // data — so saving can settle the buttons in a single paint instead of waiting
   // on router.invalidate() to complete in a second, separate render.
@@ -640,31 +625,19 @@ function CharacterPage() {
           <div className="flex flex-col gap-5 pt-2">
             <div className="flex flex-wrap gap-4">
               <div>
-                <div className="mb-1 flex items-center gap-2">
-                  <Label>Genesis</Label>
-                  {!poseAssetCsvValidated(character, csvEra, presetFrames?.base, presetFrames?.gp) && (
-                    <Tag
-                      tone="orange"
-                      title={`This configuration's PoseAsset CSV uses the custom-only layout, which hasn't been validated in Houdini. Validated setups: G9 (DQS, JCM+FAC presets, DTH 2.x) and G8.1 (DQS, JCM+FAC presets, DTH 1.9.x — the old Houdini pipeline). The Daz-side ROM works either way.`}
-                    >
-                      experimental
-                    </Tag>
-                  )}
-                </div>
+                <Label className="mb-1">Genesis</Label>
                 <Select
                   value={character.genesis}
                   onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
                 >
-                  <SelectTrigger className="w-28">
+                  <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="G9">G9</SelectItem>
                     <SelectItem value="G8.1">G8.1</SelectItem>
                     <SelectItem value="G8">G8</SelectItem>
-                    <SelectItem value="G3" disabled>
-                      G3 — later
-                    </SelectItem>
+                    <SelectItem value="G3">G3</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -674,7 +647,7 @@ function CharacterPage() {
                   value={character.gender}
                   onValueChange={(v) => patch({ gender: v as Character['gender'] })}
                 >
-                  <SelectTrigger className="w-28">
+                  <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -689,17 +662,20 @@ function CharacterPage() {
           {/* The legend is positioned absolutely (a notch on the border) so it
               doesn't consume a row of flow — that keeps the FACS / Flexion fields
               on the same baseline as the Genesis row on the left (-mt-2 lifts the
-              box, pt-2 on the left column matches). The box only exists on
-              generations flagged hasStrengthDials (G9 today) — other generations
-              have no generation-specific settings (yet). The tear-UV toggle sits
-              below the dials and is gated G9 within it separately (no UE5 tear UV
-              ships for other figures). */}
-          {GENERATIONS[character.genesis].hasStrengthDials && (
-            <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4">
+              box, pt-2 on the left column matches). The box always shows; on
+              non-G9 characters the native fieldset `disabled` turns off every
+              control inside (the strengths and tear UV only exist on Genesis 9
+              figures) and the text goes muted. */}
+          <fieldset
+            disabled={character.genesis !== 'G9'}
+            className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4"
+          >
               <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
-                {GENESIS_LABELS[character.genesis]} Specific
+                Genesis 9 Specific
               </legend>
-              <div className="space-y-4">
+              <div
+                className={`space-y-4${character.genesis === 'G9' ? '' : ' text-muted-foreground'}`}
+              >
                 {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
                     percentages, same as every morph value field. */}
                 <div className="flex flex-wrap gap-4">
@@ -726,25 +702,22 @@ function CharacterPage() {
                     />
                   </div>
                 </div>
-                {character.genesis === 'G9' && (
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      checked={character.applyUE5TearUV}
-                      onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
-                    />
-                    <span className="flex items-center gap-1 text-sm">
-                      Set UE5 tear UV
-                      <InfoPopup label="Set UE5 tear UV — more information">
-                        Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
-                        ROM build, so DTH's Lacrimal Fluid material lines up without the manual
-                        Surfaces-tab step.
-                      </InfoPopup>
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={character.applyUE5TearUV}
+                    onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
+                  />
+                  <span className="flex items-center gap-1 text-sm">
+                    Set UE5 tear UV
+                    <InfoPopup label="Set UE5 tear UV — more information">
+                      Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
+                      ROM build, so DTH's Lacrimal Fluid material lines up without the manual
+                      Surfaces-tab step.
+                    </InfoPopup>
+                  </span>
+                </div>
               </div>
-            </fieldset>
-          )}
+          </fieldset>
         </div>
         {location && (
           <div className="mt-6 space-y-4 border-t pt-5">
