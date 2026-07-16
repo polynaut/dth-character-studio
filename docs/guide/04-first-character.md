@@ -73,6 +73,11 @@ mode (your own poses and morphs):
   <sub><em>The ROM's eight sections, each enabled and set to Preset or Custom.</em></sub>
 </p>
 
+Above the sections, a colored **timeline bar** maps the whole ROM: one segment per
+block (preset and custom), widths proportional to their frame counts — hover a
+segment for its exact frame range. It re-renders as you edit, so you always see
+where every section lands before anything runs.
+
 
 <details>
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
@@ -217,6 +222,35 @@ the studio replaces.
 </td></tr></table>
 </details>
 
+<details>
+<summary><strong>Section &amp; group tools — suffixes, mirroring, reordering, inserting</strong></summary>
+<table><tr><td>
+
+Each section header has its **Enable** switch and **Mode** (Preset / Custom)
+select. In Preset mode you can **pick the exact DTH release asset** (when several
+match); a red **no preset asset** chip appears when the active release ships
+nothing for the character's generation. The **JCM** section's Custom mode takes a
+**path to your own pose preset** (`.duf`), loaded as the base ROM exactly like a
+DTH asset.
+
+Grouped sections carry per-group settings in their header:
+
+- **driver bone(s)** — the bones driving the group's poses (JCM/GEN/PHY).
+- **Generation / Calculate from / Suffix** — how Houdini computes the group's
+  morphs (Default / Individual / Additive / Cumulative / Advanced Additive), what
+  deltas are measured against (Rest Pose / Animation Frame), and the side suffix
+  (Left / Centre / Right → `_l` / `_r` appended automatically).
+- **Mirror right** — on a *Left* group, appends a mirrored right-side copy of the
+  whole group in one click.
+- The **frame chip** shows the group's computed range live (`frames 104–107`).
+
+Inside a group: **drag rows** to reorder (frames simply renumber — they're never
+stored), and the small **+** next to a frame number inserts an empty pose
+before or after it.
+
+</td></tr></table>
+</details>
+
 ### Finding a morph's internal Daz name
 
 The internal name usually differs from the slider's label (label *Body Tone* →
@@ -316,13 +350,156 @@ Press **Save**. Every save regenerates the character's files in one go:
 > Change anything later — morphs, sections, export options — and simply Save again;
 > both sides stay in sync by construction.
 
-&nbsp;
+## The rest of the character page
 
-> [!TIP]
-> This page covered defining the ROM. Everything else on the character page —
-> avatar, notes, the run report, linked scenes and Houdini projects, the ROM
-> timeline, group tools, deleting — is toured in
-> [The character page](./character-page.md).
+Everything above covered the ROM. The page around it, box by box:
+
+<details>
+<summary><strong>The header — avatar, rename, path chip, Save/Discard</strong></summary>
+<table><tr><td>
+
+<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
+<p align="center">
+  <img width="900" alt="character page header" src="ADD_IMAGE_URL" />
+  <br>
+  <sub><em>The character page's header: avatar, name, path chip, Save/Discard.</em></sub>
+</p>
+-->
+
+- **Avatar** — click the portrait to open the **Character image** dialog: pick one
+  of the linked Daz scenes' thumbnails, drop an image file, or paste an image URL.
+  Applied **immediately** (no Save needed); stored in the project's hidden
+  `.dcsmeta/images` folder, so it travels with the project.
+- **Name** — click it to rename the character. The character folder, notes and
+  generated scripts follow the new name (the old `ROM_…` script is cleaned up).
+- **Subtitle** — the generation, the **skinning** the ROM targets (DQS or Linear,
+  derived from the chosen preset assets), and the count of custom ROM frames.
+- **Path chip** — where the definition lives on disk. Click **copies** the path,
+  **Alt+click reveals it in Explorer** — this works on every path chip in the app.
+- **Save / Discard** — the page edits a **draft**: nothing touches disk until
+  **Save** (which also regenerates, see above). **Discard** reverts to the last
+  save; leaving with unsaved edits asks first. (Holding **Ctrl** turns a settled
+  Save button into **Re-save** — force-rewrites the files when nothing changed.)
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Notes — and the Products tab</strong></summary>
+<table><tr><td>
+
+The **Notes** tab holds freeform **markdown notes** for this character:
+background, art direction, references. The rendered view is the default; hover
+and hit the pencil to edit, **drop images or files straight into the editor**,
+and it autosaves. Stored as `<Name>.notes.md` next to the definition (media in
+`.dcsmeta/media`), so notes are part of your project backup. The project page
+has the same tab for project-wide notes.
+
+A **Products** tab appears when the project enables Daz Products — see
+[Daz product scanning](./product-scanning.md).
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>The run report</strong></summary>
+<table><tr><td>
+
+After a ROM run in Daz had problems (a missing morph, a failed preset), a
+**report banner** appears the moment you switch back to the studio: every failed
+frame with its reason. Clicking an entry **jumps to and highlights the pose row**
+(failed rows are also tinted red in the tables). **Dismiss** clears it; a clean
+run clears it automatically.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>The experimental tag</strong></summary>
+<table><tr><td>
+
+The **Genesis** and **Gender** selects can be changed after creation — gender is
+what decides the GEN section's product (Golden Palace vs Dicktator, see above).
+
+An orange **experimental** tag next to Genesis means this *configuration's*
+PoseAsset CSV falls outside the validated layouts (G9 · DQS · JCM+FAC presets on
+DTH 2.x, and G8.1 · DQS · JCM+FAC on the 1.9.x pipeline) and uses the custom-only
+layout instead, which hasn't been byte-validated in Houdini. The **Daz-side ROM
+works either way** — the tag is about the Houdini import.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>The Genesis 9 specific box</strong></summary>
+<table><tr><td>
+
+G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields:
+
+- **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
+  **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
+  DTH's **Lacrimal Fluid** material lines up without you doing the manual
+  *Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only
+  matters if you use that material, and an example UE5 tear UV only ships for
+  Genesis 9 — so it's off by default and absent on other generations.
+- **FACS detail strength / Flexion strength** — the G9 strength dials
+  (**FACS Detail Strength** and **Flexion Automatic Strength**), applied at
+  frame 0 as the ROM builds. Daz-style percentages (0–100 %), like every morph
+  value in the studio. Leave them at `100 %` unless your character needs the
+  stock correctives dialed up or down.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>
+<table><tr><td>
+
+- **Daz scenes** — the character's scene, plus any number of extra scenes
+  (outfit/look variants): **drop a `.duf`** on the card to add one; a dialog asks
+  whether to **copy it into the character's folder** (optionally under a
+  subfolder) or leave it where it is. The original scene can't be unlinked;
+  extras can be removed. **Scenes subfolder** moves the whole scenes folder. Each
+  scene has **Open in Daz** — if Daz Studio is already running with a scene
+  loaded, the studio walks you through closing it and the button flips to
+  **Open now** once Daz has quit.
+- **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
+  Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
+  its folder.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Script install location &amp; export directory</strong></summary>
+<table><tr><td>
+
+The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
+split export, `Export_…`) scripts install on Save:
+`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` — needs
+"My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
+first time a script is generated.
+
+The **Export directory** section drives [direct export](./05-rom-in-daz.md):
+**Choose folder…** opens the picker (starting at the character's Houdini folder
+as guidance), **Clear** turns direct export off again, and an amber warning
+appears when poses are flagged **Bone scale** but no export directory is set —
+their reference-skeleton FBX needs the exporter.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Deleting a character</strong></summary>
+<table><tr><td>
+
+**Operations → Delete** removes the character's folder and generated files, with
+a confirmation that lets you **keep the Daz files folder** (your scenes) and
+**keep the Houdini files folder** (your exports) — for when the assets should
+outlive the definition. This can't be undone.
+
+</td></tr></table>
+</details>
 
 &nbsp;
 

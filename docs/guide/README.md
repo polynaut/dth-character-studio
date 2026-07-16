@@ -30,9 +30,6 @@ None of these are needed to generate a ROM — reach for them once you want fine
 control over a character, or want the studio to help maintain your Daz/Houdini
 content or organize a project beyond its characters:
 
-- [The character page](./character-page.md) — the full tour of the character detail
-  view: avatar, notes, run report, linked scenes/Houdini projects, the ROM timeline,
-  group tools, delete.
 - [Advanced character options](./advanced.md) — preserve morphs and node transforms
   across the ROM, reset genitalia morphs before custom frames, move a character's
   folder, and drive extra morphs off bone rotations (Modify JCM frames).
