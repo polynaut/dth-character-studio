@@ -129,6 +129,33 @@ export function resolveRomPaths(
 }
 
 /**
+ * Fingerprint of every Character field that can change which preset ROM blocks
+ * get measured or which .duf each block resolves to — the inputs of
+ * {@link resolveRomPaths}, {@link genRomIncludes} and {@link jcmIsBaseRom}.
+ * The character editor re-measures the preset frame lengths whenever this
+ * string changes. A field that affects resolution but is missing here means
+ * stale frame numbers in the editor (no error — just wrong numbers), so grow
+ * this in lockstep with those resolvers; generate.test.ts couples the two.
+ */
+export function presetFramesSignature(character: Character): string {
+  const { sections } = character
+  return JSON.stringify({
+    genesis: character.genesis,
+    gender: character.gender,
+    jcm: [
+      sections.JCM.enabled,
+      sections.JCM.mode,
+      sections.JCM.presetAssets,
+      sections.JCM.customAssetPath,
+    ],
+    // FAC steers which JCM base .duf resolveRomPaths picks (includesFac match).
+    fac: [sections.FAC.enabled, sections.FAC.mode],
+    gen: [sections.GEN.enabled, sections.GEN.mode, sections.GEN.presetAssets],
+    phy: [sections.PHY.enabled, sections.PHY.mode],
+  })
+}
+
+/**
  * Generators that compile a Character into the DTH workflow artifacts.
  * Formats are taken from real files in soltude/DazToHue-Scripts
  * (ElectraG9_FBMs.json / .csv, DthWorkflowElectraG9.dsa) and from the
