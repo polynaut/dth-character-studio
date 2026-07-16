@@ -110,8 +110,6 @@ pub fn run() {
             drives::ensure_network_drives,
             poses::pose_asset_frames,
             housekeeping::housekeeping_sweep,
-            housekeeping::folder_stats,
-            housekeeping::empty_folder,
             poses::scan_duf_files,
             windows::active_project_file,
             windows::open_project_window,
