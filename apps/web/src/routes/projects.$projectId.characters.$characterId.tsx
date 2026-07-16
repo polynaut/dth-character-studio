@@ -52,6 +52,7 @@ import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
   characterSkinning,
   countPoses,
+  presetFramesSignature,
   REFERENCE_FBX_SECTIONS,
   romTimeline,
   romValidationErrors,
@@ -237,19 +238,9 @@ function CharacterPage() {
   // Re-measure the preset ROM block lengths when a preset/custom selection that
   // affects them changes (not on every custom-pose keystroke). Debounced; the
   // last good value is kept until the new one lands, so frame numbers don't
-  // flicker. Null only when an included asset can't be read.
-  const presetSignature = JSON.stringify({
-    genesis: character.genesis,
-    gender: character.gender,
-    jcm: [
-      character.sections.JCM.enabled,
-      character.sections.JCM.mode,
-      character.sections.JCM.presetAssets,
-      character.sections.JCM.customAssetPath,
-    ],
-    gen: [character.sections.GEN.enabled, character.sections.GEN.mode, character.sections.GEN.presetAssets],
-    phy: [character.sections.PHY.enabled, character.sections.PHY.mode],
-  })
+  // flicker. Null only when an included asset can't be read. Which fields count
+  // is owned by @dth/rom (next to the path resolution), not hand-mirrored here.
+  const presetSignature = presetFramesSignature(character)
   useEffect(() => {
     let cancelled = false
     const timer = setTimeout(() => {

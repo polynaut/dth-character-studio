@@ -5,6 +5,7 @@ import {
   buildFbmData,
   generateAll,
   poseAssetCsvValidated,
+  presetFramesSignature,
   referenceFrames,
   resolveRomPaths,
   toCharacterScriptDsa,
@@ -452,6 +453,76 @@ describe('resolveRomPaths', () => {
     expect(config.mouthRomPath).toBeDefined()
     expect(config.gpRomPath).toBeDefined()
     expect(config.dkRomPath).toBeUndefined()
+  })
+})
+
+describe('presetFramesSignature', () => {
+  // A catalog with BOTH includesFac variants of the JCM base, so the FAC toggle
+  // actually flips which base .duf resolveRomPaths picks (the bug the signature
+  // must catch: a resolution change without a signature change = stale frames).
+  const catalog = {
+    folder: 'D:/Lib/DazToHue/Poses',
+    assets: [
+      { name: 'G9 DQS JCM FAC - Base', relPath: 'G9 DQS JCM FAC - Base.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'JCM' as const, includesFac: true },
+      { name: 'G9 DQS JCM - Base', relPath: 'G9 DQS JCM - Base.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'JCM' as const, includesFac: false },
+      { name: 'G9 DQS JCM FAC - Mouth', relPath: 'G9 DQS JCM FAC - Mouth.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'FAC' as const, includesFac: false },
+      { name: 'GP9 - Golden Palace', relPath: 'GP9 - Golden Palace.duf', genesis: 'G9' as const, skinning: null, section: 'GEN' as const, includesFac: false },
+      { name: 'DK9 - Dicktator', relPath: 'DK9 - Dicktator.duf', genesis: 'G9' as const, skinning: null, section: 'GEN' as const, includesFac: false },
+      { name: 'G9 Physics', relPath: 'G9 Physics.duf', genesis: 'G9' as const, skinning: null, section: 'PHY' as const, includesFac: false },
+    ],
+  }
+  /** The paths of the blocks that get MEASURED (mouth is resolved but never measured). */
+  const measuredPaths = (c: Character) => {
+    const { jcm, gp, dk, phys } = resolveRomPaths(c, catalog)
+    return { jcm, gp, dk, phys }
+  }
+
+  // Every mutation that changes which blocks are measured / which .duf a block
+  // resolves to. Each case asserts BOTH sides: the resolution really changed
+  // (the case is meaningful) and the signature changed with it (the editor
+  // re-measures). A new resolver input added without extending the signature
+  // shows up here as a missing case — add both.
+  const resolutionChanges: Array<[string, (c: Character) => void]> = [
+    ['FAC toggled off picks the FAC-less JCM base', (c) => { c.sections.FAC.enabled = false }],
+    ['FAC switched to custom picks the FAC-less JCM base', (c) => { c.sections.FAC.mode = 'custom' }],
+    ['JCM disabled drops the base block', (c) => { c.sections.JCM.enabled = false }],
+    ['an explicit JCM preset pick overrides the default', (c) => { c.sections.JCM.presetAssets = ['G9 DQS JCM - Base.duf'] }],
+    ['GEN enabled adds the GP block', (c) => { c.sections.GEN.enabled = true }],
+    ['PHY enabled adds the Physics block', (c) => { c.sections.PHY.enabled = true }],
+    ['genesis change resolves against another generation', (c) => { c.genesis = 'G8.1' }],
+  ]
+
+  it.each(resolutionChanges)('changes when %s', (_label, mutate) => {
+    const before = makeCharacter()
+    const after = makeCharacter()
+    mutate(after)
+    expect(measuredPaths(after)).not.toEqual(measuredPaths(before))
+    expect(presetFramesSignature(after)).not.toBe(presetFramesSignature(before))
+  })
+
+  it('changes with gender when GEN is enabled (GP ↔ DK)', () => {
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    const female = makeCharacter({ sections })
+    const male = makeCharacter({ sections, gender: 'male' })
+    expect(measuredPaths(male)).not.toEqual(measuredPaths(female))
+    expect(presetFramesSignature(male)).not.toBe(presetFramesSignature(female))
+  })
+
+  it('changes with the custom JCM asset path (measured directly, not via the catalog)', () => {
+    const before = makeCharacter()
+    const after = makeCharacter()
+    after.sections.JCM.mode = 'custom'
+    after.sections.JCM.customAssetPath = 'X:/my/Custom Base.duf'
+    expect(presetFramesSignature(after)).not.toBe(presetFramesSignature(before))
+  })
+
+  it('ignores edits that cannot affect the preset blocks (no spurious re-measures)', () => {
+    const before = makeCharacter()
+    const after = makeCharacter({ name: 'Renamed', facsDetailStrength: 0.5 })
+    after.sections.EXP.enabled = true
+    after.sections.FBM.groups[0].poses[0].name = 'Edited'
+    expect(presetFramesSignature(after)).toBe(presetFramesSignature(before))
   })
 })
 
