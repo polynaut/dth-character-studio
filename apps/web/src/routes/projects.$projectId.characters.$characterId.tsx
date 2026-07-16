@@ -47,7 +47,7 @@ import { ImageDialog } from '#/components/image-dialog.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
-import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
+import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
   characterSkinning,
@@ -55,11 +55,10 @@ import {
   presetFramesSignature,
   REFERENCE_FBX_SECTIONS,
   romTimeline,
-  romValidationErrors,
 } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
-import type { GeneratedFile, PresetFrames, RomSection } from '@dth/rom'
+import type { PresetFrames, RomSection } from '@dth/rom'
 import type { Character, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
@@ -132,13 +131,6 @@ function CharacterPageRoute() {
   return <CharacterPage key={characterId} />
 }
 
-interface GenerateResult {
-  outDir: string
-  files: Array<GeneratedFile>
-  scriptsDir: string | null
-  scriptsError: string | null
-}
-
 function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
@@ -154,17 +146,33 @@ function CharacterPage() {
     romRunLog: initialRomRunLog,
   } = Route.useLoaderData()
   const router = useRouter()
-  // The page owns a draft copy; "Save" persists it and revalidates the loader.
-  const [character, setCharacter] = useState<Character>(initial)
+  // A blocked-save validation error, sent to the ROM editor to open its section,
+  // scroll the offending pose row in and focus its first empty field.
+  const [revealPose, setRevealPose] = useState<{
+    section: RomSection
+    poseId: string
+    nonce: number
+  } | null>(null)
+  // The draft + save/generate machinery (dirty vs baseline, unsaved-changes
+  // guard, save → generate → settle in one paint) lives in the hook; the page
+  // only wires a blocked save to the reveal signal above.
+  const draft = useCharacterDraft({
+    projectId,
+    initial,
+    onValidationErrors: (errors) => {
+      const first = errors[0]
+      setRevealPose((prev) => ({
+        section: first.section,
+        poseId: first.poseId,
+        nonce: (prev?.nonce ?? 0) + 1,
+      }))
+    },
+  })
+  const { character, dirty, saving, patch } = draft
   // Preset ROM block lengths, re-measured from the .duf assets whenever the
   // preset/custom selections change (kept from the last good measure during a
   // re-measure; null only when an included asset can't be read).
   const [presetFrames, setPresetFrames] = useState<PresetFrames | null>(initialFrames)
-  // The last-persisted character. `dirty` compares against this — NOT the loader
-  // data — so saving can settle the buttons in a single paint instead of waiting
-  // on router.invalidate() to complete in a second, separate render.
-  const [baseline, setBaseline] = useState<Character>(initial)
-  const [saving, setSaving] = useState(false)
   // Only meaningful when the project enables Daz Products: splits this page into a
   // "Character" tab (everything) and a "Products" tab (the scan section).
   const [activeTab, setActiveTab] = useState<'character' | 'products' | 'notes'>('character')
@@ -206,19 +214,11 @@ function CharacterPage() {
   function revealFailedFrame(frame: number) {
     setRevealFrame((prev) => ({ frame, nonce: (prev?.nonce ?? 0) + 1 }))
   }
-  // A blocked-save validation error, sent to the ROM editor to open its section,
-  // scroll the offending pose row in and focus its first empty field.
-  const [revealPose, setRevealPose] = useState<{
-    section: RomSection
-    poseId: string
-    nonce: number
-  } | null>(null)
   const swallowNavRef = useRef(false)
   // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
   // disk even when nothing changed (handy during development).
   const ctrlHeld = useModifierHeld('Control')
 
-  const dirty = JSON.stringify(character) !== JSON.stringify(baseline)
   // Bone-scale frames need the exporter (an export dir) to produce their reference
   // FBX and resolve its CSV path — flag when some are set but no export dir is.
   // Only GEN/FBM count: generation ignores the flag elsewhere (REFERENCE_FBX_SECTIONS).
@@ -229,12 +229,6 @@ function CharacterPage() {
         : n,
     0,
   )
-  // Leaving with unsaved edits asks first; delete bypasses (see onDeleteCharacter).
-  const unsavedGuard = useUnsavedChangesGuard(
-    dirty,
-    'You have unsaved changes on this character — leave and lose them?',
-  )
-
   // Re-measure the preset ROM block lengths when a preset/custom selection that
   // affects them changes (not on every custom-pose keystroke). Debounced; the
   // last good value is kept until the new one lands, so frame numbers don't
@@ -283,107 +277,30 @@ function CharacterPage() {
   const exportSet = character.exportPath.trim() !== ''
   const exportSplit = exportSet && character.exportWithRomScript === false
 
-  function patch(p: Partial<Character>) {
-    setCharacter((c) => ({ ...c, ...p }))
-  }
-
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button.
   async function onRenameCharacter(next: string) {
     const previousName = character.name
     const updated = { ...character, name: next }
-    setCharacter(updated)
+    patch({ name: next })
     const saved = await saveCharacter({ data: { projectId, character: updated } })
-    setCharacter(saved)
-    setBaseline(saved)
+    draft.settle(saved)
     // Renaming moves the character folder + renames the generated script, so
     // regenerate at the new name and drop the old-named script in the shared folder.
     const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
     void router.invalidate()
-    notifyGenerated(`Renamed to “${next}”`, result)
-  }
-
-  // Saving also (re)generates all DTH files in the same step.
-  async function onSave() {
-    // Block the save on invalid required custom-morph fields (empty, or a pose
-    // name with characters Houdini rejects) — and jump to the first one so it's
-    // obvious what to fix (RomSections opens the section, scrolls the row in and
-    // focuses the offending field).
-    const errors = romValidationErrors(character.sections)
-    if (errors.length > 0) {
-      const first = errors[0]
-      setRevealPose({ section: first.section, poseId: first.poseId, nonce: (revealPose?.nonce ?? 0) + 1 })
-      toast.error(
-        errors.length === 1
-          ? first.message
-          : `${errors.length} custom-morph fields need fixing before saving.`,
-      )
-      return
-    }
-    setSaving(true)
-    try {
-      const saved = await saveCharacter({ data: { projectId, character } })
-      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
-      // Settle everything in one batched render: reconcile the draft + baseline
-      // (so it's no longer "dirty") and drop the saving flag together.
-      setCharacter(saved)
-      setBaseline(saved)
-      setSaving(false)
-      // Refresh the loader for re-entry/navigation, but don't await it — the
-      // buttons no longer depend on it, so it stays off the visible path.
-      void router.invalidate()
-      notifyGenerated(`Saved “${saved.name}” — ${result.files.length} files`, result)
-    } catch (e) {
-      setSaving(false)
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  // Export settings only take effect once the script is regenerated (the export
-  // block is emitted at generation time), so persist + regenerate immediately —
-  // like the inline rename — instead of leaving them as dirty edits a manual
-  // Save might miss. Otherwise the on-disk script silently lags the chosen folder.
-  async function patchAndRegenerate(p: Partial<Character>, toastMsg?: string) {
-    const updated = { ...character, ...p }
-    setCharacter(updated)
-    try {
-      const saved = await saveCharacter({ data: { projectId, character: updated } })
-      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
-      setCharacter(saved)
-      setBaseline(saved)
-      void router.invalidate()
-      notifyGenerated(toastMsg ?? `Saved “${saved.name}”`, result)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  // The Generate panel was dissolved — generation feedback is a concise toast
-  // (the install location lives in Settings); a script-install error still warns.
-  function notifyGenerated(title: string, result: GenerateResult) {
-    toast.success(title)
-    if (result.scriptsError) {
-      toast.warning(`Couldn't install the character script: ${result.scriptsError}`)
-    }
-  }
-
-  function onDiscard() {
-    setCharacter(baseline)
+    draft.notifyGenerated(`Renamed to “${next}”`, result)
   }
 
   // Linking a Daz scene persists immediately (see relinkScene), so settle the
   // draft + baseline on the saved result — like the inline rename / avatar.
-  function onSceneLinked(saved: Character) {
-    setCharacter(saved)
-    setBaseline(saved)
-  }
+  const onSceneLinked = draft.settle
 
   // A folder move can repoint the linked scene (it travels with the folder when
   // it lives inside it). Sync just the scene path into the draft + baseline so
   // the Daz scene field stays correct without discarding any unsaved edits.
   function onCharacterMoved(moved: Character) {
-    setCharacter((c) => ({ ...c, scenePath: moved.scenePath }))
-    setBaseline((b) => ({ ...b, scenePath: moved.scenePath }))
+    draft.syncPersisted({ scenePath: moved.scenePath })
   }
 
   // --- Special operations (delete) ---
@@ -426,7 +343,7 @@ function CharacterPage() {
       'Choose the export directory for the DTH Exporter',
       await defaultExportDir(),
     )
-    if (picked) await patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
+    if (picked) await draft.patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
   }
 
   async function onDeleteCharacter({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
@@ -439,7 +356,7 @@ function CharacterPage() {
       toast.success(`Deleted “${character.name}”`)
       // Navigation unmounts this editor — no need to reset the busy flag. The
       // unsaved-changes guard is bypassed: the edited character no longer exists.
-      unsavedGuard.bypass()
+      draft.unsavedGuard.bypass()
       await router.navigate({ to: '/projects/$projectId', params: { projectId } })
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e))
@@ -554,11 +471,11 @@ function CharacterPage() {
             box so the scale below anchors on that line). They ride the sticky
             header, so they stay reachable as the form scrolls. */}
         <div className="actions-scroll ml-auto flex shrink-0 gap-2 mb-6">
-          <Button variant="outline" onClick={onDiscard} disabled={saving || !dirty}>
+          <Button variant="outline" onClick={draft.discard} disabled={saving || !dirty}>
             <Undo2 /> Discard
           </Button>
           <Button
-            onClick={onSave}
+            onClick={() => void draft.save()}
             disabled={saving || (!dirty && !ctrlHeld)}
             title={ctrlHeld && !dirty ? 'Force re-save the JSON to disk (Ctrl)' : undefined}
           >
@@ -775,10 +692,7 @@ function CharacterPage() {
             scriptsAbs={scriptsAbs}
             scriptsLib={scriptsLib}
             scriptsSuffix={scriptsSuffix}
-            onStored={(saved) => {
-              setCharacter(saved)
-              setBaseline(saved)
-            }}
+            onStored={draft.settle}
           />
         </div>
       )}
@@ -812,7 +726,7 @@ function CharacterPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void patchAndRegenerate({ exportPath: '' }, 'Export folder cleared — script regenerated')}
+                onClick={() => void draft.patchAndRegenerate({ exportPath: '' }, 'Export folder cleared — script regenerated')}
               >
                 <X /> Clear
               </Button>
@@ -831,7 +745,7 @@ function CharacterPage() {
             checked={character.exportSceneSubfolders}
             disabled={!character.exportPath}
             onCheckedChange={(exportSceneSubfolders) =>
-              void patchAndRegenerate(
+              void draft.patchAndRegenerate(
                 { exportSceneSubfolders },
                 `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated`,
               )
@@ -855,7 +769,7 @@ function CharacterPage() {
             checked={character.exportWithRomScript}
             disabled={!character.exportPath}
             onCheckedChange={(exportWithRomScript) =>
-              void patchAndRegenerate(
+              void draft.patchAndRegenerate(
                 { exportWithRomScript },
                 exportWithRomScript
                   ? 'Combined ROM + export script'
@@ -951,16 +865,15 @@ function CharacterPage() {
             // Persist the avatar immediately — it's a deliberate change and
             // should survive a reload without needing the Save button.
             const updated = { ...character, image }
-            setCharacter(updated)
+            patch({ image })
             try {
               const saved = await saveCharacter({ data: { projectId, character: updated } })
-              setCharacter(saved)
-              setBaseline(saved)
+              draft.settle(saved)
               void router.invalidate()
               toast.success('Image updated')
             } catch (e) {
               // Roll the optimistic update back so the editor isn't stuck dirty.
-              setCharacter(character)
+              patch({ image: character.image })
               toast.error(e instanceof Error ? e.message : String(e))
             }
           }}
