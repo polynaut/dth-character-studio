@@ -1,5 +1,17 @@
 # @dth/web
 
+## 0.42.3
+
+### Patch Changes
+
+- [#327](https://github.com/polynaut/dth-character-studio/pull/327) [`b8aedf7`](https://github.com/polynaut/dth-character-studio/commit/b8aedf77311c07c39adff083cd892fa702fa4a1b) Thanks [@polynaut](https://github.com/polynaut)! - Internal refactor: the character editor's draft machinery (dirty tracking against the last-persisted baseline, the unsaved-changes guard, and the save → generate → settle choreography) moved out of the route into a `useCharacterDraft` hook. No behaviour change.
+
+- [#322](https://github.com/polynaut/dth-character-studio/pull/322) [`da0f89e`](https://github.com/polynaut/dth-character-studio/commit/da0f89e61f6280ef53f5b3afce629f219a090fb6) Thanks [@polynaut](https://github.com/polynaut)! - Toggling the FAC section now re-measures the preset ROM block lengths in the character editor. The FAC preset steers which JCM base asset the ROM resolves to (with vs. without the facial block), but the editor's re-measure trigger didn't watch it — so the timeline and frame numbers could show the stale previous length until an unrelated change. The trigger's field list now lives in `@dth/rom` next to the path resolution itself (`presetFramesSignature`), with a test coupling the two so a future resolver input can't silently go missing again.
+
+- Updated dependencies [[`da0f89e`](https://github.com/polynaut/dth-character-studio/commit/da0f89e61f6280ef53f5b3afce629f219a090fb6), [`4a172dc`](https://github.com/polynaut/dth-character-studio/commit/4a172dce43131e9a3b491554ae64529b1cbd09fd)]:
+  - @dth/rom@0.42.3
+  - @dth/ui@0.42.3
+
 ## 0.42.2
 
 ### Patch Changes
