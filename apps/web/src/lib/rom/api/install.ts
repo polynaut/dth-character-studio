@@ -74,30 +74,10 @@ export async function listDthExporterReleases({
   return storage.listDthExporterReleases(folder)
 }
 
-const settingsInput = z.object({
-  dazLibraryFolder: z.string(),
-  dthPosesFolder: z.string(),
-  // Tolerate older payloads that predate the field (kept = '' = not chosen).
-  currentDthVersion: z.string().default(''),
-  dthExporterFolder: z.string().default(''),
-  currentDthExporterVersion: z.string().default(''),
-  dazInstallFolder: z.string().default(''),
-  houdiniDocsFolder: z.string().default(''),
-  extraHoudiniDocsFolders: z.array(z.string()).default([]),
-  dimManifestsFolder: z.string().default(''),
-  dazAssetsFolders: z.array(z.string()).default([]),
-  dazMorphsSource: z.string().default(''),
-  dazMorphsDest: z.string().default(''),
-  dazPresetsSource: z.string().default(''),
-  dazPresetsDest: z.string().default(''),
-  houdiniPresetsSource: z.string().default(''),
-  acceptedConflicts: z.array(z.string()).default([]),
-  dedupQuarantineFolder: z.string().default(''),
-  dazUninstallFolders: z.array(z.string()).default([]),
-})
-
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
-  return storage.saveSettings(settingsInput.parse(data))
+  // The same tolerant schema reads settings.json and validates the save input —
+  // the field list + defaults live ONCE, in storage/settings.ts.
+  return storage.saveSettings(storage.studioSettingsSchema.parse(data))
 }
 
 /**

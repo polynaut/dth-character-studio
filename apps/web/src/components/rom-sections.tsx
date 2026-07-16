@@ -14,11 +14,10 @@ import {
   ROM_SECTIONS,
   SECTION_LABELS,
   SECTION_MODES,
-  genAssetGender,
-  genRomIncludes,
   genesisFigureNode,
   newId,
   presetFrameCount,
+  sectionPresetAvailable,
 } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
@@ -284,24 +283,14 @@ export function RomSections({
         // enabling the section lands directly on the custom morph list, the Mode
         // select locks the preset option, and a legacy character that still HAS
         // it enabled in preset mode gets a red chip (generation fails loud).
-        // FAC rides in a FAC-variant JCM base ROM, not a FAC-section asset.
-        const presetAvailable = (() => {
-          if (catalog.assets.length === 0) return true // catalog unknown — don't lock
-          const forGen = catalog.assets.filter(
-            (a) => a.genesis === null || a.genesis === genesis,
-          )
-          if (section === 'JCM') return forGen.some((a) => a.section === 'JCM')
-          if (section === 'FAC')
-            return forGen.some((a) => a.section === 'JCM' && a.includesFac)
-          if (section === 'GEN') {
-            const roms = genRomIncludes(gender, config.presetAssets)
-            const has = (g: Gender) =>
-              forGen.some((a) => a.section === 'GEN' && genAssetGender(a.name) === g)
-            return (!roms.gp || has('female')) && (!roms.dk || has('male'))
-          }
-          if (section === 'PHY') return forGen.some((a) => a.section === 'PHY')
-          return true
-        })()
+        // The rules live in @dth/rom next to the path resolution they gate.
+        const presetAvailable = sectionPresetAvailable(
+          section,
+          catalog,
+          genesis,
+          gender,
+          config.presetAssets,
+        )
         const missingPresetAsset =
           effectiveEnabled && config.mode === 'preset' && !presetAvailable
         return (

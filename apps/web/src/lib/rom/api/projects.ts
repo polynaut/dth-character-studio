@@ -101,15 +101,16 @@ export async function renameProject({ data }: { data: unknown }): Promise<Projec
   return resolveProject(dir)
 }
 
-/** Save a project's behaviour defaults (the `.dcsp` manifest's per-project fields). */
+/** Save a project's behaviour defaults (the `.dcsp` manifest's per-project
+ *  fields) — defaults come from the manifest's own single copy. */
 const projectSettingsInput = z.object({
   projectId: z.string().min(1),
-  dazSubdir: z.string().default('daz3d'),
-  houdiniSubdir: z.string().default('houdini'),
-  createHoudiniSubdir: z.boolean().default(true),
-  assetsEnabled: z.boolean().default(false),
-  dazProductsEnabled: z.boolean().default(false),
-  charactersSubdir: z.string().default(''),
+  dazSubdir: z.string().default(storage.PROJECT_BEHAVIOR_DEFAULTS.dazSubdir),
+  houdiniSubdir: z.string().default(storage.PROJECT_BEHAVIOR_DEFAULTS.houdiniSubdir),
+  createHoudiniSubdir: z.boolean().default(storage.PROJECT_BEHAVIOR_DEFAULTS.createHoudiniSubdir),
+  assetsEnabled: z.boolean().default(storage.PROJECT_BEHAVIOR_DEFAULTS.assetsEnabled),
+  dazProductsEnabled: z.boolean().default(storage.PROJECT_BEHAVIOR_DEFAULTS.dazProductsEnabled),
+  charactersSubdir: z.string().default(storage.PROJECT_BEHAVIOR_DEFAULTS.charactersSubdir),
 })
 export async function saveProjectSettings({ data }: { data: unknown }): Promise<ProjectInfo> {
   const {

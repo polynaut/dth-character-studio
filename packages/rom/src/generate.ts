@@ -1,4 +1,10 @@
-import { flattenRom, presetEndFrame, walkCustomPoses } from './frames'
+import {
+  boneScaleRefPoses,
+  flattenRom,
+  isBoneScaleRefPose,
+  presetEndFrame,
+  walkCustomPoses,
+} from './frames'
 import {
   characterSkinning,
   characterSlug,
@@ -6,7 +12,6 @@ import {
   GENERATIONS,
   genRomIncludes,
   poseAssetCsvEra,
-  REFERENCE_FBX_SECTIONS,
   RUNTIME_VERSION,
 } from './types'
 
@@ -16,10 +21,12 @@ import type {
   CalculateFrom,
   Character,
   DthPoseAsset,
+  Gender,
   GenerationMethod,
   GenesisVersion,
   GroupSuffix,
   PoseAssetCsvEra,
+  RomSection,
 } from './types'
 
 // Ground-truth PoseAsset rows for the G9 / DQS / JCM+FAC / Golden Palace /
@@ -124,6 +131,38 @@ export function resolveRomPaths(
     if (phys) paths.phys = join(phys.relPath)
   }
   return paths
+}
+
+/**
+ * Whether the installed DTH release ships the preset asset(s) `section` needs
+ * for this generation — the availability side of {@link resolveRomPaths}'s
+ * selection, kept next to it so the two rules can't drift: JCM needs any JCM
+ * base for the generation; FAC rides in a FAC-variant JCM base ROM, not a
+ * FAC-section asset; GEN needs the gendered ROM(s) {@link genRomIncludes}
+ * selects; PHY any physics asset. Sections without preset assets (EXP, FBM,
+ * MISC — and RET, which lives inside the JCM base) always report available.
+ * An EMPTY catalog reports available too: "unknown" must not lock the editor.
+ */
+export function sectionPresetAvailable(
+  section: RomSection,
+  catalog: { assets: Array<DthPoseAsset> },
+  genesis: GenesisVersion,
+  gender: Gender,
+  /** The section's explicit preset picks (GEN: steers GP/DK inclusion). */
+  presetAssets: Array<string>,
+): boolean {
+  if (catalog.assets.length === 0) return true
+  const forGen = catalog.assets.filter((a) => a.genesis === null || a.genesis === genesis)
+  if (section === 'JCM') return forGen.some((a) => a.section === 'JCM')
+  if (section === 'FAC') return forGen.some((a) => a.section === 'JCM' && a.includesFac)
+  if (section === 'GEN') {
+    const roms = genRomIncludes(gender, presetAssets)
+    const has = (g: Gender) =>
+      forGen.some((a) => a.section === 'GEN' && genAssetGender(a.name) === g)
+    return (!roms.gp || has('female')) && (!roms.dk || has('male'))
+  }
+  if (section === 'PHY') return forGen.some((a) => a.section === 'PHY')
+  return true
 }
 
 /**
@@ -299,9 +338,7 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
     // in Daz at run time), so it writes a {{DTH_EXPORT_DIR}} token that the
     // generated script substitutes when it copies the CSV. The filename matches
     // what the DTH Exporter writes: <ExportDir>/Reference Skeletons/<Name>_frame_<N>.fbx.
-    // Gated on REFERENCE_FBX_SECTIONS (GEN/FBM): a non-empty file on a MIS row
-    // makes the HDA's import_from_csv fail, so a stray flag elsewhere stays inert.
-    const refFbx = pose.boneScaleRef && REFERENCE_FBX_SECTIONS.includes(section)
+    const refFbx = isBoneScaleRefPose(section, pose)
       ? csvSafe(`{{DTH_EXPORT_DIR}}/Reference Skeletons/${character.name}_frame_${frame}.fbx`)
       : ''
     if (section === 'FBM' || section === 'MISC') {
@@ -340,12 +377,9 @@ export function referenceFrames(character: Character, frames: PresetFrames): Arr
   // ROM). NEVER clamp the -1 to 0 — that shifts every custom frame and desyncs the
   // CSV from Daz.
   const lastPresetFrame = presetEndFrame(character.sections, character.gender, frames)
-  const out: Array<number> = []
-  for (const { section, pose, relativeFrame } of walkCustomPoses(character.sections)) {
-    if (pose.boneScaleRef && REFERENCE_FBX_SECTIONS.includes(section))
-      out.push(lastPresetFrame + 1 + relativeFrame)
-  }
-  return out
+  return boneScaleRefPoses(character.sections).map(
+    (walk) => lastPresetFrame + 1 + walk.relativeFrame,
+  )
 }
 
 /**

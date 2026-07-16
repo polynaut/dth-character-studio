@@ -118,9 +118,10 @@ migration on first launch (`lib/rom/migrate-projects.ts`), then the legacy files
 ### Settings flow
 
 Two scopes now:
-- **App-global** (`settings.json`, machine/tool paths) → validated by the zod `settingsInput` schema in
-  `api.ts`. Adding one requires changes in three places: `storage.ts` (the `StudioSettings` type, its
-  defaults, and the parse), `api.ts` (`settingsInput`), and the Settings route. Settings/Tools gate
+- **App-global** (`settings.json`, machine/tool paths) → ONE tolerant zod schema,
+  `studioSettingsSchema` in `storage/settings.ts`, is the single source of the field list, the
+  defaults (`parse({})` = fresh install) and the validation on BOTH the settings.json read and the
+  save input. Adding one = add the schema field + its UI in the Settings route. Settings/Tools gate
   "save before action" on a `dirty` flag — include a new field there or its value never reaches disk.
 - **Per-project** (the `.dcsp` manifest: `dazSubdir`/`houdiniSubdir`/`createHoudiniSubdir` +
   `assetsEnabled`/`charactersSubdir`) → the `DcspManifest` type + `readManifest`/`writeManifest` in
