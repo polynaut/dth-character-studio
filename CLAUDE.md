@@ -20,8 +20,8 @@ pnpm dev:desktop         # Tauri app: web dev server (HMR) + native window. Need
 pnpm build               # web production build
 pnpm build:desktop       # NSIS installer → apps/desktop/target/release/bundle
 pnpm -r test             # all JS tests (vitest)
-pnpm --filter @dth/web e2e  # Playwright browser smoke — the real SPA against an in-memory fake
-                            # of the native layer (apps/web/e2e; specs are *.e2e.ts)
+pnpm --filter @dth/web smoke  # Playwright browser smoke — the real SPA against an in-memory fake
+                              # of the native layer (apps/web/smoke; specs are *.smoke.ts)
 pnpm -r typecheck        # tsc --noEmit across packages
 pnpm lint                # oxlint (type-aware) — the CI lint gate; `pnpm lint:fix` autofixes
 pnpm generate-routes     # regenerate apps/web/src/routeTree.gen.ts (tsr generate)
@@ -87,6 +87,10 @@ native capability, follow the existing pattern: **resolve paths in TS, do heavy 
 Rust commands (`apps/desktop/src/lib.rs`) take camelCase serde structs (`#[serde(rename_all = "camelCase")]`),
 must be registered in the `generate_handler!` list, and are gated `#[cfg(desktop)]` when they use
 desktop-only deps (updater/process/reqwest live under the non-android/ios target block in `Cargo.toml`).
+Structured command RETURNS are parsed through the zod schemas in `api/native-types.ts` (never a bare
+`invoke<T>()` cast), and their wire format is pinned by shared fixtures in `contracts/` (repo root):
+serde round-trip in `apps/desktop/src/contract_tests.rs` + zod parse in `api/native-contract.test.ts`.
+A new structured return = a schema + a fixture + a test case on both sides.
 
 ### Projects are `.dcsp` files (one active project per window)
 

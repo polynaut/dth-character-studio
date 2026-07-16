@@ -31,6 +31,7 @@ pub(crate) struct DedupRequest {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 struct ConflictCopy {
     label: String,
@@ -41,6 +42,7 @@ struct ConflictCopy {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 struct FileConflict {
     rel: String,
@@ -48,6 +50,7 @@ struct FileConflict {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 struct DupMember {
     label: String,
@@ -61,6 +64,7 @@ struct DupMember {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 struct AssetDup {
     members: Vec<DupMember>,
@@ -135,6 +139,7 @@ pub(crate) fn genesis_rank(source_root: &str) -> u32 {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DedupReport {
     dry_run: bool,

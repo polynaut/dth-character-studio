@@ -14,6 +14,7 @@ pub(crate) fn io_detail(prefix: &str, e: &std::io::Error) -> String {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InstallStep {
     pub(crate) label: String,
@@ -29,6 +30,7 @@ pub(crate) struct InstallStep {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InstallReport {
     pub(crate) dry_run: bool,
