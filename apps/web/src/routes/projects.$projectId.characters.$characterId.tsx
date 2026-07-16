@@ -637,11 +637,15 @@ function CharacterPage() {
       <div className={activeTab !== 'character' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
-          <div className="flex flex-col gap-5 pt-2">
+          {/* pt-[9px] = the fieldset's -mt-2 (-8px) + 1px border + pt-4 (16px),
+              and leading-5 lifts the labels to the toggle text's text-sm line
+              height (Label is leading-none) — so Genesis/Gender sit on the same
+              baseline as the box's first row (the tear-UV toggle). */}
+          <div className="flex flex-col gap-5 pt-[9px]">
             <div className="flex flex-wrap gap-4">
               <div>
                 <div className="mb-1 flex items-center gap-2">
-                  <Label>Genesis</Label>
+                  <Label className="leading-5">Genesis</Label>
                   {!poseAssetCsvValidated(character, csvEra, presetFrames?.base, presetFrames?.gp) && (
                     <Tag
                       tone="orange"
@@ -669,7 +673,7 @@ function CharacterPage() {
                 </Select>
               </div>
               <div>
-                <Label className="mb-1">Gender</Label>
+                <Label className="mb-1 leading-5">Gender</Label>
                 <Select
                   value={character.gender}
                   onValueChange={(v) => patch({ gender: v as Character['gender'] })}
@@ -687,11 +691,12 @@ function CharacterPage() {
           </div>
 
           {/* The legend is positioned absolutely (a notch on the border) so it
-              doesn't consume a row of flow; -mt-2 lifts the box level with the
-              left column. The box only exists on generations flagged
-              hasStrengthDials (G9 today) — other generations have no
-              generation-specific settings (yet). The tear-UV toggle is gated
-              G9 within it separately (no UE5 tear UV ships for other figures). */}
+              doesn't consume a row of flow; -mt-2 lifts the box so its content
+              top matches the left column's pt-[9px] (see above). The box only
+              exists on generations flagged hasStrengthDials (G9 today) — other
+              generations have no generation-specific settings (yet). The
+              tear-UV toggle is gated G9 within it separately (no UE5 tear UV
+              ships for other figures). */}
           {GENERATIONS[character.genesis].hasStrengthDials && (
             <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4">
               <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
