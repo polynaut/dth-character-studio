@@ -318,4 +318,12 @@ Press **Save**. Every save regenerates the character's files in one go:
 
 &nbsp;
 
+> [!TIP]
+> This page covered defining the ROM. Everything else on the character page —
+> avatar, notes, the run report, linked scenes and Houdini projects, the ROM
+> timeline, group tools, deleting — is toured in
+> [The character page](./character-page.md).
+
+&nbsp;
+
 [← Your first project](./03-first-project.md) · [Next: Build the ROM in Daz →](./05-rom-in-daz.md)
