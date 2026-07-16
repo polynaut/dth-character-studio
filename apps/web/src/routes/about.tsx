@@ -62,17 +62,8 @@ function AboutPage() {
           exports the same way, every time.
         </p>
         <p className="mt-6 max-w-prose leading-relaxed text-muted-foreground">
-          It builds on <strong>DazToHue-Scripts</strong> by Soltude — a set of Daz Studio scripts.
-          They aren't needed to make the app's features work, but give you additional features; you can
-          install them from{' '}
-          <Link
-            to="/tools"
-            search={{ tab: 'daztohue' }}
-            className="font-medium text-primary underline underline-offset-2"
-          >
-            Tools&nbsp;→&nbsp;DazToHue-Scripts
-          </Link>
-          .
+          The bundled Daz runtime descends from <strong>DazToHue-Scripts</strong> by Soltude —
+          everything the workflow needs ships with the studio; there is nothing extra to install.
         </p>
         {assets && assets.total > 0 && (
           <p className="mt-6 max-w-prose leading-relaxed text-muted-foreground">

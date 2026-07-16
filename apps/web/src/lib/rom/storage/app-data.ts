@@ -35,6 +35,17 @@ export async function productScanDir(
   return dataPath('product-scans', projectId, characterId)
 }
 
+/**
+ * The FOLDER the installed `Scan_Frames.dsa` writes its keyframe-scan CSVs into
+ * (one per Daz scene, named after it), under app-local-data: `scan-frames/`.
+ * The script gets the path baked in at install time (copyRuntimeFiles); the
+ * "Import from CSV" picker lists this folder. Both sides MUST resolve it
+ * through here so they agree.
+ */
+export async function scanFramesDir(): Promise<string> {
+  return dataPath('scan-frames')
+}
+
 let versionPromise: Promise<string> | null = null
 /** The DTH Character Studio app version, cached; '' when unavailable (e.g. the
  *  web-only build with no native layer). Stamped onto saved characters and the

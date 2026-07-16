@@ -32,7 +32,7 @@ export type {
 
 // App-global settings (settings.json) + the Tools-page install features: the DTH
 // release / Exporter plugin installs, the user's own Daz/Houdini content installs,
-// asset dedup, Daz uninstall cleanup, and the DazToHue-Scripts runtime install.
+// asset dedup, and the Daz uninstall cleanup.
 
 // --- Settings + catalog ---------------------------------------------------
 
@@ -253,78 +253,6 @@ export async function uninstallDaz({ data }: { data: unknown }): Promise<Install
   const folders = s.dazUninstallFolders.map((f) => f.trim()).filter(Boolean)
   if (!folders.length) throw new Error('No folders to clean up')
   return installReportSchema.parse(await invoke('uninstall_daz', { request: { folders, dryRun: dryRun ?? false } }))
-}
-
-/** The companion DazToHue-Scripts repo (the runtime the studio co-owns). */
-export const DAZTOHUE_SCRIPTS_REPO = 'https://github.com/soltude/DazToHue-Scripts'
-
-/**
- * Download the soltude/DazToHue-Scripts repo as a zip and install it into
- * `<My DAZ 3D Library>/Scripts/DazToHue-Scripts`. The download + unpack run
- * natively in Rust (the webview can't fetch the archive — codeload's CORS only
- * allows render.githubusercontent.com); GitHub's top-level wrapper folder is
- * stripped so the repo files land directly in the folder. `dryRun` downloads +
- * counts only. Throws when "My DAZ 3D Library" isn't set.
- */
-export async function installDazToHueScripts({ data }: { data: unknown }): Promise<InstallReport> {
-  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
-  const s = await storage.getSettings()
-  const lib = s.dazLibraryFolder.trim()
-  if (!lib) throw new Error('Set “My DAZ 3D Library” first')
-  return installReportSchema.parse(await invoke('install_daztohue_scripts', {
-    request: { dest: storage.daztohueScriptsDir(lib), dryRun: dryRun ?? false },
-  }))
-}
-
-/** The latest available DazToHue-Scripts commit (HEAD of `main` on GitHub),
- *  fetched natively (the webview can't hit the GitHub API — CORS). Desktop-only;
- *  throws on web/offline/rate-limit, which {@link dazToHueScriptsStatus} treats as
- *  "couldn't check". */
-export async function latestDazToHueCommit(): Promise<string> {
-  return invoke<string>('latest_daztohue_commit')
-}
-
-export type DazToHueScriptsState =
-  | 'uptodate'
-  | 'outdated'
-  /** Files present but no version marker — installed before we tracked commits. */
-  | 'unversioned'
-  | 'notinstalled'
-  /** Installed (have a local commit) but the remote check couldn't run. */
-  | 'unknown'
-
-export interface DazToHueScriptsStatus {
-  /** Commit recorded in the local install's marker (null → no marker). */
-  installed: string | null
-  /** Latest commit on GitHub (null → the remote check failed). */
-  latest: string | null
-  state: DazToHueScriptsState
-}
-
-/**
- * Whether the locally installed DazToHue-Scripts are up to date: compares the
- * commit the installer recorded against the current HEAD on GitHub. Never throws —
- * a failed remote check reports `unknown` (so the UI still shows what's installed),
- * and nothing installed reports `notinstalled`.
- */
-export async function dazToHueScriptsStatus(): Promise<DazToHueScriptsStatus> {
-  const s = await storage.getSettings()
-  const lib = s.dazLibraryFolder.trim()
-  const installed = await storage.readDazToHueScriptsCommit(lib)
-  let latest: string | null = null
-  try {
-    latest = await latestDazToHueCommit()
-  } catch {
-    latest = null // offline / rate-limited / web build — surfaced as "unknown"
-  }
-  let state: DazToHueScriptsState
-  if (installed) {
-    state = !latest ? 'unknown' : installed === latest ? 'uptodate' : 'outdated'
-  } else {
-    // No marker: a pre-versioning install (files present) vs no install at all.
-    state = (lib && (await storage.daztohueScriptsPresent(lib))) ? 'unversioned' : 'notinstalled'
-  }
-  return { installed, latest, state }
 }
 
 /** Merge-only install (adds new files, never overwrites) used for custom morphs

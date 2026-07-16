@@ -126,7 +126,11 @@ use your own asset!
 
 For this example we add some **Full Body Morphs (FBM)**, switch it to Custom, and list the morphs your
 character actually uses (each morph by its Daz property name, with the value to
-key) — or import them from a `DthScanFrames` CSV (see [Tools](./tools.md)).
+key) — or import them with **Import from CSV**: run the bundled **`Scan_Frames`**
+script in Daz Studio (`Scripts › DTH-Character-Studio`, figure root selected) and
+its scan of the open scene — every keyed morph frame — shows up in the import
+picker automatically, one CSV per scene. A **Browse** button still takes any CSV
+you curated yourself.
 
 Each pose row has two name fields with very different jobs:
 

@@ -169,83 +169,9 @@ pub(crate) fn zip_file_entries(archive: &mut zip::ZipArchive<fs::File>) -> Vec<(
     entries
 }
 
-/// Extract every file entry of `archive` into `dest`, preserving its tree, bounded
-/// by the archive's inflate budget (entry count + total inflated bytes). Skips
-/// zip-slip paths (`enclosed_name`); directory entries are created lazily. On a
-/// mid-extraction failure the offending partial file is removed; callers own any
-/// cleanup of the (partially populated) `dest` dir.
-pub(crate) fn extract_archive<R: std::io::Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
-    dest: &Path,
-    budget: &mut InflateBudget,
-) -> std::io::Result<()> {
-    budget.check_entry_count(archive.len())?;
-    for i in 0..archive.len() {
-        let mut entry = archive
-            .by_index(i)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        let rel = match entry.enclosed_name() {
-            Some(p) => p,
-            None => continue,
-        };
-        let out = dest.join(&rel);
-        if entry.is_dir() {
-            fs::create_dir_all(&out)?;
-            continue;
-        }
-        if let Some(parent) = out.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let mut f = fs::File::create(&out)?;
-        if let Err(e) = copy_bounded(&mut entry, &mut f, budget) {
-            drop(f);
-            let _ = fs::remove_file(&out);
-            return Err(e);
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutil::{unique_temp_dir, write_zip};
-
-    #[test]
-    fn extract_archive_fails_loud_when_the_inflate_budget_is_breached() {
-        let base = unique_temp_dir("inflate_budget");
-        fs::create_dir_all(&base).unwrap();
-        let zip_path = base.join("bomb.zip");
-        // Two entries totalling 96 inflated bytes, against a 64-byte injected cap:
-        // the first fills the budget exactly, the second breaches it.
-        write_zip(&zip_path, &[("a.bin", &[0u8; 64][..]), ("b.bin", &[0u8; 32][..])]);
-        let file = fs::File::open(&zip_path).unwrap();
-        let mut archive = zip::ZipArchive::new(file).unwrap();
-        let mut budget = InflateBudget::with_max_bytes("bomb.zip", 64);
-        let dest = base.join("out");
-        let err = extract_archive(&mut archive, &dest, &mut budget).unwrap_err();
-        assert!(err.to_string().contains("bomb.zip"), "error must name the archive: {err}");
-        assert!(err.to_string().contains("decompression bomb"), "error: {err}");
-        // The breaching entry is not left behind half-written.
-        assert!(!dest.join("b.bin").exists());
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn extract_archive_within_budget_succeeds() {
-        let base = unique_temp_dir("inflate_ok");
-        fs::create_dir_all(&base).unwrap();
-        let zip_path = base.join("ok.zip");
-        write_zip(&zip_path, &[("a.txt", b"hello".as_slice())]);
-        let file = fs::File::open(&zip_path).unwrap();
-        let mut archive = zip::ZipArchive::new(file).unwrap();
-        // The real formula: a tiny archive still gets the 1 GiB floor.
-        let mut budget = InflateBudget::new("ok.zip", fs::metadata(&zip_path).unwrap().len());
-        let dest = base.join("out");
-        extract_archive(&mut archive, &dest, &mut budget).unwrap();
-        assert_eq!(fs::read(dest.join("a.txt")).unwrap(), b"hello");
-        let _ = fs::remove_dir_all(&base);
-    }
 
     #[test]
     fn budget_formula_is_ratio_with_a_floor() {

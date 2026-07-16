@@ -152,7 +152,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
           dials it; a mismatch fails on that frame. See the guide for how to look the
           internal name up in Daz, or import the exact names from a{' '}
-          <code>DthScanFrames</code> CSV.
+          <code>Scan_Frames</code> CSV.
         </InfoPopup>
       </span>
     ),

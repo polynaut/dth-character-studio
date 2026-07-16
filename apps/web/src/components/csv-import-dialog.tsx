@@ -5,7 +5,7 @@ import { Button, Input, Label } from '@dth/ui'
 
 /**
  * Frame-range picker shown after choosing a DAZ morph CSV. A full scene scan
- * (DthScanFrames.dsa) exports the whole ROM (frames 0…N), so this lets the user
+ * (Scan_Frames.dsa) exports the whole ROM (frames 0…N), so this lets the user
  * import only the slice that matches the section they're importing into. Defaults
  * to the full range; the live count reflects the current selection. Esc / backdrop
  * cancel. Portaled to <body> like the other dialogs.
