@@ -1,5 +1,11 @@
 # @dth/ui
 
+## 0.41.39
+
+### Patch Changes
+
+- [#306](https://github.com/polynaut/dth-character-studio/pull/306) [`feafd91`](https://github.com/polynaut/dth-character-studio/commit/feafd9150fb1bbcf3f49fed6ed2c9eb020238736) Thanks [@polynaut](https://github.com/polynaut)! - The FACS detail / Flexion strength dials now show Daz-style percentages (0–100 %, with a % suffix) like every morph value field, and the Genesis 9 box got more breathing room between the tear-UV toggle and the dials. Stored values are unchanged (raw 1 = 100 %) — no migration needed.
+
 ## 0.41.38
 
 ## 0.41.37
