@@ -1,5 +1,17 @@
 # @dth/web
 
+## 0.42.0
+
+### Minor Changes
+
+- [#316](https://github.com/polynaut/dth-character-studio/pull/316) [`ca0fb2f`](https://github.com/polynaut/dth-character-studio/commit/ca0fb2fe9903ddacf18d5acd89f39631e7bce20d) Thanks [@polynaut](https://github.com/polynaut)! - Scan_Frames ships with the studio: the keyframe-scan script (formerly DazToHue-Scripts' DthScanFrames) installs into Scripts/DTH-Character-Studio like the other scan scripts and writes its CSV — one per Daz scene — into the studio's own scan folder. "Import from CSV" now opens a picker listing those scans (newest first) with a Browse fallback for hand-curated files. The Tools → DazToHue-Scripts download/installer is gone — everything the workflow needs is bundled; the scan folder is bounded by the housekeeping sweep (30 days).
+
+### Patch Changes
+
+- Updated dependencies [[`ca0fb2f`](https://github.com/polynaut/dth-character-studio/commit/ca0fb2fe9903ddacf18d5acd89f39631e7bce20d)]:
+  - @dth/rom@0.42.0
+  - @dth/ui@0.42.0
+
 ## 0.41.42
 
 ### Patch Changes
