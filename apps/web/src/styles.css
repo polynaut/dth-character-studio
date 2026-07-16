@@ -308,6 +308,17 @@ a {
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }
+  /* Base state = the animation's `from` frame. On a page too short to scroll
+     (e.g. the Notes tab) the scroll timeline is INACTIVE and the animation
+     yields no values at all — without this base, these "appear on scroll"
+     elements would show their default (visible) state right at the top,
+     doubling the Back link. Scoped inside @supports: browsers without scroll
+     timelines must keep them always visible (the header never collapses). */
+  .runhint-scroll,
+  .backlink-scroll {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* The Discard / Save actions start a little larger — taller, more horizontal

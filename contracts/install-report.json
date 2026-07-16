@@ -1,0 +1,30 @@
+{
+  "dryRun": true,
+  "steps": [
+    {
+      "label": "— Genesis 9 —",
+      "files": 0,
+      "status": "header",
+      "detail": "",
+      "filesList": [],
+      "note": ""
+    },
+    {
+      "label": "Golden Palace G9",
+      "files": 2147,
+      "status": "ok",
+      "detail": "would copy 2147 files",
+      "filesList": ["data/GoldenPalace/gp9.dsf", "People/Genesis 9/GP9.duf"],
+      "note": ""
+    },
+    {
+      "label": "GP9 wrapper.zip",
+      "files": 0,
+      "status": "skipped",
+      "detail": "already installed",
+      "filesList": [],
+      "note": "same files as Golden Palace G9"
+    }
+  ],
+  "totalFiles": 2147
+}

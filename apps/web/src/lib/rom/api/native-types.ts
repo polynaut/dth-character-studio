@@ -87,6 +87,19 @@ export const dedupReportSchema = z.object({
   backupDir: z.string(),
 })
 
+// --- pose-asset frame measurement (poses.rs) ---------------------------------
+
+/** One measured `.duf` (mirrors Rust `PoseAssetFrames`). The measurement feeds
+ *  the frame-alignment invariant, so its shape is guarded extra hard: parsed at
+ *  the boundary here AND pinned by contracts/pose-asset-frames.json. */
+export const poseAssetFramesSchema = z.object({
+  path: z.string(),
+  /** Frames the asset occupies (0 when it couldn't be measured — see `error`). */
+  frames: z.number(),
+  /** Empty on success; otherwise why the count couldn't be determined. */
+  error: z.string(),
+})
+
 // --- housekeeping (housekeeping.rs `SweepReport`) ----------------------------
 
 /** Files + bytes removed by a housekeeping action (mirrors Rust `SweepReport`). */
@@ -105,3 +118,4 @@ export type DupMember = z.infer<typeof dupMemberSchema>
 export type AssetDup = z.infer<typeof assetDupSchema>
 export type DedupReport = z.infer<typeof dedupReportSchema>
 export type HousekeepingResult = z.infer<typeof housekeepingResultSchema>
+export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>

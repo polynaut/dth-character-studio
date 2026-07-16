@@ -155,22 +155,26 @@ export function JcmModsGrid({
 
   return (
     <div className="rounded-md border">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm select-none"
+      {/* A div, not a <button>: the InfoPopup inside is itself a button, and
+          button-in-button is invalid HTML (React warns, assistive tech
+          misreads it). Same pattern as the section title rows above. */}
+      <div
+        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm select-none"
         onClick={() => setOpenGrid((o) => !o)}
       >
         <ChevronRight
           className={`size-4 shrink-0 text-muted-foreground transition-transform ${openGrid ? 'rotate-90' : ''}`}
         />
         <span className="font-medium">Modify JCM frames</span>
-        <InfoPopup label="Modify JCM frames — more information" className="-my-1">
-          Drive <strong>additional morphs</strong> along the pre-defined JCM poses: a rule
-          watches one bone's rotation axis across the JCM ROM and sets its morphs
-          proportionally to the keyed angle — the angle range maps linearly onto the value
-          range, separately for positive and negative rotation. Example: add a custom
-          calf-flex morph on top of the shipped knee-bend poses.
-        </InfoPopup>
+        <span onClick={(e) => e.stopPropagation()}>
+          <InfoPopup label="Modify JCM frames — more information" className="-my-1">
+            Drive <strong>additional morphs</strong> along the pre-defined JCM poses: a rule
+            watches one bone's rotation axis across the JCM ROM and sets its morphs
+            proportionally to the keyed angle — the angle range maps linearly onto the value
+            range, separately for positive and negative rotation. Example: add a custom
+            calf-flex morph on top of the shipped knee-bend poses.
+          </InfoPopup>
+        </span>
         {mods.length > 0 && (
           <span className="text-xs text-muted-foreground">
             {mods.length} rule{mods.length === 1 ? '' : 's'} · {driveCount} morph
@@ -178,7 +182,7 @@ export function JcmModsGrid({
           </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground">optional</span>
-      </button>
+      </div>
 
       {openGrid && (
         <div className="space-y-3 border-t px-3 py-3">

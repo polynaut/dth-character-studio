@@ -68,6 +68,16 @@ test('project window: character editor measures, edits and saves both artifacts'
     .poll(() => commandCalls(page, 'pose_asset_frames'))
     .toContainEqual({ paths: [DUF.base] })
 
+  // The sticky header's scroll-in Back link is hidden at the top — including on
+  // the SHORT Notes tab, where the page can't scroll and the scroll timeline is
+  // inactive (the regression: an inactive timeline used to fall back to the
+  // visible base state, doubling the Back link).
+  const backlink = page.locator('.backlink-scroll')
+  await expect(backlink).toHaveCSS('opacity', '0')
+  await page.getByRole('tab', { name: 'Notes' }).click()
+  await expect(backlink).toHaveCSS('opacity', '0')
+  await page.getByRole('tab', { name: 'Character' }).click()
+
   // Toggle the GEN section on → the editor must re-measure, now including the
   // Golden Palace ROM (female character). This exercises presetFramesSignature
   // → resolvePresetFrames → the native measurement end-to-end.

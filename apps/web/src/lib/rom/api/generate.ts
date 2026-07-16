@@ -12,6 +12,7 @@ import {
   resolveRomPaths,
 } from '@dth/rom'
 import * as storage from '../storage'
+import { poseAssetFramesSchema } from './native-types'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
   charScopeInput,
@@ -46,14 +47,15 @@ interface MeasuredFrames {
   error: string
 }
 
-/** Measure the frame length of each `.duf` via the native command. */
+/** Measure the frame length of each `.duf` via the native command. The result
+ *  is parsed through the contract schema (not a bare cast), so a Rust-side
+ *  shape change throws HERE instead of desyncing frame numbers downstream. */
 async function measureFrames(paths: Array<string>): Promise<Map<string, MeasuredFrames>> {
   const unique = [...new Set(paths.filter(Boolean))]
   if (unique.length === 0) return new Map()
-  const results = await invoke<Array<{ path: string; frames: number; error: string }>>(
-    'pose_asset_frames',
-    { paths: unique },
-  )
+  const results = z
+    .array(poseAssetFramesSchema)
+    .parse(await invoke('pose_asset_frames', { paths: unique }))
   return new Map(results.map((r) => [r.path, { frames: r.frames, error: r.error }]))
 }
 
