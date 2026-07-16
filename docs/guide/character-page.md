@@ -62,8 +62,21 @@ DTH 2.x, and G8.1 · DQS · JCM+FAC on the 1.9.x pipeline) and uses the custom-o
 layout instead, which hasn't been byte-validated in Houdini. The **Daz-side ROM
 works either way** — the tag is about the Houdini import.
 
-The **Genesis 9 specific** box (UE5 tear UV, FACS/Flexion strength) is covered in
-[Advanced character options](./advanced.md).
+## The "Genesis 9 specific" box
+
+G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields:
+
+- **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
+  **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
+  DTH's **Lacrimal Fluid** material lines up without you doing the manual
+  *Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only
+  matters if you use that material, and an example UE5 tear UV only ships for
+  Genesis 9 — so it's off by default and absent on other generations.
+- **FACS detail strength / Flexion strength** — the G9 strength dials
+  (**FACS Detail Strength** and **Flexion Automatic Strength**), applied at
+  frame 0 as the ROM builds. Daz-style percentages (0–100 %), like every morph
+  value in the studio. Leave them at `100 %` unless your character needs the
+  stock correctives dialed up or down.
 
 ## Linked files
 
