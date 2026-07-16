@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { FileText, FolderOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, FolderOpen } from 'lucide-react'
 
 import { Button } from '@dth/ui'
+import { PathCode } from '#/components/path-code.tsx'
 import { listScanFrameCsvs } from '#/lib/rom/api.ts'
 
 import type { ScanFrameCsv } from '#/lib/rom/api.ts'
@@ -16,6 +17,13 @@ function relativeTime(ms: number): string {
   if (diff < 3_600_000) return `${Math.round(diff / 60_000)} min ago`
   if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)} h ago`
   return new Date(ms).toLocaleDateString()
+}
+
+/** Middle-truncate a path to its first and last segments, so the chip shows
+ *  where it starts and which file it is. Copying still yields the full path. */
+function truncatePath(p: string): string {
+  const parts = p.split('/')
+  return parts.length <= 5 ? p : [...parts.slice(0, 2), '…', ...parts.slice(-2)].join('/')
 }
 
 /**
@@ -37,6 +45,8 @@ export function ScanCsvPickerDialog({
 }) {
   // null = still loading (avoids flashing the empty-state hint).
   const [scans, setScans] = useState<Array<ScanFrameCsv> | null>(null)
+  // The scan whose file-path chip is expanded below its row (one at a time).
+  const [expandedPath, setExpandedPath] = useState<string | null>(null)
   useEffect(() => {
     let active = true
     listScanFrameCsvs()
@@ -81,19 +91,41 @@ export function ScanCsvPickerDialog({
         {scans !== null && scans.length > 0 && (
           <ul className="max-h-72 space-y-1 overflow-y-auto">
             {scans.map((scan) => (
-              <li key={scan.path}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                  title={scan.path}
-                  onClick={() => onPick(scan.path)}
-                >
-                  <FileText className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate font-medium">{scan.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {relativeTime(scan.modifiedAt)}
-                  </span>
-                </button>
+              <li key={scan.path} className="rounded-md border">
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                    onClick={() => onPick(scan.path)}
+                  >
+                    <FileText className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{scan.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {relativeTime(scan.modifiedAt)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Show the scan's file path"
+                    className="mr-1 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    onClick={() =>
+                      setExpandedPath(expandedPath === scan.path ? null : scan.path)
+                    }
+                  >
+                    {expandedPath === scan.path ? (
+                      <ChevronDown className="size-4" />
+                    ) : (
+                      <ChevronRight className="size-4" />
+                    )}
+                  </button>
+                </div>
+                {expandedPath === scan.path && (
+                  <div className="border-t px-3 py-2 text-xs">
+                    {/* Click copies the FULL path, Alt+click reveals it — the chip
+                        only displays a start…end truncation. */}
+                    <PathCode path={scan.path}>{truncatePath(scan.path)}</PathCode>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

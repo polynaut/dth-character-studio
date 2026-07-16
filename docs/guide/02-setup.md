@@ -93,6 +93,21 @@ direct export.
 Press **Save** at the top. The studio scans the release's pose presets — you're
 ready to create a project.
 
+## The App Data tab
+
+Settings also has an **App Data** tab — the app's own on-disk state:
+
+- **App data folder** — where machine settings, the recent-projects list,
+  network-drive mappings and scan outputs live (project data lives in each
+  project's own folder). The path chip copies it; Alt+click reveals it.
+- **Storage & housekeeping** — the studio ages out **its own** generated data so
+  it can't fill your disk: **Clean up now** deletes per-scene
+  [product-scan](./product-scanning.md) files and `Scan_Frames` keyframe CSVs
+  older than 30 days (also swept automatically on every launch).
+
+(Mapped **network drives** the app remembers show as their own pane at the bottom
+of the **General** tab, with a "Re-map missing now" action.)
+
 &nbsp;
 
 > [!NOTE]

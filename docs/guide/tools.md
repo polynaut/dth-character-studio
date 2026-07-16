@@ -58,7 +58,8 @@ Finds **duplicate assets** (a folder and its identical `.zip`, or the same produ
 at two versions) and **conflicting shared files** (the same file shipped by two
 products at different sizes). **Scan** previews; nothing changes until you
 **Apply**. Apply only **quarantines** the redundant copies — it *moves* them to a
-**Quarantine folder** you set (reversible; pick one *outside* your asset sources).
+**Quarantine folder** you set (reversible; pick one *outside* your asset sources —
+and empty it yourself in Explorer once you're sure you don't need the copies).
 Shared-file conflicts are **never rewritten** (that would edit an author's
 download) — you **Accept** them instead, which tells the scan they're legitimately
 shared. See also the [nested-zip handling](./tools.md) for store "wrapper"
@@ -69,24 +70,6 @@ downloads (a zip inside a zip) — the scan looks inside them automatically.
   <img width="900" alt="Deduplicate section" src="ADD_IMAGE_URL" />
   <br>
   <sub><em>The Deduplicate section for redundant and conflicting assets.</em></sub>
-</p>
--->
-
-### Storage & housekeeping
-
-The studio ages out **its own** generated data so it can't fill your disk:
-
-- **Clean up now** — deletes per-scene [product-scan](./product-scanning.md) files
-  and `Scan_Frames` keyframe CSVs older than 30 days (also swept automatically on
-  every launch) and reports how much it freed.
-- **Empty quarantine** — shows the dedup quarantine's size and lets you reclaim it
-  with a confirm. Never emptied automatically — it's your reversible backup.
-
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
-<p align="center">
-  <img width="900" alt="Storage &amp; housekeeping section" src="ADD_IMAGE_URL" />
-  <br>
-  <sub><em>The Storage &amp; housekeeping section.</em></sub>
 </p>
 -->
 

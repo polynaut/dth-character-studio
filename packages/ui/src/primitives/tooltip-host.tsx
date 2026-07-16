@@ -5,8 +5,10 @@ import { computePosition, flip, offset, shift } from '@floating-ui/dom'
 /** Hover delay before the tooltip appears (keyboard focus shows immediately). */
 const SHOW_DELAY_MS = 350
 
+// break-words: long unbroken tokens (absolute paths, URLs) must wrap inside the
+// box — whitespace-pre-line alone only wraps at spaces, so they'd overflow.
 const TIP_BASE =
-  'pointer-events-none fixed top-0 left-0 z-[100] w-max max-w-xs rounded-md px-2.5 py-1.5 text-xs leading-relaxed whitespace-pre-line shadow-lg'
+  'pointer-events-none fixed top-0 left-0 z-[100] w-max max-w-xs rounded-md px-2.5 py-1.5 text-xs leading-relaxed break-words whitespace-pre-line shadow-lg'
 const TIP_DEFAULT = `${TIP_BASE} border bg-popover text-popover-foreground`
 // An element with data-tooltip-variant="error" (e.g. an invalid input) gets an
 // alert-style tooltip: red background, light text.
