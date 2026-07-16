@@ -146,14 +146,13 @@ export type {
 
 // --- maintenance: housekeeping + network drives ------------------------------
 export {
-  emptyQuarantine,
   ensureNetworkDrives,
   fetchKnownDrives,
   forgetNetworkDrive,
   housekeepingSweep,
   NOTE_MEDIA_RETENTION_DAYS,
   PRODUCT_SCAN_RETENTION_DAYS,
-  quarantineStats,
+  SCAN_FRAMES_RETENTION_DAYS,
   rememberNetworkPath,
   uncForPath,
 } from './api/maintenance'

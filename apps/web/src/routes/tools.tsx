@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
@@ -11,7 +11,6 @@ import {
   installDazPresets,
   installHoudiniPresets,
   listDazAssets,
-  quarantineStats,
   saveSettings,
   uninstallDaz,
 } from '#/lib/rom/api.ts'
@@ -21,7 +20,6 @@ import { DazAssetsSection } from '#/components/tools/daz-assets-section.tsx'
 import { DazPresetsSection } from '#/components/tools/daz-presets-section.tsx'
 import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
-import { HousekeepingSection } from '#/components/tools/housekeeping-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
 import { toast } from 'sonner'
 
@@ -66,20 +64,6 @@ function ToolsPage() {
   const [uninstallBusy, setUninstallBusy] = useState(false)
   const [uninstallReport, setUninstallReport] = useState<InstallReport | null>(null)
   const [uninstallConfirm, setUninstallConfirm] = useState(false)
-  // Housekeeping — quarantine size/empty (the sweep + empty actions live in the
-  // section; the stats are shared with the dedup Apply, so they stay up here).
-  const [quarantine, setQuarantine] = useState<{ files: number; bytes: number } | null>(null)
-  async function loadQuarantineStats() {
-    const stats = await quarantineStats()
-    setQuarantine(stats.exists ? { files: stats.files, bytes: stats.bytes } : null)
-  }
-
-  // Load the quarantine stats once on open. Fire-and-forget — the check
-  // swallows its own errors, so there's nothing to catch here.
-  useEffect(() => {
-    void loadQuarantineStats()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Scoped to the fields THIS page edits (assets / morphs / presets / dedup /
   // uninstall). Save still writes the full settings object, but the Settings-page
@@ -232,8 +216,6 @@ function ToolsPage() {
         setAssetsReport(null)
         setKeeperOverrides(new Set())
         setDedupReport(await dedupDazAssets({ data: { dryRun: true } }))
-        // The quarantine just grew — refresh its size readout.
-        void loadQuarantineStats()
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -318,12 +300,6 @@ function ToolsPage() {
             onCloseReport={() => setDedupReport(null)}
             onScan={() => void runDedup(true)}
             onApply={() => void runDedup(false)}
-          />
-
-          <HousekeepingSection
-            quarantineFolder={settings.dedupQuarantineFolder}
-            quarantine={quarantine}
-            onReloadStats={loadQuarantineStats}
           />
 
           <CustomMorphsSection

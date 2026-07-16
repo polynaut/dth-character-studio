@@ -27,6 +27,7 @@ import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
+import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
 import { toast } from 'sonner'
 
 import type {
@@ -238,7 +239,7 @@ function NetworkDrivesSection() {
   }
 
   return (
-    <div className="border-t pt-5">
+    <section className="rounded-lg border bg-card p-5">
       <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
         Network drives
         <InfoPopup label="Network drives — more information">
@@ -272,7 +273,7 @@ function NetworkDrivesSection() {
         {busy ? 'Mapping…' : 'Re-map missing now'}
       </Button>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -341,7 +342,7 @@ function SettingsPage() {
   // checked / no install folder; '' = folder set but plugin not installed there.
   const [installedExporter, setInstalledExporter] = useState<string | null>(null)
   // The app's internal data folder (settings.json, recents.json, network-drives.json,
-  // …), resolved once for display in the General tab.
+  // …), resolved once for display in the App Data tab.
   const [appDataFolder, setAppDataFolder] = useState('')
 
   // Project tab — per-project `.dcsp` behaviour defaults (only present when this
@@ -667,10 +668,13 @@ function SettingsPage() {
         onSave={() => void onSaveAll()}
       />
 
-      <Tabs defaultValue="general" className="max-w-3xl">
+      {/* In a project window the Project tab leads (and opens by default) —
+          matching the tab order; General/App Data are machine-wide. */}
+      <Tabs defaultValue={project ? 'project' : 'general'} className="max-w-3xl">
         <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
           {project && <TabsTrigger value="project">Project</TabsTrigger>}
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="appdata">App Data</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-5">
@@ -1070,15 +1074,22 @@ function SettingsPage() {
             )}
           </section>
 
-          {/* Read-only — informational locations the app manages itself. */}
+          {/* Renders its own card, or nothing when no network drives are
+              detected — see NetworkDrivesSection. */}
+          <NetworkDrivesSection />
+        </TabsContent>
+
+        {/* App Data — the app's own on-disk state: where it lives and how it's
+            bounded (housekeeping). */}
+        <TabsContent value="appdata" className="space-y-5">
           <section className="space-y-5 rounded-lg border bg-card p-5">
             <div>
               <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
                 App data folder
                 <InfoPopup label="App data folder — more information">
-                  Where the app keeps its machine settings, the recent-projects list and
-                  network-drive mappings. Project data (characters, avatars) lives in each
-                  project's own folder.
+                  Where the app keeps its machine settings, the recent-projects list,
+                  network-drive mappings and scan outputs. Project data (characters,
+                  avatars) lives in each project's own folder.
                 </InfoPopup>
               </h2>
               {appDataFolder ? (
@@ -1087,11 +1098,9 @@ function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Resolving…</p>
               )}
             </div>
-            {/* Renders its own heading + separator, or nothing when no network
-                drives are detected — see NetworkDrivesSection. */}
-            <NetworkDrivesSection />
           </section>
 
+          <HousekeepingSection />
         </TabsContent>
 
         {project && (

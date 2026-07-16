@@ -3,12 +3,12 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use crate::fsutil::{entry_is_real_dir, rail_target, unsafe_recursive_target};
+use crate::fsutil::entry_is_real_dir;
 
 // --- Housekeeping: keep app-generated data from filling the disk -------------
-// The app writes per-scene product-scan CSVs (app-data) and moves redundant Daz
-// assets into a dedup quarantine. Both can pile up. These commands age-out the
-// former on a schedule and let the user empty the latter on demand.
+// The app writes per-scene scan files into app-data (product-scan CSVs, the
+// Scan_Frames keyframe CSVs) which pile up over time. This command ages them
+// out on a schedule (launch + the Settings "Clean up now" button).
 
 /// Files + bytes deleted by a housekeeping action (also the empty-quarantine result).
 #[derive(Serialize, Default)]
@@ -16,24 +16,6 @@ use crate::fsutil::{entry_is_real_dir, rail_target, unsafe_recursive_target};
 pub(crate) struct SweepReport {
     files_deleted: u64,
     bytes_freed: u64,
-}
-
-/// Recursively total the files + bytes under `dir` (0/0 when missing/unreadable).
-fn dir_size(dir: &Path) -> (u64, u64) {
-    let (mut files, mut bytes) = (0u64, 0u64);
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if entry_is_real_dir(&entry) {
-                let (f, b) = dir_size(&entry.path());
-                files += f;
-                bytes += b;
-            } else if let Ok(md) = entry.metadata() {
-                files += 1;
-                bytes += md.len();
-            }
-        }
-    }
-    (files, bytes)
 }
 
 /// Delete every file under `dir` last modified before `cutoff`, then remove any
@@ -96,64 +78,6 @@ pub fn housekeeping_sweep(request: SweepRequest) -> SweepReport {
 
 /// Whether a folder exists + its total file count and size — for the quarantine
 /// size readout in Tools.
-#[derive(Serialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FolderStats {
-    exists: bool,
-    files: u64,
-    bytes: u64,
-}
-
-#[tauri::command]
-pub fn folder_stats(path: String) -> FolderStats {
-    let dir = Path::new(&path);
-    if path.trim().is_empty() || !dir.is_dir() {
-        return FolderStats::default();
-    }
-    let (files, bytes) = dir_size(dir);
-    FolderStats { exists: true, files, bytes }
-}
-
-/// Empty the CONTENTS of the dedup quarantine folder (keeping the folder itself) —
-/// the user's manual "reclaim this backup" action. The path is the user-configured
-/// quarantine folder; the UI confirms first (this permanently deletes the moved-aside
-/// duplicate assets).
-#[tauri::command]
-pub fn empty_folder(path: String) -> SweepReport {
-    let mut report = SweepReport::default();
-    let dir = Path::new(&path);
-    // Rail: never empty a drive/profile root, even if the quarantine folder was
-    // (mis)configured to one. Contents-only (the folder itself is kept). Judged
-    // on the CANONICAL path (rail_target) so a junction or `..`-laden spelling
-    // can't dress a root up as a deep-looking folder.
-    if path.trim().is_empty() || !dir.is_dir() || unsafe_recursive_target(&rail_target(dir)).is_some()
-    {
-        return report;
-    }
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return report,
-    };
-    for entry in entries.flatten() {
-        let p = entry.path();
-        let (files, bytes) = if p.is_dir() {
-            dir_size(&p)
-        } else {
-            (1, entry.metadata().map(|m| m.len()).unwrap_or(0))
-        };
-        let removed = if p.is_dir() {
-            fs::remove_dir_all(&p).is_ok()
-        } else {
-            fs::remove_file(&p).is_ok()
-        };
-        if removed {
-            report.files_deleted += files;
-            report.bytes_freed += bytes;
-        }
-    }
-    report
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,18 +118,6 @@ mod tests {
 
         assert_eq!(report.files_deleted, 0);
         assert!(scene.join("Fresh.csv").exists(), "a fresh file must be kept");
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn dir_size_totals_files_and_bytes() {
-        let base = unique_temp_dir("dirsize");
-        fs::create_dir_all(base.join("sub")).unwrap();
-        fs::write(base.join("a.bin"), b"1234").unwrap();
-        fs::write(base.join("sub").join("b.bin"), b"567").unwrap();
-        let (files, bytes) = dir_size(&base);
-        assert_eq!(files, 2);
-        assert_eq!(bytes, 7);
         let _ = fs::remove_dir_all(&base);
     }
 }

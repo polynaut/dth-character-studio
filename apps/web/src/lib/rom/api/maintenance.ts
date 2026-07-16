@@ -80,29 +80,6 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
   }
 }
 
-/** The dedup quarantine folder's file count + size (Tools readout). Zeroed when
- *  no quarantine folder is configured or the app has no native layer. */
-export async function quarantineStats(): Promise<{
-  exists: boolean
-  files: number
-  bytes: number
-}> {
-  const { dedupQuarantineFolder } = await storage.getSettings()
-  if (!isTauri() || !dedupQuarantineFolder.trim()) return { exists: false, files: 0, bytes: 0 }
-  return invoke('folder_stats', { path: dedupQuarantineFolder })
-}
-
-/** Empty the dedup quarantine folder's contents — the user's manual "reclaim this
- *  backup" action. Callers MUST confirm first: this permanently deletes the
- *  moved-aside duplicate assets (they can be re-created by re-running dedup). */
-export async function emptyQuarantine(): Promise<HousekeepingResult> {
-  const { dedupQuarantineFolder } = await storage.getSettings()
-  if (!dedupQuarantineFolder.trim()) throw new Error('No quarantine folder is set.')
-  return housekeepingResultSchema.parse(
-    await invoke('empty_folder', { path: dedupQuarantineFolder }),
-  )
-}
-
 // --- Network drives -------------------------------------------------------
 
 /** Outcome of trying to ensure one known network drive is mapped (mirrors Rust). */
