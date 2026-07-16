@@ -8,6 +8,7 @@ import {
   presetFramesSignature,
   referenceFrames,
   resolveRomPaths,
+  sectionPresetAvailable,
   toCharacterScriptDsa,
   toExportScriptDsa,
   toPoseAssetCsv,
@@ -26,7 +27,14 @@ function characterConfig(content: string) {
   const close = content.indexOf('\n};', open) + 2
   return JSON.parse(content.slice(open, close))
 }
-import { flattenRom, mirrorGroup, presetFrameCount, sectionsFromFlatFrames } from './frames'
+import {
+  boneScaleRefPoses,
+  flattenRom,
+  mirrorGroup,
+  presetEndFrame,
+  presetFrameCount,
+  sectionsFromFlatFrames,
+} from './frames'
 import { characterSchema, defaultSections } from './types'
 
 import type { PresetFrames } from './frames'
@@ -518,6 +526,88 @@ describe('presetFramesSignature', () => {
     after.sections.EXP.enabled = true
     after.sections.FBM.groups[0].poses[0].name = 'Edited'
     expect(presetFramesSignature(after)).toBe(presetFramesSignature(before))
+  })
+})
+
+describe('boneScaleRefPoses — the single reference-FBX rule', () => {
+  it('drives referenceFrames one-to-one; a bone-scale flag outside GEN/FBM stays inert', () => {
+    const sections = makeSections()
+    sections.FBM.groups[0].poses[0].boneScaleRef = true
+    // A stray flag on a MISC pose must not produce a reference frame (a file
+    // column on a MIS row breaks the HDA's import_from_csv).
+    sections.MISC.enabled = true
+    sections.MISC.mode = 'custom'
+    sections.MISC.groups = [
+      {
+        id: 'm1',
+        label: '',
+        suffix: 'centre',
+        method: 'individual',
+        calculateFrom: 'default',
+        poses: [{ id: 'mp', name: 'Odd', morphs: [], boneScaleRef: true }],
+      },
+    ]
+    const walks = boneScaleRefPoses(sections)
+    expect(walks.map((w) => [w.section, w.pose.name])).toEqual([['FBM', 'BodyTone']])
+    // referenceFrames = the same walks at their absolute frames — by construction.
+    const character = makeCharacter({ sections })
+    expect(referenceFrames(character, FRAMES)).toEqual(
+      walks.map((w) => presetEndFrame(sections, 'female', FRAMES) + 1 + w.relativeFrame),
+    )
+  })
+})
+
+describe('sectionPresetAvailable — availability matches resolveRomPaths resolution', () => {
+  // Two catalogs: a full G9 release, and a sparse one (FAC-less linear JCM base
+  // only — no GEN, no PHY). For every preset-backed section, "available" must
+  // agree with "resolveRomPaths actually yields the block's path": the chip in
+  // the editor and the resolution in generation are two views of ONE rule.
+  const rich = {
+    folder: 'D:/P',
+    assets: [
+      { name: 'G9 DQS JCM FAC - Base', relPath: 'a.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'JCM' as const, includesFac: true },
+      { name: 'G9 DQS JCM FAC - Mouth', relPath: 'b.duf', genesis: 'G9' as const, skinning: 'dqs' as const, section: 'FAC' as const, includesFac: false },
+      { name: 'GP9 - Golden Palace', relPath: 'c.duf', genesis: 'G9' as const, skinning: null, section: 'GEN' as const, includesFac: false },
+      { name: 'DK9 - Dicktator', relPath: 'd.duf', genesis: 'G9' as const, skinning: null, section: 'GEN' as const, includesFac: false },
+      { name: 'G9 Physics', relPath: 'e.duf', genesis: 'G9' as const, skinning: null, section: 'PHY' as const, includesFac: false },
+    ],
+  }
+  const sparse = {
+    folder: 'D:/P',
+    assets: [
+      { name: 'G9 LINEAR JCM - Base', relPath: 'f.duf', genesis: 'G9' as const, skinning: 'linear' as const, section: 'JCM' as const, includesFac: false },
+    ],
+  }
+  // section → the RomPaths key its preset resolves to (GEN female → GP).
+  const CASES = [
+    ['JCM', 'jcm'],
+    ['FAC', 'mouth'],
+    ['GEN', 'gp'],
+    ['PHY', 'phys'],
+  ] as const
+
+  for (const [catalogName, catalog] of [['rich', rich], ['sparse', sparse]] as const) {
+    it(`agrees with the resolved paths for the ${catalogName} catalog`, () => {
+      for (const [section, pathKey] of CASES) {
+        const sections = makeSections()
+        sections[section].enabled = true
+        sections[section].mode = 'preset'
+        const character = makeCharacter({ sections })
+        const available = sectionPresetAvailable(
+          section,
+          catalog,
+          'G9',
+          'female',
+          sections[section].presetAssets,
+        )
+        const resolved = resolveRomPaths(character, catalog)[pathKey] !== undefined
+        expect(available, `${section} availability vs resolution`).toBe(resolved)
+      }
+    })
+  }
+
+  it('reports available on an EMPTY catalog (unknown must not lock the editor)', () => {
+    expect(sectionPresetAvailable('GEN', { assets: [] }, 'G9', 'female', [])).toBe(true)
   })
 })
 

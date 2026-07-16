@@ -1,4 +1,10 @@
-import { defaultSections, genRomIncludes, newId, ROM_SECTIONS } from './types.ts'
+import {
+  defaultSections,
+  genRomIncludes,
+  newId,
+  REFERENCE_FBX_SECTIONS,
+  ROM_SECTIONS,
+} from './types.ts'
 
 import type {
   Gender,
@@ -139,6 +145,29 @@ export function* walkCustomPoses(sections: RomSections): Generator<CustomPoseWal
       }
     }
   }
+}
+
+/**
+ * Whether a custom pose needs a reference-skeleton FBX from the DTH Exporter:
+ * marked **bone scale**, in a section reference FBX applies to
+ * ({@link REFERENCE_FBX_SECTIONS}, GEN/FBM — a stray flag elsewhere stays
+ * inert; a non-empty file column on e.g. a MIS row breaks the HDA's
+ * import_from_csv). THE single definition of that rule — the CSV's file
+ * column, the exporter's reference-frame list and the editor's
+ * missing-export-folder warning all ask HERE, so they can't drift apart.
+ */
+export function isBoneScaleRefPose(
+  section: RomSection,
+  pose: Pick<RomPose, 'boneScaleRef'>,
+): boolean {
+  return pose.boneScaleRef && REFERENCE_FBX_SECTIONS.includes(section)
+}
+
+/** The custom poses needing a reference-skeleton FBX (see {@link isBoneScaleRefPose}). */
+export function boneScaleRefPoses(sections: RomSections): Array<CustomPoseWalk> {
+  return [...walkCustomPoses(sections)].filter((walk) =>
+    isBoneScaleRefPose(walk.section, walk.pose),
+  )
 }
 
 export interface FlatFrame {

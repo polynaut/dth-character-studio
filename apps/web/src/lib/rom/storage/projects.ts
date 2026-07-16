@@ -50,18 +50,27 @@ export interface DcspManifest {
   unrealProjects: Array<string>
 }
 
+/**
+ * Per-project behaviour defaults — THE single copy: a fresh manifest
+ * ({@link readManifest} filling gaps) and the api's project-settings save
+ * input both take their defaults from here, so the two can't drift.
+ */
+export const PROJECT_BEHAVIOR_DEFAULTS = {
+  dazSubdir: 'daz3d',
+  houdiniSubdir: 'houdini',
+  createHoudiniSubdir: true,
+  assetsEnabled: false,
+  dazProductsEnabled: false,
+  charactersSubdir: '',
+} as const
+
 function manifestDefaults(dir: string): DcspManifest {
   return {
     schemaVersion: DCSP_SCHEMA_VERSION,
     id: '',
     name: basename(dir),
     createdAt: '',
-    dazSubdir: 'daz3d',
-    houdiniSubdir: 'houdini',
-    createHoudiniSubdir: true,
-    assetsEnabled: false,
-    dazProductsEnabled: false,
-    charactersSubdir: '',
+    ...PROJECT_BEHAVIOR_DEFAULTS,
     unrealProjects: [],
   }
 }

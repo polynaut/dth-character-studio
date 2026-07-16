@@ -50,10 +50,10 @@ import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
+  boneScaleRefPoses,
   characterSkinning,
   countPoses,
   presetFramesSignature,
-  REFERENCE_FBX_SECTIONS,
   romTimeline,
 } from '@dth/rom'
 
@@ -221,14 +221,8 @@ function CharacterPage() {
 
   // Bone-scale frames need the exporter (an export dir) to produce their reference
   // FBX and resolve its CSV path — flag when some are set but no export dir is.
-  // Only GEN/FBM count: generation ignores the flag elsewhere (REFERENCE_FBX_SECTIONS).
-  const boneScaleFrames = Object.entries(character.sections).reduce(
-    (n, [section, s]) =>
-      s.enabled && s.mode === 'custom' && REFERENCE_FBX_SECTIONS.includes(section as RomSection)
-        ? n + s.groups.reduce((m, g) => m + g.poses.filter((p) => p.boneScaleRef).length, 0)
-        : n,
-    0,
-  )
+  // Which poses count is generation's call (boneScaleRefPoses), not re-derived here.
+  const boneScaleFrames = boneScaleRefPoses(character.sections).length
   // Re-measure the preset ROM block lengths when a preset/custom selection that
   // affects them changes (not on every custom-pose keystroke). Debounced; the
   // last good value is kept until the new one lands, so frame numbers don't
