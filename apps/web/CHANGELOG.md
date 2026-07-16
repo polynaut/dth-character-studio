@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.41
+
+### Patch Changes
+
+- [#312](https://github.com/polynaut/dth-character-studio/pull/312) [`f8b478a`](https://github.com/polynaut/dth-character-studio/commit/f8b478ae51bfec1999a5b8e29a658a21b954f740) Thanks [@polynaut](https://github.com/polynaut)! - Genesis 9 box rearranged: the strength dials sit on top (baseline-aligned with Genesis/Gender, as before the toggle moved in) and the UE5 tear UV toggle sits below them.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.41
+  - @dth/ui@0.41.41
+
 ## 0.41.40
 
 ### Patch Changes
