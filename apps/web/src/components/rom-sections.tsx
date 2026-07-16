@@ -8,6 +8,7 @@ import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
+import { ScanCsvPickerDialog } from '#/components/scan-csv-picker-dialog.tsx'
 import {
   GROUPED_SECTIONS,
   ROM_SECTIONS,
@@ -102,6 +103,8 @@ export function RomSections({
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
+  // The section whose scan-CSV picker is open (null = no import in progress).
+  const [pickerSection, setPickerSection] = useState<RomSection | null>(null)
   // A picked CSV awaiting its frame-range dialog (null = no import in progress).
   const [pendingCsv, setPendingCsv] = useState<{
     section: RomSection
@@ -188,12 +191,12 @@ export function RomSections({
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })
   }
 
-  // Bulk-import a DAZ morph CSV into a section. A full scene scan covers the whole
-  // ROM, so after picking the file we open the frame-range dialog; applyCsvImport
-  // commits the chosen slice.
-  async function importCsv(section: RomSection) {
-    const filePath = await pickCsvPath('Select a DAZ morph CSV')
-    if (!filePath) return
+  // Bulk-import a DAZ morph CSV into a section: the picker dialog lists the
+  // Scan_Frames scans (plus Browse for hand-curated files); a full scene scan
+  // covers the whole ROM, so the chosen file then opens the frame-range dialog
+  // and applyCsvImport commits the slice.
+  async function loadCsv(section: RomSection, filePath: string) {
+    setPickerSection(null)
     let imported: Awaited<ReturnType<typeof importPosesFromCsv>>
     try {
       imported = await importPosesFromCsv({ data: { filePath } })
@@ -206,6 +209,12 @@ export function RomSections({
       return
     }
     setPendingCsv({ section, poses: imported })
+  }
+
+  async function browseCsv(section: RomSection) {
+    const filePath = await pickCsvPath('Select a DAZ morph CSV')
+    if (!filePath) return
+    await loadCsv(section, filePath)
   }
 
   // Commit the chosen frame range: each selected row becomes a pose (a cleaned
@@ -455,7 +464,7 @@ export function RomSections({
                       removable={false}
                       onGroupsChange={(groups) => patchSection(section, { groups })}
                     />
-                    <ImportCsvButton onImport={() => void importCsv(section)} />
+                    <ImportCsvButton onImport={() => setPickerSection(section)} />
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -490,7 +499,7 @@ export function RomSections({
                       >
                         <Plus /> Add group
                       </Button>
-                      <ImportCsvButton onImport={() => void importCsv(section)} />
+                      <ImportCsvButton onImport={() => setPickerSection(section)} />
                     </div>
                   </div>
                 )}
@@ -509,6 +518,14 @@ export function RomSections({
           </div>
         )
       })}
+      {pickerSection && (
+        <ScanCsvPickerDialog
+          sectionLabel={SECTION_LABELS[pickerSection]}
+          onPick={(path) => void loadCsv(pickerSection, path)}
+          onBrowse={() => void browseCsv(pickerSection)}
+          onClose={() => setPickerSection(null)}
+        />
+      )}
       {pendingCsv && (
         <CsvImportDialog
           sectionLabel={SECTION_LABELS[pendingCsv.section]}

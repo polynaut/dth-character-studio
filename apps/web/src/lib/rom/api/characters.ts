@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
@@ -464,6 +464,41 @@ const csvImportInput = z.object({ filePath: z.string().min(1) })
 export async function importPosesFromCsv({ data }: { data: unknown }): Promise<Array<ImportedPose>> {
   const { filePath } = csvImportInput.parse(data)
   return posesFromDazCsv(await readTextFile(filePath))
+}
+
+/** One CSV the installed Scan_Frames.dsa wrote into the studio's scan folder. */
+export interface ScanFrameCsv {
+  /** Display name — the Daz scene the scan ran on (file name without .csv). */
+  name: string
+  path: string
+  /** Modified time (ms since epoch); 0 when unavailable. */
+  modifiedAt: number
+}
+
+/**
+ * The keyframe-scan CSVs `Scan_Frames.dsa` has written (newest first) — the
+ * "Import from CSV" picker lists these. Empty when no scan ran yet (the folder
+ * doesn't exist) or outside the desktop app.
+ */
+export async function listScanFrameCsvs(): Promise<Array<ScanFrameCsv>> {
+  try {
+    const dir = await storage.scanFramesDir()
+    const out: Array<ScanFrameCsv> = []
+    for (const entry of await readDir(dir)) {
+      if (entry.isDirectory || !/\.csv$/i.test(entry.name)) continue
+      const path = joinPath(dir, entry.name)
+      let modifiedAt = 0
+      try {
+        modifiedAt = (await stat(path)).mtime?.getTime() ?? 0
+      } catch {
+        // unreadable entry — keep it listed, just unsorted
+      }
+      out.push({ name: entry.name.replace(/\.csv$/i, ''), path, modifiedAt })
+    }
+    return out.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  } catch {
+    return [] // no folder yet (no scan ran), or no native layer (browser build)
+  }
 }
 
 /** Where a character's files live (absolute + library-relative), for the editor. */

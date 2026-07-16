@@ -4,20 +4,22 @@ import { characterScriptName } from '@dth/rom'
 import type { Character } from '@dth/rom'
 
 import { characterFolderName } from '../library'
-// The DTH runtime (DazToHue-Scripts) is bundled into the app so the studio is
-// self-contained — no external checkout to configure. copyRuntimeFiles installs
-// these (rewritten + dot-prefixed). Keep them in sync with the DazToHue-Scripts
-// source; bump RUNTIME_VERSION (@dth/rom) when they change so Refresh assets flags
-// characters whose generated scripts need regenerating.
+// The DTH Daz runtime is bundled into the app so the studio is self-contained —
+// no external checkout to configure. It descends from soltude/DazToHue-Scripts
+// but is studio-owned now. copyRuntimeFiles installs these (rewritten +
+// dot-prefixed). Bump RUNTIME_VERSION (@dth/rom) when they change so Refresh
+// assets flags characters whose generated scripts need regenerating.
 import dthUtilsRuntime from '../runtime/DthUtils.dsa?raw'
 import dthOptionsRuntime from '../runtime/DthOptions.dsa?raw'
 import dthWorkflowRuntime from '../runtime/DthWorkflow.dsa?raw'
 import dthProductsRuntime from '../runtime/DthProducts.dsa?raw'
 import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
+import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
 import scanMorphsG9 from '../runtime/Scan_Morphs_G9.dsa?raw'
 import scanMorphsG81 from '../runtime/Scan_Morphs_G8.1.dsa?raw'
 import scanMorphsG8 from '../runtime/Scan_Morphs_G8.dsa?raw'
 import scanMorphsG3 from '../runtime/Scan_Morphs_G3.dsa?raw'
+import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 
 import { join } from './fs'
 import { dataDir } from './app-data'
@@ -40,62 +42,32 @@ const RUNTIME_FILES: Record<string, string> = {
   // Morph-scanner runtime — included by the VISIBLE Scan_Morphs_<Genesis>.dsa
   // wrappers below; feeds the Morph-name autocomplete's per-generation index.
   'DthScanMorphs.dsa': dthScanMorphsRuntime,
+  // Keyframe-scanner runtime — included by DthWorkflow (debug/scanned-CSV paths)
+  // AND by the visible Scan_Frames.dsa wrapper, which exports the open scene's
+  // keyed frames as a CSV for the studio's "Import from CSV".
+  'DthScanFrames.dsa': dthScanFramesRuntime,
 }
 
 /**
- * The visible per-generation morph-scan scripts, installed AS-IS at the
- * DTH-Character-Studio root (they run there, so they include
- * `.DthScanMorphs.dsa` directly — no `../../` rewrite), with the studio's
- * app-data folder baked into their output path at install time.
+ * The visible scan scripts, installed AS-IS at the DTH-Character-Studio root
+ * (they run there, so they include the dot-prefixed runtime directly — no
+ * `../../` rewrite), with the studio's app-data folder baked into their output
+ * path at install time. Scan_Morphs_<Genesis> feeds the Morph-name
+ * autocomplete; Scan_Frames exports the open scene's keyed frames as a CSV for
+ * "Import from CSV".
  */
-const SCAN_MORPH_SCRIPTS: Record<string, string> = {
+const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   'Scan_Morphs_G9.dsa': scanMorphsG9,
   'Scan_Morphs_G8.1.dsa': scanMorphsG81,
   'Scan_Morphs_G8.dsa': scanMorphsG8,
   'Scan_Morphs_G3.dsa': scanMorphsG3,
+  'Scan_Frames.dsa': scanFramesScript,
 }
 
 /** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install root,
  *  holding the DTH runtime files (installed once) at its top level. */
 export function studioScriptsDir(dazLibraryFolder: string): string {
   return join(dazLibraryFolder, 'Scripts', 'DTH-Character-Studio')
-}
-
-/** `<My DAZ 3D Library>/Scripts/DazToHue-Scripts` — where the soltude/DazToHue-Scripts
- *  repo is downloaded + unpacked (Tools installer). Separate from the studio's own
- *  bundled DTH-Character-Studio runtime root above. */
-export function daztohueScriptsDir(dazLibraryFolder: string): string {
-  return join(dazLibraryFolder, 'Scripts', 'DazToHue-Scripts')
-}
-
-/** The commit SHA recorded in the installed DazToHue-Scripts version marker
- *  (`<daztohueScriptsDir>/.dth-version.json`, written by the Rust installer), or
- *  null when the scripts aren't installed / the marker is missing or unreadable.
- *  Living inside the install folder makes it the ground truth: delete the install
- *  and the marker goes with it, so we never claim something stale is installed. */
-export async function readDazToHueScriptsCommit(dazLibraryFolder: string): Promise<string | null> {
-  const lib = dazLibraryFolder.trim()
-  if (!lib) return null
-  try {
-    const raw = await readTextFile(join(daztohueScriptsDir(lib), '.dth-version.json'))
-    const parsed = JSON.parse(raw) as { commit?: unknown }
-    return typeof parsed.commit === 'string' && parsed.commit ? parsed.commit : null
-  } catch {
-    return null // not installed, no marker, or unreadable — all "unknown locally"
-  }
-}
-
-/** Whether a DazToHue-Scripts install exists on disk at all, regardless of whether
- *  it carries a version marker — lets the UI tell a pre-versioning install (files
- *  present, installed before we tracked commits) apart from no install at all. */
-export async function daztohueScriptsPresent(dazLibraryFolder: string): Promise<boolean> {
-  const lib = dazLibraryFolder.trim()
-  if (!lib) return false
-  try {
-    return await exists(daztohueScriptsDir(lib))
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -138,12 +110,12 @@ export async function copyRuntimeFiles(destDir: string): Promise<void> {
     }
     await writeTextFile(join(destDir, `.${name}`), content)
   }
-  // The visible Scan_Morphs_<Genesis>.dsa scripts: installed as-is (they run at
-  // this root — their include of `.DthScanMorphs.dsa` resolves right here), with
-  // the studio's app-data folder baked into the JSON output path so the scan
-  // lands where the Morph-name autocomplete reads it (DzFile wants '/').
+  // The visible scan scripts: installed as-is (they run at this root — their
+  // includes of the dot-prefixed runtime resolve right here), with the studio's
+  // app-data folder baked into their output paths so the scans land where the
+  // studio reads them (DzFile wants '/').
   const appData = (await dataDir()).replace(/\\/g, '/')
-  for (const [name, raw] of Object.entries(SCAN_MORPH_SCRIPTS)) {
+  for (const [name, raw] of Object.entries(VISIBLE_SCAN_SCRIPTS)) {
     await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
   }
   // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)

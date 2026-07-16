@@ -6,41 +6,29 @@ is optional** — you never need it to define a character and generate its ROM.
 The [one-time setup](./02-setup.md) covered installing the DTH release + Exporter;
 Tools is for the extras beyond that.
 
-It has three tabs.
+It has two tabs.
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Tools page, three tabs" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Tools page, two tabs" src="ADD_IMAGE_URL" />
   <br>
-  <sub><em>The Tools page and its three tabs.</em></sub>
+  <sub><em>The Tools page and its two tabs.</em></sub>
 </p>
 -->
 
----
+&nbsp;
 
-## Tab 1 — DazToHue-Scripts
+> [!NOTE]
+> Everything the Daz side needs ships **with the studio** — the runtime and the
+> visible scan scripts (`Scan_Morphs_<Genesis>`, `Scan_Frames`) install into
+> `Scripts/DTH-Character-Studio` automatically on Save / Refresh assets. There is
+> no separate scripts download anymore.
 
-Downloads mrpdean/soltude's **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)**
-(the Daz-side scripts the studio builds on) and installs them into
-`<My DAZ 3D Library>/Scripts/DazToHue-Scripts`. It shows whether your installed
-copy is up to date with the latest commit, with **Dry run** / **Install** buttons.
-
-The main reason to install it: it ships **`DthScanFrames.dsa`**. Run that in Daz on
-an open scene and it writes a CSV of *every* morph on the figure — then a ROM
-section's **Import from CSV** (in the character editor) pulls that morph list
-straight into the character, so you don't type morph names by hand.
-
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
-<p align="center">
-  <img width="900" alt="DazToHue-Scripts tab" src="ADD_IMAGE_URL" />
-  <br>
-  <sub><em>The DazToHue-Scripts tab with Dry run / Install.</em></sub>
-</p>
--->
+&nbsp;
 
 ---
 
-## Tab 2 — Daz Studio & Houdini
+## Tab 1 — Daz Studio & Houdini
 
 Install your **own** Daz / Houdini content (not DTH release data). Each section
 remembers its folders in Settings and installs from them on demand. **Dry run**
@@ -89,8 +77,8 @@ downloads (a zip inside a zip) — the scan looks inside them automatically.
 The studio ages out **its own** generated data so it can't fill your disk:
 
 - **Clean up now** — deletes per-scene [product-scan](./product-scanning.md) files
-  older than 30 days (also swept automatically on every launch) and reports how
-  much it freed.
+  and `Scan_Frames` keyframe CSVs older than 30 days (also swept automatically on
+  every launch) and reports how much it freed.
 - **Empty quarantine** — shows the dedup quarantine's size and lets you reclaim it
   with a confirm. Never emptied automatically — it's your reversible backup.
 
@@ -136,7 +124,7 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 
 ---
 
-## Tab 3 — Refresh assets
+## Tab 2 — Refresh assets
 
 Re-generates the Daz scripts and PoseAsset CSVs so every generated file matches the
 **current** studio/runtime version. Run it after **updating the app** or

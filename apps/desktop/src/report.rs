@@ -50,8 +50,3 @@ pub(crate) fn step_header(label: &str) -> InstallStep {
     InstallStep { label: label.into(), files: 0, status: "header".into(), detail: String::new(), files_list: Vec::new(), note: String::new() }
 }
 
-/// Wrap a single step into a one-step report (mirrors the other installers).
-pub(crate) fn one_step_report(dry: bool, step: InstallStep) -> InstallReport {
-    let total = step.files;
-    InstallReport { dry_run: dry, steps: vec![step], total_files: total }
-}

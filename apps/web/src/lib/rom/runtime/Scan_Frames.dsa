@@ -1,0 +1,15 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - scan the open scene's keyed morph frames into a CSV.
+// Select your character's root node (add more nodes to widen the scan), then
+// run this. The CSV lands in the studio's scan output folder, named after the
+// open scene - the studio's "Import from CSV" picker lists it automatically.
+// The output path is baked in by the studio when it installs this script.
+
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+include(dir_self.filePath(".DthUtils.dsa"));
+include(dir_self.filePath(".DthScanFrames.dsa"));
+
+DthScanFrames({
+	outDir: "__DTH_APPDATA_DIR__/scan-frames"
+});

@@ -51,11 +51,12 @@ export {
   getCharacterPath,
   importCharacterFromJson,
   importPosesFromCsv,
+  listScanFrameCsvs,
   moveCharacter,
   moveCharacterScenesFolder,
   saveCharacter,
 } from './api/characters'
-export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog } from './api/characters'
+export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog, ScanFrameCsv } from './api/characters'
 
 // --- avatars: avatar images + scene thumbnails ------------------------------
 export {
@@ -112,8 +113,6 @@ export type {
 
 // --- install: app settings + the Tools-page install features ----------------
 export {
-  DAZTOHUE_SCRIPTS_REPO,
-  dazToHueScriptsStatus,
   dedupDazAssets,
   defaultDazUninstallFolders,
   fetchAppDataFolder,
@@ -122,14 +121,12 @@ export {
   installDazAssets,
   installDazMorphs,
   installDazPresets,
-  installDazToHueScripts,
   installDthPlugin,
   installDthRelease,
   installUnrealDthContent,
   unrealDthContentPresent,
   installHoudiniPresets,
   installedExporterVersion,
-  latestDazToHueCommit,
   listDazAssets,
   listDthExporterReleases,
   listDthReleases,
@@ -140,8 +137,6 @@ export {
 export type {
   AssetDup,
   ConflictCopy,
-  DazToHueScriptsState,
-  DazToHueScriptsStatus,
   DedupReport,
   DupMember,
   FileConflict,

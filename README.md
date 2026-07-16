@@ -86,7 +86,7 @@ assets.
 
 - **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** by *mrpdean* — the Houdini/UE toolset this studio targets (the PoseAsset node, ROMs and pose presets).
 - **[Guide To Creating Custom ROMs](https://docs.google.com/document/d/1e8B9uDSmiS-v5si0YLEnnAhcnhnfGl9m0RsgCE5EDWA/edit?tab=t.0)** — DTH's extended learning resource: the manual, step-by-step way to build a custom ROM, with the theory behind categories, generation methods and reference skeletons. Everything it walks through by hand is what this studio automates.
-- **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)** by *Soltude* and contributors — the Daz Studio scripting framework the generated files drive.
+- **[DazToHue-Scripts](https://github.com/soltude/DazToHue-Scripts)** by *Soltude* and contributors — the Daz Studio scripting framework the studio's bundled runtime descends from. Everything the workflow needs now ships with the studio.
 
 ## Documentation
 

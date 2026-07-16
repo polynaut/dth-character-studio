@@ -11,14 +11,19 @@ export type { HousekeepingResult }
 
 // --- Housekeeping: keep app-generated data from filling the disk -------------
 // Product-scan CSVs (one per Daz scene, app-data) age out after
-// PRODUCT_SCAN_RETENTION_DAYS; unreferenced note media ages out after
-// NOTE_MEDIA_RETENTION_DAYS (the save-time GC usually gets there first); the
-// dedup quarantine (large, reversible backup) is only ever emptied on the
+// PRODUCT_SCAN_RETENTION_DAYS; the Scan_Frames keyframe CSVs (also one per Daz
+// scene) after SCAN_FRAMES_RETENTION_DAYS; unreferenced note media ages out
+// after NOTE_MEDIA_RETENTION_DAYS (the save-time GC usually gets there first);
+// the dedup quarantine (large, reversible backup) is only ever emptied on the
 // user's explicit request. deleteCharacter also prunes a character's scan
 // folder + avatar so nothing orphans going forward.
 
 /** Days a product-scan file is kept before the launch/manual sweep ages it out. */
 export const PRODUCT_SCAN_RETENTION_DAYS = 30
+
+/** Days a Scan_Frames keyframe CSV is kept before the sweep ages it out —
+ *  scans are cheap to reproduce (re-run the script on the scene). */
+export const SCAN_FRAMES_RETENTION_DAYS = 30
 
 /** Days an unreferenced note-media file is kept before the sweep removes it. */
 export const NOTE_MEDIA_RETENTION_DAYS = 7
@@ -44,11 +49,11 @@ export async function sweepNoteMedia(): Promise<HousekeepingResult> {
 }
 
 /**
- * Age-out stale product-scan files (not modified within the retention window)
- * under the app-data `product-scans` root, pruning folders they empty, plus
- * the note-media sweep across all known projects. Runs on app launch and from
- * the Tools "Clean up now" button. No-op in the plain web build (no native
- * layer).
+ * Age-out stale app-data scan files (not modified within their retention
+ * windows) — the `product-scans` root and the `scan-frames` keyframe CSVs —
+ * pruning folders they empty, plus the note-media sweep across all known
+ * projects. Runs on app launch and from the Tools "Clean up now" button.
+ * No-op in the plain web build (no native layer).
  */
 export async function housekeepingSweep(): Promise<HousekeepingResult> {
   if (!isTauri()) return { filesDeleted: 0, bytesFreed: 0 }
@@ -59,9 +64,19 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
       request: { productScansDir, maxAgeDays: PRODUCT_SCAN_RETENTION_DAYS },
     }),
   )
+  // Same age-out for the Scan_Frames CSVs — the sweep command is generic over
+  // its root, so it bounds this folder too.
+  const frames = housekeepingResultSchema.parse(
+    await invoke('housekeeping_sweep', {
+      request: {
+        productScansDir: await storage.scanFramesDir(),
+        maxAgeDays: SCAN_FRAMES_RETENTION_DAYS,
+      },
+    }),
+  )
   return {
-    filesDeleted: scans.filesDeleted + media.filesDeleted,
-    bytesFreed: scans.bytesFreed + media.bytesFreed,
+    filesDeleted: scans.filesDeleted + frames.filesDeleted + media.filesDeleted,
+    bytesFreed: scans.bytesFreed + frames.bytesFreed + media.bytesFreed,
   }
 }
 
