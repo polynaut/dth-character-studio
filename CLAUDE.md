@@ -48,8 +48,9 @@ inline — no build step, no stale `dist`).
 
 - **`packages/rom` (`@dth/rom`)** — framework-agnostic, **no I/O**. The full pipeline: a `Character`
   definition (`types.ts`, zod-validated) → `generateAll()` (`generate.ts`) → the Daz `.dsa` script
-  text + the Houdini PoseAsset CSV. Ground-truth CSV/`.dsa` templates live in `src/templates`. Also
-  parses DAZ-exported morph CSVs into poses (`daz-csv.ts`).
+  text + the Houdini PoseAsset CSV. The frame math + ROM walks (the core invariant's computation)
+  live in `frames.ts`; ground-truth CSV/`.dsa` templates in `src/templates`. Also parses
+  DAZ-exported morph CSVs into poses (`daz-csv.ts`).
 - **`packages/ui` (`@dth/ui`)** — app-agnostic React UI kit: primitives (button, input, select…),
   presentational components (`LinkedAssetCard`, `KeyedListEditor`, `Tag`, `Field`…), and hooks
   (`useModifierHeld`, `installAltMenuGuard`, `useRefetchOnFocus`). **No Tauri / router / filesystem

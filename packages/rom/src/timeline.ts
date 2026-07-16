@@ -1,11 +1,7 @@
-import {
-  customSections,
-  genRomIncludes,
-  jcmIsBaseRom,
-  presetFrameCount,
-  SECTION_LABELS,
-} from './types.ts'
-import type { Gender, PresetFrames, RomSection, RomSections } from './types.ts'
+import { customSections, jcmIsBaseRom, presetFrameCount } from './frames.ts'
+import { genRomIncludes, SECTION_LABELS } from './types.ts'
+import type { PresetFrames } from './frames.ts'
+import type { Gender, RomSection, RomSections } from './types.ts'
 
 /** A contiguous block of the ROM timeline — a 0-based, inclusive frame range. */
 export interface TimelineSegment {
