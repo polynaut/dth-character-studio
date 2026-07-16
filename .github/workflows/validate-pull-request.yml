@@ -46,6 +46,25 @@ jobs:
       - name: Build web
         run: pnpm --filter @dth/web build
 
+  # The browser smoke test: the real SPA against the in-memory fake of the
+  # native layer (apps/web/e2e). Catches the integration regressions the unit
+  # tests can't see — loader wiring, editor save flow, artifact generation.
+  e2e:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm --filter @dth/web exec playwright install chromium --with-deps
+      - name: E2E smoke (Playwright)
+        run: pnpm --filter @dth/web e2e
+
   # Every feature PR must ship a changeset (the three packages are a fixed group,
   # so this is what actually bumps the product version and triggers a release).
   # A PR that legitimately needs no version bump (CI/docs-only) can satisfy this

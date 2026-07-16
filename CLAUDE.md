@@ -20,6 +20,8 @@ pnpm dev:desktop         # Tauri app: web dev server (HMR) + native window. Need
 pnpm build               # web production build
 pnpm build:desktop       # NSIS installer → apps/desktop/target/release/bundle
 pnpm -r test             # all JS tests (vitest)
+pnpm --filter @dth/web e2e  # Playwright browser smoke — the real SPA against an in-memory fake
+                            # of the native layer (apps/web/e2e; specs are *.e2e.ts)
 pnpm -r typecheck        # tsc --noEmit across packages
 pnpm lint                # oxlint (type-aware) — the CI lint gate; `pnpm lint:fix` autofixes
 pnpm generate-routes     # regenerate apps/web/src/routeTree.gen.ts (tsr generate)
