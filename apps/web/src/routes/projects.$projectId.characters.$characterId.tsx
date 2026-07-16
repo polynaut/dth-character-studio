@@ -687,37 +687,54 @@ function CharacterPage() {
           </div>
 
           {/* The legend is positioned absolutely (a notch on the border) so it
-              doesn't consume a row of flow — that keeps the FACS / Flexion fields
-              on the same baseline as the Genesis row on the left. -mt-2 + pt-2
-              lift the box so its fields start at the same y as the left column.
-              The dials only exist on generations flagged hasStrengthDials (G9
-              today) — other generations have no generation-specific settings
-              (yet), so the box disappears. */}
+              doesn't consume a row of flow; -mt-2 lifts the box level with the
+              left column. The box only exists on generations flagged
+              hasStrengthDials (G9 today) — other generations have no
+              generation-specific settings (yet). The tear-UV toggle is gated
+              G9 within it separately (no UE5 tear UV ships for other figures). */}
           {GENERATIONS[character.genesis].hasStrengthDials && (
             <fieldset className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4">
               <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
                 {GENESIS_LABELS[character.genesis]} Specific
               </legend>
-              <div className="flex flex-wrap gap-4">
-                <div>
-                  <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                    FACS detail strength
-                  </Label>
-                  <NumberField
-                    className="w-28"
-                    value={character.facsDetailStrength}
-                    onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
-                  />
-                </div>
-                <div>
-                  <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                    Flexion strength
-                  </Label>
-                  <NumberField
-                    className="w-28"
-                    value={character.flexionStrength}
-                    onCommit={(flexionStrength) => patch({ flexionStrength })}
-                  />
+              <div className="space-y-3">
+                {character.genesis === 'G9' && (
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={character.applyUE5TearUV}
+                      onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
+                    />
+                    <span className="flex items-center gap-1 text-sm">
+                      Set UE5 tear UV
+                      <InfoPopup label="Set UE5 tear UV — more information">
+                        Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
+                        ROM build, so DTH's Lacrimal Fluid material lines up without the manual
+                        Surfaces-tab step.
+                      </InfoPopup>
+                    </span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-4">
+                  <div>
+                    <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+                      FACS detail strength
+                    </Label>
+                    <NumberField
+                      className="w-28"
+                      value={character.facsDetailStrength}
+                      onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+                      Flexion strength
+                    </Label>
+                    <NumberField
+                      className="w-28"
+                      value={character.flexionStrength}
+                      onCommit={(flexionStrength) => patch({ flexionStrength })}
+                    />
+                  </div>
                 </div>
               </div>
             </fieldset>
@@ -916,22 +933,6 @@ function CharacterPage() {
               </InfoPopup>
             </span>
           </div>
-          {character.genesis === 'G9' && (
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={character.applyUE5TearUV}
-                onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
-              />
-              <span className="flex items-center gap-1 text-sm">
-                Set UE5 tear UV
-                <InfoPopup label="Set UE5 tear UV — more information">
-                  Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the ROM
-                  build, so DTH's Lacrimal Fluid material lines up without the manual
-                  Surfaces-tab step. Genesis 9 only.
-                </InfoPopup>
-              </span>
-            </div>
-          )}
           <PreserveFields character={character} patch={patch} />
         </div>
       </details>

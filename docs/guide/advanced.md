@@ -5,7 +5,8 @@
 > [!NOTE]
 > None of these are needed for a working ROM — reach for them when a character needs
 > finer control over how the ROM is built or how its morphs behave. They live on the
-> **character page**: an **Advanced options** panel (collapsed by default), plus the
+> **character page**: an **Advanced options** panel (collapsed by default), the
+> **Genesis 9 specific** box next to the Genesis/Gender fields, plus the
 > **Modify JCM frames** grid inside the JCM section.
 
 &nbsp;
@@ -20,7 +21,7 @@
 </p>
 -->
 
-Expand **Advanced options** near the top of the character page for four settings:
+Expand **Advanced options** near the top of the character page:
 
 ### Storage location
 
@@ -35,15 +36,6 @@ first custom frame, so its morphs don't **leak** into your full-body and custom
 poses. Turn it on when a GEN preset and your own FBM/custom morphs are both enabled
 and you see genital shapes bleeding into later frames.
 
-### Set UE5 tear UV *(Genesis 9 only)*
-
-A toggle, shown only for **G9** characters. When on, the generated ROM script
-switches the **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the
-build — so DTH's **Lacrimal Fluid** material lines up without you doing the manual
-*Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only matters
-if you use that material, and an example UE5 tear UV only ships for Genesis 9 — so
-it's off by default and hidden on G8/G3 characters.
-
 ### Preserve morphs after ROM loading
 
 The DTH ROM zeroes morphs as it loads. Any morph you list here is **restored to the
@@ -56,6 +48,26 @@ name** and its **hold value**.
 A node's transform is **memorized before** the ROM loads and **restored after**, so
 posed nodes (e.g. the eyes) keep their orientation instead of being reset. Enter
 the **node's label** as it appears in Daz.
+
+## The "Genesis 9 specific" box
+
+G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields
+at the top of the character page:
+
+### Set UE5 tear UV
+
+A toggle. When on, the generated ROM script switches the **Genesis 9 Tear**
+figure's shader **UV Set** to **UE5** during the build — so DTH's **Lacrimal
+Fluid** material lines up without you doing the manual
+*Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only matters
+if you use that material, and an example UE5 tear UV only ships for Genesis 9 — so
+it's off by default and absent on other generations.
+
+### FACS detail strength / Flexion strength
+
+The G9 strength dials — **FACS Detail Strength** and **Flexion Automatic
+Strength** — applied at frame 0 as the ROM builds. Leave them at `1` unless your
+character needs the stock correctives dialed up or down.
 
 ## Modify JCM frames
 
