@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.41.40
+
+### Patch Changes
+
+- [#310](https://github.com/polynaut/dth-character-studio/pull/310) [`32d9ac7`](https://github.com/polynaut/dth-character-studio/commit/32d9ac73b77b969cbade32eb0b21317f110c3206) Thanks [@polynaut](https://github.com/polynaut)! - Genesis/Gender now sit on the same baseline as the Genesis 9 box's first row (the tear-UV toggle) — matched content-top offsets and label line heights.
+
+- Updated dependencies []:
+  - @dth/rom@0.41.40
+  - @dth/ui@0.41.40
+
 ## 0.41.39
 
 ### Patch Changes
