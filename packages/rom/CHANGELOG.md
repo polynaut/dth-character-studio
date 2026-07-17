@@ -1,5 +1,7 @@
 # @dth/rom
 
+## 0.42.5
+
 ## 0.42.4
 
 ### Patch Changes

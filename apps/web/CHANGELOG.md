@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.42.5
+
+### Patch Changes
+
+- [#331](https://github.com/polynaut/dth-character-studio/pull/331) [`25e3cab`](https://github.com/polynaut/dth-character-studio/commit/25e3cab3cfdf3fa9e6766a33243c0d025ff2eddb) Thanks [@polynaut](https://github.com/polynaut)! - The character editor's Discard/Save buttons keep their large "at the top" size on pages too short to scroll (e.g. the Notes tab) — the same inactive-scroll-timeline quirk as the Back-link fix: with no scrollable overflow the shrink animation yields no values, so the buttons fell to their collapsed default size while the rest of the header showed its expanded state.
+
+- Updated dependencies []:
+  - @dth/rom@0.42.5
+  - @dth/ui@0.42.5
+
 ## 0.42.4
 
 ### Patch Changes
