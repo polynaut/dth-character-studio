@@ -662,8 +662,15 @@ export const CHARACTER_SCHEMA_VERSION = 12
  *       reset flags are gone — with the resetGenBeforeApplying option removed
  *       in schema v11 they no longer had an off position), and the FBM-start
  *       art-morph reset is retired: the boundary close-out covers it.
+ *  28 — Auto-select the character's figure: a missing or wrong selection no
+ *       longer aborts the ROM — the runtime finds the scene's figure of the
+ *       config's generation by its source-ASSET identity (labels/names are
+ *       user-renamable; the instantiating .dsf is not) and selects it, first
+ *       match winning when a scene holds several. Legacy configs without a
+ *       genesis, and Daz builds without a readable asset URI, keep the old
+ *       select-it-yourself behavior unchanged.
  */
-export const RUNTIME_VERSION = 27
+export const RUNTIME_VERSION = 28
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

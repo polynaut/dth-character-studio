@@ -891,6 +891,69 @@ function createMorphFrameFromSelectedProperty( bAdvanceFrame, bWarnOnFail){
 	}
 }
 
+/**********************************************************************
+ * Generation-aware figure lookup by ASSET identity. A node's label/name is
+ * user-renamable, but the .dsf asset it was instantiated from is not — so the
+ * source asset URI is the one rename-proof way to recognize "a Genesis 9
+ * figure". Used to auto-select the character's figure instead of aborting on
+ * a wrong/missing selection. */
+
+/** The stock figure asset file names per generation ('' / unknown → null,
+ *  which callers treat as "no generation check possible"). */
+function dthGenerationAssetFiles(sGenesis){
+	if (sGenesis == "G9") return ["genesis9.dsf"];
+	if (sGenesis == "G8.1") return ["genesis8_1female.dsf", "genesis8_1male.dsf"];
+	if (sGenesis == "G8") return ["genesis8female.dsf", "genesis8male.dsf"];
+	if (sGenesis == "G3") return ["genesis3female.dsf", "genesis3male.dsf"];
+	return null;
+}
+
+/** The node's source-asset file path, lowercased ('' when unreadable —
+ *  guarded, so an API difference degrades instead of erroring). */
+function dthNodeAssetPath(oNode){
+	try {
+		if (oNode && typeof oNode.getAssetUri == "function") {
+			var oUri = oNode.getAssetUri();
+			if (oUri && typeof oUri.getFilePath == "function") return String(oUri.getFilePath()).toLowerCase();
+			if (oUri) return String(oUri).toLowerCase();
+		}
+		if (oNode && oNode.assetUri != undefined) return String(oNode.assetUri).toLowerCase();
+	} catch (e) { /* fall through */ }
+	return "";
+}
+
+/** Whether `oNode` is a root figure instantiated from the generation's stock
+ *  asset. Unknown generation (legacy config) or an unreadable asset URI keeps
+ *  the old tolerant behavior: any root DzNode passes. */
+function dthIsGenerationFigure(oNode, sGenesis){
+	if (!oNode || !oNode.inherits("DzNode")) return false;
+	var aFiles = dthGenerationAssetFiles(sGenesis);
+	if (!aFiles) return true;
+	var sPath = dthNodeAssetPath(oNode);
+	if (sPath == "") return true;
+	for (var i = 0; i < aFiles.length; i++) {
+		if (sPath.indexOf("/" + aFiles[i]) >= 0 || sPath == aFiles[i]) return true;
+	}
+	return false;
+}
+
+/** First ROOT figure in the scene instantiated from the generation's stock
+ *  asset (multiple = a user error; the first wins). Null when none matches. */
+function dthFindGenerationFigure(sGenesis){
+	var aFiles = dthGenerationAssetFiles(sGenesis);
+	if (!aFiles) return null;
+	for (var i = 0; i < Scene.getNumNodes(); i++) {
+		var oNode = Scene.getNode(i);
+		if (!oNode || oNode.getNodeParent()) continue;
+		if (!oNode.inherits("DzFigure") && !oNode.inherits("DzSkeleton")) continue;
+		var sPath = dthNodeAssetPath(oNode);
+		for (var j = 0; j < aFiles.length; j++) {
+			if (sPath.indexOf("/" + aFiles[j]) >= 0 || sPath == aFiles[j]) return oNode;
+		}
+	}
+	return null;
+}
+
 /*********************************************************************/
 // DzNode : returns this nodes root node, or oNode if it is root
 function getNodeRoot(oNode){
