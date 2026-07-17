@@ -19,7 +19,7 @@ export function sceneBase(scenePath: string): string {
  * conventions: `<scene>.tip.png` (e.g. Kira.duf.tip.png) and `<base>.tip.png`
  * (Kira.tip.png). Returns '' when neither exists.
  */
-async function findTipImage(scenePath: string): Promise<string> {
+export async function findTipImage(scenePath: string): Promise<string> {
   for (const p of [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]) {
     if (await exists(p)) return p
   }
@@ -34,7 +34,7 @@ async function findTipImage(scenePath: string): Promise<string> {
  * keep showing the cached old image (e.g. switching the avatar between two scenes).
  * Returns the stored filename.
  */
-async function writeAvatarBytes(
+export async function writeAvatarBytes(
   characterId: string,
   bytes: Uint8Array,
   ext: string,
