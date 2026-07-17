@@ -931,6 +931,67 @@ ${exportBlock}        }` : ''}
  * set and `exportWithRomScript` is false. Native Daz API only — no runtime
  * include — so it must run after the ROM_ script in the same Daz session.
  */
+/** The stock figure asset file names per generation — the rename-proof identity
+ *  the standalone scripts use to auto-select the figure (mirrors the runtime's
+ *  v28 auto-select, which only the ROM script gets via the include). */
+const GENERATION_ASSET_FILES: Record<GenesisVersion, Array<string>> = {
+  G9: ['genesis9.dsf'],
+  'G8.1': ['genesis8_1female.dsf', 'genesis8_1male.dsf'],
+  G8: ['genesis8female.dsf', 'genesis8male.dsf'],
+  G3: ['genesis3female.dsf', 'genesis3male.dsf'],
+}
+
+/**
+ * Standalone-script snippet: resolve `dthFig` to the character's figure — the
+ * selection's root when it matches the generation's source ASSET (rename-proof;
+ * an unreadable asset URI keeps the tolerant old behavior), else the scene's
+ * first matching root figure, auto-selected. `dthFig` is null only when the
+ * scene has no such figure; the caller emits its own error UI for that.
+ */
+function figureAutoSelectSnippet(genesis: GenesisVersion): string {
+  const files = JSON.stringify(GENERATION_ASSET_FILES[genesis])
+  return `var dthFig = Scene.getPrimarySelection();
+while (dthFig && dthFig.getNodeParent()) dthFig = dthFig.getNodeParent();
+var dthAssetFiles = ${files};
+var dthAssetPath = function (oNode) {
+    try {
+        if (oNode && typeof oNode.getAssetUri == "function") {
+            var dthUri = oNode.getAssetUri();
+            return String(dthUri && typeof dthUri.getFilePath == "function" ? dthUri.getFilePath() : dthUri).toLowerCase();
+        }
+    } catch (eA) {}
+    return "";
+};
+var dthMatchesAsset = function (sPath) {
+    for (var dthAi = 0; dthAi < dthAssetFiles.length; dthAi++) {
+        if (sPath.indexOf("/" + dthAssetFiles[dthAi]) >= 0 || sPath == dthAssetFiles[dthAi]) return true;
+    }
+    return false;
+};
+var dthSelPath = dthFig && dthFig.inherits("DzNode") ? dthAssetPath(dthFig) : null;
+if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
+    // No/wrong selection - find the scene's ${genesis} figure by ASSET identity
+    // (labels/names are user-renamable; the instantiating .dsf is not).
+    var dthFound = null;
+    for (var dthFi = 0; dthFi < Scene.getNumNodes(); dthFi++) {
+        var dthCand = Scene.getNode(dthFi);
+        if (!dthCand || dthCand.getNodeParent()) continue;
+        if (!dthCand.inherits("DzFigure") && !dthCand.inherits("DzSkeleton")) continue;
+        if (dthMatchesAsset(dthAssetPath(dthCand))) { dthFound = dthCand; break; }
+    }
+    if (dthFound) {
+        print("Auto-selected the ${genesis} figure: " + dthFound.getLabel());
+        Scene.selectAllNodes(false);
+        dthFound.select(true);
+        Scene.setPrimarySelection(dthFound);
+        dthFig = dthFound;
+    } else if (dthSelPath == null) {
+        dthFig = null;
+    }
+}
+`
+}
+
 export function toExportScriptDsa(
   character: Character,
   frames?: PresetFrames,
@@ -944,7 +1005,14 @@ export function toExportScriptDsa(
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
-${buildExportBlock(character, frames, charFolderAbs)}`
+${figureAutoSelectSnippet(character.genesis)}if (!dthFig) {
+    MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
+} else {
+${buildExportBlock(character, frames, charFolderAbs)
+  .split('\n')
+  .map((line) => (line ? `    ${line}` : line))
+  .join('\n')}}
+`
   return { fileName: `Export_${characterScriptName(character)}.dsa`, content, target: 'daz' }
 }
 
@@ -983,12 +1051,10 @@ if (dthSceneFile != "") {
 // on the character's scene with the figure selected; the ROM is NOT needed.
 
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
-var dthFig = Scene.getPrimarySelection();
-while (dthFig && dthFig.getNodeParent()) dthFig = dthFig.getNodeParent();
-if (!dthAction) {
-    MessageBox.critical("DazToHue Exporter Action not found - install the DTH Exporter Plugin v1.8.1+.", "DTH Character Studio", "&OK");
+${figureAutoSelectSnippet(character.genesis)}if (!dthAction) {
+    MessageBox.critical("DazToHue Exporter Action not found - install the DTH Exporter Plugin v2.0+.", "DTH Character Studio", "&OK");
 } else if (!dthFig || !dthFig.inherits("DzNode")) {
-    MessageBox.critical("Select the character's figure first, then run this script again.", "DTH Character Studio", "&OK");
+    MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
     var dthGroomByScene = ${JSON.stringify(groomMap)};
     var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
