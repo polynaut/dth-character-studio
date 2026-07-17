@@ -643,56 +643,53 @@ ${csvCopyBlock}`
   const exportBody =
     Object.keys(groomMap).length === 0
       ? exportCore
-      : `    // Groom items (hair) must stay OUT of the export. Mechanism: HIDE the
-    // item + all its children (the script equivalent of Ctrl+clicking the eye
-    // icon) and restore the exact per-node flags after — DTH Exporter Plugin
-    // 2.0+ skips hidden nodes (1.8.1 exported them regardless; update the
-    // plugin, or the hair rides into the artifacts). The lists are per scene
-    // (outfit scenes carry different hair); a scene without an entry has no
-    // groom to exclude and exports as-is.
+      : `    // Groom items (hair) must stay OUT of the export. DETACH, not hide:
+    // measured July 17 on plugin 2.0 — hidden nodes are excluded from the
+    // alembic but STILL exported into the FBX (Daz's own FBX exporter ignores
+    // visibility), so the OPEN scene's listed items are unfitted + unparented
+    // and restored right after — the same unfit/refit Daz's "Fit To" performs.
+    // Flip to hide-based only when the plugin's FBX path honors hiding too. The lists are per scene (outfit scenes carry different hair);
+    // a scene without an entry has no groom to exclude and exports as-is.
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
     var dthGroomByScene = ${JSON.stringify(groomMap)};
     var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
-    var dthGroomHidden = [];
-    var dthGroomHideTree = function (oNode) {
-        if (!oNode) return;
-        var dthVisible = true;
-        try { if (typeof oNode.isVisible == "function") dthVisible = oNode.isVisible(); } catch (eV) {}
-        if (dthVisible) {
-            try { oNode.setVisible(false); dthGroomHidden.push(oNode); } catch (eH) {}
-        }
-        var dthKids = oNode.getNodeChildren(false);
-        for (var dthC = 0; dthC < dthKids.length; dthC++) dthGroomHideTree(dthKids[dthC]);
-    };
     if (dthGroomLabels.length == 0) {
         print("No groom list for the open scene - exporting as-is.");
         dthRunExport();
     } else {
-    var dthGroomNodes = [];
+    var dthGroomRestore = [];
     var dthGroomMissing = "";
     for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++) {
         var dthGroomNode = Scene.findNodeByLabel(dthGroomLabels[dthGi]);
         if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }
-        dthGroomNodes.push(dthGroomNode);
+        dthGroomRestore.push({
+            node: dthGroomNode,
+            follow: (typeof dthGroomNode.getFollowTarget == "function") ? dthGroomNode.getFollowTarget() : null,
+            parent: dthGroomNode.getNodeParent()
+        });
     }
     if (dthGroomMissing != "") {
         // A typo must not silently ship a hair-polluted export - fail loud, fix, re-run.
         print("Groom item not found: " + dthGroomMissing + " - export skipped.");
         MessageBox.critical("The groom item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Groom list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.", "DTH Character Studio", "&OK");
     } else {
-        for (var dthGd = 0; dthGd < dthGroomNodes.length; dthGd++) dthGroomHideTree(dthGroomNodes[dthGd]);
-        print("Groom nodes hidden for the export: " + dthGroomHidden.length);
+        for (var dthGd = 0; dthGd < dthGroomRestore.length; dthGd++) {
+            if (dthGroomRestore[dthGd].follow) dthGroomRestore[dthGd].node.setFollowTarget(null);
+            if (dthGroomRestore[dthGd].parent) dthGroomRestore[dthGd].parent.removeNodeChild(dthGroomRestore[dthGd].node, true);
+        }
+        print("Groom items detached for the export: " + dthGroomRestore.length);
         try {
             dthRunExport();
         } finally {
-            // Restore the exact per-node visibility flags, even when the
-            // export itself throws.
-            for (var dthGr = 0; dthGr < dthGroomHidden.length; dthGr++) {
-                try { dthGroomHidden[dthGr].setVisible(true); } catch (eR) {}
+            // Reparent first, then refit - restoring the exact pre-export state
+            // even when the export itself throws.
+            for (var dthGr = dthGroomRestore.length - 1; dthGr >= 0; dthGr--) {
+                if (dthGroomRestore[dthGr].parent) dthGroomRestore[dthGr].parent.addNodeChild(dthGroomRestore[dthGr].node, true);
+                if (dthGroomRestore[dthGr].follow) dthGroomRestore[dthGr].node.setFollowTarget(dthGroomRestore[dthGr].follow);
             }
-            print("Groom nodes shown again: " + dthGroomHidden.length);
+            print("Groom items restored: " + dthGroomRestore.length);
         }
     }
     }

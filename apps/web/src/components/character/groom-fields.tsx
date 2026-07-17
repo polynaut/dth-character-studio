@@ -105,9 +105,9 @@ export function GroomFields({
           Groom (hair) lives in the ROM scenes
           <InfoPopup label="Groom lives in the ROM scenes — more information">
             On: each scene carries its full look, hair included — the groom items listed per
-            scene are hidden (like Ctrl+clicking the eye icon: the item and all its children)
-            around the DTH export, then shown again, so hair never rides into the ROM artifacts.
-            Needs DTH Exporter Plugin 2.0+ (older versions export hidden nodes). The generated script carries every
+            scene are unfitted and moved out of the figure around the DTH export, then restored
+            (hiding is not enough: the FBX exporter includes hidden nodes — measured), so hair
+            never rides into the ROM artifacts. The generated script carries every
             scene's list and applies the right one for the scene open in Daz. Off: the classic
             workflow — you keep hair in separate Daz scene files and nothing is excluded.
           </InfoPopup>
@@ -123,8 +123,8 @@ export function GroomFields({
             Groom items in “{sceneName}” kept out of the export
             <InfoPopup label="Groom items kept out of the export — more information">
               Click a scene card above to pick which scene's hair you're listing. Items listed
-              here are hidden (with all their children) right before the DTH Exporter runs and
-              shown again after — Exporter Plugin 2.0+ skips hidden nodes.
+              here are unfitted and moved out of the figure right before the DTH Exporter runs,
+              then restored — hiding is not enough, the FBX would still contain them.
               List the top fitted item (e.g. the hair cap); its children ride along. Enter the
               label exactly as shown in Daz's Scene pane, or pick from the items found in the
               scene. A scene with no items listed exports as-is.
