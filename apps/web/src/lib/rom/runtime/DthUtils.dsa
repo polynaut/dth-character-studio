@@ -927,6 +927,9 @@ function dthNodeAssetPath(oNode){
  *  the old tolerant behavior: any root DzNode passes. */
 function dthIsGenerationFigure(oNode, sGenesis){
 	if (!oNode || !oNode.inherits("DzNode")) return false;
+	// The unreadable-asset tolerance below applies ONLY to actual figures — a
+	// selected non-figure (a prop, Environment Options, …) is never accepted.
+	if (!oNode.inherits("DzFigure") && !oNode.inherits("DzSkeleton")) return false;
 	var aFiles = dthGenerationAssetFiles(sGenesis);
 	if (!aFiles) return true;
 	var sPath = dthNodeAssetPath(oNode);

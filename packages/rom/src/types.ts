@@ -680,8 +680,12 @@ export const CHARACTER_SCHEMA_VERSION = 15
  *       match winning when a scene holds several. Legacy configs without a
  *       genesis, and Daz builds without a readable asset URI, keep the old
  *       select-it-yourself behavior unchanged.
+ *  29 — The auto-select's unreadable-asset tolerance is restricted to actual
+ *       FIGURES: a selected non-figure (a prop, Environment Options, …) is
+ *       never accepted as the export root anymore — it auto-selects the real
+ *       figure or fails loud (found by deliberate wrong-selection testing).
  */
-export const RUNTIME_VERSION = 28
+export const RUNTIME_VERSION = 29
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

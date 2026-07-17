@@ -968,10 +968,13 @@ var dthMatchesAsset = function (sPath) {
     }
     return false;
 };
-var dthSelPath = dthFig && dthFig.inherits("DzNode") ? dthAssetPath(dthFig) : null;
+// The unreadable-asset tolerance applies ONLY to actual figures - a selected
+// non-figure (a prop, Environment Options, ...) must never be accepted.
+var dthFigIsFigure = dthFig && (dthFig.inherits("DzFigure") || dthFig.inherits("DzSkeleton"));
+var dthSelPath = dthFigIsFigure ? dthAssetPath(dthFig) : null;
 if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
-    // No/wrong selection - find the scene's ${genesis} figure by ASSET identity
-    // (labels/names are user-renamable; the instantiating .dsf is not).
+    // No/non-figure/wrong-asset selection - find the scene's ${genesis} figure
+    // by ASSET identity (labels are user-renamable; the source .dsf is not).
     var dthFound = null;
     for (var dthFi = 0; dthFi < Scene.getNumNodes(); dthFi++) {
         var dthCand = Scene.getNode(dthFi);
@@ -984,10 +987,9 @@ if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
         Scene.selectAllNodes(false);
         dthFound.select(true);
         Scene.setPrimarySelection(dthFound);
-        dthFig = dthFound;
-    } else if (dthSelPath == null) {
-        dthFig = null;
     }
+    // A wrong selection never survives - no match means fail loud downstream.
+    dthFig = dthFound;
 }
 `
 }
