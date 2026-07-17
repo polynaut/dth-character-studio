@@ -585,6 +585,12 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 const syncAvatarInput = z.object({ projectId: z.string().min(1), id: z.string().min(1) })
 
+/** Single-flight guard: concurrent sync calls for the same character (double
+ *  focus events, strict-mode double effects) join the first run instead of
+ *  racing — two parallel runs could each write an avatar and delete the
+ *  other's file, leaving the saved reference pointing at nothing. */
+const avatarSyncInFlight = new Map<string, Promise<Partial<Character> | null>>()
+
 /**
  * Keep a scene-derived avatar in step with its source scene's preview. Daz
  * rewrites `<scene>.tip.png` on every scene save, but the avatar is a one-time
@@ -601,6 +607,18 @@ const syncAvatarInput = z.object({ projectId: z.string().min(1), id: z.string().
  */
 export async function syncAvatarWithScene({ data }: { data: unknown }): Promise<Partial<Character> | null> {
   const { projectId, id } = syncAvatarInput.parse(data)
+  const key = `${projectId}|${id}`
+  const inFlight = avatarSyncInFlight.get(key)
+  if (inFlight) return inFlight
+  const run = doSyncAvatarWithScene(projectId, id).finally(() => avatarSyncInFlight.delete(key))
+  avatarSyncInFlight.set(key, run)
+  return run
+}
+
+async function doSyncAvatarWithScene(
+  projectId: string,
+  id: string,
+): Promise<Partial<Character> | null> {
   const character = await fetchCharacter({ data: { projectId, id } })
   if (!character) return null
   const projectDir = await getActiveProjectDir()
