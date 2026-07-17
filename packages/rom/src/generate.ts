@@ -959,6 +959,9 @@ var dthAssetPath = function (oNode) {
             var dthUri = oNode.getAssetUri();
             return String(dthUri && typeof dthUri.getFilePath == "function" ? dthUri.getFilePath() : dthUri).toLowerCase();
         }
+        // DS6 has no getAssetUri() method - the assetUri PROPERTY is how the
+        // runtime's auto-select succeeds there (measured; do not drop this).
+        if (oNode && oNode.assetUri != undefined) return String(oNode.assetUri).toLowerCase();
     } catch (eA) {}
     return "";
 };
