@@ -209,6 +209,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
             ? { path, frames: 0, error: `[tauri-mock] no seeded frames for: ${path}` }
             : { path, frames, error: '' }
         })
+      case 'scene_wearables':
+        // Groom suggestions are best-effort; the fixture scene has no wearables.
+        return { items: [], error: '' }
       case 'housekeeping_sweep':
         return { filesDeleted: 0, bytesFreed: 0 }
       case 'unc_for_path':

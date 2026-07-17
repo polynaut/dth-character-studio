@@ -1,5 +1,5 @@
 import { exists, remove } from '@tauri-apps/plugin-fs'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import {
@@ -12,7 +12,7 @@ import {
   resolveRomPaths,
 } from '@dth/rom'
 import * as storage from '../storage'
-import { poseAssetFramesSchema } from './native-types'
+import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
   charScopeInput,
@@ -57,6 +57,20 @@ async function measureFrames(paths: Array<string>): Promise<Map<string, Measured
     .array(poseAssetFramesSchema)
     .parse(await invoke('pose_asset_frames', { paths: unique }))
   return new Map(results.map((r) => [r.path, { frames: r.frames, error: r.error }]))
+}
+
+/** The fitted (conformed) items of a scene `.duf` — the groom-suggestion source
+ *  for the character editor. Best-effort by design: outside the desktop app, or
+ *  when the scene can't be read, it returns an empty list with the reason in
+ *  `error` — suggestions degrade, the editor never breaks. */
+export async function sceneWearables({ data }: { data: unknown }) {
+  const input = z.object({ scenePath: z.string().min(1) }).parse(data)
+  if (!isTauri()) return { items: [], error: 'not running in the desktop app' }
+  try {
+    return sceneWearablesSchema.parse(await invoke('scene_wearables', { path: input.scenePath }))
+  } catch (error) {
+    return { items: [], error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 /**

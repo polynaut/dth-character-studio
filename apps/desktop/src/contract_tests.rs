@@ -31,6 +31,13 @@ fn pose_asset_frames_matches_the_shared_fixture() {
 }
 
 #[test]
+fn scene_wearables_matches_the_shared_fixture() {
+    round_trip::<crate::poses::SceneWearables>(include_str!(
+        "../../../contracts/scene-wearables.json"
+    ));
+}
+
+#[test]
 fn sweep_report_matches_the_shared_fixture() {
     round_trip::<crate::housekeeping::SweepReport>(include_str!(
         "../../../contracts/sweep-report.json"

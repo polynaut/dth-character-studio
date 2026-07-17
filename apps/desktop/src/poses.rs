@@ -50,18 +50,22 @@ pub(crate) struct PoseAssetFrames {
     error: String,
 }
 
-/// Frames a single `.duf` occupies: `round(maxKeyTime × 30) + 1`.
-fn duf_frame_count(path: &Path) -> Result<u32, String> {
+/// Read a `.duf` (DSON) into JSON — plain or gzip-compressed (detected via the
+/// magic bytes), with the decompression-bomb budget applied.
+fn read_duf_json(path: &Path) -> Result<serde_json::Value, String> {
     let raw = fs::read(path).map_err(|e| format!("{}: {}", path.display(), e))?;
-    // Daz can save pose presets gzip-compressed; detect via the magic bytes.
     let bytes = if raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b {
         let budget = (raw.len() as u64).saturating_mul(INFLATE_RATIO).max(INFLATE_FLOOR);
         gunzip_bounded(&raw, path, budget)?
     } else {
         raw
     };
-    let json: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {}", path.display(), e))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {}", path.display(), e))
+}
+
+/// Frames a single `.duf` occupies: `round(maxKeyTime × 30) + 1`.
+fn duf_frame_count(path: &Path) -> Result<u32, String> {
+    let json = read_duf_json(path)?;
     let animations = json
         .get("scene")
         .and_then(|s| s.get("animations"))
@@ -98,6 +102,71 @@ pub fn pose_asset_frames(paths: Vec<String>) -> Vec<PoseAssetFrames> {
             Err(error) => PoseAssetFrames { path, frames: 0, error },
         })
         .collect()
+}
+
+// --- Scene wearables (conformed items) -------------------------------------
+// A scene `.duf`'s `scene.nodes[]` carries every node's `label` and, for fitted
+// wearables, a `conform_target` ref ("#Genesis9"). Reading them OUTSIDE Daz is
+// what feeds the groom-item suggestions: the fitted followers of the figure are
+// exactly the candidates for "keep this out of the export".
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SceneWearable {
+    /// The node's DSON id — what other nodes' `conformTarget` refs point at
+    /// (URL-encoded in refs; returned raw here).
+    id: String,
+    /// The label shown in Daz's Scene pane — what the groom list stores.
+    label: String,
+    /// Raw DSON ref of the fit target (e.g. "#Genesis9" or another wearable's id).
+    conform_target: String,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SceneWearables {
+    items: Vec<SceneWearable>,
+    /// Empty on success; otherwise why the scene couldn't be read.
+    error: String,
+}
+
+fn duf_conformed_items(path: &Path) -> Result<Vec<SceneWearable>, String> {
+    let json = read_duf_json(path)?;
+    let nodes = json
+        .get("scene")
+        .and_then(|s| s.get("nodes"))
+        .and_then(|n| n.as_array())
+        .ok_or_else(|| format!("{}: no scene.nodes (is it a scene file?)", path.display()))?;
+    Ok(nodes
+        .iter()
+        .filter_map(|node| {
+            let conform = node.get("conform_target").and_then(|v| v.as_str())?;
+            let id = node.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            let label = node
+                .get("label")
+                .and_then(|v| v.as_str())
+                .or_else(|| node.get("name").and_then(|v| v.as_str()))
+                .unwrap_or(id);
+            Some(SceneWearable {
+                id: id.to_string(),
+                label: label.to_string(),
+                conform_target: conform.to_string(),
+            })
+        })
+        .collect())
+}
+
+/// The fitted (conformed) items of a scene `.duf` — the groom-suggestion source.
+/// Never throws: an unreadable scene returns an empty list with the reason in
+/// `error`, so suggestions degrade instead of breaking the editor.
+#[tauri::command]
+pub fn scene_wearables(path: String) -> SceneWearables {
+    match duf_conformed_items(Path::new(&path)) {
+        Ok(items) => SceneWearables { items, error: String::new() },
+        Err(error) => SceneWearables { items: Vec::new(), error },
+    }
 }
 
 /// Recursively collect every `.duf` under `folder`, as paths relative to it
@@ -162,6 +231,31 @@ mod tests {
         let data = br#"{"scene":{"animations":[]}}"#;
         let out = gunzip_bounded(&gzip(data), Path::new("ok.duf"), 1024).unwrap();
         assert_eq!(out, data);
+    }
+
+    #[test]
+    fn scene_wearables_lists_conformed_items_and_fails_soft() {
+        let dir = unique_temp_dir("scene_duf");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("scene.duf");
+        let json = br##"{"scene":{"nodes":[
+            {"id":"Genesis9","label":"Genesis 9"},
+            {"id":"Black Tie Cap_1529","label":"dForce Black Tie Cap","conform_target":"#Genesis9"},
+            {"id":"Black Tie Hair_3297440","label":"dForce Black Tie Hair Base","conform_target":"#Black%20Tie%20Cap_1529"}
+        ]}}"##;
+        fs::write(&path, gzip(json)).unwrap();
+        let result = scene_wearables(path.to_string_lossy().to_string());
+        assert_eq!(result.error, "");
+        // Only the conformed items — the figure itself is not a wearable.
+        assert_eq!(result.items.len(), 2);
+        assert_eq!(result.items[0].label, "dForce Black Tie Cap");
+        assert_eq!(result.items[0].conform_target, "#Genesis9");
+        assert_eq!(result.items[1].conform_target, "#Black%20Tie%20Cap_1529");
+        // An unreadable path degrades to an empty list + error, never a panic.
+        let missing = scene_wearables(dir.join("nope.duf").to_string_lossy().to_string());
+        assert!(missing.items.is_empty());
+        assert!(missing.error.contains("nope.duf"), "error: {}", missing.error);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

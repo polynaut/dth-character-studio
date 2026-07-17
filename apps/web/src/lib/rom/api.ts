@@ -102,6 +102,7 @@ export {
   isRefreshNeeded,
   refreshAllAssets,
   resolvePresetFrames,
+  sceneWearables,
 } from './api/generate'
 export type {
   AssetVersionReport,

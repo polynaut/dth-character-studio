@@ -100,6 +100,28 @@ export const poseAssetFramesSchema = z.object({
   error: z.string(),
 })
 
+// --- scene wearables (poses.rs `SceneWearables`) ------------------------------
+
+/** One fitted (conformed) item of a scene `.duf` (mirrors Rust `SceneWearable`).
+ *  The groom-suggestion source: followers of the figure are the candidates for
+ *  "keep this out of the export". */
+export const sceneWearableSchema = z.object({
+  /** The node's DSON id — what `conformTarget` refs point at (URL-encoded there). */
+  id: z.string(),
+  /** The label shown in Daz's Scene pane — what the groom list stores. */
+  label: z.string(),
+  /** Raw DSON ref of the fit target (e.g. "#Genesis9" or another wearable's id). */
+  conformTarget: z.string(),
+})
+
+/** Result of reading a scene's conformed items (mirrors Rust `SceneWearables`).
+ *  Never a hard error: an unreadable scene comes back empty with the reason in
+ *  `error`, so suggestions degrade instead of breaking the editor. */
+export const sceneWearablesSchema = z.object({
+  items: z.array(sceneWearableSchema),
+  error: z.string(),
+})
+
 // --- housekeeping (housekeeping.rs `SweepReport`) ----------------------------
 
 /** Files + bytes removed by a housekeeping action (mirrors Rust `SweepReport`). */
@@ -119,3 +141,5 @@ export type AssetDup = z.infer<typeof assetDupSchema>
 export type DedupReport = z.infer<typeof dedupReportSchema>
 export type HousekeepingResult = z.infer<typeof housekeepingResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
+export type SceneWearable = z.infer<typeof sceneWearableSchema>
+export type SceneWearables = z.infer<typeof sceneWearablesSchema>
