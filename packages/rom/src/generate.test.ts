@@ -11,6 +11,7 @@ import {
   sectionPresetAvailable,
   toCharacterScriptDsa,
   toExportScriptDsa,
+  toGroomExportScriptDsa,
   toPoseAssetCsv,
   toScanProductsScriptDsa,
 } from './generate'
@@ -1092,11 +1093,25 @@ describe('groom items (hair kept out of the export)', () => {
     expect(content).not.toContain('dthGroom')
   })
 
-  it('generateAll emits NO groom script — hair exclusion only (a hair-only export needs plugin support)', () => {
+  it('generateAll emits the groom script only with an export path AND groom lists', () => {
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      'Export_Groom_Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
+    expect(generateAll(groomChar({ exportPath: '' }), {}, FRAMES).map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+
+  it('the groom script bakes the map and calls the DOCUMENTED 3-arg export (saveSettings false)', () => {
+    const script = toGroomExportScriptDsa(groomChar())
+    expect(script.fileName).toBe('Export_Groom_Electra_G9.dsa')
+    expect(script.content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
+    // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
+    expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
+    expect(script.content).toContain('} finally {')
   })
 })
 
