@@ -168,7 +168,10 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
   const parsed = characterSchema.parse(character)
   const next: Character = { ...parsed, scenePath, updatedAt: new Date().toISOString() }
   const image = await copyTipImage(parsed.id, scenePath)
-  if (image) next.image = image
+  if (image) {
+    next.image = image
+    next.imageScene = scenePath
+  }
   const project = await resolveProject(projectId)
   return storage.saveCharacter(project, next, charsRoot(project))
 }

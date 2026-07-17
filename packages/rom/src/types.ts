@@ -495,8 +495,13 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       choice: the generated FBM meta always sets the reset flags, and the
  *       gen-block close-out is unconditional. The off position only reproduced
  *       the dangling-tail bug.
+ *  12 — added `imageScene` (the linked scene whose preview the avatar mirrors,
+ *       so the editor can re-sync it when Daz rewrites the preview on a scene
+ *       save; additive with a '' default — no migration step. Pre-existing
+ *       scene-derived avatars self-heal: the sync adopts a source scene when
+ *       the stored avatar still byte-matches that scene's current preview).
  */
-export const CHARACTER_SCHEMA_VERSION = 11
+export const CHARACTER_SCHEMA_VERSION = 12
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -781,6 +786,14 @@ export const characterSchema = z.object({
   name: z.string().min(1).max(MAX_NAME_LENGTH),
   /** Path or URL to a recognition image; optional (may be a `data:` URL). */
   image: z.string().max(MAX_IMAGE_LENGTH).default(''),
+  /**
+   * Absolute path of the linked Daz scene whose preview (`.tip.png`) the avatar
+   * mirrors — '' for a custom upload / external URL (those are never touched).
+   * With a source scene set, the editor re-copies the preview whenever it
+   * drifts (Daz rewrites it on every scene save): on view load and whenever the
+   * app window regains focus. Repointed alongside `scenePath` on folder moves.
+   */
+  imageScene: z.string().max(MAX_PATH_LENGTH).default(''),
   /**
    * Absolute path to the Daz scene (`.duf`) this character was created from.
    * Read-only provenance shown in the editor; empty for characters made before
