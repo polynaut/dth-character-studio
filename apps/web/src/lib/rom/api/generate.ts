@@ -182,7 +182,15 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         dazLibraryFolder: settings.dazLibraryFolder,
       }
     : undefined
-  const files = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
+  const files = generateAll(
+    versioned,
+    romPaths,
+    frames,
+    outDir,
+    activeRelease,
+    scanProducts,
+    settings.groomExcludeByHiding,
+  )
 
   // Houdini deliverable(s) — <Name>_pose_asset.csv — live in the character's own folder.
   if (writeHoudini) {

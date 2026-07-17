@@ -1075,6 +1075,29 @@ describe('groom items (hair kept out of the export)', () => {
     expect(content).toContain('dthCsvSrcDir')
   })
 
+  it('the "Solve hair assets by hiding" setting switches the bracket to hide → run → show', () => {
+    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra', true).content
+    const hideAt = content.indexOf('dthGroomHideTree(dthGroomNodes[dthGd])')
+    const runAt = content.indexOf('dthRunExport();', hideAt)
+    const restoreAt = content.indexOf('.setVisible(true)', runAt)
+    expect(hideAt).toBeGreaterThan(-1)
+    expect(runAt).toBeGreaterThan(hideAt)
+    expect(restoreAt).toBeGreaterThan(runAt)
+    // The hide arm never detaches — that's the whole point of the toggle.
+    expect(content).not.toContain('setFollowTarget(null)')
+    // generateAll threads the flag into the split Export_ script too.
+    const split = generateAll(
+      groomChar({ exportWithRomScript: false }),
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      '',
+      undefined,
+      true,
+    ).find((f) => f.fileName === 'Export_Electra_G9.dsa')
+    expect(split?.content).toContain('dthGroomHideTree(dthGroomNodes[dthGd])')
+  })
+
   it('a missing groom item skips the export loud instead of shipping hair', () => {
     const content = toCharacterScriptDsa(groomChar(), {}, FRAMES).content
     expect(content).toContain('if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }')
