@@ -23,12 +23,6 @@ describe('migrateCharacterData — pre-versioning normalization', () => {
     expect(data.sections.GEN.presetAssets).toEqual(['DK9 - Dicktator.duf'])
   })
 
-  it('renames resetGPBeforeApplying → resetGenBeforeApplying', () => {
-    const data = migrateCharacterData({ sections: {}, resetGPBeforeApplying: false })
-    expect(data.resetGenBeforeApplying).toBe(false)
-    expect(data.resetGPBeforeApplying).toBeUndefined()
-  })
-
   it('migrates a "none" group suffix to "centre"', () => {
     const data = migrateCharacterData({
       sections: { MISC: { enabled: true, mode: 'custom', groups: [{ suffix: 'none' }, { suffix: 'left' }] } },
@@ -72,38 +66,25 @@ describe('migrateCharacterData — version handling', () => {
   })
 })
 
-// v11 removed `resetGenBeforeApplying` (runtime v26 always closes the gen-block
+// v11 removed `resetGenBeforeApplying` (runtime v26+ always closes the block
 // tails — leaking was never a sane choice) — a removal, so there is no migrate
-// step; zod strips the stored key on read. This is the "ritual" test for that
-// change.
+// step; zod strips the stored key on read. The old pre-rename spelling
+// (`resetGPBeforeApplying`, once mapped in normalizeLegacyCharacter) is stripped
+// the same way now that its target field is gone. This is the "ritual" test for
+// that change.
 describe('characterSchema — v11 resetGenBeforeApplying removal', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
   it('strips the stored flag from an older definition', () => {
-    const parsed = characterSchema.parse({
-      id: 'c1',
-      name: 'Electra',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      schemaVersion: 10,
-      resetGenBeforeApplying: false,
-    })
+    const parsed = characterSchema.parse({ ...base, schemaVersion: 10, resetGenBeforeApplying: false })
     expect('resetGenBeforeApplying' in parsed).toBe(false)
   })
 
-  it('the pre-versioning rename still feeds a strippable key (not a crash)', () => {
-    // Ancient (pre-v1) definitions carry `resetGPBeforeApplying`; the frozen
-    // rename step maps it to the (now removed) generic field, and zod strips
-    // that in turn — the chain stays intact end to end.
+  it('strips the ancient pre-rename spelling too (migrate + parse, no crash)', () => {
     const migrated = migrateCharacterData({ resetGPBeforeApplying: false })
-    expect(migrated.resetGenBeforeApplying).toBe(false)
-    expect(migrated.resetGPBeforeApplying).toBeUndefined()
-    const parsed = characterSchema.parse({
-      id: 'c1',
-      name: 'Electra',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      ...migrated,
-    })
+    const parsed = characterSchema.parse({ ...base, ...migrated })
     expect('resetGenBeforeApplying' in parsed).toBe(false)
+    expect('resetGPBeforeApplying' in parsed).toBe(false)
   })
 })
 
