@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { InfoPopup, Input, KeyedListEditor, Label } from '@dth/ui'
+import { InfoPopup, Input, KeyedListEditor, Label, Switch } from '@dth/ui'
 
 import * as api from '#/lib/rom/api.ts'
 
@@ -101,6 +101,24 @@ export function GroomFields({
 
   return (
     <div className="max-w-xl">
+      <div className="mb-3 flex items-center gap-3">
+        <Switch
+          checked={character.groomMode === 'scene'}
+          onCheckedChange={(inScene) => patch({ groomMode: inScene ? 'scene' : 'separate' })}
+        />
+        <span className="flex items-center gap-1 text-sm">
+          Groom (hair) lives in the ROM scene
+          <InfoPopup label="Groom lives in the ROM scene — more information">
+            On: one scene carries the full character — the groom items listed below are
+            unfitted and moved out of the figure around the DTH export, then restored, so
+            hair never rides into the ROM artifacts. Off: the classic workflow — you keep
+            hair in separate Daz scene files (link them under Daz scenes) and nothing is
+            excluded at export.
+          </InfoPopup>
+        </span>
+      </div>
+      {character.groomMode !== 'scene' ? null : (
+        <>
       <Label className="mb-2 flex w-fit items-center gap-1">
         Groom items kept out of the export (hair)
         <InfoPopup label="Groom items kept out of the export — more information">
@@ -146,6 +164,8 @@ export function GroomFields({
           <strong>{missing.join(', ')}</strong> — the export would stop on a label that isn't in
           the scene; check it against Daz's Scene pane.
         </p>
+      )}
+        </>
       )}
     </div>
   )

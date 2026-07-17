@@ -503,8 +503,12 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *  13 — added `groomNodes` (hair items excluded from the DTH export via
  *       unfit+unparent around doExport; additive with a [] default — no
  *       migration step).
+ *  14 — added `groomMode` ('scene' = groom lives in the ROM scene and the
+ *       groomNodes bracket excludes it at export; 'separate' = classic
+ *       separate-scene workflow, list inert; additive with a 'scene' default —
+ *       no migration step).
  */
-export const CHARACTER_SCHEMA_VERSION = 13
+export const CHARACTER_SCHEMA_VERSION = 14
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -846,6 +850,16 @@ export const characterSchema = z.object({
    * hierarchy, not hiding. Labels as shown in Daz's Scene pane.
    */
   groomNodes: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
+  /**
+   * How this character's groom (hair) is handled at export time:
+   *  - 'scene': the groom lives IN the ROM scene — the items in `groomNodes`
+   *    are unfitted/unparented around `doExport` and restored (one scene
+   *    carries everything).
+   *  - 'separate': the classic workflow — groom kept in separate Daz scene
+   *    files (linkable via `extraScenes`); nothing is excluded at export and
+   *    `groomNodes` is ignored.
+   */
+  groomMode: z.enum(['scene', 'separate']).default('scene'),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   sections: sectionsSchema.default(defaultSections()),
   createdAt: z.string().max(MAX_NAME_LENGTH),

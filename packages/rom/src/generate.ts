@@ -694,6 +694,9 @@ ${sceneSubfolderBlock}${exportBody}} else {
  *  reading of `groomNodes` the export bracket, the groom script and the
  *  emission gate all share. */
 function groomNodeLabels(character: Character): Array<string> {
+  // 'separate' groom mode = the classic separate-scene workflow: nothing is
+  // excluded at export, the list is inert. THE single gate for the bracket.
+  if (character.groomMode !== 'scene') return []
   return character.groomNodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
 }
 

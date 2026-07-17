@@ -129,6 +129,7 @@ function romFields(src: Character): Partial<Character> {
     preserveMorphs: src.preserveMorphs,
     preserveNodeTransforms: src.preserveNodeTransforms,
     groomNodes: src.groomNodes,
+    groomMode: src.groomMode,
     jcmMorphMods: src.jcmMorphMods,
   }
 }

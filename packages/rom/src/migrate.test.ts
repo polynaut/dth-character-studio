@@ -123,6 +123,20 @@ describe('characterSchema — v13 groomNodes (additive)', () => {
   })
 })
 
+// v14 added `groomMode` — additive with a 'scene' default, so there is no
+// migrate step; zod fills it when reading an older definition.
+describe('characterSchema — v14 groomMode (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it("fills groomMode with 'scene' for a v13-shaped definition", () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 13 }).groomMode).toBe('scene')
+  })
+
+  it('round-trips the separate-scenes mode', () => {
+    expect(characterSchema.parse({ ...base, groomMode: 'separate' }).groomMode).toBe('separate')
+  })
+})
+
 // v8 added `products` / `productsUnmatched` / `productsScannedAt` — additive with
 // [] / '' defaults, so there is no migrate step; zod fills them when reading an
 // older (v7-shaped) definition. This is the "ritual" test for that change.
