@@ -60,7 +60,6 @@ describe('migrateCharacterData — version handling', () => {
   it('is a no-op for an already-current shape', () => {
     const current = {
       sections: { GEN: { enabled: false, mode: 'preset', presetAssets: ['GP9 - Golden Palace.duf'], groups: [] } },
-      resetGenBeforeApplying: true,
       schemaVersion: CHARACTER_SCHEMA_VERSION,
     }
     expect(migrateCharacterData(structuredClone(current))).toEqual(current)
@@ -70,6 +69,41 @@ describe('migrateCharacterData — version handling', () => {
     const once = migrateCharacterData({ groups: [{ section: 'FAC', label: 'a' }], resetGPBeforeApplying: true })
     const twice = migrateCharacterData(structuredClone(once))
     expect(twice).toEqual(once)
+  })
+})
+
+// v11 removed `resetGenBeforeApplying` (runtime v26 always closes the gen-block
+// tails — leaking was never a sane choice) — a removal, so there is no migrate
+// step; zod strips the stored key on read. This is the "ritual" test for that
+// change.
+describe('characterSchema — v11 resetGenBeforeApplying removal', () => {
+  it('strips the stored flag from an older definition', () => {
+    const parsed = characterSchema.parse({
+      id: 'c1',
+      name: 'Electra',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      schemaVersion: 10,
+      resetGenBeforeApplying: false,
+    })
+    expect('resetGenBeforeApplying' in parsed).toBe(false)
+  })
+
+  it('the pre-versioning rename still feeds a strippable key (not a crash)', () => {
+    // Ancient (pre-v1) definitions carry `resetGPBeforeApplying`; the frozen
+    // rename step maps it to the (now removed) generic field, and zod strips
+    // that in turn — the chain stays intact end to end.
+    const migrated = migrateCharacterData({ resetGPBeforeApplying: false })
+    expect(migrated.resetGenBeforeApplying).toBe(false)
+    expect(migrated.resetGPBeforeApplying).toBeUndefined()
+    const parsed = characterSchema.parse({
+      id: 'c1',
+      name: 'Electra',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      ...migrated,
+    })
+    expect('resetGenBeforeApplying' in parsed).toBe(false)
   })
 })
 
