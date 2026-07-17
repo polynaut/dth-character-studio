@@ -1084,16 +1084,18 @@ function SettingsPage() {
             </div>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="flex items-center gap-1 font-medium">
-                Solve hair assets by hiding
+                Solve hair assets by hiding (experimental)
                 <InfoPopup label="Solve hair assets by hiding — more information">
                   How the ROM/Export scripts keep a character's groom (hair) items out of the
                   export. <strong>Off</strong> (default): the items are unfitted and unparented
                   right before the DTH Exporter runs and restored afterwards — works with every
                   Exporter Plugin version and keeps hair out of both the FBX and the Alembic.{' '}
-                  <strong>On</strong>: the items are hidden with all their children instead
-                  (gentler on the scene) — requires DTH Exporter Plugin <strong>2.0+</strong>,
-                  which skips hidden nodes during export. Re-save the character (or Tools →
-                  Refresh assets) after changing this so the scripts regenerate.
+                  <strong>On</strong> (experimental): the items are hidden with all their
+                  children instead (gentler on the scene) — requires DTH Exporter Plugin{' '}
+                  <strong>2.0+</strong>, which skips hidden nodes during export. As of the 2.0
+                  preview that covers the Alembic but not yet the FBX, so leave this off unless
+                  your plugin build handles both. Re-save the character (or Tools → Refresh
+                  assets) after changing this so the scripts regenerate.
                 </InfoPopup>
               </span>
               <Switch
