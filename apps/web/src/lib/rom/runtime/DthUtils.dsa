@@ -265,49 +265,7 @@ function addFrameData(frameDatas, keyData){
 	return true;
 }
 
-function readPropsCSV(sFilename, frameDatas, iOffset){
-	frameDatas = frameDatas || [];
-	iOffset = iOffset || 0;
-
-	oFile = new DzFile( sFilename );
-	if ( oFile.open( oFile.ReadOnly ) ) {
-		var i = 0;
-	    while (!oFile.eof()) {
-	        sLine = oFile.readLine();
-	        verbose("parsing row", i, ":", sLine);
-	        var row = sLine.split(",");
-	        // first three values are relative frame number, sectionName, and frameName
-	        if(row.length > 2){
-	        	// we want absolute frame numbers, so add the offset here.
-	          	var frameNum = parseInt(row[0]) + iOffset;
-				if(!frameDatas[frameNum])
-					frameDatas[frameNum] = {keyDatas:  		[],
-											sectionName: 	row[1],
-											frameName: 		row[2] };
-	          	// take three values at a time
-	          	for(var j = 3; j + 2 < row.length; j += 3){
-	          		var keyData = { frameIdx:  frameNum,
-									nodeName:  row[j],
-									propName:  row[j+1],
-									propValue: parseFloat(row[j+2]) };
-					addFrameData(frameDatas, keyData);
-					verbose("add frame data. frame:",frameNum, "prop:", row[j+1]);
-	          	}
-        	}
-          	i++;
-	    }
-	    oFile.close();
-	    print("added", i, "CSV frames from:", sFilename);
-	}	
-	else
-	{
-		print("ERROR: could not find or open file:", sFilename);
-	}
-	return frameDatas;
-}
-
-// Reads frame data from JSON file format
-// JSON format:
+// Frame data JSON format (inline `config.extraFrames` of the character script):
 // {
 //   "meta": { "version": "1.0", "description": "..." },
 //   "frames": [
@@ -322,128 +280,19 @@ function readPropsCSV(sFilename, frameDatas, iOffset){
 //     }
 //   ]
 // }
-// Reads + parses a sibling art-direction JSON (GP9_ArtDirection.json /
-// DK9_ArtDirection.json) next to the FBM file. Returns the parsed object or null.
-function readArtDirectionSibling(sFilename, sJsonName, sLabel){
-	var oFileInfo = new DzFileInfo(sFilename);
-	var sJsonPath = oFileInfo.path() + "/" + sJsonName;
-	var oFile = new DzFile(sJsonPath);
-	if (!oFile.open(oFile.ReadOnly)) {
-		print("WARNING: Could not open", sJsonName, "at:", sJsonPath);
-		return null;
-	}
-	var sContent = oFile.read();
-	oFile.close();
-	try {
-		return JSON.parse(sContent);
-	} catch (e) {
-		print("ERROR: Failed to parse", sLabel, "art direction (" + sJsonName + "):", e);
-		return null;
-	}
-}
-
-function readFrameDataJSON(sFilename, frameDatas, iOffset){
-	frameDatas = frameDatas || [];
-	iOffset = iOffset || 0;
-
-	var oFile = new DzFile(sFilename);
-	if (!oFile.open(oFile.ReadOnly)) {
-		print("ERROR: could not find or open file:", sFilename);
-		return frameDatas;
-	}
-
-	var sContent = oFile.read();
-	oFile.close();
-
-	var jsonData;
-	try {
-		jsonData = JSON.parse(sContent);
-	} catch (e) {
-		print("ERROR: failed to parse JSON from:", sFilename, "-", e);
-		return frameDatas;
-	}
-
-	// The file path reads the sibling GP9/DK9_ArtDirection.json for the reset
-	// (inline callers pass the parsed data straight to processFrameDataJSON).
-	var gpArtData = (jsonData.meta && jsonData.meta.resetGPBeforeApplying === true)
-		? readArtDirectionSibling(sFilename, "GP9_ArtDirection.json", "GP") : null;
-	var dkArtData = (jsonData.meta && jsonData.meta.resetDKBeforeApplying === true)
-		? readArtDirectionSibling(sFilename, "DK9_ArtDirection.json", "DK") : null;
-	return processFrameDataJSON(jsonData, frameDatas, iOffset, gpArtData, dkArtData);
-}
-
 /**
- * Inject reset keyframes that zero a genital ROM's morphs at the first custom
- * (FBM) frame, so the GP/DK block's morphs don't leak into the custom poses.
- * `artData` is the parsed GP9/DK9 art-direction object; its last (highest-frame)
- * entry carries the morph list to clear. `sLabel` is for logging ("GP"/"DK").
- * noSawtooth sets 0 only at the FBM start, leaving the block's final pose intact.
+ * Process an already-parsed frame-data object (the inline `config.extraFrames`
+ * of the character script — same shape as the historical *_FBMs.json files)
+ * into `frameDatas`. Gen-block leakage needs no handling here: runtime v27
+ * closes every block's dangling keys at its boundary (closeDanglingMorphKeys).
  */
-function resetGenMorphsAtFbmStart(jsonData, frameDatas, iOffset, artData, sLabel){
-	if (!artData || !artData.frames || artData.frames.length === 0) {
-		print("WARNING:", sLabel, "reset requested but no art-direction data - skipping");
-		return;
-	}
-	// The last frame (highest frame number) holds the morphs to reset.
-	var lastFrame = null;
-	var maxFrameNum = -1;
-	for (var g = 0; g < artData.frames.length; g++) {
-		var af = artData.frames[g];
-		if (parseInt(af.frame) > maxFrameNum) {
-			maxFrameNum = parseInt(af.frame);
-			lastFrame = af;
-		}
-	}
-	if (!lastFrame || !lastFrame.morphs || lastFrame.morphs.length === 0) {
-		print("WARNING:", sLabel, "art direction last frame has no morphs - nothing to reset");
-		return;
-	}
-	// First frame of this FBM block = where we anchor the reset.
-	var minFrame = Number.MAX_VALUE;
-	for (var f = 0; f < jsonData.frames.length; f++) {
-		var fn = parseInt(jsonData.frames[f].frame);
-		if (fn < minFrame) minFrame = fn;
-	}
-	var firstFrameNum = minFrame + iOffset;
-	for (var m = 0; m < lastFrame.morphs.length; m++) {
-		var morph = lastFrame.morphs[m];
-		addFrameData(frameDatas, {
-			frameIdx: firstFrameNum,
-			nodeName: morph.node,
-			propName: morph.prop,
-			propValue: 0,
-			baseValue: 0,
-			noSawtooth: true  // set 0 here only; don't sawtooth the previous frame
-		});
-		verbose("Reset", sLabel, "morph before applying:", morph.prop, "at frame", firstFrameNum);
-	}
-	print("Reset", lastFrame.morphs.length, sLabel, "morphs at FBM start frame", firstFrameNum);
-}
-
-/**
- * Process an already-parsed frame-data object (same shape as the *_FBMs.json
- * files) into `frameDatas`. Split out of readFrameDataJSON so callers can pass
- * the data inline (DTH Character Studio's single-file script) instead of a file.
- * `gpArtData` / `dkArtData` (optional) are the parsed GP9 / DK9 art-direction
- * objects used for the reset; pass null to skip a given block's reset.
- */
-function processFrameDataJSON(jsonData, frameDatas, iOffset, gpArtData, dkArtData){
+function processFrameDataJSON(jsonData, frameDatas, iOffset){
 	frameDatas = frameDatas || [];
 	iOffset = iOffset || 0;
 
 	if (!jsonData || !jsonData.frames || !Array.isArray(jsonData.frames)) {
 		print("ERROR: frame data missing 'frames' array");
 		return frameDatas;
-	}
-
-	// Reset the active genital ROM's morphs at the FBM start to prevent leakage.
-	// The studio emits both flags from one generic option; only the block whose
-	// art-direction data is actually present (GP for female, DK for male) resets.
-	if (jsonData.meta && jsonData.meta.resetGPBeforeApplying === true && gpArtData) {
-		resetGenMorphsAtFbmStart(jsonData, frameDatas, iOffset, gpArtData, "GP");
-	}
-	if (jsonData.meta && jsonData.meta.resetDKBeforeApplying === true && dkArtData) {
-		resetGenMorphsAtFbmStart(jsonData, frameDatas, iOffset, dkArtData, "DK");
 	}
 
 	var frameCount = 0;
@@ -1534,32 +1383,9 @@ function restoreNodeTransforms(oNodeRoot, preserveNodeTransforms) {
     }
 }
 
-// Applies GP art direction morphs from GP9_ArtDirection.json to the GP ROM frames
-// sJsonPath: path to GP9_ArtDirection.json
-// oNodeRoot: root node (Genesis9)
-// startFrame: frame where GP ROM starts (e.g., 328 for DQS)
-function applyGPArtDirection(sJsonPath, oNodeRoot, startFrame) {
-    var oFile = new DzFile(sJsonPath);
-    if (!oFile.open(oFile.ReadOnly)) {
-        print("WARNING: Could not open GP art direction file:", sJsonPath);
-        return false;
-    }
-
-    var sContent = oFile.read();
-    oFile.close();
-
-    var jsonData;
-    try {
-        jsonData = JSON.parse(sContent);
-    } catch (e) {
-        print("ERROR: Failed to parse GP art direction JSON:", e);
-        return false;
-    }
-    return applyArtDirectionData(jsonData, oNodeRoot, startFrame);
-}
-
-// Apply already-parsed art-direction frames (split out of applyGPArtDirection so
-// DTH Character Studio's single-file script can pass the data inline).
+// Apply the character's art-direction frames (inline `config.gpArtDirection` /
+// `config.dkArtDirection` of the single-file character script) onto the GP/DK
+// ROM block starting at `startFrame`.
 function applyArtDirectionData(jsonData, oNodeRoot, startFrame) {
     if (!jsonData || !jsonData.frames || !Array.isArray(jsonData.frames)) {
         print("ERROR: art direction data missing 'frames' array");

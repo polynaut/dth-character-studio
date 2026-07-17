@@ -172,7 +172,8 @@ describe('buildFbmData', () => {
   it('builds the inline extra-frame payload with 0-based frames', () => {
     const data = buildFbmData(makeCharacter())
     expect(data.meta.version).toBe('1.0')
-    expect(data.meta.resetGPBeforeApplying).toBe(true)
+    // The per-block reset flags are gone: runtime v27 always closes block tails.
+    expect('resetGPBeforeApplying' in data.meta).toBe(false)
     expect(data.frames[0]).toEqual({
       frame: 0,
       section: 'FBM',
