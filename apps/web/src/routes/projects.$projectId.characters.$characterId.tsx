@@ -27,6 +27,7 @@ import {
   fetchProject,
   fetchMorphIndex,
   fetchRomRunLog,
+  syncAvatarWithScene,
   fetchSettings,
   fileExists,
   generateCharacterFiles,
@@ -185,6 +186,20 @@ function CharacterPage() {
   useRefetchOnFocus(() => {
     void fetchRomRunLog({ data: { projectId, id: initial.id } }).then(setRomRunLog)
   }, [projectId, initial.id])
+
+  // Scene-derived avatars mirror their source scene's preview, which Daz
+  // rewrites on every scene save — re-sync on load and whenever the window
+  // regains focus (tabbing back from Daz), so the avatar never goes stale.
+  // Custom uploads have no source scene and are never touched.
+  useRefetchOnFocus(
+    () => {
+      void syncAvatarWithScene({ data: { projectId, id: initial.id } }).then((changed) => {
+        if (changed) draft.syncPersisted(changed)
+      })
+    },
+    [projectId, initial.id],
+    { immediate: true },
+  )
 
   // The scanned morph index for this generation (Scan_Morphs_<Genesis>.dsa →
   // app-data JSON) powering the Morph-name autocomplete. Loaded on mount and
@@ -842,11 +857,13 @@ function CharacterPage() {
           name={character.name}
           characterId={character.id}
           scenes={[...new Set([character.scenePath, ...character.extraScenes].filter(Boolean))]}
-          onApply={async (image) => {
+          onApply={async (image, imageScene) => {
             // Persist the avatar immediately — it's a deliberate change and
-            // should survive a reload without needing the Save button.
-            const updated = { ...character, image }
-            patch({ image })
+            // should survive a reload without needing the Save button. The
+            // source scene ('' for uploads/URLs) rides along so the avatar
+            // auto-sync knows what to mirror.
+            const updated = { ...character, image, imageScene }
+            patch({ image, imageScene })
             try {
               const saved = await saveCharacter({ data: { projectId, character: updated } })
               draft.settle(saved)
@@ -854,7 +871,7 @@ function CharacterPage() {
               toast.success('Image updated')
             } catch (e) {
               // Roll the optimistic update back so the editor isn't stuck dirty.
-              patch({ image: character.image })
+              patch({ image: character.image, imageScene: character.imageScene })
               toast.error(e instanceof Error ? e.message : String(e))
             }
           }}

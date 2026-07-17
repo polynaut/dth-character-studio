@@ -19,7 +19,7 @@ export function sceneBase(scenePath: string): string {
  * conventions: `<scene>.tip.png` (e.g. Kira.duf.tip.png) and `<base>.tip.png`
  * (Kira.tip.png). Returns '' when neither exists.
  */
-async function findTipImage(scenePath: string): Promise<string> {
+export async function findTipImage(scenePath: string): Promise<string> {
   for (const p of [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]) {
     if (await exists(p)) return p
   }
@@ -34,7 +34,7 @@ async function findTipImage(scenePath: string): Promise<string> {
  * keep showing the cached old image (e.g. switching the avatar between two scenes).
  * Returns the stored filename.
  */
-async function writeAvatarBytes(
+export async function writeAvatarBytes(
   characterId: string,
   bytes: Uint8Array,
   ext: string,
@@ -44,22 +44,33 @@ async function writeAvatarBytes(
   const dir = storage.metaImagesDir(projectDir)
   await mkdir(dir, { recursive: true })
   const id = basename(characterId)
-  // One avatar per character — drop any previous variant (old fixed name or version).
-  await removeCharacterAvatars(projectDir, id)
   const fileName = `${id}-${Date.now()}.${ext}`
+  // Write the new avatar FIRST, then drop the previous variants — the reverse
+  // order leaves a window where a concurrent writer's just-written file (already
+  // referenced by a save) gets deleted, breaking the stored reference.
   await writeFile(joinPath(dir, fileName), bytes)
+  await removeCharacterAvatars(projectDir, id, fileName)
   return fileName
 }
 
 /** Remove every avatar image stored for a character (old fixed name + versioned
  *  `<id>-<ts>.<ext>`), used both when replacing an avatar and when the character
- *  is deleted. Best-effort per file; a missing images folder is a no-op. */
-export async function removeCharacterAvatars(projectDir: string, characterId: string): Promise<void> {
+ *  is deleted. `keep` spares one filename (the replacement just written).
+ *  Best-effort per file; a missing images folder is a no-op. */
+export async function removeCharacterAvatars(
+  projectDir: string,
+  characterId: string,
+  keep = '',
+): Promise<void> {
   const dir = storage.metaImagesDir(projectDir)
   const id = basename(characterId)
   if (!(await exists(dir))) return
   for (const entry of await readDir(dir)) {
-    if (entry.isFile && (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))) {
+    if (
+      entry.isFile &&
+      entry.name !== keep &&
+      (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))
+    ) {
       await remove(joinPath(dir, entry.name))
     }
   }

@@ -54,6 +54,7 @@ export {
   listScanFrameCsvs,
   moveCharacter,
   moveCharacterScenesFolder,
+  syncAvatarWithScene,
   saveCharacter,
 } from './api/characters'
 export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog, ScanFrameCsv } from './api/characters'
