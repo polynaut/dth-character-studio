@@ -1062,11 +1062,12 @@ describe('groom items (hair kept out of the export)', () => {
     expect(content).toContain('String(Scene.getFilename()).split(')
     // No entry for the open scene → export as-is (a scene without groom is valid).
     expect(content).toContain('No groom list for the open scene - exporting as-is.')
-    const detachAt = content.indexOf('setFollowTarget(null)')
-    const runAt = content.indexOf('dthRunExport();', detachAt)
-    const restoreAt = content.indexOf('addNodeChild(', runAt)
-    expect(detachAt).toBeGreaterThan(-1)
-    expect(runAt).toBeGreaterThan(detachAt)
+    // Hide-based (plugin 2.0 skips hidden nodes): hide subtree → export → show.
+    const hideAt = content.indexOf('dthGroomHideTree(dthGroomNodes[dthGd])')
+    const runAt = content.indexOf('dthRunExport();', hideAt)
+    const restoreAt = content.indexOf('.setVisible(true)', runAt)
+    expect(hideAt).toBeGreaterThan(-1)
+    expect(runAt).toBeGreaterThan(hideAt)
     expect(restoreAt).toBeGreaterThan(runAt)
     // Restore runs even when the export throws; the CSV delivery rides inside.
     expect(content).toContain('} finally {')
