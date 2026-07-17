@@ -31,6 +31,8 @@ export function LinkedAssetCard({
   onOpen,
   onRemove,
   removeTitle = 'Remove',
+  selected,
+  onSelect,
 }: {
   title: string
   /** Thumbnail slot — the app's Portrait or a logo, sized by the caller. */
@@ -53,18 +55,24 @@ export function LinkedAssetCard({
   /** When set, a hover ✕ appears (unlink — never a file delete). */
   onRemove?: () => void
   removeTitle?: string
+  /** Selectable mode: highlights when `selected`; a card click SELECTS instead
+   *  of opening — only the corner icon opens. Both optional (default = the
+   *  classic whole-card-opens behavior). */
+  selected?: boolean
+  onSelect?: () => void
 }) {
   const CornerIcon = altHeld ? FolderOpen : ExternalLink
   return (
     <div className={cn('group/card relative', width)}>
       <button
         type="button"
-        onClick={onOpen}
+        onClick={onSelect ?? onOpen}
         data-alt-reveal=""
-        title={openTitle}
+        title={onSelect ? title : openTitle}
         className={cn(
           'group relative flex h-full w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
           cardClass,
+          selected && 'ring-2 ring-primary',
         )}
       >
         <div className="relative shrink-0">
@@ -76,12 +84,32 @@ export function LinkedAssetCard({
           {chip && <div className="mt-1">{chip}</div>}
           {extra && <div className="mt-1">{extra}</div>}
         </div>
-        <CornerIcon
-          className={cn(
-            'absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors',
-            accentClass,
-          )}
-        />
+        {onSelect ? (
+          // Selectable mode: the corner icon is the ONLY open target (a span,
+          // not a nested button - invalid HTML; see the JCM-header fix).
+          <span
+            role="button"
+            tabIndex={0}
+            title={openTitle}
+            aria-label={openTitle}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen(e as unknown as MouseEvent)
+            }}
+            className="absolute right-2 bottom-2 rounded p-1 hover:bg-accent"
+          >
+            <CornerIcon
+              className={cn('size-4 text-muted-foreground transition-colors', accentClass)}
+            />
+          </span>
+        ) : (
+          <CornerIcon
+            className={cn(
+              'absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors',
+              accentClass,
+            )}
+          />
+        )}
       </button>
       {onRemove && (
         <Button

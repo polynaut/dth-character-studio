@@ -634,20 +634,30 @@ function buildExportBlock(
   // unfit/unparent bracket below; without any, the emitted script is unchanged.
   const exportCore = `    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
 ${csvCopyBlock}`
-  const groomLabels = groomNodeLabels(character)
+  const groomMap = groomSceneMap(character)
   const indentBlock = (block: string) =>
     block
       .split('\n')
       .map((line) => (line ? `    ${line}` : line))
       .join('\n')
   const exportBody =
-    groomLabels.length === 0
+    Object.keys(groomMap).length === 0
       ? exportCore
       : `    // Groom items (hair) must stay OUT of the export: the DTH Exporter walks
-    // the selected figure's hierarchy and IGNORES visibility (measured), so each
-    // listed item is unfitted + unparented for the export and restored right
-    // after — the same unfit/refit Daz's own "Fit To" dialog performs.
-    var dthGroomLabels = [${groomLabels.map((label) => JSON.stringify(label)).join(', ')}];
+    // the selected figure's hierarchy and IGNORES visibility (measured), so the
+    // OPEN scene's listed items are unfitted + unparented for the export and
+    // restored right after — the same unfit/refit Daz's own "Fit To" dialog
+    // performs. The lists are per scene (outfit scenes carry different hair);
+    // a scene without an entry has no groom to exclude and exports as-is.
+    var dthRunExport = function () {
+${indentBlock(indentBlock(exportCore))}    };
+    var dthGroomByScene = ${JSON.stringify(groomMap)};
+    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
+    if (dthGroomLabels.length == 0) {
+        print("No groom list for the open scene - exporting as-is.");
+        dthRunExport();
+    } else {
     var dthGroomRestore = [];
     var dthGroomMissing = "";
     for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++) {
@@ -670,7 +680,8 @@ ${csvCopyBlock}`
         }
         print("Groom items detached for the export: " + dthGroomRestore.length);
         try {
-${indentBlock(exportCore)}        } finally {
+            dthRunExport();
+        } finally {
             // Reparent first, then refit - restoring the exact pre-export state
             // even when the export itself throws.
             for (var dthGr = dthGroomRestore.length - 1; dthGr >= 0; dthGr--) {
@@ -679,6 +690,7 @@ ${indentBlock(exportCore)}        } finally {
             }
             print("Groom items restored: " + dthGroomRestore.length);
         }
+    }
     }
 `
   return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
@@ -690,14 +702,22 @@ ${sceneSubfolderBlock}${exportBody}} else {
 `
 }
 
-/** The character's groom-item labels, trimmed, empties dropped — the single
- *  reading of `groomNodes` the export bracket, the groom script and the
- *  emission gate all share. */
-function groomNodeLabels(character: Character): Array<string> {
-  // 'separate' groom mode = the classic separate-scene workflow: nothing is
-  // excluded at export, the list is inert. THE single gate for the bracket.
-  if (character.groomMode !== 'scene') return []
-  return character.groomNodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
+/**
+ * The character's per-SCENE groom lists as a lookup the generated script embeds:
+ * normalized scene path (forward slashes, lowercased) → trimmed non-empty item
+ * labels. Scenes without items are dropped — absence MEANS "this scene has no
+ * groom to exclude". Empty in 'separate' groom mode (the classic separate-scene
+ * workflow: the lists are inert). THE single gate for the export bracket.
+ */
+function groomSceneMap(character: Character): Record<string, Array<string>> {
+  if (character.groomMode !== 'scene') return {}
+  const map: Record<string, Array<string>> = {}
+  for (const entry of character.groomScenes) {
+    const key = entry.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    const labels = entry.nodes.map((n) => n.nodeLabel.trim()).filter((label) => label !== '')
+    if (key !== '' && labels.length > 0) map[key] = labels
+  }
+  return map
 }
 
 /**
@@ -933,7 +953,9 @@ ${buildExportBlock(character, frames, charFolderAbs)}`
  * unparenting — hair stays as worn), writes only empty shells for a non-Genesis
  * root (261-byte .abc, geometry-less .fbx). A hair-only export therefore needs
  * DTH Exporter plugin support (a groom/subtree export mode) — requested
- * upstream; until then the studio ships hair EXCLUSION only.
+ * upstream; until then the studio ships hair EXCLUSION only. When it returns,
+ * it stays ONE script: bake the same per-scene map groomSceneMap() builds and
+ * resolve the open scene's list at run time exactly like the export bracket.
  */
 /** Inputs for the per-character product-scan script — both supplied by the host
  *  (the studio), never by the pure core. Present ⇔ the project opted into the

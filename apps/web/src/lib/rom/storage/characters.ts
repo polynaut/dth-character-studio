@@ -228,6 +228,7 @@ export async function saveCharacter(
     stamped.extraScenes = stamped.extraScenes.map(repoint)
     stamped.houdiniProjects = stamped.houdiniProjects.map(repoint)
     stamped.imageScene = repoint(stamped.imageScene)
+    stamped.groomScenes = stamped.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) }))
   }
 
   await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
@@ -385,6 +386,7 @@ export async function moveCharactersRoot(oldRoot: string, newRoot: string): Prom
           extraScenes: c.extraScenes.map(repoint),
           houdiniProjects: c.houdiniProjects.map(repoint),
           imageScene: repoint(c.imageScene),
+          groomScenes: c.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
         }
         await writeTextFile(defAbs, JSON.stringify(updated, null, 2) + '\n')
       } catch {

@@ -504,11 +504,15 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       unfit+unparent around doExport; additive with a [] default — no
  *       migration step).
  *  14 — added `groomMode` ('scene' = groom lives in the ROM scene and the
- *       groomNodes bracket excludes it at export; 'separate' = classic
- *       separate-scene workflow, list inert; additive with a 'scene' default —
+ *       groom bracket excludes it at export; 'separate' = classic
+ *       separate-scene workflow, lists inert; additive with a 'scene' default —
  *       no migration step).
+ *  15 — `groomNodes` (v13, never released) became the per-SCENE `groomScenes`
+ *       (a character's outfit scenes carry different hair styles; the script
+ *       resolves the open scene's list at run time). Removal+addition — zod
+ *       strips the old flat list and fills the new default; no migration step.
  */
-export const CHARACTER_SCHEMA_VERSION = 14
+export const CHARACTER_SCHEMA_VERSION = 15
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -849,15 +853,30 @@ export const characterSchema = z.object({
    * IGNORES visibility (measured July 2026), so exclusion means leaving the
    * hierarchy, not hiding. Labels as shown in Daz's Scene pane.
    */
-  groomNodes: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
+  /**
+   * Per-SCENE groom lists: a character's outfit scenes can carry different hair
+   * styles, so the excluded items are tied to the scene they live in. The
+   * generated script embeds the whole map and resolves the OPEN scene's list at
+   * run time (`Scene.getFilename()`); a scene without an entry excludes nothing
+   * (that's its meaning — e.g. a bald outfit scene). Paths repoint alongside
+   * `scenePath`/`extraScenes` on folder moves.
+   */
+  groomScenes: z
+    .array(
+      z.object({
+        scenePath: z.string().max(MAX_PATH_LENGTH),
+        nodes: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
+      }),
+    )
+    .default([]),
   /**
    * How this character's groom (hair) is handled at export time:
-   *  - 'scene': the groom lives IN the ROM scene — the items in `groomNodes`
-   *    are unfitted/unparented around `doExport` and restored (one scene
-   *    carries everything).
+   *  - 'scene': the groom lives IN the ROM scene(s) — the open scene's
+   *    `groomScenes` items are unfitted/unparented around `doExport` and
+   *    restored (one scene per outfit carries everything, hair included).
    *  - 'separate': the classic workflow — groom kept in separate Daz scene
    *    files (linkable via `extraScenes`); nothing is excluded at export and
-   *    `groomNodes` is ignored.
+   *    `groomScenes` is ignored.
    */
   groomMode: z.enum(['scene', 'separate']).default('scene'),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),

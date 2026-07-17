@@ -23,54 +23,57 @@ function refKey(ref: string): string {
 }
 
 /**
- * The "groom items" list of the character editor's Export section: scene items
- * (hair — usually the fitted cap; its children ride along) the generated script
- * unfits + unparents around the DTH export and restores afterwards, so one
- * scene carries full hair while the ROM export stays clean. (A hair-ONLY groom
- * export needs DTH Exporter plugin support and is not emitted — see the note
- * in @dth/rom generate.ts.)
- *
- * Suggestions come from the character's linked scene `.duf`s (read natively,
- * no Daz needed): the top-level items conformed to the figure, hair-ish names
- * first. A listed label the scenes don't contain gets a warning — the script
- * would abort loud on it at run time. `patch` is the route's partial-Character
- * updater — saved with the ordinary Save.
+ * The groom (hair) block of the character editor's Export section. The lists
+ * are PER SCENE (`groomScenes`) — outfit scenes carry different hair styles —
+ * and this component edits the list of the SELECTED scene card (`selectedScene`,
+ * the primary scene by default). The generated script bakes the whole map and
+ * resolves the open scene's list at run time, so one script serves every scene.
+ * Suggestions come from the selected scene's `.duf` (read natively, no Daz
+ * needed); a listed label the scene doesn't contain gets a warning. `patch` is
+ * the route's partial-Character updater — saved with the ordinary Save.
  */
 export function GroomFields({
   character,
   patch,
+  selectedScene,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
+  /** The scene whose groom list is being edited (a linked scene path). */
+  selectedScene: string
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
-  const scenesKey = [character.scenePath, ...character.extraScenes].filter(Boolean).join('|')
 
   useEffect(() => {
-    const scenes = scenesKey.split('|').filter(Boolean)
-    if (scenes.length === 0) {
+    if (!selectedScene) {
       setWearables([])
       setScanned(false)
       return
     }
     let cancelled = false
-    void (async () => {
-      const results = await Promise.all(
-        scenes.map((scenePath) => api.sceneWearables({ data: { scenePath } })),
-      )
+    void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
       if (cancelled) return
-      setWearables(results.flatMap((result) => result.items))
-      // Only scenes that actually parsed may judge a label as missing.
-      setScanned(results.some((result) => result.error === ''))
-    })()
+      setWearables(result.items)
+      setScanned(result.error === '')
+    })
     return () => {
       cancelled = true
     }
-  }, [scenesKey])
+  }, [selectedScene])
+
+  const entry = character.groomScenes.find((g) => g.scenePath === selectedScene)
+  const nodes = entry?.nodes ?? []
+  const setNodes = (next: Array<{ nodeLabel: string }>) =>
+    patch({
+      groomScenes: [
+        ...character.groomScenes.filter((g) => g.scenePath !== selectedScene),
+        ...(next.length > 0 ? [{ scenePath: selectedScene, nodes: next }] : []),
+      ],
+    })
 
   const ids = new Set(wearables.map((wearable) => wearable.id))
-  const listed = new Set(character.groomNodes.map((groom) => groom.nodeLabel.trim()))
+  const listed = new Set(nodes.map((groom) => groom.nodeLabel.trim()))
   const suggestions = wearables
     // Top-level followers only: an item fitted to another wearable (hair base on
     // its cap) rides along with its parent and needs no own entry.
@@ -89,15 +92,7 @@ export function GroomFields({
   const missing = scanned
     ? [...listed].filter((label) => label !== '' && !knownLabels.has(label))
     : []
-
-  const addGroom = (nodeLabel: string) =>
-    patch({
-      // A freshly added empty row is replaced rather than left dangling.
-      groomNodes: [
-        ...character.groomNodes.filter((groom) => groom.nodeLabel.trim() !== ''),
-        { nodeLabel },
-      ],
-    })
+  const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
 
   return (
     <div className="max-w-xl">
@@ -107,64 +102,74 @@ export function GroomFields({
           onCheckedChange={(inScene) => patch({ groomMode: inScene ? 'scene' : 'separate' })}
         />
         <span className="flex items-center gap-1 text-sm">
-          Groom (hair) lives in the ROM scene
-          <InfoPopup label="Groom lives in the ROM scene — more information">
-            On: one scene carries the full character — the groom items listed below are
-            unfitted and moved out of the figure around the DTH export, then restored, so
-            hair never rides into the ROM artifacts. Off: the classic workflow — you keep
-            hair in separate Daz scene files (link them under Daz scenes) and nothing is
-            excluded at export.
+          Groom (hair) lives in the ROM scenes
+          <InfoPopup label="Groom lives in the ROM scenes — more information">
+            On: each scene carries its full look, hair included — the groom items listed per
+            scene are unfitted and moved out of the figure around the DTH export, then restored,
+            so hair never rides into the ROM artifacts. The generated script carries every
+            scene's list and applies the right one for the scene open in Daz. Off: the classic
+            workflow — you keep hair in separate Daz scene files and nothing is excluded.
           </InfoPopup>
         </span>
       </div>
-      {character.groomMode !== 'scene' ? null : (
-        <>
-      <Label className="mb-2 flex w-fit items-center gap-1">
-        Groom items kept out of the export (hair)
-        <InfoPopup label="Groom items kept out of the export — more information">
-          Scene items listed here are unfitted and moved out of the figure right before the DTH
-          Exporter runs, then restored — the exporter ignores visibility, so hiding hair is not
-          enough. List the top fitted item (e.g. the hair cap); its children ride along. Enter the
-          label exactly as shown in Daz's Scene pane, or pick from the items found in the linked
-          scene.
-        </InfoPopup>
-      </Label>
-      <KeyedListEditor
-        items={character.groomNodes}
-        onChange={(groomNodes) => patch({ groomNodes })}
-        newItem={() => ({ nodeLabel: '' })}
-        addLabel="Add groom item"
-      >
-        {(item, set) => (
-          <Input
-            value={item.nodeLabel}
-            placeholder="dForce Black Tie Cap"
-            onChange={(e) => set({ nodeLabel: e.target.value })}
-          />
-        )}
-      </KeyedListEditor>
-      {suggestions.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">In the scene:</span>
-          {suggestions.map((wearable) => (
-            <button
-              key={wearable.label}
-              type="button"
-              className="rounded-full border px-2 py-0.5 text-xs hover:bg-accent"
-              onClick={() => addGroom(wearable.label)}
-            >
-              + {wearable.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {missing.length > 0 && (
-        <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
-          Not found in the linked scene{missing.length === 1 ? '' : 's'}:{' '}
-          <strong>{missing.join(', ')}</strong> — the export would stop on a label that isn't in
-          the scene; check it against Daz's Scene pane.
+      {character.groomMode !== 'scene' ? null : !selectedScene ? (
+        <p className="text-sm text-muted-foreground">
+          Link a Daz scene to define its groom items.
         </p>
-      )}
+      ) : (
+        <>
+          <Label className="mb-2 flex w-fit items-center gap-1">
+            Groom items in “{sceneName}” kept out of the export
+            <InfoPopup label="Groom items kept out of the export — more information">
+              Click a scene card above to pick which scene's hair you're listing. Items listed
+              here are unfitted and moved out of the figure right before the DTH Exporter runs,
+              then restored — the exporter ignores visibility, so hiding hair is not enough.
+              List the top fitted item (e.g. the hair cap); its children ride along. Enter the
+              label exactly as shown in Daz's Scene pane, or pick from the items found in the
+              scene. A scene with no items listed exports as-is.
+            </InfoPopup>
+          </Label>
+          <KeyedListEditor
+            items={nodes}
+            onChange={setNodes}
+            newItem={() => ({ nodeLabel: '' })}
+            addLabel="Add groom item"
+          >
+            {(item, set) => (
+              <Input
+                value={item.nodeLabel}
+                placeholder="dForce Black Tie Cap"
+                onChange={(e) => set({ nodeLabel: e.target.value })}
+              />
+            )}
+          </KeyedListEditor>
+          {suggestions.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">In this scene:</span>
+              {suggestions.map((wearable) => (
+                <button
+                  key={wearable.label}
+                  type="button"
+                  className="rounded-full border px-2 py-0.5 text-xs hover:bg-accent"
+                  onClick={() =>
+                    setNodes([
+                      ...nodes.filter((groom) => groom.nodeLabel.trim() !== ''),
+                      { nodeLabel: wearable.label },
+                    ])
+                  }
+                >
+                  + {wearable.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {missing.length > 0 && (
+            <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
+              Not found in “{sceneName}”: <strong>{missing.join(', ')}</strong> — the export
+              would stop on a label that isn't in the open scene; check it against Daz's Scene
+              pane.
+            </p>
+          )}
         </>
       )}
     </div>

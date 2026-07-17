@@ -180,6 +180,12 @@ function CharacterPage() {
   const [activeTab, setActiveTab] = useState<'character' | 'products' | 'notes'>('character')
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  // Which Daz scene card is selected (groom lists are per scene). Entering the
+  // character selects the primary scene by default; unlinking the selected
+  // extra scene falls back to it too (the stored path just stops matching).
+  const [selectedScene, setSelectedScene] = useState('')
+  const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  const effectiveScene = linkedScenes.includes(selectedScene) ? selectedScene : (character.scenePath || '')
   // The ROM run log written by the Daz-side script (ingested into the studio's
   // own store on read). Re-read whenever the window regains focus, so problems
   // from a run surface the moment the user switches back from Daz to the studio.
@@ -647,6 +653,8 @@ function CharacterPage() {
               sceneFolderExists={sceneFolderExists}
               defaultSubdir={project?.dazSubdir ?? 'daz3d'}
               onLinked={onSceneLinked}
+              selectedScene={effectiveScene}
+              onSelectScene={setSelectedScene}
             />
             <HoudiniProjectsField
               projectId={projectId}
@@ -802,7 +810,7 @@ function CharacterPage() {
           </span>
         </div>
         <div className="mt-5">
-          <GroomFields character={character} patch={patch} />
+          <GroomFields character={character} patch={patch} selectedScene={effectiveScene} />
         </div>
       </section>
 

@@ -1048,24 +1048,28 @@ describe('groom items (hair kept out of the export)', () => {
     makeCharacter({
       name: 'Electra',
       exportPath: 'X:\\exports\\electra',
-      groomNodes: [{ nodeLabel: 'dForce Black Tie Cap' }],
+      groomScenes: [
+        { scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: 'dForce Black Tie Cap' }] },
+      ],
       ...over,
     })
 
-  it('brackets doExport with unfit/unparent and a finally-restore, in that order', () => {
+  it('embeds the per-scene map and brackets the export with detach → run → restore', () => {
     const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').content
-    expect(content).toContain('var dthGroomLabels = ["dForce Black Tie Cap"];')
+    // The whole map is baked in (normalized keys); the OPEN scene resolves at run time.
+    expect(content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
+    expect(content).toContain('String(Scene.getFilename()).split(')
+    // No entry for the open scene → export as-is (a scene without groom is valid).
+    expect(content).toContain('No groom list for the open scene - exporting as-is.')
     const detachAt = content.indexOf('setFollowTarget(null)')
-    const exportAt = content.indexOf('dthExportAction.doExport(')
-    const restoreAt = content.indexOf('addNodeChild(')
+    const runAt = content.indexOf('dthRunExport();', detachAt)
+    const restoreAt = content.indexOf('addNodeChild(', runAt)
     expect(detachAt).toBeGreaterThan(-1)
-    expect(exportAt).toBeGreaterThan(detachAt)
-    expect(restoreAt).toBeGreaterThan(exportAt)
+    expect(runAt).toBeGreaterThan(detachAt)
+    expect(restoreAt).toBeGreaterThan(runAt)
     // Restore runs even when the export throws; the CSV delivery rides inside.
     expect(content).toContain('} finally {')
-    const csvAt = content.indexOf('dthCsvSrcDir')
-    expect(csvAt).toBeGreaterThan(exportAt)
-    expect(csvAt).toBeLessThan(restoreAt)
+    expect(content).toContain('dthCsvSrcDir')
   })
 
   it('a missing groom item skips the export loud instead of shipping hair', () => {
@@ -1077,7 +1081,9 @@ describe('groom items (hair kept out of the export)', () => {
   it('emits no groom code without groom items, and blank labels count as none', () => {
     const plain = makeCharacter({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
     expect(toCharacterScriptDsa(plain, {}, FRAMES).content).not.toContain('dthGroom')
-    const blank = groomChar({ groomNodes: [{ nodeLabel: '  ' }] })
+    const blank = groomChar({
+      groomScenes: [{ scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: '  ' }] }],
+    })
     expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
   })
 

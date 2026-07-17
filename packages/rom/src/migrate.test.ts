@@ -104,22 +104,27 @@ describe('characterSchema — v12 imageScene (additive)', () => {
   })
 })
 
-// v13 added `groomNodes` (hair items excluded from the DTH export) — additive
-// with a [] default, so there is no migrate step; zod fills it when reading an
-// older definition. This is the "ritual" test for that change.
-describe('characterSchema — v13 groomNodes (additive)', () => {
+// v15 replaced the flat groomNodes with per-scene `groomScenes` (additive with
+// a [] default; the never-released flat list is stripped by zod on read).
+describe('characterSchema — v15 groomScenes (additive)', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it('fills groomNodes with [] for a v12-shaped definition', () => {
-    expect(characterSchema.parse({ ...base, schemaVersion: 12 }).groomNodes).toEqual([])
-  })
-
-  it('round-trips stored groom items', () => {
+  it('fills groomScenes with [] and strips the old flat groomNodes', () => {
     const parsed = characterSchema.parse({
       ...base,
-      groomNodes: [{ nodeLabel: 'dForce Black Tie Cap' }, { nodeLabel: 'Ponytail' }],
+      schemaVersion: 13,
+      groomNodes: [{ nodeLabel: 'Old Cap' }],
     })
-    expect(parsed.groomNodes).toEqual([{ nodeLabel: 'dForce Black Tie Cap' }, { nodeLabel: 'Ponytail' }])
+    expect(parsed.groomScenes).toEqual([])
+    expect('groomNodes' in parsed).toBe(false)
+  })
+
+  it('round-trips per-scene groom lists', () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      groomScenes: [{ scenePath: 'X:/scenes/Karen.duf', nodes: [{ nodeLabel: 'dForce Black Tie Cap' }] }],
+    })
+    expect(parsed.groomScenes[0].nodes[0].nodeLabel).toBe('dForce Black Tie Cap')
   })
 })
 
