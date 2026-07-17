@@ -63,6 +63,18 @@ function ApplyDTHWorkflow(options){
 
 		// Apply JCM morph modifications based on bone rotation keyframes
 		applyJcmMorphMods(oNodeRoot, options.jcmMorphMods);
+
+		// The base block's LAST pose has no ramp-down key past the block end (a
+		// pose preset only keys inside its own range), so its morph would hold
+		// through every block after — the final FAC neck pose staying on across
+		// the whole GEN range. Close those dangling keys at the first post-base
+		// frame. The mouth node is included: its FAC keys are morph modifiers on
+		// the MOUTH object, which a root-only pass never touches (see
+		// setLinearInterp). NOT a figure fence (DzMemorizeFigureAction) like the
+		// DK path uses — that would overwrite the memorize state
+		// preserveNodeTransforms restores from.
+		var iAfterBase = Scene.getAnimRange().end / Scene.getTimeStep();
+		closeDanglingMorphKeys(oNodeMouth ? [oNodeRoot, oNodeMouth] : [oNodeRoot], iAfterBase);
 	}
 
 	/**       *****************************************************/
