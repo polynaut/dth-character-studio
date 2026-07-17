@@ -8,6 +8,7 @@ import {
   housekeepingResultSchema,
   installReportSchema,
   poseAssetFramesSchema,
+  sceneWearablesSchema,
 } from './native-types.ts'
 
 // FFI contract tests — the TS half. The shared fixtures under `contracts/`
@@ -23,6 +24,7 @@ const fixture = (name: string): unknown =>
 
 const CASES = [
   ['pose-asset-frames.json', z.array(poseAssetFramesSchema)],
+  ['scene-wearables.json', sceneWearablesSchema],
   ['sweep-report.json', housekeepingResultSchema],
   ['install-report.json', installReportSchema],
   ['dedup-report.json', dedupReportSchema],

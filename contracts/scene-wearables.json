@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "Black Tie Cap_1529",
+      "label": "dForce Black Tie Cap",
+      "conformTarget": "#Genesis9"
+    },
+    {
+      "id": "Black Tie Hair_3297440",
+      "label": "dForce Black Tie Hair Base",
+      "conformTarget": "#Black%20Tie%20Cap_1529"
+    },
+    {
+      "id": "Crop Top_88",
+      "label": "MM Crop Top",
+      "conformTarget": "#Genesis9"
+    }
+  ],
+  "error": ""
+}

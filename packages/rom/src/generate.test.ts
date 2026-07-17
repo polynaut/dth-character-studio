@@ -11,6 +11,7 @@ import {
   sectionPresetAvailable,
   toCharacterScriptDsa,
   toExportScriptDsa,
+  toGroomExportScriptDsa,
   toPoseAssetCsv,
   toScanProductsScriptDsa,
 } from './generate'
@@ -1040,6 +1041,102 @@ describe('exporter integration', () => {
       'ROM_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+})
+
+describe('groom items (hair kept out of the export)', () => {
+  const groomChar = (over: Partial<Character> = {}) =>
+    makeCharacter({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+      groomScenes: [
+        { scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: 'dForce Black Tie Cap' }] },
+      ],
+      ...over,
+    })
+
+  it('embeds the per-scene map and brackets the export with detach → run → restore', () => {
+    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').content
+    // The whole map is baked in (normalized keys); the OPEN scene resolves at run time.
+    expect(content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
+    expect(content).toContain('String(Scene.getFilename()).split(')
+    // No entry for the open scene → export as-is (a scene without groom is valid).
+    expect(content).toContain('No groom list for the open scene - exporting as-is.')
+    // DETACH, not hide (measured: plugin 2.0's skip-hidden misses the FBX):
+    // unfit+unparent → export → reparent+refit.
+    const detachAt = content.indexOf('setFollowTarget(null)')
+    const runAt = content.indexOf('dthRunExport();', detachAt)
+    const restoreAt = content.indexOf('addNodeChild(', runAt)
+    expect(detachAt).toBeGreaterThan(-1)
+    expect(runAt).toBeGreaterThan(detachAt)
+    expect(restoreAt).toBeGreaterThan(runAt)
+    // Restore runs even when the export throws; the CSV delivery rides inside.
+    expect(content).toContain('} finally {')
+    expect(content).toContain('dthCsvSrcDir')
+  })
+
+  it('the "Solve hair assets by hiding" setting switches the bracket to hide → run → show', () => {
+    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra', true).content
+    const hideAt = content.indexOf('dthGroomHideTree(dthGroomNodes[dthGd])')
+    const runAt = content.indexOf('dthRunExport();', hideAt)
+    const restoreAt = content.indexOf('.setVisible(true)', runAt)
+    expect(hideAt).toBeGreaterThan(-1)
+    expect(runAt).toBeGreaterThan(hideAt)
+    expect(restoreAt).toBeGreaterThan(runAt)
+    // The hide arm never detaches — that's the whole point of the toggle.
+    expect(content).not.toContain('setFollowTarget(null)')
+    // generateAll threads the flag into the split Export_ script too.
+    const split = generateAll(
+      groomChar({ exportWithRomScript: false }),
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      '',
+      undefined,
+      true,
+    ).find((f) => f.fileName === 'Export_Electra_G9.dsa')
+    expect(split?.content).toContain('dthGroomHideTree(dthGroomNodes[dthGd])')
+  })
+
+  it('a missing groom item skips the export loud instead of shipping hair', () => {
+    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES).content
+    expect(content).toContain('if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }')
+    expect(content).toContain('was not found in the scene')
+  })
+
+  it('emits no groom code without groom items, and blank labels count as none', () => {
+    const plain = makeCharacter({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    expect(toCharacterScriptDsa(plain, {}, FRAMES).content).not.toContain('dthGroom')
+    const blank = groomChar({
+      groomScenes: [{ scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: '  ' }] }],
+    })
+    expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
+  })
+
+  it("separate-scenes groom mode disables the bracket even with items listed", () => {
+    const content = toCharacterScriptDsa(groomChar({ groomMode: 'separate' }), {}, FRAMES).content
+    expect(content).not.toContain('dthGroom')
+  })
+
+  it('generateAll emits the groom script only with an export path AND groom lists', () => {
+    expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      'Export_Groom_Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
+    expect(generateAll(groomChar({ exportPath: '' }), {}, FRAMES).map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
+  })
+
+  it('the groom script bakes the map and calls the DOCUMENTED 3-arg export (saveSettings false)', () => {
+    const script = toGroomExportScriptDsa(groomChar())
+    expect(script.fileName).toBe('Export_Groom_Electra_G9.dsa')
+    expect(script.content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
+    // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
+    expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
+    expect(script.content).toContain('} finally {')
   })
 })
 

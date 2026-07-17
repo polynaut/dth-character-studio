@@ -38,6 +38,8 @@ function SceneCard({
   onOpen,
   onRemove,
   primary,
+  selected,
+  onSelect,
 }: {
   scenePath: string
   name: string
@@ -50,6 +52,9 @@ function SceneCard({
   /** The character's original creation scene — gets a "primary" badge and is not
    *  unlinkable (the caller omits onRemove). */
   primary?: boolean
+  /** Selectable mode (see LinkedAssetCard): card click selects, icon opens. */
+  selected?: boolean
+  onSelect?: () => void
 }) {
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The heading shows the scene name without its extension (e.g. ".duf").
@@ -108,6 +113,8 @@ function SceneCard({
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"
+      selected={selected}
+      onSelect={onSelect}
     />
   )
 }
@@ -127,6 +134,8 @@ export function DazSceneField({
   sceneFolderExists,
   defaultSubdir,
   onLinked,
+  selectedScene,
+  onSelectScene,
 }: {
   projectId: string
   character: Character
@@ -135,6 +144,11 @@ export function DazSceneField({
   sceneFolderExists: boolean
   defaultSubdir: string
   onLinked: (character: Character) => void
+  /** Selectable cards (see LinkedAssetCard): pass the selected scene path and a
+   *  setter — a card click selects (only the corner icon opens). Omit both for
+   *  the classic click-to-open cards. */
+  selectedScene?: string
+  onSelectScene?: (scene: string) => void
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -560,6 +574,8 @@ export function DazSceneField({
                   charFolderAbs={charFolder}
                   onOpen={(e) => void onOpen(character.scenePath, e)}
                   primary
+                  selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
+                  onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
@@ -577,6 +593,8 @@ export function DazSceneField({
                   charFolderAbs={charFolder}
                   onOpen={(e) => void onOpen(scene, e)}
                   onRemove={() => askRemove(scene)}
+                  selected={selectedScene !== undefined ? selectedScene === scene : undefined}
+                  onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
                 />
               ))}
             </div>
