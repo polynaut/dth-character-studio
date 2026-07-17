@@ -1106,7 +1106,6 @@ ${sceneSubfolderBlock}        // HIDE the non-groom wearables (script Ctrl+click
             }
             print("Groom export - shown again: " + dthHidden.length);
         }
-        MessageBox.information("Groom exported to:\\n" + dthExportDir + "\\n\\nLoad the _grooms.abc as the Groom Source in Houdini's DazToHueGroom Import node.", "DTH Character Studio", "&OK");
     }
 }
 `
