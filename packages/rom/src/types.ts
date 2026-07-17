@@ -626,14 +626,19 @@ export const CHARACTER_SCHEMA_VERSION = 10
  *       into the studio's app-data scan-frames folder for "Import from CSV" —
  *       replacing the DazToHue-Scripts DthScanFrames workflow. Bumped so Refresh
  *       assets installs the new scripts.
- *  26 — The base ROM's tail no longer leaks into later blocks: a pose preset can
- *       only key frames inside its own range, so the base block's LAST pose (the
- *       final FAC neck pose) had no ramp-down key and held its value through
- *       everything after — visible as neck/throat morph deltas across the whole
- *       GEN range in Houdini. After the base block loads, any keyed morph on the
- *       figure (and the G9 mouth) not back at its frame-0 value gets that value
- *       keyed at the first post-base frame, completing the sawtooth the preset
- *       couldn't. Re-run the ROM script in Daz to rebuild existing timelines.
+ *  26 — ROM block tails no longer leak into later blocks: a pose preset can
+ *       only key frames inside its own range, so a block's LAST pose had no
+ *       ramp-down key and held its value through everything after — the base
+ *       ROM's final FAC neck pose showed as neck/throat morph deltas across the
+ *       whole GEN range in Houdini. After the base block loads, any keyed morph
+ *       on the figure (and the G9 mouth) not back at its frame-0 value gets that
+ *       value keyed at the first post-base frame, completing the sawtooth the
+ *       preset couldn't. The GP/DK blocks get the same close-out on their own
+ *       node at the next block boundary, gated on resetGenBeforeApplying (the
+ *       FBM-start art-morph reset alone missed .duf-baked gen morphs, skipped
+ *       characters without art direction, and never protected a Physics block
+ *       between GEN and the customs). Re-run the ROM script in Daz to rebuild
+ *       existing timelines.
  */
 export const RUNTIME_VERSION = 26
 

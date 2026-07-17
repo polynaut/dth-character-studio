@@ -295,6 +295,19 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 	//setFencePoses(oNodeDk9, 0, aFenceFrames);
 	setFencePoses(oNodeDk9, 0, [startFrame]);
 
+	// The DK block's own tail: its last pose has no ramp-down key past the block
+	// end either (the same preset-range limit as the base ROM), so it would hold
+	// through GP/Physics/custom. Close it at the next block boundary — gated on
+	// the same reset flag that zeroes the gen art morphs at the FBM start, so a
+	// deliberate opt-out (resetGenBeforeApplying off) keeps meaning "let the gen
+	// state persist". Legacy file-based configs (no inline extraFrames) keep
+	// their old behavior. Art-direction morphs need no closing: their sawtooth
+	// (createMorphFrame) already keys the ramp-down itself.
+	var oDkMeta = options.extraFrames && options.extraFrames.meta;
+	if( oDkMeta && oDkMeta.resetDKBeforeApplying === true ){
+		closeDanglingMorphKeys([oNodeDk9], startFrame + dk9FrameCount);
+	}
+
 	// Apply DK9 art direction morphs (per-character). Inline data (from the
 	// single-file character script) wins over a file path.
 	if( options["dkArtDirection"] ){
@@ -365,6 +378,15 @@ function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
 	var aFenceFrames = options["aGPFenceOffsets"].map(function(x){ return x + startFrame; });
 	print("Setting fence poses for", oNodeGP.objectName, "from frame", 0, "to", aFenceFrames);
 	setFencePoses(oNodeGP, 0, aFenceFrames);
+
+	// The GP block's own tail (mirror of the DK close-out): the last GP pose
+	// (ClitorisErect on the stock ROM) has no ramp-down key past the block end
+	// and would hold through Physics/custom. Same reset-flag gate as DK, so the
+	// resetGenBeforeApplying opt-out keeps meaning "let the gen state persist".
+	var oGpMeta = options.extraFrames && options.extraFrames.meta;
+	if( oGpMeta && oGpMeta.resetGPBeforeApplying === true ){
+		closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount);
+	}
 
 	print("Setting keys to linear interpolation");
 	setLinearInterp([oNodeGP]);
