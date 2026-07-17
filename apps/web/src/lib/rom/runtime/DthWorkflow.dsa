@@ -63,6 +63,18 @@ function ApplyDTHWorkflow(options){
 
 		// Apply JCM morph modifications based on bone rotation keyframes
 		applyJcmMorphMods(oNodeRoot, options.jcmMorphMods);
+
+		// The base block's LAST pose has no ramp-down key past the block end (a
+		// pose preset only keys inside its own range), so its morph would hold
+		// through every block after — the final FAC neck pose staying on across
+		// the whole GEN range. Close those dangling keys at the first post-base
+		// frame. The mouth node is included: its FAC keys are morph modifiers on
+		// the MOUTH object, which a root-only pass never touches (see
+		// setLinearInterp). NOT a figure fence (DzMemorizeFigureAction) like the
+		// DK path uses — that would overwrite the memorize state
+		// preserveNodeTransforms restores from.
+		var iAfterBase = Scene.getAnimRange().end / Scene.getTimeStep();
+		closeDanglingMorphKeys(oNodeMouth ? [oNodeRoot, oNodeMouth] : [oNodeRoot], iAfterBase);
 	}
 
 	/**       *****************************************************/
@@ -283,6 +295,18 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 	//setFencePoses(oNodeDk9, 0, aFenceFrames);
 	setFencePoses(oNodeDk9, 0, [startFrame]);
 
+	// The DK block's own tail: its last pose has no ramp-down key past the block
+	// end either (the same preset-range limit as the base ROM), so it would hold
+	// through GP/Physics/custom. Close it at the next block boundary. The studio
+	// always emits the meta reset flags true (a leaking tail is never wanted);
+	// the gate only keeps legacy file-based configs (no inline extraFrames) on
+	// their old behavior. Art-direction morphs need no closing: their sawtooth
+	// (createMorphFrame) already keys the ramp-down itself.
+	var oDkMeta = options.extraFrames && options.extraFrames.meta;
+	if( oDkMeta && oDkMeta.resetDKBeforeApplying === true ){
+		closeDanglingMorphKeys([oNodeDk9], startFrame + dk9FrameCount);
+	}
+
 	// Apply DK9 art direction morphs (per-character). Inline data (from the
 	// single-file character script) wins over a file path.
 	if( options["dkArtDirection"] ){
@@ -353,6 +377,14 @@ function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
 	var aFenceFrames = options["aGPFenceOffsets"].map(function(x){ return x + startFrame; });
 	print("Setting fence poses for", oNodeGP.objectName, "from frame", 0, "to", aFenceFrames);
 	setFencePoses(oNodeGP, 0, aFenceFrames);
+
+	// The GP block's own tail (mirror of the DK close-out): the last GP pose
+	// (ClitorisErect on the stock ROM) has no ramp-down key past the block end
+	// and would hold through Physics/custom. Same legacy-config gate as DK.
+	var oGpMeta = options.extraFrames && options.extraFrames.meta;
+	if( oGpMeta && oGpMeta.resetGPBeforeApplying === true ){
+		closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount);
+	}
 
 	print("Setting keys to linear interpolation");
 	setLinearInterp([oNodeGP]);

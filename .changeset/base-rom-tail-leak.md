@@ -1,0 +1,6 @@
+---
+'@dth/rom': patch
+'@dth/web': patch
+---
+
+ROM block tails no longer leak into the blocks after them (runtime v26). A pose preset can only key frames inside its own range, so a block's final pose had no ramp-down key past the block end and held its value through everything that followed — the base ROM's last FAC pose (a neck morph) showed as neck/throat morph deltas across the whole GEN range in Houdini. After the base block loads, the runtime now keys any morph not back at its frame-0 value to that value at the first post-base frame (figure and G9 mouth alike), completing the sawtooth the preset couldn't author. The GP and DK blocks get the same close-out on their own node at the next block boundary — closing the gaps the FBM-start art-morph reset left (.duf-baked gen morphs, characters without art direction, and a Physics block between GEN and the custom sections). The "Reset genitalia morphs before extra frames" character option is removed (schema v11): tails never leaking is behavior now, not a choice — its off position only reproduced the bug. Re-run the character's ROM script in Daz to rebuild existing timelines; Tools → Refresh assets flags characters generated on older runtimes as stale.

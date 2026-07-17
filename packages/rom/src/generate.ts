@@ -255,11 +255,12 @@ export function buildFbmData(character: Character) {
   return {
     meta: {
       version: '1.0',
-      // The single generic flag drives both per-block reset flags the DTH
-      // runtime understands; the runtime only acts on whichever genital ROM's
-      // art-direction data is actually present (GP for female, DK for male).
-      resetGPBeforeApplying: character.resetGenBeforeApplying,
-      resetDKBeforeApplying: character.resetGenBeforeApplying,
+      // Always on: a gen block's tail leaking into later frames is never wanted
+      // (runtime v26 closes it at the block boundary; the FBM-start art-morph
+      // reset rides the same flags). Kept as per-block meta flags because the
+      // format is shared with legacy DazToHue-Scripts FBM JSONs.
+      resetGPBeforeApplying: true,
+      resetDKBeforeApplying: true,
       description: `${character.name} Full Body Morphs - relative frame offsets from ROM start`,
     },
     frames: flat.map((frame) => ({

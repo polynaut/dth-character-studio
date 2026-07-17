@@ -798,19 +798,6 @@ function CharacterPage() {
             location={location}
             onMoved={onCharacterMoved}
           />
-          <div className="flex items-center gap-3">
-            <Switch
-              checked={character.resetGenBeforeApplying}
-              onCheckedChange={(resetGenBeforeApplying) => patch({ resetGenBeforeApplying })}
-            />
-            <span className="flex items-center gap-1 text-sm">
-              Reset genitalia morphs before extra frames
-              <InfoPopup label="Reset genitalia morphs before extra frames — more information">
-                Zeroes the active genital ROM (Golden Palace or Dicktator) at the first custom
-                frame, so its morphs don't leak into your full-body and custom poses.
-              </InfoPopup>
-            </span>
-          </div>
           <PreserveFields character={character} patch={patch} />
         </div>
       </details>

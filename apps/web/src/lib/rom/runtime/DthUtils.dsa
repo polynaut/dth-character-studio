@@ -867,6 +867,44 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
 	}
 }
 
+/**********************************************************************
+ * Closes the dangling sawtooth a ROM block leaves at its end: a pose preset
+ * can only key frames inside its own range, so a pose on the block's LAST
+ * frame has no ramp-down key after it — that morph would hold its value
+ * through every block that follows (e.g. the base ROM's final FAC neck pose
+ * staying on across the whole GEN range). For every keyed morph modifier on
+ * `oNodes` whose last key ends before `iBoundaryFrame` at a value different
+ * from its frame-0 value, key that frame-0 value at `iBoundaryFrame` — the
+ * same "next frame back to base" every non-final pose gets from the sawtooth.
+ * Morphs already back at their frame-0 value are untouched, so flattened
+ * preserved morphs and dials set once at frame 0 stay as they are. */
+function closeDanglingMorphKeys(oNodes, iBoundaryFrame){
+	var timeStep = Scene.getTimeStep();
+	var tBoundary = iBoundaryFrame * timeStep;
+	var iClosed = 0;
+	for(var x = 0; x < oNodes.length; x++){
+		var oNode = oNodes[x];
+		if(!oNode) continue;
+		var oObj = oNode.getObject();
+		if(!oObj) continue;
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp || oProp.getNumKeys() < 1) continue;
+			var iLastKey = oProp.getNumKeys() - 1;
+			// A key at/past the boundary means the block manages its own tail.
+			if(oProp.getKeyTime(iLastKey) >= tBoundary) continue;
+			var fBaseValue = oProp.getValue(0);
+			if(approx_eq(oProp.getKeyValue(iLastKey), fBaseValue)) continue;
+			oProp.setValue(tBoundary, fBaseValue);
+			verbose("Closed dangling key:", oProp.getLabel(), "back to", fBaseValue, "at frame", iBoundaryFrame);
+			iClosed++;
+		}
+	}
+	print("Closed", iClosed, "dangling morph key(s) at frame", iBoundaryFrame);
+}
+
 /** **************************************************************************/
 function createMorphFrameByKey( oProperty, iFrame, fValue, iKey){
 	if(iKey < 1){

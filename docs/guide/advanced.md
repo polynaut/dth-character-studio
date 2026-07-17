@@ -28,13 +28,6 @@ Shows where this character's files live and lets you **move the folder** — han
 when you reorganise a project. The scene and generated-file paths are repointed for
 you.
 
-### Reset genitalia morphs before extra frames
-
-A toggle. Zeroes the active genital ROM (**Golden Palace** or **Dicktator**) at the
-first custom frame, so its morphs don't **leak** into your full-body and custom
-poses. Turn it on when a GEN preset and your own FBM/custom morphs are both enabled
-and you see genital shapes bleeding into later frames.
-
 ### Preserve morphs after ROM loading
 
 The DTH ROM zeroes morphs as it loads. Any morph you list here is **restored to the
