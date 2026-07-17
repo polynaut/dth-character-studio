@@ -23,8 +23,26 @@ function ApplyDTHWorkflow(options){
 	var aNodes = Scene.getSelectedNodeList();
 	var oNode = Scene.getPrimarySelection();
 	var oNodeRoot = getNodeRoot(oNode);
+	// No selection — or a selection that isn't the character's generation of
+	// figure — auto-selects the scene's matching figure by its ASSET identity
+	// (labels/names are user-renamable; the source .dsf asset is not). Multiple
+	// matches = a user error: the first one wins. Legacy configs without a
+	// genesis (and Daz builds without a readable asset URI) keep the old
+	// behavior: whatever is selected is used, nothing auto-selects.
+	if(!dthIsGenerationFigure(oNodeRoot, options["genesis"])){
+		var oAutoFigure = dthFindGenerationFigure(options["genesis"]);
+		if(oAutoFigure){
+			print("Auto-selected the " + options["genesis"] + " figure: " + oAutoFigure.getLabel());
+			Scene.selectAllNodes(false);
+			oAutoFigure.select(true);
+			Scene.setPrimarySelection(oAutoFigure);
+			oNode = oAutoFigure;
+			oNodeRoot = oAutoFigure;
+			aNodes = Scene.getSelectedNodeList();
+		}
+	}
 	if(!oNodeRoot || !oNodeRoot.inherits("DzNode")){
-		logRunError("No figure selected - select the character's figure and re-run. ROM aborted.");
+		logRunError("No " + (options["genesis"] ? options["genesis"] + " " : "") + "figure found in the scene - load the character's scene and re-run. ROM aborted.");
 		return false; }
 	// A separate mouth ROM (and mouth node) only exists on Genesis 9 - other
 	// generations keep their FAC frames in the base ROM. Only skip the mouth
