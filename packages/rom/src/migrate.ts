@@ -110,10 +110,11 @@ export const characterMigrations: Record<
 /**
  * Pre-versioning shape normalization — the implicit "before `schemaVersion` → v1"
  * migration. Legacy definitions stored flat `entries` / `groups` / `options`
- * instead of `sections`, a GEN `presetVariant` instead of `presetAssets`, a
- * `resetGPBeforeApplying` flag (since renamed), and a "none" group suffix. These
- * transforms are shape-detected and idempotent, so they run on every read and are
- * no-ops for already-current data.
+ * instead of `sections`, a GEN `presetVariant` instead of `presetAssets`, and a
+ * "none" group suffix. These transforms are shape-detected and idempotent, so
+ * they run on every read and are no-ops for already-current data. (The old
+ * `resetGPBeforeApplying` flag once mapped here too; its successor field was
+ * removed in schema v11, so either spelling is now simply stripped by zod.)
  */
 export function normalizeLegacyCharacter(data: Record<string, any>): Record<string, any> {
   if (data.sections) {
@@ -158,20 +159,11 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
         ...(options.includeDK ? ['DK9 - Dicktator.duf'] : []),
       ]
     }
-    if (typeof options.resetGPBeforeApplying === 'boolean') {
-      data.resetGenBeforeApplying = options.resetGPBeforeApplying
-    }
     data.sections = sections
     delete data.entries
     delete data.groups
     delete data.options
   }
-  // Field renamed resetGPBeforeApplying → resetGenBeforeApplying (now generic over
-  // GP/DK); carry forward characters saved under the old name.
-  if (data.resetGPBeforeApplying !== undefined && data.resetGenBeforeApplying === undefined) {
-    data.resetGenBeforeApplying = data.resetGPBeforeApplying
-  }
-  delete data.resetGPBeforeApplying
   // The PoseAsset node knows no "none" suffix — older data migrates to centre.
   for (const config of Object.values((data.sections ?? {}) as Record<string, any>)) {
     for (const group of config?.groups ?? []) {

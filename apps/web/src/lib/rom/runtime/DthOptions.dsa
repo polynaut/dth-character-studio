@@ -19,8 +19,6 @@ var options = {
 	bDQS: false,// set true to enable Dual Quat Skinning, defaults to linear
 	FACsDetailStrength: 1.0,
 	FlexionStrength: 1.0,
-	extraJSONs: [],
-	extraCSVs: [],  // Legacy - only used by DthExportFBMs.dsa
 	// Write OUT*.csv debug dumps (frameDatas / success / failed / scanned) into the
 	// scripts folder. Off by default so normal runs don't litter the repo.
 	bWriteDebugCSV: false,
@@ -34,10 +32,6 @@ var options = {
 	gpRomPath: null,
 	dkRomPath: null,
 	physRomPath: null,
-	// Per-character art direction JSONs for the pre-made GP/DK ROM blocks.
-	// Null falls back to GP9_ArtDirection.json / DK9_ArtDirection.json next to the scripts.
-	gpArtDirectionPath: null,
-	dkArtDirectionPath: null,
 	// Morphs to preserve after ROM loading. Example: [{ name: "body_ctrl_BreastsUp-Down", keepValue: 1 }]
 	preserveMorphs: [],
 	// Node transforms to preserve after ROM loading. Example: [{ nodeLabel: "Left Eye" }]

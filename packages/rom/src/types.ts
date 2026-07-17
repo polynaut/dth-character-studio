@@ -647,8 +647,18 @@ export const CHARACTER_SCHEMA_VERSION = 11
  *       emits the FBM meta reset flags; only legacy file-based configs can still
  *       turn them off. Re-run the ROM script in Daz to rebuild existing
  *       timelines.
+ *  27 — Inline-config only: the runtime no longer reads file-based configs — the
+ *       extraJSONs (*_FBMs.json) list, the GP9/DK9 art-direction JSON path
+ *       fallbacks and the readPropsCSV reader of the old wrapper-script era are
+ *       gone (the runtime is studio-owned; everything arrives inline via
+ *       ApplyDTHCharacter). A config that still passes them aborts LOUD with a
+ *       regenerate-in-studio error instead of building a ROM without its custom
+ *       frames. The GP/DK block-tail close-outs are unconditional now (the meta
+ *       reset flags are gone — with the resetGenBeforeApplying option removed
+ *       in schema v11 they no longer had an off position), and the FBM-start
+ *       art-morph reset is retired: the boundary close-out covers it.
  */
-export const RUNTIME_VERSION = 26
+export const RUNTIME_VERSION = 27
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
