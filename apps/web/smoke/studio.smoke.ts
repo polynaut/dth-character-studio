@@ -76,6 +76,9 @@ test('project window: character editor measures, edits and saves both artifacts'
   await expect(backlink).toHaveCSS('opacity', '0')
   await page.getByRole('tab', { name: 'Notes' }).click()
   await expect(backlink).toHaveCSS('opacity', '0')
+  // Same inactive-timeline trap for the header actions: they must keep their
+  // large "at the top" size (2.75rem = 44px), not fall to the collapsed default.
+  await expect(page.getByRole('button', { name: 'Discard' })).toHaveCSS('height', '44px')
   await page.getByRole('tab', { name: 'Character' }).click()
 
   // Toggle the GEN section on → the editor must re-measure, now including the
