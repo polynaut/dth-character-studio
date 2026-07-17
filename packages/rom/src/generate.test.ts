@@ -11,6 +11,7 @@ import {
   sectionPresetAvailable,
   toCharacterScriptDsa,
   toExportScriptDsa,
+  toGroomExportScriptDsa,
   toPoseAssetCsv,
   toScanProductsScriptDsa,
 } from './generate'
@@ -1040,6 +1041,77 @@ describe('exporter integration', () => {
       'ROM_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+})
+
+describe('groom items (hair kept out of the export)', () => {
+  const groomChar = (over: Partial<Character> = {}) =>
+    makeCharacter({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+      groomNodes: [{ nodeLabel: 'dForce Black Tie Cap' }],
+      ...over,
+    })
+
+  it('brackets doExport with unfit/unparent and a finally-restore, in that order', () => {
+    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').content
+    expect(content).toContain('var dthGroomLabels = ["dForce Black Tie Cap"];')
+    const detachAt = content.indexOf('setFollowTarget(null)')
+    const exportAt = content.indexOf('dthExportAction.doExport(')
+    const restoreAt = content.indexOf('addNodeChild(')
+    expect(detachAt).toBeGreaterThan(-1)
+    expect(exportAt).toBeGreaterThan(detachAt)
+    expect(restoreAt).toBeGreaterThan(exportAt)
+    // Restore runs even when the export throws; the CSV delivery rides inside.
+    expect(content).toContain('} finally {')
+    const csvAt = content.indexOf('dthCsvSrcDir')
+    expect(csvAt).toBeGreaterThan(exportAt)
+    expect(csvAt).toBeLessThan(restoreAt)
+  })
+
+  it('a missing groom item skips the export loud instead of shipping hair', () => {
+    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES).content
+    expect(content).toContain('if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }')
+    expect(content).toContain('was not found in the scene')
+  })
+
+  it('emits no groom code without groom items, and blank labels count as none', () => {
+    const plain = makeCharacter({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
+    expect(toCharacterScriptDsa(plain, {}, FRAMES).content).not.toContain('dthGroom')
+    const blank = groomChar({ groomNodes: [{ nodeLabel: '  ' }] })
+    expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
+  })
+
+  it('generateAll emits Export_Groom_ only with an export path AND groom items', () => {
+    expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      'Export_Groom_Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
+    expect(generateAll(groomChar({ exportPath: '' }), {}, FRAMES).map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      'Electra_pose_asset.csv',
+    ])
+  })
+
+  it('the groom script exports frame 0 of just the groom items as Alembic', () => {
+    const script = toGroomExportScriptDsa(groomChar({ exportSceneSubfolders: true }))
+    expect(script.fileName).toBe('Export_Groom_Electra_G9.dsa')
+    expect(script.target).toBe('daz')
+    expect(script.experimental).toBe(true)
+    expect(script.content).not.toContain('ApplyDTHCharacter(') // no ROM rebuild
+    expect(script.content).toContain('findExporterByExtension("abc")')
+    expect(script.content).toContain('absoluteFilePath("Electra_groom.abc")')
+    expect(script.content).toContain('Scene.setFrame(0);')
+    // Scene-subfolder resolution mirrors the DTH export block…
+    expect(script.content).toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
+    // …and the frame-0 range clamp is restored even when the export fails.
+    const clampAt = script.content.indexOf('Scene.setAnimRange(new DzTimeRange(0, 0));')
+    const finallyAt = script.content.indexOf('} finally {')
+    const restoreAt = script.content.indexOf('Scene.setAnimRange(dthOldAnimRange);')
+    expect(clampAt).toBeGreaterThan(-1)
+    expect(finallyAt).toBeGreaterThan(clampAt)
+    expect(restoreAt).toBeGreaterThan(finallyAt)
   })
 })
 

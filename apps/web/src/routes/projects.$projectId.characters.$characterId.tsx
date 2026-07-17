@@ -38,6 +38,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
+import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
@@ -784,6 +785,9 @@ function CharacterPage() {
               {!character.exportPath && 'Set an export folder above to enable this.'}
             </InfoPopup>
           </span>
+        </div>
+        <div className="mt-5">
+          <GroomFields character={character} patch={patch} />
         </div>
       </section>
 

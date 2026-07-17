@@ -88,6 +88,25 @@ describe('characterSchema — v11 resetGenBeforeApplying removal', () => {
   })
 })
 
+// v12 added `groomNodes` (hair items excluded from the DTH export) — additive
+// with a [] default, so there is no migrate step; zod fills it when reading an
+// older definition. This is the "ritual" test for that change.
+describe('characterSchema — v12 groomNodes (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('fills groomNodes with [] for a v11-shaped definition', () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 11 }).groomNodes).toEqual([])
+  })
+
+  it('round-trips stored groom items', () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      groomNodes: [{ nodeLabel: 'dForce Black Tie Cap' }, { nodeLabel: 'Ponytail' }],
+    })
+    expect(parsed.groomNodes).toEqual([{ nodeLabel: 'dForce Black Tie Cap' }, { nodeLabel: 'Ponytail' }])
+  })
+})
+
 // v8 added `products` / `productsUnmatched` / `productsScannedAt` — additive with
 // [] / '' defaults, so there is no migrate step; zod fills them when reading an
 // older (v7-shaped) definition. This is the "ritual" test for that change.

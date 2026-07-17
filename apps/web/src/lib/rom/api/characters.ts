@@ -126,6 +126,7 @@ function romFields(src: Character): Partial<Character> {
     applyUE5TearUV: src.applyUE5TearUV,
     preserveMorphs: src.preserveMorphs,
     preserveNodeTransforms: src.preserveNodeTransforms,
+    groomNodes: src.groomNodes,
     jcmMorphMods: src.jcmMorphMods,
   }
 }

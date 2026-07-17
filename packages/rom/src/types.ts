@@ -495,8 +495,11 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       choice: the generated FBM meta always sets the reset flags, and the
  *       gen-block close-out is unconditional. The off position only reproduced
  *       the dangling-tail bug.
+ *  12 — added `groomNodes` (hair items excluded from the DTH export via
+ *       unfit+unparent around doExport; additive with a [] default — no
+ *       migration step).
  */
-export const CHARACTER_SCHEMA_VERSION = 11
+export const CHARACTER_SCHEMA_VERSION = 12
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -814,6 +817,15 @@ export const characterSchema = z.object({
   preserveNodeTransforms: z
     .array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) }))
     .default([]),
+  /**
+   * Groom items (hair — usually the fitted cap; its children ride along) kept OUT
+   * of the DTH export, so one scene can carry full hair while the ROM export stays
+   * clean. The generated script unfits + unparents each item before `doExport` and
+   * restores it after — the exporter walks the selected figure's hierarchy and
+   * IGNORES visibility (measured July 2026), so exclusion means leaving the
+   * hierarchy, not hiding. Labels as shown in Daz's Scene pane.
+   */
+  groomNodes: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   sections: sectionsSchema.default(defaultSections()),
   createdAt: z.string().max(MAX_NAME_LENGTH),

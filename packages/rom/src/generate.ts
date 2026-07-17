@@ -630,14 +630,71 @@ function buildExportBlock(
     }
 `
     : ''
+  // The export call + CSV delivery. With groom items listed, it is wrapped in the
+  // unfit/unparent bracket below; without any, the emitted script is unchanged.
+  const exportCore = `    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
+${csvCopyBlock}`
+  const groomLabels = groomNodeLabels(character)
+  const indentBlock = (block: string) =>
+    block
+      .split('\n')
+      .map((line) => (line ? `    ${line}` : line))
+      .join('\n')
+  const exportBody =
+    groomLabels.length === 0
+      ? exportCore
+      : `    // Groom items (hair) must stay OUT of the export: the DTH Exporter walks
+    // the selected figure's hierarchy and IGNORES visibility (measured), so each
+    // listed item is unfitted + unparented for the export and restored right
+    // after — the same unfit/refit Daz's own "Fit To" dialog performs.
+    var dthGroomLabels = [${groomLabels.map((label) => JSON.stringify(label)).join(', ')}];
+    var dthGroomRestore = [];
+    var dthGroomMissing = "";
+    for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++) {
+        var dthGroomNode = Scene.findNodeByLabel(dthGroomLabels[dthGi]);
+        if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }
+        dthGroomRestore.push({
+            node: dthGroomNode,
+            follow: (typeof dthGroomNode.getFollowTarget == "function") ? dthGroomNode.getFollowTarget() : null,
+            parent: dthGroomNode.getNodeParent()
+        });
+    }
+    if (dthGroomMissing != "") {
+        // A typo must not silently ship a hair-polluted export - fail loud, fix, re-run.
+        print("Groom item not found: " + dthGroomMissing + " - export skipped.");
+        MessageBox.critical("The groom item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Groom list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.", "DTH Character Studio", "&OK");
+    } else {
+        for (var dthGd = 0; dthGd < dthGroomRestore.length; dthGd++) {
+            if (dthGroomRestore[dthGd].follow) dthGroomRestore[dthGd].node.setFollowTarget(null);
+            if (dthGroomRestore[dthGd].parent) dthGroomRestore[dthGd].parent.removeNodeChild(dthGroomRestore[dthGd].node, true);
+        }
+        print("Groom items detached for the export: " + dthGroomRestore.length);
+        try {
+${indentBlock(exportCore)}        } finally {
+            // Reparent first, then refit - restoring the exact pre-export state
+            // even when the export itself throws.
+            for (var dthGr = dthGroomRestore.length - 1; dthGr >= 0; dthGr--) {
+                if (dthGroomRestore[dthGr].parent) dthGroomRestore[dthGr].parent.addNodeChild(dthGroomRestore[dthGr].node, true);
+                if (dthGroomRestore[dthGr].follow) dthGroomRestore[dthGr].node.setFollowTarget(dthGroomRestore[dthGr].follow);
+            }
+            print("Groom items restored: " + dthGroomRestore.length);
+        }
+    }
+`
   return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 if (dthExportAction) {
     var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
-${sceneSubfolderBlock}    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
-${csvCopyBlock}} else {
+${sceneSubfolderBlock}${exportBody}} else {
     print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
 }
 `
+}
+
+/** The character's groom-item labels, trimmed, empties dropped — the single
+ *  reading of `groomNodes` the export bracket, the groom script and the
+ *  emission gate all share. */
+function groomNodeLabels(character: Character): Array<string> {
+  return character.groomNodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
 }
 
 /**
@@ -864,6 +921,99 @@ ${buildExportBlock(character, frames, charFolderAbs)}`
   return { fileName: `Export_${characterScriptName(character)}.dsa`, content, target: 'daz' }
 }
 
+/**
+ * The standalone Groom export script (`Export_Groom_<Name>_<Genesis>.dsa`) —
+ * exports the character's groom items (hair) at FRAME 0 as one Alembic (.abc)
+ * for the Unreal groom path, via Daz's Alembic Exporter (a separate Daz
+ * product; the script reports clearly when it's missing). Generated only when
+ * an export dir is set AND the character lists groom items; the ROM is NOT
+ * needed — it runs on the open scene at any time. EXPERIMENTAL: the Alembic
+ * exporter's option contract isn't pinned, so the script exports the play
+ * range (temporarily clamped to frame 0) with the exporter's default options
+ * and prints the option keys for diagnosis.
+ */
+export function toGroomExportScriptDsa(character: Character): GeneratedFile {
+  const exportDir = character.exportPath.trim().replace(/\\/g, '/')
+  const groomLabels = groomNodeLabels(character)
+  const sceneSubfolderBlock = character.exportSceneSubfolders
+    ? `var dthSceneFile = Scene.getFilename();
+if (dthSceneFile != "") {
+    var dthSceneName = new DzFileInfo(dthSceneFile).completeBaseName();
+    if (dthSceneName != "") dthExportDir = dthExportDir + "/" + dthSceneName;
+}
+`
+    : ''
+  const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
+
+// DTH Groom Export for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.
+// DTH-Runtime: v${RUNTIME_VERSION}
+// Exports the groom items (hair) at FRAME 0 as one Alembic (.abc) for the
+// Unreal groom path. Runs on the scene currently open in Daz — the ROM is NOT
+// needed. Requires the Daz "Alembic Exporter" add-on (a separate Daz product).
+
+var dthExportDir = ${JSON.stringify(exportDir)};
+${sceneSubfolderBlock}var dthGroomLabels = [${groomLabels.map((label) => JSON.stringify(label)).join(', ')}];
+var dthGroomNodes = [];
+var dthGroomMissing = "";
+for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++) {
+    var dthGroomNode = Scene.findNodeByLabel(dthGroomLabels[dthGi]);
+    if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }
+    dthGroomNodes.push(dthGroomNode);
+}
+if (dthGroomMissing != "") {
+    print("Groom item not found: " + dthGroomMissing + " - nothing exported.");
+    MessageBox.critical("The groom item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Groom list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run this script again.", "DTH Character Studio", "&OK");
+} else {
+    var dthAbcExporter = App.getExportMgr().findExporterByExtension("abc");
+    if (!dthAbcExporter) {
+        MessageBox.critical("Daz's Alembic Exporter is not installed - the groom export needs it.\\n\\nInstall the \\"Alembic Exporter\\" product (DIM / Daz Central), restart Daz Studio and run this script again.", "DTH Character Studio", "&OK");
+    } else {
+        // Frame 0 = the rest pose. Select ONLY the groom items (children of a
+        // selected item follow), and clamp the anim/play range to frame 0 for the
+        // export - keys outside a shrunken range are kept by Daz, so restoring
+        // the ranges afterwards brings a built ROM timeline back untouched.
+        Scene.setFrame(0);
+        Scene.selectAllNodes(false);
+        for (var dthGs = 0; dthGs < dthGroomNodes.length; dthGs++) dthGroomNodes[dthGs].select(true);
+        Scene.setPrimarySelection(dthGroomNodes[0]);
+        var dthOutDir = new DzDir(dthExportDir);
+        if (!dthOutDir.exists()) dthOutDir.mkpath(dthExportDir);
+        var dthAbcPath = dthOutDir.absoluteFilePath(${JSON.stringify(`${characterSlug(character)}_groom.abc`)});
+        var dthOldAnimRange = Scene.getAnimRange();
+        var dthOldPlayRange = Scene.getPlayRange();
+        Scene.setAnimRange(new DzTimeRange(0, 0));
+        Scene.setPlayRange(new DzTimeRange(0, 0));
+        try {
+            // EXPERIMENTAL: default options; the printed keys are the contract to
+            // adjust against if the result is off (selection scope, frame range).
+            var dthAbcSettings = new DzFileIOSettings();
+            dthAbcExporter.getDefaultOptions(dthAbcSettings);
+            if (typeof dthAbcSettings.getKeys == "function")
+                print("Alembic exporter option keys: " + dthAbcSettings.getKeys().join(", "));
+            var dthAbcError = dthAbcExporter.writeFile(dthAbcPath, dthAbcSettings);
+            // DzError 0x00000000 = none; some exporters return nothing - treat as ok.
+            if (dthAbcError == undefined || dthAbcError == 0) {
+                print("Groom exported to " + dthAbcPath);
+                MessageBox.information("Groom exported:\\n" + dthAbcPath, "DTH Character Studio", "&OK");
+            } else {
+                print("Groom export failed: " + dthAbcError);
+                MessageBox.critical("The groom export failed (" + dthAbcError + ").\\n\\nCheck the log: Help > Troubleshooting > View Log File.", "DTH Character Studio", "&OK");
+            }
+        } finally {
+            Scene.setAnimRange(dthOldAnimRange);
+            Scene.setPlayRange(dthOldPlayRange);
+        }
+    }
+}
+`
+  return {
+    fileName: `Export_Groom_${characterScriptName(character)}.dsa`,
+    content,
+    target: 'daz',
+    experimental: true,
+  }
+}
+
 /** Inputs for the per-character product-scan script — both supplied by the host
  *  (the studio), never by the pure core. Present ⇔ the project opted into the
  *  Daz Products feature. */
@@ -951,9 +1101,12 @@ export function generateAll(
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
   const split = character.exportPath.trim() !== '' && character.exportWithRomScript === false
+  // Groom items + an export dir → also the standalone groom (.abc) script.
+  const groom = character.exportPath.trim() !== '' && groomNodeLabels(character).length > 0
   return [
     toCharacterScriptDsa(character, romPaths, frames, charFolderAbs),
     ...(split ? [toExportScriptDsa(character, frames, charFolderAbs)] : []),
+    ...(groom ? [toGroomExportScriptDsa(character)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
     toPoseAssetCsv(character, frames, poseAssetCsvEra(dthReleaseVersion ?? '')),
   ]

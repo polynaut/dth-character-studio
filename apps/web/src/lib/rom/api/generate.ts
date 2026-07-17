@@ -222,6 +222,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           `${dazBase}.dsa`,
           `ROM_${dazBase}.dsa`,
           `Export_${dazBase}.dsa`,
+          `Export_Groom_${dazBase}.dsa`,
           `Open_Scene_${dazBase}.dsa`,
           `Scan_Products_${characterSlug(character)}.dsa`,
         ].filter((name) => !writtenDaz.includes(name)),
