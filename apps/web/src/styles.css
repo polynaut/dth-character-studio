@@ -347,6 +347,17 @@ a {
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
     will-change: height, padding, font-size;
+    /* Base state = the `from` frame (the large "at the top" size). On a page
+       too short to scroll (e.g. the Notes tab) the scroll timeline is INACTIVE
+       and the animation yields no values — without this base the buttons would
+       drop to the Button default (= the collapsed `to` size) while the rest of
+       the header (avatar, subtitle) still shows its expanded top state. Scoped
+       inside @supports: without scroll timelines the header never collapses
+       and the default size stays the intended look. */
+    height: 2.75rem;
+    padding-inline: 1.25rem;
+    font-size: 1rem;
+    margin-bottom: 0;
   }
 }
 
