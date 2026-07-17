@@ -500,8 +500,19 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       save; additive with a '' default — no migration step. Pre-existing
  *       scene-derived avatars self-heal: the sync adopts a source scene when
  *       the stored avatar still byte-matches that scene's current preview).
+ *  13 — added `groomNodes` (hair items excluded from the DTH export via
+ *       unfit+unparent around doExport; additive with a [] default — no
+ *       migration step).
+ *  14 — added `groomMode` ('scene' = groom lives in the ROM scene and the
+ *       groom bracket excludes it at export; 'separate' = classic
+ *       separate-scene workflow, lists inert; additive with a 'scene' default —
+ *       no migration step).
+ *  15 — `groomNodes` (v13, never released) became the per-SCENE `groomScenes`
+ *       (a character's outfit scenes carry different hair styles; the script
+ *       resolves the open scene's list at run time). Removal+addition — zod
+ *       strips the old flat list and fills the new default; no migration step.
  */
-export const CHARACTER_SCHEMA_VERSION = 12
+export const CHARACTER_SCHEMA_VERSION = 15
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -669,8 +680,12 @@ export const CHARACTER_SCHEMA_VERSION = 12
  *       match winning when a scene holds several. Legacy configs without a
  *       genesis, and Daz builds without a readable asset URI, keep the old
  *       select-it-yourself behavior unchanged.
+ *  29 — The auto-select's unreadable-asset tolerance is restricted to actual
+ *       FIGURES: a selected non-figure (a prop, Environment Options, …) is
+ *       never accepted as the export root anymore — it auto-selects the real
+ *       figure or fails loud (found by deliberate wrong-selection testing).
  */
-export const RUNTIME_VERSION = 28
+export const RUNTIME_VERSION = 29
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -834,6 +849,40 @@ export const characterSchema = z.object({
   preserveNodeTransforms: z
     .array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) }))
     .default([]),
+  /**
+   * Groom items (hair — usually the fitted cap; its children ride along) kept OUT
+   * of the DTH export, so one scene can carry full hair while the ROM export stays
+   * clean. The generated script unfits + unparents each item before `doExport` and
+   * restores it after — the exporter walks the selected figure's hierarchy and
+   * IGNORES visibility (measured July 2026), so exclusion means leaving the
+   * hierarchy, not hiding. Labels as shown in Daz's Scene pane.
+   */
+  /**
+   * Per-SCENE groom lists: a character's outfit scenes can carry different hair
+   * styles, so the excluded items are tied to the scene they live in. The
+   * generated script embeds the whole map and resolves the OPEN scene's list at
+   * run time (`Scene.getFilename()`); a scene without an entry excludes nothing
+   * (that's its meaning — e.g. a bald outfit scene). Paths repoint alongside
+   * `scenePath`/`extraScenes` on folder moves.
+   */
+  groomScenes: z
+    .array(
+      z.object({
+        scenePath: z.string().max(MAX_PATH_LENGTH),
+        nodes: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
+      }),
+    )
+    .default([]),
+  /**
+   * How this character's groom (hair) is handled at export time:
+   *  - 'scene': the groom lives IN the ROM scene(s) — the open scene's
+   *    `groomScenes` items are unfitted/unparented around `doExport` and
+   *    restored (one scene per outfit carries everything, hair included).
+   *  - 'separate': the classic workflow — groom kept in separate Daz scene
+   *    files (linkable via `extraScenes`); nothing is excluded at export and
+   *    `groomScenes` is ignored.
+   */
+  groomMode: z.enum(['scene', 'separate']).default('scene'),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   sections: sectionsSchema.default(defaultSections()),
   createdAt: z.string().max(MAX_NAME_LENGTH),

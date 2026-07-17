@@ -111,6 +111,7 @@ pub fn run() {
             drives::unc_for_path,
             drives::ensure_network_drives,
             poses::pose_asset_frames,
+            poses::scene_wearables,
             housekeeping::housekeeping_sweep,
             poses::scan_duf_files,
             windows::active_project_file,

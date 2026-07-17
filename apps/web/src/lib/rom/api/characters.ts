@@ -128,6 +128,8 @@ function romFields(src: Character): Partial<Character> {
     applyUE5TearUV: src.applyUE5TearUV,
     preserveMorphs: src.preserveMorphs,
     preserveNodeTransforms: src.preserveNodeTransforms,
+    groomScenes: src.groomScenes,
+    groomMode: src.groomMode,
     jcmMorphMods: src.jcmMorphMods,
   }
 }
@@ -571,6 +573,7 @@ export async function moveCharacterScenesFolder({
     scenePath: repoint(character.scenePath),
     extraScenes: character.extraScenes.map(repoint),
     imageScene: repoint(character.imageScene),
+    groomScenes: character.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
   }
   const project = await resolveProject(projectId)
   return storage.saveCharacter(project, next, root)
