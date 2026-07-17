@@ -88,14 +88,30 @@ describe('characterSchema — v11 resetGenBeforeApplying removal', () => {
   })
 })
 
-// v12 added `groomNodes` (hair items excluded from the DTH export) — additive
-// with a [] default, so there is no migrate step; zod fills it when reading an
-// older definition. This is the "ritual" test for that change.
-describe('characterSchema — v12 groomNodes (additive)', () => {
+// v12 added `imageScene` (the linked scene whose preview the avatar mirrors) —
+// additive with a '' default, so there is no migrate step; zod fills it when
+// reading an older definition. This is the "ritual" test for that change.
+describe('characterSchema — v12 imageScene (additive)', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it('fills groomNodes with [] for a v11-shaped definition', () => {
-    expect(characterSchema.parse({ ...base, schemaVersion: 11 }).groomNodes).toEqual([])
+  it("fills imageScene with '' for a v11-shaped definition", () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 11 }).imageScene).toBe('')
+  })
+
+  it('round-trips a stored source scene', () => {
+    const parsed = characterSchema.parse({ ...base, imageScene: 'X:/proj/Karen/daz3d/Karen.duf' })
+    expect(parsed.imageScene).toBe('X:/proj/Karen/daz3d/Karen.duf')
+  })
+})
+
+// v13 added `groomNodes` (hair items excluded from the DTH export) — additive
+// with a [] default, so there is no migrate step; zod fills it when reading an
+// older definition. This is the "ritual" test for that change.
+describe('characterSchema — v13 groomNodes (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('fills groomNodes with [] for a v12-shaped definition', () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 12 }).groomNodes).toEqual([])
   })
 
   it('round-trips stored groom items', () => {

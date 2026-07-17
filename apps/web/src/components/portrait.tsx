@@ -17,6 +17,15 @@ export function usePortraitSrc({
   scenePath?: string
 }): string {
   const [src, setSrc] = useState('')
+  // Scene previews change CONTENT under an unchanged path (Daz rewrites the
+  // .tip.png on every scene save) — re-resolve on window focus so a card shows
+  // the current preview after tabbing back from Daz, not the mount-time one.
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1)
+    window.addEventListener('focus', bump)
+    return () => window.removeEventListener('focus', bump)
+  }, [])
   useEffect(() => {
     let active = true
     const resolve = scenePath
@@ -24,11 +33,13 @@ export function usePortraitSrc({
       : image
         ? resolveImageSrc(image)
         : Promise.resolve('')
+    // Keep the previous image while re-resolving; only swap on a result (or
+    // clear on failure) so focus refreshes don't flash the fallback initial.
     resolve.then((s) => active && setSrc(s)).catch(() => active && setSrc(''))
     return () => {
       active = false
     }
-  }, [image, scenePath])
+  }, [image, scenePath, tick])
   return src
 }
 

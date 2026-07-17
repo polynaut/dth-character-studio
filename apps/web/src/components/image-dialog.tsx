@@ -30,7 +30,10 @@ export function ImageDialog({
   characterId: string
   /** Linked Daz scene paths — each offers its `.tip.png` as a pickable avatar. */
   scenes: Array<string>
-  onApply: (image: string) => void | Promise<void>
+  /** Applies the new stored image reference. `imageScene` is the linked scene
+   *  whose preview the image mirrors — '' for uploads and external URLs — so
+   *  the caller can persist the provenance the avatar auto-sync keys off. */
+  onApply: (image: string, imageScene: string) => void | Promise<void>
   onClose: () => void
 }) {
   const [url, setUrl] = useState(image)
@@ -45,7 +48,7 @@ export function ImageDialog({
     try {
       const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
       setUrl(served)
-      void onApply(served)
+      void onApply(served, '')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -79,7 +82,7 @@ export function ImageDialog({
         },
       })
       setUrl(served)
-      void onApply(served)
+      void onApply(served, '')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -95,7 +98,7 @@ export function ImageDialog({
     try {
       const served = await setAvatarFromScene({ data: { characterId, scenePath } })
       setUrl(served)
-      await onApply(served)
+      await onApply(served, scenePath)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -181,7 +184,7 @@ export function ImageDialog({
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                void onApply(url)
+                void onApply(url, '')
                 onClose()
               }
             }}
@@ -189,7 +192,7 @@ export function ImageDialog({
           <Button
             variant="outline"
             onClick={() => {
-              void onApply(url)
+              void onApply(url, '')
               onClose()
             }}
           >

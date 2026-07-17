@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
@@ -21,13 +21,15 @@ import {
   charsRoot,
   dirname,
   fetchPoseAssets,
+  getActiveProjectDir,
   invalidateCharacterLocations,
   joinPath,
   morphIndexCache,
   projectIdInput,
   resolveProject,
 } from './core'
-import { copyTipImage, removeCharacterAvatars } from './avatars'
+import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
+import { isExternalImage } from '../image'
 
 import type { Character, GenesisVersion, ImportedPose } from '@dth/rom'
 
@@ -181,7 +183,12 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   if (input.scenePath) {
     base.scenePath = input.scenePath
     const image = await copyTipImage(id, input.scenePath)
-    if (image) base.image = image
+    if (image) {
+      base.image = image
+      // Remember the source scene so the avatar re-syncs when Daz rewrites the
+      // scene's preview (every scene save does).
+      base.imageScene = input.scenePath
+    }
   }
   const character: Character = characterSchema.parse(base)
   const created = await storage.createCharacterAt(project, character, input.relFolder ?? '', lib)
@@ -564,9 +571,94 @@ export async function moveCharacterScenesFolder({
     ...character,
     scenePath: repoint(character.scenePath),
     extraScenes: character.extraScenes.map(repoint),
+    imageScene: repoint(character.imageScene),
   }
   const project = await resolveProject(projectId)
   return storage.saveCharacter(project, next, root)
+}
+
+/** Constant-time-irrelevant byte compare for small avatar/preview images. */
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+const syncAvatarInput = z.object({ projectId: z.string().min(1), id: z.string().min(1) })
+
+/** Single-flight guard: concurrent sync calls for the same character (double
+ *  focus events, strict-mode double effects) join the first run instead of
+ *  racing — two parallel runs could each write an avatar and delete the
+ *  other's file, leaving the saved reference pointing at nothing. */
+const avatarSyncInFlight = new Map<string, Promise<Partial<Character> | null>>()
+
+/**
+ * Keep a scene-derived avatar in step with its source scene's preview. Daz
+ * rewrites `<scene>.tip.png` on every scene save, but the avatar is a one-time
+ * copy — this re-copies it when the two drift. Called when the character view
+ * loads and whenever the app window regains focus; silent and best-effort:
+ *  - custom uploads / external URLs have no source scene and are never touched,
+ *  - a source scene that is no longer linked is ignored (stale provenance),
+ *  - definitions from before `imageScene` existed self-heal: when the stored
+ *    avatar still byte-matches a linked scene's current preview, that scene is
+ *    adopted as the source (provenance only — no visible change yet).
+ * Persists via the ordinary character save (a real update: the avatar changed)
+ * and returns the changed fields for the editor to merge via `syncPersisted`,
+ * or null when nothing drifted.
+ */
+export async function syncAvatarWithScene({ data }: { data: unknown }): Promise<Partial<Character> | null> {
+  const { projectId, id } = syncAvatarInput.parse(data)
+  const key = `${projectId}|${id}`
+  const inFlight = avatarSyncInFlight.get(key)
+  if (inFlight) return inFlight
+  const run = doSyncAvatarWithScene(projectId, id).finally(() => avatarSyncInFlight.delete(key))
+  avatarSyncInFlight.set(key, run)
+  return run
+}
+
+async function doSyncAvatarWithScene(
+  projectId: string,
+  id: string,
+): Promise<Partial<Character> | null> {
+  const character = await fetchCharacter({ data: { projectId, id } })
+  if (!character) return null
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return null
+  const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  const readAvatar = async (): Promise<Uint8Array | null> => {
+    if (!character.image || isExternalImage(character.image)) return null
+    try {
+      return await readFile(joinPath(storage.metaImagesDir(projectDir), character.image))
+    } catch {
+      return null
+    }
+  }
+  let source = character.imageScene
+  if (source && !linked.includes(source)) return null
+  if (!source) {
+    const avatar = await readAvatar()
+    if (!avatar) return null
+    for (const scene of linked) {
+      const tipPath = await findTipImage(scene)
+      if (tipPath && bytesEqual(await readFile(tipPath), avatar)) {
+        source = scene
+        break
+      }
+    }
+    if (!source) return null
+    const project = await resolveProject(projectId)
+    await storage.saveCharacter(project, { ...character, imageScene: source }, charsRoot(project))
+    return { imageScene: source }
+  }
+  const tipPath = await findTipImage(source)
+  if (!tipPath) return null
+  const tip = await readFile(tipPath)
+  const avatar = await readAvatar()
+  if (avatar && bytesEqual(tip, avatar)) return null
+  const image = await writeAvatarBytes(character.id, tip, 'png')
+  const project = await resolveProject(projectId)
+  await storage.saveCharacter(project, { ...character, image, imageScene: source }, charsRoot(project))
+  return { image, imageScene: source }
 }
 
 // --- Morph index (Scan_Morphs_<Genesis>.dsa output) -------------------------
