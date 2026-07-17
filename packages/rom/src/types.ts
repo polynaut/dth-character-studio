@@ -490,8 +490,13 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       boolean. The DTH Exporter now auto-generates the reference-skeleton FBXs and
  *       the studio computes their CSV paths, so the manual path is gone (migration
  *       step: a non-empty old path → `true`).
+ *  11 — removed `resetGenBeforeApplying` (removal — zod strips it, no migration
+ *       step). Block tails never leaking is runtime v26 behavior now, not a
+ *       choice: the generated FBM meta always sets the reset flags, and the
+ *       gen-block close-out is unconditional. The off position only reproduced
+ *       the dangling-tail bug.
  */
-export const CHARACTER_SCHEMA_VERSION = 10
+export const CHARACTER_SCHEMA_VERSION = 11
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -634,11 +639,14 @@ export const CHARACTER_SCHEMA_VERSION = 10
  *       on the figure (and the G9 mouth) not back at its frame-0 value gets that
  *       value keyed at the first post-base frame, completing the sawtooth the
  *       preset couldn't. The GP/DK blocks get the same close-out on their own
- *       node at the next block boundary, gated on resetGenBeforeApplying (the
- *       FBM-start art-morph reset alone missed .duf-baked gen morphs, skipped
- *       characters without art direction, and never protected a Physics block
- *       between GEN and the customs). Re-run the ROM script in Daz to rebuild
- *       existing timelines.
+ *       node at the next block boundary (the FBM-start art-morph reset alone
+ *       missed .duf-baked gen morphs, skipped characters without art direction,
+ *       and never protected a Physics block between GEN and the customs). The
+ *       `resetGenBeforeApplying` character option is gone with it (schema v11):
+ *       tails never leaking is behavior now, not a choice — the studio always
+ *       emits the FBM meta reset flags; only legacy file-based configs can still
+ *       turn them off. Re-run the ROM script in Daz to rebuild existing
+ *       timelines.
  */
 export const RUNTIME_VERSION = 26
 
@@ -786,9 +794,6 @@ export const characterSchema = z.object({
   /** G9 detail strengths set at frame 0 (DthWorkflow.dsa applies them when > 0). */
   facsDetailStrength: z.number().default(1),
   flexionStrength: z.number().default(1),
-  /** Zero the active genital ROM's morphs (Golden Palace or Dicktator) at the
-   *  first custom frame, so they don't leak into the full-body/custom poses. */
-  resetGenBeforeApplying: z.boolean().default(true),
   /** G9 only: switch the Genesis 9 Tear figure's shader UV set to "UE5" during the
    *  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
    *  Surfaces-tab step. No-op on non-G9 figures (no UE5 tear UV ships for them). */

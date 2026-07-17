@@ -297,10 +297,9 @@ function ApplyDK9(options, oNodeRoot, oNodeDk9, startFrame){
 
 	// The DK block's own tail: its last pose has no ramp-down key past the block
 	// end either (the same preset-range limit as the base ROM), so it would hold
-	// through GP/Physics/custom. Close it at the next block boundary — gated on
-	// the same reset flag that zeroes the gen art morphs at the FBM start, so a
-	// deliberate opt-out (resetGenBeforeApplying off) keeps meaning "let the gen
-	// state persist". Legacy file-based configs (no inline extraFrames) keep
+	// through GP/Physics/custom. Close it at the next block boundary. The studio
+	// always emits the meta reset flags true (a leaking tail is never wanted);
+	// the gate only keeps legacy file-based configs (no inline extraFrames) on
 	// their old behavior. Art-direction morphs need no closing: their sawtooth
 	// (createMorphFrame) already keys the ramp-down itself.
 	var oDkMeta = options.extraFrames && options.extraFrames.meta;
@@ -381,8 +380,7 @@ function ApplyGP9(options, oNodeRoot, oNodeGP, startFrame){
 
 	// The GP block's own tail (mirror of the DK close-out): the last GP pose
 	// (ClitorisErect on the stock ROM) has no ramp-down key past the block end
-	// and would hold through Physics/custom. Same reset-flag gate as DK, so the
-	// resetGenBeforeApplying opt-out keeps meaning "let the gen state persist".
+	// and would hold through Physics/custom. Same legacy-config gate as DK.
 	var oGpMeta = options.extraFrames && options.extraFrames.meta;
 	if( oGpMeta && oGpMeta.resetGPBeforeApplying === true ){
 		closeDanglingMorphKeys([oNodeGP], startFrame + gpFrameCount);
