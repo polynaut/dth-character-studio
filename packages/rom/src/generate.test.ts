@@ -11,7 +11,6 @@ import {
   sectionPresetAvailable,
   toCharacterScriptDsa,
   toExportScriptDsa,
-  toGroomExportScriptDsa,
   toPoseAssetCsv,
   toScanProductsScriptDsa,
 } from './generate'
@@ -1082,36 +1081,11 @@ describe('groom items (hair kept out of the export)', () => {
     expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
   })
 
-  it('generateAll emits Export_Groom_ only with an export path AND groom items', () => {
+  it('generateAll emits NO groom script — hair exclusion only (a hair-only export needs plugin support)', () => {
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
-      'Export_Groom_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
-    expect(generateAll(groomChar({ exportPath: '' }), {}, FRAMES).map((f) => f.fileName)).toEqual([
-      'ROM_Electra_G9.dsa',
-      'Electra_pose_asset.csv',
-    ])
-  })
-
-  it('the groom script exports frame 0 of just the groom items as Alembic', () => {
-    const script = toGroomExportScriptDsa(groomChar({ exportSceneSubfolders: true }))
-    expect(script.fileName).toBe('Export_Groom_Electra_G9.dsa')
-    expect(script.target).toBe('daz')
-    expect(script.experimental).toBe(true)
-    expect(script.content).not.toContain('ApplyDTHCharacter(') // no ROM rebuild
-    expect(script.content).toContain('findExporterByExtension("abc")')
-    expect(script.content).toContain('absoluteFilePath("Electra_groom.abc")')
-    expect(script.content).toContain('Scene.setFrame(0);')
-    // Scene-subfolder resolution mirrors the DTH export block…
-    expect(script.content).toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
-    // …and the frame-0 range clamp is restored even when the export fails.
-    const clampAt = script.content.indexOf('Scene.setAnimRange(new DzTimeRange(0, 0));')
-    const finallyAt = script.content.indexOf('} finally {')
-    const restoreAt = script.content.indexOf('Scene.setAnimRange(dthOldAnimRange);')
-    expect(clampAt).toBeGreaterThan(-1)
-    expect(finallyAt).toBeGreaterThan(clampAt)
-    expect(restoreAt).toBeGreaterThan(finallyAt)
   })
 })
 

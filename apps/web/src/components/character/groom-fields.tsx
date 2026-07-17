@@ -26,9 +26,9 @@ function refKey(ref: string): string {
  * The "groom items" list of the character editor's Export section: scene items
  * (hair — usually the fitted cap; its children ride along) the generated script
  * unfits + unparents around the DTH export and restores afterwards, so one
- * scene carries full hair while the ROM export stays clean. With items listed
- * (and an export folder set) generation also emits the standalone
- * `Export_Groom_<Name>.dsa` (frame-0 Alembic of just the groom).
+ * scene carries full hair while the ROM export stays clean. (A hair-ONLY groom
+ * export needs DTH Exporter plugin support and is not emitted — see the note
+ * in @dth/rom generate.ts.)
  *
  * Suggestions come from the character's linked scene `.duf`s (read natively,
  * no Daz needed): the top-level items conformed to the figure, hair-ish names
@@ -108,9 +108,7 @@ export function GroomFields({
           Exporter runs, then restored — the exporter ignores visibility, so hiding hair is not
           enough. List the top fitted item (e.g. the hair cap); its children ride along. Enter the
           label exactly as shown in Daz's Scene pane, or pick from the items found in the linked
-          scene. With groom items listed, generation also writes an <code>Export_Groom</code>{' '}
-          script that exports just the hair at frame 0 as Alembic (needs Daz's Alembic Exporter
-          add-on).
+          scene.
         </InfoPopup>
       </Label>
       <KeyedListEditor
