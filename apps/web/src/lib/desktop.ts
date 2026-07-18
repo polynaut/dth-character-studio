@@ -95,6 +95,9 @@ function notePick(path: string): string {
  * path, or '' if the user cancelled.
  */
 export async function pickFbxPath(): Promise<string> {
+  // Every pick* helper no-ops in a plain browser, like the rest of this file —
+  // without the guard each Browse button was an unhandled rejection there.
+  if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
@@ -109,6 +112,7 @@ export async function pickFbxPath(): Promise<string> {
  * picked absolute path, or '' if the user cancelled.
  */
 export async function pickDufPath(title: string): Promise<string> {
+  if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
@@ -123,6 +127,7 @@ export async function pickDufPath(title: string): Promise<string> {
  * picked absolute path, or '' if the user cancelled.
  */
 export async function pickCsvPath(title: string): Promise<string> {
+  if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
@@ -137,6 +142,7 @@ export async function pickCsvPath(title: string): Promise<string> {
  * absolute path, or '' if the user cancelled.
  */
 export async function pickUprojectPath(title: string): Promise<string> {
+  if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
@@ -151,6 +157,7 @@ export async function pickUprojectPath(title: string): Promise<string> {
  * absolute path, or '' if the user cancelled.
  */
 export async function pickHipPath(title: string): Promise<string> {
+  if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,
@@ -165,6 +172,7 @@ export async function pickHipPath(title: string): Promise<string> {
  * path, or '' if the user cancelled. `defaultPath` opens the dialog there.
  */
 export async function pickFolder(title: string, defaultPath?: string): Promise<string> {
+  if (!isTauri()) return ''
   const selected = await open({ multiple: false, directory: true, title, defaultPath })
   return notePick(typeof selected === 'string' ? selected : '')
 }
@@ -174,6 +182,7 @@ export async function pickFolder(title: string, defaultPath?: string): Promise<s
  * picked absolute path, or '' if the user cancelled.
  */
 export async function pickDcspPath(title: string): Promise<string> {
+  if (!isTauri()) return ''
   const selected = await open({
     multiple: false,
     directory: false,

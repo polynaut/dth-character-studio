@@ -115,16 +115,26 @@ export function useCharacterDraft(options: {
   // like the inline rename — instead of leaving them as dirty edits a manual
   // Save might miss. Otherwise the on-disk script silently lags the chosen folder.
   async function patchAndRegenerate(p: Partial<Character>, toastMsg?: string) {
+    // Single-flight like save(): two quick toggles previously ran overlapping
+    // save+generate rounds whose out-of-order completions could settle the
+    // draft/baseline to the OLDER result and interleave script writes.
+    if (saving) {
+      toast.info('Still saving the previous change — try again in a moment.')
+      return
+    }
     const updated = { ...character, ...p }
     setCharacter(updated)
+    setSaving(true)
     try {
       const saved = await saveCharacter({ data: { projectId, character: updated } })
       const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
       setCharacter(saved)
       setBaseline(saved)
+      setSaving(false)
       void router.invalidate()
       notifyGenerated(toastMsg ?? `Saved “${saved.name}”`, result)
     } catch (e) {
+      setSaving(false)
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }

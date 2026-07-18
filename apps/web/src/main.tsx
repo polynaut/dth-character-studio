@@ -8,16 +8,10 @@ import { getRouter } from './router'
 import { checkForUpdates } from './lib/updater'
 import { housekeepingSweep, isRefreshNeeded } from './lib/rom/api'
 import { activeProjectFile } from './lib/desktop'
+import { dirOf } from './lib/path'
 import { migrateProjects } from './lib/rom/migrate-projects'
 import '@fontsource-variable/manrope/index.css'
 import './styles.css'
-
-/** Everything but the last path segment ('/'-joined). */
-function dirOf(p: string): string {
-  const norm = p.replace(/[\\/]+$/g, '')
-  const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
-  return idx >= 0 ? norm.slice(0, idx).replace(/\\/g, '/') : norm
-}
 
 const router = getRouter()
 
