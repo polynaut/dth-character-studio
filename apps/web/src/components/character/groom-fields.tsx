@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { InfoPopup, Label, MultiSelect, Switch } from '@dth/ui'
+import { InfoPopup, MultiSelect, Switch } from '@dth/ui'
 
 import * as api from '#/lib/rom/api.ts'
 
@@ -100,15 +100,16 @@ export function GroomFields({
           onCheckedChange={(inScene) => patch({ groomMode: inScene ? 'scene' : 'separate' })}
         />
         <span className="flex items-center gap-1 text-sm">
-          Groom (hair) lives in the ROM scenes
-          <InfoPopup label="Groom lives in the ROM scenes — more information">
-            On: each scene carries its full look, hair included — the groom items listed per
-            scene are excluded around the DTH export and restored after, so hair never rides
-            into the ROM artifacts (by default they're unfitted and moved out of the figure;
-            the global “Solve hair assets by hiding” setting switches this to hiding, for
-            Exporter Plugin 2.0+). The generated script carries every
-            scene's list and applies the right one for the scene open in Daz. Off: the classic
-            workflow — you keep hair in separate Daz scene files and nothing is excluded.
+          Hair items (groom) live in the Daz scenes
+          <InfoPopup label="Hair items live in the Daz scenes — more information">
+            <strong>On</strong>: each scene carries its full look, hair included — the groom
+            items listed per scene are excluded around the DTH export and restored after, so
+            hair never rides into the ROM artifacts (by default they're unfitted and moved out
+            of the figure; the global “Solve hair assets by hiding” setting switches this to
+            hiding, for Exporter Plugin 2.0+). The generated script carries every
+            scene's list and applies the right one for the scene open in Daz.{' '}
+            <strong>Off</strong>: the classic workflow — you keep hair in separate Daz scene
+            files and nothing is excluded.
           </InfoPopup>
         </span>
       </div>
@@ -118,19 +119,6 @@ export function GroomFields({
         </p>
       ) : (
         <>
-          <Label className="mb-2 flex w-fit items-center gap-1">
-            Groom items in “{sceneName}” kept out of the export
-            <InfoPopup label="Groom items kept out of the export — more information">
-              Click a scene card above to pick which scene's hair you're listing. Items listed
-              here are excluded right before the DTH Exporter runs and restored after —
-              unfitted and moved out of the figure, or hidden with the global “Solve hair
-              assets by hiding” setting.
-              List the top fitted item (e.g. the hair cap); its children ride along. Pick from
-              the items found in the scene (type to filter) — a label the scan doesn't offer
-              can be typed exactly as in Daz's Scene pane and added. A scene with no items
-              listed exports as-is.
-            </InfoPopup>
-          </Label>
           <MultiSelect
             values={listed}
             options={candidates}

@@ -472,6 +472,42 @@ G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields
 </details>
 
 <details>
+<summary><strong>Hair items (groom) — keep hair out of the export</strong></summary>
+<table><tr><td>
+
+With **Hair items (groom) live in the Daz scenes** on (the default), each scene
+carries its full look — hair included — and the hair items you pick per scene
+are kept out of the DTH export: they're excluded right before the DTH Exporter
+runs and restored afterwards, so hair never rides into the ROM's FBX/Alembic. By
+default the items are unfitted and moved out of the figure for the export (the
+same unfit/refit Daz's own "Fit To" performs); the global
+**Solve hair assets by hiding** setting (Settings → General) switches the
+mechanism to hiding instead — experimental, for DTH Exporter Plugin 2.0+.
+Turned **off**, nothing is excluded — the classic workflow where hair lives in
+separate Daz scene files.
+
+The picker under the scene cards edits the **selected** card's list — the lists
+are **per scene**, since outfit scenes carry different hair. The one generated
+script bakes every scene's list and applies the right one for whichever scene is
+open in Daz; a scene with no items listed exports as-is.
+
+- **List the top fitted item** (e.g. the hair cap) — its children ride along
+  automatically.
+- The dropdown offers the items found in the scene file (hair-ish names first,
+  type to filter). A label the scan doesn't offer can be typed exactly as it
+  appears in Daz's **Scene** pane and added.
+- A listed label that isn't found in the scene turns amber — the export stops
+  loudly on a label missing from the open scene rather than silently shipping a
+  hair-polluted export.
+
+Characters with hair items also get an `Export_Groom_…` script — it exports the
+`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
+worn, with everything else hidden).
+
+</td></tr></table>
+</details>
+
+<details>
 <summary><strong>Script install location &amp; export directory</strong></summary>
 <table><tr><td>
 
