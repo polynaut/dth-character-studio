@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.44.1
+
+### Patch Changes
+
+- [#347](https://github.com/polynaut/dth-character-studio/pull/347) [`22c7071`](https://github.com/polynaut/dth-character-studio/commit/22c70712bf37a3cce5a26f2194b4bfad6dc51432) Thanks [@polynaut](https://github.com/polynaut)! - Groom UI polish: the switch reads "Hair items (groom) live in the Daz scenes" (bold On/Off in its popup), and the label + popup over the per-scene picker are gone — the selected scene card right above is the context, and the full how-it-works moved into the guide's new "Hair items (groom)" section.
+
+- Updated dependencies []:
+  - @dth/rom@0.44.1
+  - @dth/ui@0.44.1
+
 ## 0.44.0
 
 ### Minor Changes
