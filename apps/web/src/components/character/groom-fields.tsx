@@ -100,15 +100,16 @@ export function GroomFields({
           onCheckedChange={(inScene) => patch({ groomMode: inScene ? 'scene' : 'separate' })}
         />
         <span className="flex items-center gap-1 text-sm">
-          Groom (hair) lives in the ROM scenes
-          <InfoPopup label="Groom lives in the ROM scenes — more information">
-            On: each scene carries its full look, hair included — the groom items listed per
-            scene are excluded around the DTH export and restored after, so hair never rides
-            into the ROM artifacts (by default they're unfitted and moved out of the figure;
-            the global “Solve hair assets by hiding” setting switches this to hiding, for
-            Exporter Plugin 2.0+). The generated script carries every
-            scene's list and applies the right one for the scene open in Daz. Off: the classic
-            workflow — you keep hair in separate Daz scene files and nothing is excluded.
+          Hair items (groom) live in the Daz scenes
+          <InfoPopup label="Hair items live in the Daz scenes — more information">
+            <strong>On</strong>: each scene carries its full look, hair included — the groom
+            items listed per scene are excluded around the DTH export and restored after, so
+            hair never rides into the ROM artifacts (by default they're unfitted and moved out
+            of the figure; the global “Solve hair assets by hiding” setting switches this to
+            hiding, for Exporter Plugin 2.0+). The generated script carries every
+            scene's list and applies the right one for the scene open in Daz.{' '}
+            <strong>Off</strong>: the classic workflow — you keep hair in separate Daz scene
+            files and nothing is excluded.
           </InfoPopup>
         </span>
       </div>
