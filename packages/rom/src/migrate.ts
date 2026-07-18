@@ -185,7 +185,15 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
  * written back to disk (see storage `saveCharacter`).
  */
 export function migrateCharacterData(raw: unknown): Record<string, any> {
-  let data = normalizeLegacyCharacter(raw as Record<string, any>)
+  // Non-object input (null, an array, a bare string…) must flow into a clean
+  // zod validation failure downstream — not a TypeError inside the legacy
+  // normalizer. Such input starts from an empty object, which zod then rejects
+  // with its usual required-field errors.
+  const base =
+    raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, any>)
+      : {}
+  let data = normalizeLegacyCharacter(base)
   const from = typeof data.schemaVersion === 'number' ? data.schemaVersion : 1
   for (let version = from + 1; version <= CHARACTER_SCHEMA_VERSION; version++) {
     const step = characterMigrations[version]

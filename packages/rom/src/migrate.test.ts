@@ -3,6 +3,18 @@ import { describe, expect, it } from 'vitest'
 import { migrateCharacterData, normalizeLegacyCharacter } from './migrate'
 import { CHARACTER_SCHEMA_VERSION, characterSchema } from './types'
 
+describe('migrateCharacterData — non-object input', () => {
+  it('flows into a clean zod failure instead of a TypeError in the normalizer', () => {
+    for (const bad of [null, undefined, 'a string', 42, ['an', 'array']]) {
+      const migrated = migrateCharacterData(bad)
+      expect(typeof migrated).toBe('object')
+      // The empty result then fails validation with zod's usual required-field
+      // errors — the same "unreadable definition" path a corrupt JSON takes.
+      expect(characterSchema.safeParse(migrated).success).toBe(false)
+    }
+  })
+})
+
 describe('migrateCharacterData — pre-versioning normalization', () => {
   it('expands a GEN presetVariant into the selected preset assets', () => {
     expect(migrateCharacterData({ sections: { GEN: { presetVariant: 'both' } } }).sections.GEN.presetAssets).toEqual(
