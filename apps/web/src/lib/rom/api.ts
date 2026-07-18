@@ -117,6 +117,7 @@ export type {
 export {
   dedupDazAssets,
   defaultDazUninstallFolders,
+  consumeSettingsFileCorrupt,
   fetchAppDataFolder,
   fetchAppVersion,
   fetchSettings,

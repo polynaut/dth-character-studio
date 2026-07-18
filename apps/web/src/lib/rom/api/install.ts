@@ -76,8 +76,21 @@ export async function listDthExporterReleases({
 
 export async function saveSettings({ data }: { data: unknown }): Promise<StudioSettings> {
   // The same tolerant schema reads settings.json and validates the save input —
-  // the field list + defaults live ONCE, in storage/settings.ts.
-  return storage.saveSettings(storage.studioSettingsSchema.parse(data))
+  // the field list + defaults live ONCE, in storage/settings.ts. The caller's
+  // loader-seeded `baseline` rides along so only its actual edits win over what
+  // other windows saved meanwhile (see storage.saveSettings).
+  const { settings, baseline } = z
+    .object({
+      settings: storage.studioSettingsSchema,
+      baseline: storage.studioSettingsSchema,
+    })
+    .parse(data)
+  return storage.saveSettings(settings, baseline)
+}
+
+/** One-shot corrupt-settings flag for the startup toast (see storage/settings). */
+export function consumeSettingsFileCorrupt(): boolean {
+  return storage.consumeSettingsFileCorrupt()
 }
 
 /**

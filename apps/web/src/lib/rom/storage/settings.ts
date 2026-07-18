@@ -122,21 +122,63 @@ export const studioSettingsSchema = z.object({
 
 export type StudioSettings = z.infer<typeof studioSettingsSchema>
 
+// Set when settings.json EXISTED but couldn't be parsed — the UI surfaces it
+// once (see __root.tsx), so a reset-to-defaults never masquerades as a fresh
+// install while a later save silently overwrites the broken file.
+let settingsFileCorrupt = false
+
+/** One-shot: whether the last settings read found an existing-but-unparseable
+ *  file. Reading the flag clears it (a single startup toast, not a nag). */
+export function consumeSettingsFileCorrupt(): boolean {
+  const was = settingsFileCorrupt
+  settingsFileCorrupt = false
+  return was
+}
+
 export async function getSettings(): Promise<StudioSettings> {
+  let raw: string
   try {
-    // Every field is individually tolerant (see the schema), so a partial or
-    // hand-damaged settings.json keeps its good fields instead of resetting.
-    return studioSettingsSchema.parse(
-      JSON.parse(await readTextFile(await dataPath('settings.json'))),
-    )
+    raw = await readTextFile(await dataPath('settings.json'))
   } catch {
     // Missing/unreadable file — a fresh install: every field at its default.
     return studioSettingsSchema.parse({})
   }
+  try {
+    // Every field is individually tolerant (see the schema), so a partial or
+    // hand-damaged settings.json keeps its good fields instead of resetting.
+    return studioSettingsSchema.parse(JSON.parse(raw))
+  } catch {
+    // The file exists but isn't JSON — same defaults, but flagged for the UI.
+    settingsFileCorrupt = true
+    return studioSettingsSchema.parse({})
+  }
 }
 
-export async function saveSettings(settings: StudioSettings): Promise<StudioSettings> {
+/**
+ * Persist the app-global settings. With a `baseline` (the caller's loader-seeded
+ * snapshot), only the fields the caller actually CHANGED versus that baseline are
+ * taken from `next`; every other field is re-read fresh from disk. One project per
+ * WINDOW means several windows share this file — a whole-object write from window
+ * A silently reverted anything window B changed since A's loader ran (e.g. Tools
+ * saving `dazMorphsSource` in a project window, wiped by a later Settings save in
+ * the Home window). Same-field concurrent edits stay last-writer-wins. Without a
+ * baseline (one-shot internal writers that just re-read) it's a plain write.
+ */
+export async function saveSettings(
+  next: StudioSettings,
+  baseline?: StudioSettings,
+): Promise<StudioSettings> {
   await ensureAppDir()
-  await writeTextFile(await dataPath('settings.json'), JSON.stringify(settings, null, 2) + '\n')
-  return settings
+  let merged = next
+  if (baseline) {
+    const disk = await getSettings()
+    merged = { ...disk }
+    for (const key of Object.keys(studioSettingsSchema.shape) as Array<keyof StudioSettings>) {
+      if (JSON.stringify(next[key]) !== JSON.stringify(baseline[key])) {
+        ;(merged as Record<string, unknown>)[key] = next[key]
+      }
+    }
+  }
+  await writeTextFile(await dataPath('settings.json'), JSON.stringify(merged, null, 2) + '\n')
+  return merged
 }

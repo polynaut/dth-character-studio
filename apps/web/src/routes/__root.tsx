@@ -5,7 +5,12 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { Toaster, toast } from 'sonner'
 
-import { ensureNetworkDrives, fetchPoseAssets } from '#/lib/rom/api.ts'
+import {
+  consumeSettingsFileCorrupt,
+  ensureNetworkDrives,
+  fetchPoseAssets,
+  fetchSettings,
+} from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
 import { onMenu, openExternal } from '#/lib/desktop.ts'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
@@ -53,6 +58,21 @@ function RootComponent() {
   // Alt over a reveal target must not arm the native menu bar (Alt+click is
   // the "show in Explorer" hotkey there) — bare Alt elsewhere still does.
   useEffect(() => installAltMenuGuard(), [])
+
+  // On launch, surface a corrupt settings.json ONCE: getSettings degrades to
+  // defaults (deliberately tolerant), but silently — the next save would then
+  // overwrite the broken file and the user would lose every tool path with no
+  // notice. The read here primes the flag even before any settings-using route.
+  useEffect(() => {
+    void fetchSettings().then(() => {
+      if (consumeSettingsFileCorrupt()) {
+        toast.error(
+          'Your settings file could not be read — starting from defaults. Check the tool paths under Settings before saving (a save overwrites the broken file).',
+          { duration: 12000 },
+        )
+      }
+    })
+  }, [])
 
   // On launch, re-map any known network drives that aren't currently available
   // (an elevated relaunch doesn't inherit the user's interactive mappings).
