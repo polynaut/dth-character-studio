@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.43.1
+
+### Patch Changes
+
+- [#343](https://github.com/polynaut/dth-character-studio/pull/343) [`4b63955`](https://github.com/polynaut/dth-character-studio/commit/4b639551258fc175716b8dac3d4ecec2420f860e) Thanks [@polynaut](https://github.com/polynaut)! - The "Solve hair assets by hiding" setting is labeled experimental: as of Exporter Plugin 2.0 (preview), hiding keeps hair out of the Alembic but not yet the FBX — the default detach mechanism covers both.
+
+- Updated dependencies []:
+  - @dth/rom@0.43.1
+  - @dth/ui@0.43.1
+
 ## 0.43.0
 
 ### Minor Changes
