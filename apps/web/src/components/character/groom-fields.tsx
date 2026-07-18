@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { InfoPopup, Label, MultiSelect, Switch } from '@dth/ui'
+import { InfoPopup, MultiSelect, Switch } from '@dth/ui'
 
 import * as api from '#/lib/rom/api.ts'
 
@@ -119,19 +119,6 @@ export function GroomFields({
         </p>
       ) : (
         <>
-          <Label className="mb-2 flex w-fit items-center gap-1">
-            Groom items in “{sceneName}” kept out of the export
-            <InfoPopup label="Groom items kept out of the export — more information">
-              Click a scene card above to pick which scene's hair you're listing. Items listed
-              here are excluded right before the DTH Exporter runs and restored after —
-              unfitted and moved out of the figure, or hidden with the global “Solve hair
-              assets by hiding” setting.
-              List the top fitted item (e.g. the hair cap); its children ride along. Pick from
-              the items found in the scene (type to filter) — a label the scan doesn't offer
-              can be typed exactly as in Daz's Scene pane and added. A scene with no items
-              listed exports as-is.
-            </InfoPopup>
-          </Label>
           <MultiSelect
             values={listed}
             options={candidates}
