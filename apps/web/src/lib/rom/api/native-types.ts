@@ -9,6 +9,7 @@ import { z } from 'zod'
  *   - `ConflictCopy` / `FileConflict` /
  *     `DupMember` / `AssetDup` / `DedupReport` → `apps/desktop/src/dedup.rs`
  *   - `HousekeepingResult` (Rust `SweepReport`) → `apps/desktop/src/housekeeping.rs`
+ *   - `RemapResult`                         → `apps/desktop/src/drives.rs`
  *
  * The api layer parses each command result through these schemas (`Schema.parse(
  * await invoke(...))`) instead of a bare `invoke<T>()` cast, so a shape mismatch
@@ -130,6 +131,21 @@ export const housekeepingResultSchema = z.object({
   bytesFreed: z.number(),
 })
 
+// --- network-drive remap (drives.rs `RemapResult`) ----------------------------
+
+/** Outcome of ensuring one known network drive is mapped (mirrors Rust
+ *  `RemapResult`). Produced on startup — re-mapping drives an elevated relaunch
+ *  can't see (see drives.rs). */
+export const remapResultSchema = z.object({
+  /** Drive specifier, e.g. "X:". */
+  drive: z.string(),
+  /** UNC target, e.g. "\\\\jebpot\\devs". */
+  unc: z.string(),
+  status: z.enum(['already', 'remapped', 'conflict', 'failed']),
+  /** Empty, or why the drive couldn't be (re)mapped. */
+  detail: z.string(),
+})
+
 // --- inferred TS types (single source of truth is the schemas above) ---------
 
 export type InstallStep = z.infer<typeof installStepSchema>
@@ -140,6 +156,7 @@ export type DupMember = z.infer<typeof dupMemberSchema>
 export type AssetDup = z.infer<typeof assetDupSchema>
 export type DedupReport = z.infer<typeof dedupReportSchema>
 export type HousekeepingResult = z.infer<typeof housekeepingResultSchema>
+export type RemapResult = z.infer<typeof remapResultSchema>
 export type PoseAssetFramesResult = z.infer<typeof poseAssetFramesSchema>
 export type SceneWearable = z.infer<typeof sceneWearableSchema>
 export type SceneWearables = z.infer<typeof sceneWearablesSchema>

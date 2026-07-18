@@ -1,0 +1,26 @@
+[
+  {
+    "drive": "X:",
+    "unc": "\\\\jebpot\\devs",
+    "status": "already",
+    "detail": ""
+  },
+  {
+    "drive": "Y:",
+    "unc": "\\\\jebpot\\media",
+    "status": "remapped",
+    "detail": ""
+  },
+  {
+    "drive": "Z:",
+    "unc": "\\\\nas\\share",
+    "status": "conflict",
+    "detail": "in use → \\\\other\\share"
+  },
+  {
+    "drive": "W:",
+    "unc": "\\\\gone\\share",
+    "status": "failed",
+    "detail": "network name not found — is the server reachable?"
+  }
+]

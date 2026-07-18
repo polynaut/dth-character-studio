@@ -4,10 +4,10 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import { projectsForSweep } from './core'
 import { gcNoteMedia } from './notes'
-import { housekeepingResultSchema } from './native-types.ts'
-// Inferred from the zod schema (parsed at the invoke boundary below) + re-exported.
-import type { HousekeepingResult } from './native-types.ts'
-export type { HousekeepingResult }
+import { housekeepingResultSchema, remapResultSchema } from './native-types.ts'
+// Inferred from the zod schemas (parsed at the invoke boundary below) + re-exported.
+import type { HousekeepingResult, RemapResult } from './native-types.ts'
+export type { HousekeepingResult, RemapResult }
 
 // --- Housekeeping: keep app-generated data from filling the disk -------------
 // Product-scan CSVs (one per Daz scene, app-data) age out after
@@ -82,14 +82,6 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
 
 // --- Network drives -------------------------------------------------------
 
-/** Outcome of trying to ensure one known network drive is mapped (mirrors Rust). */
-export interface RemapResult {
-  drive: string
-  unc: string
-  status: 'already' | 'remapped' | 'conflict' | 'failed' | 'unsupported'
-  detail: string
-}
-
 /** UNC a mapped network drive points to ("X:\…" → "\\host\share"), or '' when
  *  the path isn't on a (mapped) network drive / the native command is absent. */
 export async function uncForPath(path: string): Promise<string> {
@@ -117,7 +109,9 @@ export async function ensureNetworkDrives(): Promise<Array<RemapResult>> {
   try {
     const mappings = await storage.listKnownDrives()
     if (mappings.length === 0) return []
-    return await invoke<Array<RemapResult>>('ensure_network_drives', { mappings })
+    // Parsed at the boundary (never a bare invoke<T>() cast) — the shape is
+    // pinned by contracts/remap-results.json on both sides.
+    return z.array(remapResultSchema).parse(await invoke('ensure_network_drives', { mappings }))
   } catch {
     return []
   }
