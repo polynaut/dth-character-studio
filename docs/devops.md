@@ -17,7 +17,7 @@ feature PR (+ changeset)  ──►  main
 ```
 
 - **Versioning:** [Changesets](.changeset/config.json). `@dth/web`, `@dth/desktop`,
-  `@dth/rom` are a **fixed** group → one product version. The Tauri app reads its
+  `@dth/rom`, `@dth/ui` are a **fixed** group → one product version. The Tauri app reads its
   version from `apps/desktop/package.json` (`tauri.conf.json` → `"version": "package.json"`),
   which Changesets bumps — so version → tag → installer stay in sync.
 - **Release gate:** `release.yml` builds only when there are **no pending
@@ -233,6 +233,18 @@ The real mitigation against a hostile page driving those broad fs scopes is the
 third-party executes in the webview, so there is no untrusted code positioned to
 abuse the fs plugin in the first place. Keep the CSP strict; treat the Rust rails
 as the second layer, not the primary one.
+
+Two residual softnesses to keep in mind (both accepted, documented from the
+2026-07-18 review):
+
+- `style-src 'unsafe-inline'` is the one CSP relaxation (Tailwind/inline styles
+  need it). It permits style injection, not script execution — acceptable under
+  the no-untrusted-code posture above.
+- The shell-open allowlist (`tauri.conf.json` → `plugins.shell.open`) permits
+  `.dsa` paths, so a shell-open on a machine where `.dsa` associates with Daz
+  Studio executes that script. Consistent with the posture (the app's whole
+  purpose is running its generated scripts in Daz), but remember it when
+  reasoning about what a compromised webview could reach.
 
 ## Later: macOS
 

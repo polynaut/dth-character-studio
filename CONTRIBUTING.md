@@ -10,6 +10,7 @@ apps/
   desktop/    @dth/desktop  — Tauri 2 shell (Rust). Loads apps/web; the shippable app.
 packages/
   rom/        @dth/rom      — pure ROM/CSV/DSA generation core (no I/O).
+  ui/         @dth/ui       — app-agnostic React UI kit (no Tauri/router/fs imports).
 ```
 
 ## Develop
@@ -30,8 +31,8 @@ Rust is required for the desktop app (`rustup`, plus WebView2 on Windows — pre
 
 1. Branch off `main` (`feature/…`, `fix/…`).
 2. Make your change. Add a changeset describing it: `pnpm changeset` (pick
-   patch/minor/major; `@dth/web`/`@dth/desktop`/`@dth/rom` are versioned in
-   lockstep). Commit the generated file.
+   patch/minor/major; `@dth/web`/`@dth/desktop`/`@dth/rom`/`@dth/ui` are
+   versioned in lockstep). Commit the generated file.
 3. Open a PR. CI must be green and the PR reviewed/approved before merge.
 
 ## Releases (automated)

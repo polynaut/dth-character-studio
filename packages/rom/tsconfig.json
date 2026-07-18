@@ -11,7 +11,7 @@
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": true
   },
   "include": ["src"]
 }
