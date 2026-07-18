@@ -105,19 +105,21 @@ fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
     if fs::rename(src, dst).is_ok() {
         return true;
     }
-    let copied = if src.is_dir() {
-        copy_dir(src, dst).is_ok()
-    } else {
-        fs::copy(src, dst).is_ok()
-    };
-    if !copied {
-        return false;
+    let is_dir = src.is_dir();
+    let copied = if is_dir { copy_dir(src, dst).is_ok() } else { fs::copy(src, dst).is_ok() };
+    let moved = copied
+        && if is_dir { fs::remove_dir_all(src).is_ok() } else { fs::remove_file(src).is_ok() };
+    if !moved {
+        // A partial copy — or a full copy whose source delete failed (the source
+        // stays the live copy) — must not linger in quarantine: the next run's
+        // name-collision loop would mint " (1)" duplicates of the same asset.
+        if is_dir {
+            let _ = fs::remove_dir_all(dst);
+        } else {
+            let _ = fs::remove_file(dst);
+        }
     }
-    if src.is_dir() {
-        fs::remove_dir_all(src).is_ok()
-    } else {
-        fs::remove_file(src).is_ok()
-    }
+    moved
 }
 
 /// Rank a source folder by its Genesis number so newer wins (e.g. "_genesis 9" →
@@ -179,8 +181,9 @@ fn collect_folder_files(dir: &Path, rel: &Path, out: &mut Vec<(String, u64)>) {
 /// zips the same way so a wrapper download dedups like a flat zip of the same
 /// content. Returns whether a content level was found; unreadable nested zips are
 /// skipped (dedup is lenient — the asset resolves to None, not an error).
-/// `budget` is the CURRENT archive's inflate budget (its nested-zip entries are
-/// the only thing this scan inflates); each inner archive derives its own.
+/// `budget` is the top-level archive's inflate budget (its nested-zip entries are
+/// the only thing this scan inflates); inner archives SHARE it, so one budget
+/// bounds the whole tree — see `diff_zip_archive`'s counterpart.
 fn collect_zip_files(
     archive: &mut zip::ZipArchive<fs::File>,
     depth: u32,
@@ -197,12 +200,10 @@ fn collect_zip_files(
                 continue;
             }
             if let Ok(tmp) = extract_nested_zip(archive, *idx, budget) {
-                let inner_len = fs::metadata(&tmp.0).map(|m| m.len()).unwrap_or(0);
                 if let Ok(file) = fs::File::open(&tmp.0) {
                     if let Ok(mut inner) = zip::ZipArchive::new(file) {
-                        let mut inner_budget = budget.nested(path, inner_len);
-                        if inner_budget.check_entry_count(inner.len()).is_ok() {
-                            found |= collect_zip_files(&mut inner, depth - 1, out, &mut inner_budget);
+                        if budget.check_entry_count(inner.len()).is_ok() {
+                            found |= collect_zip_files(&mut inner, depth - 1, out, budget);
                         }
                     }
                 }
@@ -275,7 +276,8 @@ pub(crate) fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
 /// `<sources' parent>/_dth_dedup_backup/quarantine` (reversible). Shared-file
 /// conflicts are reported only — never rewritten (that would mutate an author's
 /// downloaded asset); they're resolved by Accept.
-#[tauri::command]
+// `(async)`: runs off the main thread — see assets::install_daz_assets.
+#[tauri::command(async)]
 pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let dry = request.dry_run;
     let accepted: HashSet<String> = request.accepted.into_iter().collect();
@@ -521,6 +523,20 @@ mod tests {
         rels.sort();
         assert_eq!(rels, vec!["Runtime/Textures/t.png", "data/Meipe/morph.dsf"]);
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn move_to_quarantine_leaves_no_debris_when_the_move_fails() {
+        let base = unique_temp_dir("quarantine_fail");
+        fs::create_dir_all(&base).unwrap();
+        // A vanished source (e.g. deleted mid-scan): rename and copy both fail —
+        // the quarantine target must not be left behind, or the next run's
+        // name-collision loop would mint " (1)" duplicates.
+        let missing = base.join("not-there.zip");
+        let dst = base.join("q").join("not-there.zip");
+        assert!(!move_to_quarantine(&missing, &dst));
+        assert!(!dst.exists(), "a failed move must not leave a quarantine copy");
         let _ = fs::remove_dir_all(&base);
     }
 

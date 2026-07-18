@@ -87,13 +87,18 @@ fn duf_frame_count(path: &Path) -> Result<u32, String> {
     if !max_t.is_finite() {
         return Err(format!("{}: no animation keyframes found", path.display()));
     }
-    Ok((max_t * DTH_FPS).round() as u32 + 1)
+    // The float→int cast saturates at u32::MAX for an absurd key time in a
+    // corrupt/hostile .duf; `+ 1` would then overflow (debug panic / release
+    // wrap to 0 frames) — saturate instead.
+    Ok(((max_t * DTH_FPS).round() as u32).saturating_add(1))
 }
 
 /// Measure the frame length of each `.duf` (parallel-friendly but cheap enough
 /// serially). Each result carries its own error so the caller can hard-fail on
 /// exactly the asset(s) that couldn't be read.
-#[tauri::command]
+// `(async)`: reads (possibly many) .duf files, often on a network share — a sync
+// command would do that on the main thread and freeze the UI.
+#[tauri::command(async)]
 pub fn pose_asset_frames(paths: Vec<String>) -> Vec<PoseAssetFrames> {
     paths
         .into_iter()
@@ -161,7 +166,7 @@ fn duf_conformed_items(path: &Path) -> Result<Vec<SceneWearable>, String> {
 /// The fitted (conformed) items of a scene `.duf` — the groom-suggestion source.
 /// Never throws: an unreadable scene returns an empty list with the reason in
 /// `error`, so suggestions degrade instead of breaking the editor.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scene_wearables(path: String) -> SceneWearables {
     match duf_conformed_items(Path::new(&path)) {
         Ok(items) => SceneWearables { items, error: String::new() },
@@ -175,7 +180,7 @@ pub fn scene_wearables(path: String) -> SceneWearables {
 /// walk replaces the old per-directory JS round-trips (much faster on a network
 /// share). Unreadable subfolders (locked / permission / network) are skipped so
 /// one bad directory can't fail the whole scan.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_duf_files(folder: String) -> Vec<String> {
     let root = Path::new(&folder);
     let mut out = Vec::new();

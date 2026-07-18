@@ -27,6 +27,9 @@ fn github_client() -> Result<reqwest::Client, String> {
     ensure_crypto_provider();
     reqwest::Client::builder()
         .user_agent("DTH-Character-Studio")
+        // reqwest defaults to NO timeout — without one, a stalled connection
+        // hangs the release-tags call (and its caller's UI state) forever.
+        .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("http client failed: {e}"))
 }

@@ -69,7 +69,8 @@ pub(crate) struct UninstallDazRequest {
 /// Delete the listed leftover Daz folders (run after removing Daz Studio / DIM via
 /// Add or Remove Programs). Recursive — these are whole folders. Each step reports
 /// deleted / not found / error; `dry_run` only counts what would be removed.
-#[tauri::command]
+// `(async)`: recursive deletes of whole Daz folders — off the main thread.
+#[tauri::command(async)]
 pub fn uninstall_daz(request: UninstallDazRequest) -> InstallReport {
     let dry = request.dry_run;
     let mut steps: Vec<InstallStep> = Vec::new();
