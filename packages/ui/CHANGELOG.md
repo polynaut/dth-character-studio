@@ -1,5 +1,7 @@
 # @dth/ui
 
+## 0.44.1
+
 ## 0.44.0
 
 ### Minor Changes
