@@ -39,6 +39,7 @@ export { Field } from './components/field.tsx'
 export { NumberField } from './components/number-field.tsx'
 export { RemoveAssetDialog } from './components/remove-asset-dialog.tsx'
 export { KeyedListEditor } from './components/keyed-list-editor.tsx'
+export { MultiSelect } from './components/multi-select.tsx'
 export { LinkedAssetCard } from './components/linked-asset-card.tsx'
 
 // Hooks
