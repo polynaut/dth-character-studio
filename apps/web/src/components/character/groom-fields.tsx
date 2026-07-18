@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { InfoPopup, Input, KeyedListEditor, Label, Switch } from '@dth/ui'
+import { InfoPopup, Label, MultiSelect, Switch } from '@dth/ui'
 
 import * as api from '#/lib/rom/api.ts'
 
@@ -46,11 +46,11 @@ export function GroomFields({
   const [scanned, setScanned] = useState(false)
 
   useEffect(() => {
-    if (!selectedScene) {
-      setWearables([])
-      setScanned(false)
-      return
-    }
+    // Drop the previous scene's scan immediately — judging this scene's list
+    // against another scene's wearables would flash bogus "not found" warnings.
+    setWearables([])
+    setScanned(false)
+    if (!selectedScene) return
     let cancelled = false
     void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
       if (cancelled) return
@@ -73,8 +73,8 @@ export function GroomFields({
     })
 
   const ids = new Set(wearables.map((wearable) => wearable.id))
-  const listed = new Set(nodes.map((groom) => groom.nodeLabel.trim()))
-  const suggestions = wearables
+  const listed = nodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
+  const candidates = wearables
     // Top-level followers only: an item fitted to another wearable (hair base on
     // its cap) rides along with its parent and needs no own entry.
     .filter((wearable) => !ids.has(refKey(wearable.conformTarget)))
@@ -82,16 +82,14 @@ export function GroomFields({
     .filter(
       (wearable, index, arr) => arr.findIndex((other) => other.label === wearable.label) === index,
     )
-    .filter((wearable) => !listed.has(wearable.label))
     .sort(
       (a, b) =>
         Number(HAIRISH.test(b.label)) - Number(HAIRISH.test(a.label)) ||
         a.label.localeCompare(b.label),
     )
+    .map((wearable) => wearable.label)
   const knownLabels = new Set(wearables.map((wearable) => wearable.label))
-  const missing = scanned
-    ? [...listed].filter((label) => label !== '' && !knownLabels.has(label))
-    : []
+  const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
 
   return (
@@ -127,45 +125,22 @@ export function GroomFields({
               here are excluded right before the DTH Exporter runs and restored after —
               unfitted and moved out of the figure, or hidden with the global “Solve hair
               assets by hiding” setting.
-              List the top fitted item (e.g. the hair cap); its children ride along. Enter the
-              label exactly as shown in Daz's Scene pane, or pick from the items found in the
-              scene. A scene with no items listed exports as-is.
+              List the top fitted item (e.g. the hair cap); its children ride along. Pick from
+              the items found in the scene (type to filter) — a label the scan doesn't offer
+              can be typed exactly as in Daz's Scene pane and added. A scene with no items
+              listed exports as-is.
             </InfoPopup>
           </Label>
-          <KeyedListEditor
-            items={nodes}
-            onChange={setNodes}
-            newItem={() => ({ nodeLabel: '' })}
-            addLabel="Add groom item"
-          >
-            {(item, set) => (
-              <Input
-                value={item.nodeLabel}
-                placeholder="dForce Black Tie Cap"
-                onChange={(e) => set({ nodeLabel: e.target.value })}
-              />
-            )}
-          </KeyedListEditor>
-          {suggestions.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">In this scene:</span>
-              {suggestions.map((wearable) => (
-                <button
-                  key={wearable.label}
-                  type="button"
-                  className="rounded-full border px-2 py-0.5 text-xs hover:bg-accent"
-                  onClick={() =>
-                    setNodes([
-                      ...nodes.filter((groom) => groom.nodeLabel.trim() !== ''),
-                      { nodeLabel: wearable.label },
-                    ])
-                  }
-                >
-                  + {wearable.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <MultiSelect
+            values={listed}
+            options={candidates}
+            onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}
+            placeholder="Pick the hair items of this scene…"
+            allowCustom
+            pillWarning={(label) =>
+              scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
+            }
+          />
           {missing.length > 0 && (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
               Not found in “{sceneName}”: <strong>{missing.join(', ')}</strong> — the export

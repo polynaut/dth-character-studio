@@ -656,6 +656,9 @@ function CharacterPage() {
               selectedScene={effectiveScene}
               onSelectScene={setSelectedScene}
             />
+            {/* Groom lists are PER SCENE — living right under the scene cards makes
+                the card-selection ↔ hair-list connection visible while switching. */}
+            <GroomFields character={character} patch={patch} selectedScene={effectiveScene} />
             <HoudiniProjectsField
               projectId={projectId}
               character={character}
@@ -808,9 +811,6 @@ function CharacterPage() {
               {!character.exportPath && 'Set an export folder above to enable this.'}
             </InfoPopup>
           </span>
-        </div>
-        <div className="mt-5">
-          <GroomFields character={character} patch={patch} selectedScene={effectiveScene} />
         </div>
       </section>
 
