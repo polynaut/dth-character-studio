@@ -46,11 +46,11 @@ export function GroomFields({
   const [scanned, setScanned] = useState(false)
 
   useEffect(() => {
-    if (!selectedScene) {
-      setWearables([])
-      setScanned(false)
-      return
-    }
+    // Drop the previous scene's scan immediately — judging this scene's list
+    // against another scene's wearables would flash bogus "not found" warnings.
+    setWearables([])
+    setScanned(false)
+    if (!selectedScene) return
     let cancelled = false
     void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
       if (cancelled) return
