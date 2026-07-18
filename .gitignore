@@ -14,3 +14,6 @@ data/
 # Playwright (e2e) run output
 test-results/
 playwright-report/
+
+# TanStack Router plugin temp output
+.tanstack
