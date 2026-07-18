@@ -1,4 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
@@ -51,6 +58,44 @@ export function SidePanel({
   // toggled one frame after mount (slide in) and immediately on close (slide out).
   const [mounted, setMounted] = useState(open)
   const [shown, setShown] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  const titleId = useId()
+
+  // Focus management: the panel declares role="dialog" + aria-modal, and
+  // aria-modal WITHOUT focus containment actively misleads assistive tech —
+  // so move focus in on open, contain Tab (see onTrapTab), restore the opener
+  // on close.
+  useEffect(() => {
+    if (!(open && mounted)) return
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    panelRef.current?.focus()
+    return () => opener?.focus()
+  }, [open, mounted])
+
+  function onTrapTab(e: ReactKeyboardEvent<HTMLElement>) {
+    if (e.key !== 'Tab') return
+    const panel = panelRef.current
+    if (!panel) return
+    const focusable = Array.from(
+      panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => el.offsetParent !== null)
+    if (focusable.length === 0) {
+      e.preventDefault()
+      return
+    }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const active = document.activeElement
+    if (e.shiftKey && (active === first || active === panel)) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -103,8 +148,12 @@ export function SidePanel({
         }}
       />
       <aside
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={onTrapTab}
         className={cn(
           'absolute inset-y-0 right-0 flex h-full w-full max-w-[50vw] flex-col border-l bg-background shadow-2xl transition-transform duration-300 ease-out',
           shown ? 'translate-x-0' : 'translate-x-full',
@@ -112,7 +161,9 @@ export function SidePanel({
         )}
       >
         <div className="flex items-center justify-between gap-2 border-b p-4">
-          <h2 className="truncate text-lg font-semibold">{title}</h2>
+          <h2 id={titleId} className="truncate text-lg font-semibold">
+            {title}
+          </h2>
           <Button
             variant="ghost"
             size="icon-sm"

@@ -194,7 +194,7 @@ function HomePage() {
                 type="button"
                 title="Remove from recents"
                 onClick={() => void onForget(recent.path)}
-                className="absolute top-2.5 right-2.5 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                className="absolute top-2.5 right-2.5 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] hover:bg-muted hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <Trash2 className="size-4" />
               </button>

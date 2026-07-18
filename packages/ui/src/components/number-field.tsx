@@ -26,6 +26,11 @@ export function NumberField({
       value={draft}
       inputMode="decimal"
       onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        // Enter commits like blur (EditableTitle does the same) — otherwise a
+        // typed value followed by Enter (e.g. inside a dialog) stayed stale.
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
       onBlur={() => {
         const parsed = Number(draft)
         if (!Number.isNaN(parsed)) onCommit(parsed)

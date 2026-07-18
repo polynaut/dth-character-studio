@@ -96,6 +96,15 @@ export function LinkedAssetCard({
               e.stopPropagation()
               onOpen(e as unknown as MouseEvent)
             }}
+            onKeyDown={(e) => {
+              // role="button" gives no native key handling — without this the
+              // span was focusable but Enter/Space did nothing.
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                e.stopPropagation()
+                onOpen(e as unknown as MouseEvent)
+              }
+            }}
             className="absolute right-2 bottom-2 rounded p-1 hover:bg-accent"
           >
             <CornerIcon
