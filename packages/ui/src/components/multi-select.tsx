@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 
 import { cn } from '../cn.ts'
@@ -7,8 +7,14 @@ import { cn } from '../cn.ts'
  * A multi-select combobox: one always-rendered field showing the selected
  * values as removable pills, with an inline text input. Clicking into it opens
  * a full-width list of the remaining options (typing filters); picking one adds
- * it and keeps the list open for the next pick. Backspace on an empty input
- * removes the last pill; Escape (or an outside click) closes the list.
+ * it and keeps the list open for the next pick. Escape (or focus leaving the
+ * field) closes the list.
+ *
+ * Keyboard: Arrow keys walk the list with wrap-around (Home/End/PageUp/PageDown
+ * jump while open), Enter picks. Backspace on an empty input first highlights
+ * the last pill, a second press removes it; ArrowLeft from the input's start
+ * moves focus onto the pills themselves (ArrowLeft/Right to walk them,
+ * Backspace/Delete to remove the focused one).
  *
  * With `allowCustom`, a query that matches no option can itself be added — for
  * lists whose options are best-effort suggestions rather than the full universe.
@@ -40,51 +46,89 @@ export function MultiSelect({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
+  // Backspace on an empty input arms (highlights) the last pill before a second
+  // press actually removes it, so a stray keystroke can't silently drop a value.
+  const [armed, setArmed] = useState(false)
+  // Roving tab stop among the pill remove buttons (reached via ArrowLeft).
+  const [focusedPill, setFocusedPill] = useState(-1)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const pillRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const baseId = useId()
+  const listboxId = `${baseId}-listbox`
+  const optionId = (index: number) => `${baseId}-option-${index}`
 
-  useEffect(() => {
-    if (!open) return
-    const onOutside = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false)
-        setQuery('')
-      }
-    }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
-
+  const trimmed = query.trim()
   const selected = new Set(values)
   const remaining = options.filter((option) => !selected.has(option))
   const filtered =
-    query.trim() === ''
+    trimmed === ''
       ? remaining
-      : remaining.filter((option) => option.toLowerCase().includes(query.trim().toLowerCase()))
+      : remaining.filter((option) => option.toLowerCase().includes(trimmed.toLowerCase()))
   const customCandidate =
     allowCustom &&
-    query.trim() !== '' &&
-    !selected.has(query.trim()) &&
-    !remaining.some((option) => option.toLowerCase() === query.trim().toLowerCase())
-      ? query.trim()
+    trimmed !== '' &&
+    !selected.has(trimmed) &&
+    !remaining.some((option) => option.toLowerCase() === trimmed.toLowerCase())
+      ? trimmed
       : null
   // The rows the keyboard walks: matching options first, the add-custom row last.
   const rows = [...filtered, ...(customCandidate ? [customCandidate] : [])]
   const highlightIndex = Math.min(highlighted, Math.max(rows.length - 1, 0))
 
+  useEffect(() => {
+    if (open) optionRefs.current[highlightIndex]?.scrollIntoView?.({ block: 'nearest' })
+  }, [open, highlightIndex])
+
+  const close = () => {
+    setOpen(false)
+    setQuery('')
+    setArmed(false)
+  }
   const add = (value: string) => {
     onChange([...values, value])
+    // With no query the list only loses the picked row, so keeping the index
+    // lands on the next item; a filtered list changes wholesale — restart at 0.
+    setHighlighted(trimmed === '' ? highlightIndex : 0)
     setQuery('')
-    setHighlighted(0)
+    setArmed(false)
     inputRef.current?.focus()
   }
   const remove = (value: string) => {
     onChange(values.filter((v) => v !== value))
+    setArmed(false)
     inputRef.current?.focus()
+  }
+  const focusPill = (index: number) => {
+    setFocusedPill(index)
+    pillRefs.current[index]?.focus()
+  }
+  /** Remove the pill at `index` from its own keyboard, keeping focus sensible. */
+  const removeFromPill = (index: number) => {
+    const next = values.filter((_, i) => i !== index)
+    onChange(next)
+    if (next.length === 0) {
+      setFocusedPill(-1)
+      inputRef.current?.focus()
+      return
+    }
+    // Focus a SURVIVING node now (the removed one unmounts on re-render):
+    // the previous pill, or — when the first was removed — the old second.
+    pillRefs.current[index > 0 ? index - 1 : 1]?.focus()
+    setFocusedPill(Math.max(index - 1, 0))
   }
 
   return (
-    <div ref={rootRef} className={cn('relative', className)}>
+    <div
+      ref={rootRef}
+      className={cn('relative', className)}
+      onBlur={(event) => {
+        if (rootRef.current?.contains(event.relatedTarget)) return
+        close()
+        setFocusedPill(-1)
+      }}
+    >
       <div
         className={cn(
           'flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-1.5 py-1 text-base shadow-xs transition-[color,box-shadow] md:text-sm dark:bg-input/30',
@@ -96,12 +140,16 @@ export function MultiSelect({
           // select trigger — except on the pills' own controls.
           if (event.target instanceof Element && event.target.closest('[data-pill]')) return
           event.preventDefault()
-          inputRef.current?.focus()
-          setOpen((was) => !was)
+          setHighlighted(0)
+          // A click on an unfocused field only focuses — onFocus already opens;
+          // toggling here too would immediately flip the list closed again.
+          if (document.activeElement === inputRef.current) setOpen((was) => !was)
+          else inputRef.current?.focus()
         }}
       >
-        {values.map((value) => {
+        {values.map((value, index) => {
           const warning = pillWarning?.(value) ?? null
+          const isArmed = armed && index === values.length - 1
           return (
             <span
               key={value}
@@ -110,14 +158,39 @@ export function MultiSelect({
               className={cn(
                 'flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-sm',
                 warning !== null && 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+                isArmed && 'ring-2 ring-ring',
               )}
             >
               {value}
               <button
                 type="button"
                 aria-label={`Remove ${value}`}
-                className="rounded p-0.5 hover:bg-accent"
+                disabled={disabled}
+                tabIndex={index === focusedPill ? 0 : -1}
+                ref={(node) => {
+                  pillRefs.current[index] = node
+                }}
+                className="rounded p-0.5 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                // Keep the click from stealing focus (and blurring the field).
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={() => remove(value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowLeft' && index > 0) {
+                    event.preventDefault()
+                    focusPill(index - 1)
+                  } else if (event.key === 'ArrowRight') {
+                    event.preventDefault()
+                    if (index === values.length - 1) {
+                      setFocusedPill(-1)
+                      inputRef.current?.focus()
+                    } else {
+                      focusPill(index + 1)
+                    }
+                  } else if (event.key === 'Backspace' || event.key === 'Delete') {
+                    event.preventDefault()
+                    removeFromPill(index)
+                  }
+                }}
               >
                 <X className="size-3.5" />
               </button>
@@ -128,6 +201,10 @@ export function MultiSelect({
           ref={inputRef}
           role="combobox"
           aria-expanded={open}
+          aria-controls={open ? listboxId : undefined}
+          aria-activedescendant={open && rows.length > 0 ? optionId(highlightIndex) : undefined}
+          aria-autocomplete="list"
+          autoComplete="off"
           disabled={disabled}
           value={query}
           placeholder={values.length === 0 ? placeholder : undefined}
@@ -135,41 +212,87 @@ export function MultiSelect({
           onChange={(event) => {
             setQuery(event.target.value)
             setHighlighted(0)
+            setArmed(false)
             setOpen(true)
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setFocusedPill(-1)
+            setOpen(true)
+          }}
           onKeyDown={(event) => {
+            const atStart =
+              event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0
+            if (values.length > 0 && atStart) {
+              if (event.key === 'ArrowLeft') {
+                event.preventDefault()
+                focusPill(values.length - 1)
+                return
+              }
+              if (event.key === 'Backspace') {
+                event.preventDefault()
+                if (armed) remove(values[values.length - 1])
+                else setArmed(true)
+                return
+              }
+            }
+            setArmed(false)
             if (event.key === 'ArrowDown') {
               event.preventDefault()
-              setOpen(true)
-              setHighlighted((i) => Math.min(i + 1, rows.length - 1))
+              if (open) setHighlighted(rows.length > 0 ? (highlightIndex + 1) % rows.length : 0)
+              else {
+                setOpen(true)
+                setHighlighted(0)
+              }
             } else if (event.key === 'ArrowUp') {
               event.preventDefault()
-              setHighlighted((i) => Math.max(i - 1, 0))
+              if (open) {
+                setHighlighted(rows.length > 0 ? (highlightIndex + rows.length - 1) % rows.length : 0)
+              } else {
+                setOpen(true)
+                setHighlighted(Math.max(rows.length - 1, 0))
+              }
+            } else if (event.key === 'Home' && open) {
+              event.preventDefault()
+              setHighlighted(0)
+            } else if (event.key === 'End' && open) {
+              event.preventDefault()
+              setHighlighted(Math.max(rows.length - 1, 0))
+            } else if (event.key === 'PageDown' && open) {
+              event.preventDefault()
+              setHighlighted(Math.min(highlightIndex + 10, Math.max(rows.length - 1, 0)))
+            } else if (event.key === 'PageUp' && open) {
+              event.preventDefault()
+              setHighlighted(Math.max(highlightIndex - 10, 0))
             } else if (event.key === 'Enter') {
               event.preventDefault()
-              const row = rows[highlightIndex]
-              if (open && row !== undefined) add(row)
-            } else if (event.key === 'Escape') {
-              setOpen(false)
-              setQuery('')
-            } else if (event.key === 'Backspace' && query === '' && values.length > 0) {
-              remove(values[values.length - 1])
+              if (!open) {
+                setOpen(true)
+                setHighlighted(0)
+              } else if (rows[highlightIndex] !== undefined) {
+                add(rows[highlightIndex])
+              }
+            } else if (event.key === 'Escape' && open) {
+              // Swallow it: an Escape that closed the list must not also close
+              // a surrounding dialog.
+              event.preventDefault()
+              event.stopPropagation()
+              close()
             }
           }}
         />
-        <span className="ml-auto pr-1.5 text-muted-foreground">
+        <span aria-hidden className="ml-auto pr-1.5 text-muted-foreground">
           {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
         </span>
       </div>
       {open && (
         <div
+          id={listboxId}
           role="listbox"
           className="absolute top-full right-0 left-0 z-50 mt-1 max-h-64 overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md"
         >
           {rows.length === 0 && (
             <p className="px-3 py-2 text-sm text-muted-foreground">
-              {remaining.length === 0 && query.trim() === ''
+              {remaining.length === 0 && trimmed === ''
                 ? 'All items selected.'
                 : 'No matching items.'}
             </p>
@@ -177,16 +300,21 @@ export function MultiSelect({
           {rows.map((row, index) => (
             <button
               key={row}
+              id={optionId(index)}
               type="button"
               role="option"
+              tabIndex={-1}
               aria-selected={index === highlightIndex}
+              ref={(node) => {
+                optionRefs.current[index] = node
+              }}
               className={cn(
                 'block w-full cursor-pointer px-3 py-2 text-left text-sm',
                 index === highlightIndex && 'bg-accent text-accent-foreground',
               )}
               onMouseEnter={() => setHighlighted(index)}
-              // mousedown, not click: the field's outside-close and the input blur
-              // must not race the selection away.
+              // mousedown, not click: the field's blur-close must not race the
+              // selection away.
               onMouseDown={(event) => {
                 event.preventDefault()
                 add(row)
@@ -197,12 +325,25 @@ export function MultiSelect({
                   Add “<strong>{row}</strong>”
                 </>
               ) : (
-                row
+                <MatchedOption option={row} query={trimmed} />
               )}
             </button>
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+/** The option label with the matched part of the query set in bold. */
+function MatchedOption({ option, query }: { option: string; query: string }) {
+  const at = query === '' ? -1 : option.toLowerCase().indexOf(query.toLowerCase())
+  if (at < 0) return option
+  return (
+    <>
+      {option.slice(0, at)}
+      <strong className="font-semibold">{option.slice(at, at + query.length)}</strong>
+      {option.slice(at + query.length)}
+    </>
   )
 }

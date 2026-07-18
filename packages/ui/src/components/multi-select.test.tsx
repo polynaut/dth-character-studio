@@ -19,7 +19,21 @@ describe('MultiSelect', () => {
     expect(rows).toEqual(['Apricot', 'Banana', 'Cherry'])
   })
 
-  it('typing filters the list and picking an option adds it', () => {
+  it('a single click into the unfocused field opens the list; the next toggles', () => {
+    const { getByRole, queryByRole } = render(
+      <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,
+    )
+    const field = getByRole('combobox').parentElement as HTMLElement
+    fireEvent.mouseDown(field) // focuses AND opens in one click
+    expect(document.activeElement).toBe(getByRole('combobox'))
+    expect(queryByRole('listbox')).toBeTruthy()
+    fireEvent.mouseDown(field) // already focused: plain toggle
+    expect(queryByRole('listbox')).toBeNull()
+    fireEvent.mouseDown(field)
+    expect(queryByRole('listbox')).toBeTruthy()
+  })
+
+  it('typing filters the list, bolds the match, and picking an option adds it', () => {
     const onChange = vi.fn()
     const { getByRole, getAllByRole } = render(
       <MultiSelect values={['Apple']} options={OPTIONS} onChange={onChange} />,
@@ -28,19 +42,84 @@ describe('MultiSelect', () => {
     fireEvent.change(input, { target: { value: 'ban' } })
     const rows = getAllByRole('option')
     expect(rows.map((el) => el.textContent)).toEqual(['Banana'])
+    expect(rows[0].querySelector('strong')?.textContent).toBe('Ban')
     fireEvent.mouseDown(rows[0])
     expect(onChange).toHaveBeenCalledWith(['Apple', 'Banana'])
   })
 
-  it('the pill × and Backspace-on-empty both remove', () => {
+  it('wires the ARIA combobox pattern: listbox id + active descendant', () => {
+    const { getByRole, getAllByRole } = render(
+      <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,
+    )
+    const input = getByRole('combobox')
+    fireEvent.focus(input)
+    expect(input.getAttribute('aria-controls')).toBe(getByRole('listbox').id)
+    expect(input.getAttribute('aria-activedescendant')).toBe(getAllByRole('option')[0].id)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.getAttribute('aria-activedescendant')).toBe(getAllByRole('option')[1].id)
+  })
+
+  it('arrow keys wrap around; Home/End jump; ArrowUp opens at the last row', () => {
+    const { getByRole, getAllByRole } = render(
+      <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,
+    )
+    const input = getByRole('combobox')
+    const active = () => input.getAttribute('aria-activedescendant')
+    fireEvent.keyDown(input, { key: 'ArrowUp' }) // opens, highlights last
+    const ids = getAllByRole('option').map((el) => el.id)
+    expect(active()).toBe(ids[3])
+    fireEvent.keyDown(input, { key: 'ArrowDown' }) // wraps to first
+    expect(active()).toBe(ids[0])
+    fireEvent.keyDown(input, { key: 'ArrowUp' }) // wraps back to last
+    expect(active()).toBe(ids[3])
+    fireEvent.keyDown(input, { key: 'Home' })
+    expect(active()).toBe(ids[0])
+    fireEvent.keyDown(input, { key: 'End' })
+    expect(active()).toBe(ids[3])
+  })
+
+  it('the pill × removes; Backspace on empty input arms first, removes second', () => {
     const onChange = vi.fn()
     const { getByLabelText, getByRole } = render(
       <MultiSelect values={['Apple', 'Banana']} options={OPTIONS} onChange={onChange} />,
     )
     fireEvent.click(getByLabelText('Remove Apple'))
     expect(onChange).toHaveBeenCalledWith(['Banana'])
-    fireEvent.keyDown(getByRole('combobox'), { key: 'Backspace' })
+    const input = getByRole('combobox')
+    fireEvent.keyDown(input, { key: 'Backspace' }) // arms only
+    expect(onChange).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(input, { key: 'Backspace' })
     expect(onChange).toHaveBeenCalledWith(['Apple'])
+  })
+
+  it('ArrowLeft walks focus into the pills; Delete removes the focused one', () => {
+    const onChange = vi.fn()
+    const { getByRole, getByLabelText } = render(
+      <MultiSelect values={['Apple', 'Banana']} options={OPTIONS} onChange={onChange} />,
+    )
+    fireEvent.keyDown(getByRole('combobox'), { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(getByLabelText('Remove Banana'))
+    fireEvent.keyDown(getByLabelText('Remove Banana'), { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(getByLabelText('Remove Apple'))
+    fireEvent.keyDown(getByLabelText('Remove Apple'), { key: 'Delete' })
+    expect(onChange).toHaveBeenCalledWith(['Banana'])
+  })
+
+  it('Escape closes the list without bubbling to a surrounding dialog', () => {
+    const outer = vi.fn()
+    const { getByRole, queryByRole } = render(
+      <div onKeyDown={outer}>
+        <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />
+      </div>,
+    )
+    const input = getByRole('combobox')
+    fireEvent.focus(input)
+    expect(queryByRole('listbox')).toBeTruthy()
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(queryByRole('listbox')).toBeNull()
+    expect(outer).not.toHaveBeenCalled()
+    fireEvent.keyDown(input, { key: 'Escape' }) // closed: bubbles normally
+    expect(outer).toHaveBeenCalled()
   })
 
   it('allowCustom offers adding an unknown query via Enter', () => {
