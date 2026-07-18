@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { CircleCheck, Download, Plus } from 'lucide-react'
 
-import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@dth/ui'
+import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
   detectDimManifestsFolder,
@@ -1084,7 +1084,10 @@ function SettingsPage() {
             </div>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="flex items-center gap-1 font-medium">
-                Solve hair assets by hiding (experimental)
+                Solve hair assets by hiding
+                <Tag title="Exclusion by hiding does not cover the FBX yet — the default (off) detach mechanism does">
+                  Experimental
+                </Tag>
                 <InfoPopup label="Solve hair assets by hiding — more information">
                   How the ROM/Export scripts keep a character's groom (hair) items out of the
                   export. <strong>Off</strong> (default): the items are unfitted and unparented
