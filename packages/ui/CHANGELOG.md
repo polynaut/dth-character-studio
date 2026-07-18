@@ -1,5 +1,11 @@
 # @dth/ui
 
+## 0.44.0
+
+### Minor Changes
+
+- [#345](https://github.com/polynaut/dth-character-studio/pull/345) [`05d3a78`](https://github.com/polynaut/dth-character-studio/commit/05d3a781f16303b3d929fe287bae5cec383305c1) Thanks [@polynaut](https://github.com/polynaut)! - The groom (hair) settings moved up under the Daz scene cards — the lists are per scene, so selecting a card now visibly swaps the hair list right beneath it. The list itself is a new multi-select combobox (new `MultiSelect` in `@dth/ui`): the selected items sit in one always-rendered field as removable pills, clicking into it lists the scene's remaining wearables (hair-ish first, type to filter), and a label the scan doesn't offer can still be typed and added. A pill whose label isn't found in the scene turns amber with a tooltip. The combobox implements the full ARIA pattern (active-descendant list, wrap-around arrow keys, Home/End, match highlighting) — pills are keyboard-reachable via ArrowLeft, Backspace asks twice before dropping one, and Escape closing the list won't also close a surrounding dialog.
+
 ## 0.43.1
 
 ## 0.43.0
