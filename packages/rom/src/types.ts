@@ -684,8 +684,19 @@ export const CHARACTER_SCHEMA_VERSION = 15
  *       FIGURES: a selected non-figure (a prop, Environment Options, …) is
  *       never accepted as the export root anymore — it auto-selects the real
  *       figure or fails loud (found by deliberate wrong-selection testing).
+ *  30 — The base-ROM tail close-out (closeDanglingMorphKeys, runtime v26) no
+ *       longer double-applies character-owned morphs. It ran a whole-figure
+ *       re-key at the FAC→GEN boundary using each morph's post-ROM value; for a
+ *       morph the character/GP/character-preset drives (e.g. ProportionHeight),
+ *       that stacked the value on top of the ERC-driven contribution, so a -10%
+ *       dialed height read as -20% by frame 327. The runtime now snapshots the
+ *       morph baseline BEFORE the ROM (memorizeBaseMorphs) and leaves any
+ *       character-dialed (non-zero base) morph untouched — only pure ROM poses
+ *       (base ~0, e.g. the final FAC neck pose that v26 was added to fix) still
+ *       close their dangling tail. The DK/GP geograft and mouth close-outs are
+ *       unchanged. Re-run the ROM script in Daz to rebuild affected timelines.
  */
-export const RUNTIME_VERSION = 29
+export const RUNTIME_VERSION = 30
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

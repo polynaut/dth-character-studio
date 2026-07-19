@@ -82,6 +82,11 @@ function ApplyDTHWorkflow(options){
 	/**       *****************************************************/
 	if(options.bIncludeJCM)
 	{
+		// Snapshot the figure's morph baseline BEFORE the ROM keys anything, so the
+		// tail close-out below can tell a character-owned shape morph (non-zero
+		// dial, e.g. ProportionHeight) from a pure ROM pose (base ~0).
+		var baseMorphValues = memorizeBaseMorphs([oNodeRoot]);
+
 		print("Applying default ROMs...");
 		if(!ApplyDefaultROMs(options, oNodeRoot, oNodeMouth))
 			return false;
@@ -96,13 +101,21 @@ function ApplyDTHWorkflow(options){
 		// pose preset only keys inside its own range), so its morph would hold
 		// through every block after — the final FAC neck pose staying on across
 		// the whole GEN range. Close those dangling keys at the first post-base
-		// frame. The mouth node is included: its FAC keys are morph modifiers on
-		// the MOUTH object, which a root-only pass never touches (see
-		// setLinearInterp). NOT a figure fence (DzMemorizeFigureAction) like the
-		// DK path uses — that would overwrite the memorize state
-		// preserveNodeTransforms restores from.
+		// frame. NOT a figure fence (DzMemorizeFigureAction) like the DK path
+		// uses — that would overwrite the memorize state preserveNodeTransforms
+		// restores from.
+		//
+		// The ROOT close-out passes the pre-ROM baseline (memorizeBaseMorphs): the
+		// root figure carries the character's OWN shape/controller morphs, and a
+		// whole-figure re-key double-applied any the preset drives (a -10% dialed
+		// height read as -20% by frame 327). With the baseline, character-owned
+		// morphs are left alone and only ROM poses close. The MOUTH node carries
+		// only FAC mouth morphs (no character shape) — like a geograft, it closes
+		// the plain way (its FAC keys are morph modifiers a root-only pass would
+		// otherwise never touch; see setLinearInterp).
 		var iAfterBase = Scene.getAnimRange().end / Scene.getTimeStep();
-		closeDanglingMorphKeys(oNodeMouth ? [oNodeRoot, oNodeMouth] : [oNodeRoot], iAfterBase);
+		closeDanglingMorphKeys([oNodeRoot], iAfterBase, baseMorphValues);
+		if(oNodeMouth) closeDanglingMorphKeys([oNodeMouth], iAfterBase);
 	}
 
 	/**       *****************************************************/
