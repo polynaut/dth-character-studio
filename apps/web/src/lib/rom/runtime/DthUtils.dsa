@@ -727,7 +727,42 @@ function applyKeyData(oNodeRoot, keyData, overrideFrameIdx){
  * same "next frame back to base" every non-final pose gets from the sawtooth.
  * Morphs already back at their frame-0 value are untouched, so flattened
  * preserved morphs and dials set once at frame 0 stay as they are. */
-function closeDanglingMorphKeys(oNodes, iBoundaryFrame){
+/**
+ * Snapshot every morph's value on the given nodes into a name→value map, taken
+ * BEFORE any ROM preset is loaded (right after ApplyInitialValues). The base-ROM
+ * tail close-out (closeDanglingMorphKeys) uses this to tell a CHARACTER-owned
+ * shape/controller morph — one the character/GP/preset dials to a non-zero base
+ * (e.g. ProportionHeight) — apart from a pure ROM pose (base ~0, e.g. the final
+ * FAC "neck under chin" pose). The former must never be re-keyed at the block
+ * boundary: doing so re-applied its value on top of the ERC-driven contribution,
+ * so a -10% character height read as -20% by frame 327. The latter still gets
+ * its dangling tail closed.
+ */
+function memorizeBaseMorphs(oNodes){
+	var map = {};
+	for(var x = 0; x < oNodes.length; x++){
+		var oNode = oNodes[x];
+		if(!oNode) continue;
+		var oObj = oNode.getObject();
+		if(!oObj) continue;
+		for(var i = 0; i < oObj.getNumModifiers(); i++){
+			var oMod = oObj.getModifier(i);
+			if(!oMod || !oMod.inherits("DzMorph")) continue;
+			var oProp = oMod.getValueControl();
+			if(!oProp) continue;
+			map[oMod.getName()] = oProp.getValue(0);
+		}
+	}
+	return map;
+}
+
+// `baselineValues` (optional): the pre-ROM morph snapshot from memorizeBaseMorphs.
+// When passed (the base-ROM root close-out), a morph the character dialed to a
+// non-zero base is left untouched — only ROM poses (base ~0) get their tail
+// closed. Without it (the DK/GP geograft + mouth close-outs, whose morphs are
+// self-contained ROM assets with no character-driven base) the old getValue(0)
+// behaviour is unchanged.
+function closeDanglingMorphKeys(oNodes, iBoundaryFrame, baselineValues){
 	var timeStep = Scene.getTimeStep();
 	var tBoundary = iBoundaryFrame * timeStep;
 	var iClosed = 0;
@@ -744,7 +779,16 @@ function closeDanglingMorphKeys(oNodes, iBoundaryFrame){
 			var iLastKey = oProp.getNumKeys() - 1;
 			// A key at/past the boundary means the block manages its own tail.
 			if(oProp.getKeyTime(iLastKey) >= tBoundary) continue;
-			var fBaseValue = oProp.getValue(0);
+			// Close BACK to the pre-ROM baseline when we have one — never to a
+			// post-ROM getValue(0), which for a preset-driven controller already
+			// carries the ROM's contribution and so double-applies it.
+			var sKey = oMod.getName();
+			var bHasBaseline = baselineValues && (baselineValues[sKey] !== undefined);
+			var fBaseValue = bHasBaseline ? baselineValues[sKey] : oProp.getValue(0);
+			// A morph the character dialed to a non-zero base is its OWN shape — the
+			// base ROM only borrowed it. Re-keying it here is exactly what doubled
+			// the value; leave character-owned morphs alone, close only ROM poses.
+			if(bHasBaseline && !approx_eq(fBaseValue, 0)) continue;
 			if(approx_eq(oProp.getKeyValue(iLastKey), fBaseValue)) continue;
 			oProp.setValue(tBoundary, fBaseValue);
 			verbose("Closed dangling key:", oProp.getLabel(), "back to", fBaseValue, "at frame", iBoundaryFrame);
