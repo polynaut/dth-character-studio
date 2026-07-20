@@ -1,4 +1,5 @@
 ---
+"@dth/desktop": patch
 ---
 
-CI/docs only: adds an opt-in macOS build to the release workflow (universal .app + .dmg, Developer-ID-signed + notarized). Dormant until the repo variable `ENABLE_MAC_RELEASE=true` and the Apple secrets are set — Windows releases are unchanged. No package changes, so no version bump.
+DTH Character Studio is now also built and published for **macOS** — a universal (Intel + Apple Silicon) `.dmg` / `.app`, Developer-ID-signed and Apple-notarized, published alongside the Windows installer. The auto-updater serves the matching platform from the same `latest.json`. (The Daz DTH Exporter Plugin is still Windows-only, so the far side of the pipeline continues to need Windows.)
