@@ -64,7 +64,7 @@ import type { PresetFrames, RomSection } from '@dth/rom'
 import type { Character, GenesisVersion } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
-  loader: async ({ params }) => {
+  loader: async ({ params, preload }) => {
     const { projectId, characterId: id } = params
     // The route param IS the project's folder — pin it so avatars resolve.
     setActiveProjectDir(projectId)
@@ -99,8 +99,10 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
       // section that consumes it is gated on project.dazProductsEnabled).
       fetchProductScan({ data: { projectId, id } }),
       // The run log the ROM script writes in Daz — re-read on window focus too,
-      // so problems show the moment the user switches back to the studio.
-      fetchRomRunLog({ data: { projectId, id } }),
+      // so problems show the moment the user switches back to the studio. A
+      // hover PRELOAD must not ingest (ingesting deletes the Daz-written file —
+      // hovering a card would race Daz mid-write); it reads the stored copy.
+      fetchRomRunLog({ data: { projectId, id, ingest: !preload } }),
     ])
     // Preset ROM block lengths, measured live from the actual .duf assets. Null
     // (best-effort) when an included asset can't be read — the editor then shows
@@ -299,7 +301,17 @@ function CharacterPage() {
     const previousName = character.name
     const updated = { ...character, name: next }
     patch({ name: next })
-    const saved = await saveCharacter({ data: { projectId, character: updated } })
+    let saved: Character
+    try {
+      saved = await saveCharacter({ data: { projectId, character: updated } })
+    } catch (e) {
+      // Roll the optimistic patch back — the folder/scripts still carry the old
+      // name, so the draft must not keep the failed name as a dirty edit (the
+      // avatar flow rolls back the same way). EditableTitle catches the rethrow
+      // to toast and reset its own text.
+      patch({ name: previousName })
+      throw e
+    }
     draft.settle(saved)
     // Renaming moves the character folder + renames the generated script, so
     // regenerate at the new name and drop the old-named script in the shared folder.
@@ -764,7 +776,7 @@ function CharacterPage() {
         <div className="mt-4 flex items-center gap-3">
           <Switch
             checked={character.exportSceneSubfolders}
-            disabled={!character.exportPath}
+            disabled={!character.exportPath || saving}
             onCheckedChange={(exportSceneSubfolders) =>
               void draft.patchAndRegenerate(
                 { exportSceneSubfolders },
@@ -788,7 +800,7 @@ function CharacterPage() {
         <div className="mt-4 flex items-center gap-3">
           <Switch
             checked={character.exportWithRomScript}
-            disabled={!character.exportPath}
+            disabled={!character.exportPath || saving}
             onCheckedChange={(exportWithRomScript) =>
               void draft.patchAndRegenerate(
                 { exportWithRomScript },

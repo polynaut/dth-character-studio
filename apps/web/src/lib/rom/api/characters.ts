@@ -283,14 +283,20 @@ function unreadableRomRunLog(): RomRunLog {
  * becomes an `unreadable` problem log rather than an exception.
  */
 export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRunLog | null> {
-  const { projectId, id } = charScopeInput.parse(data)
+  // `ingest: false` (the route's hover-PRELOAD path) reads the stored copy only:
+  // ingesting DELETES the Daz-written file, and merely hovering a character card
+  // must never race Daz mid-write — a partial file would parse as "unreadable"
+  // and the original would be gone. Real visits and the focus refetch ingest.
+  const { projectId, id, ingest } = charScopeInput
+    .extend({ ingest: z.boolean().default(true) })
+    .parse(data)
   const location = await locateCharacter(await charactersRoot(projectId), id)
   if (!location) return null
   const folder = location.folderAbs
   const dazPath = joinPath(folder, ROM_RUN_LOG_FILE)
   const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
-    if (await exists(dazPath)) {
+    if (ingest && (await exists(dazPath))) {
       let log: RomRunLog
       try {
         log = parseRomRunLogText(await readTextFile(dazPath))
