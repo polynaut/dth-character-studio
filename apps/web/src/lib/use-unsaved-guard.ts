@@ -27,7 +27,13 @@ export function useUnsavedChangesGuard(dirty: boolean, message: string) {
   useBlocker({
     shouldBlockFn: async () => {
       if (!dirtyRef.current || bypassRef.current) return false
-      const leave = await confirmDialog(message, { title: 'Unsaved changes', kind: 'warning' })
+      // messageRef, not the closure: the blocker registers once, so a changed
+      // message would otherwise show its first-render text here forever (the
+      // window-close path below already reads the ref).
+      const leave = await confirmDialog(messageRef.current, {
+        title: 'Unsaved changes',
+        kind: 'warning',
+      })
       return !leave
     },
     enableBeforeUnload: () => dirtyRef.current && !bypassRef.current,

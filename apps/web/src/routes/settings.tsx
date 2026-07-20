@@ -234,8 +234,13 @@ function NetworkDrivesSection() {
   }
 
   async function forget(drive: string) {
-    await forgetNetworkDrive({ data: { drive } })
-    await load()
+    try {
+      await forgetNetworkDrive({ data: { drive } })
+      await load()
+    } catch (e) {
+      // Previously an unhandled rejection with zero feedback.
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
   }
 
   return (
@@ -371,6 +376,9 @@ function SettingsPage() {
       } else {
         toast.error("Couldn't auto-detect the DIM manifests folder — set it manually.")
       }
+    } catch (e) {
+      // try/finally alone left a thrown probe as an unhandled rejection.
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setDetectingDim(false)
     }

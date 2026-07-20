@@ -29,6 +29,14 @@ export function normalizePathLower(path: string): string {
   return normalizePath(path).toLowerCase()
 }
 
+/** Everything but the last path segment ('/'-joined) — e.g. the folder of a
+ *  `.dcsp` file. THE single copy (was re-implemented in main.tsx + Home). */
+export function dirOf(p: string): string {
+  const norm = p.replace(/[\\/]+$/g, '')
+  const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
+  return idx >= 0 ? norm.slice(0, idx).replace(/\\/g, '/') : norm
+}
+
 /**
  * Normalize a filesystem path for display: rewrite every `/` or `\` to the
  * current OS separator. Backend paths come back with the OS separator, but

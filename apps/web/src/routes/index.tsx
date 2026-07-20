@@ -9,7 +9,7 @@ import { formatDate } from '#/components/overview-controls.tsx'
 import { createProject, fetchRecents, forgetRecent, openProject } from '#/lib/rom/api.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { onMenu, pickDcspPath, pickFolder } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { dirOf, displayPath } from '#/lib/path.ts'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
@@ -21,13 +21,6 @@ export const Route = createFileRoute('/')({
   loader: () => fetchRecents(),
   component: HomePage,
 })
-
-/** Everything but the last path segment ('/'-joined). */
-function dirOf(p: string): string {
-  const norm = p.replace(/[\\/]+$/g, '')
-  const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
-  return idx >= 0 ? norm.slice(0, idx).replace(/\\/g, '/') : norm
-}
 
 /** Suggested project name from a chosen folder (its own name). */
 function folderName(folder: string): string {
