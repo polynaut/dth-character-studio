@@ -176,7 +176,7 @@ const shell = (md, content) => `<!doctype html>
           <a href="index.html">Guide</a>
           <a href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener">GitHub</a>
         </nav>
-        <a class="btn btn-primary btn-compact" href="https://github.com/polynaut/dth-character-studio/releases/latest">Download</a>
+        <a class="btn btn-primary btn-compact" href="../">Download</a>
       </div>
     </header>
     <div class="container guide-layout">
