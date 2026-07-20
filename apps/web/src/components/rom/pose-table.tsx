@@ -201,10 +201,11 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         Bone scale
         <InfoPopup label="Bone scale — more information">
           Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length,
-          Proportion Height). Unreal can't drive bone scale from a morph alone, so the DTH
-          Exporter writes a per-frame <strong>reference-skeleton FBX</strong> for this frame and
-          the studio fills its path into the PoseAsset CSV automatically. Needs an export
-          directory set.
+          Proportion Height). Unreal can't drive bone scale from a morph alone, so when an
+          export directory is set the DTH Exporter writes a per-frame{' '}
+          <strong>reference-skeleton FBX</strong> for the frame and the studio fills its path
+          into the PoseAsset CSV automatically. With no export directory it's simply a no-op —
+          nothing exports, so you handle the reference skeletons yourself.
         </InfoPopup>
       </span>
     ),

@@ -32,12 +32,6 @@ extract the downloaded archives somewhere permanent first.
 
 ## Setup DTH Exporter Plugin
 
-<p align="center">
-  <img width="900" alt="settings general, exporter plugin section" src="screenshots/settings-exporter-plugin.png" />
-  <br>
-  <sub><em>The DTH Exporter Plugin section in Settings → General.</em></sub>
-</p>
-
 Needed for exporting the ROM out of Daz (step 5) — including the studio's automatic
 direct export.
 

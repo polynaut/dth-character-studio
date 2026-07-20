@@ -31,6 +31,9 @@ export interface TauriMockSeed {
   /** What the native file/folder picker (`plugin:dialog|open`) returns — a path
    *  to simulate a pick, or undefined for "cancelled" (the default). */
   dialogPath?: string
+  /** Conformed items a scene's `.duf` reports (`scene_wearables`) — the groom
+   *  picker's suggestions; a listed hair item resolves against these. */
+  sceneWearables?: Array<{ id: string; label: string; conformTarget: string }>
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -222,8 +225,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
             : { path, frames, error: '' }
         })
       case 'scene_wearables':
-        // Groom suggestions are best-effort; the fixture scene has no wearables.
-        return { items: [], error: '' }
+        // Groom suggestions: the seeded wearables (so a listed hair item resolves
+        // instead of flashing "not found"), else empty. Best-effort — never errors.
+        return { items: seed.sceneWearables ?? [], error: '' }
       case 'housekeeping_sweep':
         return { filesDeleted: 0, bytesFreed: 0 }
       case 'unc_for_path':
