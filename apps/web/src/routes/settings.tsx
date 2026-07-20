@@ -211,6 +211,10 @@ function SettingsPage() {
     const folder = settings.dthPosesFolder
     if (!folder) {
       setReleases({ mode: 'none', version: '', releases: [], error: null })
+      // Clear the spinner too: the previous run's `finally` is skipped once its
+      // effect is cancelled, so without this "Looking for DTH releases…" sticks
+      // forever when the folder is cleared mid-inspection.
+      setReleasesLoading(false)
       return
     }
     let cancelled = false
@@ -234,6 +238,8 @@ function SettingsPage() {
     const folder = settings.dthExporterFolder
     if (!folder) {
       setExporter({ mode: 'none', version: '', releases: [], error: null })
+      // Clear the spinner too (see the releases effect above).
+      setExporterLoading(false)
       return
     }
     let cancelled = false

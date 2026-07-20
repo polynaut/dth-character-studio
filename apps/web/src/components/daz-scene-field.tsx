@@ -133,6 +133,7 @@ export function DazSceneField({
   sceneFolderExists,
   defaultSubdir,
   onLinked,
+  onScenesFolderMoved,
   selectedScene,
   onSelectScene,
 }: {
@@ -143,6 +144,10 @@ export function DazSceneField({
   sceneFolderExists: boolean
   defaultSubdir: string
   onLinked: (character: Character) => void
+  /** A scenes-FOLDER move repoints paths but reads the character from DISK, so its
+   *  result must be MERGED into the draft (preserving unsaved edits), never used to
+   *  replace it wholesale like `onLinked` does — see the route's `syncPersisted`. */
+  onScenesFolderMoved: (character: Character) => void
   /** Selectable cards (see LinkedAssetCard): pass the selected scene path and a
    *  setter — a card click selects (only the corner icon opens). Omit both for
    *  the classic click-to-open cards. */
@@ -495,7 +500,10 @@ export function DazSceneField({
       const saved = await moveCharacterScenesFolder({
         data: { projectId, id: character.id, newSubdir: editDir },
       })
-      onLinked(saved)
+      // MERGE the repointed paths into the draft — this `saved` came from DISK and
+      // lacks any unsaved edits, so replacing the draft wholesale (onLinked) would
+      // silently discard them and clear `dirty` so the guard never fires.
+      onScenesFolderMoved(saved)
       setEditDir(null)
       void router.invalidate()
       toast.success('Moved the Daz scenes folder')
