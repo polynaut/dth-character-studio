@@ -37,7 +37,7 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 
 &nbsp;
 
-From here, continue with the [DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)
+From here, continue with the [DazToHue](https://docs.google.com/document/d/1LYXl90FCXPX5KVpru4_T_hCY_XLr9vinR_9zYENPHUw/edit?tab=t.0)
 documentation for the Houdini → Unreal leg.
 
 ---
