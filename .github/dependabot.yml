@@ -1,0 +1,50 @@
+version: 2
+updates:
+  # JS/TS — the pnpm workspace (one lockfile at the root covers all packages).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      js-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Rust — the Tauri shell.
+  - package-ecosystem: "cargo"
+    directory: "/apps/desktop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      rust-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Pinned in Cargo.lock — anything newer breaks brotli 8 via Tauri's
+      # asset compression (docs/devops.md). CI guards this too; ignoring
+      # them here avoids doomed PRs.
+      - dependency-name: "alloc-stdlib"
+      - dependency-name: "alloc-no-stdlib"
+
+  # GitHub Actions — bumps the SHA pins (keeps the "# vN" comments in sync).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns: ["*"]
