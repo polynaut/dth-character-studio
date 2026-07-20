@@ -448,6 +448,16 @@ Press **Save**. Every save regenerates the character's files in one go:
 - **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
   character's folder
 
+Two more scripts appear alongside the ROM one **only when their feature is on**:
+
+- **`Export_<Name>_G9.dsa`** *(optional)* — the standalone direct-export script.
+  It's split out only when an **Export directory** is set **and** *Run the export
+  with the ROM script* is turned off; otherwise the export runs inline at the tail
+  of the ROM script (no separate file).
+- **`Export_Hair_<Name>_G9.dsa`** *(optional)* — generated when the character lists
+  **hair items**: it exports the `_grooms.abc` for Houdini's **DazToHueGroom Import**
+  node (the groom worn, everything else hidden).
+
 &nbsp;
 
 > [!TIP]
