@@ -401,8 +401,10 @@ a:hover {
 
 .section-lead {
   margin-top: 18px;
+  margin-inline: auto;
   max-width: 760px;
   color: var(--fg);
+  text-align: center;
 }
 
 /* Cards */
@@ -522,32 +524,18 @@ a:hover {
   color: var(--fg-bright);
 }
 
-/* About — full-width container like every other section; only the text
-   measure is capped so long lines stay readable. */
+/* The two prose sections (Why, About) center their heading and text on the
+   page axis — same axis as the hero and the card grids below them. */
+
+#why h2,
+#about h2 {
+  text-align: center;
+}
 
 #about p {
-  margin-top: 18px;
+  margin: 18px auto 0;
   max-width: 780px;
-}
-
-.callout {
-  margin-top: 28px;
-  max-width: 780px;
-  border: 1px solid color-mix(in oklab, var(--primary) 35%, var(--border));
-  border-left: 3px solid var(--primary);
-  background: color-mix(in oklab, var(--primary) 6%, var(--card));
-  border-radius: var(--radius);
-  padding: 22px 26px;
-}
-
-.callout h3 {
-  font-size: 1.05rem;
-  font-weight: 800;
-}
-
-.callout p {
-  margin-top: 10px;
-  font-size: 0.95rem;
+  text-align: center;
 }
 
 /* Resources */
