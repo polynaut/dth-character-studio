@@ -409,6 +409,31 @@ a:hover {
   letter-spacing: -0.015em;
 }
 
+/* Screenshot teaser atop the "why" section: the top of the real character page,
+   cropped and fading out so the heading rides up into it. Geometry: the source
+   shot is 2560×2260 — 40% of its height stays fully visible, then it fades to
+   transparent over the next 10%, so the container crops at 50% (aspect-ratio
+   2560/1130) and the mask goes opaque→transparent across the last fifth. */
+.section-teaser {
+  overflow: hidden;
+  border-radius: var(--radius);
+  aspect-ratio: 2560 / 1130;
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+}
+
+.section-teaser img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Pull the heading up into the teaser's faded zone so title and image blend. */
+.section-teaser + h2 {
+  position: relative;
+  margin-top: clamp(-48px, -4vw, -24px);
+}
+
 .section h2 em {
   font-style: normal;
   color: var(--primary);
