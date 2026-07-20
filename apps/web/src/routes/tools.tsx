@@ -23,6 +23,7 @@ import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
+import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { toast } from 'sonner'
 
 import type { DedupReport, InstallReport } from '#/lib/rom/api.ts'
@@ -84,6 +85,9 @@ function ToolsPage() {
   // were silently discarded.
   useUnsavedChangesGuard(dirty, 'You have unsaved settings — leave and lose them?')
 
+  // Save pending edits before an install/scan/dedup, + the shared install runner.
+  const { saveIfDirty, runInstall } = useSettingsActions({ dirty, settings, baseline: initial })
+
   // Saving stores the settings. Tools doesn't touch the active release, so it
   // just persists and re-validates dependent routes.
   async function onSave() {
@@ -102,42 +106,6 @@ function ToolsPage() {
   // Run a scoped install: persist pending edits first, then surface the per-step
   // report. On failure the first errored step's message is toasted verbatim — it
   // carries the "close all apps / restart as administrator" guidance.
-  async function runInstall(
-    install: (args: { data: { dryRun: boolean } }) => Promise<InstallReport>,
-    dryRun: boolean,
-    setBusyState: (value: boolean) => void,
-    setReport: (report: InstallReport | null) => void,
-    onComplete?: () => void,
-    // Runs only after a successful (real, error-free) install — e.g. the DTH
-    // release install re-scans the poses so the app works immediately.
-    afterSuccess?: () => Promise<void> | void,
-  ) {
-    setBusyState(true)
-    setReport(null)
-    try {
-      if (dirty) {
-        await saveSettings({ data: { settings, baseline: initial } })
-        await router.invalidate()
-      }
-      const report = await install({ data: { dryRun } })
-      setReport(report)
-      const firstError = report.steps.find((step) => step.status === 'error')
-      if (firstError) {
-        toast.error(firstError.detail || 'Install failed')
-      } else if (dryRun) {
-        toast.success(`Dry run — would copy ${report.totalFiles} file(s)`)
-      } else {
-        toast.success(`Installed ${report.totalFiles} file(s)`)
-        await afterSuccess?.()
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusyState(false)
-      onComplete?.()
-    }
-  }
-
   // --- Optional tab: asset-folder list editor + read-only scan ---
   function setAssetFolders(folders: Array<string>) {
     setSettings((s) => ({ ...s, dazAssetsFolders: folders }))
@@ -157,10 +125,7 @@ function ToolsPage() {
     setUninstallBusy(true)
     setUninstallReport(null)
     try {
-      if (dirty) {
-        await saveSettings({ data: { settings, baseline: initial } })
-        await router.invalidate()
-      }
+      await saveIfDirty()
       const report = await uninstallDaz({ data: { dryRun } })
       setUninstallReport(report)
       setUninstallConfirm(false)
@@ -180,10 +145,7 @@ function ToolsPage() {
     setAssetsBusy(true)
     setAssetsReport(null)
     try {
-      if (dirty) {
-        await saveSettings({ data: { settings, baseline: initial } })
-        await router.invalidate()
-      }
+      await saveIfDirty()
       const report = await listDazAssets()
       setAssetsReport(report)
       toast.success(`Scanned ${report.steps.length} asset(s)`)
@@ -200,10 +162,7 @@ function ToolsPage() {
     setDedupBusy(true)
     if (dryRun) setDedupReport(null)
     try {
-      if (dirty) {
-        await saveSettings({ data: { settings, baseline: initial } })
-        await router.invalidate()
-      }
+      await saveIfDirty()
       const report = await dedupDazAssets({
         data: { dryRun, keepers: dryRun ? [] : [...keeperOverrides] },
       })
@@ -282,7 +241,17 @@ function ToolsPage() {
         onSave={() => void onSave()}
       />
 
-      <Tabs defaultValue={tab === 'refresh' ? 'refresh' : 'install'} className="max-w-3xl">
+      {/* CONTROLLED by the ?tab search param (not defaultValue) so the native
+          "Refresh assets" menu deep-link switches tabs even when already on
+          /tools — an uncontrolled Tabs ignored the URL change (same route match,
+          no remount). onValueChange keeps the URL in sync when the user clicks. */}
+      <Tabs
+        value={tab === 'refresh' ? 'refresh' : 'install'}
+        onValueChange={(value) =>
+          void router.navigate({ to: '/tools', search: value === 'refresh' ? { tab: 'refresh' } : {} })
+        }
+        className="max-w-3xl"
+      >
         <TabsList>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>

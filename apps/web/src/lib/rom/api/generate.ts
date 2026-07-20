@@ -1,6 +1,9 @@
-import { exists, remove } from '@tauri-apps/plugin-fs'
+import { exists, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
+
+import { normalizePathLower } from '#/lib/path.ts'
+import { withBusyCursor } from '../../busy-cursor.ts'
 
 import {
   activeSceneOverrides,
@@ -50,16 +53,51 @@ interface MeasuredFrames {
   error: string
 }
 
-/** Measure the frame length of each `.duf` via the native command. The result
- *  is parsed through the contract schema (not a bare cast), so a Rust-side
- *  shape change throws HERE instead of desyncing frame numbers downstream. */
+/** Measured `.duf` frame counts, keyed on `path|<mtime>:<size>`. A `.duf`'s frame
+ *  count is deterministic per file version, so this spares re-parsing tens of MB of
+ *  DSON JSON on every hover-preload / generate. Self-invalidating: a replaced `.duf`
+ *  (a new DTH release) has a fresh mtime:size, so a stale entry is never served.
+ *  Only successful measures are cached (an error may be a transient locked file). */
+const measuredFramesCache = new Map<string, MeasuredFrames>()
+
+/** Measure the frame length of each `.duf` via the native command (through a cheap
+ *  mtime|size cache). The native result is parsed through the contract schema (not a
+ *  bare cast), so a Rust-side shape change throws HERE instead of desyncing frames. */
 async function measureFrames(paths: Array<string>): Promise<Map<string, MeasuredFrames>> {
   const unique = [...new Set(paths.filter(Boolean))]
   if (unique.length === 0) return new Map()
-  const results = z
-    .array(poseAssetFramesSchema)
-    .parse(await invoke('pose_asset_frames', { paths: unique }))
-  return new Map(results.map((r) => [r.path, { frames: r.frames, error: r.error }]))
+  const out = new Map<string, MeasuredFrames>()
+  const stamps = new Map<string, string>()
+  const need: Array<string> = []
+  // Cheap revalidation (one stat per path) gates the expensive native parse.
+  await Promise.all(
+    unique.map(async (path) => {
+      let stamp = ''
+      try {
+        const info = await stat(path)
+        const mtime = info.mtime?.getTime()
+        if (mtime !== undefined) stamp = `${mtime}:${info.size}`
+      } catch {
+        // unstattable → force a fresh measure so it errors meaningfully downstream
+      }
+      stamps.set(path, stamp)
+      const cached = stamp ? measuredFramesCache.get(`${path}|${stamp}`) : undefined
+      if (cached) out.set(path, cached)
+      else need.push(path)
+    }),
+  )
+  if (need.length > 0) {
+    const results = z
+      .array(poseAssetFramesSchema)
+      .parse(await invoke('pose_asset_frames', { paths: need }))
+    for (const r of results) {
+      const measured = { frames: r.frames, error: r.error }
+      out.set(r.path, measured)
+      const stamp = stamps.get(r.path)
+      if (stamp && !r.error) measuredFramesCache.set(`${r.path}|${stamp}`, measured)
+    }
+  }
+  return out
 }
 
 /** The fitted (conformed) items of a scene `.duf` — the groom-suggestion source
@@ -156,7 +194,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const writeHoudini = targets?.houdini ?? true
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
-  const character = await storage.getCharacter(lib, id)
+  // Resolve the character's location ONCE (one library scan) and reuse it for the
+  // read, the output folder, and the generated-version write below — those three
+  // storage calls used to each run their own full scan (O(N) per save; O(N²) over
+  // a Refresh-assets sweep).
+  const location = await storage.getCharacterPath(lib, id)
+  if (!location) throw new Error(`Character ${id} not found`)
+  const character = await storage.getCharacter(lib, id, location.definitionAbs)
   if (!character) throw new Error(`Character ${id} not found`)
   // Exact ROM paths from the active release's pose scan; {} when the folder is
   // unavailable — the script then falls back to DthOptions resolution.
@@ -168,7 +212,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // The character's own folder holds the canonical PoseAsset CSV. Its absolute
   // path is baked into the generated script so the script can move the CSV into
   // the resolved export dir (scene subfolder included) when it runs in Daz.
-  const outDir = await storage.getCharacterFolder(lib, id)
+  const outDir = await storage.getCharacterFolder(lib, id, location.folderAbs)
   // Stamp the generating studio version into the script header for traceability.
   const versioned = { ...character, studioVersion: await storage.studioVersion() }
   // The active DTH release selects the PoseAsset CSV era/variant (the Daz scripts
@@ -233,7 +277,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       ...overrideCsvNames(character.name).filter((name) => !writtenHoudini.includes(name)),
     ])
     // Record which DTH release the CSV was generated for (its era drives staleness).
-    await storage.setGeneratedDthVersion(lib, id, activeRelease)
+    await storage.setGeneratedDthVersion(lib, id, activeRelease, location.definitionAbs)
   }
 
   // The PoseAsset CSV is delivered to the export dir by the generated Daz script
@@ -291,7 +335,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           project.name,
           previousName,
         )
-        if (oldCharDir !== charDir && (await exists(oldCharDir))) {
+        // Case-only rename (kira → Kira): the two paths differ as strings but are
+        // the SAME physical dir on Windows, so a case-sensitive `!==` would delete
+        // the folder we just wrote the new scripts into. Compare case-insensitively.
+        if (
+          normalizePathLower(oldCharDir) !== normalizePathLower(charDir) &&
+          (await exists(oldCharDir))
+        ) {
           await remove(oldCharDir, { recursive: true })
         }
       }
@@ -352,7 +402,13 @@ export interface RefreshSummary {
  * Per-character failures are collected, not thrown, so one bad character can't
  * abort the sweep.
  */
-export async function refreshAllAssets(): Promise<RefreshSummary> {
+export function refreshAllAssets(): Promise<RefreshSummary> {
+  // A full refresh regenerates every stale character across every known
+  // project — minutes on large libraries; show the working cursor throughout.
+  return withBusyCursor(refreshAllAssetsInner())
+}
+
+async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   const settings = await storage.getSettings()
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
   const catalog = await fetchPoseAssets()

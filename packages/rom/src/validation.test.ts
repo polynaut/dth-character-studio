@@ -104,6 +104,20 @@ describe('romValidationErrors', () => {
     expect(romValidationErrors(s)).toEqual([])
   })
 
+  it('flags a cross-scope collision — a centre `Smile_l` and a left `Smile` both resolve to Smile_l', () => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.JCM.enabled = true
+    s.JCM.mode = 'custom'
+    s.JCM.groups = [
+      { ...group([pose('Smile_l', ['head_bs_SmileL'])]), id: 'gc', suffix: 'centre' },
+      { ...group([pose('Smile', ['head_bs_Smile'])]), id: 'gl', suffix: 'left' },
+    ]
+    const errs = romValidationErrors(s)
+    expect(errs).toHaveLength(1)
+    expect(errs[0].message).toMatch(/Smile_l/)
+  })
+
   it('never errors on preset sections (nothing to fill in)', () => {
     const s = defaultSections()
     for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false

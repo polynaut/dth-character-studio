@@ -166,6 +166,15 @@ describe('project manifest (.dcsp)', () => {
     expect((await storage.readManifest('/games/Evil')).charactersSubdir).toBe('assets/characters')
   })
 
+  it('throws on a corrupt (unparseable) .dcsp instead of silently returning defaults', async () => {
+    // A corrupt manifest must NOT read back as a fresh default project — that
+    // would let the next save overwrite the real charactersSubdir/flags, and make
+    // fetchProject render a fake empty project instead of surfacing the problem.
+    const dcsp = await storage.createProjectManifest('/games/Corrupt', 'Corrupt')
+    files.set(norm(dcsp), '{ this is not valid json ')
+    await expect(storage.readManifest('/games/Corrupt')).rejects.toThrow(/unreadable or corrupt/i)
+  })
+
   it('writeManifest reuses the existing .dcsp file name on rename', async () => {
     await storage.createProjectManifest('/games/Nova', 'Nova')
     const m = await storage.readManifest('/games/Nova')
@@ -227,12 +236,13 @@ describe('moveCharactersRoot', () => {
     seedChar('/games/Nova', 'Hero')
 
     const moved = await storage.moveCharactersRoot('/games/Nova', '/games/Nova/assets/characters')
-    expect(moved).toBe(1)
+    expect(moved.moved).toBe(1)
+    expect(moved.repointFailures).toEqual([])
     expect(files.has('/games/Nova/assets/characters/Hero/Hero.json')).toBe(true)
     expect(files.has('/games/Nova/Hero/Hero.json')).toBe(false)
 
     const back = await storage.moveCharactersRoot('/games/Nova/assets/characters', '/games/Nova')
-    expect(back).toBe(1)
+    expect(back.moved).toBe(1)
     expect(files.has('/games/Nova/Hero/Hero.json')).toBe(true)
     expect(files.has('/games/Nova/assets/characters/Hero/Hero.json')).toBe(false)
   })

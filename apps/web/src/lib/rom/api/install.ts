@@ -1,6 +1,7 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { withBusyCursor } from '../../busy-cursor.ts'
 import * as storage from '../storage'
 import { dataPath } from '../storage'
 import { dedupReportSchema, installReportSchema } from './native-types.ts'
@@ -30,6 +31,12 @@ export type {
   InstallStep,
 }
 
+/** Every native command in this module is a potentially long job (release/
+ *  plugin/asset installs, library scans, dedup, uninstall) — run them all
+ *  under the global working cursor. */
+const invoke = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
+  withBusyCursor(tauriInvoke<T>(cmd, args))
+
 // App-global settings (settings.json) + the Tools-page install features: the DTH
 // release / Exporter plugin installs, the user's own Daz/Houdini content installs,
 // asset dedup, and the Daz uninstall cleanup.
@@ -46,9 +53,10 @@ export async function fetchAppVersion(): Promise<string> {
 }
 
 /**
- * The app's internal per-user data folder — where settings.json, projects.json
- * and avatar images live. Surfaced in Settings so the user can find (and back
- * up) the app's state.
+ * The app's internal per-user data folder — where settings.json, recents.json and
+ * network-drives.json live (projects.json + global avatars were migrated away to
+ * the `.dcsp` model; avatars are now per-project under `.dcsmeta/images`).
+ * Surfaced in Settings so the user can find (and back up) the app's machine state.
  */
 export async function fetchAppDataFolder(): Promise<string> {
   return dataPath()
@@ -204,7 +212,11 @@ export async function setAcceptedConflicts(
     else set.add(r)
   }
   const acceptedConflicts = [...set].sort()
-  await storage.saveSettings({ ...s, acceptedConflicts })
+  // Pass `s` as the baseline so this writes ONLY `acceptedConflicts` (field-level
+  // merge, re-reading every other field from disk) — a plain full-object write
+  // would clobber a Settings save made in another window between the read above
+  // and here.
+  await storage.saveSettings({ ...s, acceptedConflicts }, s)
   return acceptedConflicts
 }
 
@@ -233,9 +245,13 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
  *  library root, common Documents/Public spots, APPDATA DAZ 3D + Start Menu). */
 export async function defaultDazUninstallFolders(): Promise<Array<string>> {
   const s = await storage.getSettings()
-  return invoke<Array<string>>('default_daz_uninstall_folders', {
+  // Parse the native return through zod rather than a bare `invoke<T>()` cast:
+  // this list pre-fills the danger-zone RECURSIVE-DELETE targets, so a wrong shape
+  // must fail loud here, not feed junk into a delete.
+  const raw = await invoke('default_daz_uninstall_folders', {
     request: { dazLibFolder: s.dazLibraryFolder.trim() },
   })
+  return z.array(z.string()).parse(raw)
 }
 
 /** DANGER: recursively delete the configured leftover Daz folders (run after

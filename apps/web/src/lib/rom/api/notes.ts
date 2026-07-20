@@ -197,6 +197,25 @@ export async function gcNoteMedia(
 
 /** Extensions the preview can inline as an <img> (everything else links). */
 const NOTE_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'avif'])
+
+/**
+ * Extensions `openNoteMedia` will hand to the OS default app. A strict ALLOWLIST
+ * of passive media/document types — NOT the global `shell.open` regex, which (for
+ * the legit "open the generated ROM script" flow) also allows `.dsa`, and a `.dsa`
+ * opens IN Daz Studio, which EXECUTES it. A hostile shared project could carry a
+ * `.dcsmeta/media/x.dsa` plus a notes link `[readme](media://x.dsa)`; clicking it
+ * would run attacker DzScript. Anything not on this list is refused (the file
+ * still lives on disk for the user to open deliberately from Explorer).
+ */
+const OPENABLE_MEDIA_EXTS = new Set([
+  ...NOTE_IMAGE_EXTS,
+  // video
+  'mp4', 'webm', 'mov', 'avi', 'mkv',
+  // audio
+  'mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac',
+  // documents / text
+  'pdf', 'txt', 'md', 'csv', 'json',
+])
 const NOTE_IMAGE_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -273,6 +292,15 @@ export async function resolveNoteMedia({ data }: { data: unknown }): Promise<str
 /** Open a stored media file with its default app (non-image media links). */
 export async function openNoteMedia({ data }: { data: unknown }): Promise<void> {
   const { projectId, fileName } = mediaRefInput.parse(data)
+  // Refuse anything outside the passive-media allowlist — notably `.dsa`, which
+  // the global shell scope permits but which EXECUTES in Daz Studio (a hostile
+  // shared project's note attachment must not be one click from running).
+  const ext = (fileName.split('.').pop() ?? '').toLowerCase()
+  if (!OPENABLE_MEDIA_EXTS.has(ext)) {
+    throw new Error(
+      `Can't open “${fileName}” from the app for safety — reveal it in your file manager to open it yourself.`,
+    )
+  }
   const path = await mediaPath(projectId, fileName)
   if (!(await exists(path))) throw new Error('The media file is missing.')
   await shellOpen(path)

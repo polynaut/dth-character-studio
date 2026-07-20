@@ -169,7 +169,7 @@ const shell = (md, content) => `<!doctype html>
   <body class="guide-body">
     <header class="topbar shown">
       <div class="container topbar-inner">
-        <a class="topbar-brand" href="../">
+        <a class="topbar-brand" href="index.html">
           <img src="../assets/logo-192.png" alt="" width="26" height="26" />
           <span>DTH Character Studio</span>
         </a>
@@ -203,10 +203,19 @@ ${pager(md)}
 </html>
 `
 
+/** The markdown files end in their own prev/next line ("[← …](…) · [Next: …")
+ *  for the GitHub rendering — the site has the pager cards instead, so that
+ *  trailing nav line is dropped here (the .md files keep it). */
+function stripMdFooterNav(md) {
+  const lines = md.trimEnd().split('\n')
+  if (/^\[← .*\)$/.test(lines.at(-1))) lines.pop()
+  return lines.join('\n')
+}
+
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 for (const md of pages) {
-  const html = pageRenderer().parse(readFileSync(join(SRC, md), 'utf8'))
+  const html = pageRenderer().parse(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8')))
   writeFileSync(join(OUT, htmlName(md)), shell(md, html))
 }
 cpSync(join(SRC, 'screenshots'), join(OUT, 'screenshots'), { recursive: true })

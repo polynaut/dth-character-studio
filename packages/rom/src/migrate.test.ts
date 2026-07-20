@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { migrateCharacterData, normalizeLegacyCharacter } from './migrate'
-import { CHARACTER_SCHEMA_VERSION, characterSchema, jcmMorphModForRuntime } from './types'
+import {
+  CHARACTER_SCHEMA_VERSION,
+  characterSchema,
+  jcmMorphModForRuntime,
+  romGroupSchema,
+} from './types'
 
 describe('migrateCharacterData — non-object input', () => {
   it('flows into a clean zod failure instead of a TypeError in the normalizer', () => {
@@ -46,14 +51,38 @@ describe('migrateCharacterData — pre-versioning normalization', () => {
     const data = migrateCharacterData({ groups: [{ section: 'JCM', label: 'mine' }] })
     expect(data.sections.JCM.enabled).toBe(true)
     expect(data.sections.JCM.mode).toBe('custom')
-    expect(data.sections.JCM.groups).toEqual([{ label: 'mine' }])
+    // A stable id is minted during the fold — `romGroupSchema.id` has no zod
+    // default, so a folded group lacking one would fail the whole character
+    // parse ("unreadable definition").
+    expect(data.sections.JCM.groups).toHaveLength(1)
+    expect(data.sections.JCM.groups[0].label).toBe('mine')
+    expect(typeof data.sections.JCM.groups[0].id).toBe('string')
     expect(data.groups).toBeUndefined()
     expect(data.options).toBeUndefined()
   })
 
+  it('folds legacy poses with minted ids so the folded group parses through the schema', () => {
+    const data = migrateCharacterData({
+      groups: [
+        {
+          section: 'MISC',
+          label: 'g',
+          poses: [{ name: 'Pose', morphs: [{ node: 'Genesis9', prop: 'body_bs_A', value: 1 }] }],
+        },
+      ],
+    })
+    const group = data.sections.MISC.groups[0]
+    expect(typeof group.poses[0].id).toBe('string')
+    // `romGroupSchema.id` / `romPoseSchema.id` have no zod default, so before the
+    // fix this folded group failed to parse ("unreadable definition").
+    expect(romGroupSchema.safeParse(group).success).toBe(true)
+  })
+
   it('routes an unknown section to MISC', () => {
     const data = migrateCharacterData({ groups: [{ section: 'NOPE', label: 'x' }] })
-    expect(data.sections.MISC.groups).toEqual([{ label: 'x' }])
+    expect(data.sections.MISC.groups).toHaveLength(1)
+    expect(data.sections.MISC.groups[0].label).toBe('x')
+    expect(typeof data.sections.MISC.groups[0].id).toBe('string')
   })
 })
 
@@ -92,6 +121,26 @@ describe('migrateCharacterData — version handling', () => {
     const once = migrateCharacterData({ groups: [{ section: 'FAC', label: 'a' }], resetGPBeforeApplying: true })
     const twice = migrateCharacterData(structuredClone(once))
     expect(twice).toEqual(once)
+  })
+
+  it('does not hang on a corrupt hugely-negative schemaVersion (clamped to 1)', () => {
+    // Without the clamp, `for (v = from+1; v <= CURRENT; v++)` from -9e15 spins
+    // ~9 quadrillion times and hangs the app at project open (migration runs on
+    // every read). The clamp makes this return promptly and run every step.
+    const started = performance.now()
+    const data = migrateCharacterData({ sections: {}, schemaVersion: -9_000_000_000_000_000 })
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(typeof data).toBe('object')
+  })
+
+  it('treats a fractional or above-current schemaVersion as "no steps to run"', () => {
+    // A fractional version must not silently skip integer steps between floor+1
+    // and CURRENT; both fractional and above-current collapse to running nothing
+    // rather than mis-stepping.
+    expect(() => migrateCharacterData({ sections: {}, schemaVersion: 9.5 })).not.toThrow()
+    expect(() =>
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 5 }),
+    ).not.toThrow()
   })
 })
 

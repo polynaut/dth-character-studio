@@ -50,6 +50,7 @@ import { StorageLocation } from '#/components/storage-location.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
 import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
+import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
   applySceneOverride,
@@ -66,8 +67,10 @@ import type { Character, GenesisVersion } from '@dth/rom'
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params, preload }) => {
     const { projectId, characterId: id } = params
-    // The route param IS the project's folder — pin it so avatars resolve.
-    setActiveProjectDir(projectId)
+    // The route param IS the project's folder — pin it so avatars resolve. NOT on
+    // a hover preload though: that mutates window-global state (avatar resolution)
+    // for a navigation that may never happen.
+    if (!preload) setActiveProjectDir(projectId)
     const character = await fetchCharacter({ data: { projectId, id } })
     if (!character) throw notFound()
     // The Daz scenes folder = the directory holding the primary scene. Tracking
@@ -204,6 +207,22 @@ function CharacterPage() {
     },
   })
   const { character, dirty, saving, patch } = draft
+  const confirm = useConfirm()
+
+  // Discard throws away every unsaved edit and can't be undone — unlike leaving the
+  // page, which already asks. Confirm before wiping non-trivial pending changes.
+  async function onDiscard() {
+    if (
+      dirty &&
+      !(await confirm('Discard all unsaved changes to this character?', {
+        title: 'Discard changes',
+        confirmLabel: 'Discard',
+      }))
+    ) {
+      return
+    }
+    draft.discard()
+  }
   // Preset ROM block lengths, re-measured from the .duf assets whenever the
   // preset/custom selections change (kept from the last good measure during a
   // re-measure; null only when an included asset can't be read).
@@ -351,6 +370,12 @@ function CharacterPage() {
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button.
   async function onRenameCharacter(next: string) {
+    // An inline rename persists + regenerates immediately from the WHOLE draft, so
+    // it must run the same save-blocking checks — otherwise a rename would commit
+    // (and bake into scripts) an invalid unsaved ROM edit that Save itself refuses.
+    // Also single-flight against an in-progress save so the two can't interleave.
+    if (draft.saving) throw new Error('Still saving the previous change — try again in a moment.')
+    if (!draft.validate()) throw new Error('Fix the highlighted fields before renaming.')
     const previousName = character.name
     const updated = { ...character, name: next }
     patch({ name: next })
@@ -384,6 +409,20 @@ function CharacterPage() {
     draft.syncPersisted({ scenePath: moved.scenePath })
   }
 
+  // Moving the Daz SCENES folder repoints every in-folder scene path but reads the
+  // character from disk (no unsaved edits). MERGE only those path fields into the
+  // draft + baseline via syncPersisted — using settle here would discard unsaved
+  // ROM edits AND clear `dirty`, so the unsaved-changes guard would never fire.
+  function onScenesFolderMoved(moved: Character) {
+    draft.syncPersisted({
+      scenePath: moved.scenePath,
+      extraScenes: moved.extraScenes,
+      imageScene: moved.imageScene,
+      groomScenes: moved.groomScenes,
+      sceneOverrides: moved.sceneOverrides,
+    })
+  }
+
   // --- Special operations (delete) ---
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -408,9 +447,9 @@ function CharacterPage() {
   // user can still browse elsewhere; this is only where the dialog opens.
   async function defaultExportDir(): Promise<string | undefined> {
     if (character.exportPath.trim()) return character.exportPath
-    const defAbs = location?.definitionAbs
-    if (!defAbs) return undefined
-    const charDir = normalizePath(defAbs).replace(/\/[^/]*$/, '')
+    const definitionAbs = location?.definitionAbs
+    if (!definitionAbs) return undefined
+    const charDir = normalizePath(definitionAbs).replace(/\/[^/]*$/, '')
     const houSub = project?.houdiniSubdir?.trim()
     if (houSub) {
       const houDir = `${charDir}/${houSub}`
@@ -577,7 +616,7 @@ function CharacterPage() {
             box so the scale below anchors on that line). They ride the sticky
             header, so they stay reachable as the form scrolls. */}
         <div className="actions-scroll ml-auto flex shrink-0 gap-2 mb-6">
-          <Button variant="outline" onClick={draft.discard} disabled={saving || !dirty}>
+          <Button variant="outline" onClick={() => void onDiscard()} disabled={saving || !dirty}>
             <Undo2 /> Discard
           </Button>
           <Button
@@ -633,7 +672,7 @@ function CharacterPage() {
         </section>
       )}
 
-      <div className={activeTab !== 'character' ? 'hidden' : undefined}>
+      <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         <div className="flex flex-wrap gap-x-12 gap-y-5">
           <div className="flex flex-col gap-5 pt-2">
@@ -743,6 +782,7 @@ function CharacterPage() {
               sceneFolderExists={sceneFolderExists}
               defaultSubdir={project?.dazSubdir ?? 'daz3d'}
               onLinked={onSceneLinked}
+              onScenesFolderMoved={onScenesFolderMoved}
               selectedScene={effectiveScene}
               onSelectScene={setSelectedScene}
             />
@@ -813,7 +853,7 @@ function CharacterPage() {
         </div>
       )}
 
-      <div className={activeTab !== 'character' ? 'hidden' : undefined}>
+      <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
           Export directory

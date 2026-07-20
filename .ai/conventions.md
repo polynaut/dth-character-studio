@@ -33,6 +33,11 @@ the reference.
   amplified everywhere users read.
 - Docs/CI-only PRs satisfy the gate with an **empty** changeset
   (`pnpm changeset --empty`).
+- A changeset may name several packages, but **identical text is written into
+  every named CHANGELOG** — `pnpm version-packages` runs
+  `scripts/dedupe-changelogs.mjs` afterwards, which drops duplicated entries
+  (priority: desktop → web → rom → ui; the first keeps it). Entries that
+  genuinely differ per package all survive.
 - Dependabot PRs are exempt — which means product-relevant dependency bumps never
   release themselves. The `/dep-release` skill (`.claude/skills/dep-release`)
   finds and ships them.
@@ -55,12 +60,16 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 4. Steps run pre-zod on raw objects, must be idempotent, and guard on
    `=== undefined`.
 5. A new field carrying a **scene path** (or any inside-the-character-folder
-   path) must join every repoint site, or renames/moves silently orphan it —
-   **grep `groomScenes` to find them all**: `saveCharacter`'s rename repoint +
-   `moveCharactersRoot` (`apps/web/src/lib/rom/storage/characters.ts`),
-   `moveScenesFolder` (`apps/web/src/lib/rom/api/characters.ts`), and the
-   prefill field list `romFields` (same file). `sceneOverrides` and `groomScenes`
-   are the existing examples.
+   path) must join the repoint helper, or renames/moves silently orphan it. The
+   folder-repoint sites are now unified in one place —
+   **`repointCharacterPaths`** (`apps/web/src/lib/rom/storage/characters.ts`),
+   consumed by `saveCharacter`'s rename, `moveCharacter`, AND `moveCharactersRoot`
+   (add the field to that helper). Still separate: `moveScenesFolder`
+   (`apps/web/src/lib/rom/api/characters.ts`) and the prefill field list
+   `romFields` (same file). `sceneOverrides` and `groomScenes` are the existing
+   examples — grep them to find every site. (Regression fixed: `moveCharacter`
+   used to repoint only `scenePath`, orphaning extra scenes/grooms/overrides on a
+   folder move.)
 
 ## FFI (Rust ↔ TS) change ritual
 

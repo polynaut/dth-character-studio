@@ -190,6 +190,12 @@
   color: var(--muted);
 }
 
+/* Screenshot paragraphs (image + <sub> caption): breathing room before the
+   following text picks up again. */
+.guide-content p[align='center'] {
+  margin-block: 28px 36px;
+}
+
 .guide-content code {
   padding: 0.12em 0.38em;
   background: var(--bg-raised);
@@ -276,8 +282,12 @@
   border: 0;
 }
 
+/* The expanded body sits one shade darker than the summary bar (but still
+   off the page background), so open accordions read as an inset area. */
 .guide-content details > table {
-  padding: 4px 16px 12px;
+  padding: 10px 16px 14px;
+  background: color-mix(in oklab, var(--bg-raised) 25%, var(--bg));
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 /* GitHub-style alerts (> [!NOTE] / [!TIP] / …). */

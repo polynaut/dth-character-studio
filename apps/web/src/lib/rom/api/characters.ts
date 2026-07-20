@@ -1,6 +1,8 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
+import { withBusyCursor } from '../../busy-cursor.ts'
+
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
@@ -301,10 +303,19 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
   const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
     if (ingest && (await exists(dazPath))) {
+      const text = await readTextFile(dazPath)
       let log: RomRunLog
       try {
-        log = parseRomRunLogText(await readTextFile(dazPath))
+        log = parseRomRunLogText(text)
       } catch {
+        // Parse failed — this can be a PARTIAL mid-write (a focus refetch can land
+        // while Daz is still writing the file), not a genuinely corrupt log. Only
+        // treat it as unreadable (store + delete) if the file is STABLE — identical
+        // on a second read. If it changed, Daz is still writing: throw to fall back
+        // to the stored copy and let the next refetch ingest the finished file,
+        // instead of deleting a log Daz is about to complete.
+        const stable = (await exists(dazPath)) && (await readTextFile(dazPath)) === text
+        if (!stable) throw new Error('run log still being written')
         log = unreadableRomRunLog()
       }
       await writeTextFile(storePath, JSON.stringify(log, null, 2))
@@ -532,7 +543,7 @@ export async function moveCharacter({
 }): Promise<{ location: storage.CharacterLocation; character: Character }> {
   const { projectId, id, relPath } = moveInput.parse(data)
   invalidateCharacterLocations()
-  return storage.moveCharacter(await charactersRoot(projectId), id, relPath)
+  return withBusyCursor(storage.moveCharacter(await charactersRoot(projectId), id, relPath))
 }
 
 const moveScenesFolderInput = z.object({
@@ -570,7 +581,7 @@ export async function moveCharacterScenesFolder({
   if (!rel) throw new Error('Enter a subfolder name.')
   const newDir = `${charFolder}/${rel}`
   if (norm(newDir).toLowerCase() === oldDir.toLowerCase()) return character
-  await storage.moveFolder(oldDir, newDir)
+  await withBusyCursor(storage.moveFolder(oldDir, newDir))
   // Everything that lived under the old folder travels with the rename.
   const repoint = (p: string) => {
     const n = norm(p)

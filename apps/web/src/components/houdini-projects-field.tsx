@@ -167,7 +167,10 @@ export function HoudiniProjectsField({
   // Houdini projects are linked in place — store each `.hip` path as-is, skipping
   // any already linked. Shared by the Browse button and OS drag-and-drop.
   async function addProjects(paths: Array<string>) {
-    const fresh = paths.filter((p) => !character.houdiniProjects.includes(p))
+    // De-dupe case-insensitively on the normalised path (Windows): dropping
+    // `d:/x.hip` after `D:\x.hip` was picked must not link the same project twice.
+    const linked = new Set(character.houdiniProjects.map((p) => normalizePath(p).toLowerCase()))
+    const fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
     if (fresh.length === 0) return
     setBusy(true)
     setError('')
@@ -237,9 +240,9 @@ export function HoudiniProjectsField({
       {hasProjects && <p className="mb-2 text-xs">{projectDirChip}</p>}
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
-          {projects.map((hip, i) => (
+          {projects.map((hip) => (
             <HoudiniCard
-              key={`${hip}-${i}`}
+              key={hip}
               hipPath={hip}
               charFolderAbs={charFolder}
               avatarSrc={placeholderSrc}

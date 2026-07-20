@@ -94,7 +94,7 @@ export function LinkedAssetCard({
             aria-label={openTitle}
             onClick={(e) => {
               e.stopPropagation()
-              onOpen(e as unknown as MouseEvent)
+              onOpen(e)
             }}
             onKeyDown={(e) => {
               // role="button" gives no native key handling — without this the
