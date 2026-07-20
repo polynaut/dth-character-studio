@@ -243,6 +243,41 @@ describe('normalizeLegacyCharacter', () => {
   })
 })
 
+// v16 restructured a JCM "Modify frames" rule from split positive[]/negative[]
+// drive lists to one signed drives[] — direction is inferred from the angle sign
+// now (Case A, carries a step). The two lists concatenate; the old keys are dropped.
+describe('migrateCharacterData — v16 (JCM positive/negative → drives)', () => {
+  const modWith = () => ({
+    schemaVersion: 15,
+    jcmMorphMods: [
+      {
+        boneLabel: 'Left Thigh',
+        axis: 'XRotate',
+        positive: [
+          { morphName: 'A', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+        ],
+        negative: [
+          { morphName: 'B', range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } } },
+        ],
+      },
+    ],
+  })
+
+  it('merges positive + negative into one drives[] and drops the old keys', () => {
+    const mod = migrateCharacterData(modWith()).jcmMorphMods[0]
+    expect(mod.drives.map((d: { morphName: string }) => d.morphName)).toEqual(['A', 'B'])
+    expect(mod.positive).toBeUndefined()
+    expect(mod.negative).toBeUndefined()
+  })
+
+  it('is idempotent — migrating twice yields the same result', () => {
+    const once = migrateCharacterData(modWith())
+    const twice = migrateCharacterData(structuredClone(once))
+    expect(twice).toEqual(once)
+    expect(twice.jcmMorphMods[0].drives).toHaveLength(2)
+  })
+})
+
 // ── REFERENCE: how to test a registered `characterMigrations[N]` step ─────────
 // When you add a step in migrate.ts (a rename/restructure — Case A — or a computed
 // value — Case B), add a describe block like this one alongside it. Assert the

@@ -76,6 +76,26 @@ export const characterMigrations: Record<
     }
     return data
   },
+  // v16 — a JCM "Modify frames" rule kept two separate drive lists (positive /
+  // negative rotation); direction is inferred from each drive's angle-range sign
+  // now, so the two lists merge into one signed `drives[]`. Pre-zod, or zod would
+  // strip the old keys before we could read them.
+  16: (data) => {
+    if (Array.isArray(data.jcmMorphMods)) {
+      for (const mod of data.jcmMorphMods) {
+        if (!mod || typeof mod !== 'object') continue
+        if (mod.drives === undefined) {
+          mod.drives = [
+            ...(Array.isArray(mod.positive) ? mod.positive : []),
+            ...(Array.isArray(mod.negative) ? mod.negative : []),
+          ]
+        }
+        delete mod.positive
+        delete mod.negative
+      }
+    }
+    return data
+  },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────
   //
   // Case A — rename / restructure an existing field:

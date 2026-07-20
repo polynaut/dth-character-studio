@@ -360,10 +360,9 @@ describe('Modify JCM frames (jcmMorphMods grid)', () => {
       {
         boneLabel: 'Left Thigh Bend',
         axis: 'XRotate',
-        positive: [
+        drives: [
           { morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
         ],
-        negative: [],
       },
     ]
     render(
@@ -390,11 +389,11 @@ describe('Modify JCM frames (jcmMorphMods grid)', () => {
     const morphInput = screen.getByPlaceholderText('body_bs_CalfFlex')
     fireEvent.change(morphInput, { target: { value: 'body_cbs_ThighFlex' } })
     fireEvent.blur(morphInput)
-    expect(mods[0].positive[0].morphName).toBe('body_cbs_ThighFlex')
+    expect(mods[0].drives[0].morphName).toBe('body_cbs_ThighFlex')
 
     // Add a second rule — an empty XRotate rule appears in the model.
     fireEvent.click(screen.getByText('Add rule'))
     expect(mods).toHaveLength(2)
-    expect(mods[1]).toEqual({ boneLabel: '', axis: 'XRotate', positive: [], negative: [] })
+    expect(mods[1]).toEqual({ boneLabel: '', axis: 'XRotate', drives: [] })
   })
 })

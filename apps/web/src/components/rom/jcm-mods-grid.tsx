@@ -8,10 +8,18 @@ import { MorphNameCell } from './morph-name-cell.tsx'
 
 import type { JcmMorphMod } from '@dth/rom'
 
-type Drive = JcmMorphMod['positive'][number]
-type Direction = 'positive' | 'negative'
+type Drive = JcmMorphMod['drives'][number]
 
 const AXES = ['XRotate', 'YRotate', 'ZRotate'] as const
+
+/** A JCM drive corrects a bone bending from rest in ONE direction, so its angle
+ *  range must have a definite sign — flag a zero range (no direction) or one that
+ *  crosses zero (ambiguous). Direction is otherwise read from the range's sign. */
+function angleRangeInvalid(angle: { start: number; end: number }): boolean {
+  const { start, end } = angle
+  if (start === 0 && end === 0) return true
+  return start !== 0 && end !== 0 && Math.sign(start) !== Math.sign(end)
+}
 
 function emptyDrive(): Drive {
   return { morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } }
@@ -60,8 +68,7 @@ export function mirrorMod(mod: JcmMorphMod): JcmMorphMod {
   return {
     ...mod,
     boneLabel: mirrorSide(mod.boneLabel),
-    positive: mod.positive.map(mirrorDrive),
-    negative: mod.negative.map(mirrorDrive),
+    drives: mod.drives.map(mirrorDrive),
   }
 }
 
@@ -72,6 +79,7 @@ function RawNumberCell({
   title,
   onCommit,
   percent,
+  invalid,
 }: {
   value: number
   title: string
@@ -79,13 +87,17 @@ function RawNumberCell({
   /** Show/edit the 0–1 morph value as a Daz-style percentage (0–100%), like the
    *  ROM pose value cells. Angle cells (degrees) stay raw. */
   percent?: boolean
+  /** Flag the field (red border) — used for an ambiguous angle range. */
+  invalid?: boolean
 }) {
   const format = useCallback((v: number) => (percent ? valueToPct(v) : String(v)), [percent])
   const [draft, setDraft] = useState(() => format(value))
   useEffect(() => setDraft(format(value)), [value, format])
   const input = (
     <input
-      className={`${cellInputClass} w-16 text-right tabular-nums ${percent ? 'pr-5' : ''}`}
+      className={`${cellInputClass} w-16 text-right tabular-nums ${percent ? 'pr-5' : ''} ${
+        invalid ? 'border-destructive bg-destructive/10 hover:border-destructive' : ''
+      }`}
       value={draft}
       title={title}
       inputMode="decimal"
@@ -114,15 +126,6 @@ function RawNumberCell({
   )
 }
 
-/** One rule's drives flattened for the grid: the model keeps two arrays
- *  (positive/negative rotation), the grid shows one list with a direction. */
-function flatDrives(mod: JcmMorphMod): Array<{ dir: Direction; index: number; drive: Drive }> {
-  return [
-    ...mod.positive.map((drive, index) => ({ dir: 'positive' as const, index, drive })),
-    ...mod.negative.map((drive, index) => ({ dir: 'negative' as const, index, drive })),
-  ]
-}
-
 /**
  * "Modify JCM frames" — a grid UI over `character.jcmMorphMods` (formerly a raw
  * JSON textarea in Advanced Options). Each RULE watches one bone rotation axis
@@ -142,34 +145,23 @@ export function JcmModsGrid({
   function patchMod(i: number, patch: Partial<JcmMorphMod>) {
     onChange(mods.map((mod, mi) => (mi === i ? { ...mod, ...patch } : mod)))
   }
-  function patchDrive(i: number, dir: Direction, di: number, patch: Partial<Drive>) {
-    const mod = mods[i]
+  function patchDrive(i: number, di: number, patch: Partial<Drive>) {
     patchMod(i, {
-      [dir]: mod[dir].map((drive, idx) => (idx === di ? { ...drive, ...patch } : drive)),
+      drives: mods[i].drives.map((drive, idx) => (idx === di ? { ...drive, ...patch } : drive)),
     })
   }
   function patchRange(
     i: number,
-    dir: Direction,
     di: number,
     key: 'angle' | 'value',
     bound: 'start' | 'end',
     num: number,
   ) {
-    const range = mods[i][dir][di].range
-    patchDrive(i, dir, di, { range: { ...range, [key]: { ...range[key], [bound]: num } } })
-  }
-  function moveDrive(i: number, from: Direction, di: number, to: Direction) {
-    if (from === to) return
-    const mod = mods[i]
-    const drive = mod[from][di]
-    patchMod(i, {
-      [from]: mod[from].filter((_, idx) => idx !== di),
-      [to]: [...mod[to], drive],
-    } as Partial<JcmMorphMod>)
+    const range = mods[i].drives[di].range
+    patchDrive(i, di, { range: { ...range, [key]: { ...range[key], [bound]: num } } })
   }
 
-  const driveCount = mods.reduce((sum, m) => sum + m.positive.length + m.negative.length, 0)
+  const driveCount = mods.reduce((sum, m) => sum + m.drives.length, 0)
 
   return (
     <div className="rounded-md border">
@@ -189,8 +181,10 @@ export function JcmModsGrid({
             Drive <strong>additional morphs</strong> along the pre-defined JCM poses: a rule
             watches one bone's rotation axis across the JCM ROM and sets its morphs
             proportionally to the keyed angle — the angle range maps linearly onto the value
-            range, separately for positive and negative rotation. Example: add a custom
-            calf-flex morph on top of the shipped knee-bend poses.
+            range. The <strong>direction</strong> a drive corrects is read from its angle
+            range's sign (e.g. <em>Angle to</em> −115 = the negative bend), so a rule can hold
+            drives for both bend directions at once. Example: add a custom calf-flex morph on
+            top of the shipped knee-bend poses.
           </InfoPopup>
         </span>
         {mods.length > 0 && (
@@ -251,11 +245,10 @@ export function JcmModsGrid({
               </div>
 
               <div className="p-2">
-                {flatDrives(mod).length > 0 && (
+                {mod.drives.length > 0 && (
                   <table className="w-full border-separate border-spacing-y-1 text-sm">
                     <thead>
                       <tr className="text-left text-xs text-muted-foreground">
-                        <th className="font-medium">Rotation</th>
                         <th className="font-medium">Morph name</th>
                         <th className="text-right font-medium">Angle from</th>
                         <th className="text-right font-medium">Angle to</th>
@@ -265,87 +258,80 @@ export function JcmModsGrid({
                       </tr>
                     </thead>
                     <tbody>
-                      {flatDrives(mod).map(({ dir, index, drive }) => (
-                        <tr key={`${dir}-${index}`}>
-                          <td className="pr-2">
-                            <Select
-                              value={dir}
-                              onValueChange={(to) => moveDrive(i, dir, index, to as Direction)}
-                            >
-                              <SelectTrigger size="sm" className="w-28">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="positive">positive</SelectItem>
-                                <SelectItem value="negative">negative</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="w-full pr-2">
-                            <MorphNameCell
-                              value={drive.morphName}
-                              placeholder="body_bs_CalfFlex"
-                              onCommit={(morphName) => patchDrive(i, dir, index, { morphName })}
-                              // The runtime resolves these on the figure root — only
-                              // the internal name matters, the node tag is informative.
-                              onPick={(e) => patchDrive(i, dir, index, { morphName: e.name })}
-                            />
-                          </td>
-                          <td className="pr-1 text-right">
-                            <RawNumberCell
-                              value={drive.range.angle.start}
-                              title="Bone angle (degrees) where the morph starts ramping"
-                              onCommit={(n) => patchRange(i, dir, index, 'angle', 'start', n)}
-                            />
-                          </td>
-                          <td className="pr-2 text-right">
-                            <RawNumberCell
-                              value={drive.range.angle.end}
-                              title="Bone angle (degrees) where the morph reaches its end value"
-                              onCommit={(n) => patchRange(i, dir, index, 'angle', 'end', n)}
-                            />
-                          </td>
-                          <td className="pr-1 text-right">
-                            <RawNumberCell
-                              value={drive.range.value.start}
-                              percent
-                              title="Morph value at the start angle (100% = full)"
-                              onCommit={(n) => patchRange(i, dir, index, 'value', 'start', n)}
-                            />
-                          </td>
-                          <td className="pr-2 text-right">
-                            <RawNumberCell
-                              value={drive.range.value.end}
-                              percent
-                              title="Morph value at the end angle (100% = full)"
-                              onCommit={(n) => patchRange(i, dir, index, 'value', 'end', n)}
-                            />
-                          </td>
-                          <td>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground hover:text-destructive"
-                              title="Remove this morph drive"
-                              aria-label={`Remove drive ${drive.morphName || index + 1}`}
-                              onClick={() =>
-                                patchMod(i, {
-                                  [dir]: mod[dir].filter((_, idx) => idx !== index),
-                                } as Partial<JcmMorphMod>)
-                              }
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                      {mod.drives.map((drive, index) => {
+                        const angleBad = angleRangeInvalid(drive.range.angle)
+                        return (
+                          <tr key={index}>
+                            <td className="w-full pr-2">
+                              <MorphNameCell
+                                value={drive.morphName}
+                                placeholder="body_bs_CalfFlex"
+                                onCommit={(morphName) => patchDrive(i, index, { morphName })}
+                                // The runtime resolves these on the figure root — only
+                                // the internal name matters, the node tag is informative.
+                                onPick={(e) => patchDrive(i, index, { morphName: e.name })}
+                              />
+                            </td>
+                            <td className="pr-1 text-right">
+                              <RawNumberCell
+                                value={drive.range.angle.start}
+                                invalid={angleBad}
+                                title="Bone angle (degrees) where the morph starts ramping"
+                                onCommit={(n) => patchRange(i, index, 'angle', 'start', n)}
+                              />
+                            </td>
+                            <td className="pr-2 text-right">
+                              <RawNumberCell
+                                value={drive.range.angle.end}
+                                invalid={angleBad}
+                                title={
+                                  angleBad
+                                    ? 'The angle range needs one direction — it must not be zero or cross zero (its sign picks the bend direction)'
+                                    : 'Bone angle (degrees) where the morph reaches its end value — its sign is the bend direction'
+                                }
+                                onCommit={(n) => patchRange(i, index, 'angle', 'end', n)}
+                              />
+                            </td>
+                            <td className="pr-1 text-right">
+                              <RawNumberCell
+                                value={drive.range.value.start}
+                                percent
+                                title="Morph value at the start angle (100% = full)"
+                                onCommit={(n) => patchRange(i, index, 'value', 'start', n)}
+                              />
+                            </td>
+                            <td className="pr-2 text-right">
+                              <RawNumberCell
+                                value={drive.range.value.end}
+                                percent
+                                title="Morph value at the end angle (100% = full)"
+                                onCommit={(n) => patchRange(i, index, 'value', 'end', n)}
+                              />
+                            </td>
+                            <td>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-muted-foreground hover:text-destructive"
+                                title="Remove this morph drive"
+                                aria-label={`Remove drive ${drive.morphName || index + 1}`}
+                                onClick={() =>
+                                  patchMod(i, { drives: mod.drives.filter((_, idx) => idx !== index) })
+                                }
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 )}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => patchMod(i, { positive: [...mod.positive, emptyDrive()] })}
+                  onClick={() => patchMod(i, { drives: [...mod.drives, emptyDrive()] })}
                 >
                   <Plus /> Add morph drive
                 </Button>
@@ -355,9 +341,7 @@ export function JcmModsGrid({
           <Button
             variant="outline"
             size="sm"
-            onClick={() =>
-              onChange([...mods, { boneLabel: '', axis: 'XRotate', positive: [], negative: [] }])
-            }
+            onClick={() => onChange([...mods, { boneLabel: '', axis: 'XRotate', drives: [] }])}
           >
             <Plus /> Add rule
           </Button>

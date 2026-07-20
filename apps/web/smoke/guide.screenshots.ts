@@ -59,16 +59,26 @@ async function settle(page: Page) {
  *  in ~99% of cases (exact header measurement fought the inner-scroll container). */
 const HEADER = 150
 
-async function shoot(page: Page, path: string, feature?: Locator, opts: { hideHeader?: boolean } = {}) {
+async function shoot(
+  page: Page,
+  path: string,
+  feature?: Locator,
+  opts: { hideHeader?: boolean; headerOffset?: number } = {},
+) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await settle(page)
   if (!feature) {
     await page.screenshot({ path })
     return
   }
+  // How far below the top to land the feature — enough to clear the sticky
+  // header. A page with a SECOND sticky layer (the character page pins a section
+  // title under its header) needs a taller offset so the feature's own label
+  // isn't tucked under it; those shots pass `headerOffset`.
+  const offset = opts.headerOffset ?? HEADER
   // Room for the header + a capped feature; the pages are taller than this so
   // they still scroll (needed to reach the feature).
-  const VH = MAX_H + HEADER
+  const VH = MAX_H + offset
   await page.setViewportSize({ width: VW, height: VH })
   // Edge case: a feature pinned too near the page top (e.g. the last card in a
   // short form) can't scroll far enough to clear the sticky header, which then
@@ -91,7 +101,7 @@ async function shoot(page: Page, path: string, feature?: Locator, opts: { hideHe
   await feature.evaluate((el, back) => {
     ;(el as HTMLElement).style.scrollMarginTop = `${back}px`
     el.scrollIntoView({ block: 'start' })
-  }, opts.hideHeader ? topGap : HEADER)
+  }, opts.hideHeader ? topGap : offset)
   await settle(page)
   const rect = await feature.evaluate((el) => {
     const r = el.getBoundingClientRect()
@@ -318,7 +328,9 @@ test('jcm-modify-grid', async ({ page }) => {
   const grid = page
     .getByText('Modify JCM frames')
     .locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
-  await shoot(page, join(OUT, 'jcm-modify-grid.png'), grid)
+  // The character page pins a section title under its header, so land the grid
+  // lower than the default so its own "Modify JCM frames" label stays visible.
+  await shoot(page, join(OUT, 'jcm-modify-grid.png'), grid, { headerOffset: 210 })
 })
 
 test('character-bone-scale-toggle', async ({ page }) => {

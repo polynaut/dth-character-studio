@@ -322,6 +322,26 @@ describe('toCharacterScriptDsa', () => {
     ).toBe(false)
   })
 
+  it("splits a JCM rule's signed drives[] into positive/negative by angle sign", () => {
+    const character = makeCharacter({
+      jcmMorphMods: [
+        {
+          boneLabel: 'Left Thigh',
+          axis: 'XRotate',
+          drives: [
+            { morphName: 'PosDrive', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+            { morphName: 'NegDrive', range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } } },
+          ],
+        },
+      ],
+    })
+    const mod = characterConfig(toCharacterScriptDsa(character).content).jcmMorphMods[0]
+    // The stored single list splits back into the runtime's positive/negative lists.
+    expect(mod.drives).toBeUndefined()
+    expect(mod.positive.map((d: { morphName: string }) => d.morphName)).toEqual(['PosDrive'])
+    expect(mod.negative.map((d: { morphName: string }) => d.morphName)).toEqual(['NegDrive'])
+  })
+
   it('inlines GP art direction when GEN/GP is enabled', () => {
     const sections = makeSections()
     sections.GEN.enabled = true
