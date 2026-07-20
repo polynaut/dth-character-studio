@@ -54,6 +54,10 @@ export function posesFromDazCsv(text: string): Array<ImportedPose> {
   const poses: Array<ImportedPose> = []
   for (const cols of parseCsvRecords(text)) {
     if (cols.length === 1 && cols[0].trim() === '') continue
+    // An empty first cell must be SKIPPED, not read as frame 0: `Number('')`
+    // is 0 (finite), which would otherwise import a section-keyword-less row
+    // with a blank frame column as a real pose at frame 0.
+    if ((cols[0] ?? '').trim() === '') continue
     const frame = Number(cols[0])
     if (!Number.isFinite(frame)) continue
     const morphs: Array<Morph> = []

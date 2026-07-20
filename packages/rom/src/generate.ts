@@ -3,6 +3,7 @@ import {
   flattenRom,
   isBoneScaleRefPose,
   presetEndFrame,
+  presetSelections,
   walkCustomPoses,
 } from './frames'
 import { applySceneOverride, sceneOverrideSlug } from './scene-override'
@@ -57,7 +58,7 @@ const CUSTOM_SECTIONS_PLACEHOLDER = 'CUSTOM_SECTIONS_PLACEHOLDER'
  * falls to the experimental custom-only path. Adding a generation = one row here +
  * one row in GENERATIONS.
  */
-const GENERATION_TEMPLATE_CSV: Partial<Record<GenesisVersion, string>> = {
+export const GENERATION_TEMPLATE_CSV: Partial<Record<GenesisVersion, string>> = {
   G9: poseAssetTemplateG9DqsFacGp,
   'G8.1': poseAssetTemplateG81DqsFac,
 }
@@ -358,7 +359,14 @@ function dazJson(value: unknown, space?: number): string {
  * file the exporter never writes).
  */
 function exporterFigureName(character: Pick<Character, 'name'>): string {
-  return csvSafe(character.name)
+  // Beyond csvSafe's comma/newline guard, strip the characters Windows forbids
+  // in file names (`< > : " / \ | ? *`): this name is BOTH handed to
+  // the exporter's doExport — which writes `<name>_frame_<N>.fbx` to disk — and
+  // baked into the CSV `file` column that points at it. An illegal char makes
+  // the FBX write fail/mangle while the CSV still references the clean name, so
+  // the HDA import breaks. Runs collapse to one space; a name with none of these
+  // (e.g. "A B") is unchanged, so valid-character output stays byte-identical.
+  return character.name.replace(/[\r\n,<>:"/\\|?*]+/g, ' ')
 }
 
 /**
@@ -476,13 +484,10 @@ export function poseAssetCsvValidated(
   gpFrames?: number,
 ): boolean {
   const { sections } = character
-  const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
-  const facPreset = sections.FAC.enabled && sections.FAC.mode === 'preset'
-  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
-  const roms = genRomIncludes(character.gender, sections.GEN.presetAssets)
-  const includeGp = genPreset && roms.gp
-  const includeDk = genPreset && roms.dk
-  const physPreset = sections.PHY.enabled && sections.PHY.mode === 'preset'
+  const { jcmPreset, facPreset, genPreset, includeGp, includeDk, physPreset } = presetSelections(
+    sections,
+    character.gender,
+  )
   if (characterSkinning(character) !== 'dqs' || !jcmPreset || !facPreset) return false
 
   const tpl = GENERATIONS[character.genesis].template
@@ -521,9 +526,7 @@ function spliceTemplate(
   frames: PresetFrames,
 ): string {
   const { sections } = character
-  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
-  const includeGp = genPreset && genRomIncludes(character.gender, sections.GEN.presetAssets).gp
-  const includePhys = sections.PHY.enabled && sections.PHY.mode === 'preset'
+  const { includeGp, physPreset: includePhys } = presetSelections(sections, character.gender)
 
   const lines = templateCsv.replace(/\r\n/g, '\n').trimEnd().split('\n')
   const placeholder = lines.indexOf(CUSTOM_SECTIONS_PLACEHOLDER)
@@ -619,9 +622,21 @@ export function buildArtDirectionData(
   rom: 'gp' | 'dk',
   section: 'GP9' | 'DK9',
   label: string,
+  /** Measured length of this ROM block (PresetFrames.gp / .dk). Entries whose
+   *  relative offset falls at or beyond it are DROPPED — the runtime would
+   *  otherwise stamp their morphs at `startFrame + frame`, landing in the
+   *  custom-frame range and corrupting a custom pose's exported deltas while the
+   *  CSV still labels that frame as the custom pose. Undefined ⇒ unbounded (the
+   *  pure/web path has no measurement and the runtime fails loud anyway). */
+  blockLength?: number,
 ) {
   const frames = character.sections.GEN.artDirection
-    .filter((frame): frame is ArtDirectionFrame => frame.rom === rom && frame.morphs.length > 0)
+    .filter(
+      (frame): frame is ArtDirectionFrame =>
+        frame.rom === rom &&
+        frame.morphs.length > 0 &&
+        (blockLength === undefined || frame.frame < blockLength),
+    )
     .sort((a, b) => a.frame - b.frame)
   if (frames.length === 0) return null
   return {
@@ -830,15 +845,17 @@ export function toCharacterScriptDsa(
     sections.JCM.mode === 'custom'
       ? sections.JCM.customAssetPath.trim().replace(/\\/g, '/')
       : ''
+  // GP/DK/Physics preset selection comes from the shared helper (single source);
+  // JCM/FAC are the SUPERSET here — a custom `.duf` path also counts — so they
+  // stay local rather than using the helper's preset-only jcmPreset/facPreset.
+  const {
+    includeGp: includeGP,
+    includeDk: includeDK,
+    physPreset: includePhysics,
+  } = presetSelections(sections, character.gender)
   const includeJCM =
     sections.JCM.enabled && (sections.JCM.mode === 'preset' || jcmCustomPath !== '')
   const includeFAC = sections.FAC.enabled && sections.FAC.mode === 'preset'
-  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
-  // No explicit selection: the character's gender decides (female → GP, male → DK).
-  const genRoms = genRomIncludes(character.gender, sections.GEN.presetAssets)
-  const includeGP = genPreset && genRoms.gp
-  const includeDK = genPreset && genRoms.dk
-  const includePhysics = sections.PHY.enabled && sections.PHY.mode === 'preset'
 
   const config: Record<string, unknown> = {
     genesis: character.genesis,
@@ -890,8 +907,12 @@ export function toCharacterScriptDsa(
   // All extra ROM frames inline (was <Name>_FBMs.json).
   config.extraFrames = buildFbmData(character)
   // Per-character art direction inline (was <Name>_<GP9|DK9>ArtDirection.json).
-  const gpArt = includeGP ? buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace') : null
-  const dkArt = includeDK ? buildArtDirectionData(character, 'dk', 'DK9', 'Dicktator') : null
+  const gpArt = includeGP
+    ? buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace', frames?.gp)
+    : null
+  const dkArt = includeDK
+    ? buildArtDirectionData(character, 'dk', 'DK9', 'Dicktator', frames?.dk)
+    : null
   if (gpArt) config.gpArtDirection = gpArt
   if (dkArt) config.dkArtDirection = dkArt
 
