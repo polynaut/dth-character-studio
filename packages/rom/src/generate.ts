@@ -2,6 +2,7 @@ import {
   boneScaleRefPoses,
   flattenRom,
   isBoneScaleRefPose,
+  jcmIsBaseRom,
   presetEndFrame,
   presetSelections,
   walkCustomPoses,
@@ -73,10 +74,35 @@ export interface RomPaths {
 }
 
 /**
+ * The catalog's FAC-preset support for a generation, derived from ONE signal:
+ * FAC frames ride in a FAC-variant JCM base ROM (`includesFac`), never in a
+ * FAC-section asset — the FAC-section entry is the G9 Mouth COMPANION, which
+ * only adds mouth-node keys over those same base frames (runtime v19: the
+ * mouth pass runs only when a mouth asset resolves; G8.1 has FAC in its base
+ * and no mouth at all). Both {@link sectionPresetAvailable}'s FAC chip and
+ * {@link resolveRomPaths}'s mouth resolution consume THIS, so the two views
+ * can't diverge: a catalog shipping a mouth but only FAC-less bases reports
+ * unavailable AND resolves no mouth (there are no base FAC frames for the
+ * companion to serve); a FAC-capable base with no mouth reports available
+ * with an empty companion list (the G8.1 shape).
+ */
+export function facPresetSupport(
+  assets: Array<DthPoseAsset>,
+  genesis: GenesisVersion,
+): { available: boolean; mouths: Array<DthPoseAsset> } {
+  const forGen = assets.filter((a) => a.genesis === null || a.genesis === genesis)
+  const available = forGen.some((a) => a.section === 'JCM' && a.includesFac)
+  return { available, mouths: available ? forGen.filter((a) => a.section === 'FAC') : [] }
+}
+
+/**
  * Resolves the exact ROM files for the character's preset selections, using
  * the same logic as the UI (explicit pick wins, else the DQS/FAC-matching
  * default). Returns {} when no catalog is available — the wrapper then falls
- * back to the DTH_POSES_PATH resolution in DthOptions.dsa.
+ * back to the DTH_POSES_PATH resolution in DthOptions.dsa. The preset-block
+ * selection booleans come from {@link presetSelections} (the single source —
+ * hand-rewriting `enabled && mode === 'preset'` here is exactly the pattern
+ * behind the historical dk-term desync).
  */
 export function resolveRomPaths(
   character: Character,
@@ -88,8 +114,16 @@ export function resolveRomPaths(
   const forGenesis = (asset: DthPoseAsset) => asset.genesis === null || asset.genesis === genesis
   const paths: RomPaths = {}
 
-  const jcmPreset = sections.JCM.enabled && sections.JCM.mode === 'preset'
-  const facPreset = sections.FAC.enabled && sections.FAC.mode === 'preset'
+  const { jcmPreset, facPreset, physPreset, includeGp, includeDk } = presetSelections(
+    sections,
+    gender,
+  )
+  // The mouth companion resolves through the ONE FAC rule (facPresetSupport):
+  // no FAC-capable base in the catalog → no mouth, matching the availability chip.
+  const facSupport = facPresetSupport(catalog.assets, genesis)
+  const resolveMouth = (skinning: DthPoseAsset['skinning']) =>
+    facSupport.mouths.find((a) => a.skinning === skinning) ?? facSupport.mouths[0]
+
   if (jcmPreset) {
     const available = catalog.assets.filter((a) => a.section === 'JCM' && forGenesis(a))
     const explicit = available.find((a) => `${a.name}.duf` === sections.JCM.presetAssets[0])
@@ -100,9 +134,7 @@ export function resolveRomPaths(
       available[0]
     if (effective) paths.jcm = join(effective.relPath)
     if (facPreset) {
-      const skinning = effective?.skinning ?? characterSkinning(character)
-      const mouths = catalog.assets.filter((a) => a.section === 'FAC' && forGenesis(a))
-      const mouth = mouths.find((a) => a.skinning === skinning) ?? mouths[0]
+      const mouth = resolveMouth(effective?.skinning ?? characterSkinning(character))
       if (mouth) paths.mouth = join(mouth.relPath)
     }
   }
@@ -110,27 +142,23 @@ export function resolveRomPaths(
   // Custom JCM: the base ROM path comes from the user (set in the generator,
   // not the catalog); still resolve the FAC mouth from the catalog when enabled.
   if (sections.JCM.enabled && sections.JCM.mode === 'custom' && facPreset && !paths.mouth) {
-    const skinning = characterSkinning(character)
-    const mouths = catalog.assets.filter((a) => a.section === 'FAC' && forGenesis(a))
-    const mouth = mouths.find((a) => a.skinning === skinning) ?? mouths[0]
+    const mouth = resolveMouth(characterSkinning(character))
     if (mouth) paths.mouth = join(mouth.relPath)
   }
 
-  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
-  if (genPreset) {
-    const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+  if (includeGp || includeDk) {
     const genAssets = catalog.assets.filter((a) => a.section === 'GEN' && forGenesis(a))
-    if (roms.gp) {
+    if (includeGp) {
       const gp = genAssets.find((a) => genAssetGender(a.name) === 'female')
       if (gp) paths.gp = join(gp.relPath)
     }
-    if (roms.dk) {
+    if (includeDk) {
       const dk = genAssets.find((a) => genAssetGender(a.name) === 'male')
       if (dk) paths.dk = join(dk.relPath)
     }
   }
 
-  if (sections.PHY.enabled && sections.PHY.mode === 'preset') {
+  if (physPreset) {
     const phys = catalog.assets.find((a) => a.section === 'PHY' && forGenesis(a))
     if (phys) paths.phys = join(phys.relPath)
   }
@@ -142,10 +170,11 @@ export function resolveRomPaths(
  * for this generation — the availability side of {@link resolveRomPaths}'s
  * selection, kept next to it so the two rules can't drift: JCM needs any JCM
  * base for the generation; FAC rides in a FAC-variant JCM base ROM, not a
- * FAC-section asset; GEN needs the gendered ROM(s) {@link genRomIncludes}
- * selects; PHY any physics asset. Sections without preset assets (EXP, FBM,
- * MISC — and RET, which lives inside the JCM base) always report available.
- * An EMPTY catalog reports available too: "unknown" must not lock the editor.
+ * FAC-section asset (the shared rule lives in {@link facPresetSupport}); GEN
+ * needs the gendered ROM(s) {@link genRomIncludes} selects; PHY any physics
+ * asset. Sections without preset assets (EXP, FBM, MISC — and RET, which lives
+ * inside the JCM base) always report available. An EMPTY catalog reports
+ * available too: "unknown" must not lock the editor.
  */
 export function sectionPresetAvailable(
   section: RomSection,
@@ -158,7 +187,7 @@ export function sectionPresetAvailable(
   if (catalog.assets.length === 0) return true
   const forGen = catalog.assets.filter((a) => a.genesis === null || a.genesis === genesis)
   if (section === 'JCM') return forGen.some((a) => a.section === 'JCM')
-  if (section === 'FAC') return forGen.some((a) => a.section === 'JCM' && a.includesFac)
+  if (section === 'FAC') return facPresetSupport(catalog.assets, genesis).available
   if (section === 'GEN') {
     const roms = genRomIncludes(gender, presetAssets)
     const has = (g: Gender) =>
@@ -472,10 +501,10 @@ function physicsPoseAssetRows(startFrame: number): Array<string> {
  * `baseFrames` is the measured base-ROM length; a validated template pins it (G9
  * 328, G8.1 188), so a base that measures differently is a future/custom asset —
  * pass `undefined` while unmeasured (counts as not validated, symmetric across
- * generations). `gpFrames` is the measured Golden Palace block length: the
- * generation path passes it so a non-standard GP (≠ the baked 104) can't silently
- * desync; the editor omits it (GP length only matters once GP is included, and its
- * rows are stripped otherwise).
+ * generations). `gpFrames` is the measured Golden Palace block length, checked
+ * only when GP is included (its baked rows are stripped otherwise) — and with
+ * the SAME polarity as `baseFrames`: unmeasured counts as not validated, so a
+ * non-standard GP (≠ the baked 104) can't silently desync the splice.
  */
 export function poseAssetCsvValidated(
   character: Character,
@@ -483,30 +512,87 @@ export function poseAssetCsvValidated(
   baseFrames?: number,
   gpFrames?: number,
 ): boolean {
-  const { sections } = character
-  const { jcmPreset, facPreset, genPreset, includeGp, includeDk, physPreset } = presetSelections(
-    sections,
-    character.gender,
-  )
-  if (characterSkinning(character) !== 'dqs' || !jcmPreset || !facPreset) return false
-
+  if (!poseAssetTemplateApplies(character)) return false
+  const { includeGp } = presetSelections(character.sections, character.gender)
   const tpl = GENERATIONS[character.genesis].template
   if (!tpl) return false
   // Era: an era-locked template (G9 → 2.0, the CURVE rows) only validates under
   // its era; an era-independent one (G8.1 → the pre-2.0 CTL-tail HDA, byte-identical
   // across releases) validates whatever release is active.
   if (tpl.era !== null && era !== tpl.era) return false
-  // Baked-length guard (symmetric across generations): the splice places PHY/custom
-  // rows at offsets measured against fixed baked rows, so a base/GP that measures
-  // differently must fall to the experimental path rather than silently desync.
+  // Baked-length guard (symmetric across generations AND across the two
+  // measured lengths): the splice places PHY/custom rows at offsets measured
+  // against fixed baked rows, so a base/GP that measures differently — or is
+  // not measured at all — must fall to the experimental path rather than
+  // silently desync. (A `!== undefined` escape once let an unmeasured GP pass
+  // as validated, the opposite polarity of the base check; every caller
+  // passes the measurement, so the escape was dead — and wrong.)
   if (baseFrames !== tpl.baseFrames) return false
-  if (includeGp && gpFrames !== undefined && gpFrames !== tpl.gpFrames) return false
+  if (includeGp && gpFrames !== tpl.gpFrames) return false
+  return true
+}
+
+/**
+ * Whether the character's SHAPE (skinning + preset selections) fits its
+ * generation's validated template at all — the structural half of
+ * {@link poseAssetCsvValidated}, which additionally gates on the CSV era and
+ * the measured block lengths. Also the gate for {@link templateBakedPoseNames}:
+ * baked rows can only ship when the template applies.
+ */
+export function poseAssetTemplateApplies(character: Character): boolean {
+  const { jcmPreset, facPreset, genPreset, includeDk, physPreset } = presetSelections(
+    character.sections,
+    character.gender,
+  )
+  if (characterSkinning(character) !== 'dqs' || !jcmPreset || !facPreset) return false
+  const tpl = GENERATIONS[character.genesis].template
+  if (!tpl) return false
   // GEN / PHY only where the template ships them (G8.1 ships neither; the G9
   // template bakes no Dicktator ROM, so a DK selection never fits either).
   if (genPreset && !tpl.allowGen) return false
   if (physPreset && !tpl.allowPhys) return false
   if (includeDk) return false
   return true
+}
+
+/**
+ * The RESOLVED Unreal morph names the character's preset/template blocks
+ * already export: every baked pose row that would survive the splice (GEN rows
+ * only when GP is included, the PHY preset block when physics is on), with the
+ * active group's `_l`/`_r` suffix applied — the same resolution custom rows go
+ * through. Feed these to `romValidationErrors` as its `reservedPoseNames` so a
+ * custom pose named after a baked one (e.g. an FBM pose called "Fence01" with
+ * GP on) is flagged instead of silently overwriting the baked morph in Unreal.
+ * Empty when no validated template applies (the experimental custom-only
+ * layout ships no baked rows).
+ */
+export function templateBakedPoseNames(character: Character): Array<string> {
+  if (!poseAssetTemplateApplies(character)) return []
+  const templateCsv = GENERATION_TEMPLATE_CSV[character.genesis]
+  if (!templateCsv) return []
+  const { includeGp, physPreset } = presetSelections(character.sections, character.gender)
+  const names: Array<string> = []
+  const collect = (csv: string) => {
+    // Suffix menu indices, as in the emitters: 0=left, 1=centre, 2=right.
+    const suffixTokens = ['_l', '', '_r']
+    let token = ''
+    for (const line of csv.replace(/\r\n/g, '\n').split('\n')) {
+      const cols = line.split(',')
+      const type = cols[0]
+      // Track the ACTIVE group's suffix — the HDA appends _l/_r to the pose
+      // names of left/right groups, forming the final Unreal morph name.
+      if (type === 'JCMGROUP') token = suffixTokens[Number(cols[2])] ?? ''
+      else if (type === 'FACGROUP' || type === 'EXPGROUP' || type === 'GENGROUP')
+        token = suffixTokens[Number(cols[3])] ?? ''
+      else if (type === 'PHYGROUP') token = suffixTokens[Number(cols[2])] ?? ''
+      else if (type === 'RET' || type === 'JCM' || type === 'FAC' || type === 'PHY')
+        names.push(`${cols[2]}${token}`)
+      else if (type === 'GEN' && includeGp) names.push(`${cols[2]}${token}`)
+    }
+  }
+  collect(templateCsv)
+  if (physPreset) collect(poseAssetPhysicsG9)
+  return names
 }
 
 /**
@@ -855,7 +941,14 @@ export function toCharacterScriptDsa(
   } = presetSelections(sections, character.gender)
   const includeJCM =
     sections.JCM.enabled && (sections.JCM.mode === 'preset' || jcmCustomPath !== '')
-  const includeFAC = sections.FAC.enabled && sections.FAC.mode === 'preset'
+  // FAC frames live INSIDE the JCM base ROM (see facPresetSupport) — without a
+  // base block there are no FAC frames, so bIncludeFAC true would tell the
+  // runtime to expect frames that contribute nothing to presetEndFrame (a
+  // config that lies to the runtime). The same rule is surfaced to the user as
+  // a romValidationErrors config error (validation.ts); this gate keeps even a
+  // bypassed save honest.
+  const includeFAC =
+    sections.FAC.enabled && sections.FAC.mode === 'preset' && jcmIsBaseRom(sections)
 
   const config: Record<string, unknown> = {
     genesis: character.genesis,
@@ -893,7 +986,10 @@ export function toCharacterScriptDsa(
   // Custom JCM path wins over the catalog-resolved one.
   const jcmRomPath = jcmCustomPath || romPaths.jcm
   if (jcmRomPath) config.jcmRomPath = jcmRomPath
-  if (romPaths.mouth) config.mouthRomPath = romPaths.mouth
+  // The mouth companion only ever plays over base FAC frames — never emit it
+  // when bIncludeFAC is off (e.g. a mouth resolved for a custom JCM that has no
+  // base .duf yet), or the config would carry a pass with no frames to serve.
+  if (includeFAC && romPaths.mouth) config.mouthRomPath = romPaths.mouth
   if (romPaths.gp) config.gpRomPath = romPaths.gp
   if (romPaths.dk) config.dkRomPath = romPaths.dk
   if (romPaths.phys) config.physRomPath = romPaths.phys
