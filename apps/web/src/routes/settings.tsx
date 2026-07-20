@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { CircleCheck, Download, Plus } from 'lucide-react'
 
-import { Button, Field, InfoPopup, Input, Label, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag } from '@dth/ui'
+import { Button, Field, InfoPopup, Input, Label, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
   detectDimManifestsFolder,
@@ -309,7 +309,6 @@ function SettingsPage() {
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
-    settings.groomExcludeByHiding !== initial.groomExcludeByHiding ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders)
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
@@ -851,39 +850,6 @@ function SettingsPage() {
                 administrator, then try again.
               </p>
             )}
-          </section>
-
-          <section className="space-y-4 rounded-lg border bg-card p-5">
-            <div>
-              <h2 className="font-semibold">Generation</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                How the generated Daz scripts behave.
-              </p>
-            </div>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="flex items-center gap-1 font-medium">
-                Solve hair assets by hiding
-                <Tag title="Exclusion by hiding does not cover the FBX yet — the default (off) detach mechanism does">
-                  Experimental
-                </Tag>
-                <InfoPopup label="Solve hair assets by hiding — more information">
-                  How the ROM/Export scripts keep a character's groom (hair) items out of the
-                  export. <strong>Off</strong> (default): the items are unfitted and unparented
-                  right before the DTH Exporter runs and restored afterwards — works with every
-                  Exporter Plugin version and keeps hair out of both the FBX and the Alembic.{' '}
-                  <strong>On</strong> (experimental): the items are hidden with all their
-                  children instead (gentler on the scene) — requires DTH Exporter Plugin{' '}
-                  <strong>2.0+</strong>, which skips hidden nodes during export. As of the 2.0
-                  preview that covers the Alembic but not yet the FBX, so leave this off unless
-                  your plugin build handles both. Re-save the character (or Tools → Refresh
-                  assets) after changing this so the scripts regenerate.
-                </InfoPopup>
-              </span>
-              <Switch
-                checked={settings.groomExcludeByHiding}
-                onCheckedChange={(v) => setSettings((s) => ({ ...s, groomExcludeByHiding: v }))}
-              />
-            </div>
           </section>
 
           {/* Renders its own card, or nothing when no network drives are

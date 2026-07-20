@@ -1150,47 +1150,39 @@ describe('groom items (hair kept out of the export)', () => {
       ...over,
     })
 
-  it('embeds the per-scene map and brackets the export with detach → run → restore', () => {
+  it('embeds the per-scene map and brackets the export with hide → run → show', () => {
     const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').content
     // The whole map is baked in (normalized keys); the OPEN scene resolves at run time.
     expect(content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
     expect(content).toContain('String(Scene.getFilename()).split(')
     // No entry for the open scene → export as-is (a scene without groom is valid).
     expect(content).toContain('No groom list for the open scene - exporting as-is.')
-    // DETACH, not hide (measured: plugin 2.0's skip-hidden misses the FBX):
-    // unfit+unparent → export → reparent+refit.
-    const detachAt = content.indexOf('setFollowTarget(null)')
-    const runAt = content.indexOf('dthRunExport();', detachAt)
-    const restoreAt = content.indexOf('addNodeChild(', runAt)
-    expect(detachAt).toBeGreaterThan(-1)
-    expect(runAt).toBeGreaterThan(detachAt)
-    expect(restoreAt).toBeGreaterThan(runAt)
-    // Restore runs even when the export throws; the CSV delivery rides inside.
-    expect(content).toContain('} finally {')
-    expect(content).toContain('dthCsvSrcDir')
-  })
-
-  it('the "Solve hair assets by hiding" setting switches the bracket to hide → run → show', () => {
-    const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra', true).content
+    // HIDE → export → show. The DTH Exporter Plugin unparents any hidden child
+    // node before exporting, so hiding excludes the groom from BOTH artifacts —
+    // the script no longer unfit+unparents itself.
     const hideAt = content.indexOf('dthGroomHideTree(dthGroomNodes[dthGd])')
     const runAt = content.indexOf('dthRunExport();', hideAt)
     const restoreAt = content.indexOf('.setVisible(true)', runAt)
     expect(hideAt).toBeGreaterThan(-1)
     expect(runAt).toBeGreaterThan(hideAt)
     expect(restoreAt).toBeGreaterThan(runAt)
-    // The hide arm never detaches — that's the whole point of the toggle.
+    // The detach path is gone — the script never touches parenting/fit anymore.
     expect(content).not.toContain('setFollowTarget(null)')
-    // generateAll threads the flag into the split Export_ script too.
+    expect(content).not.toContain('removeNodeChild(')
+    // Restore runs even when the export throws; the CSV delivery rides inside.
+    expect(content).toContain('} finally {')
+    expect(content).toContain('dthCsvSrcDir')
+  })
+
+  it('brackets the split Export_ script with the same hide bracket', () => {
     const split = generateAll(
       groomChar({ exportWithRomScript: false }),
       {},
       FRAMES,
       'D:\\lib\\Electra',
-      '',
-      undefined,
-      true,
     ).find((f) => f.fileName === 'Export_Electra_G9.dsa')
     expect(split?.content).toContain('dthGroomHideTree(dthGroomNodes[dthGd])')
+    expect(split?.content).not.toContain('setFollowTarget(null)')
   })
 
   it('a missing groom item skips the export loud instead of shipping hair', () => {

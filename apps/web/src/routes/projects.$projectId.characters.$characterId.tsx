@@ -670,7 +670,12 @@ function CharacterPage() {
             />
             {/* Groom lists are PER SCENE — living right under the scene cards makes
                 the card-selection ↔ hair-list connection visible while switching. */}
-            <GroomFields character={character} patch={patch} selectedScene={effectiveScene} />
+            <GroomFields
+              character={character}
+              patch={patch}
+              selectedScene={effectiveScene}
+              dazInstallFolder={settings.dazInstallFolder}
+            />
             <HoudiniProjectsField
               projectId={projectId}
               character={character}

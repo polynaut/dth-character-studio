@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { InfoPopup, MultiSelect, Switch } from '@dth/ui'
+import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
 
@@ -36,14 +37,33 @@ export function GroomFields({
   character,
   patch,
   selectedScene,
+  dazInstallFolder,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
   /** The scene whose groom list is being edited (a linked scene path). */
   selectedScene: string
+  /** The Daz install folder (from settings) — used to read the installed
+   *  Exporter Plugin's DLL version and warn when it's too old for hide-only groom. */
+  dazInstallFolder: string
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
+  // The installed Exporter Plugin version (read from the DLL). '' = not installed
+  // / unknown — we don't warn then (see exporterSupportsGroomHide).
+  const [exporterVersion, setExporterVersion] = useState('')
+
+  // Read the installed plugin version only while groom is actually in use.
+  useEffect(() => {
+    if (character.groomMode !== 'scene') return
+    let cancelled = false
+    void api.installedExporterVersion(dazInstallFolder).then((v) => {
+      if (!cancelled) setExporterVersion(v)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [character.groomMode, dazInstallFolder])
 
   useEffect(() => {
     // Drop the previous scene's scan immediately — judging this scene's list
@@ -92,6 +112,13 @@ export function GroomFields({
   const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
 
+  // Groom exclusion is hide-only: an Exporter Plugin below MIN_GROOM_EXPORTER_VERSION
+  // doesn't unparent the hidden items, so the hair would leak into the FBX. Warn
+  // when the character actually lists groom AND the installed DLL is too old.
+  const hasGroom = character.groomScenes.some((g) => g.nodes.length > 0)
+  const exporterTooOld =
+    character.groomMode === 'scene' && hasGroom && !exporterSupportsGroomHide(exporterVersion)
+
   return (
     <div className="max-w-xl">
       <div className="mb-3 flex items-center gap-3">
@@ -103,16 +130,24 @@ export function GroomFields({
           Hair items (groom) live in the Daz scenes
           <InfoPopup label="Hair items live in the Daz scenes — more information">
             <strong>On</strong>: each scene carries its full look, hair included — the groom
-            items listed per scene are excluded around the DTH export and restored after, so
-            hair never rides into the ROM artifacts (by default they're unfitted and moved out
-            of the figure; the global “Solve hair assets by hiding” setting switches this to
-            hiding, for Exporter Plugin 2.0+). The generated script carries every
+            items listed per scene are HIDDEN around the DTH export and shown again after, so
+            hair never rides into the ROM artifacts. The DTH Exporter Plugin{' '}
+            <strong>{MIN_GROOM_EXPORTER_VERSION}+</strong> unparents the hidden items itself, which
+            keeps them out of both the FBX and the Alembic. The generated script carries every
             scene's list and applies the right one for the scene open in Daz.{' '}
             <strong>Off</strong>: the classic workflow — you keep hair in separate Daz scene
             files and nothing is excluded.
           </InfoPopup>
         </span>
       </div>
+      {exporterTooOld && (
+        <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Your installed DTH Exporter Plugin is <strong>{exporterVersion}</strong> — groom
+          exclusion needs <strong>{MIN_GROOM_EXPORTER_VERSION}+</strong> (it unparents the hidden
+          hair so it stays out of the FBX). Update the plugin in Settings, or this character's
+          export will bake the hair into the FBX.
+        </p>
+      )}
       {character.groomMode !== 'scene' ? null : !selectedScene ? (
         <p className="text-sm text-muted-foreground">
           Link a Daz scene to define its groom items.

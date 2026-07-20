@@ -727,8 +727,18 @@ export const CHARACTER_SCHEMA_VERSION = 15
  *       (base ~0, e.g. the final FAC neck pose that v26 was added to fix) still
  *       close their dangling tail. The DK/GP geograft and mouth close-outs are
  *       unchanged. Re-run the ROM script in Daz to rebuild affected timelines.
+ *  31 — Groom (hair) exclusion is HIDE-only now. The generated export block used
+ *       to unfit+unparent the groom items itself (because Daz's FBX exporter
+ *       ignores visibility on fitted followers), with an opt-in hide variant.
+ *       The DTH Exporter Plugin now unparents any HIDDEN child node before
+ *       exporting and reparents it after, so the script only hides the groom
+ *       items and lets the plugin exclude them from BOTH the FBX and the alembic.
+ *       The detach path and the "Solve hair assets by hiding" setting are gone.
+ *       NB: requires the plugin build that does the hidden-node unparent — an
+ *       older Exporter would leak hair back into the FBX. Refresh assets to
+ *       regenerate existing characters onto the hide-only export block.
  */
-export const RUNTIME_VERSION = 30
+export const RUNTIME_VERSION = 31
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -774,6 +784,28 @@ export function compareDthVersions(a: string, b: string): number {
     if (d !== 0) return d
   }
   return 0
+}
+
+/**
+ * The DTH Exporter Plugin version that first unparents hidden child nodes before
+ * exporting (and reparents after). Groom (hair) exclusion is HIDE-only from
+ * runtime v31 on — the generated script only hides the groom items and relies on
+ * the plugin to keep them out of the FBX. An OLDER plugin exports the hidden hair
+ * into the FBX, so a character with groom items needs at least this version. The
+ * DLL carries its version in its VS_FIXEDFILEINFO, so the studio can read the
+ * installed plugin's version and warn precisely (see the editor's groom section).
+ */
+export const MIN_GROOM_EXPORTER_VERSION = '2.0.1'
+
+/**
+ * Whether an installed Exporter Plugin version can do the hidden-node unparent
+ * groom exclusion ({@link MIN_GROOM_EXPORTER_VERSION}). Empty (unknown / not
+ * installed) returns `true` — we don't warn when we can't read a version, so a
+ * missing native read never nags.
+ */
+export function exporterSupportsGroomHide(installedVersion: string): boolean {
+  if (!installedVersion) return true
+  return compareDthVersions(installedVersion, MIN_GROOM_EXPORTER_VERSION) >= 0
 }
 
 /**
