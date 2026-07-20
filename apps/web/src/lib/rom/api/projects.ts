@@ -2,6 +2,8 @@ import { exists, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { withBusyCursor } from '../../busy-cursor.ts'
+
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import {
@@ -135,7 +137,7 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     const newRoot = nextCharactersSubdir ? joinPath(dir, nextCharactersSubdir) : dir
     // Every character folder physically moves — the cached locations are all stale.
     invalidateCharacterLocations()
-    await storage.moveCharactersRoot(oldRoot, newRoot)
+    await withBusyCursor(storage.moveCharactersRoot(oldRoot, newRoot))
   }
   await storage.writeManifest(dir, {
     ...manifest,

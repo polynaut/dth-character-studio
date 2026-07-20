@@ -1,6 +1,7 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { withBusyCursor } from '../../busy-cursor.ts'
 import * as storage from '../storage'
 import { dataPath } from '../storage'
 import { dedupReportSchema, installReportSchema } from './native-types.ts'
@@ -29,6 +30,12 @@ export type {
   InstallReport,
   InstallStep,
 }
+
+/** Every native command in this module is a potentially long job (release/
+ *  plugin/asset installs, library scans, dedup, uninstall) — run them all
+ *  under the global working cursor. */
+const invoke = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
+  withBusyCursor(tauriInvoke<T>(cmd, args))
 
 // App-global settings (settings.json) + the Tools-page install features: the DTH
 // release / Exporter plugin installs, the user's own Daz/Houdini content installs,
