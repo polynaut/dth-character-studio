@@ -68,40 +68,13 @@ fields:
 </td></tr></table>
 </details>
 
-<details>
-<summary><strong>Hair items — keep hair out of the export</strong></summary>
-<table><tr><td>
+&nbsp;
 
-With **Hair items live in the Daz scenes** on (the default), each scene
-carries its full look — hair included — and the hair items you pick per scene
-are kept out of the DTH export: they're hidden right before the DTH Exporter
-runs and shown again afterwards, so hair never rides into the ROM's FBX/Alembic.
-The DTH Exporter Plugin **2.0.1+** unparents the hidden items itself, keeping
-them out of **both** the FBX and the Alembic (older plugins leak the hidden hair
-into the FBX — the character page warns when yours is too old). Turned **off**,
-nothing is excluded — the classic workflow where hair lives in separate Daz
-scene files.
-
-The picker under the scene cards edits the **selected** card's list — the lists
-are **per scene**, since outfit scenes carry different hair. The one generated
-script bakes every scene's list and applies the right one for whichever scene is
-open in Daz; a scene with no items listed exports as-is.
-
-- **List the top fitted item** (e.g. the hair cap) — its children ride along
-  automatically.
-- The dropdown offers the items found in the scene file (hair-ish names first,
-  type to filter). A label the scan doesn't offer can be typed exactly as it
-  appears in Daz's **Scene** pane and added.
-- A listed label that isn't found in the scene turns amber — the export stops
-  loudly on a label missing from the open scene rather than silently shipping a
-  hair-polluted export.
-
-Characters with hair items also get an `Export_Hair_…` script — it exports the
-`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
-worn, with everything else hidden).
-
-</td></tr></table>
-</details>
+> [!TIP]
+> **Hair items** (per-scene hair kept out of the export) and everything else
+> around **multiple Daz scenes on one character** — outfit variants, the
+> selected scene, per-scene ROM overrides — moved to
+> [Advanced: Multiple Daz scenes](./advanced.md#multiple-daz-scenes--outfits--hair-variants).
 
 ## Script install location & export directory
 
@@ -455,8 +428,13 @@ Two more scripts appear alongside the ROM one **only when their feature is on**:
   with the ROM script* is turned off; otherwise the export runs inline at the tail
   of the ROM script (no separate file).
 - **`Export_Hair_<Name>_G9.dsa`** *(optional)* — generated when the character lists
-  **hair items**: it exports the `_grooms.abc` for Houdini's **DazToHueGroom Import**
-  node (the groom worn, everything else hidden).
+  **[hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)**: it
+  exports the `_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom
+  worn, everything else hidden).
+
+A character with **[per-scene ROM overrides](./advanced.md#per-scene-rom-overrides)**
+additionally gets a `ROM_<Name>_G9_<Scene>.dsa` + `<Name>_<Scene>_pose_asset.csv`
+pair per overridden scene.
 
 &nbsp;
 

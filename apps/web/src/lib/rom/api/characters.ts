@@ -131,6 +131,10 @@ function romFields(src: Character): Partial<Character> {
     groomScenes: src.groomScenes,
     groomMode: src.groomMode,
     jcmMorphMods: src.jcmMorphMods,
+    // Like groomScenes: per-scene data whose scene paths point at the SOURCE
+    // character's scenes — inert until those scenes are linked here too (the
+    // pose ids they reference come along inside the copied sections).
+    sceneOverrides: src.sceneOverrides,
   }
 }
 
@@ -580,6 +584,7 @@ export async function moveCharacterScenesFolder({
     extraScenes: character.extraScenes.map(repoint),
     imageScene: repoint(character.imageScene),
     groomScenes: character.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
+    sceneOverrides: character.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),
   }
   const project = await resolveProject(projectId)
   return storage.saveCharacter(project, next, root)

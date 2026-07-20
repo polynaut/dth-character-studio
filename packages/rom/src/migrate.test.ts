@@ -57,6 +57,23 @@ describe('migrateCharacterData — pre-versioning normalization', () => {
   })
 })
 
+describe('schema v17 — sceneOverrides (additive, zod default)', () => {
+  it('fills an empty list on definitions written before v17', () => {
+    const now = '2026-07-20T00:00:00.000Z'
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 16,
+      }),
+    )
+    expect(parsed.sceneOverrides).toEqual([])
+  })
+})
+
 describe('migrateCharacterData — version handling', () => {
   it('leaves the stored schemaVersion untouched (bumping happens on save)', () => {
     expect(migrateCharacterData({ sections: {}, schemaVersion: 3 }).schemaVersion).toBe(3)

@@ -107,6 +107,9 @@ export const P = {
   /** The character's primary Daz scene — mandatory in the real create flow, so
    *  the demo character carries one (the docs shot must show a linked scene). */
   scene: 'D:/DTH Projects/Demo/Kira/daz3d/KiraDefault_G9_GP.duf',
+  /** An extra (outfit) scene for the multi-scene docs/smoke states — linked via
+   *  `extraScenes` when SeedOptions.extraScene is on. */
+  scene2: 'D:/DTH Projects/Demo/Kira/daz3d/KiraSummertide_G9_GP.duf',
   /** A linked Houdini project (inside the char folder → the card chip reads %CHAR%\houdini). */
   houdini: 'D:/DTH Projects/Demo/Kira/houdini/Kira.hip',
 }
@@ -114,6 +117,9 @@ export const P = {
 /** The hair item the demo character lists on its primary scene (Hair-items
  *  feature). Seeded as a scene wearable too, so it resolves instead of flagging. */
 const HAIR_ITEM = 'CHT Sevenly Hair'
+/** The extra (outfit) scene's own hair item — per-SCENE hair lists are the
+ *  point of the multi-scene docs, so the outfit carries a different style. */
+const HAIR_ITEM_2 = 'Nova Ponytail Hair'
 
 /** Fixture `.duf` pose assets. Paths follow the layout `classifyPose` expects
  *  (`<Genesis N>/<DQS|Linear|…>/<name>.duf`); the names carry the JCM/FAC/GEN/
@@ -138,6 +144,9 @@ export interface SeedOptions {
   activeProjectFile?: string
   /** The rich docs character (linked scene, avatar, populated FBM/JCM/preserve). */
   demo?: boolean
+  /** Link a second (outfit) Daz scene with its own hair item — the multi-scene
+   *  states (per-scene hair, the header scene tag, ROM overrides). Demo only. */
+  extraScene?: boolean
   /** `.dcsp` manifest: opt-in Attachments feature (adds the Attachments tab). */
   assetsEnabled?: boolean
   /** `.dcsp` manifest: opt-in Daz Products feature (adds the Products tab). */
@@ -186,7 +195,14 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           // feature: the primary scene lists one hair item (groomMode defaults to
           // 'scene', so the toggle is on).
           houdiniProjects: [P.houdini],
-          groomScenes: [{ scenePath: P.scene, nodes: [{ nodeLabel: HAIR_ITEM }] }],
+          groomScenes: [
+            { scenePath: P.scene, nodes: [{ nodeLabel: HAIR_ITEM }] },
+            // The outfit scene carries its own style — hair lists are per scene.
+            ...(opts.extraScene
+              ? [{ scenePath: P.scene2, nodes: [{ nodeLabel: HAIR_ITEM_2 }] }]
+              : []),
+          ],
+          ...(opts.extraScene ? { extraScenes: [P.scene2] } : {}),
         }
       : {}),
   })
@@ -224,6 +240,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     // (the mock decodes the data URL to real bytes for readFile).
     [P.scene]: 'duf-fixture',
     [`${P.scene}.tip.png`]: AVATAR,
+    ...(opts.extraScene ? { [P.scene2]: 'duf-fixture', [`${P.scene2}.tip.png`]: AVATAR } : {}),
     [P.houdini]: 'hip-fixture',
     // A release root is marked by copyright.txt; the version parses from the
     // folder name (single-release mode).
@@ -255,7 +272,14 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     files,
     dialogPath: opts.dialogPath,
     // The demo scene reports its hair item as a wearable so the groom pill resolves.
-    sceneWearables: opts.demo ? [{ id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' }] : undefined,
+    sceneWearables: opts.demo
+      ? [
+          { id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' },
+          ...(opts.extraScene
+            ? [{ id: 'nova-ponytail-hair', label: HAIR_ITEM_2, conformTarget: '#Genesis9' }]
+            : []),
+        ]
+      : undefined,
     dufFrames: {
       [DUF.base]: FRAMES.base,
       [DUF.mouth]: FRAMES.mouth,
