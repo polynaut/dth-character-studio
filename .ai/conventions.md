@@ -24,8 +24,13 @@ the reference.
 
 - The four packages `@dth/web` / `@dth/desktop` / `@dth/rom` / `@dth/ui` are a
   **fixed group** — one product version, bumped in lockstep.
-- **Every feature PR needs a changeset** (CI enforces it). The summary line is the
-  user-facing changelog entry — write it for users, not for git.
+- **Every feature PR needs a changeset** (CI enforces it). The summary is the
+  user-facing changelog entry — write it for users, not for git, and **keep it
+  changelog-sized: one tight paragraph, a few sentences.** The full essay
+  (UI walkthrough, edge cases, implementation notes) belongs in the PR
+  description, never in the changeset — a fixed-group changeset lands verbatim
+  in FOUR CHANGELOGs and the GitHub release notes, so a wall of text is
+  amplified everywhere users read.
 - Docs/CI-only PRs satisfy the gate with an **empty** changeset
   (`pnpm changeset --empty`).
 - Dependabot PRs are exempt — which means product-relevant dependency bumps never
