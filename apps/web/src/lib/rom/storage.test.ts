@@ -185,6 +185,32 @@ describe('settings (settings.json)', () => {
     await storage.saveSettings(custom)
     expect(await storage.getSettings()).toEqual(custom)
   })
+
+  it('merges by baseline: only the caller-changed fields win over the disk state', async () => {
+    // Two windows loaded the same baseline (one project per window shares the file).
+    const baseline = await storage.getSettings()
+    // Window B saves its edit first…
+    await storage.saveSettings({ ...baseline, dazMorphsSource: 'X:/morphs' })
+    // …then window A saves a DIFFERENT edit against the stale baseline. The old
+    // whole-object write silently reverted B's field; the merge keeps both.
+    await storage.saveSettings({ ...baseline, dazLibraryFolder: 'X:/lib' }, baseline)
+    const merged = await storage.getSettings()
+    expect(merged.dazLibraryFolder).toBe('X:/lib')
+    expect(merged.dazMorphsSource).toBe('X:/morphs')
+  })
+
+  it('flags an existing-but-corrupt settings.json for the one-time startup notice', async () => {
+    addDir('/appdata')
+    files.set('/appdata/settings.json', 'not json {')
+    await storage.getSettings()
+    expect(storage.consumeSettingsFileCorrupt()).toBe(true)
+    // One-shot: consuming clears it.
+    expect(storage.consumeSettingsFileCorrupt()).toBe(false)
+    // A merely MISSING file is a fresh install, never flagged.
+    files.delete('/appdata/settings.json')
+    await storage.getSettings()
+    expect(storage.consumeSettingsFileCorrupt()).toBe(false)
+  })
 })
 
 describe('character library scan', () => {

@@ -21,6 +21,7 @@ import { DazPresetsSection } from '#/components/tools/daz-presets-section.tsx'
 import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
+import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { toast } from 'sonner'
 
 import type { DedupReport, InstallReport } from '#/lib/rom/api.ts'
@@ -77,13 +78,17 @@ function ToolsPage() {
     settings.dedupQuarantineFolder !== initial.dedupQuarantineFolder ||
     JSON.stringify(settings.dazAssetsFolders) !== JSON.stringify(initial.dazAssetsFolders) ||
     JSON.stringify(settings.dazUninstallFolders) !== JSON.stringify(initial.dazUninstallFolders)
+  // Leaving (or closing the window) with unsaved Tools edits asks first — the
+  // same guard Settings and the character editor arm; without it these edits
+  // were silently discarded.
+  useUnsavedChangesGuard(dirty, 'You have unsaved settings — leave and lose them?')
 
   // Saving stores the settings. Tools doesn't touch the active release, so it
   // just persists and re-validates dependent routes.
   async function onSave() {
     setBusy(true)
     try {
-      await saveSettings({ data: settings })
+      await saveSettings({ data: { settings, baseline: initial } })
       await router.invalidate()
       toast.success('Saved')
     } catch (e) {
@@ -110,7 +115,7 @@ function ToolsPage() {
     setReport(null)
     try {
       if (dirty) {
-        await saveSettings({ data: settings })
+        await saveSettings({ data: { settings, baseline: initial } })
         await router.invalidate()
       }
       const report = await install({ data: { dryRun } })
@@ -152,7 +157,7 @@ function ToolsPage() {
     setUninstallReport(null)
     try {
       if (dirty) {
-        await saveSettings({ data: settings })
+        await saveSettings({ data: { settings, baseline: initial } })
         await router.invalidate()
       }
       const report = await uninstallDaz({ data: { dryRun } })
@@ -175,7 +180,7 @@ function ToolsPage() {
     setAssetsReport(null)
     try {
       if (dirty) {
-        await saveSettings({ data: settings })
+        await saveSettings({ data: { settings, baseline: initial } })
         await router.invalidate()
       }
       const report = await listDazAssets()
@@ -195,7 +200,7 @@ function ToolsPage() {
     if (dryRun) setDedupReport(null)
     try {
       if (dirty) {
-        await saveSettings({ data: settings })
+        await saveSettings({ data: { settings, baseline: initial } })
         await router.invalidate()
       }
       const report = await dedupDazAssets({
