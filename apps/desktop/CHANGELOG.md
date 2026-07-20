@@ -1,5 +1,13 @@
 # @dth/desktop
 
+## 0.44.5
+
+### Patch Changes
+
+- [#365](https://github.com/polynaut/dth-character-studio/pull/365) [`ed0e9a3`](https://github.com/polynaut/dth-character-studio/commit/ed0e9a3dc3efc75fe20d9788804856681abb080a) Thanks [@polynaut](https://github.com/polynaut)! - New dark macOS app icon — the logo now sits on a slate rounded background instead of a light one, so it reads cleanly in the Dock in both light and dark mode. The Windows icon is unchanged.
+
+- [#365](https://github.com/polynaut/dth-character-studio/pull/365) [`ed0e9a3`](https://github.com/polynaut/dth-character-studio/commit/ed0e9a3dc3efc75fe20d9788804856681abb080a) Thanks [@polynaut](https://github.com/polynaut)! - Fix "forbidden path" when creating a project — or any new nested folder — on macOS/Linux. Tauri's fs plugin scope-checks a not-yet-existing path as a raw string, and the `**` scope glob doesn't match a POSIX absolute path's leading `/`, so creating `.dcsmeta/images` (and other new nested paths) failed on the macOS build. A `/**` scope now covers absolute Unix paths; Windows is unaffected.
+
 ## 0.44.4
 
 ### Patch Changes
