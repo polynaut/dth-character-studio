@@ -185,7 +185,9 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
 /// Daz library, and/or `Houdini Assets/*` → the Houdini documents folder,
 /// selected by `target` ("daz" / "houdini" / "all"). Native port of the dth-cli
 /// `install-daz-dth` / `install-houdini-dth` — now individually runnable.
-#[tauri::command]
+// `(async)` on every install command: sync commands run on the MAIN thread, and
+// these do recursive copies that can take minutes on a network library.
+#[tauri::command(async)]
 pub fn install_dth_release(request: ReleaseInstallRequest) -> InstallReport {
     let dry = request.dry_run;
     let release_root = Path::new(&request.release_root);
@@ -226,7 +228,7 @@ pub fn install_dth_release(request: ReleaseInstallRequest) -> InstallReport {
 /// Install the *Exporter Plugin* DLLs into `<Daz install>/plugins`. This is the
 /// admin-sensitive half — writing into Program Files needs elevation and Daz
 /// locks loaded plugin DLLs (see `install_plugin_dlls`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_dth_plugin(request: PluginInstallRequest) -> InstallReport {
     let step = install_plugin_dlls(
         "Exporter plugin",
@@ -256,7 +258,7 @@ pub(crate) struct HoudiniPresetsRequest {
 }
 
 /// Merge-only install (adds new files, never overwrites) for custom morphs / presets.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_daz_merge(request: MergeInstallRequest) -> InstallReport {
     let dry = request.dry_run;
     let src = Path::new(&request.source);
@@ -284,7 +286,7 @@ pub fn install_daz_merge(request: MergeInstallRequest) -> InstallReport {
 
 /// Install your Houdini `my_presets` into the Houdini docs folder (overwriting)
 /// and wire it into that version's `houdini.env`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_houdini_presets(request: HoudiniPresetsRequest) -> InstallReport {
     let dry = request.dry_run;
     let src = Path::new(&request.source);
@@ -340,7 +342,7 @@ pub(crate) struct UnrealInstallRequest {
 /// when the release ships no Unreal content, or when the content already exists
 /// and `overwrite` is off. Overwrite copies files over — it never deletes first,
 /// so project-local additions inside the folder survive. Returns files copied.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_unreal_dth(request: UnrealInstallRequest) -> Result<u64, String> {
     let uproject = Path::new(&request.uproject_path);
     let is_uproject = uproject
@@ -372,7 +374,9 @@ pub fn install_unreal_dth(request: UnrealInstallRequest) -> Result<u64, String> 
 /// on purpose: the JS fs plugin's `exists` proved unreliable for this probe (it
 /// silently reported the folder missing on a real project), and this stays
 /// symmetric with `install_unreal_dth`'s own path derivation.
-#[tauri::command]
+// `(async)` even for a probe: `.is_dir()` on an unreachable network project can
+// block for seconds — that stall must not happen on the main thread.
+#[tauri::command(async)]
 pub fn unreal_dth_present(uproject_path: String) -> bool {
     Path::new(&uproject_path)
         .parent()

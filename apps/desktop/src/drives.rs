@@ -109,14 +109,15 @@ fn error_text(code: u32) -> String {
 }
 
 /// Resolve the UNC behind a path on a mapped network drive (for remembering it).
+// `(async)`: WNet calls can block on an unreachable server — off the main thread.
 #[cfg(windows)]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn unc_for_path(path: String) -> Option<String> {
     unc_for(&path)
 }
 
 #[cfg(not(windows))]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn unc_for_path(_path: String) -> Option<String> {
     None
 }
@@ -125,7 +126,7 @@ pub fn unc_for_path(_path: String) -> Option<String> {
 /// remap the missing ones (current session, no stored credentials), and report
 /// every outcome. Runs on startup.
 #[cfg(windows)]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ensure_network_drives(mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
     use windows_sys::Win32::Foundation::NO_ERROR;
 
@@ -161,7 +162,7 @@ pub fn ensure_network_drives(mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
 }
 
 #[cfg(not(windows))]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ensure_network_drives(_mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
     Vec::new()
 }

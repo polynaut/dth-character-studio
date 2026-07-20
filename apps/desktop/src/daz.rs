@@ -5,7 +5,8 @@
 /// a running Daz (DS6) silently ignores forwarded `.duf` opens, but forwarded
 /// SCRIPT files still execute — so the studio opens scenes through a one-shot
 /// `.dsa` when an instance is up (see `run_daz_script`).
-#[tauri::command]
+// `(async)`: spawns `tasklist` and waits for its output — off the main thread.
+#[tauri::command(async)]
 pub fn daz_studio_running() -> bool {
     #[cfg(windows)]
     {
@@ -43,7 +44,9 @@ pub fn daz_studio_running() -> bool {
 /// can't be located.
 /// Returns the executable it launched (so the caller can log which instance it
 /// targeted — useful when debugging why a running Daz did or didn't react).
-#[tauri::command]
+// `(async)`: the running-instance probe shells out to PowerShell (a CIM query
+// takes noticeable time) — off the main thread.
+#[tauri::command(async)]
 pub fn run_daz_script(script_path: String) -> Result<String, String> {
     #[cfg(windows)]
     {

@@ -12,7 +12,7 @@ use crate::archive::{
 };
 use crate::content::{find_content_level, zip_dir_level, CONTENT_FOLDERS, META_FOLDERS};
 use crate::dedup::{collect_asset_files, genesis_rank, AssetFiles};
-use crate::fsutil::{folder_name, join_rel, lock_dest};
+use crate::fsutil::{entry_is_real_dir, folder_name, join_rel, lock_dest};
 use crate::report::{
     io_detail, step_err, step_header, step_ok, step_skip, InstallReport, InstallStep,
 };
@@ -62,8 +62,14 @@ fn sync_dir(
         let from = entry.path();
         let to = dst.join(&name);
         let rel_child = rel.join(&name);
-        if from.is_dir() {
+        if entry_is_real_dir(&entry) {
             total += sync_dir(&from, &to, dry, force, &rel_child, out, fp, accepted)?;
+        } else if from.is_dir() {
+            // A directory symlink/junction (real dir above is symlink-free — the
+            // fsutil walker rule): following it can loop forever on a cycle while
+            // COPYING — filling the destination disk — or escape the asset tree.
+            // Not the asset's own content; treat it as a leaf and skip it.
+            continue;
         } else {
             total += 1;
             let rel_str = rel_child.to_string_lossy().replace('\\', "/");
@@ -169,8 +175,9 @@ fn process_folder_asset(
 /// `dest`, accumulating the changed files / total / destination fingerprint so
 /// nested package zips merge into their outer asset's step. Returns whether a Daz
 /// content level was found in this archive or a nested one; `Err` carries a
-/// step_err detail. `budget` is the CURRENT archive's inflate budget (bounding
-/// its own entry + nested-zip inflation); each nested archive derives its own.
+/// step_err detail. `budget` is the top-level archive's inflate budget; nested
+/// archives SHARE it, so one budget bounds the whole tree's inflation (a crafted
+/// wrapper can't mint a fresh allowance per inner zip).
 // 11 args: a recursive zip-diff threading scan state through each nested archive;
 // splitting it would just scatter that state across a struct.
 #[allow(clippy::too_many_arguments)]
@@ -200,17 +207,15 @@ fn diff_zip_archive(
             }
             let tmp = extract_nested_zip(archive, *idx, budget)
                 .map_err(|e| io_detail(&format!("unpack {path}"), &e))?;
-            // The inner archive gets its own ratio budget from ITS compressed size.
-            let inner_len = fs::metadata(&tmp.0).map(|m| m.len()).unwrap_or(0);
             let file =
                 fs::File::open(&tmp.0).map_err(|e| io_detail(&format!("open {path}"), &e))?;
             let mut inner =
                 zip::ZipArchive::new(file).map_err(|e| format!("unzip {path} failed: {e}"))?;
-            let mut inner_budget = budget.nested(path, inner_len);
-            inner_budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
+            // The inner archive shares the OUTER budget (see the fn doc).
+            budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
             found |= diff_zip_archive(
                 &mut inner, dest, dry, force, accepted, depth - 1, dest_sizes, diff_files, total,
-                fp, &mut inner_budget,
+                fp, budget,
             )?;
         }
         if found {
@@ -441,7 +446,10 @@ fn winner_skip_map(
 /// skipping ones that already appear installed unless `force`. Shared files are
 /// resolved by `winner_skip_map` (newer genesis, then bigger), so only the winning
 /// copy is installed and the losers are never flagged.
-#[tauri::command]
+// `(async)` on this and every other I/O-heavy command: a sync command runs on the
+// MAIN thread (see windows::open_project_window), so a multi-GB install / network
+// walk would freeze every window's chrome and queue all other IPC behind it.
+#[tauri::command(async)]
 pub fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let dry = request.dry_run;
     let force = request.force;
@@ -514,7 +522,7 @@ fn process_assets(
 }
 
 /// Read-only scan: what content each asset holds and whether it's already in the library.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let accepted: HashSet<String> = request.accepted.into_iter().collect();

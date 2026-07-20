@@ -119,6 +119,14 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
     Ok(())
 }
 
+/// Serializes Home-window creation: home windows deliberately have no
+/// `WindowProjects` entry, so `unique_window_label` has no reservation step —
+/// two concurrent opens could both pick "home-1" and the second `build()` would
+/// fail. One lock across find→build closes that race (project windows reserve
+/// their label in the map instead).
+#[cfg(desktop)]
+static HOME_WINDOW_LOCK: Mutex<()> = Mutex::new(());
+
 /// Open — or focus — the Home (launcher) window (a window with no project mapping).
 /// With `new_project`, also open its create-project panel: an already-running
 /// window gets the `menu-new-project` event (its listener is live); a fresh
@@ -128,6 +136,7 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
 pub(crate) fn open_home_window_impl(app: &tauri::AppHandle, new_project: bool) -> tauri::Result<()> {
     use tauri::{Emitter, Manager};
     use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let _guard = HOME_WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let projects = app.state::<WindowProjects>();
     let with_project: HashSet<String> = lock_windows(&projects).keys().cloned().collect();
     for (label, w) in app.webview_windows() {

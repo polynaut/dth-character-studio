@@ -6,9 +6,11 @@ use crate::fsutil::lock_dest;
 
 // --- Decompression-bomb bounds ----------------------------------------------
 // Users share Daz asset zips with each other, so a hostile archive is in scope.
-// Wherever entries are actually INFLATED, the output is bounded per archive: a
-// byte budget of max(INFLATE_RATIO × the archive's compressed file size,
-// INFLATE_FLOOR) plus an entry-count cap. Central-directory-only scans
+// Wherever entries are actually INFLATED, the output is bounded per TOP-LEVEL
+// archive: a byte budget of max(INFLATE_RATIO × the archive's compressed file
+// size, INFLATE_FLOOR) plus an entry-count cap. Nested zips are charged against
+// the same budget — one budget bounds the whole tree, so a crafted wrapper can't
+// mint a fresh ≥floor allowance per inner zip. Central-directory-only scans
 // (`zip_file_entries`) inflate nothing and carry no budget.
 
 /// Total inflated bytes allowed per compressed byte — generous for any real Daz
@@ -41,12 +43,6 @@ impl InflateBudget {
     /// inject a tiny cap here instead of crafting a >1 GiB fixture.
     fn with_max_bytes(label: impl Into<String>, max_bytes: u64) -> Self {
         Self { label: label.into(), max_bytes, inflated: 0 }
-    }
-
-    /// Budget for a NESTED archive found inside this one — same formula, keyed
-    /// to the inner zip's compressed size, labelled through the outer archive.
-    pub(crate) fn nested(&self, entry_path: &str, compressed_len: u64) -> Self {
-        Self::new(format!("{} → {entry_path}", self.label), compressed_len)
     }
 
     /// Refuse an archive with an absurd entry count before inflating anything.
@@ -131,7 +127,8 @@ impl Drop for TempFile {
 }
 
 /// Inflate the nested zip entry `idx` to a unique temp file, charged against the
-/// OUTER archive's budget (the inner archive then gets its own via `nested`).
+/// OUTER archive's budget (the inner archive's entries then charge that same
+/// budget — the whole nested tree shares one allowance).
 pub(crate) fn extract_nested_zip(
     archive: &mut zip::ZipArchive<fs::File>,
     idx: usize,

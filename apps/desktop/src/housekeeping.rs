@@ -61,7 +61,8 @@ pub(crate) struct SweepRequest {
 
 /// Age-out stale product-scan files: delete those older than `max_age_days` and
 /// drop the directories they emptied. Runs on launch + from the manual button.
-#[tauri::command]
+// `(async)`: walks + deletes across app-data — off the main thread.
+#[tauri::command(async)]
 pub fn housekeeping_sweep(request: SweepRequest) -> SweepReport {
     let mut report = SweepReport::default();
     let dir = Path::new(&request.product_scans_dir);
@@ -77,8 +78,6 @@ pub fn housekeeping_sweep(request: SweepRequest) -> SweepReport {
     report
 }
 
-/// Whether a folder exists + its total file count and size — for the quarantine
-/// size readout in Tools.
 #[cfg(test)]
 mod tests {
     use super::*;

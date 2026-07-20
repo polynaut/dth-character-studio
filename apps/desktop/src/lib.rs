@@ -25,6 +25,15 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         // Window label → the `.dcsp` it's showing; read by `active_project_file`.
         .manage(WindowProjects::default())
+        // A closed window's label→project mapping is stale the moment it's gone —
+        // drop it so the label is reusable and the map can't grow for the session.
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                use tauri::Manager;
+                let projects = window.app_handle().state::<WindowProjects>();
+                lock_windows(&projects).remove(window.label());
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -54,13 +63,14 @@ pub fn run() {
                 // open_project_window) so creating the webview doesn't deadlock.
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    match dcsp_from_args(&argv) {
-                        Some(dcsp) => {
-                            let _ = open_project_window_impl(&app, &dcsp);
-                        }
-                        None => {
-                            let _ = open_home_window_impl(&app, false);
-                        }
+                    let result = match dcsp_from_args(&argv) {
+                        Some(dcsp) => open_project_window_impl(&app, &dcsp),
+                        None => open_home_window_impl(&app, false),
+                    };
+                    // Otherwise a failed second launch (e.g. a builder error) gives
+                    // zero feedback in the running instance.
+                    if let Err(e) = result {
+                        eprintln!("second-launch window failed: {e}");
                     }
                 });
             }))
@@ -75,8 +85,16 @@ pub fn run() {
             .menu(build_app_menu)
             .on_menu_event(|app, event| match event.id().as_ref() {
                 "new_project" => {
-                    // Focus/open Home AND open its create-project panel.
-                    let _ = open_home_window_impl(app, true);
+                    // Focus/open Home AND open its create-project panel. Menu events
+                    // run on the main thread — build the window off it, exactly like
+                    // the single-instance handler above (a synchronous build() on the
+                    // main thread deadlocks; see windows::open_project_window).
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = open_home_window_impl(&app, true) {
+                            eprintln!("New Project window failed: {e}");
+                        }
+                    });
                 }
                 "refresh_assets" => {
                     let _ = app.emit("menu-refresh-assets", ());
