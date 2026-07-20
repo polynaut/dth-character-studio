@@ -498,7 +498,7 @@ function CharacterPage() {
           </span>
         </button>
         <div className="title-scroll pb-6">
-          <div className="flex items-baseline gap-2.5">
+          <div className="flex items-center gap-2.5">
             <EditableTitle
               name={character.name}
               ariaLabel="Character name"
