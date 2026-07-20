@@ -29,6 +29,15 @@ document.addEventListener('click', (e) => {
   if (/\/screenshots\//.test(full.src)) full.style.width = 'min(1280px, 96vw)'
   else full.style.maxWidth = '96vw'
   overlay.replaceChildren(full)
+  // Carry the article's caption (the <sub> sharing the image's paragraph)
+  // into the overlay; fall back to the alt text.
+  const caption = img.closest('p')?.querySelector('sub')?.textContent?.trim() || img.alt
+  if (caption) {
+    const cap = document.createElement('p')
+    cap.className = 'lightbox-caption'
+    cap.textContent = caption
+    overlay.appendChild(cap)
+  }
   overlay.classList.add('open')
   document.body.style.overflow = 'hidden'
 })

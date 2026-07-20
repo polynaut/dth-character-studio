@@ -113,6 +113,14 @@
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.55);
 }
 
+.guide-lightbox .lightbox-caption {
+  margin: 14px auto 0;
+  max-width: 900px;
+  color: var(--fg);
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
 .guide-content h1 {
   margin: 0 0 18px;
   font-size: clamp(1.7rem, 4vw, 2.3rem);
