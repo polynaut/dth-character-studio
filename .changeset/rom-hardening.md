@@ -1,0 +1,6 @@
+---
+"@dth/rom": patch
+"@dth/web": patch
+---
+
+ROM-core hardening from the 2026-07-18 review: generated Daz scripts escape U+2028/U+2029 in every embedded string (a shared definition carrying one no longer breaks the whole script — Daz's engine treats them as line terminators); the exporter and the PoseAsset CSV now share one sanitized figure name, so a comma in a character name can't make the CSV point at a reference FBX the exporter never writes; the PHY preset block's start frame derives from the single frame-math source (`presetEndFrame`) instead of a private sum; a custom PHY section flags its CSV as experimental until the physics payload is modeled; art-direction frame offsets must be whole and non-negative; sections in unsupported modes (e.g. a crafted RET-custom) are rejected at parse instead of silently shifting every custom frame, while files missing section keys now heal to defaults; duplicate pose names within one suffix scope are flagged before they collide into the same Unreal morph; the Daz morph-CSV import handles BOMs and quoted fields (RFC-4180) instead of naive comma-splitting; `mirrorGroup` no longer corrupts non-sided names like CleftChin; and a corrupt (non-object) character JSON fails validation cleanly instead of throwing.

@@ -4,6 +4,7 @@ import {
   newId,
   REFERENCE_FBX_SECTIONS,
   ROM_SECTIONS,
+  SECTION_MODES,
 } from './types.ts'
 
 import type {
@@ -214,9 +215,13 @@ export function sectionsFromFlatFrames(
   const sections = defaultSections()
   let lastSection: RomSection | null = null
   for (const frame of frames) {
-    const section = (ROM_SECTIONS as ReadonlyArray<string>).includes(frame.section)
+    // Unknown sections AND sections that don't support custom mode (e.g. RET —
+    // see SECTION_MODES, now enforced by the schema) both land in MISC, so a
+    // legacy file can't produce a section configuration the parse would reject.
+    const known = (ROM_SECTIONS as ReadonlyArray<string>).includes(frame.section)
       ? (frame.section as RomSection)
       : 'MISC'
+    const section = SECTION_MODES[known].includes('custom') ? known : 'MISC'
     const config = sections[section]
     config.enabled = true
     config.mode = 'custom'
@@ -252,7 +257,11 @@ export function mirrorGroup(group: RomGroup): RomGroup {
   const swap = (value: string) =>
     value
       .replace(/Left/g, 'Right')
-      .replace(/left/g, 'right')
+      // Lowercase 'left' only when it STARTS a word: real Daz morphs contain
+      // 'left' mid-word without meaning a side (body_bs_CleftChin), and blindly
+      // swapping corrupted those into nonsense (…CrightChin) instead of leaving
+      // them alone. Word-initial covers the real cases (left_thigh, leftFoot).
+      .replace(/(?<![A-Za-z])left/g, 'right')
       .replace(/_l\b/g, '_r')
       .replace(/\bL_/g, 'R_')
   return {

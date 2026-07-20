@@ -80,6 +80,30 @@ describe('romValidationErrors', () => {
     ])
   })
 
+  it('flags duplicate pose names within the same suffix scope (same Unreal morph)', () => {
+    const s = customSection('FBM', [
+      pose('BodyTone', ['body_bs_BodyTone']),
+      pose('BodyTone', ['body_bs_BodyToneAlt']), // frame 1: collides with frame 0
+    ])
+    const errs = romValidationErrors(s)
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatchObject({ field: 'name', relativeFrame: 1 })
+    expect(errs[0].message).toMatch(/duplicate/i)
+  })
+
+  it('allows the same pose name across DIFFERENT suffixes (left/right variants)', () => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.JCM.enabled = true
+    s.JCM.mode = 'custom'
+    s.JCM.groups = [
+      { ...group([pose('KneeBend', ['thigh_l'])]), id: 'gl', suffix: 'left' },
+      { ...group([pose('KneeBend', ['thigh_r'])]), id: 'gr', suffix: 'right' },
+    ]
+    // The group suffix appends _l/_r to the Unreal morph name — no collision.
+    expect(romValidationErrors(s)).toEqual([])
+  })
+
   it('never errors on preset sections (nothing to fill in)', () => {
     const s = defaultSections()
     for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false

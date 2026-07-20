@@ -23,6 +23,21 @@ describe('cleanMorphName', () => {
 })
 
 describe('posesFromDazCsv', () => {
+  it('strips a BOM so the first data row is kept', () => {
+    // Excel and some Daz exports prepend a BOM; the old naive split made the
+    // first row's frame parse NaN and silently dropped it.
+    const bom = String.fromCharCode(0xfeff)
+    const poses = posesFromDazCsv(`${bom}384,,,Genesis9,body_bs_X,1\n`)
+    expect(poses).toHaveLength(1)
+    expect(poses[0].frame).toBe(384)
+  })
+
+  it('reads quoted fields containing commas without shifting the triplets', () => {
+    const poses = posesFromDazCsv('5,,,"Hip, twist",prop_X,0.5\n')
+    expect(poses).toHaveLength(1)
+    expect(poses[0].morphs[0]).toEqual({ node: 'Hip, twist', prop: 'prop_X', value: 0.5 })
+  })
+
   it('parses single- and multi-morph rows into named poses', () => {
     const csv = [
       '384,,,Genesis9,xMusc_body_bs_AnconeusL_B_HD2,1',

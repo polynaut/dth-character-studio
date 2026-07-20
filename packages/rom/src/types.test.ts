@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CHARACTER_SCHEMA_VERSION,
+  artDirectionFrameSchema,
   characterSchema,
   characterSkinning,
   compareDthVersions,
@@ -101,6 +102,48 @@ describe('string bounds (hostile shared JSONs)', () => {
     // reject a reasonable inline avatar.
     const dataUrl = `data:image/png;base64,${'A'.repeat(100_000)}`
     expect(characterSchema.safeParse({ ...base, image: dataUrl }).success).toBe(true)
+  })
+})
+
+describe('artDirection frame offsets', () => {
+  const ad = { id: 'a', rom: 'gp', frame: 100, name: 'AnusOpen', morphs: [] }
+
+  it('accepts whole non-negative offsets', () => {
+    expect(artDirectionFrameSchema.safeParse(ad).success).toBe(true)
+    expect(artDirectionFrameSchema.safeParse({ ...ad, frame: 0 }).success).toBe(true)
+  })
+
+  it('rejects fractional and negative offsets (they would key into a neighboring block)', () => {
+    expect(artDirectionFrameSchema.safeParse({ ...ad, frame: 2.5 }).success).toBe(false)
+    expect(artDirectionFrameSchema.safeParse({ ...ad, frame: -1 }).success).toBe(false)
+  })
+})
+
+describe('sections schema (SECTION_MODES enforcement + healing)', () => {
+  it('rejects a section in a mode it does not support (RET custom would shift every custom frame)', () => {
+    const result = characterSchema.safeParse({
+      ...base,
+      sections: { RET: { enabled: true, mode: 'custom' } },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('heals missing section keys to their defaults instead of hard-failing', () => {
+    const character = characterSchema.parse({
+      ...base,
+      // A hand-edited file carrying only one section: the others fill in.
+      sections: { FBM: { enabled: true, mode: 'custom' } },
+    })
+    expect(character.sections.RET.mode).toBe('preset')
+    expect(character.sections.JCM.enabled).toBe(true)
+    expect(character.sections.FBM.enabled).toBe(true)
+  })
+
+  it('hands every parse a FRESH default sections object (no shared mutable state)', () => {
+    const a = characterSchema.parse(base)
+    const b = characterSchema.parse(base)
+    a.sections.FBM.enabled = true
+    expect(b.sections.FBM.enabled).toBe(false)
   })
 })
 
