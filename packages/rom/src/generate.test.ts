@@ -1156,7 +1156,7 @@ describe('groom items (hair kept out of the export)', () => {
     expect(content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
     expect(content).toContain('String(Scene.getFilename()).split(')
     // No entry for the open scene → export as-is (a scene without groom is valid).
-    expect(content).toContain('No groom list for the open scene - exporting as-is.')
+    expect(content).toContain('No hair list for the open scene - exporting as-is.')
     // HIDE → export → show. The DTH Exporter Plugin unparents any hidden child
     // node before exporting, so hiding excludes the groom from BOTH artifacts —
     // the script no longer unfit+unparents itself.
@@ -1208,7 +1208,7 @@ describe('groom items (hair kept out of the export)', () => {
   it('generateAll emits the groom script only with an export path AND groom lists', () => {
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
-      'Export_Groom_Electra_G9.dsa',
+      'Export_Hair_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
     expect(generateAll(groomChar({ exportPath: '' }), {}, FRAMES).map((f) => f.fileName)).toEqual([
@@ -1219,7 +1219,7 @@ describe('groom items (hair kept out of the export)', () => {
 
   it('the groom script bakes the map and calls the DOCUMENTED 3-arg export (saveSettings false)', () => {
     const script = toGroomExportScriptDsa(groomChar())
-    expect(script.fileName).toBe('Export_Groom_Electra_G9.dsa')
+    expect(script.fileName).toBe('Export_Hair_Electra_G9.dsa')
     expect(script.content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
     // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
     expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
