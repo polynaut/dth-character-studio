@@ -18,6 +18,7 @@
     "build:desktop": "pnpm --filter @dth/desktop tauri build",
     "generate-routes": "pnpm --filter @dth/web generate-routes",
     "screenshots": "pnpm --filter @dth/web screenshots",
+    "gifs": "pnpm --filter @dth/web gifs",
     "build:guide": "node scripts/build-guide-site.mjs",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

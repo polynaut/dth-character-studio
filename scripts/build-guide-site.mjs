@@ -18,7 +18,7 @@
 // Raw HTML in the markdown (<details>, <p align="center"><img>, tables) passes
 // through untouched — the same reason it renders on GitHub.
 
-import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Marked } from 'marked'
@@ -219,4 +219,5 @@ for (const md of pages) {
   writeFileSync(join(OUT, htmlName(md)), shell(md, html))
 }
 cpSync(join(SRC, 'screenshots'), join(OUT, 'screenshots'), { recursive: true })
-console.log(`guide → site/guide: ${pages.length} pages + screenshots`)
+if (existsSync(join(SRC, 'gifs'))) cpSync(join(SRC, 'gifs'), join(OUT, 'gifs'), { recursive: true })
+console.log(`guide → site/guide: ${pages.length} pages + screenshots + gifs`)

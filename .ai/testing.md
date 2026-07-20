@@ -94,3 +94,10 @@ are generated, not hand-shot. **The full runbook lives in the header comment of
   Daz/Houdini — an app restyle doesn't affect them.
 - Navigate by clicking header links, not `page.goto` (a goto re-runs `main.tsx`
   startup navigation).
+- **Interaction GIFs** (`pnpm gifs` → `docs/guide/gifs/*.gif`) are the moving
+  siblings: `smoke/guide.gifs.ts` scripts each interaction as a FIXED frame
+  sequence — a fake cursor overlay glides between UI states (headless Chromium
+  draws no OS pointer), every frame is a screenshot, `gifenc` encodes them
+  byte-reproducibly (no video capture, no ffmpeg). Same fixtures/frozen clock;
+  transitions are pinned to 0ms while recording; the coverage test guards
+  gifs/ ↔ guide references too. Machinery: `smoke/gif-recorder.ts`.
