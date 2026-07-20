@@ -94,7 +94,6 @@ async function initDownload() {
   const sub = document.getElementById('dl-sub');
   const alt = document.getElementById('dl-alt');
   const topbarBtn = document.getElementById('topbar-dl');
-  const footerVersion = document.getElementById('footer-version');
 
   let release;
   try {
@@ -105,9 +104,6 @@ async function initDownload() {
 
   const { win, mac } = pickAssets(release.assets);
   const os = detectOS();
-
-  footerVersion.textContent = release.tag;
-  footerVersion.href = release.url;
 
   const altParts = [];
   const altLink = (text, href) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
