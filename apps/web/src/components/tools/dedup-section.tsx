@@ -16,6 +16,7 @@ export function DedupSection({
   report,
   keeperOverrides,
   onChooseKeeper,
+  onAcceptShared,
   onCloseReport,
   onScan,
   onApply,
@@ -26,6 +27,9 @@ export function DedupSection({
   report: DedupReport | null
   keeperOverrides: Set<string>
   onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
+  /** Accept a group of shared files as legitimately shared (drops them from the
+   *  conflict list on the next scan). */
+  onAcceptShared: (rels: Array<string>) => void
   onCloseReport: () => void
   onScan: () => void
   onApply: () => void
@@ -95,8 +99,10 @@ export function DedupSection({
       {report && (
         <DedupReportList
           report={report}
+          busy={busy}
           keeperOverrides={keeperOverrides}
           onChooseKeeper={onChooseKeeper}
+          onAcceptShared={onAcceptShared}
           onClose={onCloseReport}
         />
       )}

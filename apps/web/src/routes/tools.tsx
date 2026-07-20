@@ -12,6 +12,7 @@ import {
   installHoudiniPresets,
   listDazAssets,
   saveSettings,
+  setAcceptedConflicts,
   uninstallDaz,
 } from '#/lib/rom/api.ts'
 import { CustomMorphsSection } from '#/components/tools/custom-morphs-section.tsx'
@@ -229,6 +230,25 @@ function ToolsPage() {
     }
   }
 
+  // Accept a group of shared files as legitimately shared: persist them onto the
+  // settings' acceptedConflicts, then re-scan so they drop out of the conflict
+  // list (the scan/install then treats them as in-sync). `clear` un-accepts.
+  async function acceptShared(rels: Array<string>, clear = false) {
+    setDedupBusy(true)
+    try {
+      const acceptedConflicts = await setAcceptedConflicts(rels, clear)
+      // Keep the in-memory settings in step with what we just wrote, so a later
+      // Save (baseline-merged) doesn't revert the acceptance.
+      setSettings((s) => ({ ...s, acceptedConflicts }))
+      setDedupReport(await dedupDazAssets({ data: { dryRun: true } }))
+      toast.success(clear ? 'Shared files un-accepted' : `Accepted ${rels.length} shared file(s)`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDedupBusy(false)
+    }
+  }
+
   // Override which copy of a duplicate group to keep — local only (no re-scan);
   // passed to Apply. Clears the group's other members so exactly one is chosen.
   function chooseKeeper(groupLabels: Array<string>, keep: string) {
@@ -302,6 +322,7 @@ function ToolsPage() {
             report={dedupReport}
             keeperOverrides={keeperOverrides}
             onChooseKeeper={chooseKeeper}
+            onAcceptShared={(rels) => void acceptShared(rels)}
             onCloseReport={() => setDedupReport(null)}
             onScan={() => void runDedup(true)}
             onApply={() => void runDedup(false)}
