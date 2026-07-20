@@ -38,13 +38,11 @@ describe('mirrorMod', () => {
     const left: JcmMorphMod = {
       boneLabel: 'Left Thigh Bend',
       axis: 'XRotate',
-      positive: [
+      drives: [
         {
           morphName: '!Hip Bend Controller',
           range: { angle: { start: 0, end: 37.5 }, value: { start: 1, end: 1 } },
         },
-      ],
-      negative: [
         {
           morphName: 'Hip Adjuster L',
           range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 1 } },
@@ -55,24 +53,23 @@ describe('mirrorMod', () => {
     expect(right.boneLabel).toBe('Right Thigh Bend')
     expect(right.axis).toBe('XRotate')
     // Side-less controller unchanged; the L-suffixed morph flips to R.
-    expect(right.positive[0].morphName).toBe('!Hip Bend Controller')
-    expect(right.negative[0].morphName).toBe('Hip Adjuster R')
+    expect(right.drives[0].morphName).toBe('!Hip Bend Controller')
+    expect(right.drives[1].morphName).toBe('Hip Adjuster R')
     // Angles/values are copied verbatim (no negation).
-    expect(right.positive[0].range).toEqual({ angle: { start: 0, end: 37.5 }, value: { start: 1, end: 1 } })
-    expect(right.negative[0].range).toEqual({ angle: { start: 0, end: -115 }, value: { start: 0, end: 1 } })
+    expect(right.drives[0].range).toEqual({ angle: { start: 0, end: 37.5 }, value: { start: 1, end: 1 } })
+    expect(right.drives[1].range).toEqual({ angle: { start: 0, end: -115 }, value: { start: 0, end: 1 } })
   })
 
   it('deep-copies ranges (no shared references with the source)', () => {
     const src: JcmMorphMod = {
       boneLabel: 'Left Foot',
       axis: 'YRotate',
-      positive: [
+      drives: [
         { morphName: 'x', range: { angle: { start: 0, end: 30 }, value: { start: 0, end: 1 } } },
       ],
-      negative: [],
     }
     const out = mirrorMod(src)
-    out.positive[0].range.angle.end = 999
-    expect(src.positive[0].range.angle.end).toBe(30)
+    out.drives[0].range.angle.end = 999
+    expect(src.drives[0].range.angle.end).toBe(30)
   })
 })

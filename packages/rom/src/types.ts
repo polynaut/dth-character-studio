@@ -468,23 +468,57 @@ export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 
 const rangeSchema = z.object({ start: z.number(), end: z.number() })
 
-const jcmMorphModDriveSchema = z.object({
+export const jcmMorphModDriveSchema = z.object({
   morphName: z.string().max(MAX_NAME_LENGTH),
   range: z.object({ angle: rangeSchema, value: rangeSchema }),
 })
+export type JcmMorphModDrive = z.infer<typeof jcmMorphModDriveSchema>
 
 /**
  * Drives morphs proportionally to a bone rotation across the JCM ROM
- * (DthWorkflow.dsa `options.jcmMorphMods`).
+ * (DthWorkflow.dsa `options.jcmMorphMods`). A rule holds one signed `drives[]`
+ * list: each drive's direction (which way the bone bends) is inferred from its
+ * angle-range sign, so there is no separate positive/negative selector — the
+ * runtime still consumes split lists, so generation splits them (see
+ * {@link jcmMorphModForRuntime}).
  */
 export const jcmMorphModSchema = z.object({
   boneLabel: z.string().max(MAX_NAME_LENGTH),
   /** Rotation axis, e.g. "XRotate". */
   axis: z.string().max(MAX_NAME_LENGTH),
-  positive: z.array(jcmMorphModDriveSchema).default([]),
-  negative: z.array(jcmMorphModDriveSchema).default([]),
+  drives: z.array(jcmMorphModDriveSchema).default([]),
 })
 export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
+
+/**
+ * Which way a JCM drive corrects — inferred from its angle range's sign (the
+ * extreme angle furthest from rest). A rest-only / zero range counts as positive;
+ * the grid flags such ranges, so it shouldn't reach here in practice.
+ */
+export function jcmDriveDirection(drive: JcmMorphModDrive): 'positive' | 'negative' {
+  const { start, end } = drive.range.angle
+  const extreme = Math.abs(end) >= Math.abs(start) ? end : start
+  return extreme < 0 ? 'negative' : 'positive'
+}
+
+/**
+ * The runtime `.dsa` still consumes a rule as split positive/negative drive
+ * lists; the studio stores one signed `drives[]` and splits it here at generation
+ * time, so the emitted `options.jcmMorphMods` contract is byte-for-byte unchanged.
+ */
+export function jcmMorphModForRuntime(mod: JcmMorphMod): {
+  boneLabel: string
+  axis: string
+  positive: Array<JcmMorphModDrive>
+  negative: Array<JcmMorphModDrive>
+} {
+  const positive: Array<JcmMorphModDrive> = []
+  const negative: Array<JcmMorphModDrive> = []
+  for (const drive of mod.drives) {
+    ;(jcmDriveDirection(drive) === 'negative' ? negative : positive).push(drive)
+  }
+  return { boneLabel: mod.boneLabel, axis: mod.axis, positive, negative }
+}
 
 /**
  * Version of the character-JSON **schema** — independent of the app version.
@@ -543,8 +577,12 @@ export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
  *       (a character's outfit scenes carry different hair styles; the script
  *       resolves the open scene's list at run time). Removal+addition — zod
  *       strips the old flat list and fills the new default; no migration step.
+ *  16 — a JCM "Modify frames" rule's split `positive[]` / `negative[]` drive
+ *       lists merged into one signed `drives[]`; direction is inferred from each
+ *       drive's angle-range sign now (the positive/negative selector was
+ *       redundant). Restructure — migration step concatenates the two lists.
  */
-export const CHARACTER_SCHEMA_VERSION = 15
+export const CHARACTER_SCHEMA_VERSION = 16
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
