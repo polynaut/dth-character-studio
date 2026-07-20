@@ -598,6 +598,99 @@ test('character-create-panel', async ({ page }) => {
   await shoot(page, join(OUT, 'character-create-panel.png'), page.getByRole('dialog'))
 })
 
+/**
+ * A tight detail crop around one element (+pad) — for the small `detail-*.png`
+ * shots the guide shows at natural size (guide.css exempts them from the
+ * column stretch). Deliberately does NOT park the mouse: hover states are
+ * often the point of a detail shot.
+ */
+async function shootTight(page: Page, path: string, el: Locator) {
+  // Room for the hover badge that overlaps the top-right corner; tight on the
+  // other sides so neighbouring UI stays out of the crop.
+  const pad = { top: 14, right: 14, bottom: 6, left: 6 }
+  const b = (await el.boundingBox())!
+  await page.screenshot({
+    path,
+    clip: {
+      x: b.x - pad.left,
+      y: b.y - pad.top,
+      width: b.width + pad.left + pad.right,
+      height: b.height + pad.top + pad.bottom,
+    },
+  })
+}
+
+test('detail-path-chip', async ({ page }) => {
+  await openProject(page)
+  // The project header's own path chip. Hovering shows the copy badge.
+  const chip = page.getByRole('button', { name: 'Copy path' }).first()
+  await settle(page)
+  await chip.hover()
+  await page.waitForTimeout(250)
+  await shootTight(page, join(OUT, 'detail-path-chip.png'), chip)
+})
+
+test('detail-path-chip-alt', async ({ page }) => {
+  await openProject(page)
+  // Alt held: the hover badge flips to the folder icon — previewing that
+  // Alt+click opens the location in Explorer instead of copying.
+  const chip = page.getByRole('button', { name: 'Copy path' }).first()
+  await settle(page)
+  await page.keyboard.down('Alt')
+  await chip.hover()
+  await page.waitForTimeout(250)
+  await shootTight(page, join(OUT, 'detail-path-chip-alt.png'), chip)
+  await page.keyboard.up('Alt')
+})
+
+test('settings-exporter-plugin', async ({ page }) => {
+  await prime(page, buildSeed())
+  await page.goto('/')
+  await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await shoot(
+    page,
+    join(OUT, 'settings-exporter-plugin.png'),
+    card(page, 'Setup DTH Exporter Plugin Release'),
+  )
+})
+
+test('detail-morph-autocomplete', async ({ page }) => {
+  await openCharacter(page)
+  await page.getByRole('button', { name: /FBM/ }).click()
+  await settle(page)
+  // Focus a Morph-name cell (found by its fixture value) and retype a prefix —
+  // the seeded morphs_G9.json index answers with suggestions.
+  const handle = await page.evaluateHandle(() => {
+    const input = [...document.querySelectorAll('input')].find(
+      (i) => i.value === 'SS_body_bs_Glute UpDown',
+    )!
+    input.scrollIntoView({ block: 'center' })
+    return input
+  })
+  const input = handle.asElement()!
+  await input.click()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type('Glute', { delay: 30 })
+  const dropdown = page.locator('div.top-full.z-30')
+  await dropdown.waitFor()
+  await page.waitForTimeout(250)
+  const a = (await input.boundingBox())!
+  const b = (await dropdown.boundingBox())!
+  const pad = 14
+  const x = Math.min(a.x, b.x) - pad
+  const y = Math.min(a.y, b.y) - pad
+  await page.screenshot({
+    path: join(OUT, 'detail-morph-autocomplete.png'),
+    clip: {
+      x,
+      y,
+      width: Math.max(a.x + a.width, b.x + b.width) - x + pad,
+      height: Math.max(a.y + a.height, b.y + b.height) - y + pad,
+    },
+  })
+})
+
 // ── Coverage guard ───────────────────────────────────────────────────────────
 // The one asserting test: keeps docs/guide and this suite in lockstep, both
 // directions. Fails when a guide page references a PNG nothing generates

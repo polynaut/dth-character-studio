@@ -38,7 +38,7 @@ direct export.
 1. **DTH Exporter Plugin release(s) folder** — the extracted Exporter Plugin download.
 
    <p align="center">
-     <img width="725" alt="Exporter Plugin release folder field" src="https://github.com/user-attachments/assets/980485af-0526-42db-8d5c-4723db8b069f" />
+     <img width="900" alt="Exporter Plugin release folder field" src="screenshots/settings-exporter-plugin.png" />
      <br>
      <sub><em>Point it at the extracted DTH Exporter Plugin download.</em></sub>
    </p>
