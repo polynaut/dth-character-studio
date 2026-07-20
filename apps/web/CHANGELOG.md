@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.45.1
+
+### Patch Changes
+
+- [#420](https://github.com/polynaut/dth-character-studio/pull/420) [`63866f3`](https://github.com/polynaut/dth-character-studio/commit/63866f34c92de9776fe28b8f84e00cc47475dd47) Thanks [@polynaut](https://github.com/polynaut)! - Long-running jobs now show the OS "working" cursor (pointer + spinning ring) everywhere in the window while they run — installing a DTH release, the Exporter Plugin or Daz assets, library scans, deduplication, uninstall sweeps, Refresh assets, and character-folder moves. Overlapping jobs keep the cursor until the last one finishes.
+
+- Updated dependencies []:
+  - @dth/rom@0.45.1
+  - @dth/ui@0.45.1
+
 ## 0.45.0
 
 ### Minor Changes
