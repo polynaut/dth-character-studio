@@ -1,0 +1,56 @@
+# Strips the binary assets (installers, .dmg, .sig, latest.json) from every
+# release EXCEPT the newest 6 — old releases keep their tag and changelog, but
+# their multi-MB artifacts are dead weight: the Tauri updater only ever reads
+# latest.json from the newest release, so nothing depends on old assets.
+# Runs daily; idempotent (already-stripped releases have no assets left).
+
+name: 🧹 Release housekeeping
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write # deleting release assets
+
+concurrency:
+  group: release-housekeeping
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KEEP: 6
+    steps:
+      - name: Strip assets from all but the newest releases
+        shell: bash
+        run: |
+          # One page of 100 is plenty: daily runs keep everything beyond the
+          # newest $KEEP already stripped, so the prune set stays tiny.
+          gh api "repos/${{ github.repository }}/releases?per_page=100" > releases.json
+
+          {
+            echo "# 🧹 Release housekeeping"
+            echo ""
+            echo "Keeping the newest $KEEP releases:"
+            jq -r --argjson keep "$KEEP" \
+              '[ .[] | select(.draft | not) ] | .[:$keep] | .[] | "- \(.tag_name)"' releases.json
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          pruned=0
+          while read -r tag asset_id asset_name; do
+            echo "deleting $tag: $asset_name ($asset_id)"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id"
+            echo "- pruned \`$tag\`: $asset_name" >> "$GITHUB_STEP_SUMMARY"
+            pruned=$((pruned + 1))
+          done < <(jq -r --argjson keep "$KEEP" \
+            '[ .[] | select(.draft | not) ] | .[$keep:] | .[] | .tag_name as $t | .assets[] | "\($t) \(.id) \(.name)"' releases.json)
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**$pruned asset(s) deleted.**" >> "$GITHUB_STEP_SUMMARY"
+          echo "pruned $pruned asset(s)"

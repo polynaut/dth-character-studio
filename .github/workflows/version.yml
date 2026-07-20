@@ -1,4 +1,4 @@
-name: Version
+name: 🔖 Version
 
 # Maintains a "version packages" PR. When feature PRs that contain changesets
 # land on main, this opens/updates a PR that bumps versions + writes CHANGELOGs.
