@@ -16,21 +16,8 @@
 5. **ROM prefill** — start **Empty** for a first character, or prefill from any
    of your own characters (across projects) to copy a working ROM definition.
 
-  <p align="center">
-    <img width="722" alt="Character details and ROM prefill" src="https://github.com/user-attachments/assets/3446cc99-9884-416a-88b0-e6e6f7cc8368" />
-    <br>
-    <sub><em>Set Genesis, gender, and the ROM prefill for the new character.</em></sub>
-  </p>
-   
 6. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
-
-   <p align="center">
-     <img width="1014" alt="The new character's page" src="https://github.com/user-attachments/assets/9e6b850e-9725-4f5c-9e18-64ee797ce18b" />
-     <br>
-     <sub><em>After Create, the scene is copied into the character's folder.</em></sub>
-   </p>
-
 
 ## The ROM definition
 
@@ -60,14 +47,6 @@ mode (your own poses and morphs):
 > [!NOTE]
 > The studio computes every frame number from this structure — you never type a
 > frame, and the Daz and Houdini outputs can't drift apart.
-
-&nbsp;
-
-<p align="center">
-  <img width="1014" alt="The ROM's eight fixed sections" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
-  <br>
-  <sub><em>The ROM's eight sections, each enabled and set to Preset or Custom.</em></sub>
-</p>
 
 Above the sections, a colored **timeline bar** maps the whole ROM: one segment per
 block (preset and custom), widths proportional to their frame counts — hover a

@@ -17,13 +17,6 @@ extract the downloaded archives somewhere permanent first.
 1. **DTH release(s) folder** — point it at the extracted DTH release (or a folder
    holding several release versions; then pick the version to use).
 
-   <p align="center">
-     <img width="891" alt="release-folder" src="https://github.com/user-attachments/assets/742cf028-da3c-46bd-907c-ac1e062fa9b6" />
-     <br>
-     <sub><em>Point the DTH release(s) folder at your extracted release.</em></sub>
-   </p>
-
-
    After selecting a DTH Release(s) folder, if there are multiple versions detected,
    you can select the **active** one. Adding another release later to the folder won't change the selection!
    You need to actively select the new version in the dropdown and re-install the files for Daz and Houdini.

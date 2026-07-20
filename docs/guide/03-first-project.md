@@ -18,13 +18,6 @@ back it up with them, and you're done.
    You can also just drop a folder anywhere onto the Home screen.
 4. Give it a **Project name** and press **Create**.
 
-   <p align="center">
-     <img width="722" alt="Naming the new project" src="https://github.com/user-attachments/assets/d3ce515a-3976-4d30-9451-4ba3019f901a" />
-     <br>
-     <sub><em>Give the project a name and press Create.</em></sub>
-   </p>
-
-
 The project opens **in its own window**. From now on you can also open it by
 double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent list.
 
@@ -43,13 +36,7 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
 - Per-project options (folder layout, optional [Assets](./attachments.md) and
   [Daz Products](./product-scanning.md) features) live in **Settings → Project** —
   the defaults are fine for a first run.
-  
-   <p align="center">
-     <img width="722" alt="Settings → Project tab" src="https://github.com/user-attachments/assets/8a59ab2a-9cc6-4499-86ad-bb6e51b82c03" />
-     <br>
-     <sub><em>Per-project options live in Settings → Project.</em></sub>
-   </p>
-  
+
 - **Path chips** — the monospace path badges all over the app — **copy the full
   path on click** (a check mark confirms it); **Alt+click opens the location
   in Explorer** (for a file, its folder). Where a chip carries a pencil, it
@@ -68,13 +55,6 @@ The bar docked to the bottom of the project window holds the **Unreal projects**
 this studio project feeds. Link one or more `.uproject` files with the button or
 by dropping them onto the bar — links only: the files stay where they are, and
 unlinking never deletes anything.
-
-<p align="center">
-  <img width="727" alt="Unreal projects bar with a linked project" src="https://github.com/user-attachments/assets/f899c95b-d660-4c18-a0bf-995f4e995d29" />
-  <br>
-  <sub><em>The Unreal projects bar docked at the bottom of the window.</em></sub>
-</p>
-
 
 - **Click a card** to open that project in Unreal Engine — **Alt+click** shows it
   in Explorer instead.
