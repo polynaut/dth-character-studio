@@ -51,6 +51,9 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
     "shell": {
       "open": "((https?://.+)|(.+\\.([Dd][Uu][Ff]|[Hh][Ii][Pp]|[Hh][Ii][Pp][Nn][Cc]|[Hh][Ii][Pp][Ll][Cc]|[Uu][Pp][Rr][Oo][Jj][Ee][Cc][Tt]|[Dd][Ss][Aa]|[Pp][Nn][Gg]|[Jj][Pp][Gg]|[Jj][Pp][Ee][Gg]|[Ww][Ee][Bb][Pp]|[Gg][Ii][Ff]|[Ss][Vv][Gg]|[Bb][Mm][Pp]|[Aa][Vv][Ii][Ff]|[Tt][Ii][Ff]|[Tt][Ii][Ff][Ff]|[Tt][Gg][Aa]|[Ee][Xx][Rr]|[Hh][Dd][Rr]|[Pp][Ss][Dd]|[Mm][Pp]4|[Ww][Ee][Bb][Mm]|[Mm][Oo][Vv]|[Aa][Vv][Ii]|[Mm][Kk][Vv]|[Mm][Pp]3|[Ww][Aa][Vv]|[Oo][Gg][Gg]|[Ff][Ll][Aa][Cc]|[Pp][Dd][Ff]|[Tt][Xx][Tt]|[Mm][Dd]|[Cc][Ss][Vv]|[Jj][Ss][Oo][Nn]|[Zz][Ii][Pp]|7[Zz]|[Ff][Bb][Xx]|[Oo][Bb][Jj]|[Bb][Ll][Ee][Nn][Dd]|[Aa][Bb][Cc]))|(.+[\\\\/]))"
     },

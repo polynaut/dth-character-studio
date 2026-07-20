@@ -114,6 +114,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      # Cache Cargo's downloaded SOURCE only (registry index + .crate tarballs +
+      # git deps) — NOT target/ compiled artifacts. Cargo verifies every crate
+      # against Cargo.lock's checksums, so even a poisoned cache can't inject
+      # tampered code: the signed build stays a cold compile of pinned source.
+      # Saves the crate-download time without touching the "cold + reproducible"
+      # guarantee (safe even with outside contributors).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-src-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-src-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
       # The build-time updater .sig is DISCARDED — the signer regenerates it over
       # the Authenticode-signed bytes with the real key. So the real updater key
@@ -170,7 +184,17 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
+      # Source-only Cargo cache (see build-win) — index + .crate tarballs + git
+      # deps, never target/. Cargo checksums each crate against Cargo.lock.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-src-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-src-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
       # As on Windows: the REAL updater key never touches this hosted runner (it
       # runs the third-party tauri-action). Sign the updater artifact with a
@@ -194,9 +218,11 @@ jobs:
           set -euo pipefail
           printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$RUNNER_TEMP/api_key.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/api_key.p8" >> "$GITHUB_ENV"
-      # Universal (Intel + Apple Silicon) build; tauri-action Developer-ID-signs,
-      # notarizes and staples inline via the API key. Pinned SHA like Windows.
-      # `--bundles app,dmg` overrides the config's nsis-only target for macOS.
+      # Apple Silicon (arm64) build; tauri-action Developer-ID-signs, notarizes
+      # and staples inline via the API key. Pinned SHA like Windows. `--bundles
+      # app,dmg` overrides the config's nsis-only target for macOS. (arm64-only,
+      # not universal: it halves the build; Intel Macs are unsupported. Switch
+      # back to `universal-apple-darwin` + re-add darwin-x86_64 below to restore.)
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
@@ -209,13 +235,13 @@ jobs:
           APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
         with:
           projectPath: apps/desktop
-          args: --target universal-apple-darwin --bundles app,dmg
+          args: --target aarch64-apple-darwin --bundles app,dmg
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: macos-bundle
           path: |
-            apps/desktop/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            apps/desktop/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+            apps/desktop/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            apps/desktop/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
           if-no-files-found: error
           retention-days: 3
 
@@ -430,8 +456,8 @@ jobs:
             assets+=("$MAC_TAR" "$MAC_TAR.sig" "$mac_dmg")
           fi
 
-          # ONE latest.json for every platform. A universal mac tarball serves
-          # both arches, so it is listed under darwin-x86_64 and darwin-aarch64.
+          # ONE latest.json for every platform. The macOS build is Apple Silicon
+          # (arm64) only, so the mac tarball is listed under darwin-aarch64.
           node -e '
             const fs = require("fs");
             const winSig = fs.readFileSync(process.argv[1] + ".sig", "utf8").trim();
@@ -445,7 +471,6 @@ jobs:
                 .readFileSync(process.env.MAC_TAR + ".sig", "utf8")
                 .trim();
               const macEntry = { signature: macSig, url: process.env.MAC_URL };
-              platforms["darwin-x86_64"] = macEntry;
               platforms["darwin-aarch64"] = macEntry;
             }
             fs.writeFileSync("latest.json", JSON.stringify({
