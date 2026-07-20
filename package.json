@@ -17,6 +17,7 @@
     "build": "pnpm --filter @dth/web build",
     "build:desktop": "pnpm --filter @dth/desktop tauri build",
     "generate-routes": "pnpm --filter @dth/web generate-routes",
+    "screenshots": "pnpm --filter @dth/web screenshots",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint --config .oxlintrc.json --type-aware apps packages",

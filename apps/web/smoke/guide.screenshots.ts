@@ -1,21 +1,49 @@
-import { test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { buildSeed, DIM_FOLDER, P, UPROJECT, type SeedOptions } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 // Documentation screenshots for docs/guide/*. Reuses the smoke Tauri fake +
-// fixture world (one project "Smoke Project", one character "Kira"). Each
-// `test` navigates to a screen/state and writes a PNG; nothing is asserted.
-// Run: pnpm --filter @dth/web screenshots
+// fixture world (one project "Demo", one character "Kira"). Each `test`
+// navigates to a screen/state and writes a PNG; the final `coverage` test is
+// the only assertion — it keeps the guide and this suite in lockstep.
 //
-// To ADD a screenshot: navigate/click to the state, then call
-// `shoot(page, join(OUT, '<name>.png'), <feature?>)`. Pass a `feature` locator
-// when the doc is about one region so the shot trims to it; omit it to grab the
-// realistic 16:9 viewport from the top. Keep the width constant (never override
-// it) so every image lines up in the guide.
+// ── REGENERATING EVERYTHING (e.g. after a restyle) ──────────────────────────
+// One command, from the repo root:
+//
+//     pnpm screenshots
+//
+// That regenerates every PNG in docs/guide/screenshots/ deterministically:
+//  - the world is the in-memory fixture (no real Daz install, no personal data),
+//  - the clock is FROZEN (prime() pins Date/Date.now via page.clock), and the
+//    config pins locale + timezone — so file dates and "saved …" strings render
+//    identically on every machine and every run,
+//  - viewport (1280×720 @2x, dark) and the self-hosted font are fixed by the
+//    config — no OS fonts, no theme drift.
+// Contract: a SECOND full run right after the first must leave `git diff`
+// empty. If it doesn't, a new source of nondeterminism crept in — fix it here
+// (never hand-revert PNGs as a workaround).
+// After a restyle, every PNG changing is EXPECTED — review the diff visually,
+// commit the lot. The only knobs that may need a one-time touch are the crop
+// constants below (HEADER + per-shot headerOffset/hideHeader): they mirror the
+// app's sticky-chrome heights (page header ~128px, pinned ROM section title,
+// pinned column headers). If the restyle changes those heights, adjust HEADER
+// (and the few explicit headerOffset values) once — nothing else is tuned by
+// hand.
+// NOT covered here: the guide's Daz-/Houdini-side photos (user-attachments
+// CDN links in docs/guide/*.md) — those are taken manually in Daz/Houdini and
+// are unaffected by an app restyle.
+//
+// To ADD a screenshot: write a test that navigates/clicks to the state, then
+// call `shoot(page, join(OUT, '<name>.png'), <feature?>)` and reference the
+// PNG from a guide page (the coverage test fails on unreferenced or missing
+// shots). Pass a `feature` locator when the doc is about one region so the
+// shot trims to it; omit it to grab the realistic 16:9 viewport from the top.
+// Keep the width constant (never override it) so every image lines up.
 
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { readdir, readFile } from 'node:fs/promises'
 
 // Absolute output dir (repo/docs/guide/screenshots) — a relative path resolves
 // against Playwright's cwd, which isn't the repo root.
@@ -26,11 +54,18 @@ const VW = 1280
 /** 16:9 of the width — a realistic widescreen viewport; the height cap. */
 const MAX_H = 720
 
-/** Prime the page BEFORE the app bundle runs: set the flag that gates the dev
- *  TanStack devtools trigger off (so it stays out of the shots — a DOM/CSS hack
- *  loses to the widget re-mounting during the capture), then install the
- *  in-memory Tauri fake with the fixture world. */
+/** Every date/time the app renders resolves against this frozen instant — file
+ *  mtimes from the mock (statOf uses Date.now IN the page), "saved …" stamps,
+ *  recents. Frozen so a regeneration never diffs on timestamps alone. */
+const FIXED_TIME = new Date('2026-07-01T12:00:00')
+
+/** Prime the page BEFORE the app bundle runs: freeze the clock (see
+ *  FIXED_TIME — timers keep running, only Date is pinned), set the flag that
+ *  gates the dev TanStack devtools trigger off (so it stays out of the shots —
+ *  a DOM/CSS hack loses to the widget re-mounting during the capture), then
+ *  install the in-memory Tauri fake with the fixture world. */
 async function prime(page: Page, seed: ReturnType<typeof buildSeed>) {
+  await page.clock.setFixedTime(FIXED_TIME)
   await page.addInitScript(() => {
     ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
   })
@@ -561,4 +596,25 @@ test('character-create-panel', async ({ page }) => {
   await page.getByRole('button', { name: /Choose Daz scene/ }).click()
   await page.getByText('Character name').waitFor()
   await shoot(page, join(OUT, 'character-create-panel.png'), page.getByRole('dialog'))
+})
+
+// ── Coverage guard ───────────────────────────────────────────────────────────
+// The one asserting test: keeps docs/guide and this suite in lockstep, both
+// directions. Fails when a guide page references a PNG nothing generates
+// (typo/rename/deleted test) or a PNG sits in screenshots/ that no guide page
+// references anymore (orphan — delete its test + file, or reference it).
+// Runs LAST (single worker, file order), so a full `pnpm screenshots` run
+// verifies its own completeness.
+test('coverage: guide references and generated screenshots match 1:1', async () => {
+  const guideDir = join(OUT, '..')
+  const referenced = new Set<string>()
+  for (const md of (await readdir(guideDir)).filter((f) => f.endsWith('.md'))) {
+    const text = await readFile(join(guideDir, md), 'utf8')
+    for (const m of text.matchAll(/screenshots\/([\w.-]+\.png)/g)) referenced.add(m[1])
+  }
+  const onDisk = (await readdir(OUT)).filter((f) => f.endsWith('.png'))
+  const missing = [...referenced].filter((f) => !onDisk.includes(f)).sort()
+  const orphans = onDisk.filter((f) => !referenced.has(f)).sort()
+  expect(missing, `referenced in docs/guide but missing from screenshots/: ${missing.join(', ')}`).toEqual([])
+  expect(orphans, `in screenshots/ but referenced by no guide page: ${orphans.join(', ')}`).toEqual([])
 })

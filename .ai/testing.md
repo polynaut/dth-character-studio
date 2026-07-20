@@ -55,24 +55,32 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
 - `smoke/*.smoke.ts` — one test per window kind; asserts through the whole
   api→storage stack by reading back `__tauriMock.files`/`calls`.
 
-## 4. Guide screenshots (`pnpm --filter @dth/web screenshots`)
+## 4. Guide screenshots (`pnpm screenshots` from the repo root)
 
 `smoke/guide.screenshots.ts` + `playwright.screenshots.config.ts` (own dev
-server :4332, 1280×720 @2x, dark). Reuses the smoke mock/fixtures, navigates to
-each documented screen/state, and **writes the PNGs the guide embeds** to
-`docs/guide/screenshots/` — the guide's images are generated, not hand-shot.
-Asserts nothing.
+server :4332, 1280×720 @2x, dark, `locale`/`timezoneId` pinned). Reuses the
+smoke mock/fixtures, navigates to each documented screen/state, and **writes
+the PNGs the guide embeds** to `docs/guide/screenshots/` — the guide's images
+are generated, not hand-shot. **The full runbook lives in the header comment of
+`guide.screenshots.ts` — read it before touching shots.** The short version:
 
-Regeneration workflow & gotchas:
-
-- Run it after UI changes that touch documented screens; commit the changed PNGs
-  with the feature.
-- **Check `git diff` on the PNGs and revert drift-only changes** — the mock's
-  `statOf` uses the live clock, so shots showing file timestamps (products tab,
-  tools refresh) differ every run without any real change
-  (`git checkout -- <png>`).
-- The character page has three stacked sticky layers (header / section titles /
-  column headers); the suite's `shoot(…, { headerOffset })` / `hideHeader` /
-  un-stick helpers exist to keep crops clean. Follow existing shots' patterns.
+- **One command regenerates everything:** `pnpm screenshots`. Output is
+  **deterministic across runs AND machines**: `prime()` freezes the in-page
+  clock (`page.clock.setFixedTime` — covers the mock's file mtimes and every
+  rendered date), the config pins locale + timezone, fonts are self-hosted.
+  Contract: a second full run must leave `git diff` empty — if it doesn't, a
+  new nondeterminism crept in; fix it at the source, never hand-revert PNGs.
+- **The suite verifies its own completeness:** the final `coverage` test fails
+  when a guide page references a PNG nothing generated, or a PNG in
+  `screenshots/` is referenced by no guide page (orphans in either direction).
+- **After a full restyle:** run it once, review the diff visually (every PNG
+  changing is expected), commit the lot. The only hand-tuned knobs are the crop
+  constants in `guide.screenshots.ts` (`HEADER` + a few per-shot
+  `headerOffset`/`hideHeader`) — they mirror the app's sticky-chrome heights
+  (page header / pinned ROM section title / pinned column headers), so adjust
+  them once if the restyle changes those heights.
+- **Not covered:** the guide's Daz-/Houdini-side photos (the
+  `user-attachments` CDN links in `docs/guide/*.md`) are manual captures inside
+  Daz/Houdini — an app restyle doesn't affect them.
 - Navigate by clicking header links, not `page.goto` (a goto re-runs `main.tsx`
   startup navigation).

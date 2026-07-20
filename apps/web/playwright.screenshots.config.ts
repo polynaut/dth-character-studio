@@ -22,6 +22,11 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 2,
     colorScheme: 'dark',
+    // Pin locale + timezone so date strings (toLocaleString etc.) render the
+    // same on every machine — together with the frozen clock in prime(), this
+    // makes a full regeneration byte-stable across runs AND machines.
+    locale: 'en-US',
+    timezoneId: 'Europe/Zurich',
   },
   webServer: {
     command: 'pnpm exec vite dev --port 4332 --strictPort',

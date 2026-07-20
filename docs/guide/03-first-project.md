@@ -19,7 +19,13 @@ back it up with them, and you're done.
 4. Give it a **Project name** and press **Create**.
 
 The project opens **in its own window**. From now on you can also open it by
-double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent list.
+double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent list:
+
+<p align="center">
+  <img width="900" alt="Home screen with the project in the recent list" src="screenshots/home.png" />
+  <br>
+  <sub><em>The Home screen — recently opened projects reopen with one click.</em></sub>
+</p>
 
 <p align="center">
   <img width="900" alt="Project open in its own window" src="screenshots/project-open-window.png" />
