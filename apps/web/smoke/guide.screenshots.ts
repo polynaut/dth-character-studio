@@ -418,6 +418,84 @@ test('combine-morphs', async ({ page }) => {
   })
 })
 
+/** Open the demo character with the second (outfit) scene linked and SELECT it —
+ *  the state the multi-scene docs describe (per-scene hair, header tag, override). */
+async function openCharacterOnOutfitScene(page: Page) {
+  await openCharacter(page, { extraScene: true })
+  await page.getByText('KiraSummertide_G9_GP', { exact: true }).first().click()
+}
+
+test('character-daz-scenes', async ({ page }) => {
+  await openCharacterOnOutfitScene(page)
+  // The Daz scenes block: both cards (outfit selected) + its per-scene hair
+  // list. The hair picker (an unnamed combobox) is the page's last combobox.
+  await shootStrip(
+    page,
+    join(OUT, 'character-daz-scenes.png'),
+    page.getByText('Daz scenes', { exact: true }),
+    page.getByRole('combobox').last(),
+  )
+})
+
+test('character-scene-tag', async ({ page }) => {
+  await openCharacterOnOutfitScene(page)
+  // The header with the selected scene tagged next to the character name.
+  await shootTopThrough(
+    page,
+    join(OUT, 'character-scene-tag.png'),
+    page.getByRole('tab', { name: 'Character' }),
+  )
+})
+
+test('rom-override-toggle', async ({ page }) => {
+  await openCharacterOnOutfitScene(page)
+  await page.getByRole('switch', { name: /Override ROM frames/ }).click()
+  // The ROM header row (Override armed + on) down through the override banner.
+  await shootStrip(
+    page,
+    join(OUT, 'rom-override-toggle.png'),
+    page.getByRole('heading', { name: /^ROM/ }).locator('xpath=..'),
+    page.getByText(/Scene override active/),
+  )
+})
+
+test('rom-override-grid', async ({ page }) => {
+  await openCharacterOnOutfitScene(page)
+  await page.getByRole('switch', { name: /Override ROM frames/ }).click()
+  await page.getByRole('button', { name: /FBM/ }).click()
+  // Override the SECOND row, so the shot shows a replaced (full-strength) row
+  // between untouched (dimmed, read-only) base rows.
+  await page.getByRole('checkbox', { name: /Override this frame/ }).nth(1).check()
+  await page.mouse.move(0, 0)
+  await settle(page)
+  await page.setViewportSize({ width: VW, height: 900 })
+  // Same un-stick + slice approach as the bone-scale shot: column headers + the
+  // first pose rows, without the page's stacked sticky chrome overlapping.
+  await page.evaluate(() => {
+    const h = document.querySelector('header.sticky')
+    if (h) (h as HTMLElement).style.display = 'none'
+    document.querySelectorAll('.sticky').forEach((el) => {
+      ;(el as HTMLElement).style.position = 'static'
+    })
+  })
+  const thead = page.locator('table').first().locator('thead')
+  await thead.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  await settle(page)
+  const top = await thead.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
+  const theadH = await thead.evaluate((el) => el.getBoundingClientRect().height)
+  const rowH = await page
+    .getByRole('checkbox', { name: /Override this frame/ })
+    .first()
+    .locator('xpath=ancestor::tr[1]')
+    .evaluate((el) => el.getBoundingClientRect().height)
+  const y = Math.max(0, top - 8)
+  const height = Math.ceil(theadH + 4 * rowH + 8)
+  await page.screenshot({
+    path: join(OUT, 'rom-override-grid.png'),
+    clip: { x: 0, y, width: VW, height },
+  })
+})
+
 test('products-tab', async ({ page }) => {
   // Daz Products on + a seeded per-scene scan CSV → the character page splits into
   // Character / Products, and the Products tab renders the matched-products table.

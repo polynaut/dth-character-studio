@@ -30,9 +30,9 @@ None of these are needed to generate a ROM — reach for them once you want fine
 control over a character, or want the studio to help maintain your Daz/Houdini
 content or organize a project beyond its characters:
 
-- [Advanced character options](./advanced.md) — preserve morphs and node transforms
-  across the ROM, move a character's folder, and drive extra morphs off bone
-  rotations (Modify JCM frames).
+- [Advanced character options](./advanced.md) — multiple Daz scenes on one
+  character (outfits, per-scene hair, per-scene ROM overrides), and driving extra
+  morphs off bone rotations (Modify JCM frames).
 - [The Tools page](./tools.md) — install/maintain your own Daz & Houdini content,
   deduplicate downloads, storage housekeeping, and refresh generated files.
 - [Attachments](./attachments.md) — attach reusable Daz scenes (not full characters)
