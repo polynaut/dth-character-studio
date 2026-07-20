@@ -37,7 +37,7 @@ flate2 = "1"
 # Extracting zipped Daz assets (Optional tab installs). deflate-only (via flate2,
 # already in tree) — no bzip2/zstd/aes backends, so no heavy/native deps and it
 # leaves the alloc-stdlib/brotli pins above untouched.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "4", default-features = false, features = ["deflate"] }
 # Parallelize the per-asset Optional-tab scan/install (independent I/O-bound
 # folder walks + zip central-directory reads).
 rayon = "1"
