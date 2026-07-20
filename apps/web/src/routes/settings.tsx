@@ -20,6 +20,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
+import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -387,41 +388,8 @@ function SettingsPage() {
   // Run a scoped install: persist pending edits first, then surface the per-step
   // report. On failure the first errored step's message is toasted verbatim — it
   // carries the "close all apps / restart as administrator" guidance.
-  async function runInstall(
-    install: (args: { data: { dryRun: boolean } }) => Promise<InstallReport>,
-    dryRun: boolean,
-    setBusyState: (value: boolean) => void,
-    setReport: (report: InstallReport | null) => void,
-    onComplete?: () => void,
-    // Runs only after a successful (real, error-free) install — e.g. the DTH
-    // release install re-scans the poses so the app works immediately.
-    afterSuccess?: () => Promise<void> | void,
-  ) {
-    setBusyState(true)
-    setReport(null)
-    try {
-      if (dirty) {
-        await saveSettings({ data: { settings, baseline: initial } })
-        await router.invalidate()
-      }
-      const report = await install({ data: { dryRun } })
-      setReport(report)
-      const firstError = report.steps.find((step) => step.status === 'error')
-      if (firstError) {
-        toast.error(firstError.detail || 'Install failed')
-      } else if (dryRun) {
-        toast.success(`Dry run — would copy ${report.totalFiles} file(s)`)
-      } else {
-        toast.success(`Installed ${report.totalFiles} file(s)`)
-        await afterSuccess?.()
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusyState(false)
-      onComplete?.()
-    }
-  }
+  // Shared with the Tools page: save pending settings edits, then run the install.
+  const { runInstall } = useSettingsActions({ dirty, settings, baseline: initial })
 
   // The sticky header's Save persists EVERY pending change — the machine settings
   // (General tab) and, in a project window, the project manifest (Project tab) —
