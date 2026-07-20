@@ -1,5 +1,25 @@
 # @dth/web
 
+## 0.45.2
+
+### Patch Changes
+
+- [#428](https://github.com/polynaut/dth-character-studio/pull/428) [`56c2463`](https://github.com/polynaut/dth-character-studio/commit/56c2463e1a49129c510642c754bef3bad3e3ac5e) Thanks [@polynaut](https://github.com/polynaut)! - Accepting/clearing dedup conflicts no longer clobbers a settings change made in another window. The write now goes through the same field-level merge as a normal settings save, so it only updates the accepted-conflicts list and re-reads every other field from disk.
+
+- [#431](https://github.com/polynaut/dth-character-studio/pull/431) [`08b15da`](https://github.com/polynaut/dth-character-studio/commit/08b15da8463a478ba9640befd53dd04506d03c3c) Thanks [@polynaut](https://github.com/polynaut)! - Saving a character is faster on projects with many characters (and much faster over a "Refresh assets" sweep or on a network-share project). Generating a character's files now resolves where it lives on disk once and reuses that, instead of re-scanning the whole character library three times per save.
+
+- [#430](https://github.com/polynaut/dth-character-studio/pull/430) [`d8bec0c`](https://github.com/polynaut/dth-character-studio/commit/d8bec0cb848f4886f7b891e0d795aad8ff2dabea) Thanks [@polynaut](https://github.com/polynaut)! - Fix the "Modify JCM frames" grid swapping the row you're editing when you Mirror or remove a rule/drive above it. Each rule and drive now carries a stable id used as its React key (instead of the list position), so a mid-list insert no longer re-binds a focused input to a different row. The ids are editor-only — they never reach the generated Daz/Houdini output.
+
+- [#432](https://github.com/polynaut/dth-character-studio/pull/432) [`0504f43`](https://github.com/polynaut/dth-character-studio/commit/0504f439ccfece4f808dcb794c72647bc405b86b) Thanks [@polynaut](https://github.com/polynaut)! - The "Modify JCM frames" and art-direction section toggles are now keyboard-operable — they were click-only, so keyboard and screen-reader users couldn't expand them. They're real buttons now, focusable and Enter/Space-operable, and announce their open/closed state.
+
+- [#418](https://github.com/polynaut/dth-character-studio/pull/418) [`fc440c9`](https://github.com/polynaut/dth-character-studio/commit/fc440c9fd2e4c2fe00e7039dbf7a71c3f4b08306) Thanks [@polynaut](https://github.com/polynaut)! - Notes editor: serialize autosaves so a debounced save and an immediate blur save can no longer run at once. Previously the two could fire concurrently with the same stale expected-mtime, making the second spuriously report "Notes changed on disk" (whose Reload discarded the newest keystrokes). Saves now single-flight — the latest value is queued and flushed once the in-flight save finishes with the updated mtime — and a no-op save (nothing changed) is skipped so it can't churn the file against another open window.
+
+- [#425](https://github.com/polynaut/dth-character-studio/pull/425) [`a479e6d`](https://github.com/polynaut/dth-character-studio/commit/a479e6d635d8593df33621224bac472b14f806e7) Thanks [@polynaut](https://github.com/polynaut)! - Settings: reconcile the open form when another window saves settings. Previously the form kept its once-loaded state, so after a background refresh the Save/Discard buttons lit up though nothing was touched — and saving would write the stale value back over the other window's change. Fields you've actually edited are kept; untouched fields quietly adopt the newer value.
+
+- Updated dependencies [[`d575b9d`](https://github.com/polynaut/dth-character-studio/commit/d575b9dd39a5a665c36736fc2b19e090f2e00ab8), [`d8bec0c`](https://github.com/polynaut/dth-character-studio/commit/d8bec0cb848f4886f7b891e0d795aad8ff2dabea)]:
+  - @dth/rom@0.45.2
+  - @dth/ui@0.45.2
+
 ## 0.45.1
 
 ### Patch Changes
