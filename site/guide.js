@@ -1,6 +1,6 @@
-// Guide lightbox: the article shows app screenshots at 60% of their native
-// size — clicking one opens it at 100% in an overlay. Click anywhere or press
-// Escape to close; tall images scroll inside the overlay.
+// Guide lightbox: the article shows app screenshots at ~66% of their native
+// size (the text column) — clicking one opens it at 100% in an overlay. Click
+// anywhere or press Escape to close; tall images scroll inside the overlay.
 
 const overlay = document.createElement('div')
 overlay.className = 'guide-lightbox'

@@ -66,12 +66,13 @@
   max-width: 860px;
 }
 
-/* The app screenshots are 2560px @2x (1280 CSS px): render them inline at
-   60% of native (768px), overriding the markdown's width="900" attribute —
-   click for the 100% lightbox (guide.js). External (Daz-side) photos keep
-   their own size — no upscaling. */
+/* The app screenshots are 2560px @2x (1280 CSS px): inline they fill the
+   860px text column (≈66% of native) so their edges sit flush with the
+   text, overriding the markdown's width="900" attribute — click for the
+   100% lightbox (guide.js). External (Daz-side) photos keep their own
+   size — no upscaling. */
 .guide-content img[src^='screenshots/'] {
-  width: min(768px, 100%);
+  width: 100%;
 }
 
 .guide-content img {
