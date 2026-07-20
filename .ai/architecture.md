@@ -18,7 +18,9 @@ no build step and no stale dist.
 
 `Character` definition (zod-validated, `types.ts`) → `generateAll()`
 (`generate.ts`) → the Daz `.dsa` ROM script + the Houdini PoseAsset CSV (+
-optional Export/Hair/Scan scripts). Frame math and ROM walks live in `frames.ts`;
+optional Export/Hair/Scan scripts, + a scene-suffixed pair per active scene
+override via `generateSceneOverride()`). Frame math and ROM walks live in
+`frames.ts`; per-scene override merge/slug/gate in `scene-override.ts`;
 ground-truth CSV templates in `src/templates/`; character-JSON migrations in
 `migrate.ts`; Daz morph-CSV import in `daz-csv.ts`; product-scan CSV parsing in
 `product-scan.ts`; timeline blocks in `timeline.ts`; custom-section validation in
@@ -86,9 +88,12 @@ a plain browser with native features as no-ops):
 
 Route loaders fetch via `api.ts`; mutations call api then `router.invalidate()`.
 The character editor keeps a draft + baseline (`dirty` by JSON comparison);
-`save()` = validate (`romValidationErrors`) → `saveCharacter` →
+`save()` = validate (`romValidationErrors` on the base sections AND on each
+active scene override's merged sections) → `saveCharacter` →
 `generateCharacterFiles` → settle draft+baseline in one paint → invalidate in the
-background.
+background. The editor's page-local **selected scene** (the Daz scene cards)
+drives every per-scene feature: the hair list, the ROM Override toggle, and —
+with more than one scene linked — the header's scene tag.
 
 ## apps/desktop — the Tauri shell
 

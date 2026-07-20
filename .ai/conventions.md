@@ -49,6 +49,13 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    web `parseCharacter` — never in the pure core.
 4. Steps run pre-zod on raw objects, must be idempotent, and guard on
    `=== undefined`.
+5. A new field carrying a **scene path** (or any inside-the-character-folder
+   path) must join every repoint site, or renames/moves silently orphan it —
+   **grep `groomScenes` to find them all**: `saveCharacter`'s rename repoint +
+   `moveCharactersRoot` (`apps/web/src/lib/rom/storage/characters.ts`),
+   `moveScenesFolder` (`apps/web/src/lib/rom/api/characters.ts`), and the
+   prefill field list `romFields` (same file). `sceneOverrides` and `groomScenes`
+   are the existing examples.
 
 ## FFI (Rust ↔ TS) change ritual
 

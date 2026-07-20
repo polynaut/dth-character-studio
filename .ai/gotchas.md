@@ -53,8 +53,30 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **`useReactTable`'s `data` must be referentially stable.** A derived rows array
+  built inline in render (the override grid's merged `displayPoses`) fed the
+  table a new identity every render and — once a row's content actually differed —
+  tipped React into an **endless synchronous re-render loop** that hard-froze the
+  window (~9,500 self-renders in 5s, no error, no yield). jsdom tests never catch
+  it; only the browser smoke did. Memoize derived table data AND keep the memo's
+  inputs stable (memoized Maps, shared `EMPTY_…` constants instead of fresh `[]`
+  per call) — see `group-card.tsx` `displayPoses` / `rom-sections.tsx`
+  `overriddenById`.
+- **The ui kit's TooltipHost rewrites a hovered control's `title` into
+  `data-tooltip` + `aria-label`.** Playwright `getByTitle` therefore silently
+  stops matching any control the test already hovered/clicked — locate by ROLE
+  (accessible name survives the rewrite). Documented in
+  `apps/web/smoke/override.smoke.ts`.
+- **`behavior: 'smooth'` scrolling degrades to an instant jump** when Windows'
+  reduced-motion setting is on (WebView2 honors `prefers-reduced-motion`).
+  Deliberate glides are rAF-driven instead — `smoothScrollToTop` in the character
+  route (wheel/touch cancels it).
 - **`routeTree.gen.ts` is generated** — adding/removing a route *file* requires
-  `pnpm generate-routes`; forgetting it is a silent 404.
+  `pnpm generate-routes`; forgetting it is a silent 404. Its import ORDER follows
+  the installed router-cli version: after a tooling bump the dev-server watcher
+  rewrites it with a different ordering — **commit the regenerated file** (it's
+  the new canonical output; restoring the old one just fights the watcher, which
+  can even re-dirty it fast enough to block a `git pull` while `pnpm dev` runs).
 - **Settings saves merge by baseline** — only fields changed on that page win,
   the rest re-read from disk (multi-window safety). A new settings field must be
   added to `studioSettingsSchema` AND covered by the page's `dirty` flag, or its

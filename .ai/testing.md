@@ -52,8 +52,18 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.
-- `smoke/*.smoke.ts` — one test per window kind; asserts through the whole
-  api→storage stack by reading back `__tauriMock.files`/`calls`.
+- `smoke/*.smoke.ts` — `studio.smoke.ts` (one test per window kind) +
+  `override.smoke.ts` (the per-scene ROM override flow end to end); both assert
+  through the whole api→storage stack by reading back
+  `__tauriMock.files`/`calls`.
+- **This layer is where browser-only bugs reproduce.** A window-freezing React
+  render loop passed every jsdom test and only showed here — when a UI
+  interaction "works in tests" but misbehaves in the app, write the repro as a
+  smoke spec first (a hung `locator.click` + a stack sample via CDP
+  `Debugger.pause` localizes it fast).
+- **Locate by ROLE, not `getByTitle`** — the ui kit's TooltipHost rewrites a
+  hovered control's `title` into `data-tooltip`/`aria-label`, so title locators
+  stop matching controls the test already touched (see `.ai/gotchas.md`).
 
 ## 4. Guide screenshots (`pnpm --filter @dth/web screenshots`)
 
