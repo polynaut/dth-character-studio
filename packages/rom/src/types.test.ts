@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CHARACTER_SCHEMA_VERSION,
+  MIN_GROOM_EXPORTER_VERSION,
   artDirectionFrameSchema,
   characterSchema,
   characterSkinning,
   compareDthVersions,
+  exporterSupportsGroomHide,
   genesisFigureNode,
   poseAssetCsvEra,
 } from './types'
@@ -157,6 +159,24 @@ describe('compareDthVersions', () => {
   it('treats missing segments as 0 and empty as lowest', () => {
     expect(compareDthVersions('2.4', '2.4.0')).toBe(0)
     expect(compareDthVersions('', '2.4.3')).toBeLessThan(0)
+  })
+})
+
+describe('exporterSupportsGroomHide', () => {
+  it('accepts the min groom exporter version and above', () => {
+    expect(exporterSupportsGroomHide(MIN_GROOM_EXPORTER_VERSION)).toBe(true) // 2.0.1
+    expect(exporterSupportsGroomHide('2.0.2')).toBe(true)
+    expect(exporterSupportsGroomHide('2.1.0')).toBe(true)
+  })
+
+  it('rejects older plugins that would leak hidden hair into the FBX', () => {
+    expect(exporterSupportsGroomHide('2.0.0')).toBe(false)
+    expect(exporterSupportsGroomHide('1.9.6')).toBe(false)
+  })
+
+  it("doesn't warn when the version is unknown (empty)", () => {
+    // '' = plugin not installed / not readable — never nag on a missing read.
+    expect(exporterSupportsGroomHide('')).toBe(true)
   })
 })
 

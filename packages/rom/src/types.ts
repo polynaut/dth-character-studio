@@ -787,6 +787,28 @@ export function compareDthVersions(a: string, b: string): number {
 }
 
 /**
+ * The DTH Exporter Plugin version that first unparents hidden child nodes before
+ * exporting (and reparents after). Groom (hair) exclusion is HIDE-only from
+ * runtime v31 on — the generated script only hides the groom items and relies on
+ * the plugin to keep them out of the FBX. An OLDER plugin exports the hidden hair
+ * into the FBX, so a character with groom items needs at least this version. The
+ * DLL carries its version in its VS_FIXEDFILEINFO, so the studio can read the
+ * installed plugin's version and warn precisely (see the editor's groom section).
+ */
+export const MIN_GROOM_EXPORTER_VERSION = '2.0.1'
+
+/**
+ * Whether an installed Exporter Plugin version can do the hidden-node unparent
+ * groom exclusion ({@link MIN_GROOM_EXPORTER_VERSION}). Empty (unknown / not
+ * installed) returns `true` — we don't warn when we can't read a version, so a
+ * missing native read never nags.
+ */
+export function exporterSupportsGroomHide(installedVersion: string): boolean {
+  if (!installedVersion) return true
+  return compareDthVersions(installedVersion, MIN_GROOM_EXPORTER_VERSION) >= 0
+}
+
+/**
  * The CSV era of a DTH release: the highest {@link POSEASSET_CSV_BREAKING_VERSIONS}
  * entry that is `<=` `release`, or '' when the release predates the first baseline
  * (or no release is given). Two releases with the same era have interchangeable
