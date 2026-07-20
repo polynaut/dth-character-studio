@@ -52,12 +52,23 @@ const NAV = [
 
 const htmlName = (md) => (md === 'README.md' ? 'index.html' : md.replace(/\.md$/, '.html'))
 
+/** Drop HTML tags from a rendered heading. Loops to a fixpoint so nested
+ *  fragments can't reassemble into a tag (CodeQL
+ *  js/incomplete-multi-character-sanitization) — and the allowlist in
+ *  `slugify` below is the actual safety net: a slug can only ever contain
+ *  letters, numbers and dashes. */
+const stripTags = (s) => {
+  let out = s
+  for (let prev; prev !== out; ) {
+    prev = out
+    out = out.replace(/<[^>]*>/g, '')
+  }
+  return out
+}
+
 /** GitHub-flavoured heading slug (close enough for the guide's anchors). */
 const slugify = (text) =>
-  text
-    .toLowerCase()
-    .trim()
-    .replace(/<[^>]+>/g, '')
+  stripTags(text.toLowerCase().trim())
     .replace(/[^\p{L}\p{N} -]/gu, '')
     .replace(/ /g, '-')
 
