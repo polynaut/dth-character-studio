@@ -308,7 +308,13 @@ export function RomSections({
       : [
           config.groups[0]
             ? { ...config.groups[0], poses: [...config.groups[0].poses, ...poses] }
-            : newGroup(),
+            : // A flat FBM/MISC section's implicit group must carry the STABLE
+              // `flatSectionGroupId` (via flatGroup), NOT a random newGroup() id —
+              // scene-override additions key on it, and applySceneOverride only
+              // materializes flat-id additions when the base group matches. A random
+              // id silently drops those overridden frames from the editor and the
+              // scene's generated artifacts.
+              { ...flatGroup(section), poses },
           ...config.groups.slice(1),
         ]
     patchSection(section, { enabled: true, mode: 'custom', groups })

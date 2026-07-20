@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -180,18 +180,9 @@ export function DazSceneField({
   // Editing the scenes subfolder (the chip's pencil): null = not editing,
   // otherwise the draft value relative to the character folder.
   const [editDir, setEditDir] = useState<string | null>(null)
-
-  // Esc closes the primary link modal (the Add modal is a SceneCopyDialog, which
-  // wires its own Esc). This one isn't a Radix dialog, so it's by hand; ignored
-  // while a copy is in flight.
-  useEffect(() => {
-    if (!pending) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) setPending('')
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [pending, busy])
+  // Guards onOpen against a double-click launching Daz twice (a ref, so it takes
+  // effect synchronously within the same tick — a state flag would lag a render).
+  const openingRef = useRef(false)
 
   const linked = Boolean(character.scenePath)
   const ready = linked && sceneExists
@@ -224,6 +215,10 @@ export function DazSceneField({
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
   async function onOpen(scenePath: string, e?: React.MouseEvent) {
+    // Re-entry guard: a fast double-click would otherwise fire two openScene calls
+    // and, with Daz closed, launch two fresh Daz instances.
+    if (openingRef.current) return
+    openingRef.current = true
     setError('')
     try {
       if (e?.altKey) {
@@ -242,6 +237,8 @@ export function DazSceneField({
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
       toast.error(e?.altKey ? msg : `Couldn't open in Daz: ${msg}`)
+    } finally {
+      openingRef.current = false
     }
   }
 
@@ -592,9 +589,9 @@ export function DazSceneField({
                   </Button>
                 </div>
               )}
-              {character.extraScenes.map((scene, i) => (
+              {character.extraScenes.map((scene) => (
                 <SceneCard
-                  key={`${scene}-${i}`}
+                  key={scene}
                   scenePath={scene}
                   name={character.name}
                   charFolderAbs={charFolder}
