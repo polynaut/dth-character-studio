@@ -127,9 +127,9 @@ export function GroomFields({
           onCheckedChange={(inScene) => patch({ groomMode: inScene ? 'scene' : 'separate' })}
         />
         <span className="flex items-center gap-1 text-sm">
-          Hair items (groom) live in the Daz scenes
+          Hair items live in the Daz scenes
           <InfoPopup label="Hair items live in the Daz scenes — more information">
-            <strong>On</strong>: each scene carries its full look, hair included — the groom
+            <strong>On</strong>: each scene carries its full look, hair included — the hair
             items listed per scene are HIDDEN around the DTH export and shown again after, so
             hair never rides into the ROM artifacts. The DTH Exporter Plugin{' '}
             <strong>{MIN_GROOM_EXPORTER_VERSION}+</strong> unparents the hidden items itself, which
@@ -142,7 +142,7 @@ export function GroomFields({
       </div>
       {exporterTooOld && (
         <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Your installed DTH Exporter Plugin is <strong>{exporterVersion}</strong> — groom
+          Your installed DTH Exporter Plugin is <strong>{exporterVersion}</strong> — hair
           exclusion needs <strong>{MIN_GROOM_EXPORTER_VERSION}+</strong> (it unparents the hidden
           hair so it stays out of the FBX). Update the plugin in Settings, or this character's
           export will bake the hair into the FBX.
@@ -150,7 +150,7 @@ export function GroomFields({
       )}
       {character.groomMode !== 'scene' ? null : !selectedScene ? (
         <p className="text-sm text-muted-foreground">
-          Link a Daz scene to define its groom items.
+          Link a Daz scene to define its hair items.
         </p>
       ) : (
         <>

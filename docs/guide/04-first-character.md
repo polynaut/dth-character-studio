@@ -472,19 +472,18 @@ G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields
 </details>
 
 <details>
-<summary><strong>Hair items (groom) — keep hair out of the export</strong></summary>
+<summary><strong>Hair items — keep hair out of the export</strong></summary>
 <table><tr><td>
 
-With **Hair items (groom) live in the Daz scenes** on (the default), each scene
+With **Hair items live in the Daz scenes** on (the default), each scene
 carries its full look — hair included — and the hair items you pick per scene
-are kept out of the DTH export: they're excluded right before the DTH Exporter
-runs and restored afterwards, so hair never rides into the ROM's FBX/Alembic. By
-default the items are unfitted and moved out of the figure for the export (the
-same unfit/refit Daz's own "Fit To" performs); the global
-**Solve hair assets by hiding** setting (Settings → General) switches the
-mechanism to hiding instead — experimental, for DTH Exporter Plugin 2.0+.
-Turned **off**, nothing is excluded — the classic workflow where hair lives in
-separate Daz scene files.
+are kept out of the DTH export: they're hidden right before the DTH Exporter
+runs and shown again afterwards, so hair never rides into the ROM's FBX/Alembic.
+The DTH Exporter Plugin **2.0.1+** unparents the hidden items itself, keeping
+them out of **both** the FBX and the Alembic (older plugins leak the hidden hair
+into the FBX — the character page warns when yours is too old). Turned **off**,
+nothing is excluded — the classic workflow where hair lives in separate Daz
+scene files.
 
 The picker under the scene cards edits the **selected** card's list — the lists
 are **per scene**, since outfit scenes carry different hair. The one generated
@@ -500,7 +499,7 @@ open in Daz; a scene with no items listed exports as-is.
   loudly on a label missing from the open scene rather than silently shipping a
   hair-polluted export.
 
-Characters with hair items also get an `Export_Groom_…` script — it exports the
+Characters with hair items also get an `Export_Hair_…` script — it exports the
 `_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
 worn, with everything else hidden).
 

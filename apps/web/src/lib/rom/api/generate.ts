@@ -236,6 +236,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           `${dazBase}.dsa`,
           `ROM_${dazBase}.dsa`,
           `Export_${dazBase}.dsa`,
+          `Export_Hair_${dazBase}.dsa`,
+          // Legacy name (pre-Hair rename) — never in the written set now, so it's
+          // always swept from a character folder that still has the old script.
           `Export_Groom_${dazBase}.dsa`,
           `Open_Scene_${dazBase}.dsa`,
           `Scan_Products_${characterSlug(character)}.dsa`,
