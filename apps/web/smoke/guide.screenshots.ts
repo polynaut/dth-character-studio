@@ -668,7 +668,7 @@ test('detail-morph-autocomplete', async ({ page }) => {
     input.scrollIntoView({ block: 'center' })
     return input
   })
-  const input = handle.asElement()!
+  const input = handle.asElement()
   await input.click()
   await page.keyboard.press('ControlOrMeta+a')
   await page.keyboard.type('Glute', { delay: 30 })
