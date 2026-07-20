@@ -512,7 +512,9 @@ function CharacterPage() {
             {linkedScenes.length > 1 && selectedSceneName && !editingTitle && (
               <Tag
                 tone="orange"
-                className="max-w-64 truncate normal-case"
+                // Optical nudge: the bold 3xl title's visual weight sits below
+                // the line box's geometric center, so dead-center reads high.
+                className="max-w-64 translate-y-[3px] truncate normal-case"
                 title="The Daz scene selected in the scene cards — hair items and the ROM override follow it"
               >
                 {selectedSceneName}
