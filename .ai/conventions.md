@@ -33,6 +33,11 @@ the reference.
   amplified everywhere users read.
 - Docs/CI-only PRs satisfy the gate with an **empty** changeset
   (`pnpm changeset --empty`).
+- A changeset may name several packages, but **identical text is written into
+  every named CHANGELOG** — `pnpm version-packages` runs
+  `scripts/dedupe-changelogs.mjs` afterwards, which drops duplicated entries
+  (priority: desktop → web → rom → ui; the first keeps it). Entries that
+  genuinely differ per package all survive.
 - Dependabot PRs are exempt — which means product-relevant dependency bumps never
   release themselves. The `/dep-release` skill (`.claude/skills/dep-release`)
   finds and ships them.
