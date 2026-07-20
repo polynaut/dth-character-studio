@@ -204,7 +204,11 @@ export async function setAcceptedConflicts(
     else set.add(r)
   }
   const acceptedConflicts = [...set].sort()
-  await storage.saveSettings({ ...s, acceptedConflicts })
+  // Pass `s` as the baseline so this writes ONLY `acceptedConflicts` (field-level
+  // merge, re-reading every other field from disk) — a plain full-object write
+  // would clobber a Settings save made in another window between the read above
+  // and here.
+  await storage.saveSettings({ ...s, acceptedConflicts }, s)
   return acceptedConflicts
 }
 
