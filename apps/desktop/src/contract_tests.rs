@@ -57,3 +57,10 @@ fn dedup_report_matches_the_shared_fixture() {
         "../../../contracts/dedup-report.json"
     ));
 }
+
+#[test]
+fn remap_results_match_the_shared_fixture() {
+    round_trip::<Vec<crate::drives::RemapResult>>(include_str!(
+        "../../../contracts/remap-results.json"
+    ));
+}
