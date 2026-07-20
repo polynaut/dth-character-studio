@@ -408,9 +408,9 @@ function CharacterPage() {
   // user can still browse elsewhere; this is only where the dialog opens.
   async function defaultExportDir(): Promise<string | undefined> {
     if (character.exportPath.trim()) return character.exportPath
-    const defAbs = location?.definitionAbs
-    if (!defAbs) return undefined
-    const charDir = normalizePath(defAbs).replace(/\/[^/]*$/, '')
+    const definitionAbs = location?.definitionAbs
+    if (!definitionAbs) return undefined
+    const charDir = normalizePath(definitionAbs).replace(/\/[^/]*$/, '')
     const houSub = project?.houdiniSubdir?.trim()
     if (houSub) {
       const houDir = `${charDir}/${houSub}`

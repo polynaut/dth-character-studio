@@ -316,14 +316,14 @@ export function DazSceneField({
 
   async function applyAdd(scene: string, copyInto: boolean) {
     const sceneName = scene.split(/[\\/]/).pop() ?? scene
-    const subfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
+    const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
     // Reject a scene that's already attached, before any copy runs. An in-place add
     // compares the picked path itself; a copy compares its destination inside the
     // character folder — which catches re-copying the same external scene (its source
     // path differs from the in-folder copy, but the destination collides, which would
     // otherwise overwrite the existing copy and add a duplicate card). Checking up
     // front also means a `deleteOriginal` move never deletes the source then bails.
-    const dest = copyInto ? [charFolder, subfolder, sceneName].filter(Boolean).join('/') : scene
+    const dest = copyInto ? [charFolder, destSubfolder, sceneName].filter(Boolean).join('/') : scene
     if (isAlreadyLinked(dest)) {
       toast.error(`“${sceneName}” is already linked to this character.`)
       return
@@ -337,7 +337,7 @@ export function DazSceneField({
               projectId,
               characterId: character.id,
               scenePath: scene,
-              subfolder,
+              subfolder: destSubfolder,
               deleteOriginal,
             },
           })

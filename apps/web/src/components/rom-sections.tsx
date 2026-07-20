@@ -317,9 +317,13 @@ export function RomSections({
     )
   }
 
+  // Memoize the context value so it's referentially stable across renders —
+  // constructing it inline re-renders every FigureNodeContext consumer each time.
+  const figureNode = useMemo(() => genesisFigureNode(genesis, gender), [genesis, gender])
+
   return (
     <MorphIndexContext.Provider value={indexedMorphs}>
-    <FigureNodeContext.Provider value={genesisFigureNode(genesis, gender)}>
+    <FigureNodeContext.Provider value={figureNode}>
     <div className="space-y-2">
       {!presetFrames && (
         <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">

@@ -38,7 +38,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Lint (oxlint, type-aware — fails on correctness errors)
+      # oxlint exits non-zero on any ERROR-severity rule, so this fails the check.
+      # Beyond the `correctness` category, .oxlintrc.json promotes a handful of
+      # real-bug rules from warn→error (no-shadow, jsx-no-constructed-context-values,
+      # no-object-type-as-default-prop, no-unnecessary-type-assertion) so they block
+      # PRs. High-count INTENTIONAL patterns (no-await-in-loop, react-markdown
+      # component maps, promise-in-handler) stay advisory warnings on purpose.
+      - name: Lint (oxlint, type-aware — fails on correctness + promoted real-bug rules)
         run: pnpm lint
       - name: Typecheck
         run: pnpm -r typecheck
