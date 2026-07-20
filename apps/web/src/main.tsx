@@ -6,7 +6,7 @@ import { isTauri } from '@tauri-apps/api/core'
 
 import { getRouter } from './router'
 import { checkForUpdates } from './lib/updater'
-import { housekeepingSweep, isRefreshNeeded } from './lib/rom/api'
+import { housekeepingSweep, isRefreshNeeded, rememberActiveProject } from './lib/rom/api'
 import { activeProjectFile } from './lib/desktop'
 import { dirOf } from './lib/path'
 import { migrateProjects } from './lib/rom/migrate-projects'
@@ -39,6 +39,10 @@ void (async () => {
     // no route — every window must be navigated somewhere explicitly.
     const file = await activeProjectFile()
     if (file) {
+      // A `.dcsp` opened via the OS file association boots straight here without
+      // going through openProject — record it in recents so Home and the
+      // cross-project sweeps (which read recents as the registry) can see it.
+      void rememberActiveProject(file)
       await router.navigate({ to: '/projects/$projectId', params: { projectId: dirOf(file) } })
     } else {
       // A Home window: land on `/`, preserving the `?new=1` the native

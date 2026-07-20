@@ -308,7 +308,13 @@ export function RomSections({
       : [
           config.groups[0]
             ? { ...config.groups[0], poses: [...config.groups[0].poses, ...poses] }
-            : newGroup(),
+            : // A flat FBM/MISC section's implicit group must carry the STABLE
+              // `flatSectionGroupId` (via flatGroup), NOT a random newGroup() id —
+              // scene-override additions key on it, and applySceneOverride only
+              // materializes flat-id additions when the base group matches. A random
+              // id silently drops those overridden frames from the editor and the
+              // scene's generated artifacts.
+              { ...flatGroup(section), poses },
           ...config.groups.slice(1),
         ]
     patchSection(section, { enabled: true, mode: 'custom', groups })
@@ -317,9 +323,13 @@ export function RomSections({
     )
   }
 
+  // Memoize the context value so it's referentially stable across renders —
+  // constructing it inline re-renders every FigureNodeContext consumer each time.
+  const figureNode = useMemo(() => genesisFigureNode(genesis, gender), [genesis, gender])
+
   return (
     <MorphIndexContext.Provider value={indexedMorphs}>
-    <FigureNodeContext.Provider value={genesisFigureNode(genesis, gender)}>
+    <FigureNodeContext.Provider value={figureNode}>
     <div className="space-y-2">
       {!presetFrames && (
         <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">

@@ -103,7 +103,13 @@ export function AssetsGrid({
                     size="icon"
                     className="ml-auto size-7"
                     title="Open scene in Daz"
-                    onClick={() => void openScene({ data: { scenePath: asset.scenePath } })}
+                    onClick={() =>
+                      void openScene({ data: { scenePath: asset.scenePath } }).catch((e) =>
+                        // Surface a failed open (missing app association, scope) —
+                        // an unhandled rejection just looks like a dead button.
+                        toast.error(e instanceof Error ? e.message : String(e)),
+                      )
+                    }
                   >
                     <ExternalLink className="size-4" />
                   </Button>

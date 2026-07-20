@@ -1,5 +1,5 @@
 import { sectionsFromFlatFrames } from './frames'
-import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections } from './types'
+import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections, newId } from './types'
 
 import type { RomSection } from './types'
 
@@ -159,6 +159,16 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
           ? group.section
           : 'MISC'
         const { section: _ignored, ...rest } = group
+        // Legacy flat groups predate stable ids; `romGroupSchema.id` /
+        // `romPoseSchema.id` have no zod default, so a folded group/pose lacking
+        // one fails the whole character parse ("unreadable definition"). Mint
+        // ids here so the folded result is schema-valid.
+        if (rest.id === undefined) rest.id = newId()
+        if (Array.isArray(rest.poses)) {
+          for (const pose of rest.poses) {
+            if (pose && typeof pose === 'object' && pose.id === undefined) pose.id = newId()
+          }
+        }
         sections[section].enabled = true
         sections[section].mode = 'custom'
         sections[section].groups.push(rest)
@@ -214,7 +224,18 @@ export function migrateCharacterData(raw: unknown): Record<string, any> {
       ? (raw as Record<string, any>)
       : {}
   let data = normalizeLegacyCharacter(base)
-  const from = typeof data.schemaVersion === 'number' ? data.schemaVersion : 1
+  // Clamp the stored version to a sane integer in [1, CURRENT]. A corrupt or
+  // hand-edited definition carrying a hugely negative `schemaVersion` (e.g.
+  // -9e15) would otherwise spin the loop below ~9 quadrillion times and hang
+  // the app at project open — `migrateCharacterData` runs on every read, and
+  // zod's `int().positive()` guard only runs AFTER migration. A fractional or
+  // above-current value collapses to "no steps to run" rather than silently
+  // skipping registered steps.
+  const stored = data.schemaVersion
+  const from =
+    typeof stored === 'number' && Number.isInteger(stored) && stored >= 1
+      ? Math.min(stored, CHARACTER_SCHEMA_VERSION)
+      : 1
   for (let version = from + 1; version <= CHARACTER_SCHEMA_VERSION; version++) {
     const step = characterMigrations[version]
     if (step) data = step(data)

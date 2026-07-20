@@ -157,8 +157,16 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
       }
     }
     return manifest
-  } catch {
-    return defaults
+  } catch (e) {
+    // A `.dcsp` file EXISTS here but couldn't be read/parsed — it is CORRUPT, not
+    // a fresh project. Returning defaults would (a) make fetchProject render a fake
+    // empty project for a stale/typoed path instead of 404-ing, and (b) let the
+    // next save write those defaults OVER the real charactersSubdir/flags. Surface
+    // it instead; cross-project sweeps already skip a project whose manifest throws.
+    throw new Error(
+      `The project file at "${path}" is unreadable or corrupt — ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
+    )
   }
 }
 

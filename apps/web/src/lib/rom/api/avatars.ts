@@ -20,10 +20,11 @@ export function sceneBase(scenePath: string): string {
  * (Kira.tip.png). Returns '' when neither exists.
  */
 export async function findTipImage(scenePath: string): Promise<string> {
-  for (const p of [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]) {
-    if (await exists(p)) return p
-  }
-  return ''
+  // Check both naming conventions in parallel, then return the first that exists
+  // in preference order (`<scene>.tip.png` wins over `<base>.tip.png`).
+  const candidates = [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]
+  const present = await Promise.all(candidates.map((p) => exists(p)))
+  return candidates.find((_, i) => present[i]) ?? ''
 }
 
 /**
@@ -65,15 +66,18 @@ export async function removeCharacterAvatars(
   const dir = storage.metaImagesDir(projectDir)
   const id = basename(characterId)
   if (!(await exists(dir))) return
-  for (const entry of await readDir(dir)) {
-    if (
-      entry.isFile &&
-      entry.name !== keep &&
-      (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))
-    ) {
-      await remove(joinPath(dir, entry.name))
-    }
-  }
+  const entries = await readDir(dir)
+  // Remove the matching avatar files in parallel (independent files, best-effort).
+  await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isFile &&
+          entry.name !== keep &&
+          (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`)),
+      )
+      .map((entry) => remove(joinPath(dir, entry.name))),
+  )
 }
 
 /**
@@ -121,9 +125,10 @@ const uploadImageInput = z.object({
 })
 
 /**
- * Stores a dropped avatar image under <data>/images/ and returns its bare
- * filename — the portable canonical reference saved on the character (see
- * ./image). Avatars are global (keyed by character id), not per-project.
+ * Stores a dropped avatar image under the active project's `.dcsmeta/images/`
+ * (via {@link writeAvatarBytes}) and returns its bare filename — the portable
+ * canonical reference saved on the character (see ./image). Avatars are
+ * PER-PROJECT (they live in the project's hidden `.dcsmeta`), keyed by character id.
  */
 export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
   const input = uploadImageInput.parse(data)
@@ -184,14 +189,25 @@ function bytesToDataUrl(bytes: Uint8Array, fileName: string): string {
  * protocol isn't scoped to arbitrary project folders). Returns '' when there's no
  * active project or the file is missing, so the UI falls back to the placeholder.
  */
+// Resolved avatar data URLs, keyed by `<projectDir>|<image>`. The stored avatar
+// filename is content-versioned (`<id>-<ts>.<ext>`), so a changed avatar gets a
+// NEW key — the cache is self-invalidating and spares a file read + base64 encode
+// on every remount of a character grid (dozens of cards, re-run on each nav back).
+const imageSrcCache = new Map<string, string>()
+
 export async function resolveImageSrc(image: string): Promise<string> {
   if (!image) return ''
   if (isExternalImage(image)) return image
   const projectDir = await getActiveProjectDir()
   if (!projectDir) return ''
+  const key = `${projectDir}|${image}`
+  const cached = imageSrcCache.get(key)
+  if (cached) return cached
   try {
     const bytes = await readFile(joinPath(storage.metaImagesDir(projectDir), image))
-    return bytesToDataUrl(bytes, image)
+    const url = bytesToDataUrl(bytes, image)
+    imageSrcCache.set(key, url)
+    return url
   } catch {
     return ''
   }

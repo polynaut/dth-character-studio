@@ -131,9 +131,13 @@ pub(crate) fn lock_dest(path: &Path) -> MutexGuard<'static, ()> {
 
 /// Join a `/`-separated relative path onto `base`, component by component (so the
 /// separator is normalized to the OS one rather than relying on `/` passthrough).
+/// `.` and `..` components are DROPPED — a zip-slip rail that holds on every
+/// platform: on a Unix build a `..\..\x` zip entry passes `enclosed_name` (one
+/// `Normal` component) and only becomes `../../x` after the backslash→slash
+/// rewrite, so the escape must be blocked here rather than relying on that order.
 pub(crate) fn join_rel(base: &Path, rel: &str) -> PathBuf {
     let mut p = base.to_path_buf();
-    for c in rel.split('/').filter(|s| !s.is_empty()) {
+    for c in rel.split('/').filter(|s| !s.is_empty() && *s != "." && *s != "..") {
         p.push(c);
     }
     p
@@ -148,6 +152,15 @@ mod tests {
     fn join_rel_uses_components() {
         let joined = join_rel(Path::new("base"), "data/foo/bar.dsf");
         assert_eq!(joined, Path::new("base").join("data").join("foo").join("bar.dsf"));
+    }
+
+    #[test]
+    fn join_rel_drops_traversal_components() {
+        // A `..`-laden entry (e.g. a backslash-normalised zip path on a Unix build)
+        // must not escape `base` — the `.`/`..` components are dropped.
+        let joined = join_rel(Path::new("base"), "../../evil.dsf");
+        assert_eq!(joined, Path::new("base").join("evil.dsf"));
+        assert_eq!(join_rel(Path::new("base"), "a/./b/../c"), Path::new("base").join("a").join("b").join("c"));
     }
 
     #[test]

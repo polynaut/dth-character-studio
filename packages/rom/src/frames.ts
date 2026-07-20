@@ -49,6 +49,43 @@ export interface PresetFrames {
   phys: number
 }
 
+/** The preset-block selection booleans (GP/DK gender+selection already resolved). */
+export interface PresetSelections {
+  /** GEN section enabled in preset mode. */
+  genPreset: boolean
+  /** JCM base ROM from a shipped PRESET (not a custom asset path — see note). */
+  jcmPreset: boolean
+  facPreset: boolean
+  physPreset: boolean
+  includeGp: boolean
+  includeDk: boolean
+}
+
+/**
+ * Derive the preset-block selection booleans in ONE place. Several artifacts —
+ * the frame math ({@link presetEndFrame}), CSV validation/splice, the Daz config —
+ * each need "is GP included?", "is PHY a preset?" etc.; deriving them independently
+ * is exactly how a past desync crept in (a separately-summed base+gp splice
+ * silently lacked presetEndFrame's dk term). Consume this instead of re-writing
+ * `sections.X.enabled && sections.X.mode === 'preset'`.
+ *
+ * NOTE: the Daz config's `bIncludeJCM`/`bIncludeFAC` also accept a CUSTOM `.duf`
+ * path; that superset stays local to generate.ts. Here jcmPreset/facPreset mean
+ * preset-only.
+ */
+export function presetSelections(sections: RomSections, gender: Gender): PresetSelections {
+  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
+  const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+  return {
+    genPreset,
+    jcmPreset: sections.JCM.enabled && sections.JCM.mode === 'preset',
+    facPreset: sections.FAC.enabled && sections.FAC.mode === 'preset',
+    physPreset: sections.PHY.enabled && sections.PHY.mode === 'preset',
+    includeGp: genPreset && roms.gp,
+    includeDk: genPreset && roms.dk,
+  }
+}
+
 /** Whether JCM contributes a base ROM block — a preset, or a custom asset path. */
 export function jcmIsBaseRom(sections: RomSections): boolean {
   const jcm = sections.JCM
@@ -75,13 +112,12 @@ export function presetEndFrame(
   gender: Gender,
   frames: PresetFrames,
 ): number {
-  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
-  const roms = genRomIncludes(gender, sections.GEN.presetAssets)
+  const { includeGp, includeDk, physPreset } = presetSelections(sections, gender)
   return (
     (jcmIsBaseRom(sections) ? frames.base - 1 : -1) +
-    (genPreset && roms.gp ? frames.gp : 0) +
-    (genPreset && roms.dk ? frames.dk : 0) +
-    (sections.PHY.enabled && sections.PHY.mode === 'preset' ? frames.phys : 0)
+    (includeGp ? frames.gp : 0) +
+    (includeDk ? frames.dk : 0) +
+    (physPreset ? frames.phys : 0)
   )
 }
 

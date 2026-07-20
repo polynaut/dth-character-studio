@@ -32,6 +32,7 @@ export {
   forgetRecent,
   isDirectory,
   openProject,
+  rememberActiveProject,
   renameProject,
   saveProjectSettings,
   setUnrealProjects,

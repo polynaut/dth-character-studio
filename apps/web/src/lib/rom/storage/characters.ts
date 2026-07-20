@@ -41,6 +41,37 @@ import type { Project } from './projects'
 // CRUD around them (save/create/move/delete + the paths Generate writes into).
 
 /**
+ * THE single repoint site: rewrite every in-folder path field of a character
+ * from `fromFolder` to `toFolder`. A folder move/rename carries the character's
+ * files with it, so any stored path that lived INSIDE the folder must follow; a
+ * path linked in place outside it is left untouched. A new character field that
+ * stores an inside-the-folder path MUST be added here (and to the prefill list) —
+ * see `.ai/conventions.md` §schema-ritual item 5. Used by `saveCharacter`'s
+ * rename, `moveCharacter`, and `moveCharactersRoot` so they can't drift apart
+ * (they used to: `moveCharacter` repointed only `scenePath`, orphaning extra
+ * scenes / grooms / overrides / the avatar-source scene on a folder move).
+ */
+export function repointCharacterPaths(
+  character: Character,
+  fromFolder: string,
+  toFolder: string,
+): Character {
+  const repoint = (p: string): string => {
+    const rel = relativeInside(fromFolder, p)
+    return rel ? join(toFolder, rel) : p
+  }
+  return {
+    ...character,
+    scenePath: repoint(character.scenePath),
+    extraScenes: character.extraScenes.map(repoint),
+    houdiniProjects: character.houdiniProjects.map(repoint),
+    imageScene: repoint(character.imageScene),
+    groomScenes: character.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
+    sceneOverrides: character.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),
+  }
+}
+
+/**
  * Read a stored definition into a current-shape Character: run the core migration
  * framework ({@link migrateCharacterData}) on the raw JSON to bring any older
  * shape forward, normalise the avatar ref, then validate against the schema. The
@@ -82,7 +113,11 @@ async function scanLibrary(lib: string): Promise<Array<LibraryEntry>> {
   if (!lib || !(await isDir(lib))) return []
   const entries: Array<LibraryEntry> = []
   const seen = new Set<string>()
-  for (const rel of await walkFiles(lib)) {
+  // Prune dot-folders: a character definition never lives in one, but `.dcsmeta`
+  // (avatars + up-to-100MB note media), `.assets`, and `.dth-moving` would
+  // otherwise be walked in full on every scan. Character/Daz/Houdini subfolders
+  // still descend (a moved character can nest arbitrarily).
+  for (const rel of await walkFiles(lib, '', (name) => name.startsWith('.'))) {
     if (!rel.toLowerCase().endsWith('.json')) continue
     const definitionAbs = join(lib, rel)
     let character: Character
@@ -150,11 +185,16 @@ export async function getCharacter(lib: string, id: string): Promise<Character |
  */
 export async function findCharacterAcrossProjects(id: string): Promise<Character | null> {
   for (const recent of await listRecents()) {
-    const dir = dirname(recent.path)
-    const manifest = await readManifest(dir)
-    const root = manifest.charactersSubdir ? join(dir, manifest.charactersSubdir) : dir
-    const found = await getCharacter(root, id)
-    if (found) return found
+    try {
+      const dir = dirname(recent.path)
+      const manifest = await readManifest(dir)
+      const root = manifest.charactersSubdir ? join(dir, manifest.charactersSubdir) : dir
+      const found = await getCharacter(root, id)
+      if (found) return found
+    } catch {
+      // A recent project with a corrupt/unreachable manifest must not abort the
+      // cross-project search — skip it and keep scanning the others.
+    }
   }
   return null
 }
@@ -191,7 +231,13 @@ export async function saveCharacter(
     // was still tracking the name (never clobber a manually moved/renamed one).
     const tracksName = oldFolderName === characterFolderName(existing.character.name)
     if (tracksName && oldFolderName !== newName) {
-      const folderAbs = await uniqueFolder(dirname(existing.folderAbs), newName)
+      // A case-only rename (kira → Kira) targets the SAME physical folder on
+      // Windows, so `uniqueFolder` would see it as taken and fork to "Kira (2)".
+      // Rename in place to the new casing instead of probing for a free name.
+      const caseOnlyRename = oldFolderName.toLowerCase() === newName.toLowerCase()
+      const folderAbs = caseOnlyRename
+        ? join(dirname(existing.folderAbs), newName)
+        : await uniqueFolder(dirname(existing.folderAbs), newName)
       await rename(existing.folderAbs, folderAbs)
       const movedDefinition = join(folderAbs, basename(existing.definitionAbs))
       definitionAbs = join(folderAbs, definitionFileName(character.name))
@@ -218,25 +264,12 @@ export async function saveCharacter(
 
   // Repoint scenes / Houdini projects that lived inside the renamed folder to its
   // new location; a scene linked in place outside the folder is left untouched.
-  if (folderMove) {
-    const { from, to } = folderMove
-    const repoint = (p: string): string => {
-      const rel = relativeInside(from, p)
-      return rel ? join(to, rel) : p
-    }
-    stamped.scenePath = repoint(stamped.scenePath)
-    stamped.extraScenes = stamped.extraScenes.map(repoint)
-    stamped.houdiniProjects = stamped.houdiniProjects.map(repoint)
-    stamped.imageScene = repoint(stamped.imageScene)
-    stamped.groomScenes = stamped.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) }))
-    stamped.sceneOverrides = stamped.sceneOverrides.map((o) => ({
-      ...o,
-      scenePath: repoint(o.scenePath),
-    }))
-  }
+  const finalStamped = folderMove
+    ? repointCharacterPaths(stamped, folderMove.from, folderMove.to)
+    : stamped
 
-  await writeTextFile(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
-  return stamped
+  await writeTextFile(definitionAbs, JSON.stringify(finalStamped, null, 2) + '\n')
+  return finalStamped
 }
 
 /**
@@ -334,11 +367,15 @@ export async function deleteCharacter(
  * Only character folders / loose definitions move; other project files (the
  * `.dcsp`, `.dcsmeta`, `.assets`) are untouched. Returns how many moved.
  */
-export async function moveCharactersRoot(oldRoot: string, newRoot: string): Promise<number> {
+export async function moveCharactersRoot(
+  oldRoot: string,
+  newRoot: string,
+): Promise<{ moved: number; repointFailures: Array<{ dest: string; error: string }> }> {
   const norm = (s: string) => s.replace(/\\/g, '/').replace(/\/+$/g, '')
   const from = norm(oldRoot)
   const to = norm(newRoot)
-  if (!from || !to || from === to || !(await isDir(from))) return 0
+  const repointFailures: Array<{ dest: string; error: string }> = []
+  if (!from || !to || from === to || !(await isDir(from))) return { moved: 0, repointFailures }
   // When the new root nests inside the old one, leave characters already under it
   // alone (moving them by their old-relative path would double-nest them).
   const newInsideOld = (to + '/').startsWith(from + '/')
@@ -380,26 +417,17 @@ export async function moveCharactersRoot(oldRoot: string, newRoot: string): Prom
       try {
         const defAbs = join(dest, basename(entry.definitionAbs))
         const c = parseCharacter(JSON.parse(await readTextFile(defAbs)))
-        const repoint = (p: string): string => {
-          const rel = relativeInside(entry.folderAbs, p)
-          return rel ? join(dest, rel) : p
-        }
-        const updated: Character = {
-          ...c,
-          scenePath: repoint(c.scenePath),
-          extraScenes: c.extraScenes.map(repoint),
-          houdiniProjects: c.houdiniProjects.map(repoint),
-          imageScene: repoint(c.imageScene),
-          groomScenes: c.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
-          sceneOverrides: c.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),
-        }
+        const updated = repointCharacterPaths(c, entry.folderAbs, dest)
         await writeTextFile(defAbs, JSON.stringify(updated, null, 2) + '\n')
-      } catch {
-        // best-effort — a parse/write hiccup leaves the moved paths as-is
+      } catch (e) {
+        // The folder is already at the new root; only the in-file paths failed to
+        // repoint. Record it so the caller can surface "moved but paths need a
+        // re-save" instead of silently leaving dead links.
+        repointFailures.push({ dest, error: e instanceof Error ? e.message : String(e) })
       }
     }
   }
-  return moved
+  return { moved, repointFailures }
 }
 
 /** Absolute path to a character's folder (created if missing) — Generate's target. */
@@ -493,9 +521,12 @@ export async function moveCharacter(
       await mkdir(dirname(newFolderAbs), { recursive: true })
       if ((newFolderAbs + '/').startsWith(entry.folderAbs + '/')) {
         // Destination is inside the source — a dir can't be renamed into its own
-        // descendant, so relocate via a temporary slot in the library root.
-        const tmp = join(lib, '.dth-moving')
-        if (await exists(tmp)) await remove(tmp, { recursive: true })
+        // descendant, so relocate via a temporary slot in the library root. Use a
+        // UNIQUE slot (never blindly `remove()` an existing `.dth-moving`): a crash
+        // between the two renames strands the WHOLE character there, and the old
+        // unconditional delete would then destroy that stranded character on the
+        // next descendant-move. A unique name leaves it recoverable instead.
+        const tmp = await uniqueFolder(lib, '.dth-moving')
         await rename(entry.folderAbs, tmp)
         await mkdir(dirname(newFolderAbs), { recursive: true })
         await rename(tmp, newFolderAbs)
@@ -511,15 +542,16 @@ export async function moveCharacter(
     }
   }
 
-  // If the linked Daz scene lived inside the (now moved) character folder, it
-  // travelled with it — repoint the stored scenePath at the new location. A
-  // scene linked in place outside the character folder didn't move, so it's left
-  // untouched.
+  // Repoint EVERY in-folder path that travelled with the moved folder — scenes,
+  // Houdini projects, the avatar-source scene, grooms, and scene overrides — not
+  // just the primary scenePath (that omission orphaned outfit scenes/overrides on
+  // a folder move, and the next save wrote the dead paths permanently). Paths
+  // linked in place outside the folder are left untouched by the helper.
   let character = entry.character
-  if (newFolderAbs !== entry.folderAbs && character.scenePath) {
-    const rel = relativeInside(entry.folderAbs, character.scenePath)
-    if (rel) {
-      character = { ...character, scenePath: join(newFolderAbs, rel) }
+  if (newFolderAbs !== entry.folderAbs) {
+    const repointed = repointCharacterPaths(character, entry.folderAbs, newFolderAbs)
+    if (JSON.stringify(repointed) !== JSON.stringify(character)) {
+      character = repointed
       await writeTextFile(newDefAbs, JSON.stringify(character, null, 2) + '\n')
     }
   }

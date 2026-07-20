@@ -16,6 +16,32 @@ import {
 import { isExternalImage } from './image'
 
 /**
+ * Move each of a project's character avatars from the legacy `app-data/images`
+ * into the project's `.dcsmeta/images`. Idempotent (a missing source is skipped)
+ * and run on BOTH the fresh-manifest path AND the "already has a manifest" path —
+ * a crash after writing the manifest but before moving avatars would otherwise
+ * leave the avatars in app-data, which finalisation then deletes wholesale.
+ * Best-effort per avatar.
+ */
+async function moveProjectAvatars(dir: string, imagesDir: string): Promise<void> {
+  const dest = metaImagesDir(dir)
+  await mkdir(dest, { recursive: true })
+  for (const character of await listCharacters(dir)) {
+    const image = character.image
+    if (!image || isExternalImage(image)) continue
+    const src = `${imagesDir}/${image}`
+    try {
+      if (await exists(src)) {
+        await writeFile(`${dest}/${image}`, await readFile(src))
+        await remove(src)
+      }
+    } catch {
+      // a locked/missing avatar shouldn't fail the project's migration
+    }
+  }
+}
+
+/**
  * One-time upgrade from the pre-`.dcsp` model (a global `projects.json` registry +
  * avatars in `app-data/images`) to self-contained project files. For each known
  * project that still exists on disk it writes a `.dcsp` manifest (seeding the
@@ -72,8 +98,12 @@ export async function migrateProjects(): Promise<void> {
       // Already migrated on an earlier run (e.g. this project was reachable then,
       // another wasn't, so projects.json is still around). Do NOT re-write its
       // manifest — that would clobber the user's per-project settings back to
-      // defaults. Skip it; it counts as done (doesn't hold up finalisation).
+      // defaults. But a prior run may have written the manifest and then crashed
+      // BEFORE moving its avatars, so still attempt the (idempotent) avatar move
+      // here — otherwise finalisation would delete app-data/images with those
+      // avatars still in it. Then skip; it counts as done.
       if (await findManifestPath(dir)) {
+        await moveProjectAvatars(dir, imagesDir)
         continue
       }
       const manifest: DcspManifest = {
@@ -91,24 +121,9 @@ export async function migrateProjects(): Promise<void> {
         unrealProjects: [],
       }
       await writeManifest(dir, manifest)
-      const dest = metaImagesDir(dir)
-      await mkdir(dest, { recursive: true })
-
-      // Move each character's avatar from app-data/images into the project's
-      // `.dcsmeta/images` (the stored `image` is a bare filename). Best-effort.
-      for (const character of await listCharacters(dir)) {
-        const image = character.image
-        if (!image || isExternalImage(image)) continue
-        const src = `${imagesDir}/${image}`
-        try {
-          if (await exists(src)) {
-            await writeFile(`${dest}/${image}`, await readFile(src))
-            await remove(src)
-          }
-        } catch {
-          // a locked/missing avatar shouldn't fail the project's migration
-        }
-      }
+      // Move this project's avatars into its `.dcsmeta/images` (the stored `image`
+      // is a bare filename). Shared with the already-migrated path above.
+      await moveProjectAvatars(dir, imagesDir)
 
       const dcsp = await findManifestPath(dir)
       if (dcsp) await rememberRecent(dcsp, project.name)

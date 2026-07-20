@@ -80,8 +80,18 @@ export async function uniqueFolder(parent: string, baseName: string): Promise<st
   throw new Error(`Could not find a free folder name for "${baseName}" in ${parent}.`)
 }
 
-/** Recursively collect file paths (relative to `root`, '/'-separated). */
-export async function walkFiles(root: string, rel = ''): Promise<Array<string>> {
+/**
+ * Recursively collect file paths (relative to `root`, '/'-separated). `skipDir`,
+ * when given, prunes a subtree by directory name — the character scan uses it to
+ * skip the app's own non-definition folders (`.dcsmeta` with its up-to-100MB
+ * media, `.assets`), which otherwise get fully walked (one readDir IPC per
+ * directory) on every project-page navigation, badly on a network share.
+ */
+export async function walkFiles(
+  root: string,
+  rel = '',
+  skipDir?: (name: string) => boolean,
+): Promise<Array<string>> {
   const here = rel ? join(root, rel) : root
   let listing: Awaited<ReturnType<typeof readDir>>
   try {
@@ -99,8 +109,10 @@ export async function walkFiles(root: string, rel = ''): Promise<Array<string>> 
   const out: Array<string> = []
   for (const entry of listing) {
     const childRel = rel ? `${rel}/${entry.name}` : entry.name
-    if (entry.isDirectory) out.push(...(await walkFiles(root, childRel)))
-    else out.push(childRel)
+    if (entry.isDirectory) {
+      if (skipDir?.(entry.name)) continue
+      out.push(...(await walkFiles(root, childRel, skipDir)))
+    } else out.push(childRel)
   }
   return out
 }

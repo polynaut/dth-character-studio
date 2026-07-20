@@ -75,7 +75,9 @@ function HomePage() {
   }
 
   async function onCreate() {
-    if (!path || !name.trim()) return
+    // Guard `busy`: the button is disabled while creating but the Enter-key
+    // handler isn't, so a fast double-Enter could race two project creates.
+    if (busy || !path || !name.trim()) return
     setBusy(true)
     setError('')
     try {

@@ -1,5 +1,5 @@
-import { customSections, jcmIsBaseRom, presetFrameCount } from './frames.ts'
-import { genRomIncludes, SECTION_LABELS } from './types.ts'
+import { customSections, jcmIsBaseRom, presetFrameCount, presetSelections } from './frames.ts'
+import { SECTION_LABELS } from './types.ts'
 import type { PresetFrames } from './frames.ts'
 import type { Gender, RomSection, RomSections } from './types.ts'
 
@@ -41,11 +41,10 @@ export function romTimeline(
 
   // Preset blocks, in the order the Daz runtime lays them on the timeline.
   if (jcmIsBaseRom(sections)) add('base', 'Base ROM', frames.base)
-  const genPreset = sections.GEN.enabled && sections.GEN.mode === 'preset'
-  const gen = genRomIncludes(gender, sections.GEN.presetAssets)
-  if (genPreset && gen.dk) add('dk', 'Dicktator', frames.dk)
-  if (genPreset && gen.gp) add('gp', 'Golden Palace', frames.gp)
-  if (sections.PHY.enabled && sections.PHY.mode === 'preset') add('phys', 'Physics', frames.phys)
+  const { includeGp, includeDk, physPreset } = presetSelections(sections, gender)
+  if (includeDk) add('dk', 'Dicktator', frames.dk)
+  if (includeGp) add('gp', 'Golden Palace', frames.gp)
+  if (physPreset) add('phys', 'Physics', frames.phys)
 
   // The custom sequence continues at the generated offset. Pin it to the single
   // source (presetFrameCount) rather than the accumulated cursor — they are equal

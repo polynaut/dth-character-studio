@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -133,6 +133,7 @@ export function DazSceneField({
   sceneFolderExists,
   defaultSubdir,
   onLinked,
+  onScenesFolderMoved,
   selectedScene,
   onSelectScene,
 }: {
@@ -143,6 +144,10 @@ export function DazSceneField({
   sceneFolderExists: boolean
   defaultSubdir: string
   onLinked: (character: Character) => void
+  /** A scenes-FOLDER move repoints paths but reads the character from DISK, so its
+   *  result must be MERGED into the draft (preserving unsaved edits), never used to
+   *  replace it wholesale like `onLinked` does — see the route's `syncPersisted`. */
+  onScenesFolderMoved: (character: Character) => void
   /** Selectable cards (see LinkedAssetCard): pass the selected scene path and a
    *  setter — a card click selects (only the corner icon opens). Omit both for
    *  the classic click-to-open cards. */
@@ -175,18 +180,9 @@ export function DazSceneField({
   // Editing the scenes subfolder (the chip's pencil): null = not editing,
   // otherwise the draft value relative to the character folder.
   const [editDir, setEditDir] = useState<string | null>(null)
-
-  // Esc closes the primary link modal (the Add modal is a SceneCopyDialog, which
-  // wires its own Esc). This one isn't a Radix dialog, so it's by hand; ignored
-  // while a copy is in flight.
-  useEffect(() => {
-    if (!pending) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) setPending('')
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [pending, busy])
+  // Guards onOpen against a double-click launching Daz twice (a ref, so it takes
+  // effect synchronously within the same tick — a state flag would lag a render).
+  const openingRef = useRef(false)
 
   const linked = Boolean(character.scenePath)
   const ready = linked && sceneExists
@@ -219,6 +215,10 @@ export function DazSceneField({
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
   async function onOpen(scenePath: string, e?: React.MouseEvent) {
+    // Re-entry guard: a fast double-click would otherwise fire two openScene calls
+    // and, with Daz closed, launch two fresh Daz instances.
+    if (openingRef.current) return
+    openingRef.current = true
     setError('')
     try {
       if (e?.altKey) {
@@ -237,6 +237,8 @@ export function DazSceneField({
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
       toast.error(e?.altKey ? msg : `Couldn't open in Daz: ${msg}`)
+    } finally {
+      openingRef.current = false
     }
   }
 
@@ -316,14 +318,14 @@ export function DazSceneField({
 
   async function applyAdd(scene: string, copyInto: boolean) {
     const sceneName = scene.split(/[\\/]/).pop() ?? scene
-    const subfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
+    const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
     // Reject a scene that's already attached, before any copy runs. An in-place add
     // compares the picked path itself; a copy compares its destination inside the
     // character folder — which catches re-copying the same external scene (its source
     // path differs from the in-folder copy, but the destination collides, which would
     // otherwise overwrite the existing copy and add a duplicate card). Checking up
     // front also means a `deleteOriginal` move never deletes the source then bails.
-    const dest = copyInto ? [charFolder, subfolder, sceneName].filter(Boolean).join('/') : scene
+    const dest = copyInto ? [charFolder, destSubfolder, sceneName].filter(Boolean).join('/') : scene
     if (isAlreadyLinked(dest)) {
       toast.error(`“${sceneName}” is already linked to this character.`)
       return
@@ -337,7 +339,7 @@ export function DazSceneField({
               projectId,
               characterId: character.id,
               scenePath: scene,
-              subfolder,
+              subfolder: destSubfolder,
               deleteOriginal,
             },
           })
@@ -495,7 +497,10 @@ export function DazSceneField({
       const saved = await moveCharacterScenesFolder({
         data: { projectId, id: character.id, newSubdir: editDir },
       })
-      onLinked(saved)
+      // MERGE the repointed paths into the draft — this `saved` came from DISK and
+      // lacks any unsaved edits, so replacing the draft wholesale (onLinked) would
+      // silently discard them and clear `dirty` so the guard never fires.
+      onScenesFolderMoved(saved)
       setEditDir(null)
       void router.invalidate()
       toast.success('Moved the Daz scenes folder')
@@ -584,9 +589,9 @@ export function DazSceneField({
                   </Button>
                 </div>
               )}
-              {character.extraScenes.map((scene, i) => (
+              {character.extraScenes.map((scene) => (
                 <SceneCard
-                  key={`${scene}-${i}`}
+                  key={scene}
                   scenePath={scene}
                   name={character.name}
                   charFolderAbs={charFolder}

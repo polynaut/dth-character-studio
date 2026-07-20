@@ -83,4 +83,12 @@ describe('posesFromDazCsv', () => {
   it('returns an empty array for empty input', () => {
     expect(posesFromDazCsv('')).toEqual([])
   })
+
+  it('skips a row with an empty first column instead of importing it at frame 0', () => {
+    // `Number('') === 0` (finite), so without the explicit empty-cell guard this
+    // row with a valid triplet but a blank frame column would import as a pose at
+    // frame 0.
+    const poses = posesFromDazCsv(',,,Genesis9,body_bs_X,1\n')
+    expect(poses).toEqual([])
+  })
 })
