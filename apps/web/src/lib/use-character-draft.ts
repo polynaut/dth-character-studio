@@ -4,7 +4,12 @@ import { toast } from 'sonner'
 
 import { generateCharacterFiles, saveCharacter } from '#/lib/rom/api.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
-import { romValidationErrors } from '@dth/rom'
+import {
+  activeSceneOverrides,
+  applySceneOverride,
+  romValidationErrors,
+  sceneOverrideSlug,
+} from '@dth/rom'
 
 import type { Character, RomValidationError } from '@dth/rom'
 
@@ -88,6 +93,35 @@ export function useCharacterDraft(options: {
         errors.length === 1
           ? errors[0].message
           : `${errors.length} custom-morph fields need fixing before saving.`,
+      )
+      return
+    }
+    // Each active scene override generates its own artifacts from the MERGED
+    // sections — validate those too, so an overridden/added row can't ship a
+    // broken scene script. The row jump rides along: when that scene's
+    // override view is on screen (the usual case — the user just edited it),
+    // the merged rows carry the same pose ids, so the reveal finds the row;
+    // with another scene selected it degrades to opening the section.
+    for (const override of activeSceneOverrides(character)) {
+      const sceneErrors = romValidationErrors(applySceneOverride(character.sections, override))
+      if (sceneErrors.length > 0) {
+        const scene = sceneOverrideSlug(override.scenePath)
+        onValidationErrors(sceneErrors)
+        toast.error(
+          sceneErrors.length === 1
+            ? `Scene override “${scene}”: ${sceneErrors[0].message}`
+            : `Scene override “${scene}”: ${sceneErrors.length} custom-morph fields need fixing before saving.`,
+        )
+        return
+      }
+    }
+    // Two linked scenes whose file names reduce to the same slug would generate
+    // the same file names — refuse instead of silently overwriting one.
+    const slugs = activeSceneOverrides(character).map((o) => sceneOverrideSlug(o.scenePath))
+    const dupe = slugs.find((slug, i) => slugs.indexOf(slug) < i)
+    if (dupe) {
+      toast.error(
+        `Two overridden scenes both generate as “${dupe}” — rename one scene file so the generated scripts don't clash.`,
       )
       return
     }

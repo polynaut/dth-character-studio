@@ -354,6 +354,128 @@ describe('pose Name validation (Houdini-safe)', () => {
   })
 })
 
+describe('scene override mode', () => {
+  // A controlled harness like the character page: the override entry lives in
+  // state and RomSections edits it; the base sections are handed in fixed so
+  // any base edit would be visible via onSectionsChange.
+  function OverrideHarness({
+    onOverrideChange,
+    onSectionsChange,
+  }: {
+    onOverrideChange: (next: import('@dth/rom').SceneOverride) => void
+    onSectionsChange: () => void
+  }) {
+    const [override, setOverride] = useState<import('@dth/rom').SceneOverride>({
+      scenePath: 'X:/scenes/Beach.duf',
+      enabled: true,
+      poses: [],
+      additions: [],
+    })
+    return (
+      <RomSections
+        sections={sectionsWithMultiMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        override={{
+          data: override,
+          onChange: (next) => {
+            setOverride(next)
+            onOverrideChange(next)
+          },
+        }}
+        onChange={onSectionsChange}
+      />
+    )
+  }
+
+  it('locks the base: no insert menus, no drag handles, unchecked rows read-only', () => {
+    let sectionsChanged = false
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(
+      <OverrideHarness
+        onOverrideChange={(next) => {
+          latest = next
+        }}
+        onSectionsChange={() => {
+          sectionsChanged = true
+        }}
+      />,
+    )
+    expect(screen.getByText(/Scene override active/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Full Body'))
+    expect(screen.queryByLabelText('Insert a frame here')).toBeNull()
+    expect(screen.queryByTitle('Drag to reorder')).toBeNull()
+    // A base row shows no delete button in override mode.
+    expect(screen.queryByTitle('Remove pose')).toBeNull()
+
+    // Editing the (unchecked) base row's name commits nowhere: the base is
+    // fixed and the row isn't part of the override.
+    const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
+    fireEvent.change(nameInput, { target: { value: 'Hacked' } })
+    fireEvent.blur(nameInput)
+    expect(sectionsChanged).toBe(false)
+    expect(latest).toBeNull()
+  })
+
+  it('checking Override seeds a copy of the base row; edits then hit the override only', () => {
+    let sectionsChanged = false
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(
+      <OverrideHarness
+        onOverrideChange={(next) => {
+          latest = next
+        }}
+        onSectionsChange={() => {
+          sectionsChanged = true
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(
+      screen.getByTitle(
+        'Override this frame for the selected scene — uncheck to fall back to the base row',
+      ),
+    )
+    expect(latest!.poses).toHaveLength(1)
+    expect(latest!.poses[0]).toMatchObject({ id: 'p1', name: 'SLGlutes SS' })
+
+    // The now-overridden row edits the override copy — the base stays fixed.
+    const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
+    fireEvent.change(nameInput, { target: { value: 'BeachGlutes' } })
+    fireEvent.blur(nameInput)
+    expect(latest!.poses[0].name).toBe('BeachGlutes')
+    expect(sectionsChanged).toBe(false)
+
+    // Unchecking reverts to the base row (the override entry is dropped).
+    fireEvent.click(
+      screen.getByTitle(
+        'Override this frame for the selected scene — uncheck to fall back to the base row',
+      ),
+    )
+    expect(latest!.poses).toHaveLength(0)
+  })
+
+  it('Add morph appends an override frame at the group end, removable again', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getByText('Add morph'))
+    expect(latest!.additions).toEqual([
+      expect.objectContaining({ groupId: 'g1', poses: [expect.objectContaining({ name: '' })] }),
+    ])
+
+    // Added frame: frame number continues after the base row (328 → 329), its
+    // checkbox is locked checked, and it is the only removable row.
+    expect(screen.getByText('329')).toBeTruthy()
+    expect(screen.getByTitle('Added frame — always part of the override')).toBeTruthy()
+    fireEvent.click(screen.getByTitle('Remove pose'))
+    expect(latest!.additions).toEqual([])
+  })
+})
+
 describe('Modify JCM frames (jcmMorphMods grid)', () => {
   it('adds a rule and edits a drive through the grid', () => {
     let mods: Array<import('@dth/rom').JcmMorphMod> = [

@@ -24,6 +24,21 @@ export interface MorphPatch {
   autoBase?: boolean | undefined
 }
 
+/**
+ * Scene-override mode state for the table (see the character page's Override
+ * toggle): rows below `baseCount` are the BASE rows — dimmed + read-only until
+ * their Override checkbox marks them replaced for the scene; rows from
+ * `baseCount` on are the override's own appended frames (always fully visible,
+ * removable, and only ever at the END — inserting between base frames is
+ * forbidden, so the insert menu and drag reordering disappear in this mode).
+ */
+export interface PoseOverrideMeta {
+  baseCount: number
+  isOverridden: (poseId: string) => boolean
+  /** Check/uncheck a base row's Override checkbox. */
+  toggle: (poseId: string, on: boolean) => void
+}
+
 export interface PoseTableMeta {
   startFrame: number
   /** Absolute frames whose morphs failed in the last ROM run — rows marked red. */
@@ -40,6 +55,8 @@ export interface PoseTableMeta {
   insertAt: (index: number) => void
   /** Default scene node for new entries — the generation's unrenamed base figure. */
   figureNode: string
+  /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
+  override?: PoseOverrideMeta
 }
 
 /**
@@ -93,6 +110,34 @@ function InsertFrameMenu({ onBefore, onAfter }: { onBefore: () => void; onAfter:
 const columnHelper = createColumnHelper<RomPose>()
 
 export const poseColumns: Array<ColumnDef<RomPose, any>> = [
+  // Scene-override mode only (hidden otherwise): the leading checkbox that
+  // marks a base row as replaced for the selected scene. Added rows show a
+  // locked checked box — they ARE the override.
+  columnHelper.display({
+    id: 'override',
+    header: 'Override',
+    cell: ({ row, table }) => {
+      const override = (table.options.meta as PoseTableMeta).override
+      if (!override) return null
+      const added = row.index >= override.baseCount
+      return (
+        <span className="flex justify-center">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-primary"
+            checked={added || override.isOverridden(row.original.id)}
+            disabled={added}
+            title={
+              added
+                ? 'Added frame — always part of the override'
+                : 'Override this frame for the selected scene — uncheck to fall back to the base row'
+            }
+            onChange={(e) => override.toggle(row.original.id, e.target.checked)}
+          />
+        </span>
+      )
+    },
+  }),
   columnHelper.display({
     id: 'frame',
     header: 'Frame',
@@ -103,10 +148,13 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <span className="pr-1 pl-2 text-sm text-muted-foreground tabular-nums">
             {meta.startFrame + row.index}
           </span>
-          <InsertFrameMenu
-            onBefore={() => meta.insertAt(row.index)}
-            onAfter={() => meta.insertAt(row.index + 1)}
-          />
+          {/* Override mode appends at the group end only — no in-between inserts. */}
+          {!meta.override && (
+            <InsertFrameMenu
+              onBefore={() => meta.insertAt(row.index)}
+              onAfter={() => meta.insertAt(row.index + 1)}
+            />
+          )}
         </span>
       )
     },
@@ -248,17 +296,23 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
   columnHelper.display({
     id: 'actions',
     header: '',
-    cell: ({ row, table }) => (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7"
-        title="Remove pose"
-        onClick={() => (table.options.meta as PoseTableMeta).remove(row.index)}
-      >
-        <Trash2 className="size-3.5 text-destructive" />
-      </Button>
-    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      // An override never deletes base rows (the base frame layout is fixed) —
+      // only its own added frames.
+      if (meta.override && row.index < meta.override.baseCount) return null
+      return (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          title="Remove pose"
+          onClick={() => meta.remove(row.index)}
+        >
+          <Trash2 className="size-3.5 text-destructive" />
+        </Button>
+      )
+    },
   }),
 ]
 
@@ -280,6 +334,16 @@ export function SortablePoseRow({
   // run report at the top of the page).
   const absFrame = meta.startFrame + row.index
   const failed = meta.failedFrames?.has(absFrame) === true
+  // Scene-override mode: base rows that are NOT overridden stay slightly
+  // transparent and inert — only the Override checkbox cell keeps working, so
+  // "check to override" is the single way in. Overridden + added rows show at
+  // full strength: that visibility IS the "this one is overridden" signal.
+  const override = meta.override
+  const dimmed =
+    override !== undefined &&
+    row.index < override.baseCount &&
+    !override.isOverridden(row.original.id)
+  const dimClass = 'opacity-40 pointer-events-none select-none'
   return (
     <>
       <tr
@@ -293,18 +357,24 @@ export function SortablePoseRow({
         } ${isDragging ? 'relative z-10 bg-muted/50 opacity-70' : ''}`}
       >
         <td className="px-1 py-0.5">
-          <button
-            type="button"
-            className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
-            title="Drag to reorder"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="size-3.5" />
-          </button>
+          {/* Frame order is fixed in override mode — no drag handle. */}
+          {!override && (
+            <button
+              type="button"
+              className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+              title="Drag to reorder"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-3.5" />
+            </button>
+          )}
         </td>
         {visibleCells.map((cell) => (
-          <td key={cell.id} className="px-1 py-0.5">
+          <td
+            key={cell.id}
+            className={`px-1 py-0.5 ${dimmed && cell.column.id !== 'override' ? dimClass : ''}`}
+          >
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </td>
         ))}
@@ -312,7 +382,7 @@ export function SortablePoseRow({
       {expanded && (
         <tr className="border-b bg-muted/20">
           <td />
-          <td colSpan={visibleCells.length} className="px-2 py-2">
+          <td colSpan={visibleCells.length} className={`px-2 py-2 ${dimmed ? dimClass : ''}`}>
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <span className="w-5 text-right">#</span>

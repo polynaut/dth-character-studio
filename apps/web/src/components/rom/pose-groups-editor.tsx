@@ -17,18 +17,33 @@ import { GripVertical } from 'lucide-react'
 
 import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core'
 
-import { mirrorGroup } from '@dth/rom'
+import { flatSectionGroupId, mirrorGroup } from '@dth/rom'
 
 import type { Gender, RomGroup, RomPose, RomSection } from '@dth/rom'
 
 import { GroupCard } from './group-card.tsx'
 
 /**
+ * Scene-override mode for a whole section's groups (built once in RomSections,
+ * shared by every group): replaced rows are keyed by base pose id, additions
+ * by group id — the GroupCards slice their own view out of it.
+ */
+export interface SectionOverrideCtl {
+  overriddenById: ReadonlyMap<string, RomPose>
+  additionsFor: (groupId: string) => Array<RomPose>
+  onToggleRow: (pose: RomPose, on: boolean) => void
+  onReplacePose: (pose: RomPose) => void
+  onAdditionsChange: (groupId: string, poses: Array<RomPose>) => void
+}
+
+/**
  * Cross-group drag-and-drop for a section's pose groups: one DndContext spans
  * every group so a morph (pose) can be dragged *between* groups, not just
  * reordered within one. The move resolves on drag end — dropped onto a pose it
  * inserts at that position; dropped on an empty group's body it appends. Also
- * used for the flat FBM/MISC list (a single group → reorder only).
+ * used for the flat FBM/MISC list (a single group → reorder only). In scene-
+ * override mode the drag handles disappear (GroupCard/pose-table), so no drag
+ * can start — the base order is fixed there.
  */
 export function PoseGroupsEditor({
   section,
@@ -37,6 +52,7 @@ export function PoseGroupsEditor({
   startFrames,
   failedFrames,
   removable,
+  override,
   onGroupsChange,
 }: {
   section: RomSection
@@ -45,6 +61,7 @@ export function PoseGroupsEditor({
   startFrames: Map<string, number>
   failedFrames?: Set<number>
   removable: boolean
+  override?: SectionOverrideCtl
   onGroupsChange: (groups: Array<RomGroup>) => void
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -203,6 +220,17 @@ export function PoseGroupsEditor({
             removable={removable}
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
+            override={
+              override
+                ? {
+                    overriddenById: override.overriddenById,
+                    additions: override.additionsFor(group.id),
+                    onToggleRow: override.onToggleRow,
+                    onReplacePose: override.onReplacePose,
+                    onAdditionsChange: (poses) => override.onAdditionsChange(group.id, poses),
+                  }
+                : undefined
+            }
             onChange={(updated) =>
               onGroupsChange(groups.map((g) => (g.id === group.id ? updated : g)))
             }
@@ -240,10 +268,12 @@ export function PoseGroupsEditor({
   )
 }
 
-/** The implicit single group of a flat FBM/MISC section (no group management). */
+/** The implicit single group of a flat FBM/MISC section (no group management).
+ *  Its id comes from the core (`flatSectionGroupId`) — scene-override additions
+ *  key on it, so the merge can materialize the group at generation time. */
 export function flatGroup(section: RomSection): RomGroup {
   return {
-    id: `flat-${section}`,
+    id: flatSectionGroupId(section),
     label: '',
     suffix: 'centre',
     method: 'default',

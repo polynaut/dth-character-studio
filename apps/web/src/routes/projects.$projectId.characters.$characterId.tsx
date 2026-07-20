@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
+import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, Tag, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
@@ -52,6 +52,7 @@ import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
+  applySceneOverride,
   characterSkinning,
   countPoses,
   presetFramesSignature,
@@ -134,6 +135,37 @@ function CharacterPageRoute() {
   return <CharacterPage key={characterId} />
 }
 
+/**
+ * Scroll the page to the top with a rAF-driven ease-out — NOT
+ * `behavior: 'smooth'`, which Windows' reduced-motion setting silently turns
+ * into an instant jump; this glide is part of the interaction (the scene tag
+ * "travels" to the scene cards it stands for), so it always animates. A wheel
+ * or touch during the glide cancels it — the user's scroll wins.
+ */
+function smoothScrollToTop() {
+  const start = window.scrollY
+  if (start === 0) return
+  const duration = 400
+  const t0 = performance.now()
+  let cancelled = false
+  const cancel = () => {
+    cancelled = true
+  }
+  window.addEventListener('wheel', cancel, { once: true, passive: true })
+  window.addEventListener('touchstart', cancel, { once: true, passive: true })
+  const step = (now: number) => {
+    if (cancelled) return
+    const t = Math.min(1, (now - t0) / duration)
+    window.scrollTo(0, Math.round(start * Math.pow(1 - t, 3)))
+    if (t < 1) requestAnimationFrame(step)
+    else {
+      window.removeEventListener('wheel', cancel)
+      window.removeEventListener('touchstart', cancel)
+    }
+  }
+  requestAnimationFrame(step)
+}
+
 function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
@@ -187,6 +219,32 @@ function CharacterPage() {
   const [selectedScene, setSelectedScene] = useState('')
   const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
   const effectiveScene = linkedScenes.includes(selectedScene) ? selectedScene : (character.scenePath || '')
+  // Scene override: an extra (non-primary) scene selected above can carry its
+  // own ROM override — most frames stay the base ROM's, a few rows replaced /
+  // appended for that outfit. The toggle sits atop the ROM grid; the override
+  // entry lives on the character (per scene path) and follows the selection.
+  const overrideEligible = effectiveScene !== '' && effectiveScene !== character.scenePath
+  const sceneOverride = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
+  const overrideActive = overrideEligible && sceneOverride?.enabled === true
+  /** The selected scene's display name (file stem) — the Override toggle's
+   *  label and, with more than one scene linked, the header tag after the
+   *  character name (so the active scene context rides the sticky header). */
+  const selectedSceneName =
+    effectiveScene.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
+  function setOverrideEnabled(enabled: boolean) {
+    const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
+    if (!existing && !enabled) return
+    patch({
+      sceneOverrides: existing
+        ? character.sceneOverrides.map((o) =>
+            o.scenePath === effectiveScene ? { ...o, enabled } : o,
+          )
+        : [
+            ...character.sceneOverrides,
+            { scenePath: effectiveScene, enabled, poses: [], additions: [] },
+          ],
+    })
+  }
   // The ROM run log written by the Daz-side script (ingested into the studio's
   // own store on read). Re-read whenever the window regains focus, so problems
   // from a run surface the moment the user switches back from Daz to the studio.
@@ -471,12 +529,37 @@ function CharacterPage() {
           </span>
         </button>
         <div className="title-scroll pb-6">
-          <EditableTitle
-            name={character.name}
-            ariaLabel="Character name"
-            onEditingChange={setEditingTitle}
-            onSave={onRenameCharacter}
-          />
+          <div className="flex items-center gap-2.5">
+            <EditableTitle
+              name={character.name}
+              ariaLabel="Character name"
+              onEditingChange={setEditingTitle}
+              onSave={onRenameCharacter}
+            />
+            {/* With several scenes linked, the SELECTED scene rides the title —
+                groom lists and the ROM override follow that selection, and the
+                title row stays visible in the collapsed sticky header (the
+                subtitle below does not). Hidden while renaming. Clicking it
+                scrolls back to the top, where the scene cards are — the one
+                place the selection can be switched. */}
+            {linkedScenes.length > 1 && selectedSceneName && !editingTitle && (
+              <button
+                type="button"
+                className="cursor-pointer"
+                title="The Daz scene selected in the scene cards — hair items and the ROM override follow it. Click to jump to the scene cards and switch."
+                onClick={smoothScrollToTop}
+              >
+                <Tag
+                  tone="orange"
+                  // Optical nudge: the bold 3xl title's visual weight sits below
+                  // the line box's geometric center, so dead-center reads high.
+                  className="max-w-64 translate-y-[5px] truncate normal-case"
+                >
+                  {selectedSceneName}
+                </Tag>
+              </button>
+            )}
+          </div>
           <p className="title-subtitle text-muted-foreground">
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
@@ -835,19 +918,58 @@ function CharacterPage() {
       </details>
 
       <section className="mb-8">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          ROM
-          <InfoPopup label="ROM — more information">
-            The eight pose asset categories in their canonical order. Pre-defined sections load
-            the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
-            section, group and pose order — the generated Daz script and PoseAsset CSV share them
-            automatically.
-          </InfoPopup>
-        </h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
+            ROM
+            <InfoPopup label="ROM — more information">
+              The eight pose asset categories in their canonical order. Pre-defined sections load
+              the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
+              section, group and pose order — the generated Daz script and PoseAsset CSV share them
+              automatically.
+            </InfoPopup>
+          </h2>
+          {/* Per-scene override toggle: armed only while an EXTRA scene is
+              selected in the Daz scenes cards (the primary scene IS the base
+              ROM). Toggling off keeps the stored override, just inactive. */}
+          <span className="ml-auto flex items-center gap-2">
+            <span
+              className={`flex items-center gap-1 text-sm ${overrideEligible ? '' : 'text-muted-foreground'}`}
+            >
+              Override
+              {overrideEligible && <span className="font-medium">for “{selectedSceneName}”</span>}
+              <InfoPopup label="Scene override — more information">
+                Drive <strong>different morphs for another Daz scene</strong> of this character
+                (e.g. a second outfit): select one of the extra scenes in the Daz scenes cards,
+                enable the override, then check <strong>Override</strong> on the rows to replace
+                for that scene or add frames at the end of a group. Everything unchecked stays
+                exactly as the base ROM. On Save the scene gets its <em>own</em> Daz script and
+                PoseAsset CSV next to the default ones.
+              </InfoPopup>
+            </span>
+            <Switch
+              checked={overrideActive}
+              disabled={!overrideEligible}
+              title={
+                overrideEligible
+                  ? overrideActive
+                    ? `Disable the ROM override for “${selectedSceneName}” (the stored override rows are kept)`
+                    : `Override ROM frames for “${selectedSceneName}”`
+                  : 'Select one of the extra Daz scenes (not the primary) in the Daz scenes cards to set up a per-scene override'
+              }
+              onCheckedChange={setOverrideEnabled}
+            />
+          </span>
+        </div>
         {presetFrames && (
           <div className="mb-4 rounded-lg border bg-card p-3">
             <RomTimeline
-              segments={romTimeline(character.sections, character.gender, presetFrames)}
+              segments={romTimeline(
+                overrideActive && sceneOverride
+                  ? applySceneOverride(character.sections, sceneOverride)
+                  : character.sections,
+                character.gender,
+                presetFrames,
+              )}
             />
           </div>
         )}
@@ -864,6 +986,19 @@ function CharacterPage() {
           morphIndex={morphIndex}
           jcmMorphMods={character.jcmMorphMods}
           onJcmMorphModsChange={(jcmMorphMods) => patch({ jcmMorphMods })}
+          override={
+            overrideActive && sceneOverride
+              ? {
+                  data: sceneOverride,
+                  onChange: (next) =>
+                    patch({
+                      sceneOverrides: character.sceneOverrides.map((o) =>
+                        o.scenePath === next.scenePath ? next : o,
+                      ),
+                    }),
+                }
+              : undefined
+          }
           onChange={(sections) => patch({ sections })}
         />
       </section>

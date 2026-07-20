@@ -3,13 +3,16 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import {
+  activeSceneOverrides,
   characterScriptName,
   characterSlug,
   generateAll,
+  generateSceneOverride,
   genRomIncludes,
   jcmIsBaseRom,
   poseAssetFileName,
   resolveRomPaths,
+  sceneOverrideSlug,
 } from '@dth/rom'
 import * as storage from '../storage'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
@@ -182,26 +185,53 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         dazLibraryFolder: settings.dazLibraryFolder,
       }
     : undefined
-  const files = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
+  const defaultFiles = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
+  // Scene overrides: every enabled override for a linked extra scene compiles
+  // its own scene-suffixed ROM script + CSV pair from the merged sections —
+  // the "default artifacts for the primary scene, specific ones per outfit
+  // scene" split. Written to the same two destinations as the defaults.
+  const overrideFiles = activeSceneOverrides(versioned).flatMap((override) =>
+    generateSceneOverride(versioned, override, romPaths, frames, outDir, activeRelease),
+  )
+  const files = [...defaultFiles, ...overrideFiles]
+  // Scene-suffixed artifact names of EVERY stored override (active or not) at a
+  // given character name — the sweep candidates. Filtered against what was just
+  // written, this removes exactly the artifacts of overrides that were disabled
+  // or whose scene was unlinked (their data stays in the JSON; the files go).
+  const overrideCsvNames = (name: string) =>
+    character.sceneOverrides.map((o) =>
+      poseAssetFileName({ ...character, name }, sceneOverrideSlug(o.scenePath)),
+    )
+  const overrideScriptNames = (name: string) =>
+    character.sceneOverrides.flatMap((o) => {
+      const base = characterScriptName({ ...character, name }, sceneOverrideSlug(o.scenePath))
+      return [`ROM_${base}.dsa`, `Export_${base}.dsa`]
+    })
 
   // Houdini deliverable(s) — <Name>_pose_asset.csv — live in the character's own folder.
   if (writeHoudini) {
-    await storage.writeFilesToFolder(
-      outDir,
-      files.filter((file) => file.target === 'houdini'),
-    )
-    // After a rename the PoseAsset filename changes too — drop the old-named one
-    // that traveled with the folder.
+    const houdiniFiles = files.filter((file) => file.target === 'houdini')
+    await storage.writeFilesToFolder(outDir, houdiniFiles)
+    const writtenHoudini = houdiniFiles.map((file) => file.fileName)
+    // After a rename the PoseAsset filenames change too — drop the old-named
+    // ones (default + per-scene) that traveled with the folder.
     if (previousName) {
-      const oldPose = poseAssetFileName({ ...character, name: previousName })
-      if (oldPose !== poseAssetFileName(character)) {
-        await storage.removeFilesFromFolder(outDir, [oldPose])
-      }
+      await storage.removeFilesFromFolder(
+        outDir,
+        [
+          poseAssetFileName({ ...character, name: previousName }),
+          ...overrideCsvNames(previousName),
+        ].filter((name) => !writtenHoudini.includes(name)),
+      )
     }
     // Drop the legacy-cased CSV (<name>_PoseAsset.csv) left by older versions —
-    // the file is now <name>_pose_asset.csv.
+    // the file is now <name>_pose_asset.csv — and the CSVs of overrides that no
+    // longer generate.
     const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
-    await storage.removeFilesFromFolder(outDir, [legacyPose])
+    await storage.removeFilesFromFolder(outDir, [
+      legacyPose,
+      ...overrideCsvNames(character.name).filter((name) => !writtenHoudini.includes(name)),
+    ])
     // Record which DTH release the CSV was generated for (its era drives staleness).
     await storage.setGeneratedDthVersion(lib, id, activeRelease)
   }
@@ -228,6 +258,9 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       // Drop the other script variant when the combined/split choice changed, and
       // the scan script when Daz Products is turned off: keep only the .dsa names
       // just written (<base>, ROM_<base>, Export_<base>, Scan_Products_<slug>).
+      // Scene-override scripts sweep the same way — the candidates of every
+      // stored override minus what was just written, so disabling an override
+      // (or unlinking its scene) retires its scripts.
       const dazBase = characterScriptName(character)
       const writtenDaz = dazFiles.map((file) => file.fileName)
       await storage.removeFilesFromFolder(
@@ -242,6 +275,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           `Export_Groom_${dazBase}.dsa`,
           `Open_Scene_${dazBase}.dsa`,
           `Scan_Products_${characterSlug(character)}.dsa`,
+          ...overrideScriptNames(character.name),
         ].filter((name) => !writtenDaz.includes(name)),
       )
       // Migration: older versions wrote the script flat in the root — drop this
