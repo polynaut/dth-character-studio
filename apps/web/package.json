@@ -19,6 +19,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "smoke": "playwright test",
+    "screenshots": "playwright test --config playwright.screenshots.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

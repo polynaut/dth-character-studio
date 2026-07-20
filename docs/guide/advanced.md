@@ -12,13 +12,11 @@
 
 ## The "Advanced options" panel
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="character page, Advanced options panel expanded" src="ADD_IMAGE_URL" />
+  <img width="900" alt="character page, Advanced options panel expanded" src="screenshots/character-advanced-options.png" />
   <br>
   <sub><em>The Advanced options panel expanded on the character page.</em></sub>
 </p>
--->
 
 Expand **Advanced options** near the top of the character page:
 
@@ -48,13 +46,11 @@ through their range and the stock correctives fire. To ride *your own* morphs al
 with those bends, the JCM section has a **Modify JCM frames** grid: an optional
 power feature, collapsed by default.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="JCM section, Modify JCM frames grid expanded" src="ADD_IMAGE_URL" />
+  <img width="900" alt="JCM section, Modify JCM frames grid expanded" src="screenshots/jcm-modify-grid.png" />
   <br>
   <sub><em>The Modify JCM frames grid expanded in the JCM section.</em></sub>
 </p>
--->
 
 You build it from **rules**, each watching **one bone's rotation axis** (XRotate /
 YRotate / ZRotate) across the JCM ROM. A rule's **drives** are the morphs it sets

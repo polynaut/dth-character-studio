@@ -7,13 +7,11 @@ back it up with them, and you're done.
 
 ## Create it
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="home screen, new project panel" src="ADD_IMAGE_URL" />
+  <img width="900" alt="home screen, new project panel" src="screenshots/home-new-project.png" />
   <br>
   <sub><em>The New project panel on the Home screen.</em></sub>
 </p>
--->
 
 1. On the **Home** screen press **New project**.
 2. **Choose folder…** — pick the folder the project should live in.
@@ -88,12 +86,10 @@ unlinking never deletes anything.
   Settings (handy after switching the DTH release — files are copied over,
   project-local additions inside the folder survive).
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Unreal projects footer bar with a linked project card" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Unreal projects footer bar with a linked project card" src="screenshots/project-unreal-footer.png" />
   <br>
   <sub><em>A linked Unreal project card in the footer bar.</em></sub>
 </p>
--->
 
 [← One-time setup](./02-setup.md) · [Next: Your first character →](./04-first-character.md)

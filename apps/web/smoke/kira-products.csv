@@ -1,0 +1,10 @@
+row_type,name,sku,artist,version,product_type,match_method,technical_name,asset_type,source_file,usage,used_by
+scene,KiraDefault_G9_GP,D:/DTH Projects/Demo/Kira/daz3d/KiraDefault_G9_GP.duf,,,,,,,,,
+product,Genesis 9 Starter Essentials,78635,Daz Originals,1.0,Figure,Genesis Base Match,,,,Base figure,Genesis9
+product,Kira HD for Genesis 9,90551,Emrys,1.0,Character,Content Folder Match,,,,Character shape & skin,Kira; Kira Head; Kira Body
+product,Golden Palace 9,,Meipe,9.0,Geograft,Third-Party Match,,,,Geograft,Golden Palace 9; GP9 Auto-Shell
+product,Kaya Hair for Genesis 9,86234,SloshWerks,1.0,Hair,Texture Match,,,,Hair,Kaya Hair
+product,dForce Sabri Outfit for Genesis 9,84702,Aeon Soul,1.1,Wardrobe,SKU Match,,,,Outfit,Sabri Top; Sabri Bottoms; Sabri Boots
+product,Sakura Eyes for Genesis 9,88410,AliveSheCried,1.0,Anatomy,Keyword Match,,,,Eyes,Sakura Eyes 04
+asset,Fingernails,,,,,,Genesis9.Fingernails,Node,,,
+asset,Custom Booty Control,,Studio,1.0,,,body_ctrl_CustomBooty,Modifier,/data/Studio/Kira/Custom.dsf,,

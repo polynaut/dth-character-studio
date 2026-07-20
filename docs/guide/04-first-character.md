@@ -2,13 +2,11 @@
 
 ## Create it
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="project window, create character panel" src="ADD_IMAGE_URL" />
+  <img width="900" alt="project window, create character panel" src="screenshots/character-create-panel.png" />
   <br>
   <sub><em>The Add character panel in the project window.</em></sub>
 </p>
--->
 
 1. In the project window press **Add character** (or drop a `.duf` anywhere).   
 3. **Choose Daz scene…** — the character's scene file.
@@ -36,13 +34,11 @@
 
 ## The ROM definition
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="character page, ROM sections" src="ADD_IMAGE_URL" />
+  <img width="900" alt="character page, ROM sections" src="screenshots/character-rom-sections.png" />
   <br>
   <sub><em>The ROM sections on the character page.</em></sub>
 </p>
--->
 
 A ROM is a fixed sequence of eight sections. Each can be **enabled or disabled**,
 and runs in **Preset** mode (the DTH release's stock pose assets) or **Custom**
@@ -202,13 +198,11 @@ the pose row and the studio handles the rest end to end:
 - that FBX's path is filled into the PoseAsset CSV for you, resolved to the exact
   absolute location the exporter wrote — so Houdini finds it with nothing to type.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="the Bone scale toggle on a pose row" src="ADD_IMAGE_URL" />
+  <img width="900" alt="the Bone scale toggle on a pose row" src="screenshots/character-bone-scale-toggle.png" />
   <br>
   <sub><em>Tick Bone scale on a bone-scaling morph — its reference-skeleton FBX is exported and referenced for you.</em></sub>
 </p>
--->
 
 &nbsp;
 
@@ -362,13 +356,11 @@ Everything above covered the ROM. The page around it, box by box:
 <summary><strong>The header — avatar, rename, path chip, Save/Discard</strong></summary>
 <table><tr><td>
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="character page header" src="ADD_IMAGE_URL" />
+  <img width="900" alt="character page header" src="screenshots/character-header.png" />
   <br>
   <sub><em>The character page's header: avatar, name, path chip, Save/Discard.</em></sub>
 </p>
--->
 
 - **Avatar** — click the portrait to open the **Character image** dialog: pick one
   of the linked Daz scenes' thumbnails, drop an image file, or paste an image URL.

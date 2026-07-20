@@ -8,13 +8,11 @@ extract the downloaded archives somewhere permanent first.
 
 ## Setup DTH Release
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="settings general, DTH release section" src="ADD_IMAGE_URL" />
+  <img width="900" alt="settings general, DTH release section" src="screenshots/settings-dth-release.png" />
   <br>
   <sub><em>The DTH release section in Settings → General.</em></sub>
 </p>
--->
 
 1. **DTH release(s) folder** — point it at the extracted DTH release (or a folder
    holding several release versions; then pick the version to use).
@@ -48,13 +46,11 @@ extract the downloaded archives somewhere permanent first.
 
 ## Setup DTH Exporter Plugin
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="settings general, exporter plugin section" src="ADD_IMAGE_URL" />
+  <img width="900" alt="settings general, exporter plugin section" src="screenshots/settings-exporter-plugin.png" />
   <br>
   <sub><em>The DTH Exporter Plugin section in Settings → General.</em></sub>
 </p>
--->
 
 Needed for exporting the ROM out of Daz (step 5) — including the studio's automatic
 direct export.
