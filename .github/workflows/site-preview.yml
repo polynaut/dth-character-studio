@@ -25,6 +25,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  deployments: write
 
 concurrency:
   group: site-preview-${{ github.ref }}
@@ -70,6 +71,27 @@ jobs:
           url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' <<<"$out" | head -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "alias=https://${branch}.${PROJECT}.pages.dev" >> "$GITHUB_OUTPUT"
+      # Surface the preview as a GitHub deployment so the PR shows a native
+      # "deployed — View deployment" box linking straight to the preview URL.
+      - name: Register the preview as a GitHub deployment
+        if: steps.deploy.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          env_name="site-preview-pr-${{ github.event.pull_request.number }}"
+          dep=$(jq -n \
+            --arg ref "${{ github.event.pull_request.head.sha }}" \
+            --arg env "$env_name" \
+            '{ref:$ref, environment:$env, auto_merge:false, required_contexts:[],
+              transient_environment:true, description:"Cloudflare Pages preview"}' |
+            gh api -X POST "repos/${{ github.repository }}/deployments" --input - -q .id)
+          jq -n \
+            --arg url "${{ steps.deploy.outputs.alias }}" \
+            '{state:"success", environment_url:$url, auto_inactive:true,
+              description:"Preview live on Cloudflare Pages"}' |
+            gh api -X POST "repos/${{ github.repository }}/deployments/$dep/statuses" --input - >/dev/null
+
       - name: Sticky PR comment with the preview URL
         if: steps.deploy.outputs.skipped != 'true'
         env:
