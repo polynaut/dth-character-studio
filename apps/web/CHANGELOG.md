@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.44.11
+
+### Patch Changes
+
+- [#403](https://github.com/polynaut/dth-character-studio/pull/403) [`72e193f`](https://github.com/polynaut/dth-character-studio/commit/72e193f138b6731ba0365f4c724753653e36ca5a) Thanks [@polynaut](https://github.com/polynaut)! - Bone scale no longer requires an export directory. With none set, the studio just generates the ROM and a ticked Bone scale is a harmless no-op; set an export directory and it drives the DTH Exporter's per-frame reference-skeleton FBX and auto-fills the PoseAsset CSV path as before. The amber "set an export directory" warning is gone, and the guide is updated (bone scale, the character-settings chapter, and the combined-morphs / GEN art-direction screenshots).
+
+- Updated dependencies []:
+  - @dth/rom@0.44.11
+  - @dth/ui@0.44.11
+
 ## 0.44.10
 
 ### Patch Changes
