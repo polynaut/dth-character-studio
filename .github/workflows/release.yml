@@ -5,24 +5,42 @@ name: Release
 # AND that version has no tag yet. Feature merges (which still carry changesets)
 # are skipped — they only feed the version packages PR.
 #
-# Three stages (see docs/devops.md → "Code signing"):
-#   build    hosted Windows runner — builds the NSIS installer (unsigned)
-#   sign     self-hosted Certum signer (the NAS runner beside the always-on
-#            certum-container/SimplySign session) — Authenticode-signs the
-#            installer through the shared p11-kit socket and regenerates the
-#            updater .sig over the SIGNED bytes. Uploads signed installer + .sig.
-#   publish  hosted runner — downloads the signed artifacts, builds latest.json,
-#            and creates the GitHub Release.
+# Stages (see docs/devops.md → "Code signing"):
+#   check      gate + release notes
+#   build      hosted Windows runner — builds the NSIS installer (unsigned)
+#   build-mac  hosted macOS runner (opt-in via ENABLE_MAC_RELEASE) — builds a
+#              universal .app + .dmg, Developer-ID-signed + Apple-notarized
+#              inline; throwaway updater key here too (same rule as Windows)
+#   sign       self-hosted Certum signer (the NAS runner beside the always-on
+#              certum-container/SimplySign session) — Authenticode-signs the
+#              installer through the shared p11-kit socket and regenerates the
+#              updater .sig over the SIGNED Windows bytes AND (when present) the
+#              notarized macOS tarball, both with the real key. Uploads the
+#              signed installer + .sig and the macOS bundle + .sig.
+#   publish    hosted runner — downloads the signed artifacts, builds ONE
+#              latest.json across every platform, and creates the GitHub Release.
 #
 # Why sign and publish are separate jobs: the NAS is the single point of failure
 # in this pipeline (it holds the SimplySign session), so the NAS job is kept as
-# small as possible — ONLY the two operations that need the real key/cert. The
+# small as possible — ONLY the operations that need the real key/cert. The
 # GitHub publish (which needs no signing secret, just GITHUB_TOKEN) runs on a
 # reliable hosted runner, so a publish hiccup can be re-run without re-signing,
 # and the real updater key never has to leave the self-hosted signer.
 #
 # Order matters: the updater signature and latest.json must be computed AFTER
 # Authenticode signing, because signing changes the installer bytes.
+#
+# macOS is OPT-IN: set repo variable ENABLE_MAC_RELEASE=true once the Apple
+# secrets are in place (a Developer ID cert + an App Store Connect API key — the
+# same set already used elsewhere works, one Developer ID covers every app under
+# the team). Until then the mac build is skipped and Windows releases normally.
+# Required secrets for the mac build:
+#   APPLE_CERTIFICATE            base64 of the Developer ID Application .p12
+#   APPLE_CERTIFICATE_PASSWORD   the .p12 export password
+#   APPLE_SIGNING_IDENTITY       e.g. "Developer ID Application: Name (TEAMID)"
+#   APPLE_API_ISSUER             App Store Connect API issuer UUID
+#   APPLE_API_KEY                App Store Connect API key ID
+#   APPLE_API_KEY_P8             the AuthKey_*.p8 contents (for notarytool)
 
 on:
   push:
@@ -135,8 +153,82 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  build-mac:
+    needs: check
+    # Opt-in: set repo variable ENABLE_MAC_RELEASE=true once the Apple secrets
+    # (see the header) are in place. Until then this job is skipped and Windows
+    # releases normally (the sign job tolerates a skipped mac build).
+    if: needs.check.outputs.should_release == 'true' && vars.ENABLE_MAC_RELEASE == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: pnpm install --frozen-lockfile
+      # As on Windows: the REAL updater key never touches this hosted runner (it
+      # runs the third-party tauri-action). Sign the updater artifact with a
+      # throwaway key here; the Certum job regenerates the real .sig over the
+      # notarized bytes.
+      - name: Generate a throwaway updater key (real key stays on the signer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes @tauri-apps/cli@2.11.2 signer generate --ci --password "" -f -w throwaway.key
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY<<THROWAWAY_KEY_EOF"
+            printf '%s\n' "$(cat throwaway.key)"
+            echo "THROWAWAY_KEY_EOF"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
+          } >> "$GITHUB_ENV"
+      # Materialize the App Store Connect API key (.p8) for notarytool.
+      - name: Write notarization API key
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$RUNNER_TEMP/api_key.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/api_key.p8" >> "$GITHUB_ENV"
+      # Universal (Intel + Apple Silicon) build; tauri-action Developer-ID-signs,
+      # notarizes and staples inline via the API key. Pinned SHA like Windows.
+      # `--bundles app,dmg` overrides the config's nsis-only target for macOS.
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+        with:
+          projectPath: apps/desktop
+          args: --target universal-apple-darwin --bundles app,dmg
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-bundle
+          path: |
+            apps/desktop/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            apps/desktop/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
   sign:
-    needs: [check, build]
+    needs: [check, build, build-mac]
+    # Run when the Windows build succeeded and the mac build either succeeded or
+    # was SKIPPED (flag off) — but NOT if the mac build FAILED, so a broken
+    # notarization surfaces loudly instead of silently shipping Windows-only.
+    if: >-
+      always() && needs.check.outputs.should_release == 'true'
+      && needs.build.result == 'success'
+      && needs.build-mac.result != 'failure'
+      && needs.build-mac.result != 'cancelled'
     runs-on: [self-hosted, linux, certum-signer]
     # Keep a hung sign step from holding the SINGLE NAS runner for the 360-min
     # GitHub default — every later release would queue behind it.
@@ -152,12 +244,19 @@ jobs:
       # release's installer is still in dist/ and the exe globs match two files.
       - name: Clean workspace
         shell: bash
-        run: rm -rf dist latest.json
+        run: rm -rf dist dist-mac latest.json
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: unsigned-installer
           path: dist
+
+      # Present only when the mac build ran (flag on + success).
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.build-mac.result == 'success'
+        with:
+          name: macos-bundle
+          path: dist-mac
 
       - name: Authenticode-sign via Certum SimplySign
         shell: bash
@@ -235,6 +334,26 @@ jobs:
             "$exe"
           test -s "$exe.sig"
 
+      # The macOS .app.tar.gz is already Developer-ID-signed + notarized (inline
+      # on the mac runner); the updater additionally verifies the minisign
+      # signature over its bytes — regenerate that with the real key here, same
+      # as Windows. The .dmg (fresh-install download) needs no updater .sig.
+      - name: Regenerate macOS updater signature (over the notarized tarball)
+        if: needs.build-mac.result == 'success'
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tar=$(find dist-mac -name '*.app.tar.gz' | head -1)
+          [ -n "$tar" ] || { echo "::error::mac build succeeded but no .app.tar.gz found"; exit 1; }
+          npx --yes @tauri-apps/cli@2.11.2 signer sign \
+            --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+            --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+            "$tar"
+          test -s "$tar.sig"
+
       # Hand the SIGNED installer + its .sig to the hosted publish job. The
       # artifact round-trip is byte-exact, so the updater .sig still verifies.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -243,6 +362,20 @@ jobs:
           path: |
             dist/*_${{ needs.check.outputs.version }}_*-setup.exe
             dist/*_${{ needs.check.outputs.version }}_*-setup.exe.sig
+          if-no-files-found: error
+          retention-days: 3
+
+      # Signed macOS bundle (dmg + notarized tarball + its updater .sig), only
+      # when the mac build ran. A separate artifact so the Windows upload above
+      # keeps its strict if-no-files-found gate.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: needs.build-mac.result == 'success'
+        with:
+          name: signed-mac
+          path: |
+            dist-mac/**/*.dmg
+            dist-mac/**/*.app.tar.gz
+            dist-mac/**/*.app.tar.gz.sig
           if-no-files-found: error
           retention-days: 3
 
@@ -261,7 +394,15 @@ jobs:
           name: signed-release
           path: dist
 
-      - name: Publish release (installer + .sig + latest.json)
+      # Optional — only exists when the mac build ran. continue-on-error so a
+      # Windows-only release (flag off) publishes normally.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: signed-mac
+          path: dist-mac
+
+      - name: Publish release (installer + dmg + sigs + latest.json)
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -271,17 +412,47 @@ jobs:
           exe=$(ls dist/*_"${VERSION}"_*-setup.exe)
           # GitHub rewrites spaces in asset names to dots — latest.json must
           # point at the rewritten name (same convention tauri-action used).
-          asset=$(basename "$exe" | tr ' ' '.')
-          export ASSET_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${asset}"
+          win_asset=$(basename "$exe" | tr ' ' '.')
+          export WIN_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${win_asset}"
+          assets=("$exe" "$exe.sig")
+
+          # macOS artifacts are optional — present only when the mac build ran.
+          # upload-artifact preserves the bundle/ subdirs, so they land nested —
+          # find them rather than globbing flat.
+          export MAC_TAR=""
+          if [ -d dist-mac ]; then
+            MAC_TAR=$(find dist-mac -name '*.app.tar.gz' | head -1)
+          fi
+          if [ -n "$MAC_TAR" ]; then
+            mac_dmg=$(find dist-mac -name '*.dmg' | head -1)
+            mac_tar_asset=$(basename "$MAC_TAR" | tr ' ' '.')
+            export MAC_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${mac_tar_asset}"
+            assets+=("$MAC_TAR" "$MAC_TAR.sig" "$mac_dmg")
+          fi
+
+          # ONE latest.json for every platform. A universal mac tarball serves
+          # both arches, so it is listed under darwin-x86_64 and darwin-aarch64.
           node -e '
             const fs = require("fs");
-            const sig = fs.readFileSync(process.argv[1] + ".sig", "utf8").trim();
-            const entry = { signature: sig, url: process.env.ASSET_URL };
+            const winSig = fs.readFileSync(process.argv[1] + ".sig", "utf8").trim();
+            const winEntry = { signature: winSig, url: process.env.WIN_URL };
+            const platforms = {
+              "windows-x86_64": winEntry,
+              "windows-x86_64-nsis": winEntry,
+            };
+            if (process.env.MAC_TAR) {
+              const macSig = fs
+                .readFileSync(process.env.MAC_TAR + ".sig", "utf8")
+                .trim();
+              const macEntry = { signature: macSig, url: process.env.MAC_URL };
+              platforms["darwin-x86_64"] = macEntry;
+              platforms["darwin-aarch64"] = macEntry;
+            }
             fs.writeFileSync("latest.json", JSON.stringify({
               version: process.env.VERSION,
               notes: process.env.NOTES,
               pub_date: new Date().toISOString(),
-              platforms: { "windows-x86_64": entry, "windows-x86_64-nsis": entry },
+              platforms,
             }, null, 2));
           ' "$exe"
           gh release create "v${VERSION}" \
@@ -290,4 +461,4 @@ jobs:
             --title "DTH Character Studio v${VERSION}" \
             --notes "$NOTES" \
             --latest \
-            "$exe" "$exe.sig" latest.json
+            "${assets[@]}" latest.json
