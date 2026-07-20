@@ -1,15 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, type ReactNode } from 'react'
 
-import { Button, Switch } from '@dth/ui'
+import { Button, Modal, Switch } from '@dth/ui'
 
 /**
  * The "really delete?" confirm for an overview's bulk delete and the character
  * editor's single delete. `message` is the (destructive) description. When
  * `keepLabel` is set, a single "keep on disk" toggle is shown — OFF by default,
  * so the default action deletes the files; turning it on opts out. The chosen
- * value is reported as `{ keep }`. Esc / backdrop cancel (ignored while busy).
- * Portaled to <body> so a CSS-contained ancestor can't capture its positioning.
+ * value is reported as `{ keep }`. Built on the Modal primitive (focus trap +
+ * dialog semantics; Esc/backdrop cancel, ignored while busy).
  */
 export function BulkDeleteDialog({
   noun,
@@ -48,28 +47,12 @@ export function BulkDeleteDialog({
   const [keep2, setKeep2] = useState(false)
   const count = names.length
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
-
   const heading = count === 1 ? `Delete ${noun} “${names[0]}”?` : `Delete ${count} ${noun}s?`
   const preview =
     count > 1 && count <= 8 ? names.join(', ') : count > 8 ? `${names.slice(0, 8).join(', ')}…` : ''
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={() => !busy && onClose()}
-    >
-      <div
-        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold">{heading}</h2>
+  return (
+    <Modal open onClose={onClose} title={heading} dismissible={!busy}>
         {preview && <p className="text-sm text-muted-foreground">{preview}</p>}
         <p className="text-sm text-muted-foreground">{message}</p>
         {(keepLabel || keep2Label) && (
@@ -103,8 +86,6 @@ export function BulkDeleteDialog({
             {busy ? 'Deleting…' : count === 1 ? 'Delete' : `Delete ${count}`}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Modal>
   )
 }

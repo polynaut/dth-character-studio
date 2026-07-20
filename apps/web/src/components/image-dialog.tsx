@@ -1,11 +1,9 @@
 import { useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, Input } from '@dth/ui'
+import { Button, Input, Modal } from '@dth/ui'
 import {
   setAvatarFromScene,
   uploadCharacterImage,
@@ -106,24 +104,11 @@ export function ImageDialog({
     }
   }
 
-  // Portaled to <body> so the editor body can use CSS containment without this
-  // fixed overlay resolving against the contained box instead of the viewport.
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Character image</h2>
-          <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
-            <X className="size-4" />
-          </Button>
-        </div>
-
+  // The Modal primitive carries the dialog semantics the old hand-rolled portal
+  // was missing: focus trap, initial focus, ESCAPE (there was none here), and
+  // focus restore to the opener.
+  return (
+    <Modal open onClose={onClose} title="Character image" showClose>
         <div className="flex justify-center">
           <Avatar
             image={url}
@@ -139,12 +124,15 @@ export function ImageDialog({
           label="Drop image to set the avatar"
           className="rounded-lg"
         >
-          <div
-            className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-input px-4 py-6 text-center text-sm text-muted-foreground transition-colors hover:border-primary"
+          {/* A real button, so the pick-a-file target works from the keyboard
+              (it was a click-only div). */}
+          <button
+            type="button"
+            className="flex w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-input px-4 py-6 text-center text-sm text-muted-foreground transition-colors hover:border-primary"
             onClick={() => fileInput.current?.click()}
           >
             {busy ? 'Uploading…' : 'Drop an image here, or click to pick one'}
-          </div>
+          </button>
         </FileDropZone>
 
         {/* Offer the linked scenes' thumbnails whenever there's at least one — the
@@ -200,7 +188,6 @@ export function ImageDialog({
           </Button>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
-      </div>
       <input
         ref={fileInput}
         type="file"
@@ -212,7 +199,6 @@ export function ImageDialog({
           e.target.value = ''
         }}
       />
-    </div>,
-    document.body,
+    </Modal>
   )
 }

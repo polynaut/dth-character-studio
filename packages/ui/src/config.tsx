@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
 /**
@@ -35,7 +35,18 @@ export function UiConfigProvider({
   value: Partial<UiConfig>
   children: ReactNode
 }) {
-  return <UiConfigContext.Provider value={{ ...defaultConfig, ...value }}>{children}</UiConfigContext.Provider>
+  // Memoized per handler, not per `value` object: hosts typically pass an
+  // inline literal, and an unmemoized merge re-rendered every useUiConfig
+  // consumer whenever the host root re-rendered.
+  const { onNavigate, onOpenExternal } = value
+  const merged = useMemo(
+    () => ({
+      onNavigate: onNavigate ?? defaultConfig.onNavigate,
+      onOpenExternal: onOpenExternal ?? defaultConfig.onOpenExternal,
+    }),
+    [onNavigate, onOpenExternal],
+  )
+  return <UiConfigContext.Provider value={merged}>{children}</UiConfigContext.Provider>
 }
 
 export function useUiConfig(): UiConfig {

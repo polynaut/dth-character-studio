@@ -24,6 +24,7 @@ export {
   SelectTrigger,
   SelectValue,
 } from './primitives/select.tsx'
+export { Modal } from './primitives/modal.tsx'
 export { SidePanel } from './primitives/side-panel.tsx'
 export { Slider } from './primitives/slider.tsx'
 export { Switch } from './primitives/switch.tsx'
