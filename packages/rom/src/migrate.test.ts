@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { migrateCharacterData, normalizeLegacyCharacter } from './migrate'
+import {
+  CharacterSchemaTooNewError,
+  migrateCharacterData,
+  normalizeLegacyCharacter,
+} from './migrate'
 import {
   CHARACTER_SCHEMA_VERSION,
   characterSchema,
@@ -36,6 +40,17 @@ describe('migrateCharacterData — pre-versioning normalization', () => {
   it('does not clobber preset assets the user already chose', () => {
     const data = migrateCharacterData({
       sections: { GEN: { presetVariant: 'both', presetAssets: ['DK9 - Dicktator.duf'] } },
+    })
+    expect(data.sections.GEN.presetAssets).toEqual(['DK9 - Dicktator.duf'])
+  })
+
+  it('expands presetVariant when presetAssets exists but is EMPTY (transitional file)', () => {
+    // A build that added the presetAssets field before the fold ran wrote
+    // `presetAssets: []` next to the legacy presetVariant. The old presence-only
+    // guard (`!gen.presetAssets`) saw the empty array as "already chosen" and
+    // silently discarded the user's GEN selection.
+    const data = migrateCharacterData({
+      sections: { GEN: { presetVariant: 'dk', presetAssets: [] } },
     })
     expect(data.sections.GEN.presetAssets).toEqual(['DK9 - Dicktator.duf'])
   })
@@ -133,14 +148,42 @@ describe('migrateCharacterData — version handling', () => {
     expect(typeof data).toBe('object')
   })
 
-  it('treats a fractional or above-current schemaVersion as "no steps to run"', () => {
+  it('treats a fractional schemaVersion as corrupt (clamped, never a throw)', () => {
     // A fractional version must not silently skip integer steps between floor+1
-    // and CURRENT; both fractional and above-current collapse to running nothing
-    // rather than mis-stepping.
+    // and CURRENT — it collapses to 1 and re-runs every (idempotent) step. Even
+    // a fractional value ABOVE current is corruption, not provenance, so it
+    // clamps instead of throwing the too-new error.
     expect(() => migrateCharacterData({ sections: {}, schemaVersion: 9.5 })).not.toThrow()
     expect(() =>
-      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 5 }),
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 0.5 }),
     ).not.toThrow()
+  })
+
+  it('throws CharacterSchemaTooNewError for a file saved by a newer build', () => {
+    // The old Math.min clamp was a SILENT DOWNGRADE: zod stripped the newer
+    // build's fields and the next save destroyed them. Fail loud instead.
+    const newer = CHARACTER_SCHEMA_VERSION + 5
+    let thrown: unknown
+    try {
+      migrateCharacterData({ sections: {}, schemaVersion: newer })
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(CharacterSchemaTooNewError)
+    const error = thrown as CharacterSchemaTooNewError
+    expect(error.name).toBe('CharacterSchemaTooNewError')
+    expect(error.storedVersion).toBe(newer)
+    expect(error.supportedVersion).toBe(CHARACTER_SCHEMA_VERSION)
+    expect(error.message).toContain(`schema v${newer}`)
+    expect(error.message).toContain(`up to v${CHARACTER_SCHEMA_VERSION}`)
+    expect(error.message).toMatch(/newer version/i)
+    // The boundary itself is fine: exactly-current runs (and is a no-op).
+    expect(() =>
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION }),
+    ).not.toThrow()
+    expect(() =>
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 1 }),
+    ).toThrow(CharacterSchemaTooNewError)
   })
 })
 

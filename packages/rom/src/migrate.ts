@@ -139,8 +139,13 @@ export const characterMigrations: Record<
 export function normalizeLegacyCharacter(data: Record<string, any>): Record<string, any> {
   if (data.sections) {
     // v3 stored a GEN presetVariant instead of selected preset asset files.
+    // The guard is on LENGTH, not presence: a transitional file carrying the
+    // legacy presetVariant next to an EMPTY presetAssets array (e.g. written by
+    // a build that added the field before this fold ran) still means "the
+    // user's selection lives in presetVariant" — `!gen.presetAssets` alone
+    // discarded it. A non-empty presetAssets always wins (never clobbered).
     const gen = data.sections.GEN
-    if (gen?.presetVariant && !gen.presetAssets) {
+    if (gen?.presetVariant && !gen.presetAssets?.length) {
       gen.presetAssets =
         gen.presetVariant === 'both'
           ? ['GP9 - Golden Palace.duf', 'DK9 - Dicktator.duf']
@@ -204,6 +209,30 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
 }
 
 /**
+ * Thrown by {@link migrateCharacterData} when a definition's stored
+ * `schemaVersion` is a genuine integer ABOVE {@link CHARACTER_SCHEMA_VERSION} —
+ * the JSON was saved by a newer build. The old behavior (clamp to current, keep
+ * going) was a silent downgrade: zod then STRIPPED the newer build's fields and
+ * the next save destroyed them for good. Failing loud lets the host tell the
+ * user to update the app instead. Carries both versions so the UI can say
+ * exactly what it found.
+ */
+export class CharacterSchemaTooNewError extends Error {
+  readonly storedVersion: number
+  readonly supportedVersion: number
+  constructor(storedVersion: number, supportedVersion: number = CHARACTER_SCHEMA_VERSION) {
+    super(
+      `This character was saved by a newer version of DTH Character Studio ` +
+        `(schema v${storedVersion}; this build supports up to v${supportedVersion}). ` +
+        `Update the app to open it — editing it here would discard the newer fields.`,
+    )
+    this.name = 'CharacterSchemaTooNewError'
+    this.storedVersion = storedVersion
+    this.supportedVersion = supportedVersion
+  }
+}
+
+/**
  * Bring a raw character definition (straight from JSON) to the current schema
  * shape: first the pre-versioning normalization, then each registered migration
  * step from the stored `schemaVersion` up to {@link CHARACTER_SCHEMA_VERSION}.
@@ -213,6 +242,11 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
  * migrated-on-read definition (stored value below current) apart from one already
  * saved at the current version — the version is bumped only when the definition is
  * written back to disk (see storage `saveCharacter`).
+ *
+ * @throws {CharacterSchemaTooNewError} when the stored `schemaVersion` is an
+ *   integer above {@link CHARACTER_SCHEMA_VERSION} (a file from a newer build) —
+ *   proceeding would silently strip its fields and a later save would destroy
+ *   them. Thrown BEFORE any normalization touches the data.
  */
 export function migrateCharacterData(raw: unknown): Record<string, any> {
   // Non-object input (null, an array, a bare string…) must flow into a clean
@@ -223,19 +257,28 @@ export function migrateCharacterData(raw: unknown): Record<string, any> {
     raw !== null && typeof raw === 'object' && !Array.isArray(raw)
       ? (raw as Record<string, any>)
       : {}
+  // A REAL forward version (a well-formed integer above current) is a file from
+  // a newer build — refuse before touching it. Only the trustworthy shape
+  // throws: a fractional/NaN/absurd value is corruption, not provenance, and
+  // falls into the clamp below like every other corrupt version.
+  const stored = base.schemaVersion
+  if (
+    typeof stored === 'number' &&
+    Number.isInteger(stored) &&
+    stored > CHARACTER_SCHEMA_VERSION
+  ) {
+    throw new CharacterSchemaTooNewError(stored)
+  }
   let data = normalizeLegacyCharacter(base)
   // Clamp the stored version to a sane integer in [1, CURRENT]. A corrupt or
   // hand-edited definition carrying a hugely negative `schemaVersion` (e.g.
   // -9e15) would otherwise spin the loop below ~9 quadrillion times and hang
   // the app at project open — `migrateCharacterData` runs on every read, and
-  // zod's `int().positive()` guard only runs AFTER migration. A fractional or
-  // above-current value collapses to "no steps to run" rather than silently
-  // skipping registered steps.
-  const stored = data.schemaVersion
+  // zod's `int().positive()` guard only runs AFTER migration. A fractional
+  // value collapses to 1 (running every idempotent step) rather than silently
+  // skipping registered steps; integers above current threw above.
   const from =
-    typeof stored === 'number' && Number.isInteger(stored) && stored >= 1
-      ? Math.min(stored, CHARACTER_SCHEMA_VERSION)
-      : 1
+    typeof stored === 'number' && Number.isInteger(stored) && stored >= 1 ? stored : 1
   for (let version = from + 1; version <= CHARACTER_SCHEMA_VERSION; version++) {
     const step = characterMigrations[version]
     if (step) data = step(data)
