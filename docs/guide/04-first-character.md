@@ -117,6 +117,33 @@ as guidance), and **Clear** turns direct export off again. With no export
 directory set the studio generates the ROM only — **Bone scale** flags then just
 ride along as no-ops until you set one.
 
+<details>
+<summary><strong>Advanced options — storage location, preserve morphs &amp; node transforms</strong></summary>
+<table><tr><td>
+
+<p align="center">
+  <img width="900" alt="character page, Advanced options panel expanded" src="screenshots/character-advanced-options.png" />
+  <br>
+  <sub><em>The Advanced options panel expanded on the character page.</em></sub>
+</p>
+
+Expand **Advanced options** near the top of the character page — none of it is
+needed for a working ROM:
+
+- **Storage location** — shows where this character's files live and lets you
+  **move the folder** — handy when you reorganise a project. The scene and
+  generated-file paths are repointed for you.
+- **Preserve morphs after ROM loading** — the DTH ROM zeroes morphs as it loads.
+  Any morph you list here is **restored to the value you set afterwards** — use it
+  for body-shaping controls (e.g. breast or muscle morphs) you want to keep across
+  the whole ROM. Enter the morph's **property name** and its **hold value**.
+- **Preserve node transforms** — a node's transform is **memorized before** the ROM
+  loads and **restored after**, so posed nodes (e.g. the eyes) keep their
+  orientation instead of being reset. Enter the **node's label** as it appears in Daz.
+
+</td></tr></table>
+</details>
+
 ## The ROM definition
 
 <p align="center">
