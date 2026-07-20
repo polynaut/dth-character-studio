@@ -332,6 +332,61 @@ const sectionsSchema = z
   })
 export type RomSections = z.infer<typeof sectionsSchema>
 
+/**
+ * The stable group id of a flat FBM/MISC section's IMPLICIT group — the one the
+ * editor shows before any pose is stored (flat sections have exactly one group
+ * and no group management). Shared between the editor and
+ * `applySceneOverride`, so a scene override's added frames can key a flat
+ * section that has no stored group yet.
+ */
+export function flatSectionGroupId(section: RomSection): string {
+  return `flat-${section}`
+}
+
+/**
+ * A per-Daz-scene ROM override — "the same character in another scene/outfit":
+ * most frames stay exactly as the base ROM defines them, a few rows are
+ * REPLACED (other morphs / other values on the same frame) and a few extra
+ * frames are APPENDED for morphs only that scene's assets have (e.g. clothing
+ * morphs). The base structure is never edited through an override — sections,
+ * groups and row order come from `sections`; an override only substitutes row
+ * content by pose id and appends rows at group ends. Generation compiles the
+ * merged result (see `applySceneOverride`) into its own scene-suffixed script +
+ * CSV pair, so the default artifacts and the per-scene ones coexist.
+ */
+export const sceneOverrideSchema = z.object({
+  /** Absolute path of the linked extra Daz scene (`.duf`) this override is for.
+   *  Repointed alongside `scenePath`/`extraScenes` on folder moves. */
+  scenePath: z.string().max(MAX_PATH_LENGTH),
+  /**
+   * Whether the override is active: drives the editor's override mode for the
+   * scene AND the generation of its scene-specific artifacts. Toggling off
+   * keeps the stored rows (re-enabling restores them) but stops generating.
+   */
+  enabled: z.boolean().default(true),
+  /**
+   * Replaced rows: each pose's `id` names the BASE pose it substitutes, so the
+   * replacement survives base-row reordering. An entry whose base pose no
+   * longer exists is simply ignored (never breaks the merge).
+   */
+  poses: z.array(romPoseSchema).default([]),
+  /**
+   * Appended rows, per group (`groupId` = the base group's id, or
+   * {@link flatSectionGroupId} for a flat section with no stored group). Always
+   * appended AFTER the group's base poses — an override can't insert between
+   * existing frames. Entries for a group that no longer exists are ignored.
+   */
+  additions: z
+    .array(
+      z.object({
+        groupId: z.string().max(MAX_NAME_LENGTH),
+        poses: z.array(romPoseSchema).default([]),
+      }),
+    )
+    .default([]),
+})
+export type SceneOverride = z.infer<typeof sceneOverrideSchema>
+
 export const genesisVersionSchema = z.enum(['G3', 'G8', 'G8.1', 'G9'])
 export type GenesisVersion = z.infer<typeof genesisVersionSchema>
 
@@ -581,8 +636,11 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       lists merged into one signed `drives[]`; direction is inferred from each
  *       drive's angle-range sign now (the positive/negative selector was
  *       redundant). Restructure — migration step concatenates the two lists.
+ *  17 — added `sceneOverrides` (per-Daz-scene ROM overrides: replaced rows +
+ *       appended frames for outfit scenes; additive with a [] default — no
+ *       migration step needed).
  */
-export const CHARACTER_SCHEMA_VERSION = 16
+export const CHARACTER_SCHEMA_VERSION = 17
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -941,6 +999,15 @@ export const characterSchema = z.object({
    * the character's Daz-scenes folder (next to the primary scene).
    */
   extraScenes: z.array(z.string().max(MAX_PATH_LENGTH)).max(MAX_PATH_LIST).default([]),
+  /**
+   * Per-SCENE ROM overrides for the linked extra scenes (see
+   * {@link sceneOverrideSchema}): another outfit of the same character usually
+   * keeps most of the base ROM and just replaces a few rows / appends a few
+   * frames for that scene's own morphs. Entries whose scene is no longer
+   * linked stay stored (re-linking the scene restores the work) but are
+   * inactive — only enabled entries for a linked extra scene generate.
+   */
+  sceneOverrides: z.array(sceneOverrideSchema).max(MAX_PATH_LIST).default([]),
   /**
    * Houdini project files (`.hip` / `.hipnc` / `.hiplc`) linked to this character.
    * Each opens in Houdini; they live in the character's Houdini folder. No

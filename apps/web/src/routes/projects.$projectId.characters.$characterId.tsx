@@ -52,6 +52,7 @@ import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
+  applySceneOverride,
   characterSkinning,
   countPoses,
   presetFramesSignature,
@@ -187,6 +188,29 @@ function CharacterPage() {
   const [selectedScene, setSelectedScene] = useState('')
   const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
   const effectiveScene = linkedScenes.includes(selectedScene) ? selectedScene : (character.scenePath || '')
+  // Scene override: an extra (non-primary) scene selected above can carry its
+  // own ROM override — most frames stay the base ROM's, a few rows replaced /
+  // appended for that outfit. The toggle sits atop the ROM grid; the override
+  // entry lives on the character (per scene path) and follows the selection.
+  const overrideEligible = effectiveScene !== '' && effectiveScene !== character.scenePath
+  const sceneOverride = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
+  const overrideActive = overrideEligible && sceneOverride?.enabled === true
+  const overrideSceneName =
+    effectiveScene.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
+  function setOverrideEnabled(enabled: boolean) {
+    const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
+    if (!existing && !enabled) return
+    patch({
+      sceneOverrides: existing
+        ? character.sceneOverrides.map((o) =>
+            o.scenePath === effectiveScene ? { ...o, enabled } : o,
+          )
+        : [
+            ...character.sceneOverrides,
+            { scenePath: effectiveScene, enabled, poses: [], additions: [] },
+          ],
+    })
+  }
   // The ROM run log written by the Daz-side script (ingested into the studio's
   // own store on read). Re-read whenever the window regains focus, so problems
   // from a run surface the moment the user switches back from Daz to the studio.
@@ -835,19 +859,58 @@ function CharacterPage() {
       </details>
 
       <section className="mb-8">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          ROM
-          <InfoPopup label="ROM — more information">
-            The eight pose asset categories in their canonical order. Pre-defined sections load
-            the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
-            section, group and pose order — the generated Daz script and PoseAsset CSV share them
-            automatically.
-          </InfoPopup>
-        </h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
+            ROM
+            <InfoPopup label="ROM — more information">
+              The eight pose asset categories in their canonical order. Pre-defined sections load
+              the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
+              section, group and pose order — the generated Daz script and PoseAsset CSV share them
+              automatically.
+            </InfoPopup>
+          </h2>
+          {/* Per-scene override toggle: armed only while an EXTRA scene is
+              selected in the Daz scenes cards (the primary scene IS the base
+              ROM). Toggling off keeps the stored override, just inactive. */}
+          <span className="ml-auto flex items-center gap-2">
+            <span
+              className={`flex items-center gap-1 text-sm ${overrideEligible ? '' : 'text-muted-foreground'}`}
+            >
+              Override
+              {overrideEligible && <span className="font-medium">for “{overrideSceneName}”</span>}
+              <InfoPopup label="Scene override — more information">
+                Drive <strong>different morphs for another Daz scene</strong> of this character
+                (e.g. a second outfit): select one of the extra scenes in the Daz scenes cards,
+                enable the override, then check <strong>Override</strong> on the rows to replace
+                for that scene or add frames at the end of a group. Everything unchecked stays
+                exactly as the base ROM. On Save the scene gets its <em>own</em> Daz script and
+                PoseAsset CSV next to the default ones.
+              </InfoPopup>
+            </span>
+            <Switch
+              checked={overrideActive}
+              disabled={!overrideEligible}
+              title={
+                overrideEligible
+                  ? overrideActive
+                    ? `Disable the ROM override for “${overrideSceneName}” (the stored override rows are kept)`
+                    : `Override ROM frames for “${overrideSceneName}”`
+                  : 'Select one of the extra Daz scenes (not the primary) in the Daz scenes cards to set up a per-scene override'
+              }
+              onCheckedChange={setOverrideEnabled}
+            />
+          </span>
+        </div>
         {presetFrames && (
           <div className="mb-4 rounded-lg border bg-card p-3">
             <RomTimeline
-              segments={romTimeline(character.sections, character.gender, presetFrames)}
+              segments={romTimeline(
+                overrideActive && sceneOverride
+                  ? applySceneOverride(character.sections, sceneOverride)
+                  : character.sections,
+                character.gender,
+                presetFrames,
+              )}
             />
           </div>
         )}
@@ -864,6 +927,19 @@ function CharacterPage() {
           morphIndex={morphIndex}
           jcmMorphMods={character.jcmMorphMods}
           onJcmMorphModsChange={(jcmMorphMods) => patch({ jcmMorphMods })}
+          override={
+            overrideActive && sceneOverride
+              ? {
+                  data: sceneOverride,
+                  onChange: (next) =>
+                    patch({
+                      sceneOverrides: character.sceneOverrides.map((o) =>
+                        o.scenePath === next.scenePath ? next : o,
+                      ),
+                    }),
+                }
+              : undefined
+          }
           onChange={(sections) => patch({ sections })}
         />
       </section>

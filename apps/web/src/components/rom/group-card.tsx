@@ -32,6 +32,21 @@ import { SortablePoseRow, poseColumns } from './pose-table.tsx'
 
 import type { PoseTableMeta } from './pose-table.tsx'
 
+/**
+ * Scene-override mode for one group (see RomSections): the BASE group stays
+ * untouched — checked rows read/write `overriddenById` (keyed by the base
+ * pose's id), added rows live in `additions` and only ever append after the
+ * base rows. All group chrome (label, method, suffix, mirror, remove) locks:
+ * the structure is the base ROM's.
+ */
+export interface GroupOverride {
+  overriddenById: ReadonlyMap<string, RomPose>
+  additions: Array<RomPose>
+  onToggleRow: (pose: RomPose, on: boolean) => void
+  onReplacePose: (pose: RomPose) => void
+  onAdditionsChange: (poses: Array<RomPose>) => void
+}
+
 export function GroupCard({
   section,
   group,
@@ -44,6 +59,7 @@ export function GroupCard({
   onChange,
   onRemove,
   onMirror,
+  override,
 }: {
   section: RomSection
   group: RomGroup
@@ -56,6 +72,7 @@ export function GroupCard({
   onChange: (group: RomGroup) => void
   onRemove: () => void
   onMirror: () => void
+  override?: GroupOverride
 }) {
   const showBoneScale = REFERENCE_FBX_SECTIONS.includes(section)
   const showBoneLabel = BONE_LABEL_SECTIONS.includes(section)
@@ -84,11 +101,37 @@ export function GroupCard({
     }
   }, [focusPoseId, group.poses])
 
+  // What the table shows: the base rows (each swapped for its override copy
+  // when checked) plus the override's appended rows. Without an override this
+  // is simply the group's poses.
+  const baseCount = group.poses.length
+  const displayPoses = override
+    ? [
+        ...group.poses.map((pose) => override.overriddenById.get(pose.id) ?? pose),
+        ...override.additions,
+      ]
+    : group.poses
+
+  // Route an edited row to where it lives: the base group, the override's
+  // replaced-row map (checked base rows only — unchecked ones are read-only in
+  // override mode), or the override's additions.
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
-    onChange({
-      ...group,
-      poses: group.poses.map((pose, i) => (i === rowIndex ? { ...pose, ...patch } : pose)),
-    })
+    if (!override) {
+      onChange({
+        ...group,
+        poses: group.poses.map((pose, i) => (i === rowIndex ? { ...pose, ...patch } : pose)),
+      })
+      return
+    }
+    const pose = displayPoses[rowIndex]
+    if (rowIndex < baseCount) {
+      if (!override.overriddenById.has(pose.id)) return
+      override.onReplacePose({ ...pose, ...patch })
+    } else {
+      override.onAdditionsChange(
+        override.additions.map((p, i) => (i === rowIndex - baseCount ? { ...p, ...patch } : p)),
+      )
+    }
   }
 
   const meta: PoseTableMeta = {
@@ -100,26 +143,36 @@ export function GroupCard({
     figureNode,
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
-      const pose = group.poses[rowIndex]
+      const pose = displayPoses[rowIndex]
       const morphs = pose.morphs.length
         ? pose.morphs.map((m, mi) => (mi === morphIndex ? { ...m, ...patch } : m))
         : [{ node: '', prop: '', value: 1, ...patch }]
       patchPose(rowIndex, { morphs })
     },
     addMorph: (rowIndex) => {
-      const pose = group.poses[rowIndex]
+      const pose = displayPoses[rowIndex]
       patchPose(rowIndex, {
         morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 }],
       })
     },
     removeMorphAt: (rowIndex, morphIndex) => {
-      const pose = group.poses[rowIndex]
+      const pose = displayPoses[rowIndex]
       if (pose.morphs.length <= 1) return
       patchPose(rowIndex, { morphs: pose.morphs.filter((_, mi) => mi !== morphIndex) })
     },
-    remove: (rowIndex) =>
-      onChange({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) }),
+    remove: (rowIndex) => {
+      if (!override) {
+        onChange({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) })
+        return
+      }
+      // Base rows never leave in override mode — only the override's own frames.
+      if (rowIndex < baseCount) return
+      override.onAdditionsChange(override.additions.filter((_, i) => i !== rowIndex - baseCount))
+    },
     insertAt: (index) => {
+      // Override mode appends at the group end only (the insert menu is hidden
+      // there — this guard just backs it up).
+      if (override) return
       // Inherit the node from the pose before the insertion point (falling back
       // to the one after, then the section default) — pose lists usually target
       // the same node throughout.
@@ -138,41 +191,51 @@ export function GroupCard({
       // Focus the new row's name field as soon as it renders.
       setFocusPoseId(id)
     },
+    override: override
+      ? {
+          baseCount,
+          isOverridden: (poseId) => override.overriddenById.has(poseId),
+          toggle: (poseId, on) => {
+            const base = group.poses.find((pose) => pose.id === poseId)
+            if (base) override.onToggleRow(base, on)
+          },
+        }
+      : undefined,
   }
 
   const table = useReactTable({
-    data: group.poses,
+    data: displayPoses,
     columns: poseColumns,
     getCoreRowModel: getCoreRowModel(),
     meta,
-    state: { columnVisibility: { boneScaleRef: showBoneScale } },
+    state: { columnVisibility: { boneScaleRef: showBoneScale, override: !!override } },
   })
 
   function addPose() {
     // Inherit the node from the previous pose — pose lists usually target the
     // same node throughout. A GEN group starts on the gender's geograft node.
     const lastNode =
-      group.poses[group.poses.length - 1]?.morphs[0]?.node ??
+      displayPoses[displayPoses.length - 1]?.morphs[0]?.node ??
       (section === 'GEN' ? genDefaultNode(gender) : figureNode)
-    onChange({
-      ...group,
-      poses: [
-        ...group.poses,
-        {
-          id: newId(),
-          name: '',
-          morphs: [{ node: lastNode, prop: '', value: 1 }],
-          boneScaleRef: false,
-        },
-      ],
-    })
+    const pose: RomPose = {
+      id: newId(),
+      name: '',
+      morphs: [{ node: lastNode, prop: '', value: 1 }],
+      boneScaleRef: false,
+    }
+    if (override) {
+      // Appended after the base rows — the only place an override adds frames.
+      override.onAdditionsChange([...override.additions, pose])
+    } else {
+      onChange({ ...group, poses: [...group.poses, pose] })
+    }
   }
 
-  const endFrame = startFrame + group.poses.length - 1
+  const endFrame = startFrame + displayPoses.length - 1
   const frameRange =
-    group.poses.length === 0
+    displayPoses.length === 0
       ? 'empty'
-      : group.poses.length === 1
+      : displayPoses.length === 1
         ? `frame ${startFrame}`
         : `frames ${startFrame}–${endFrame}`
 
@@ -187,6 +250,7 @@ export function GroupCard({
             value={group.label}
             placeholder="driver bone(s)"
             title="The bone(s) driving this group's poses (CSV bones column)"
+            disabled={!!override}
             onChange={(e) => onChange({ ...group, label: e.target.value })}
           />
         )}
@@ -200,7 +264,7 @@ export function GroupCard({
               value={group.method}
               onValueChange={(value) => onChange({ ...group, method: value as GenerationMethod })}
             >
-              <SelectTrigger size="sm" className="w-fit">
+              <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -225,7 +289,7 @@ export function GroupCard({
                 onChange({ ...group, calculateFrom: value as CalculateFrom })
               }
             >
-              <SelectTrigger size="sm" className="w-fit">
+              <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -246,7 +310,7 @@ export function GroupCard({
               value={group.suffix}
               onValueChange={(value) => onChange({ ...group, suffix: value as GroupSuffix })}
             >
-              <SelectTrigger size="sm" className="w-fit">
+              <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -258,7 +322,8 @@ export function GroupCard({
           </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">{frameRange}</span>
-        {group.suffix === 'left' && (
+        {/* Mirror/remove change the base structure — locked in override mode. */}
+        {group.suffix === 'left' && !override && (
           <Button
             variant="ghost"
             size="sm"
@@ -268,7 +333,7 @@ export function GroupCard({
             <Copy /> Mirror right
           </Button>
         )}
-        {removable && (
+        {removable && !override && (
           <Button variant="ghost" size="icon" className="size-7" title="Remove group" onClick={onRemove}>
             <Trash2 className="size-3.5 text-destructive" />
           </Button>
@@ -297,7 +362,7 @@ export function GroupCard({
             ))}
           </thead>
           <SortableContext
-            items={group.poses.map((pose) => pose.id)}
+            items={displayPoses.map((pose) => pose.id)}
             strategy={verticalListSortingStrategy}
           >
             <tbody>
@@ -309,7 +374,7 @@ export function GroupCard({
                   meta={meta}
                 />
               ))}
-              {group.poses.length === 0 && (
+              {displayPoses.length === 0 && (
                 <tr>
                   {/* Mirror a TextCell's vertical metrics (1px border + py-1 +
                       a text-sm line) — a pose row's height is set by its name
@@ -331,7 +396,16 @@ export function GroupCard({
         </table>
       </div>
       <div className="border-t p-1.5">
-        <Button variant="outline" size="sm" onClick={addPose}>
+        <Button
+          variant="outline"
+          size="sm"
+          title={
+            override
+              ? 'Append an override frame for the selected scene — added frames always go at the end of the group'
+              : undefined
+          }
+          onClick={addPose}
+        >
           <Plus /> Add morph
         </Button>
       </div>
