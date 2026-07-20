@@ -23,3 +23,8 @@ Ground rules for editing these docs:
 - **No secrets, no personal/machine specifics.** This folder is public.
 - Keep CLAUDE.md the short version — if something is needed on *every* task it
   belongs there; if it's needed when working *in an area*, it belongs here.
+- **Capture learnings in the PR that earned them.** A session that debugs a
+  footgun, measures a platform behavior, or establishes a new ritual folds it
+  into the matching file right away — a lesson that only lives in a PR
+  description or chat log is lost to the next session. New features update
+  `domain.md`/`architecture.md` in the same PR too.

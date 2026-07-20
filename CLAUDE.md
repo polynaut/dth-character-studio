@@ -173,6 +173,9 @@ Two scopes now:
   `domain.md` (ROM/frame-math/CSV/runtime semantics), `conventions.md` (schema/FFI/
   versioning rituals), `testing.md` (the four test layers), `release.md` (the
   release train), `gotchas.md` (measured Daz/Tauri/build facts). Index: `.ai/README.md`.
+  **Important learnings always land there, in the same PR that earned them** — a
+  debugged footgun goes to `gotchas.md`, a new ritual to `conventions.md`, changed
+  architecture/domain facts to their files. CLAUDE.md stays the short version.
 - `docs/development.md` — run/build/architecture
 - `docs/devops.md` — release pipeline, signing keys, branch policy
 - `apps/web/docs/poseasset-csv-spec.md` — the DazToHue PoseAsset CSV format (reverse-engineered from the HDA)
