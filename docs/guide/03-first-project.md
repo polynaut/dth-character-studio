@@ -22,7 +22,7 @@ The project opens **in its own window**. From now on you can also open it by
 double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent list.
 
 <p align="center">
-  <img width="722" alt="Project open in its own window" src="https://github.com/user-attachments/assets/63172959-d279-43b6-911b-a12b845814c9" />
+  <img width="900" alt="Project open in its own window" src="screenshots/project-open-window.png" />
   <br>
   <sub><em>The project opens in its own window.</em></sub>
 </p>

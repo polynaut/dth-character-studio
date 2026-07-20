@@ -50,10 +50,10 @@ export function TextCell({
 
 // Morph values are stored 0–1 but shown/edited as Daz-style percentages
 // (0–100%); toFixed trims the float noise of the *100 / /100 conversions.
-function valueToPct(v: number): string {
+export function valueToPct(v: number): string {
   return String(+(v * 100).toFixed(4))
 }
-function pctToValue(pct: number): number {
+export function pctToValue(pct: number): number {
   return +(pct / 100).toFixed(6)
 }
 

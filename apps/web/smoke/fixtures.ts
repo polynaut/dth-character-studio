@@ -129,6 +129,11 @@ export interface SeedOptions {
   /** Seed a per-scene product-scan CSV into the demo character's scan folder so
    *  the Products tab renders a populated "Matched products" table. */
   productScan?: boolean
+  /** No recent projects — the Home screen's first-run state (create-project shot). */
+  emptyRecents?: boolean
+  /** Omit the character definition, so the project overview shows its empty
+   *  "no characters yet" state (the just-created project window shot). */
+  emptyProject?: boolean
 }
 
 export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
@@ -169,9 +174,9 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     }),
     // NOTE: no projects.json / network-drives.json — their absence keeps the
     // legacy migration and the drive remapping paths inert at startup.
-    [`${P.appData}/recents.json`]: JSON.stringify([
-      { path: P.dcsp, name: 'Demo', lastOpenedAt: '2026-07-16T00:00:00.000Z' },
-    ]),
+    [`${P.appData}/recents.json`]: JSON.stringify(
+      opts.emptyRecents ? [] : [{ path: P.dcsp, name: 'Demo', lastOpenedAt: '2026-07-16T00:00:00.000Z' }],
+    ),
     [P.dcsp]: JSON.stringify({
       schemaVersion: 2,
       id: 'proj-smoke',
@@ -213,6 +218,10 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     files[`${P.appData}/product-scans/proj-smoke/char-kira/KiraDefault_G9_GP.csv`] =
       PRODUCT_SCAN_CSV
   }
+
+  // A freshly-created project has no characters yet — drop the definition so the
+  // overview renders its empty "no characters yet" state.
+  if (opts.emptyProject) delete files[`${P.charFolder}/Kira.json`]
 
   return {
     files,
