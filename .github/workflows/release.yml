@@ -7,7 +7,7 @@ name: Release
 #
 # Stages (see docs/devops.md → "Code signing"):
 #   check      gate + release notes
-#   build      hosted Windows runner — builds the NSIS installer (unsigned)
+#   build-win  hosted Windows runner — builds the NSIS installer (unsigned)
 #   build-mac  hosted macOS runner (opt-in via ENABLE_MAC_RELEASE) — builds a
 #              universal .app + .dmg, Developer-ID-signed + Apple-notarized
 #              inline; throwaway updater key here too (same rule as Windows)
@@ -97,7 +97,7 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
-  build:
+  build-win:
     needs: check
     if: needs.check.outputs.should_release == 'true'
     runs-on: windows-latest
@@ -220,13 +220,13 @@ jobs:
           retention-days: 3
 
   sign:
-    needs: [check, build, build-mac]
+    needs: [check, build-win, build-mac]
     # Run when the Windows build succeeded and the mac build either succeeded or
     # was SKIPPED (flag off) — but NOT if the mac build FAILED, so a broken
     # notarization surfaces loudly instead of silently shipping Windows-only.
     if: >-
       always() && needs.check.outputs.should_release == 'true'
-      && needs.build.result == 'success'
+      && needs.build-win.result == 'success'
       && needs.build-mac.result != 'failure'
       && needs.build-mac.result != 'cancelled'
     runs-on: [self-hosted, linux, certum-signer]
