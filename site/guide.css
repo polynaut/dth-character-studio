@@ -103,7 +103,13 @@
 }
 
 .guide-lightbox.open {
-  display: block;
+  display: flex;
+}
+
+/* margin:auto centers the content in both axes and degrades gracefully when
+   the image is taller than the viewport (top stays reachable, overlay scrolls). */
+.guide-lightbox .lightbox-inner {
+  margin: auto;
 }
 
 .guide-lightbox img {

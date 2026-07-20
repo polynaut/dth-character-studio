@@ -28,7 +28,11 @@ document.addEventListener('click', (e) => {
   // other images (external photos) open at their natural size instead.
   if (/\/screenshots\//.test(full.src)) full.style.width = 'min(1280px, 96vw)'
   else full.style.maxWidth = '96vw'
-  overlay.replaceChildren(full)
+  // Inner wrapper with margin:auto — centers vertically AND stays scrollable
+  // when the image is taller than the viewport (auto margins collapse to 0).
+  const inner = document.createElement('div')
+  inner.className = 'lightbox-inner'
+  inner.appendChild(full)
   // Carry the article's caption (the <sub> sharing the image's paragraph)
   // into the overlay; fall back to the alt text.
   const caption = img.closest('p')?.querySelector('sub')?.textContent?.trim() || img.alt
@@ -36,8 +40,9 @@ document.addEventListener('click', (e) => {
     const cap = document.createElement('p')
     cap.className = 'lightbox-caption'
     cap.textContent = caption
-    overlay.appendChild(cap)
+    inner.appendChild(cap)
   }
+  overlay.replaceChildren(inner)
   overlay.classList.add('open')
   document.body.style.overflow = 'hidden'
 })
