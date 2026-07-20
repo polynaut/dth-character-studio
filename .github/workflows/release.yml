@@ -431,7 +431,14 @@ jobs:
       - name: Publish release (installer + dmg + sigs + latest.json)
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The default GITHUB_TOKEN (github-actions[bot]) is blocked from
+          # creating releases on this repo — POST /releases returns 403
+          # "Resource not accessible by integration" even though the job is
+          # granted contents:write (verified in the job's own permission log).
+          # A PAT is not subject to that integration restriction, so the release
+          # step runs under RELEASE_PAT (fine-grained, Contents: read+write).
+          # Falls back to the bot token if the secret is unset.
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           NOTES: ${{ needs.check.outputs.notes }}
         run: |
           set -euo pipefail
