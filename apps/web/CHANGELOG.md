@@ -1,5 +1,17 @@
 # @dth/web
 
+## 0.45.0
+
+### Minor Changes
+
+- [#405](https://github.com/polynaut/dth-character-studio/pull/405) [`db85bf8`](https://github.com/polynaut/dth-character-studio/commit/db85bf88d6f41f615859dea904b5562f3861aff4) Thanks [@polynaut](https://github.com/polynaut)! - Per-Daz-scene ROM overrides: drive different morphs for another scene (a second outfit) of the same character. Select one of the character's extra Daz scenes and flip the new **Override** toggle atop the ROM grid — the base setup locks, every existing row shows slightly transparent, and a leading **Override** checkbox per row swaps just that frame's content for the scene (uncheck to fall back to the base row). New frames can be appended at the end of a group — always as part of the override, never between existing frames — so the base frame layout stays fixed. On Save each overridden scene generates its own artifacts next to the default ones (`ROM_<Name>_<Genesis>_<Scene>.dsa` + `<Name>_<Scene>_pose_asset.csv`, plus a scene `Export_` variant when the export is split); disabling an override or unlinking its scene retires those files while keeping the stored override rows for later. Overrides live in the character JSON per scene path (schema v17), travel with folder renames/moves, and are validated on save like the base ROM — a blocked save jumps straight to the offending row. With more than one scene linked, the header now tags the selected scene next to the character name (visible in the collapsed sticky header too), so the active scene context is always in view.
+
+### Patch Changes
+
+- Updated dependencies [[`db85bf8`](https://github.com/polynaut/dth-character-studio/commit/db85bf88d6f41f615859dea904b5562f3861aff4)]:
+  - @dth/rom@0.45.0
+  - @dth/ui@0.45.0
+
 ## 0.44.11
 
 ### Patch Changes
