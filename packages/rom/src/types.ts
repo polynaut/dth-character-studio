@@ -186,8 +186,13 @@ export type RomGroup = z.infer<typeof romGroupSchema>
 export const artDirectionFrameSchema = z.object({
   id: z.string().max(MAX_NAME_LENGTH),
   rom: z.enum(['gp', 'dk']),
-  /** Relative offset from the ROM block start (see the frame map). */
-  frame: z.number(),
+  /** Relative offset from the ROM block start (see the frame map). Constrained
+   *  to a whole, non-negative offset: the runtime stamps morphs at
+   *  `startFrame + frame`, so a negative/fractional value would silently key
+   *  into a NEIGHBORING block — corrupting exactly the frame alignment the
+   *  product exists to guarantee. (Validation-only tightening — no schema-
+   *  version bump, per the policy above.) */
+  frame: z.number().int().nonnegative(),
   name: z.string().max(MAX_NAME_LENGTH),
   morphs: z.array(morphSchema).default([]),
 })
@@ -295,16 +300,36 @@ export function defaultSections(): Record<RomSection, RomSectionConfig> {
   }
 }
 
-const sectionsSchema = z.object({
-  RET: romSectionConfigSchema,
-  JCM: romSectionConfigSchema,
-  FAC: romSectionConfigSchema,
-  EXP: romSectionConfigSchema,
-  GEN: romSectionConfigSchema,
-  PHY: romSectionConfigSchema,
-  FBM: romSectionConfigSchema,
-  MISC: romSectionConfigSchema,
-})
+const sectionsSchema = z
+  .object({
+    // Per-key defaults from defaultSections() (function form → a fresh object per
+    // parse): a hand-edited / partially-written file missing a section HEALS to
+    // that section's default instead of hard-failing the whole character — the
+    // tolerant posture everywhere else in the schema.
+    RET: romSectionConfigSchema.default(() => defaultSections().RET),
+    JCM: romSectionConfigSchema.default(() => defaultSections().JCM),
+    FAC: romSectionConfigSchema.default(() => defaultSections().FAC),
+    EXP: romSectionConfigSchema.default(() => defaultSections().EXP),
+    GEN: romSectionConfigSchema.default(() => defaultSections().GEN),
+    PHY: romSectionConfigSchema.default(() => defaultSections().PHY),
+    FBM: romSectionConfigSchema.default(() => defaultSections().FBM),
+    MISC: romSectionConfigSchema.default(() => defaultSections().MISC),
+  })
+  // SECTION_MODES was advisory data — nothing rejected a crafted file putting a
+  // section into a mode it doesn't support (e.g. RET custom), whose groups would
+  // then walk into generation, emit rows no HDA parser knows AND shift every
+  // subsequent custom frame. Fail loud at parse instead of desyncing silently.
+  .superRefine((sections, ctx) => {
+    for (const section of ROM_SECTIONS) {
+      if (!SECTION_MODES[section].includes(sections[section].mode)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [section, 'mode'],
+          message: `${section} does not support '${sections[section].mode}' mode`,
+        })
+      }
+    }
+  })
 export type RomSections = z.infer<typeof sectionsSchema>
 
 export const genesisVersionSchema = z.enum(['G3', 'G8', 'G8.1', 'G9'])
@@ -364,6 +389,9 @@ export interface GenerationDescriptor {
   skinningDefault: 'linear' | 'dqs'
   /** The FACS-detail / flexion strength dials exist only on Genesis 9 figures. */
   hasStrengthDials: boolean
+  /** The stock figure asset file names — the rename-proof identity the runtime's
+   *  auto-select and the standalone scripts match figures by. */
+  assetFiles: Array<string>
   /** The validated PoseAsset-CSV template, or `null` when none ships. */
   template: GenerationTemplate | null
 }
@@ -374,6 +402,7 @@ export const GENERATIONS: Record<GenesisVersion, GenerationDescriptor> = {
     figureHasGender: false,
     skinningDefault: 'dqs',
     hasStrengthDials: true,
+    assetFiles: ['genesis9.dsf'],
     template: { baseFrames: 328, gpFrames: 104, era: '2.0', allowGen: true, allowPhys: true },
   },
   'G8.1': {
@@ -381,6 +410,7 @@ export const GENERATIONS: Record<GenesisVersion, GenerationDescriptor> = {
     figureHasGender: true,
     skinningDefault: 'dqs',
     hasStrengthDials: false,
+    assetFiles: ['genesis8_1female.dsf', 'genesis8_1male.dsf'],
     // Era-independent: the G8.1 CTL-tail template targets the pre-2.0 HDA and
     // the base assets are byte-identical across releases (188 frames anywhere).
     template: { baseFrames: 188, era: null, allowGen: false, allowPhys: false },
@@ -390,6 +420,7 @@ export const GENERATIONS: Record<GenesisVersion, GenerationDescriptor> = {
     figureHasGender: true,
     skinningDefault: 'linear',
     hasStrengthDials: false,
+    assetFiles: ['genesis8female.dsf', 'genesis8male.dsf'],
     template: null,
   },
   G3: {
@@ -397,6 +428,7 @@ export const GENERATIONS: Record<GenesisVersion, GenerationDescriptor> = {
     figureHasGender: true,
     skinningDefault: 'linear',
     hasStrengthDials: false,
+    assetFiles: ['genesis3female.dsf', 'genesis3male.dsf'],
     template: null,
   },
 }
@@ -895,7 +927,9 @@ export const characterSchema = z.object({
    */
   groomMode: z.enum(['scene', 'separate']).default('scene'),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
-  sections: sectionsSchema.default(defaultSections()),
+  // Function form: a value default would hand every parsed character THE SAME
+  // mutable sections object.
+  sections: sectionsSchema.default(() => defaultSections()),
   createdAt: z.string().max(MAX_NAME_LENGTH),
   updatedAt: z.string().max(MAX_NAME_LENGTH),
   /** DTH Character Studio version that last wrote this character ('' = unknown,

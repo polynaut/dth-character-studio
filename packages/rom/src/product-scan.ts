@@ -29,8 +29,10 @@ export interface MergedProductScan {
  * fields containing commas, embedded newlines and doubled quotes (`""` → `"`) —
  * product names and asset labels routinely carry `,` `&` and quotes, so the
  * `Scan_Products_<Name>.dsa` writer quotes them and this must read them back.
+ * Also the parser behind `posesFromDazCsv` (daz-csv.ts) — one CSV reader for
+ * the whole package.
  */
-function parseCsvRecords(text: string): Array<Array<string>> {
+export function parseCsvRecords(text: string): Array<Array<string>> {
   const records: Array<Array<string>> = []
   let field = ''
   let record: Array<string> = []

@@ -31,6 +31,7 @@ function characterConfig(content: string) {
 import {
   boneScaleRefPoses,
   flattenRom,
+  genRomStartFrame,
   mirrorGroup,
   presetEndFrame,
   presetFrameCount,
@@ -166,6 +167,58 @@ describe('mirrorGroup', () => {
     expect(right.id).not.toBe(left.id)
     expect(right.poses[0].name).toBe('MajoraPush1')
     expect(right.poses[0].morphs[0].prop).toBe('GPL_Majora_Push 1_Right')
+  })
+
+  it('leaves non-sided names containing "left" mid-word untouched (CleftChin)', () => {
+    const left: RomGroup = {
+      id: 'gl',
+      label: '',
+      suffix: 'left',
+      method: 'individual',
+      calculateFrom: 'default',
+      poses: [
+        {
+          id: 'pl',
+          name: 'Chin',
+          // "Cleft" contains "left" but is no side marker — the old blind swap
+          // corrupted it into body_bs_CrightChin. Word-initial "left" still swaps.
+          morphs: [
+            { node: 'Genesis9', prop: 'body_bs_CleftChin', value: 1 },
+            { node: 'Genesis9', prop: 'thigh_left_up', value: 1 },
+          ],
+          boneScaleRef: false,
+        },
+      ],
+    }
+    const right = mirrorGroup(left)
+    expect(right.poses[0].morphs[0].prop).toBe('body_bs_CleftChin')
+    expect(right.poses[0].morphs[1].prop).toBe('thigh_right_up')
+  })
+})
+
+describe('genRomStartFrame ↔ presetEndFrame coupling', () => {
+  it('derives the same offsets as the single frame-math source', () => {
+    // The editor's GEN block starts and presetEndFrame must agree by identity:
+    // start('dk') is one past the preset end WITHOUT the GEN/PHY terms, and
+    // start('gp') follows the DK block when both ROMs are included.
+    const both = makeSections()
+    both.GEN.enabled = true
+    both.GEN.mode = 'preset'
+    both.GEN.presetAssets = ['GP9 - Golden Palace.duf', 'DK9 - Dicktator.duf']
+    both.PHY.enabled = true
+    both.PHY.mode = 'preset'
+    const withoutGenPhy = structuredClone(both)
+    withoutGenPhy.GEN.enabled = false
+    withoutGenPhy.PHY.enabled = false
+    const dkStart = genRomStartFrame(both, 'female', 'dk', FRAMES)
+    expect(dkStart).toBe(presetEndFrame(withoutGenPhy, 'female', FRAMES) + 1)
+    expect(genRomStartFrame(both, 'female', 'gp', FRAMES)).toBe(dkStart + FRAMES.dk)
+    // GP only (no DK): GP starts right after the base ROM.
+    const gpOnly = structuredClone(both)
+    gpOnly.GEN.presetAssets = ['GP9 - Golden Palace.duf']
+    expect(genRomStartFrame(gpOnly, 'female', 'gp', FRAMES)).toBe(
+      presetEndFrame(withoutGenPhy, 'female', FRAMES) + 1,
+    )
   })
 })
 
@@ -796,6 +849,48 @@ describe('toPoseAssetCsv', () => {
     expect(header).not.toMatch(/\n/)
     // No standalone line in the whole script starts with the injected call.
     expect(content.split('\n').some((l) => l.trim().startsWith('DzFile('))).toBe(false)
+  })
+
+  it('escapes U+2028/U+2029 in embedded strings (Daz treats them as line terminators)', () => {
+    // Built via fromCharCode — the literal characters are line terminators in
+    // THIS source too.
+    const sep = String.fromCharCode(0x2028)
+    const evil = `Kira${sep}DzFile("x").remove(); //`
+    const content = toCharacterScriptDsa(makeCharacter({ name: evil }), {}, FRAMES).content
+    // Raw, the separator would END the generated string literal mid-line and the
+    // whole script would fail to parse (comments were already hardened; the
+    // JSON-embedded strings were not).
+    expect(content.includes(sep)).toBe(false)
+    expect(content.includes(String.fromCharCode(0x2029))).toBe(false)
+    expect(content).toContain('\\u2028') // survives as DATA inside the string
+    // Still parseable: the config extractor finds valid JSON.
+    expect(characterConfig(content).characterName).toContain('Kira')
+  })
+
+  it('the exporter call and the CSV reference paths share one sanitized figure name', () => {
+    const sections = makeSections()
+    sections.JCM.enabled = false
+    sections.GEN.enabled = false
+    sections.FBM.groups[0].poses[0].boneScaleRef = true
+    const character = makeCharacter({ name: 'A,B', sections, exportPath: 'D:/Exports' })
+    // CSV side: the comma is normalized to a space in the reference-FBX path…
+    const csv = toPoseAssetCsv(character, FRAMES).content
+    expect(csv).toContain('Reference Skeletons/A B_frame_')
+    // …and doExport receives the SAME name, so the exporter writes the file the
+    // CSV points at (previously it got the raw "A,B" and the paths diverged).
+    const script = toCharacterScriptDsa(character, {}, FRAMES).content
+    expect(script).toContain('doExport(dthExportDir, "A B",')
+  })
+
+  it('a custom PHY section flags the CSV experimental (physics payload not modeled)', () => {
+    // The schema carries no offset/radius/push-XYZ for custom PHY rows yet, so a
+    // custom PHY block must not ship as validated ground truth.
+    expect(toPoseAssetCsv(makeCharacter(), FRAMES, '2.0').experimental).toBeUndefined()
+    const sections = makeSections()
+    sections.PHY.enabled = true
+    sections.PHY.mode = 'custom'
+    sections.PHY.groups = [{ ...fbmGroup(), id: 'phy1' }]
+    expect(toPoseAssetCsv(makeCharacter({ sections }), FRAMES, '2.0').experimental).toBe(true)
   })
 
   it('sanitizes commas/newlines out of CSV group labels', () => {

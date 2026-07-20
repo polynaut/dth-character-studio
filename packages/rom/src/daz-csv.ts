@@ -1,3 +1,5 @@
+import { parseCsvRecords } from './product-scan'
+
 import type { Morph } from './types'
 
 /** A pose parsed from a DAZ morph CSV: a display name + its morph applications. */
@@ -41,12 +43,17 @@ export function cleanMorphName(prop: string): string {
  * column or any complete triplet are skipped — blank lines, headers, and the
  * studio's own section-keyword rows (`RET,0,RestPose`) all fall away. The pose
  * name is the cleaned first property; the raw property is preserved on the morph.
+ *
+ * Parsed through the package's RFC-4180 reader ({@link parseCsvRecords}), so a
+ * BOM (which made the first data row's frame parse NaN and silently dropped
+ * that row) and quoted fields containing commas (a node label like
+ * `"Hip, twist"` shifted every following triplet under the old naive split)
+ * are handled.
  */
 export function posesFromDazCsv(text: string): Array<ImportedPose> {
   const poses: Array<ImportedPose> = []
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    const cols = line.split(',')
+  for (const cols of parseCsvRecords(text)) {
+    if (cols.length === 1 && cols[0].trim() === '') continue
     const frame = Number(cols[0])
     if (!Number.isFinite(frame)) continue
     const morphs: Array<Morph> = []

@@ -219,15 +219,10 @@ function morphJson(morph: { node: string; prop: string; value: number; base?: nu
 }
 
 /**
- * <Name>_FBMs.json — extra ROM frames consumed by DthWorkflow.dsa via
- * `options.extraJSONs`. Frames are 0-based relative offsets from ROM start
- * (first custom frame = 0), matching the 0-based DazToHue-Scripts handoff
- * (a ROM block reserves its full frame count; the next section starts after it).
- */
-/**
- * The extra-ROM-frame payload (meta + frames + optional groups) shared by the
- * legacy `<Name>_FBMs.json` file and the inline `config.extraFrames` of the
- * single-file character script. Frames are 0-based offsets from ROM start.
+ * The extra-ROM-frame payload (meta + frames + optional groups) emitted as the
+ * inline `config.extraFrames` of the single-file character script. Frames are
+ * 0-based offsets from ROM start (first custom frame = 0; a ROM block reserves
+ * its full frame count and the next section starts after it).
  */
 export function buildFbmData(character: Character) {
   const flat = flattenRom(character.sections)
@@ -305,6 +300,34 @@ function commentSafe(value: string): string {
 }
 
 /**
+ * JSON.stringify for embedding into generated Daz Script SOURCE. JSON leaves
+ * U+2028/U+2029 raw inside string literals, but Daz's ES3-era engine treats them
+ * as line terminators (the same class {@link commentSafe} closes for comments) —
+ * a shared definition carrying one would produce an unterminated string literal
+ * and the whole generated script would fail to parse. Escape them so every
+ * embedded value stays single-line-safe. Use THIS, never bare JSON.stringify,
+ * wherever a value lands inside generated `.dsa` source.
+ */
+function dazJson(value: unknown, space?: number): string {
+  // \u#### ESCAPES in the regexes, never the literal characters — U+2028/29 are
+  // line terminators in THIS source too (see COMMENT_LINE_TERMINATORS above).
+  return JSON.stringify(value, null, space)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}
+
+/**
+ * The figure name handed to the DTH Exporter's `doExport` — and baked into the
+ * CSV's reference-FBX paths — as ONE value, so the exporter's output file names
+ * and the CSV's pointers can't diverge (a comma/newline in the character name
+ * was previously stripped on the CSV side only, leaving the CSV pointing at a
+ * file the exporter never writes).
+ */
+function exporterFigureName(character: Pick<Character, 'name'>): string {
+  return csvSafe(character.name)
+}
+
+/**
  * Strip commas + newlines so a raw value (a group label, a reference-FBX path)
  * can't inject extra columns or rows into the PoseAsset CSV the Houdini HDA
  * parses. Pose names are already reduced to `[A-Za-z0-9_]` by sanitizePoseName;
@@ -334,7 +357,9 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
     // generated script substitutes when it copies the CSV. The filename matches
     // what the DTH Exporter writes: <ExportDir>/Reference Skeletons/<Name>_frame_<N>.fbx.
     const refFbx = isBoneScaleRefPose(section, pose)
-      ? csvSafe(`{{DTH_EXPORT_DIR}}/Reference Skeletons/${character.name}_frame_${frame}.fbx`)
+      ? csvSafe(
+          `{{DTH_EXPORT_DIR}}/Reference Skeletons/${exporterFigureName(character)}_frame_${frame}.fbx`,
+        )
       : ''
     if (section === 'FBM' || section === 'MISC') {
       rows.push(`${section === 'MISC' ? 'MIS' : 'FBM'},${frame},${name},${refFbx}`)
@@ -479,10 +504,16 @@ function spliceTemplate(
   // (G8.1) has none to drop, so the filter is a harmless no-op there.
   if (!includeGp) head = head.filter((line) => !line.startsWith('GEN'))
   // The fixed PHY preset block (G9 Physics Example ROM) sits after the kept GP
-  // block and before the custom sections; its rows are renumbered from physStart.
-  const physStart = frames.base + (includeGp ? frames.gp : 0)
+  // block and before the custom sections; its rows are renumbered from physStart:
+  // one past the last preset frame BEFORE the physics block, derived from
+  // presetEndFrame (the single offset source) by removing the phys term — a
+  // separately-summed `base + gp` here silently lacked presetEndFrame's dk term,
+  // the one crack in the single-source frame math (inert only while the template
+  // gate forbids DK).
+  const end = presetEndFrame(sections, character.gender, frames)
+  const physStart = end + 1 - (includePhys ? frames.phys : 0)
   const physRows = includePhys ? physicsPoseAssetRows(physStart) : []
-  const customRows = customPoseAssetRows(character, presetEndFrame(sections, character.gender, frames))
+  const customRows = customPoseAssetRows(character, end)
   return [...head, ...physRows, ...customRows, ...tail].join('\n') + '\n'
 }
 
@@ -511,10 +542,18 @@ export function toPoseAssetCsv(
 ): GeneratedFile {
   const templateCsv = GENERATION_TEMPLATE_CSV[character.genesis]
   if (templateCsv && poseAssetCsvValidated(character, era, frames.base, frames.gp)) {
+    // Custom PHY is only half-modeled: the schema can't carry the physics
+    // payload the HDA defines for PHY rows (offset_distance / radius / per-pose
+    // push XYZ), so its rows import without a push direction. Until that's
+    // modeled, a custom PHY section keeps the file honest by flagging it
+    // experimental instead of shipping it as validated ground truth.
+    const customPhy =
+      character.sections.PHY.enabled && character.sections.PHY.mode === 'custom'
     return {
       fileName: poseAssetFileName(character),
       content: spliceTemplate(templateCsv, character.genesis, character, frames),
       target: 'houdini',
+      ...(customPhy ? { experimental: true } : {}),
     }
   }
 
@@ -610,8 +649,8 @@ function buildExportBlock(
     // real (run-time) export dir — Houdini's PoseAsset wants absolute paths, and
     // the dir (scene subfolder included) is only known now. Source is left intact
     // so the next scene's export can reuse it.
-    var dthCsvName = ${JSON.stringify(poseAssetFileName(character))};
-    var dthCsvSrcDir = new DzDir(${JSON.stringify(charFolderAbs.replace(/\\/g, '/'))});
+    var dthCsvName = ${dazJson(poseAssetFileName(character))};
+    var dthCsvSrcDir = new DzDir(${dazJson(charFolderAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
         if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
@@ -635,7 +674,7 @@ function buildExportBlock(
     : ''
   // The export call + CSV delivery. With groom items listed, it is wrapped in the
   // unfit/unparent bracket below; without any, the emitted script is unchanged.
-  const exportCore = `    dthExportAction.doExport(dthExportDir, ${JSON.stringify(character.name)}, ${JSON.stringify(refFrames)}, false);
+  const exportCore = `    dthExportAction.doExport(dthExportDir, ${dazJson(exporterFigureName(character))}, ${dazJson(refFrames)}, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
   const indentBlock = (block: string) =>
@@ -657,7 +696,7 @@ ${csvCopyBlock}`
     // groom to exclude and exports as-is.
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
-    var dthGroomByScene = ${JSON.stringify(groomMap)};
+    var dthGroomByScene = ${dazJson(groomMap)};
     var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
     var dthGroomHidden = [];
@@ -711,7 +750,7 @@ ${indentBlock(indentBlock(exportCore))}    };
     // a scene without an entry has no groom to exclude and exports as-is.
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
-    var dthGroomByScene = ${JSON.stringify(groomMap)};
+    var dthGroomByScene = ${dazJson(groomMap)};
     var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
     if (dthGroomLabels.length == 0) {
@@ -755,7 +794,7 @@ ${indentBlock(indentBlock(exportCore))}    };
 `
   return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 if (dthExportAction) {
-    var dthExportDir = ${JSON.stringify(exportDir.replace(/\\/g, '/'))};
+    var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}${exportBody}} else {
     print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
 }
@@ -896,7 +935,7 @@ ${buildExportBlock(character, frames, charFolderAbs, groomByHiding)
 // the studio installs ONCE in the DTH-Character-Studio root — two levels up from
 // this script's <project>/<character>/ subfolder.
 
-var dthCharacterConfig = ${JSON.stringify(config, null, 2)};
+var dthCharacterConfig = ${dazJson(config, 2)};
 
 // Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
@@ -989,16 +1028,6 @@ ${exportBlock}        }` : ''}
  * set and `exportWithRomScript` is false. Native Daz API only — no runtime
  * include — so it must run after the ROM_ script in the same Daz session.
  */
-/** The stock figure asset file names per generation — the rename-proof identity
- *  the standalone scripts use to auto-select the figure (mirrors the runtime's
- *  v28 auto-select, which only the ROM script gets via the include). */
-const GENERATION_ASSET_FILES: Record<GenesisVersion, Array<string>> = {
-  G9: ['genesis9.dsf'],
-  'G8.1': ['genesis8_1female.dsf', 'genesis8_1male.dsf'],
-  G8: ['genesis8female.dsf', 'genesis8male.dsf'],
-  G3: ['genesis3female.dsf', 'genesis3male.dsf'],
-}
-
 /**
  * Standalone-script snippet: resolve `dthFig` to the character's figure — the
  * selection's root when it matches the generation's source ASSET (rename-proof;
@@ -1007,7 +1036,10 @@ const GENERATION_ASSET_FILES: Record<GenesisVersion, Array<string>> = {
  * scene has no such figure; the caller emits its own error UI for that.
  */
 function figureAutoSelectSnippet(genesis: GenesisVersion): string {
-  const files = JSON.stringify(GENERATION_ASSET_FILES[genesis])
+  // The rename-proof figure identity lives in GENERATIONS (one table row per
+  // generation) — mirrors the runtime's v28 auto-select, which only the ROM
+  // script gets via the include.
+  const files = dazJson(GENERATIONS[genesis].assetFiles)
   return `var dthFig = Scene.getPrimarySelection();
 while (dthFig && dthFig.getNodeParent()) dthFig = dthFig.getNodeParent();
 var dthAssetFiles = ${files};
@@ -1121,13 +1153,13 @@ ${figureAutoSelectSnippet(character.genesis)}if (!dthAction) {
 } else if (!dthFig || !dthFig.inherits("DzNode")) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-    var dthGroomByScene = ${JSON.stringify(groomMap)};
+    var dthGroomByScene = ${dazJson(groomMap)};
     var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
     if (dthGroomLabels.length == 0) {
         MessageBox.information("The open scene has no groom list in DTH Character Studio - nothing to export. Open one of the character's scenes with groom items defined.", "DTH Character Studio", "&OK");
     } else {
-        var dthExportDir = ${JSON.stringify(exportDir)};
+        var dthExportDir = ${dazJson(exportDir)};
 ${sceneSubfolderBlock}        // HIDE the non-groom wearables (script Ctrl+click: node + children,
         // exact flags restored) — plugin 2.0+ skips hidden nodes. The groom
         // stays fitted AND visible, exported as worn.
@@ -1160,7 +1192,7 @@ ${sceneSubfolderBlock}        // HIDE the non-groom wearables (script Ctrl+click
         dthFig.select(true);
         Scene.setPrimarySelection(dthFig);
         try {
-            dthAction.doExportAlembicGroomPoses(dthExportDir, ${JSON.stringify(`${characterSlug(character)}_groom`)}, false);
+            dthAction.doExportAlembicGroomPoses(dthExportDir, ${dazJson(`${characterSlug(character)}_groom`)}, false);
             print("Groom exported to " + dthExportDir);
         } finally {
             // Restore the exact per-node visibility flags, even on a throw.
@@ -1234,7 +1266,7 @@ export function toScanProductsScriptDsa(
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath("../../.DthProducts.dsa"));
 
-DthScanProducts(${JSON.stringify(config, null, 2)});
+DthScanProducts(${dazJson(config, 2)});
 `
   return { fileName: `Scan_Products_${characterSlug(character)}.dsa`, content, target: 'daz' }
 }
