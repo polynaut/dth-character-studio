@@ -146,7 +146,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: unsigned-installer
           path: apps/desktop/target/release/bundle/nsis/*-setup.exe
@@ -210,7 +210,7 @@ jobs:
         with:
           projectPath: apps/desktop
           args: --target universal-apple-darwin --bundles app,dmg
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: macos-bundle
           path: |
@@ -246,13 +246,13 @@ jobs:
         shell: bash
         run: rm -rf dist dist-mac latest.json
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: unsigned-installer
           path: dist
 
       # Present only when the mac build ran (flag on + success).
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: needs.build-mac.result == 'success'
         with:
           name: macos-bundle
@@ -356,7 +356,7 @@ jobs:
 
       # Hand the SIGNED installer + its .sig to the hosted publish job. The
       # artifact round-trip is byte-exact, so the updater .sig still verifies.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: signed-release
           path: |
@@ -368,7 +368,7 @@ jobs:
       # Signed macOS bundle (dmg + notarized tarball + its updater .sig), only
       # when the mac build ran. A separate artifact so the Windows upload above
       # keeps its strict if-no-files-found gate.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: needs.build-mac.result == 'success'
         with:
           name: signed-mac
@@ -389,14 +389,14 @@ jobs:
     env:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: signed-release
           path: dist
 
       # Optional — only exists when the mac build ran. continue-on-error so a
       # Windows-only release (flag off) publishes normally.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         continue-on-error: true
         with:
           name: signed-mac
