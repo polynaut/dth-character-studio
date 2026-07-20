@@ -659,9 +659,6 @@ function buildExportBlock(
   character: Character,
   frames: PresetFrames | undefined,
   charFolderAbs: string | undefined,
-  /** Exclude groom items by HIDING (needs Exporter Plugin 2.0+) instead of the
-   *  default unfit + unparent — the "Solve hair assets by hiding" setting. */
-  groomByHiding?: boolean,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -703,8 +700,8 @@ function buildExportBlock(
     }
 `
     : ''
-  // The export call + CSV delivery. With groom items listed, it is wrapped in the
-  // unfit/unparent bracket below; without any, the emitted script is unchanged.
+  // The export call + CSV delivery. With groom items listed it is wrapped in the
+  // hide bracket below; without any, the emitted script is unchanged.
   const exportCore = `    dthExportAction.doExport(dthExportDir, ${dazJson(exporterFigureName(character))}, ${dazJson(refFrames)}, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
@@ -712,15 +709,15 @@ ${csvCopyBlock}`
   const exportBody =
     Object.keys(groomMap).length === 0
       ? exportCore
-      : groomByHiding
-        ? `    // Groom items (hair) must stay OUT of the export. OPT-IN mechanism
-    // ("Solve hair assets by hiding", global setting): HIDE the item + all its
-    // children (the script equivalent of Ctrl+clicking the eye icon) and
-    // restore the exact per-node flags after. Needs DTH Exporter Plugin 2.0+
-    // (measured on the 2.0 preview: hiding is honored by the alembic but NOT
-    // yet by the FBX — hence detach as the default). The lists are per scene
-    // (outfit scenes carry different hair); a scene without an entry has no
-    // groom to exclude and exports as-is.
+      : `    // Groom items (hair) must stay OUT of the export. HIDE the item + all its
+    // children (the script equivalent of Ctrl+clicking the eye icon) and restore
+    // the exact per-node flags after. The DTH Exporter Plugin unparents any hidden
+    // child node before exporting and reparents it after, so hiding excludes it
+    // from BOTH the FBX and the alembic. (History: we briefly unfit+unparented in
+    // the script ourselves, because Daz's own FBX exporter ignores visibility on
+    // fitted followers — the plugin now does that unparent internally, so the
+    // script only has to hide.) The lists are per scene (outfit scenes carry
+    // different hair); a scene without an entry exports as-is.
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
     var dthGroomByScene = ${dazJson(groomMap)};
@@ -754,57 +751,6 @@ ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
                 try { dthGroomHidden[dthGr].setVisible(true); } catch (eR) {}
             }
             print("Groom nodes shown again: " + dthGroomHidden.length);
-        }
-    }
-    }
-`
-        : `    // Groom items (hair) must stay OUT of the export. DETACH, not hide:
-    // measured July 17 on plugin 2.0 — hidden nodes are excluded from the
-    // alembic but STILL exported into the FBX (Daz's own FBX exporter ignores
-    // visibility), so the OPEN scene's listed items are unfitted + unparented
-    // and restored right after — the same unfit/refit Daz's "Fit To" performs.
-    // Flip to hide-based only when the plugin's FBX path honors hiding too. The lists are per scene (outfit scenes carry different hair);
-    // a scene without an entry has no groom to exclude and exports as-is.
-    var dthRunExport = function () {
-${indentBlock(indentBlock(exportCore))}    };
-    var dthGroomByScene = ${dazJson(groomMap)};
-    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
-    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
-    if (dthGroomLabels.length == 0) {
-        print("No groom list for the open scene - exporting as-is.");
-        dthRunExport();
-    } else {
-    var dthGroomRestore = [];
-    var dthGroomMissing = "";
-    for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++) {
-        var dthGroomNode = Scene.findNodeByLabel(dthGroomLabels[dthGi]);
-        if (!dthGroomNode) { dthGroomMissing = dthGroomLabels[dthGi]; break; }
-        dthGroomRestore.push({
-            node: dthGroomNode,
-            follow: (typeof dthGroomNode.getFollowTarget == "function") ? dthGroomNode.getFollowTarget() : null,
-            parent: dthGroomNode.getNodeParent()
-        });
-    }
-    if (dthGroomMissing != "") {
-        // A typo must not silently ship a hair-polluted export - fail loud, fix, re-run.
-        print("Groom item not found: " + dthGroomMissing + " - export skipped.");
-        MessageBox.critical("The groom item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Groom list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.", "DTH Character Studio", "&OK");
-    } else {
-        for (var dthGd = 0; dthGd < dthGroomRestore.length; dthGd++) {
-            if (dthGroomRestore[dthGd].follow) dthGroomRestore[dthGd].node.setFollowTarget(null);
-            if (dthGroomRestore[dthGd].parent) dthGroomRestore[dthGd].parent.removeNodeChild(dthGroomRestore[dthGd].node, true);
-        }
-        print("Groom items detached for the export: " + dthGroomRestore.length);
-        try {
-            dthRunExport();
-        } finally {
-            // Reparent first, then refit - restoring the exact pre-export state
-            // even when the export itself throws.
-            for (var dthGr = dthGroomRestore.length - 1; dthGr >= 0; dthGr--) {
-                if (dthGroomRestore[dthGr].parent) dthGroomRestore[dthGr].parent.addNodeChild(dthGroomRestore[dthGr].node, true);
-                if (dthGroomRestore[dthGr].follow) dthGroomRestore[dthGr].node.setFollowTarget(dthGroomRestore[dthGr].follow);
-            }
-            print("Groom items restored: " + dthGroomRestore.length);
         }
     }
     }
@@ -854,8 +800,6 @@ export function toCharacterScriptDsa(
    * contexts, where the move block is skipped.
    */
   charFolderAbs?: string,
-  /** See {@link buildExportBlock} — the "Solve hair assets by hiding" setting. */
-  groomByHiding?: boolean,
 ): GeneratedFile {
   const { sections } = character
   // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
@@ -936,7 +880,7 @@ export function toCharacterScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, groomByHiding)
+${buildExportBlock(character, frames, charFolderAbs)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1108,8 +1052,6 @@ export function toExportScriptDsa(
   character: Character,
   frames?: PresetFrames,
   charFolderAbs?: string,
-  /** See {@link buildExportBlock} — the "Solve hair assets by hiding" setting. */
-  groomByHiding?: boolean,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1122,7 +1064,7 @@ export function toExportScriptDsa(
 ${figureAutoSelectSnippet(character.genesis)}if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, groomByHiding)
+${buildExportBlock(character, frames, charFolderAbs)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1300,11 +1242,6 @@ export function generateAll(
    *  `Scan_Products_<Name>.dsa`. The flag reaches the pure core only here — the
    *  core never imports host/app state. */
   scanProducts?: ScanProductsOptions,
-  /** The app-global "Solve hair assets by hiding" setting: exclude groom items
-   *  from the ROM export by hiding them (needs Exporter Plugin 2.0+) instead of
-   *  the default unfit + unparent. Off/omitted = detach — the only mechanism
-   *  measured to keep hair out of BOTH the FBX and the alembic (July 2026). */
-  groomByHiding?: boolean,
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -1313,8 +1250,8 @@ export function generateAll(
   const groom =
     character.exportPath.trim() !== '' && Object.keys(groomSceneMap(character)).length > 0
   return [
-    toCharacterScriptDsa(character, romPaths, frames, charFolderAbs, groomByHiding),
-    ...(split ? [toExportScriptDsa(character, frames, charFolderAbs, groomByHiding)] : []),
+    toCharacterScriptDsa(character, romPaths, frames, charFolderAbs),
+    ...(split ? [toExportScriptDsa(character, frames, charFolderAbs)] : []),
     ...(groom ? [toGroomExportScriptDsa(character)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
     toPoseAssetCsv(character, frames, poseAssetCsvEra(dthReleaseVersion ?? '')),
