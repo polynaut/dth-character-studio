@@ -135,6 +135,37 @@ function CharacterPageRoute() {
   return <CharacterPage key={characterId} />
 }
 
+/**
+ * Scroll the page to the top with a rAF-driven ease-out — NOT
+ * `behavior: 'smooth'`, which Windows' reduced-motion setting silently turns
+ * into an instant jump; this glide is part of the interaction (the scene tag
+ * "travels" to the scene cards it stands for), so it always animates. A wheel
+ * or touch during the glide cancels it — the user's scroll wins.
+ */
+function smoothScrollToTop() {
+  const start = window.scrollY
+  if (start === 0) return
+  const duration = 400
+  const t0 = performance.now()
+  let cancelled = false
+  const cancel = () => {
+    cancelled = true
+  }
+  window.addEventListener('wheel', cancel, { once: true, passive: true })
+  window.addEventListener('touchstart', cancel, { once: true, passive: true })
+  const step = (now: number) => {
+    if (cancelled) return
+    const t = Math.min(1, (now - t0) / duration)
+    window.scrollTo(0, Math.round(start * Math.pow(1 - t, 3)))
+    if (t < 1) requestAnimationFrame(step)
+    else {
+      window.removeEventListener('wheel', cancel)
+      window.removeEventListener('touchstart', cancel)
+    }
+  }
+  requestAnimationFrame(step)
+}
+
 function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
@@ -516,7 +547,7 @@ function CharacterPage() {
                 type="button"
                 className="cursor-pointer"
                 title="The Daz scene selected in the scene cards — hair items and the ROM override follow it. Click to jump to the scene cards and switch."
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                onClick={smoothScrollToTop}
               >
                 <Tag
                   tone="orange"
