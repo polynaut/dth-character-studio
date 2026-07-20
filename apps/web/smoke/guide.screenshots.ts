@@ -387,11 +387,14 @@ test('combine-morphs', async ({ page }) => {
   await page.getByRole('button', { name: /FBM/ }).click()
   // Two real multi-morph poses from the fixture: SLGlutesSS (4 morphs) and
   // SLGlutesHipBendSpandex (2) — expand both to show the combined-morph editor.
+  // Also expand the first single-morph row (GlutesUpDown), completing the set of
+  // examples: expanded single morph, collapsed rows, and combined poses.
+  await page.getByText('morphs', { exact: true }).first().click()
   await page.getByText('4 morphs', { exact: true }).click()
   await page.getByText('2 morphs', { exact: true }).click()
   await page.mouse.move(0, 0)
   await settle(page)
-  await page.setViewportSize({ width: VW, height: 1200 })
+  await page.setViewportSize({ width: VW, height: 1500 })
   // Scroll the first combined pose just below the pinned FBM section title +
   // column headers, so both examples sit under them (the real scrolled view — the
   // poses between are hidden behind the pinned headers, so nothing overlaps).
@@ -414,7 +417,7 @@ test('combine-morphs', async ({ page }) => {
   const y = Math.max(0, top)
   await page.screenshot({
     path: join(OUT, 'combine-morphs.png'),
-    clip: { x: 0, y, width: VW, height: Math.min(bottom - y + 24, 1200 - y) },
+    clip: { x: 0, y, width: VW, height: Math.min(bottom - y + 24, 1500 - y) },
   })
 })
 

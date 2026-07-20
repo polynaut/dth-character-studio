@@ -247,9 +247,9 @@ expand its **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you ad
 more).
 
 <p align="center">
-  <img width="900" alt="A pose row expanded to drive one output from several morphs" src="screenshots/combine-morphs.png" />
+  <img width="900" alt="Expanded pose rows: a single-morph row, and rows combining several morphs into one output" src="screenshots/combine-morphs.png" />
   <br>
-  <sub><em>A pose row expanded to drive one output from several morphs.</em></sub>
+  <sub><em>Expanded pose rows — a plain single-morph row on top, and two rows combining several morphs into one output below.</em></sub>
 </p>
 
 Every entry in that expanded list carries its own:
