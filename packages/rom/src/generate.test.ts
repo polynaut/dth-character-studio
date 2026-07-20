@@ -326,11 +326,12 @@ describe('toCharacterScriptDsa', () => {
     const character = makeCharacter({
       jcmMorphMods: [
         {
+          id: 'rule-1',
           boneLabel: 'Left Thigh',
           axis: 'XRotate',
           drives: [
-            { morphName: 'PosDrive', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
-            { morphName: 'NegDrive', range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } } },
+            { id: 'pos', morphName: 'PosDrive', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+            { id: 'neg', morphName: 'NegDrive', range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } } },
           ],
         },
       ],

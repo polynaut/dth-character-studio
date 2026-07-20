@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { migrateCharacterData, normalizeLegacyCharacter } from './migrate'
-import { CHARACTER_SCHEMA_VERSION, characterSchema } from './types'
+import { CHARACTER_SCHEMA_VERSION, characterSchema, jcmMorphModForRuntime } from './types'
 
 describe('migrateCharacterData — non-object input', () => {
   it('flows into a clean zod failure instead of a TypeError in the normalizer', () => {
@@ -292,6 +292,50 @@ describe('migrateCharacterData — v16 (JCM positive/negative → drives)', () =
     const twice = migrateCharacterData(structuredClone(once))
     expect(twice).toEqual(once)
     expect(twice.jcmMorphMods[0].drives).toHaveLength(2)
+  })
+})
+
+describe('schema v18 — stable ids on JCM rules + drives (additive, zod default)', () => {
+  it('mints a rule id and a drive id when a pre-v18 definition lacks them', () => {
+    const now = '2026-07-21T00:00:00.000Z'
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 17,
+        jcmMorphMods: [
+          {
+            boneLabel: 'Left Thigh',
+            axis: 'XRotate',
+            drives: [
+              { morphName: 'A', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(typeof parsed.jcmMorphMods[0].id).toBe('string')
+    expect(parsed.jcmMorphMods[0].id).not.toBe('')
+    expect(typeof parsed.jcmMorphMods[0].drives[0].id).toBe('string')
+    expect(parsed.jcmMorphMods[0].drives[0].id).not.toBe('')
+  })
+
+  it('the minted ids never reach the generated runtime output', () => {
+    const runtime = jcmMorphModForRuntime({
+      id: 'rule-1',
+      boneLabel: 'Left Thigh',
+      axis: 'XRotate',
+      drives: [
+        { id: 'drive-1', morphName: 'A', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+      ],
+    })
+    // Neither the rule id nor the drive id appears in what generation emits.
+    expect(JSON.stringify(runtime)).not.toContain('rule-1')
+    expect(JSON.stringify(runtime)).not.toContain('drive-1')
+    expect('id' in runtime.positive[0]).toBe(false)
   })
 })
 
