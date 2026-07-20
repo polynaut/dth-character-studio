@@ -235,12 +235,24 @@ test('settings-exporter-plugin', async ({ page }) => {
 })
 
 test('home-new-project', async ({ page }) => {
-  await prime(page, buildSeed())
+  // First-run Home (no recents) + a seeded folder pick, so the create form fills
+  // in with a chosen folder and its auto-derived name instead of staying empty.
+  await prime(page, buildSeed({ emptyRecents: true, dialogPath: P.project }))
   await page.goto('/')
   await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
   await page.getByRole('button', { name: 'New project' }).first().click()
-  // A small modal — the shot trims to just the dialog (min-height case).
+  await page.getByRole('button', { name: /Choose folder/ }).click()
+  // The picked folder + auto-filled name now show — wait for the Create button.
+  await page.getByRole('button', { name: 'Create' }).waitFor()
   await shoot(page, join(OUT, 'home-new-project.png'), page.getByRole('dialog'))
+})
+
+test('project-open-window', async ({ page }) => {
+  // The just-created project, opened in its own window: no characters yet.
+  await prime(page, buildSeed({ activeProjectFile: P.dcsp, emptyProject: true }))
+  await page.goto('/')
+  await page.getByText('No characters yet').waitFor()
+  await shoot(page, join(OUT, 'project-open-window.png'))
 })
 
 /** Exception to the 16:9 cap: shoot from the top of the page DOWN THROUGH

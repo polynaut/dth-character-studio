@@ -42,7 +42,8 @@ export function PreserveFields({
                   onChange={(e) => set({ ...item, name: e.target.value })}
                 />
                 <NumberField
-                  className="w-24"
+                  className="w-24 pr-6 text-right tabular-nums"
+                  percent
                   value={item.keepValue}
                   onCommit={(keepValue) => set({ ...item, keepValue })}
                 />
