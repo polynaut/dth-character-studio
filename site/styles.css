@@ -431,7 +431,7 @@ a:hover {
 /* Pull the heading up into the teaser's faded zone so title and image blend. */
 .section-teaser + h2 {
   position: relative;
-  margin-top: clamp(-72px, -6vw, -40px);
+  margin-top: clamp(-48px, -4vw, -24px);
 }
 
 .section h2 em {
