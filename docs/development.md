@@ -15,6 +15,8 @@ apps/
             provides native file / dialog / auto-update access.
 packages/
   rom/      Pure ROM/CSV/DSA generation core (@dth/rom) — framework-agnostic, no I/O.
+  ui/       App-agnostic React UI kit (@dth/ui) — primitives, components, hooks;
+            no Tauri / router / filesystem imports (host behaviour is injected).
 ```
 
 ## Run — web
@@ -47,10 +49,12 @@ Tauri plugins instead of a Node backend:
   scan go through `@tauri-apps/plugin-fs`; the native file/folder pickers use
   `@tauri-apps/plugin-dialog`. The generation itself (`packages/rom`) is pure
   TypeScript and runs in the webview.
-- **Two storage roots** — app-owned data (settings, the projects list, avatars)
-  lives in the per-user app-data folder (`appLocalDataDir()`), so it survives app
-  updates; your **characters** live in each **project's folder**, which you choose
-  and back up.
+- **Two storage roots** — machine-only app data (`settings.json`, the recently-
+  opened `.dcsp` list, `network-drives.json`) lives in the per-user app-data
+  folder (`appLocalDataDir()`); everything worth backing up — your **characters**,
+  generated artifacts, and avatars (under the hidden `.dcsmeta/`) — lives in each
+  **project's folder**, marked by its `.dcsp` file. There is no global project
+  registry: a `.dcsp`'s location *is* the project.
 
 The native boundary is concentrated in `apps/web/src/lib/rom/{api,storage}.ts`
 and `lib/desktop.ts`, each `isTauri()`-guarded so the SPA still runs in a plain
