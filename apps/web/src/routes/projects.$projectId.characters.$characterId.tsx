@@ -46,9 +46,10 @@ import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
+import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
 import { pickFolder } from '#/lib/desktop.ts'
-import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
+import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath, normalizePath } from '#/lib/path.ts'
@@ -341,25 +342,15 @@ function CharacterPage() {
   }, [presetSignature, catalog])
 
   // The character's folder, shown under the header with the project library root
-  // dimmed as a label prefix and the rest emphasized. The definition filename is
-  // dropped (it's edited in the Filepath fields below) — just the folder remains.
-  const libRoot = displayPath(location?.libraryFolder ?? '')
-  const defAbs = displayPath(location?.definitionAbs ?? '')
-  const defSep = Math.max(defAbs.lastIndexOf('\\'), defAbs.lastIndexOf('/'))
-  const defDir = defSep >= 0 ? defAbs.slice(0, defSep) : defAbs
-  const defSuffix = defDir.startsWith(libRoot) ? defDir.slice(libRoot.length) : defDir
+  // dimmed as a label prefix and the rest emphasized (lib/character-paths.ts).
+  const folderChip = location ? characterFolderDisplay(location) : null
   // Where the generated ROM_<Name>_<Genesis>.dsa lands in the Daz library, so
-  // the user knows where to find/run it in Daz. Empty until the DAZ library is set.
-  const scriptsLib = displayPath(settings.dazLibraryFolder)
-  const scriptsAbs =
-    settings.dazLibraryFolder && character.projectName
-      ? displayPath(
-          studioCharScriptsDir(settings.dazLibraryFolder, character.projectName, character.name),
-        )
-      : ''
-  const scriptsSuffix = scriptsAbs.startsWith(scriptsLib)
-    ? scriptsAbs.slice(scriptsLib.length)
-    : scriptsAbs
+  // the user knows where to find/run it in Daz. Null until the DAZ library is set.
+  const scriptsPath = characterScriptsDisplay(
+    settings.dazLibraryFolder,
+    character.projectName,
+    character.name,
+  )
   // With an export folder set and the export NOT combined with the ROM script,
   // generation splits into the ROM_ build script + a standalone Export_ script
   // (see generate.ts toCharacterScriptDsa / toExportScriptDsa). Otherwise it's
@@ -397,10 +388,6 @@ function CharacterPage() {
     void router.invalidate()
     draft.notifyGenerated(`Renamed to “${next}”`, result)
   }
-
-  // Linking a Daz scene persists immediately (see relinkScene), so settle the
-  // draft + baseline on the saved result — like the inline rename / avatar.
-  const onSceneLinked = draft.settle
 
   // A folder move can repoint the linked scene (it travels with the folder when
   // it lives inside it). Sync just the scene path into the draft + baseline so
@@ -463,7 +450,11 @@ function CharacterPage() {
       'Choose the export directory for the DTH Exporter',
       await defaultExportDir(),
     )
-    if (picked) await draft.patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
+    if (picked)
+      await draft.persistPatch(
+        { exportPath: picked },
+        { toast: 'Export folder set — script regenerated' },
+      )
   }
 
   async function onDeleteCharacter({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
@@ -603,12 +594,9 @@ function CharacterPage() {
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
           </p>
-          {location && (
+          {folderChip && (
             <p className="mt-1.5 text-xs">
-              <PathCode path={defDir}>
-                <span className="text-muted-foreground/60">{libRoot}</span>
-                <span className="text-foreground/80">{defSuffix}</span>
-              </PathCode>
+              <DirPathChip dir={folderChip.dir} roots={[folderChip.root]} />
             </p>
           )}
         </div>
@@ -781,7 +769,7 @@ function CharacterPage() {
               sceneExists={sceneExists}
               sceneFolderExists={sceneFolderExists}
               defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-              onLinked={onSceneLinked}
+              persistPatch={draft.persistPatch}
               onScenesFolderMoved={onScenesFolderMoved}
               selectedScene={effectiveScene}
               onSelectScene={setSelectedScene}
@@ -795,10 +783,9 @@ function CharacterPage() {
               dazInstallFolder={settings.dazInstallFolder}
             />
             <HoudiniProjectsField
-              projectId={projectId}
               character={character}
               location={location}
-              onChanged={onSceneLinked}
+              persistPatch={draft.persistPatch}
             />
           </div>
         )}
@@ -825,11 +812,8 @@ function CharacterPage() {
             The folder is created the first time a script is generated.
           </InfoPopup>
         </h2>
-        {scriptsAbs ? (
-          <PathCode path={scriptsAbs}>
-            <span className="text-muted-foreground/60">{scriptsLib}</span>
-            <span className="text-foreground/80">{scriptsSuffix}</span>
-          </PathCode>
+        {scriptsPath ? (
+          <DirPathChip dir={scriptsPath.dir} roots={[scriptsPath.root]} />
         ) : (
           <p className="text-sm text-muted-foreground">
             Set “My DAZ 3D Library” in Settings to install the character script.
@@ -845,10 +829,8 @@ function CharacterPage() {
             character={character}
             productScan={productScan}
             dimManifestsFolder={settings.dimManifestsFolder}
-            scriptsAbs={scriptsAbs}
-            scriptsLib={scriptsLib}
-            scriptsSuffix={scriptsSuffix}
-            onStored={draft.settle}
+            scriptsPath={scriptsPath}
+            persistPatch={draft.persistPatch}
           />
         </div>
       )}
@@ -882,7 +864,12 @@ function CharacterPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void draft.patchAndRegenerate({ exportPath: '' }, 'Export folder cleared — script regenerated')}
+                onClick={() =>
+                  void draft.persistPatch(
+                    { exportPath: '' },
+                    { toast: 'Export folder cleared — script regenerated' },
+                  )
+                }
               >
                 <X /> Clear
               </Button>
@@ -894,9 +881,9 @@ function CharacterPage() {
             checked={character.exportSceneSubfolders}
             disabled={!character.exportPath || saving}
             onCheckedChange={(exportSceneSubfolders) =>
-              void draft.patchAndRegenerate(
+              void draft.persistPatch(
                 { exportSceneSubfolders },
-                `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated`,
+                { toast: `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated` },
               )
             }
           />
@@ -918,11 +905,13 @@ function CharacterPage() {
             checked={character.exportWithRomScript}
             disabled={!character.exportPath || saving}
             onCheckedChange={(exportWithRomScript) =>
-              void draft.patchAndRegenerate(
+              void draft.persistPatch(
                 { exportWithRomScript },
-                exportWithRomScript
-                  ? 'Combined ROM + export script'
-                  : 'Separate ROM and Export scripts',
+                {
+                  toast: exportWithRomScript
+                    ? 'Combined ROM + export script'
+                    : 'Separate ROM and Export scripts',
+                },
               )
             }
           />
@@ -1053,19 +1042,9 @@ function CharacterPage() {
             // Persist the avatar immediately — it's a deliberate change and
             // should survive a reload without needing the Save button. The
             // source scene ('' for uploads/URLs) rides along so the avatar
-            // auto-sync knows what to mirror.
-            const updated = { ...character, image, imageScene }
-            patch({ image, imageScene })
-            try {
-              const saved = await saveCharacter({ data: { projectId, character: updated } })
-              draft.settle(saved)
-              void router.invalidate()
-              toast.success('Image updated')
-            } catch (e) {
-              // Roll the optimistic update back so the editor isn't stuck dirty.
-              patch({ image: character.image, imageScene: character.imageScene })
-              toast.error(e instanceof Error ? e.message : String(e))
-            }
+            // auto-sync knows what to mirror. persistPatch validates, blocks
+            // racing saves, regenerates and rolls back on failure.
+            await draft.persistPatch({ image, imageScene }, { toast: 'Image updated' })
           }}
           onClose={() => setImageDialogOpen(false)}
         />
