@@ -3,6 +3,10 @@ import type { ReactNode } from 'react'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { cn } from '@dth/ui'
 
+/** Stable default for the `accept` prop — a fresh `[]` literal default would be a
+ *  new reference every render (and churn useFileDrop's deps). */
+const NO_ACCEPT: Array<string> = []
+
 /**
  * Wraps a pane so a supported OS file dropped anywhere over it is accepted (no
  * need to target a button). While such a file hovers, a dashed overlay with
@@ -12,7 +16,7 @@ import { cn } from '@dth/ui'
  * path) — folders can't be matched by extension.
  */
 export function FileDropZone({
-  accept = [],
+  accept = NO_ACCEPT,
   acceptFolders,
   onDrop,
   label = 'Drop to add',

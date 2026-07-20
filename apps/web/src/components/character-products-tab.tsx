@@ -115,12 +115,12 @@ export function CharacterProductsTab({
   const viewProducts = !mergedScan
     ? []
     : sceneFilterActive
-      ? mergedScan.products.filter((p) => p.scenes.includes(sceneFilter!))
+      ? mergedScan.products.filter((p) => p.scenes.includes(sceneFilter))
       : mergedScan.products
   const viewUnmatched = !mergedScan
     ? []
     : sceneFilterActive
-      ? mergedScan.unmatched.filter((a) => a.scenes.includes(sceneFilter!))
+      ? mergedScan.unmatched.filter((a) => a.scenes.includes(sceneFilter))
       : mergedScan.unmatched
   const multiScene = scanScenes.length > 1 && !sceneFilterActive
   // The per-scene CSV files on disk, and whether the products stored on the

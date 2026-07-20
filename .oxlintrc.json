@@ -20,14 +20,20 @@
     "typescript/no-unsafe-type-assertion": "off",
     "typescript/no-unnecessary-boolean-literal-compare": "off",
     "typescript/consistent-return": "off",
-    "no-control-regex": "off"
+    "no-control-regex": "off",
+
+    "no-shadow": "error",
+    "react/no-object-type-as-default-prop": "error",
+    "react/jsx-no-constructed-context-values": "error",
+    "typescript/no-unnecessary-type-assertion": "error"
   },
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/testutil.*", "**/*.gen.ts"],
       "rules": {
         "typescript/no-floating-promises": "off",
-        "typescript/no-misused-promises": "off"
+        "typescript/no-misused-promises": "off",
+        "no-shadow": "off"
       }
     }
   ],
