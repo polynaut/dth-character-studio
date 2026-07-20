@@ -165,6 +165,7 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
     // it instead; cross-project sweeps already skip a project whose manifest throws.
     throw new Error(
       `The project file at "${path}" is unreadable or corrupt — ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
     )
   }
 }

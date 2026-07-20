@@ -20,10 +20,11 @@ export function sceneBase(scenePath: string): string {
  * (Kira.tip.png). Returns '' when neither exists.
  */
 export async function findTipImage(scenePath: string): Promise<string> {
-  for (const p of [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]) {
-    if (await exists(p)) return p
-  }
-  return ''
+  // Check both naming conventions in parallel, then return the first that exists
+  // in preference order (`<scene>.tip.png` wins over `<base>.tip.png`).
+  const candidates = [`${scenePath}.tip.png`, `${sceneBase(scenePath)}.tip.png`]
+  const present = await Promise.all(candidates.map((p) => exists(p)))
+  return candidates.find((_, i) => present[i]) ?? ''
 }
 
 /**
@@ -65,15 +66,18 @@ export async function removeCharacterAvatars(
   const dir = storage.metaImagesDir(projectDir)
   const id = basename(characterId)
   if (!(await exists(dir))) return
-  for (const entry of await readDir(dir)) {
-    if (
-      entry.isFile &&
-      entry.name !== keep &&
-      (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`))
-    ) {
-      await remove(joinPath(dir, entry.name))
-    }
-  }
+  const entries = await readDir(dir)
+  // Remove the matching avatar files in parallel (independent files, best-effort).
+  await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isFile &&
+          entry.name !== keep &&
+          (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`)),
+      )
+      .map((entry) => remove(joinPath(dir, entry.name))),
+  )
 }
 
 /**
