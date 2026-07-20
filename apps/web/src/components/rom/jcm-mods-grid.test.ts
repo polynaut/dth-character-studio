@@ -36,20 +36,28 @@ describe('mirrorMod', () => {
   it('mirrors the bone label + morph names but copies axis/angles/values verbatim', () => {
     // The user's real "Left Thigh Bend" example (from modifyJcmRom.dsa).
     const left: JcmMorphMod = {
+      id: 'rule-l',
       boneLabel: 'Left Thigh Bend',
       axis: 'XRotate',
       drives: [
         {
+          id: 'd0',
           morphName: '!Hip Bend Controller',
           range: { angle: { start: 0, end: 37.5 }, value: { start: 1, end: 1 } },
         },
         {
+          id: 'd1',
           morphName: 'Hip Adjuster L',
           range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 1 } },
         },
       ],
     }
     const right = mirrorMod(left)
+    // The mirrored copy is a NEW row: fresh rule + drive ids, never the source's
+    // (a reused id collides as a React key and swaps focused inputs across rows).
+    expect(right.id).not.toBe(left.id)
+    expect(right.drives[0].id).not.toBe(left.drives[0].id)
+    expect(right.drives[1].id).not.toBe(left.drives[1].id)
     expect(right.boneLabel).toBe('Right Thigh Bend')
     expect(right.axis).toBe('XRotate')
     // Side-less controller unchanged; the L-suffixed morph flips to R.
@@ -62,10 +70,11 @@ describe('mirrorMod', () => {
 
   it('deep-copies ranges (no shared references with the source)', () => {
     const src: JcmMorphMod = {
+      id: 'rule-src',
       boneLabel: 'Left Foot',
       axis: 'YRotate',
       drives: [
-        { morphName: 'x', range: { angle: { start: 0, end: 30 }, value: { start: 0, end: 1 } } },
+        { id: 'dx', morphName: 'x', range: { angle: { start: 0, end: 30 }, value: { start: 0, end: 1 } } },
       ],
     }
     const out = mirrorMod(src)

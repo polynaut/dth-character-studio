@@ -524,6 +524,9 @@ export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 const rangeSchema = z.object({ start: z.number(), end: z.number() })
 
 export const jcmMorphModDriveSchema = z.object({
+  /** Stable row id for grid editing (minted on read when absent). NEVER reaches
+   *  the generated runtime output — jcmMorphModForRuntime strips it. */
+  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
   morphName: z.string().max(MAX_NAME_LENGTH),
   range: z.object({ angle: rangeSchema, value: rangeSchema }),
 })
@@ -538,6 +541,9 @@ export type JcmMorphModDrive = z.infer<typeof jcmMorphModDriveSchema>
  * {@link jcmMorphModForRuntime}).
  */
 export const jcmMorphModSchema = z.object({
+  /** Stable row id for grid editing (minted on read when absent). Not part of the
+   *  generated runtime output (jcmMorphModForRuntime never spreads the rule). */
+  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
   boneLabel: z.string().max(MAX_NAME_LENGTH),
   /** Rotation axis, e.g. "XRotate". */
   axis: z.string().max(MAX_NAME_LENGTH),
@@ -561,16 +567,21 @@ export function jcmDriveDirection(drive: JcmMorphModDrive): 'positive' | 'negati
  * lists; the studio stores one signed `drives[]` and splits it here at generation
  * time, so the emitted `options.jcmMorphMods` contract is byte-for-byte unchanged.
  */
+/** A drive as emitted to the runtime — the stored drive minus the editor-only id. */
+export type RuntimeJcmDrive = Omit<JcmMorphModDrive, 'id'>
 export function jcmMorphModForRuntime(mod: JcmMorphMod): {
   boneLabel: string
   axis: string
-  positive: Array<JcmMorphModDrive>
-  negative: Array<JcmMorphModDrive>
+  positive: Array<RuntimeJcmDrive>
+  negative: Array<RuntimeJcmDrive>
 } {
-  const positive: Array<JcmMorphModDrive> = []
-  const negative: Array<JcmMorphModDrive> = []
+  const positive: Array<RuntimeJcmDrive> = []
+  const negative: Array<RuntimeJcmDrive> = []
   for (const drive of mod.drives) {
-    ;(jcmDriveDirection(drive) === 'negative' ? negative : positive).push(drive)
+    // Emit ONLY morphName + range (no editor-only `id`), so the generated
+    // options.jcmMorphMods contract stays byte-for-byte unchanged.
+    const clean: RuntimeJcmDrive = { morphName: drive.morphName, range: drive.range }
+    ;(jcmDriveDirection(drive) === 'negative' ? negative : positive).push(clean)
   }
   return { boneLabel: mod.boneLabel, axis: mod.axis, positive, negative }
 }
@@ -639,8 +650,12 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *  17 — added `sceneOverrides` (per-Daz-scene ROM overrides: replaced rows +
  *       appended frames for outfit scenes; additive with a [] default — no
  *       migration step needed).
+ *  18 — added a stable `id` to each JCM "Modify frames" rule AND drive (grid row
+ *       keys; minted on read via a zod default — no migration step). Never
+ *       reaches the generated output: `jcmMorphModForRuntime` emits drives without
+ *       it, so the runtime contract stays byte-for-byte unchanged.
  */
-export const CHARACTER_SCHEMA_VERSION = 17
+export const CHARACTER_SCHEMA_VERSION = 18
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime

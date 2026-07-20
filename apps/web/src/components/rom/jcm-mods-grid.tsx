@@ -6,6 +6,7 @@ import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, Se
 import { cellInputClass, pctToValue, valueToPct } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
 
+import { newId } from '@dth/rom'
 import type { JcmMorphMod } from '@dth/rom'
 
 type Drive = JcmMorphMod['drives'][number]
@@ -22,7 +23,7 @@ function angleRangeInvalid(angle: { start: number; end: number }): boolean {
 }
 
 function emptyDrive(): Drive {
-  return { morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } }
+  return { id: newId(), morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } }
 }
 
 /** Flip a case-preserving Left/Right word. */
@@ -55,6 +56,9 @@ export function mirrorSide(name: string): string {
 
 function mirrorDrive(drive: Drive): Drive {
   return {
+    // A fresh id — the mirrored copy is a NEW row, so it must not reuse the
+    // source's id (that would collide as a React key and swap focused inputs).
+    id: newId(),
     morphName: mirrorSide(drive.morphName),
     range: {
       angle: { start: drive.range.angle.start, end: drive.range.angle.end },
@@ -67,6 +71,7 @@ function mirrorDrive(drive: Drive): Drive {
 export function mirrorMod(mod: JcmMorphMod): JcmMorphMod {
   return {
     ...mod,
+    id: newId(), // new row → new id (see mirrorDrive)
     boneLabel: mirrorSide(mod.boneLabel),
     drives: mod.drives.map(mirrorDrive),
   }
@@ -201,7 +206,7 @@ export function JcmModsGrid({
       {openGrid && (
         <div className="space-y-3 border-t px-3 py-3">
           {mods.map((mod, i) => (
-            <div key={i} className="rounded-md border">
+            <div key={mod.id} className="rounded-md border">
               <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-2 py-1.5">
                 <input
                   className={`${cellInputClass} w-44`}
@@ -263,7 +268,7 @@ export function JcmModsGrid({
                       {mod.drives.map((drive, index) => {
                         const angleBad = angleRangeInvalid(drive.range.angle)
                         return (
-                          <tr key={index}>
+                          <tr key={drive.id}>
                             <td className="w-full pr-2">
                               <MorphNameCell
                                 value={drive.morphName}
@@ -343,7 +348,7 @@ export function JcmModsGrid({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onChange([...mods, { boneLabel: '', axis: 'XRotate', drives: [] }])}
+            onClick={() => onChange([...mods, { id: newId(), boneLabel: '', axis: 'XRotate', drives: [] }])}
           >
             <Plus /> Add rule
           </Button>

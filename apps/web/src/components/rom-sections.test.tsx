@@ -480,10 +480,11 @@ describe('Modify JCM frames (jcmMorphMods grid)', () => {
   it('adds a rule and edits a drive through the grid', () => {
     let mods: Array<import('@dth/rom').JcmMorphMod> = [
       {
+        id: 'rule-0',
         boneLabel: 'Left Thigh Bend',
         axis: 'XRotate',
         drives: [
-          { morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
+          { id: 'drive-0', morphName: '', range: { angle: { start: 0, end: 90 }, value: { start: 0, end: 1 } } },
         ],
       },
     ]
@@ -513,9 +514,11 @@ describe('Modify JCM frames (jcmMorphMods grid)', () => {
     fireEvent.blur(morphInput)
     expect(mods[0].drives[0].morphName).toBe('body_cbs_ThighFlex')
 
-    // Add a second rule — an empty XRotate rule appears in the model.
+    // Add a second rule — an empty XRotate rule (with a fresh id) appears.
     fireEvent.click(screen.getByText('Add rule'))
     expect(mods).toHaveLength(2)
-    expect(mods[1]).toEqual({ boneLabel: '', axis: 'XRotate', drives: [] })
+    expect(mods[1]).toMatchObject({ boneLabel: '', axis: 'XRotate', drives: [] })
+    expect(typeof mods[1].id).toBe('string')
+    expect(mods[1].id).not.toBe('')
   })
 })
