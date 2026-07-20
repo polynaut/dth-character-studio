@@ -1,8 +1,13 @@
-# Strips the binary assets (installers, .dmg, .sig, latest.json) from every
-# release EXCEPT the newest 6 — old releases keep their tag and changelog, but
-# their multi-MB artifacts are dead weight: the Tauri updater only ever reads
-# latest.json from the newest release, so nothing depends on old assets.
-# Runs daily; idempotent (already-stripped releases have no assets left).
+# Strips the binary assets (installers, .dmg, .sig, latest.json) from old
+# releases — the release, tag and changelog notes stay; only the multi-MB
+# artifacts go. The Tauri updater only ever reads latest.json from the newest
+# release, so nothing depends on old assets.
+#
+# KEEP POLICY — a release keeps its assets when it is any of:
+#   - one of the NEWEST 20 releases,
+#   - one of the FIRST 3 releases ever (museum pieces),
+#   - a major or minor release (tag matches x.y.0).
+# Everything else (old patch releases) is stripped. Runs daily; idempotent.
 
 name: 🧹 Release housekeeping
 
@@ -24,21 +29,31 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
-      KEEP: 6
+      KEEP_NEWEST: 20
+      KEEP_OLDEST: 3
     steps:
-      - name: Strip assets from all but the newest releases
+      - name: Strip assets from old patch releases
         shell: bash
         run: |
-          # One page of 100 is plenty: daily runs keep everything beyond the
-          # newest $KEEP already stripped, so the prune set stays tiny.
-          gh api "repos/${{ github.repository }}/releases?per_page=100" > releases.json
+          # Full paginated list — the oldest-N rule needs every release, and
+          # the API returns them newest-first.
+          gh api "repos/${{ github.repository }}/releases?per_page=100" --paginate --slurp \
+            | jq 'add | [ .[] | select(.draft | not) ]' > releases.json
+
+          prune_expr='
+            length as $n
+            | to_entries
+            | map(select(
+                (.key < $newest                                          # newest N
+                 or .key >= ($n - $oldest)                               # first N ever
+                 or (.value.tag_name | test("^v?[0-9]+\\.[0-9]+\\.0$"))  # major/minor
+                ) | not))
+          '
 
           {
             echo "# 🧹 Release housekeeping"
             echo ""
-            echo "Keeping the newest $KEEP releases:"
-            jq -r --argjson keep "$KEEP" \
-              '[ .[] | select(.draft | not) ] | .[:$keep] | .[] | "- \(.tag_name)"' releases.json
+            echo "Policy: keep the newest $KEEP_NEWEST, the first $KEEP_OLDEST, and every x.y.0 (major/minor)."
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -48,8 +63,8 @@ jobs:
             gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id"
             echo "- pruned \`$tag\`: $asset_name" >> "$GITHUB_STEP_SUMMARY"
             pruned=$((pruned + 1))
-          done < <(jq -r --argjson keep "$KEEP" \
-            '[ .[] | select(.draft | not) ] | .[$keep:] | .[] | .tag_name as $t | .assets[] | "\($t) \(.id) \(.name)"' releases.json)
+          done < <(jq -r --argjson newest "$KEEP_NEWEST" --argjson oldest "$KEEP_OLDEST" \
+            "$prune_expr"' | .[].value | .tag_name as $t | .assets[] | "\($t) \(.id) \(.name)"' releases.json)
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**$pruned asset(s) deleted.**" >> "$GITHUB_STEP_SUMMARY"
