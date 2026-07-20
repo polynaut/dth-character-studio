@@ -19,6 +19,90 @@
 6. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
+## Character settings
+
+<p align="center">
+  <img width="900" alt="character page top — Genesis/Gender, Genesis 9 specific, linked Daz scene + Houdini project" src="screenshots/character-settings.png" />
+  <br>
+  <sub><em>The top of the character page: Genesis/Gender, the Genesis 9 box, the primary Daz scene, hair items, and the linked Houdini project.</em></sub>
+</p>
+
+The **Genesis** and **Gender** selects can be changed after creation — gender is
+what decides the [GEN section](#the-rom-definition)'s product (**Golden Palace**
+for a female character, **Dicktator** for a male). All four generations are
+selectable; the deeply validated path is **G9** (and G8.1 on the old pipeline) —
+for the others, DTH ships a subset of pose assets and the studio offers whatever
+the active release actually provides.
+
+G9 characters also get a **Genesis 9 specific** box next to the Genesis/Gender
+fields:
+
+- **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
+  **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
+  DTH's **Lacrimal Fluid** material lines up without you doing the manual
+  *Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only
+  matters if you use that material, and an example UE5 tear UV only ships for
+  Genesis 9 — so it's off by default and absent on other generations.
+- **FACS detail strength / Flexion strength** — the G9 strength dials
+  (**FACS Detail Strength** and **Flexion Automatic Strength**), applied at
+  frame 0 as the ROM builds. Daz-style percentages (0–100 %), like every morph
+  value in the studio. Leave them at `100 %` unless your character needs the
+  stock correctives dialed up or down.
+
+<details>
+<summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>
+<table><tr><td>
+
+- **Daz scenes** — the character's scene, plus any number of extra scenes
+  (outfit/look variants): **drop a `.duf`** on the card to add one; a dialog asks
+  whether to **copy it into the character's folder** (optionally under a
+  subfolder) or leave it where it is. The original scene can't be unlinked;
+  extras can be removed. **Scenes subfolder** moves the whole scenes folder. Each
+  scene has **Open in Daz** — if Daz Studio is already running with a scene
+  loaded, the studio walks you through closing it and the button flips to
+  **Open now** once Daz has quit.
+- **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
+  Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
+  its folder.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Hair items — keep hair out of the export</strong></summary>
+<table><tr><td>
+
+With **Hair items live in the Daz scenes** on (the default), each scene
+carries its full look — hair included — and the hair items you pick per scene
+are kept out of the DTH export: they're hidden right before the DTH Exporter
+runs and shown again afterwards, so hair never rides into the ROM's FBX/Alembic.
+The DTH Exporter Plugin **2.0.1+** unparents the hidden items itself, keeping
+them out of **both** the FBX and the Alembic (older plugins leak the hidden hair
+into the FBX — the character page warns when yours is too old). Turned **off**,
+nothing is excluded — the classic workflow where hair lives in separate Daz
+scene files.
+
+The picker under the scene cards edits the **selected** card's list — the lists
+are **per scene**, since outfit scenes carry different hair. The one generated
+script bakes every scene's list and applies the right one for whichever scene is
+open in Daz; a scene with no items listed exports as-is.
+
+- **List the top fitted item** (e.g. the hair cap) — its children ride along
+  automatically.
+- The dropdown offers the items found in the scene file (hair-ish names first,
+  type to filter). A label the scan doesn't offer can be typed exactly as it
+  appears in Daz's **Scene** pane and added.
+- A listed label that isn't found in the scene turns amber — the export stops
+  loudly on a label missing from the open scene rather than silently shipping a
+  hair-polluted export.
+
+Characters with hair items also get an `Export_Hair_…` script — it exports the
+`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
+worn, with everything else hidden).
+
+</td></tr></table>
+</details>
+
 ## The ROM definition
 
 <p align="center">
@@ -387,94 +471,6 @@ After a ROM run in Daz had problems (a missing morph, a failed preset), a
 frame with its reason. Clicking an entry **jumps to and highlights the pose row**
 (failed rows are also tinted red in the tables). **Dismiss** clears it; a clean
 run clears it automatically.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Genesis &amp; Gender</strong></summary>
-<table><tr><td>
-
-The **Genesis** and **Gender** selects can be changed after creation — gender is
-what decides the GEN section's product (Golden Palace vs Dicktator, see above).
-All four generations are selectable; the deeply validated path is **G9** (and
-G8.1 on the old pipeline) — for the others, DTH ships a subset of pose assets and
-the studio offers whatever the active release actually provides.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>The Genesis 9 specific box</strong></summary>
-<table><tr><td>
-
-G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields:
-
-- **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
-  **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
-  DTH's **Lacrimal Fluid** material lines up without you doing the manual
-  *Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only
-  matters if you use that material, and an example UE5 tear UV only ships for
-  Genesis 9 — so it's off by default and absent on other generations.
-- **FACS detail strength / Flexion strength** — the G9 strength dials
-  (**FACS Detail Strength** and **Flexion Automatic Strength**), applied at
-  frame 0 as the ROM builds. Daz-style percentages (0–100 %), like every morph
-  value in the studio. Leave them at `100 %` unless your character needs the
-  stock correctives dialed up or down.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>
-<table><tr><td>
-
-- **Daz scenes** — the character's scene, plus any number of extra scenes
-  (outfit/look variants): **drop a `.duf`** on the card to add one; a dialog asks
-  whether to **copy it into the character's folder** (optionally under a
-  subfolder) or leave it where it is. The original scene can't be unlinked;
-  extras can be removed. **Scenes subfolder** moves the whole scenes folder. Each
-  scene has **Open in Daz** — if Daz Studio is already running with a scene
-  loaded, the studio walks you through closing it and the button flips to
-  **Open now** once Daz has quit.
-- **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
-  Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
-  its folder.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Hair items — keep hair out of the export</strong></summary>
-<table><tr><td>
-
-With **Hair items live in the Daz scenes** on (the default), each scene
-carries its full look — hair included — and the hair items you pick per scene
-are kept out of the DTH export: they're hidden right before the DTH Exporter
-runs and shown again afterwards, so hair never rides into the ROM's FBX/Alembic.
-The DTH Exporter Plugin **2.0.1+** unparents the hidden items itself, keeping
-them out of **both** the FBX and the Alembic (older plugins leak the hidden hair
-into the FBX — the character page warns when yours is too old). Turned **off**,
-nothing is excluded — the classic workflow where hair lives in separate Daz
-scene files.
-
-The picker under the scene cards edits the **selected** card's list — the lists
-are **per scene**, since outfit scenes carry different hair. The one generated
-script bakes every scene's list and applies the right one for whichever scene is
-open in Daz; a scene with no items listed exports as-is.
-
-- **List the top fitted item** (e.g. the hair cap) — its children ride along
-  automatically.
-- The dropdown offers the items found in the scene file (hair-ish names first,
-  type to filter). A label the scan doesn't offer can be typed exactly as it
-  appears in Daz's **Scene** pane and added.
-- A listed label that isn't found in the scene turns amber — the export stops
-  loudly on a label missing from the open scene rather than silently shipping a
-  hair-polluted export.
-
-Characters with hair items also get an `Export_Hair_…` script — it exports the
-`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
-worn, with everything else hidden).
 
 </td></tr></table>
 </details>

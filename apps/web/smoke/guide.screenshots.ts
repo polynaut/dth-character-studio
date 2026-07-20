@@ -268,14 +268,15 @@ async function shootTopThrough(page: Page, path: string, endFeature: Locator) {
   })
 }
 
-test('character-page', async ({ page }) => {
+test('character-settings', async ({ page }) => {
   await openCharacter(page)
-  // Taller than 16:9 (an exception) so the linked Daz scene card at the bottom
-  // of the form isn't cut off — down through the Hair-items toggle below it.
+  // The top of the character page ("Character settings"): Genesis/Gender + the
+  // Genesis-9-specific box, the primary Daz scene card, the Hair-items toggle +
+  // selected item, and the linked Houdini project. Taller than 16:9 (an exception).
   await shootTopThrough(
     page,
-    join(OUT, 'character-page.png'),
-    page.getByText('Hair items live in the Daz scenes'),
+    join(OUT, 'character-settings.png'),
+    page.getByRole('button', { name: /Add project/ }),
   )
 })
 
