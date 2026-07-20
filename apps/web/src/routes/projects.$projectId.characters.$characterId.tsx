@@ -508,17 +508,25 @@ function CharacterPage() {
             {/* With several scenes linked, the SELECTED scene rides the title —
                 groom lists and the ROM override follow that selection, and the
                 title row stays visible in the collapsed sticky header (the
-                subtitle below does not). Hidden while renaming. */}
+                subtitle below does not). Hidden while renaming. Clicking it
+                scrolls back to the top, where the scene cards are — the one
+                place the selection can be switched. */}
             {linkedScenes.length > 1 && selectedSceneName && !editingTitle && (
-              <Tag
-                tone="orange"
-                // Optical nudge: the bold 3xl title's visual weight sits below
-                // the line box's geometric center, so dead-center reads high.
-                className="max-w-64 translate-y-[3px] truncate normal-case"
-                title="The Daz scene selected in the scene cards — hair items and the ROM override follow it"
+              <button
+                type="button"
+                className="cursor-pointer"
+                title="The Daz scene selected in the scene cards — hair items and the ROM override follow it. Click to jump to the scene cards and switch."
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               >
-                {selectedSceneName}
-              </Tag>
+                <Tag
+                  tone="orange"
+                  // Optical nudge: the bold 3xl title's visual weight sits below
+                  // the line box's geometric center, so dead-center reads high.
+                  className="max-w-64 translate-y-[3px] truncate normal-case"
+                >
+                  {selectedSceneName}
+                </Tag>
+              </button>
             )}
           </div>
           <p className="title-subtitle text-muted-foreground">
