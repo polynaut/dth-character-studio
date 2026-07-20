@@ -98,12 +98,15 @@ export function useCharacterDraft(options: {
     }
     // Each active scene override generates its own artifacts from the MERGED
     // sections — validate those too, so an overridden/added row can't ship a
-    // broken scene script. Toast-only (no row jump — the offending row lives
-    // in that scene's override view, not necessarily the one on screen).
+    // broken scene script. The row jump rides along: when that scene's
+    // override view is on screen (the usual case — the user just edited it),
+    // the merged rows carry the same pose ids, so the reveal finds the row;
+    // with another scene selected it degrades to opening the section.
     for (const override of activeSceneOverrides(character)) {
       const sceneErrors = romValidationErrors(applySceneOverride(character.sections, override))
       if (sceneErrors.length > 0) {
         const scene = sceneOverrideSlug(override.scenePath)
+        onValidationErrors(sceneErrors)
         toast.error(
           sceneErrors.length === 1
             ? `Scene override “${scene}”: ${sceneErrors[0].message}`
