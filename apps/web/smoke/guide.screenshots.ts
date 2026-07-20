@@ -327,11 +327,42 @@ test('character-bone-scale-toggle', async ({ page }) => {
   // Expand the FBM section (a big custom morph list) — its pose table carries the
   // per-row "Bone scale" column (the reference-skeleton FBX marker).
   await page.getByRole('button', { name: /FBM/ }).click()
-  await page
-    .getByTitle('This morph scales bones — export a reference-skeleton FBX for it')
-    .first()
-    .waitFor()
-  await shoot(page, join(OUT, 'character-bone-scale-toggle.png'), page.locator('table').first())
+  const boxes = page.getByTitle(
+    'This morph scales bones — export a reference-skeleton FBX for it',
+  )
+  await boxes.first().waitFor()
+  // Tick the 2nd pose's Bone scale box, then park the cursor so the column's hover
+  // tooltip closes before the shot.
+  await boxes.nth(1).check()
+  await page.mouse.move(0, 0)
+  await settle(page)
+  await page.setViewportSize({ width: VW, height: 900 })
+  // Un-stick the page chrome so a short crop of the top rows has no pinned overlap
+  // (the character page stacks a header + section title + column headers, all
+  // sticky), then bring the pose table's column headers to the top.
+  await page.evaluate(() => {
+    const h = document.querySelector('header.sticky')
+    if (h) (h as HTMLElement).style.display = 'none'
+    document.querySelectorAll('.sticky').forEach((el) => {
+      ;(el as HTMLElement).style.position = 'static'
+    })
+  })
+  const thead = page.locator('table').first().locator('thead')
+  await thead.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  await settle(page)
+  const top = await thead.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
+  const theadH = await thead.evaluate((el) => el.getBoundingClientRect().height)
+  const rowH = await boxes
+    .nth(0)
+    .locator('xpath=ancestor::tr[1]')
+    .evaluate((el) => el.getBoundingClientRect().height)
+  // Header + exactly 3 pose rows (nth(2).bottom mis-measures with the un-stuck table).
+  const y = Math.max(0, top - 8)
+  const height = Math.ceil(theadH + 3 * rowH + 8)
+  await page.screenshot({
+    path: join(OUT, 'character-bone-scale-toggle.png'),
+    clip: { x: 0, y, width: VW, height },
+  })
 })
 
 test('gen-art-direction', async ({ page }) => {

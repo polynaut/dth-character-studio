@@ -52,7 +52,6 @@ import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { displayPath, normalizePath } from '#/lib/path.ts'
 import {
-  boneScaleRefPoses,
   characterSkinning,
   countPoses,
   presetFramesSignature,
@@ -243,10 +242,6 @@ function CharacterPage() {
   // disk even when nothing changed (handy during development).
   const ctrlHeld = useModifierHeld('Control')
 
-  // Bone-scale frames need the exporter (an export dir) to produce their reference
-  // FBX and resolve its CSV path — flag when some are set but no export dir is.
-  // Which poses count is generation's call (boneScaleRefPoses), not re-derived here.
-  const boneScaleFrames = boneScaleRefPoses(character.sections).length
   // Re-measure the preset ROM block lengths when a preset/custom selection that
   // affects them changes (not on every custom-pose keystroke). Debounced; the
   // last good value is kept until the new one lands, so frame numbers don't
@@ -771,13 +766,6 @@ function CharacterPage() {
             </>
           )}
         </div>
-        {!character.exportPath && boneScaleFrames > 0 && (
-          <p className="mt-3 text-sm text-amber-600 dark:text-amber-500">
-            {boneScaleFrames === 1 ? '1 frame is' : `${boneScaleFrames} frames are`} marked{' '}
-            <strong>bone scale</strong> — set an export directory so the DTH Exporter can generate
-            {boneScaleFrames === 1 ? ' its' : ' their'} reference-skeleton FBX.
-          </p>
-        )}
         <div className="mt-4 flex items-center gap-3">
           <Switch
             checked={character.exportSceneSubfolders}

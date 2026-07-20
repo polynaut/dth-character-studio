@@ -168,7 +168,8 @@ which the Houdini PoseAsset points at for that frame (its *Reference FBX File*
 input) to correct the skeleton to the pose.
 
 Building that FBX by hand used to be the only way. Now just tick **Bone scale** on
-the pose row and the studio handles the rest end to end:
+the pose row and — **when you export through the studio** (an export directory is
+set) — it handles the rest end to end:
 
 - the frame is handed to the **DTH Exporter Plugin**, which writes its
   reference-skeleton FBX automatically — into a `Reference Skeletons` subfolder of
@@ -185,9 +186,11 @@ the pose row and the studio handles the rest end to end:
 &nbsp;
 
 > [!NOTE]
-> Reference frames need an **Export directory** set (see [Build the ROM in
-> Daz](./05-rom-in-daz.md)) — that's where the exporter writes the FBX. The studio
-> warns you if you tick Bone scale without one.
+> **Bone scale only acts when an [Export directory](./05-rom-in-daz.md) is set** —
+> that's when the studio runs the exporter and writes the FBX. With no export
+> directory the studio generates the **ROM only** (no export call is involved), so a
+> ticked Bone scale is simply a no-op — you export the reference skeletons yourself.
+> Set an export directory later and it becomes live, no re-ticking needed.
 
 Only **GEN** and **FBM** poses can be reference frames — the two categories
 DazToHue supports reference skeletons in. DTH's own
@@ -488,9 +491,9 @@ first time a script is generated.
 
 The **Export directory** section drives [direct export](./05-rom-in-daz.md):
 **Choose folder…** opens the picker (starting at the character's Houdini folder
-as guidance), **Clear** turns direct export off again, and an amber warning
-appears when poses are flagged **Bone scale** but no export directory is set —
-their reference-skeleton FBX needs the exporter.
+as guidance), and **Clear** turns direct export off again. With no export
+directory set the studio generates the ROM only — **Bone scale** flags then just
+ride along as no-ops until you set one.
 
 </td></tr></table>
 </details>
