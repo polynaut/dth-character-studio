@@ -12,10 +12,8 @@
   gap: 48px;
   padding-top: 40px;
   padding-bottom: 72px;
-  /* Wider than the site's 1060px container: sidebar (240) + gap (48) + the
-     content column (960px — screenshots at a comfortable 75% of their native
-     1280; click any screenshot for the 100% lightbox) + padding. */
-  max-width: 1320px;
+  /* Sidebar (240) + gap (48) + the 860px content column + padding. */
+  max-width: 1196px;
 }
 
 /* ------------------------------------------------------------- Sidebar */
@@ -65,21 +63,15 @@
 
 .guide-content {
   min-width: 0;
-  max-width: 960px;
-}
-
-/* Text keeps a readable measure — only the screenshot paragraphs and the
-   collapsed detail cards may span the full 960px column. */
-.guide-content > :not(p[align='center']):not(details) {
   max-width: 860px;
 }
 
-/* The app screenshots are 2560px @2x (1280 CSS px): render them at 75% of
-   native (the 960px column), overriding the markdown's width="900"
-   attribute — click for the 100% lightbox (guide.js). External (Daz-side)
-   photos keep their own size — no upscaling. */
+/* The app screenshots are 2560px @2x (1280 CSS px): render them inline at
+   60% of native (768px), overriding the markdown's width="900" attribute —
+   click for the 100% lightbox (guide.js). External (Daz-side) photos keep
+   their own size — no upscaling. */
 .guide-content img[src^='screenshots/'] {
-  width: 100%;
+  width: min(768px, 100%);
 }
 
 .guide-content img {
