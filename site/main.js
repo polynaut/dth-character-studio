@@ -95,6 +95,17 @@ async function initDownload() {
   const alt = document.getElementById('dl-alt');
   const topbarBtn = document.getElementById('topbar-dl');
 
+  const os = detectOS();
+
+  // Unsupported OS (mobile, Linux, unknown): no download button at all — just
+  // the note that this is a desktop app, plus the releases link below it.
+  if (os !== 'windows' && os !== 'mac') {
+    btn.hidden = true;
+    topbarBtn.hidden = true;
+    document.getElementById('dl-note').hidden = false;
+    return;
+  }
+
   let release;
   try {
     release = await fetchLatestRelease();
@@ -103,7 +114,6 @@ async function initDownload() {
   }
 
   const { win, mac } = pickAssets(release.assets);
-  const os = detectOS();
 
   const altParts = [];
   const altLink = (text, href) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
@@ -123,12 +133,9 @@ async function initDownload() {
     sub.textContent = `${release.tag} · ${macArchLabel(mac.name)} · ${megabytes(mac.size)}`;
     if (win) altParts.push(altLink('Also for Windows', win.url));
   } else {
-    // Mobile / Linux / undetectable: keep the releases-page link, name the tag.
+    // Detected OS but its asset is missing from the release — generic fallback.
     label.textContent = 'Download the latest release';
-    sub.textContent =
-      os === 'mobile'
-        ? `${release.tag} · a desktop app for Windows & macOS`
-        : `${release.tag} · for Windows & macOS`;
+    sub.textContent = `${release.tag} · for Windows & macOS`;
   }
 
   altParts.push(altLink('All releases', RELEASES_URL));

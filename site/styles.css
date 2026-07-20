@@ -362,6 +362,21 @@ a:hover {
   align-items: center;
 }
 
+/* The `hidden` attribute must win over the display set by .btn etc. */
+[hidden] {
+  display: none !important;
+}
+
+.dl-note {
+  max-width: 420px;
+  font-size: 0.98rem;
+  color: var(--muted);
+}
+
+.dl-note strong {
+  color: var(--fg);
+}
+
 .dl-alt {
   margin-top: 14px;
   font-size: 0.88rem;
