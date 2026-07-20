@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from '@tanstack/react-router'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PathCode, pathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, Input, Label, LinkedAssetCard, RemoveAssetDialog, Tag, useModifierHeld } from '@dth/ui'
+import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, Tag, useModifierHeld } from '@dth/ui'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import dazLogo from '#/assets/daz-logo.png'
@@ -625,43 +624,34 @@ export function DazSceneField({
       )}
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
-      {pending &&
-        createPortal(
-        // Portaled to <body> — see ImageDialog — so the contained editor body
-        // doesn't become this fixed overlay's containing block.
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => !busy && setPending('')}
+      {pending && (
+        <Modal
+          open
+          onClose={() => setPending('')}
+          title="Copy the Daz scene into the project?"
+          dismissible={!busy}
         >
-          <div
-            className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold">Copy the Daz scene into the project?</h2>
-            <p className="text-sm text-muted-foreground">
-              The selected scene lives outside this project. Copy it into the
-              character's folder?
-            </p>
-            <div>
-              <Label className="mb-1 block">Subfolder</Label>
-              <Input
-                value={subfolder}
-                placeholder="(character folder root)"
-                onChange={(e) => setSubfolder(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" disabled={busy} onClick={() => void applyLink(pending, false)}>
-                Link in place
-              </Button>
-              <Button disabled={busy} onClick={() => void applyLink(pending, true)}>
-                {busy ? 'Copying…' : 'Copy & link'}
-              </Button>
-            </div>
+          <p className="text-sm text-muted-foreground">
+            The selected scene lives outside this project. Copy it into the character's folder?
+          </p>
+          <div>
+            <Label className="mb-1 block">Subfolder</Label>
+            <Input
+              value={subfolder}
+              placeholder="(character folder root)"
+              onChange={(e) => setSubfolder(e.target.value)}
+            />
           </div>
-        </div>,
-        document.body,
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={busy} onClick={() => void applyLink(pending, false)}>
+              Link in place
+            </Button>
+            <Button disabled={busy} onClick={() => void applyLink(pending, true)}>
+              {busy ? 'Copying…' : 'Copy & link'}
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {pendingAdd && (
@@ -698,43 +688,32 @@ export function DazSceneField({
         />
       )}
 
-      {dazWarn !== null &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onClick={() => setDazWarn(null)}
-          >
-            <div
-              className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-              onClick={(e) => e.stopPropagation()}
+      {dazWarn !== null && (
+        <Modal open onClose={() => setDazWarn(null)} title="Daz Studio is already open">
+          <p className="text-sm text-muted-foreground">
+            The studio can't load a scene into a running Daz. To open{' '}
+            <strong>{character.name}</strong>, <strong>close Daz Studio</strong> and give it a few
+            seconds to fully quit — the button below then switches to <strong>Open now</strong> and
+            opens it in a fresh Daz.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {dazStillRunning
+              ? 'Waiting for Daz Studio to close…'
+              : 'Daz Studio is closed — ready to open.'}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant={dazStillRunning ? 'outline' : 'default'}
+              onClick={() => void openAnyway()}
             >
-              <h2 className="text-lg font-semibold">Daz Studio is already open</h2>
-              <p className="text-sm text-muted-foreground">
-                The studio can't load a scene into a running Daz. To open{' '}
-                <strong>{character.name}</strong>, <strong>close Daz Studio</strong> and give it a
-                few seconds to fully quit — the button below then switches to <strong>Open now</strong>{' '}
-                and opens it in a fresh Daz.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {dazStillRunning
-                  ? 'Waiting for Daz Studio to close…'
-                  : 'Daz Studio is closed — ready to open.'}
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant={dazStillRunning ? 'outline' : 'default'}
-                  onClick={() => void openAnyway()}
-                >
-                  {dazStillRunning ? 'Open anyway' : 'Open now'}
-                </Button>
-                <Button variant="outline" onClick={() => setDazWarn(null)}>
-                  Got it
-                </Button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+              {dazStillRunning ? 'Open anyway' : 'Open now'}
+            </Button>
+            <Button variant="outline" onClick={() => setDazWarn(null)}>
+              Got it
+            </Button>
+          </div>
+        </Modal>
+      )}
     </FileDropZone>
   )
 }

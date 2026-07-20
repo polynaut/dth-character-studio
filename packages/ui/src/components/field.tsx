@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { cloneElement, isValidElement, useId } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 
 import { Label } from '../primitives/label.tsx'
 import { cn } from '../cn.ts'
@@ -26,9 +27,27 @@ export function Field({
   className?: string
   children: ReactNode
 }) {
+  const generatedId = useId()
+  const errorId = `${generatedId}-error`
+  // Wire the label to its control: htmlFor needs an id on the child, and the
+  // error line needs aria-describedby — without them the label isn't clickable
+  // and assistive tech never hears the field name or its error. Only possible
+  // when the child is a single element; an explicit child id wins.
+  let control = children
+  let controlId: string | undefined
+  if (isValidElement(children)) {
+    const props = children.props as { id?: string; 'aria-describedby'?: string }
+    controlId = props.id ?? generatedId
+    control = cloneElement(children as ReactElement<Record<string, unknown>>, {
+      id: controlId,
+      'aria-describedby':
+        error !== undefined ? (props['aria-describedby'] ?? errorId) : props['aria-describedby'],
+    })
+  }
   return (
     <div className={className}>
       <Label
+        htmlFor={label ? controlId : undefined}
         className={cn('mb-1 block', !label && 'invisible')}
         aria-hidden={label ? undefined : true}
       >
@@ -39,9 +58,11 @@ export function Field({
           with a reserved min-height — even while valid (empty string) — so an
           error appearing later doesn't shift the layout. */}
       <div>
-        {children}
+        {control}
         {error !== undefined ? (
-          <p className="mt-1 min-h-4 text-xs text-destructive">{error}</p>
+          <p id={errorId} className="mt-1 min-h-4 text-xs text-destructive">
+            {error}
+          </p>
         ) : null}
       </div>
     </div>

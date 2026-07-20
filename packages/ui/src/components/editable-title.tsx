@@ -82,21 +82,19 @@ export function EditableTitle({
 
   return (
     <span className="group/title relative inline-flex max-w-full">
-      <h1
-        role="button"
-        tabIndex={0}
-        title="Rename"
-        aria-label={`Rename — ${name}`}
-        onClick={startEdit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            startEdit()
-          }
-        }}
-        className="cursor-pointer text-3xl font-bold"
-      >
-        {name}
+      {/* A real button INSIDE the heading: role="button" on the <h1> itself
+          erased the page's main heading from the accessibility tree (no
+          heading-nav landmark). The button inherits the h1's font. */}
+      <h1 className="text-3xl font-bold">
+        <button
+          type="button"
+          title="Rename"
+          aria-label={`Rename — ${name}`}
+          onClick={startEdit}
+          className="cursor-pointer text-left [font:inherit]"
+        >
+          {name}
+        </button>
       </h1>
       <span
         aria-hidden

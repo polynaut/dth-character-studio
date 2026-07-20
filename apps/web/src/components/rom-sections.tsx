@@ -305,31 +305,39 @@ export function RomSections({
                 ancestor `contain: layout paint` re-scopes position:fixed but NOT
                 sticky (sticky binds to the scrollport, which containment doesn't
                 create), and no ancestor up to the page scroller has overflow. */}
-            <div
-              className="sticky top-[128px] z-[5] flex cursor-pointer items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
-              onClick={() => setOpen((o) => ({ ...o, [section]: !isOpen }))}
-            >
-              <ChevronRight
-                className={`size-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}
-              />
-              <span className="w-12 font-mono text-sm font-semibold">{section}</span>
-              <span className="font-medium">{SECTION_LABELS[section]}</span>
-              {missingPresetAsset && (
-                <span
-                  className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
-                  title={`The installed DTH release ships no ${SECTION_LABELS[section]} preset for ${genesis} — generation will fail. Disable this section or switch it to a custom asset.`}
-                >
-                  no {genesis} asset
+            <div className="sticky top-[128px] z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none">
+              {/* A real accordion BUTTON (was a click-only div): the core editing
+                  surface must be focusable and Enter/Space-operable, and announce
+                  its state via aria-expanded. The Switch stays OUTSIDE it — a
+                  nested interactive control would be invalid HTML. */}
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => setOpen((o) => ({ ...o, [section]: !isOpen }))}
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+              >
+                <ChevronRight
+                  className={`size-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                />
+                <span className="w-12 font-mono text-sm font-semibold">{section}</span>
+                <span className="font-medium">{SECTION_LABELS[section]}</span>
+                {missingPresetAsset && (
+                  <span
+                    className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
+                    title={`The installed DTH release ships no ${SECTION_LABELS[section]} preset for ${genesis} — generation will fail. Disable this section or switch it to a custom asset.`}
+                  >
+                    no {genesis} asset
+                  </span>
+                )}
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {tiedToJcm
+                    ? effectiveEnabled
+                      ? 'enabled with JCM'
+                      : 'disabled with JCM'
+                    : sectionSummary(config)}
                 </span>
-              )}
-              <span className="ml-auto text-xs text-muted-foreground">
-                {tiedToJcm
-                  ? effectiveEnabled
-                    ? 'enabled with JCM'
-                    : 'disabled with JCM'
-                  : sectionSummary(config)}
-              </span>
-              <span onClick={(e) => e.stopPropagation()}>
+              </button>
+              <span>
                 <Switch
                   checked={effectiveEnabled}
                   disabled={tiedToJcm}
