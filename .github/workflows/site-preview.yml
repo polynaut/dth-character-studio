@@ -14,6 +14,12 @@
 
 name: 🔍 Pull Request Pages preview
 
+# Previews deploy ONLY for PRs that change what the published page actually
+# serves — the same content inputs pages.yml deploys to production (keep the
+# two lists in sync): the landing page (site/**), the guide source rendered
+# into it (docs/guide/**, incl. regenerated screenshots), and the guide build
+# script. The one non-content exception is this workflow file itself — a PR
+# changing the preview pipeline must prove it still deploys.
 on:
   pull_request:
     paths:
