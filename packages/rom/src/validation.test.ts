@@ -97,8 +97,8 @@ describe('romValidationErrors', () => {
     s.JCM.enabled = true
     s.JCM.mode = 'custom'
     s.JCM.groups = [
-      { ...group([pose('KneeBend', ['thigh_l'])]), id: 'gl', suffix: 'left' },
-      { ...group([pose('KneeBend', ['thigh_r'])]), id: 'gr', suffix: 'right' },
+      { ...group([pose('KneeBend', ['thigh_l'])]), id: 'gl', suffix: 'left', label: 'thigh_l' },
+      { ...group([pose('KneeBend', ['thigh_r'])]), id: 'gr', suffix: 'right', label: 'thigh_r' },
     ]
     // The group suffix appends _l/_r to the Unreal morph name — no collision.
     expect(romValidationErrors(s)).toEqual([])
@@ -110,8 +110,8 @@ describe('romValidationErrors', () => {
     s.JCM.enabled = true
     s.JCM.mode = 'custom'
     s.JCM.groups = [
-      { ...group([pose('Smile_l', ['head_bs_SmileL'])]), id: 'gc', suffix: 'centre' },
-      { ...group([pose('Smile', ['head_bs_Smile'])]), id: 'gl', suffix: 'left' },
+      { ...group([pose('Smile_l', ['head_bs_SmileL'])]), id: 'gc', suffix: 'centre', label: 'head' },
+      { ...group([pose('Smile', ['head_bs_Smile'])]), id: 'gl', suffix: 'left', label: 'head' },
     ]
     const errs = romValidationErrors(s)
     expect(errs).toHaveLength(1)
@@ -124,5 +124,140 @@ describe('romValidationErrors', () => {
     s.JCM.enabled = true
     s.JCM.mode = 'preset'
     expect(romValidationErrors(s)).toEqual([])
+  })
+})
+
+describe('romValidationErrors — section-level config errors', () => {
+  it('flags FAC preset without a JCM base ROM (the FAC frames live inside the base)', () => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.FAC.enabled = true
+    s.FAC.mode = 'preset'
+    const errs = romValidationErrors(s)
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatchObject({
+      section: 'FAC',
+      field: 'config',
+      groupId: '',
+      poseId: '',
+      relativeFrame: -1,
+    })
+    expect(errs[0].message).toMatch(/JCM base/i)
+    // Config errors come FIRST — before any frame-positioned cell error.
+    s.FBM.enabled = true
+    s.FBM.mode = 'custom'
+    s.FBM.groups = [group([pose('', ['ok'])])]
+    expect(romValidationErrors(s).map((e) => e.field)).toEqual(['config', 'name'])
+  })
+
+  it('accepts FAC preset when JCM provides a base (preset OR a custom base .duf)', () => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.FAC.enabled = true
+    s.FAC.mode = 'preset'
+    s.JCM.enabled = true
+    s.JCM.mode = 'preset'
+    expect(romValidationErrors(s)).toEqual([])
+    s.JCM.mode = 'custom'
+    s.JCM.customAssetPath = 'D:/lib/My Base.duf'
+    expect(romValidationErrors(s)).toEqual([])
+    // Custom JCM WITHOUT a base .duf is not a base ROM — flagged again.
+    s.JCM.customAssetPath = '   '
+    expect(romValidationErrors(s).map((e) => e.field)).toEqual(['config'])
+  })
+})
+
+describe('romValidationErrors — group driver-bone labels (the CSV bones column)', () => {
+  const withGroup = (section: RomSection, label: string) => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s[section].enabled = true
+    s[section].mode = 'custom'
+    s[section].groups = [{ ...group([pose('Bend', ['prop_a'])]), label }]
+    return s
+  }
+
+  it('flags an empty label on JCM and PHY custom groups (once per group)', () => {
+    for (const section of ['JCM', 'PHY'] as const) {
+      const errs = romValidationErrors(withGroup(section, '  '))
+      expect(errs).toHaveLength(1)
+      expect(errs[0]).toMatchObject({ section, field: 'label', groupId: 'g', poseId: '' })
+      expect(errs[0].message).toMatch(/driver bone/i)
+      expect(romValidationErrors(withGroup(section, 'thigh_l'))).toEqual([])
+    }
+  })
+
+  it('does not require a label on GEN groups (the ground-truth GP template ships label-less ones)', () => {
+    expect(romValidationErrors(withGroup('GEN', ''))).toEqual([])
+  })
+
+  it('does not flag an EMPTY JCM group (it emits no rows at all)', () => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.JCM.enabled = true
+    s.JCM.mode = 'custom'
+    s.JCM.groups = [group([])]
+    expect(romValidationErrors(s)).toEqual([])
+  })
+})
+
+describe('romValidationErrors — art-direction morph names', () => {
+  const withArtDirection = (prop: string) => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.GEN.enabled = true
+    s.GEN.mode = 'preset'
+    s.GEN.artDirection = [
+      {
+        id: 'ad1',
+        rom: 'gp',
+        frame: 100,
+        name: 'AnusOpen',
+        morphs: [{ node: 'GoldenPalace_G9', prop, value: 0.9 }],
+      },
+    ]
+    return s
+  }
+
+  it('flags an empty art-direction morph name (it feeds the runtime verbatim)', () => {
+    const errs = romValidationErrors(withArtDirection('   '))
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatchObject({
+      section: 'GEN',
+      field: 'morphName',
+      poseId: 'ad1',
+      morphIndex: 0,
+      relativeFrame: -1,
+    })
+    expect(errs[0].message).toMatch(/AnusOpen/)
+    expect(romValidationErrors(withArtDirection('GP9_Anus_Open'))).toEqual([])
+  })
+
+  it('ignores art direction when GEN is custom/disabled (it only ships with the preset)', () => {
+    const s = withArtDirection('')
+    s.GEN.mode = 'custom'
+    expect(romValidationErrors(s)).toEqual([])
+  })
+})
+
+describe('romValidationErrors — reserved (template-baked) pose names', () => {
+  it('flags a custom pose that resolves to a name the preset ROM already exports', () => {
+    const s = customSection('FBM', [pose('Fence01', ['body_bs_X'])])
+    const errs = romValidationErrors(s, ['Fence01'])
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatchObject({ section: 'FBM', field: 'name', relativeFrame: 0 })
+    expect(errs[0].message).toMatch(/preset ROM/i)
+    // Without the reservation the same pose is fine.
+    expect(romValidationErrors(s)).toEqual([])
+  })
+
+  it('matches on the RESOLVED name — a left-group pose collides with a reserved _l name', () => {
+    const s = defaultSections()
+    for (const key of Object.keys(s) as Array<RomSection>) s[key].enabled = false
+    s.EXP.enabled = true
+    s.EXP.mode = 'custom'
+    s.EXP.groups = [{ ...group([pose('BallBD40', ['prop_a'])]), suffix: 'left' }]
+    expect(romValidationErrors(s, ['BallBD40_l'])).toHaveLength(1)
+    expect(romValidationErrors(s, ['BallBD40'])).toEqual([])
   })
 })

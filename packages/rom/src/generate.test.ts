@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildArtDirectionData,
   buildFbmData,
+  facPresetSupport,
   generateAll,
   GENERATION_TEMPLATE_CSV,
   poseAssetCsvValidated,
@@ -10,6 +11,7 @@ import {
   referenceFrames,
   resolveRomPaths,
   sectionPresetAvailable,
+  templateBakedPoseNames,
   toCharacterScriptDsa,
   toExportScriptDsa,
   toGroomExportScriptDsa,
@@ -39,6 +41,7 @@ import {
   sectionsFromFlatFrames,
 } from './frames'
 import { characterSchema, defaultSections, GENERATIONS } from './types'
+import { romValidationErrors } from './validation'
 import type { GenesisVersion } from './types'
 
 import type { PresetFrames } from './frames'
@@ -703,6 +706,91 @@ describe('sectionPresetAvailable — availability matches resolveRomPaths resolu
   })
 })
 
+describe('facPresetSupport — availability and mouth resolution are ONE rule', () => {
+  // The two catalogs where the old pair of signals (availability: a JCM base
+  // with includesFac; mouth resolution: any FAC-section asset) DIVERGED.
+  const jcmBase = (includesFac: boolean) => ({
+    name: includesFac ? 'G9 DQS JCM FAC - Base' : 'G9 DQS JCM - Base',
+    relPath: includesFac ? 'fac-base.duf' : 'base.duf',
+    genesis: 'G9' as const,
+    skinning: 'dqs' as const,
+    section: 'JCM' as const,
+    includesFac,
+  })
+  const mouth = {
+    name: 'G9 DQS JCM FAC - Mouth',
+    relPath: 'mouth.duf',
+    genesis: 'G9' as const,
+    skinning: 'dqs' as const,
+    section: 'FAC' as const,
+    includesFac: false,
+  }
+  /** FAC-section mouth shipped, but every JCM base is FAC-less. */
+  const mouthNoFacBase = { folder: 'D:/P', assets: [jcmBase(false), mouth] }
+  /** FAC-capable base shipped, but no FAC-section (mouth) asset — the G8.1 shape. */
+  const facBaseNoMouth = { folder: 'D:/P', assets: [jcmBase(true)] }
+
+  it('a mouth without any FAC-capable base: unavailable AND no mouth resolves', () => {
+    // The mouth companion only adds mouth-node keys over base FAC frames — with
+    // no base carrying them, resolving it would hand the runtime a mouth pass
+    // over frames that don't exist.
+    expect(facPresetSupport(mouthNoFacBase.assets, 'G9').available).toBe(false)
+    expect(sectionPresetAvailable('FAC', mouthNoFacBase, 'G9', 'female', [])).toBe(false)
+    const paths = resolveRomPaths(makeCharacter(), mouthNoFacBase)
+    expect(paths.jcm).toContain('base.duf')
+    expect(paths.mouth).toBeUndefined()
+  })
+
+  it('a FAC-capable base without a mouth: available, with simply no companion', () => {
+    expect(facPresetSupport(facBaseNoMouth.assets, 'G9').available).toBe(true)
+    expect(sectionPresetAvailable('FAC', facBaseNoMouth, 'G9', 'female', [])).toBe(true)
+    const paths = resolveRomPaths(makeCharacter(), facBaseNoMouth)
+    expect(paths.jcm).toContain('fac-base.duf')
+    expect(paths.mouth).toBeUndefined()
+  })
+
+  it('custom-JCM mouth resolution consumes the same rule (no FAC base → no mouth)', () => {
+    const sections = makeSections()
+    sections.JCM.mode = 'custom'
+    sections.JCM.customAssetPath = 'D:/lib/My Base.duf'
+    const character = makeCharacter({ sections })
+    expect(resolveRomPaths(character, mouthNoFacBase).mouth).toBeUndefined()
+    // With a FAC-capable base in the catalog the companion resolves as before.
+    const withBoth = { folder: 'D:/P', assets: [jcmBase(true), mouth] }
+    expect(resolveRomPaths(character, withBoth).mouth).toContain('mouth.duf')
+  })
+})
+
+describe('bIncludeFAC ↔ frame contribution (FAC rides in the JCM base)', () => {
+  it('FAC preset with JCM disabled emits bIncludeFAC false (no base = no FAC frames)', () => {
+    const sections = makeSections()
+    sections.JCM.enabled = false // FAC stays enabled+preset from defaults
+    const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections }), {}, FRAMES).content)
+    expect(config.bIncludeJCM).toBe(false)
+    expect(config.bIncludeFAC).toBe(false)
+  })
+
+  it('a custom JCM base .duf still counts as a base for FAC', () => {
+    const sections = makeSections()
+    sections.JCM.mode = 'custom'
+    sections.JCM.customAssetPath = 'D:/lib/My Base.duf'
+    const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections })).content)
+    expect(config.bIncludeFAC).toBe(true)
+  })
+
+  it('never emits mouthRomPath when bIncludeFAC is off', () => {
+    const sections = makeSections()
+    sections.JCM.enabled = true
+    sections.JCM.mode = 'custom'
+    sections.JCM.customAssetPath = '' // custom without a base .duf → no base ROM
+    const config = characterConfig(
+      toCharacterScriptDsa(makeCharacter({ sections }), { mouth: 'P/Mouth.duf' }).content,
+    )
+    expect(config.bIncludeFAC).toBe(false)
+    expect(config.mouthRomPath).toBeUndefined()
+  })
+})
+
 describe('generation method groups in the FBM data', () => {
   it('emits a groups array for additive/cumulative groups with correct frame ranges', () => {
     const sections = makeSections()
@@ -864,6 +952,48 @@ describe('toPoseAssetCsv', () => {
       'FBM,2,BodyTone,',
       'FBM,3,GluteUpDown,',
     ])
+  })
+
+  it('emits a GROUP header per group — MULTIPLE groups in one section, frames continuous', () => {
+    // A section with several groups must emit one header row per group, each
+    // BEFORE its first pose, with the pose frames running continuously across
+    // the group boundary (the header rows carry no frame).
+    const sections = makeSections()
+    sections.EXP.enabled = true
+    sections.EXP.groups = [
+      {
+        id: 'e1',
+        label: '',
+        suffix: 'left',
+        method: 'individual',
+        calculateFrom: 'default',
+        poses: [
+          { id: 'e1p1', name: 'BrowUp', morphs: [], boneScaleRef: false },
+          { id: 'e1p2', name: 'BrowDown', morphs: [], boneScaleRef: false },
+        ],
+      },
+      {
+        id: 'e2',
+        label: '',
+        suffix: 'right',
+        method: 'additive',
+        calculateFrom: 'restPose',
+        poses: [{ id: 'e2p1', name: 'EyeClosed', morphs: [], boneScaleRef: false }],
+      },
+    ]
+    const file = toPoseAssetCsv(makeCharacter({ sections }), FRAMES, '2.0')
+    const lines = file.content.trimEnd().split('\n')
+    const start = lines.indexOf('EXPGROUP,0,1,0')
+    expect(start).toBeGreaterThan(-1)
+    expect(lines.slice(start, start + 5)).toEqual([
+      'EXPGROUP,0,1,0', // calc default, method individual, suffix left
+      'EXP,328,BrowUp',
+      'EXP,329,BrowDown',
+      'EXPGROUP,1,2,2', // calc restPose, method additive, suffix right
+      'EXP,330,EyeClosed',
+    ])
+    // The following flat FBM section continues right after — no frame skipped.
+    expect(lines).toContain('FBM,331,BodyTone,')
   })
 
   it('a male/DK character continues custom frames after base+dk (the dk term pinned)', () => {
@@ -1079,6 +1209,19 @@ describe('toPoseAssetCsv — G9 baked-length guard', () => {
     expect(poseAssetCsvValidated(makeCharacter(), '2.0')).toBe(false)
     expect(poseAssetCsvValidated(makeCharacter(), '2.0', 328)).toBe(true)
   })
+
+  it('an UNMEASURED GP with GP included is not validated (same polarity as the base)', () => {
+    // A dead `gpFrames !== undefined` escape used to wave an unmeasured GP
+    // through as validated — the opposite polarity of the base check. Every
+    // caller measures gp, so unmeasured now uniformly means "not validated".
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    const character = makeCharacter({ sections })
+    expect(poseAssetCsvValidated(character, '2.0', 328)).toBe(false)
+    expect(poseAssetCsvValidated(character, '2.0', 328, 104)).toBe(true)
+    // GP not included → the gp measurement stays irrelevant either way.
+    expect(poseAssetCsvValidated(makeCharacter(), '2.0', 328, undefined)).toBe(true)
+  })
 })
 
 // The product invariant, guarded across a config matrix: the Houdini PoseAsset CSV
@@ -1094,6 +1237,19 @@ describe('frame alignment: PoseAsset CSV ↔ Daz config (no drift)', () => {
       patch: (s) => { s.GEN.enabled = true; s.PHY.enabled = true; s.PHY.mode = 'preset' },
     },
     { label: 'base-less (FBM only)', patch: (s) => { s.JCM.enabled = false } },
+    {
+      // GP/PHY preset blocks WITHOUT a base ROM: presetEndFrame starts from -1
+      // (no base) and still sums the gp + phys terms, so the first custom frame
+      // lands at 104 + 43 = 147 in BOTH artifacts.
+      label: 'base-less GEN + PHY (preset blocks without a base ROM)',
+      patch: (s) => {
+        s.JCM.enabled = false
+        s.FAC.enabled = false
+        s.GEN.enabled = true
+        s.PHY.enabled = true
+        s.PHY.mode = 'preset'
+      },
+    },
   ]
   for (const { label, patch } of cases) {
     it(`custom frames start at the measured preset offset — ${label}`, () => {
@@ -1321,6 +1477,58 @@ describe('groom items (hair kept out of the export)', () => {
     // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
     expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
     expect(script.content).toContain('} finally {')
+  })
+})
+
+describe('templateBakedPoseNames — the names the preset blocks reserve', () => {
+  it('collects baked names with their group suffix applied, matching the CSV rows', () => {
+    const names = templateBakedPoseNames(makeCharacter())
+    // Flat RET rows (before any group header) carry no suffix.
+    expect(names).toContain('RestPose')
+    expect(names).toContain('UnrealPose')
+    // JCMGROUP,0,0,ball_l is a LEFT group → its poses resolve with _l.
+    expect(names).toContain('BallBD40_l')
+    // GEN excluded while GP is off.
+    expect(names.some((n) => n.startsWith('Fence'))).toBe(false)
+  })
+
+  it('includes the GP rows when GP is included and the PHY block when physics is on', () => {
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    sections.PHY.enabled = true
+    sections.PHY.mode = 'preset'
+    const names = templateBakedPoseNames(makeCharacter({ sections }))
+    // GENGROUP,0,0,1 (centre) precedes ClitorisErect → no suffix.
+    expect(names).toContain('ClitorisErect')
+    // The physics block's first group is LEFT (PHYGROUP,0,0,breast_l).
+    expect(names).toContain('BreastOut_l')
+  })
+
+  it('is empty when no validated template applies (experimental layouts ship no baked rows)', () => {
+    const sections = makeSections()
+    sections.JCM.enabled = false
+    expect(templateBakedPoseNames(makeCharacter({ sections }))).toEqual([])
+    expect(templateBakedPoseNames(makeCharacter({ genesis: 'G8' }))).toEqual([])
+  })
+
+  it('feeds romValidationErrors: a custom FBM pose named after a baked GP pose is flagged', () => {
+    // The finding-13c scenario: with GP included, a custom FBM pose called
+    // "Fence01" would silently overwrite the baked GP morph in Unreal.
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    sections.FBM.groups[0].poses[0].name = 'Fence01'
+    sections.FBM.groups[0].poses[1].name = 'GluteUpDown' // Houdini-safe name
+    const character = makeCharacter({ sections })
+    const errs = romValidationErrors(character.sections, templateBakedPoseNames(character))
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatchObject({ section: 'FBM', field: 'name', relativeFrame: 0 })
+    expect(errs[0].message).toMatch(/preset ROM/i)
+    // Without GP the GEN names are not reserved — the same pose is fine.
+    const noGp = makeSections()
+    noGp.FBM.groups[0].poses[0].name = 'Fence01'
+    noGp.FBM.groups[0].poses[1].name = 'GluteUpDown'
+    const plain = makeCharacter({ sections: noGp })
+    expect(romValidationErrors(plain.sections, templateBakedPoseNames(plain))).toEqual([])
   })
 })
 
