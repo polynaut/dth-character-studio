@@ -104,7 +104,7 @@ token by **SimplySign Desktop**, which runs headless in a container on polynaut'
 
 ```
 release.yml
-  build     (windows-latest)             → unsigned NSIS installer artifact
+  build-win (windows-latest)             → unsigned NSIS installer artifact
   build-mac (macos-latest, opt-in)       → universal .app + .dmg, Developer-ID
                                            signed + Apple-notarized inline
   sign      (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over the

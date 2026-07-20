@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for every DTH Character Studio window (Home + per-project). NOTE: the fs `{ \"path\": \"**\" }` scopes below let the webview read/write/delete anywhere via the fs plugin WITHOUT any Rust command, so the Rust recursive-delete rails are defense against a poisoned settings.json/.dcsp, not against the webview — the real mitigation is the strict CSP in tauri.conf.json. This breadth is accepted risk (see CLAUDE.md); do not weaken the scopes. Full write-up: docs/devops.md → 'Security posture'.",
+  "description": "Default capabilities for every DTH Character Studio window (Home + per-project). NOTE: the fs `**` + `/**` scopes below let the webview read/write/delete anywhere via the fs plugin WITHOUT any Rust command, so the Rust recursive-delete rails are defense against a poisoned settings.json/.dcsp, not against the webview — the real mitigation is the strict CSP in tauri.conf.json. Both globs are required: a not-yet-existing path can't be canonicalised, so the fs plugin scope-checks it as a RAW string, and bare `**` doesn't match a POSIX absolute path's leading `/` (that's `/**`) — without it, creating any new nested path on macOS/Linux fails with 'forbidden path'. This breadth is accepted risk (see CLAUDE.md); do not weaken the scopes. Full write-up: docs/devops.md → 'Security posture'.",
   "windows": ["*"],
   "permissions": [
     "core:default",
@@ -14,43 +14,43 @@
     "fs:default",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-read-dir",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-remove",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-rename",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-stat",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:allow-exists",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     },
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "/**" }]
     }
   ]
 }

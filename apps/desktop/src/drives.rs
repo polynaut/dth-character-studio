@@ -7,6 +7,12 @@
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+// The fields are read only by the Windows `ensure_network_drives`; on other
+// platforms the command accepts the mappings (uniform signature) but ignores
+// them — network-drive remapping is a Windows-only concern — so the fields are
+// intentionally dead there. Scope the allow to non-Windows so a genuinely
+// unused field on Windows would still warn.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) struct DriveMapping {
     /// Drive specifier, e.g. "X:".
     drive: String,
