@@ -9,24 +9,21 @@ export { UiConfigProvider, useUiConfig } from './config.tsx'
 export type { UiConfig } from './config.tsx'
 
 // Primitives
-export { Button, buttonVariants } from './primitives/button.tsx'
+// The public surface is only what the app consumes. Internal-only helpers
+// (buttonVariants, the Select scroll buttons / group / label / separator) stay
+// in their own modules but are deliberately NOT re-exported here.
+export { Button } from './primitives/button.tsx'
 export { Input } from './primitives/input.tsx'
 export { Label } from './primitives/label.tsx'
 export {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectScrollDownButton,
-  SelectScrollUpButton,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from './primitives/select.tsx'
 export { Modal } from './primitives/modal.tsx'
 export { SidePanel } from './primitives/side-panel.tsx'
-export { Slider } from './primitives/slider.tsx'
 export { Switch } from './primitives/switch.tsx'
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './primitives/tabs.tsx'
 export { Textarea } from './primitives/textarea.tsx'

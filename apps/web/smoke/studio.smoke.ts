@@ -118,3 +118,30 @@ test('project window: character editor measures, edits and saves both artifacts'
   // (and therefore the map it encodes) knows about.
   expect(await unhandledCommands(page)).toEqual([])
 })
+
+test('project window: inline rename moves the folder and regenerates the script', async ({
+  page,
+}) => {
+  await page.addInitScript(installTauriMock, buildSeed({ activeProjectFile: P.dcsp }))
+  await page.goto('/')
+  await page.getByRole('link', { name: /Electra/ }).click()
+  await expect(page.getByText('G9 · DQS · 0 custom ROM frames')).toBeVisible()
+
+  // Rename via the title: the heading is a real button (EditableTitle), which
+  // opens an inline input; Enter commits → onRenameCharacter saves + regenerates.
+  await page.getByRole('button', { name: /Rename — Electra/ }).click()
+  const input = page.getByRole('textbox').first()
+  await input.fill('Kira')
+  await input.press('Enter')
+  await expect(page.getByText(/Renamed to “Kira”/)).toBeVisible()
+
+  // The definition + generated Daz script now live under the new name; the
+  // old-named script is gone (regeneration with previousName cleans it up).
+  const written = await filesWritten(page)
+  const kiraFolder = `${P.project}/Kira`
+  expect(written).toContain(`${kiraFolder}/Kira.json`)
+  expect(written).toContain(`C:/e2e/dazlib/Scripts/DTH-Character-Studio/Smoke Project/Kira/ROM_Kira_G9.dsa`)
+  expect(JSON.parse((await fileContent(page, `${kiraFolder}/Kira.json`))!).name).toBe('Kira')
+
+  expect(await unhandledCommands(page)).toEqual([])
+})

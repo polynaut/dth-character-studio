@@ -282,6 +282,37 @@ export function sanitizePoseName(name: string): string {
   return name.replace(/[^A-Za-z0-9_]+/g, '')
 }
 
+/** Indent every non-empty line of a generated-script block by one 4-space level. */
+function indentLines(block: string): string {
+  return block
+    .split('\n')
+    .map((line) => (line ? `    ${line}` : line))
+    .join('\n')
+}
+
+/**
+ * The recursive "hide this node + all its children, remembering exactly what we
+ * hid so it can be restored" DzScript snippet, at a 4-space base indent. Shared
+ * by the ROM export's hide arm ({@link buildExportBlock}) and the standalone
+ * groom export ({@link toGroomExportScriptDsa}) — the names are parameterised so
+ * each keeps its own (`dthGroomHideTree`/`dthGroomHidden` vs `dthHideTree`/
+ * `dthHidden`) while the body lives in ONE place. Callers re-indent via
+ * {@link indentLines} where they need a deeper base.
+ */
+function hideTreeSnippet(fnName: string, hiddenVar: string): string {
+  return `    var ${hiddenVar} = [];
+    var ${fnName} = function (oNode) {
+        if (!oNode) return;
+        var dthVisible = true;
+        try { if (typeof oNode.isVisible == "function") dthVisible = oNode.isVisible(); } catch (eV) {}
+        if (dthVisible) {
+            try { oNode.setVisible(false); ${hiddenVar}.push(oNode); } catch (eH) {}
+        }
+        var dthKids = oNode.getNodeChildren(false);
+        for (var dthC = 0; dthC < dthKids.length; dthC++) ${fnName}(dthKids[dthC]);
+    };`
+}
+
 /**
  * Strip the characters that could break OUT of a `//` comment line in a generated
  * Daz script — CR/LF and the Unicode line separators U+2028/U+2029 that Daz's
@@ -677,11 +708,7 @@ function buildExportBlock(
   const exportCore = `    dthExportAction.doExport(dthExportDir, ${dazJson(exporterFigureName(character))}, ${dazJson(refFrames)}, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
-  const indentBlock = (block: string) =>
-    block
-      .split('\n')
-      .map((line) => (line ? `    ${line}` : line))
-      .join('\n')
+  const indentBlock = indentLines
   const exportBody =
     Object.keys(groomMap).length === 0
       ? exportCore
@@ -699,17 +726,7 @@ ${indentBlock(indentBlock(exportCore))}    };
     var dthGroomByScene = ${dazJson(groomMap)};
     var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
-    var dthGroomHidden = [];
-    var dthGroomHideTree = function (oNode) {
-        if (!oNode) return;
-        var dthVisible = true;
-        try { if (typeof oNode.isVisible == "function") dthVisible = oNode.isVisible(); } catch (eV) {}
-        if (dthVisible) {
-            try { oNode.setVisible(false); dthGroomHidden.push(oNode); } catch (eH) {}
-        }
-        var dthKids = oNode.getNodeChildren(false);
-        for (var dthC = 0; dthC < dthKids.length; dthC++) dthGroomHideTree(dthKids[dthC]);
-    };
+${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
     if (dthGroomLabels.length == 0) {
         print("No groom list for the open scene - exporting as-is.");
         dthRunExport();
@@ -1163,17 +1180,7 @@ ${figureAutoSelectSnippet(character.genesis)}if (!dthAction) {
 ${sceneSubfolderBlock}        // HIDE the non-groom wearables (script Ctrl+click: node + children,
         // exact flags restored) — plugin 2.0+ skips hidden nodes. The groom
         // stays fitted AND visible, exported as worn.
-        var dthHidden = [];
-        var dthHideTree = function (oNode) {
-            if (!oNode) return;
-            var dthVisible = true;
-            try { if (typeof oNode.isVisible == "function") dthVisible = oNode.isVisible(); } catch (eV) {}
-            if (dthVisible) {
-                try { oNode.setVisible(false); dthHidden.push(oNode); } catch (eH) {}
-            }
-            var dthKids = oNode.getNodeChildren(false);
-            for (var dthC = 0; dthC < dthKids.length; dthC++) dthHideTree(dthKids[dthC]);
-        };
+${indentLines(hideTreeSnippet('dthHideTree', 'dthHidden'))}
         for (var dthI = 0; dthI < Scene.getNumNodes(); dthI++) {
             var dthN = Scene.getNode(dthI);
             if (!dthN || typeof dthN.getFollowTarget != "function") continue;

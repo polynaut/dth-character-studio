@@ -1,4 +1,4 @@
-import { InfoPopup } from '@dth/ui'
+import { Button, InfoPopup } from '@dth/ui'
 import { PathCode } from '#/components/path-code.tsx'
 import { ReportClose } from '#/components/install-controls.tsx'
 import { displayPath } from '#/lib/path.ts'
@@ -26,13 +26,18 @@ function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
  *  duplicate/version groups are the only thing Apply acts on (quarantine). */
 export function DedupReportList({
   report,
+  busy,
   keeperOverrides,
   onChooseKeeper,
+  onAcceptShared,
   onClose,
 }: {
   report: DedupReport
+  busy?: boolean
   keeperOverrides: Set<string>
   onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
+  /** Accept every shared file in a product group as legitimately shared. */
+  onAcceptShared?: (rels: Array<string>) => void
   onClose?: () => void
 }) {
   const clean = report.conflicts.length === 0 && report.duplicates.length === 0
@@ -134,8 +139,11 @@ export function DedupReportList({
             <InfoPopup label="Shared files — more information">
               Files shipped by two different products at different sizes. The install resolves these
               automatically — <strong>newer Genesis wins</strong>, then the <strong>bigger</strong>{' '}
-              file — installs the winner and leaves the rest, so they never show as “to copy”.
-              Nothing to do here; this just shows what gets picked (<span className="text-emerald-600 dark:text-emerald-500">◀ keeps</span>).
+              file — installs the winner and leaves the rest, so they never show as “to copy” (the{' '}
+              <span className="text-emerald-600 dark:text-emerald-500">◀ keeps</span> marker shows
+              which). If a group is legitimately shared and you'd rather it stop appearing here,{' '}
+              <strong>Accept</strong> it — the scan/install then treats those files as in-sync
+              (whatever's installed stays). Files are never edited.
             </InfoPopup>
           </p>
           <ul className="space-y-2">
@@ -159,6 +167,18 @@ export function DedupReportList({
                     <span className="text-xs text-muted-foreground">
                       {g.items.length} shared file{g.items.length === 1 ? '' : 's'} differ
                     </span>
+                    {onAcceptShared && report.dryRun && (
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        className="ml-auto shrink-0"
+                        disabled={busy}
+                        title="Mark these shared files as legitimately shared — they stop appearing here (files are never edited)"
+                        onClick={() => onAcceptShared(g.items.map((c) => c.rel))}
+                      >
+                        Accept
+                      </Button>
+                    )}
                   </div>
                   <details className="mt-1">
                     <summary className="cursor-pointer text-xs text-muted-foreground select-none">

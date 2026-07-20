@@ -2,16 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { CircleCheck, Download, Plus } from 'lucide-react'
 
-import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
+import { Button, Field, InfoPopup, Input, Label, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
   detectDimManifestsFolder,
-  ensureNetworkDrives,
   fetchActiveProject,
   fetchAppDataFolder,
-  fetchKnownDrives,
   fetchSettings,
-  forgetNetworkDrive,
   installDthPlugin,
   installDthRelease,
   installedExporterVersion,
@@ -20,7 +17,6 @@ import {
   rescanPoseAssets,
   saveProjectSettings,
   saveSettings,
-  uncForPath,
 } from '#/lib/rom/api.ts'
 import { confirmDialog } from '#/lib/desktop.ts'
 import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
@@ -29,13 +25,18 @@ import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
+import { NetworkDrivesSection } from '#/components/settings/network-drives-section.tsx'
+import {
+  ExporterReleasePicker,
+  ReleasePicker,
+} from '#/components/settings/release-pickers.tsx'
 import { toast } from 'sonner'
 
 import type {
-  DthExporterReleaseInfo,
-  DthReleaseInfo,
-  InstallReport,
-} from '#/lib/rom/api.ts'
+  ExporterReleasesState,
+  ReleasesState,
+} from '#/components/settings/release-pickers.tsx'
+import type { InstallReport } from '#/lib/rom/api.ts'
 
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
@@ -48,240 +49,6 @@ export const Route = createFileRoute('/settings')({
   loader: async () => ({ settings: await fetchSettings(), project: await fetchActiveProject() }),
   component: SettingsPage,
 })
-
-interface ReleasesState {
-  mode: 'single' | 'multi' | 'none'
-  version: string
-  releases: Array<DthReleaseInfo>
-  error: string | null
-}
-
-interface ExporterReleasesState {
-  mode: 'single' | 'multi' | 'none'
-  version: string
-  releases: Array<DthExporterReleaseInfo>
-  error: string | null
-}
-
-/**
- * Under the DTH folder field: nothing for an empty folder, the detected version
- * for a single release, or a version dropdown when the folder holds several.
- */
-function ReleasePicker({
-  releases,
-  loading,
-  value,
-  onChange,
-}: {
-  releases: ReleasesState
-  loading: boolean
-  value: string
-  onChange: (version: string) => void
-}) {
-  if (loading) {
-    return <p className="mt-2 text-xs text-muted-foreground">Looking for DTH releases…</p>
-  }
-  if (releases.error) {
-    return <p className="mt-2 text-sm text-destructive">{releases.error}</p>
-  }
-  if (releases.mode === 'single') {
-    return (
-      <p className="mt-2 text-xs text-muted-foreground">
-        Single release detected
-        {releases.version && (
-          <>
-            {' '}— version <strong className="text-foreground">{releases.version}</strong>
-          </>
-        )}
-        .
-      </p>
-    )
-  }
-  if (releases.mode === 'multi') {
-    const selected = releases.releases.find((r) => r.version === value)
-    return (
-      <div className="mt-3">
-        <Label className="mb-1">DTH release version</Label>
-        <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="w-72">
-            <SelectValue placeholder="Select a version" />
-          </SelectTrigger>
-          <SelectContent>
-            {releases.releases.map((r) => (
-              <SelectItem key={r.version} value={r.version}>
-                {r.version}
-                {r.kind === 'zip' ? ' — zip (extract first)' : ''}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {selected?.kind === 'zip' ? (
-          <div className="mt-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-            Extract the release zip first and select folders only.
-          </div>
-        ) : (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {releases.releases.length} release{releases.releases.length === 1 ? '' : 's'} found. New
-            releases don't switch automatically — pick one and Save.
-          </p>
-        )}
-      </div>
-    )
-  }
-  return null
-}
-
-/**
- * Under the Exporter Plugin folder field — mirrors {@link ReleasePicker}: the
- * detected version for a single plugin folder, or a version dropdown when the
- * folder holds several. The version is read from the exporter DLL.
- */
-function ExporterReleasePicker({
-  releases,
-  loading,
-  value,
-  onChange,
-}: {
-  releases: ExporterReleasesState
-  loading: boolean
-  value: string
-  onChange: (version: string) => void
-}) {
-  if (loading) {
-    return <p className="mt-2 text-xs text-muted-foreground">Looking for the DTH Exporter Plugin…</p>
-  }
-  if (releases.error) {
-    return <p className="mt-2 text-sm text-destructive">{releases.error}</p>
-  }
-  if (releases.mode === 'single') {
-    return (
-      <p className="mt-2 text-xs text-muted-foreground">
-        Plugin detected
-        {releases.version ? (
-          <>
-            {' '}— version <strong className="text-foreground">{releases.version}</strong>
-          </>
-        ) : (
-          <> — no version info in the exporter DLL</>
-        )}
-        .
-      </p>
-    )
-  }
-  if (releases.mode === 'multi') {
-    return (
-      <div className="mt-3">
-        <Label className="mb-1">Exporter Plugin version</Label>
-        <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="w-72">
-            <SelectValue placeholder="Select a version" />
-          </SelectTrigger>
-          <SelectContent>
-            {releases.releases.map((r) => (
-              <SelectItem key={r.version} value={r.version}>
-                {r.version}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {releases.releases.length} plugin version{releases.releases.length === 1 ? '' : 's'} found.
-          New ones don't switch automatically — pick one and Save.
-        </p>
-      </div>
-    )
-  }
-  return null
-}
-
-/**
- * Lists the network drives the app has remembered (X: → \\host\share) with their
- * current mapped status, a "Forget" per drive, and a manual re-map. Drives are
- * remembered automatically as paths are picked and re-mapped on startup.
- */
-function NetworkDrivesSection() {
-  const [drives, setDrives] = useState<Array<{ drive: string; unc: string; mapped: boolean }>>([])
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(async () => {
-    const known = await fetchKnownDrives()
-    const withStatus = await Promise.all(
-      known.map(async (d) => ({ ...d, mapped: (await uncForPath(d.drive)) !== '' })),
-    )
-    setDrives(withStatus)
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  // No detected network drives → render nothing (the parent shows only this, so
-  // the whole "Network drives" block — separator, heading and all — disappears).
-  // Users who don't use mapped drives shouldn't see an empty, confusing section.
-  if (drives.length === 0) return null
-
-  async function remap() {
-    setBusy(true)
-    try {
-      const results = await ensureNetworkDrives()
-      const failed = results.filter((r) => r.status === 'failed')
-      const remapped = results.filter((r) => r.status === 'remapped').length
-      if (failed.length > 0) toast.error(`${failed.length} drive(s) failed to map`)
-      else toast.success(remapped > 0 ? `Re-mapped ${remapped} drive(s)` : 'All drives already mapped')
-      await load()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function forget(drive: string) {
-    try {
-      await forgetNetworkDrive({ data: { drive } })
-      await load()
-    } catch (e) {
-      // Previously an unhandled rejection with zero feedback.
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  return (
-    <section className="rounded-lg border bg-card p-5">
-      <h2 className="mb-3 flex w-fit items-center gap-1 font-semibold">
-        Network drives
-        <InfoPopup label="Network drives — more information">
-          Mapped drives are remembered as you pick paths and re-mapped on startup, so the app keeps
-          working after relaunching as administrator.
-        </InfoPopup>
-      </h2>
-      <div className="space-y-3">
-      <ul className="space-y-2 text-sm">
-        {drives.map((d) => (
-          <li key={d.drive} className="flex items-center gap-2">
-            <span
-              className={cn('size-2 shrink-0 rounded-full', d.mapped ? 'bg-emerald-500' : 'bg-muted-foreground/40')}
-              title={d.mapped ? 'Mapped' : 'Not mapped'}
-            />
-            <span className="font-mono">{d.drive}</span>
-            <span className="text-muted-foreground">→</span>
-            <span className="truncate font-mono text-muted-foreground">{d.unc}</span>
-            <Button
-              variant="ghost"
-              size="xs"
-              className="ml-auto shrink-0"
-              onClick={() => void forget(d.drive)}
-            >
-              Forget
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <Button variant="outline" size="sm" onClick={() => void remap()} disabled={busy}>
-        {busy ? 'Mapping…' : 'Re-map missing now'}
-      </Button>
-      </div>
-    </section>
-  )
-}
 
 /**
  * The editable per-project `.dcsp` manifest fields, held on the Project tab as one
