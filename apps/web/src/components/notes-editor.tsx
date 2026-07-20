@@ -75,6 +75,16 @@ export function NotesEditor({
   // One error toast per failure burst: debounced saves fire on every typing
   // pause, and a persistent failure must not stack a toast per keystroke.
   const saveFailedRef = useRef(false)
+  // Single-flight the autosave: a debounced save in flight plus an immediate blur
+  // save used to run concurrently with the SAME stale `expectedMtime` — the second
+  // then hit a spurious NotesConflictError (whose Reload discards the newest
+  // keystrokes). `savingRef` gates a second concurrent save; `pendingRef` holds the
+  // latest value to flush once the in-flight one finishes (with the fresh mtime);
+  // `lastSavedRef` lets us skip a no-op write that would only churn the file mtime
+  // against another open window.
+  const savingRef = useRef(false)
+  const pendingRef = useRef<string | null>(null)
+  const lastSavedRef = useRef('')
 
   useEffect(() => {
     let active = true
@@ -82,6 +92,7 @@ export function NotesEditor({
       if (!active) return
       mtimeRef.current = mtime
       saveFailedRef.current = false
+      lastSavedRef.current = stored
       setText(stored)
       setLoaded(true)
     })
@@ -97,6 +108,8 @@ export function NotesEditor({
     const { text: stored, mtime } = await fetchNotes({ data: { projectId, characterId } })
     mtimeRef.current = mtime
     saveFailedRef.current = false
+    lastSavedRef.current = stored
+    pendingRef.current = null
     setText(stored)
     setSaveState('saved')
   }
@@ -123,17 +136,46 @@ export function NotesEditor({
   }
 
   async function persist(value: string) {
+    // No-op write: nothing changed since the last successful save. Skip it so we
+    // don't bump the file mtime (which would look like an external edit to another
+    // open window).
+    if (value === lastSavedRef.current) {
+      setSaveState('saved')
+      return
+    }
+    // A save is already running — queue the latest value; the in-flight save flushes
+    // it on completion, against the FRESH mtime (never a second concurrent save with
+    // the stale mtime, which is what produced the spurious conflict).
+    if (savingRef.current) {
+      pendingRef.current = value
+      return
+    }
+    savingRef.current = true
     setSaveState('saving')
     try {
       mtimeRef.current = await saveNotes({
         data: { projectId, characterId, text: value, expectedMtime: mtimeRef.current },
       })
+      lastSavedRef.current = value
       saveFailedRef.current = false
       setSaveState('saved')
+      // Flush a value queued while this save ran — now with the updated mtime.
+      const queued = pendingRef.current
+      pendingRef.current = null
+      if (queued !== null && queued !== value) {
+        savingRef.current = false
+        void persist(queued)
+        return
+      }
     } catch (e) {
       setSaveState('error')
       reportSaveError(e, true)
+      // Drop the queued value: retrying it with the still-stale mtime would just
+      // loop the conflict. The textarea still holds it, so a later edit/blur (or
+      // the Reload action) resolves it.
+      pendingRef.current = null
     }
+    savingRef.current = false
   }
 
   function scheduleSave(value: string) {
@@ -146,17 +188,26 @@ export function NotesEditor({
   // Flush a pending debounce on unmount so the last keystrokes never get lost.
   useEffect(() => {
     return () => {
-      if (saveTimer.current) {
-        window.clearTimeout(saveTimer.current)
-        void saveNotes({
-          data: { projectId, characterId, text: textRef.current, expectedMtime: mtimeRef.current },
-        })
-          .then((mtime) => {
-            mtimeRef.current = mtime
-            saveFailedRef.current = false
-          })
-          .catch((e: unknown) => reportSaveError(e, false))
+      if (!saveTimer.current) return
+      window.clearTimeout(saveTimer.current)
+      const value = textRef.current
+      if (value === lastSavedRef.current) return // nothing unsaved to flush
+      if (savingRef.current) {
+        // A save is in flight — hand the latest value to its pending queue; the
+        // in-flight save flushes it on completion against the fresh mtime (the
+        // fired promise still runs after this component unmounts).
+        pendingRef.current = value
+        return
       }
+      void saveNotes({
+        data: { projectId, characterId, text: value, expectedMtime: mtimeRef.current },
+      })
+        .then((mtime) => {
+          mtimeRef.current = mtime
+          lastSavedRef.current = value
+          saveFailedRef.current = false
+        })
+        .catch((e: unknown) => reportSaveError(e, false))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, characterId])
