@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -103,14 +103,21 @@ export function GroupCard({
 
   // What the table shows: the base rows (each swapped for its override copy
   // when checked) plus the override's appended rows. Without an override this
-  // is simply the group's poses.
+  // is simply the group's poses. MEMOIZED because it feeds useReactTable's
+  // `data`: an identity that changes every render makes the table re-derive
+  // its row model each time, which can feed back into an endless sync
+  // re-render loop (the table's own "give data a stable reference" rule —
+  // group.poses used to provide that stability for free).
   const baseCount = group.poses.length
-  const displayPoses = override
-    ? [
-        ...group.poses.map((pose) => override.overriddenById.get(pose.id) ?? pose),
-        ...override.additions,
-      ]
-    : group.poses
+  const overriddenById = override?.overriddenById
+  const additions = override?.additions
+  const displayPoses = useMemo(
+    () =>
+      overriddenById && additions
+        ? [...group.poses.map((pose) => overriddenById.get(pose.id) ?? pose), ...additions]
+        : group.poses,
+    [group.poses, overriddenById, additions],
+  )
 
   // Route an edited row to where it lives: the base group, the override's
   // replaced-row map (checked base rows only — unchecked ones are read-only in

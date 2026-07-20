@@ -91,6 +91,9 @@ interface RomSectionsProps {
   onChange: (sections: RomSectionsModel) => void
 }
 
+/** Shared empty-additions fallback — a stable identity (see overrideCtl). */
+const EMPTY_POSES: Array<RomPose> = []
+
 function sectionSummary(config: RomSectionConfig): string {
   if (!config.enabled) return 'disabled'
   if (config.mode === 'preset') return 'enabled'
@@ -146,13 +149,20 @@ export function RomSections({
 
   // The scene override's grid controller, shared by every section's group
   // editor: replaced rows keyed by base pose id, additions keyed by group id.
-  // Checking a row seeds its override with a copy of the base pose.
+  // Checking a row seeds its override with a copy of the base pose. The map and
+  // the empty-additions fallback keep STABLE identities across re-renders —
+  // they end up in GroupCard's memoized table `data`, which must not churn.
+  const overriddenById = useMemo(
+    () => new Map((overrideData?.poses ?? []).map((pose) => [pose.id, pose])),
+    [overrideData?.poses],
+  )
   const overrideCtl: SectionOverrideCtl | undefined =
     override && overrideData
       ? {
-          overriddenById: new Map(overrideData.poses.map((pose) => [pose.id, pose])),
+          overriddenById,
           additionsFor: (groupId) =>
-            overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ?? [],
+            overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
+            EMPTY_POSES,
           onToggleRow: (pose, on) =>
             override.onChange({
               ...overrideData,
