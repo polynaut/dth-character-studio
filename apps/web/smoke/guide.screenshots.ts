@@ -287,7 +287,11 @@ test('character-header', async ({ page }) => {
 
 test('character-rom-sections', async ({ page }) => {
   await openCharacter(page)
-  await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'))
+  // Extra offset so the full ROM timeline bar (+ its legend) clears the collapsed
+  // header instead of being clipped at the top.
+  await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'), {
+    headerOffset: 220,
+  })
 })
 
 test('character-export-directory', async ({ page }) => {
