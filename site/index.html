@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#232323" />
+
+    <title>DTH Character Studio — frame-exact ROMs for the DazToHue workflow</title>
+    <meta
+      name="description"
+      content="Define your character once. Generate a flawless, frame-exact Range of Motion in seconds — the Daz Studio apply-script and the Houdini PoseAsset CSV, always in sync. Free & open source, for Windows and macOS."
+    />
+    <link rel="canonical" href="https://polynaut.github.io/dth-character-studio/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="DTH Character Studio" />
+    <meta
+      property="og:description"
+      content="Define your character once. Generate a flawless, frame-exact Range of Motion in seconds — for the DazToHue workflow (Daz Studio → Houdini → Unreal Engine)."
+    />
+    <meta property="og:url" content="https://polynaut.github.io/dth-character-studio/" />
+    <meta property="og:image" content="https://polynaut.github.io/dth-character-studio/assets/logo.png" />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" href="assets/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="assets/logo-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="assets/logo-192.png" />
+
+    <!-- The hero logo is the LCP element — fetch it at highest priority. -->
+    <link rel="preload" as="image" href="assets/logo.png" fetchpriority="high" />
+    <link rel="preload" as="font" type="font/woff2" href="assets/manrope-latin-wght-normal.woff2" crossorigin />
+
+    <link rel="stylesheet" href="styles.css" />
+    <script src="main.js" defer></script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "DTH Character Studio",
+        "operatingSystem": "Windows, macOS",
+        "applicationCategory": "DesignApplication",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "downloadUrl": "https://github.com/polynaut/dth-character-studio/releases/latest",
+        "license": "https://github.com/polynaut/dth-character-studio/blob/main/LICENSE"
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Compact sticky header — hidden at the top, slides in once the hero title
+         scrolls out of view (toggled by an IntersectionObserver in main.js). -->
+    <header class="topbar" id="topbar" aria-hidden="true">
+      <div class="container topbar-inner">
+        <a class="topbar-brand" href="#top">
+          <img src="assets/logo-192.png" alt="" width="26" height="26" />
+          <span>DTH Character Studio</span>
+        </a>
+        <nav class="topbar-nav" aria-label="Sections">
+          <a href="#why">Why</a>
+          <a href="#how">How it works</a>
+          <a href="#about">About</a>
+          <a href="#resources">Resources</a>
+        </nav>
+        <a class="btn btn-primary btn-compact" id="topbar-dl" href="https://github.com/polynaut/dth-character-studio/releases/latest">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- ======================================================= Hero -->
+      <section class="hero">
+        <div class="container hero-inner">
+          <div class="hero-logo-wrap">
+            <img
+              class="hero-logo"
+              src="assets/logo.png"
+              alt="DTH Character Studio logo"
+              width="300"
+              height="300"
+              fetchpriority="high"
+              decoding="async"
+            />
+          </div>
+
+          <h1 id="hero-title">DTH&nbsp;Character&nbsp;Studio</h1>
+
+          <p class="tagline">
+            Define your character once. Generate a flawless, frame&#8209;exact
+            <strong>Range&nbsp;of&nbsp;Motion</strong> in seconds.
+          </p>
+
+          <p class="pipeline" aria-label="The pipeline this app serves">
+            The companion app for the
+            <a href="https://www.artstation.com/marketplace/p/BLM5K/daztohue" target="_blank" rel="noopener">DazToHue</a>
+            workflow
+            <span class="pipeline-chips"
+              ><span class="chip">Daz&nbsp;Studio</span><span class="chip-arrow">→</span><span class="chip">Houdini</span
+              ><span class="chip-arrow">→</span><span class="chip">Unreal&nbsp;Engine</span></span
+            >
+          </p>
+
+          <div class="download-block">
+            <a class="btn btn-primary btn-hero" id="dl-btn" href="https://github.com/polynaut/dth-character-studio/releases/latest">
+              <span class="dl-icon" id="dl-icon">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </span>
+              <span class="dl-text">
+                <span class="dl-label" id="dl-label">Download the latest release</span>
+                <span class="dl-sub" id="dl-sub">for Windows &amp; macOS · free &amp; open source</span>
+              </span>
+            </a>
+            <p class="dl-alt" id="dl-alt">
+              <a href="https://github.com/polynaut/dth-character-studio/releases" target="_blank" rel="noopener">All releases</a>
+            </p>
+          </div>
+
+          <a class="btn btn-ghost" href="https://github.com/polynaut/dth-character-studio/blob/main/docs/guide/README.md" target="_blank" rel="noopener">
+            New here? Follow the getting-started guide
+            <span class="arrow" aria-hidden="true">→</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- ======================================================= Why -->
+      <section class="section" id="why">
+        <div class="container">
+          <h2>One definition. Both sides. <em>Always in sync.</em></h2>
+          <p class="section-lead">
+            Building a ROM from DTH's stock pose assets is the easy part. The work piles up when you add your own
+            content — dozens of custom morphs, each on an exact frame, and Daz and Houdini have to agree on every
+            single number. Miss one frame and the morph quietly breaks in Unreal, stages later. The studio turns that
+            bookkeeping into a declaration: list your morphs once, and it generates both sides.
+          </p>
+          <div class="cards">
+            <article class="card">
+              <svg class="icon card-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <h3>The Daz side</h3>
+              <p>
+                A one-click apply-script builds the <em>entire</em> ROM in Daz Studio — every stock section and every
+                custom morph on its exact frame — replacing the hand-built per-character setup.
+              </p>
+            </article>
+            <article class="card">
+              <svg class="icon card-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              <h3>The Houdini side</h3>
+              <p>
+                The matching <strong>PoseAsset</strong> import CSV, ready to drop onto the DazToHue HDA — with the
+                Genesis&nbsp;9 path validated byte-for-byte against hand-built artifacts.
+              </p>
+            </article>
+            <article class="card">
+              <svg class="icon card-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              <h3>In sync by construction</h3>
+              <p>
+                Frame numbers are computed, never stored. Both artifacts derive from the same definition — change the
+                character, regenerate, and they <em>cannot</em> drift apart.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================= How -->
+      <section class="section" id="how">
+        <div class="container">
+          <h2>How it works</h2>
+          <ol class="steps">
+            <li class="step">
+              <span class="step-num">01</span>
+              <h3>Describe</h3>
+              <p>Pick the Genesis version, enable ROM sections, list your body morphs and expressions.</p>
+            </li>
+            <li class="step">
+              <span class="step-num">02</span>
+              <h3>Generate</h3>
+              <p>One click produces the Daz apply-script and the Houdini PoseAsset CSV.</p>
+            </li>
+            <li class="step">
+              <span class="step-num">03</span>
+              <h3>Apply</h3>
+              <p>Run the script in Daz Studio, drop the CSV into your Houdini network.</p>
+            </li>
+            <li class="step">
+              <span class="step-num">04</span>
+              <h3>Export</h3>
+              <p>Hand off to Unreal Engine — every frame already matching, by design.</p>
+            </li>
+          </ol>
+          <div class="cta-strip">
+            <p>From install to your first generated ROM in about <strong>15&nbsp;minutes</strong>.</p>
+            <a class="btn btn-secondary" href="https://github.com/polynaut/dth-character-studio/blob/main/docs/guide/README.md" target="_blank" rel="noopener">
+              Read the getting-started guide <span class="arrow" aria-hidden="true">→</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================= About -->
+      <section class="section" id="about">
+        <div class="container narrow">
+          <h2>About</h2>
+          <p>
+            DTH Character Studio is a free, open-source desktop app by
+            <a href="https://github.com/polynaut" target="_blank" rel="noopener">Polynaut</a> (MIT-licensed), built as
+            a companion to <em>mrpdean</em>'s
+            <a href="https://www.artstation.com/marketplace/p/BLM5K/daztohue" target="_blank" rel="noopener">DazToHue</a>
+            toolset. Beyond generating ROMs it manages your character library per game project, installs and maintains
+            the DTH content in Daz and Houdini for you, and keeps itself up to date with a built-in updater.
+          </p>
+          <div class="callout">
+            <h3>Share definitions, not assets</h3>
+            <p>
+              Character definitions and the generated files are <strong>recipes</strong> — they reference Daz assets by
+              morph name, frame number and bone, and contain no licensed content. That makes them freely shareable:
+              trade definitions with other artists, and everyone brings their own licensed assets.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================= Resources -->
+      <section class="section" id="resources">
+        <div class="container">
+          <h2>Resources</h2>
+          <div class="resources">
+            <a class="resource featured" href="https://github.com/polynaut/dth-character-studio/blob/main/docs/guide/README.md" target="_blank" rel="noopener">
+              <h3>Getting-started guide <span class="ext" aria-hidden="true">↗</span></h3>
+              <p>From a fresh install to your first generated ROM — six short steps, screenshots included.</p>
+            </a>
+            <a class="resource" href="https://www.artstation.com/marketplace/p/BLM5K/daztohue" target="_blank" rel="noopener">
+              <h3>DazToHue by mrpdean <span class="ext" aria-hidden="true">↗</span></h3>
+              <p>The Houdini/UE toolset this studio targets — the PoseAsset node, ROMs and pose presets.</p>
+            </a>
+            <a class="resource" href="https://docs.google.com/document/d/1e8B9uDSmiS-v5si0YLEnnAhcnhnfGl9m0RsgCE5EDWA/edit" target="_blank" rel="noopener">
+              <h3>Custom ROM guide <span class="ext" aria-hidden="true">↗</span></h3>
+              <p>DTH's manual, step-by-step way to build a custom ROM — the theory this studio automates.</p>
+            </a>
+            <a class="resource" href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener">
+              <h3>Source on GitHub <span class="ext" aria-hidden="true">↗</span></h3>
+              <p>MIT-licensed monorepo — the pure generation core, the app, and the docs.</p>
+            </a>
+            <a class="resource" href="https://github.com/polynaut/dth-character-studio/releases" target="_blank" rel="noopener">
+              <h3>Releases &amp; changelog <span class="ext" aria-hidden="true">↗</span></h3>
+              <p>Every version with notes — the app also self-updates from here.</p>
+            </a>
+            <a class="resource" href="https://github.com/polynaut/dth-character-studio/issues" target="_blank" rel="noopener">
+              <h3>Report an issue <span class="ext" aria-hidden="true">↗</span></h3>
+              <p>Found a bug or missing a feature? Open an issue — feedback is welcome.</p>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <p>
+          <a href="https://github.com/polynaut/dth-character-studio/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
+          © Polynaut
+          <span class="footer-sep">·</span>
+          <a id="footer-version" href="https://github.com/polynaut/dth-character-studio/releases/latest" target="_blank" rel="noopener">latest release</a>
+        </p>
+        <p class="footer-fine">Not affiliated with Daz 3D, SideFX, or Epic Games.</p>
+      </div>
+    </footer>
+  </body>
+</html>
