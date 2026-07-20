@@ -154,30 +154,12 @@ needed for a working ROM:
 
 A ROM is a fixed sequence of eight sections. Each can be **enabled or disabled**,
 and runs in **Preset** mode (the DTH release's stock pose assets) or **Custom**
-mode (your own poses and morphs):
-
-| Section | What it covers |
-|---|---|
-| RET | Retargeting poses |
-| JCM | Joint corrective morphs |
-| FAC | FACS / face poses |
-| EXP | Expressions |
-| GEN | Genitalia (Golden Palace / Dicktator presets) |
-| PHY | Physics |
-| FBM | Full-body morphs — where your character's custom morphs go |
-| MISC | Everything else |
-
-&nbsp;
-
-> [!NOTE]
-> The studio computes every frame number from this structure — you never type a
-> frame, and the Daz and Houdini outputs can't drift apart.
+mode (your own poses and morphs)
 
 Above the sections, a colored **timeline bar** maps the whole ROM: one segment per
 block (preset and custom), widths proportional to their frame counts — hover a
 segment for its exact frame range. It re-renders as you edit, so you always see
 where every section lands before anything runs.
-
 
 <details>
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
@@ -223,14 +205,32 @@ use your own asset!
 </td></tr></table>
 </details>
 
+&nbsp;
+
+> [!NOTE]
+> The studio computes every frame number from this structure — you never type a
+> frame, and the Daz and Houdini outputs can't drift apart.
+
+## Custom morphs
 
 For this example we add some **Full Body Morphs (FBM)**, switch it to Custom, and list the morphs your
-character actually uses (each morph by its Daz property name, with the value to
-key) — or import them with **Import from CSV**: run the bundled **`Scan_Frames`**
-script in Daz Studio (`Scripts › DTH-Character-Studio`, figure root selected) and
-its scan of the open scene — every keyed morph frame — shows up in the import
-picker automatically, one CSV per scene. A **Browse** button still takes any CSV
+character should use
+
+<details>
+<summary><strong>Import from existing Daz scene</strong></summary>
+<table><tr><td>
+
+Import with **Import from CSV**: run the bundled **`Scan_Frames`**
+script in Daz Studio (`Scripts › DTH-Character-Studio`) and
+its scan of the open scene — every keyed morph frame — and it writes a .csv file
+
+The csv shows up in the import
+picker automatically, one CSV per scene name. A **Browse** button still takes any CSV
 you curated yourself.
+
+
+</td></tr></table>
+</details>
 
 Each pose row has two name fields with very different jobs:
 
