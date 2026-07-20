@@ -18,6 +18,10 @@ on:
         required: false
         default: ""
 
+# The probe never calls the GitHub API — keep the job token read-only.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: [self-hosted, linux, certum-signer]
