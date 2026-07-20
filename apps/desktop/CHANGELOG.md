@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.44.9
+
+### Patch Changes
+
+- [#396](https://github.com/polynaut/dth-character-studio/pull/396) [`80c8353`](https://github.com/polynaut/dth-character-studio/commit/80c83532ca3667a926334fbbcfe9cac303e22c70) Thanks [@polynaut](https://github.com/polynaut)! - Dependency refresh: Tauri 2.11.5 and zip 4 in the desktop shell, TypeScript 7 in the toolchain, and updated CI actions.
+
 ## 0.44.8
 
 ## 0.44.7
