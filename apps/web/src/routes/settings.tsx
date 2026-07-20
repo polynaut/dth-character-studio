@@ -23,6 +23,7 @@ import {
   uncForPath,
 } from '#/lib/rom/api.ts'
 import { confirmDialog } from '#/lib/desktop.ts'
+import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
@@ -296,15 +297,17 @@ interface ProjectSettings {
   charactersSubdir: string
 }
 
-/** The project's saved values (with the same per-field defaults the fields use). */
+/** The project's saved values — defaults from THE single copy in
+ *  storage/projects (previously re-hardcoded here, free to drift). */
 function projectSettingsFrom(project: Partial<ProjectSettings> | null | undefined): ProjectSettings {
   return {
-    dazSubdir: project?.dazSubdir ?? 'daz3d',
-    houdiniSubdir: project?.houdiniSubdir ?? 'houdini',
-    createHoudiniSubdir: project?.createHoudiniSubdir ?? true,
-    assetsEnabled: project?.assetsEnabled ?? false,
-    dazProductsEnabled: project?.dazProductsEnabled ?? false,
-    charactersSubdir: project?.charactersSubdir ?? '',
+    dazSubdir: project?.dazSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.dazSubdir,
+    houdiniSubdir: project?.houdiniSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.houdiniSubdir,
+    createHoudiniSubdir:
+      project?.createHoudiniSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.createHoudiniSubdir,
+    assetsEnabled: project?.assetsEnabled ?? PROJECT_BEHAVIOR_DEFAULTS.assetsEnabled,
+    dazProductsEnabled: project?.dazProductsEnabled ?? PROJECT_BEHAVIOR_DEFAULTS.dazProductsEnabled,
+    charactersSubdir: project?.charactersSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.charactersSubdir,
   }
 }
 
@@ -407,7 +410,7 @@ function SettingsPage() {
       // The DIM manifests folder lives under the Daz Products toggle on this tab
       // but is a machine setting (settings.json, not the .dcsp) — persist it too.
       if (settings.dimManifestsFolder !== initial.dimManifestsFolder) {
-        await saveSettings({ data: settings })
+        await saveSettings({ data: { settings, baseline: initial } })
       }
       await saveProjectSettings({
         data: {
@@ -566,7 +569,7 @@ function SettingsPage() {
   async function onSave() {
     setBusy(true)
     try {
-      await saveSettings({ data: settings })
+      await saveSettings({ data: { settings, baseline: initial } })
       const result = await rebuildCatalog()
       if (result.error) toast.error(result.error)
       else
@@ -631,7 +634,7 @@ function SettingsPage() {
     setReport(null)
     try {
       if (dirty) {
-        await saveSettings({ data: settings })
+        await saveSettings({ data: { settings, baseline: initial } })
         await router.invalidate()
       }
       const report = await install({ data: { dryRun } })

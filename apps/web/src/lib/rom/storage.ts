@@ -27,7 +27,12 @@ export { dataPath, productScanDir, scanFramesDir, studioVersion } from './storag
 export { removeFilesFromFolder, writeFilesToFolder } from './storage/fs'
 
 // --- App-global settings (settings.json) ------------------------------------
-export { getSettings, saveSettings, studioSettingsSchema } from './storage/settings'
+export {
+  consumeSettingsFileCorrupt,
+  getSettings,
+  saveSettings,
+  studioSettingsSchema,
+} from './storage/settings'
 export type { StudioSettings } from './storage/settings'
 
 // --- Character library (scan + CRUD) -----------------------------------------
