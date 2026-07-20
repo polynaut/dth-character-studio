@@ -1,5 +1,13 @@
 # @dth/desktop
 
+## 0.44.3
+
+### Patch Changes
+
+- [#349](https://github.com/polynaut/dth-character-studio/pull/349) [`200d6bd`](https://github.com/polynaut/dth-character-studio/commit/200d6bd7254d91a97271af9c5f4f1e8fb870423c) Thanks [@polynaut](https://github.com/polynaut)! - Desktop robustness: every I/O-heavy native command now runs off the main thread (`#[tauri::command(async)]`), so large asset installs, dedup scans and network `.duf` walks no longer freeze the window. Also: asset installs skip directory junctions instead of following them (a junction cycle could previously loop forever while copying), nested asset zips share their outer archive's decompression budget instead of minting fresh allowances, a failed quarantine move cleans up its partial copy, GitHub release lookups time out after 10s instead of hanging, closed windows drop their project mapping, Home-window creation no longer races itself, and the New Project menu item builds its window off the main thread like every other window path.
+
+- [#350](https://github.com/polynaut/dth-character-studio/pull/350) [`0348765`](https://github.com/polynaut/dth-character-studio/commit/0348765bd88b4c64f5708a3f70a8f83e67140dc7) Thanks [@polynaut](https://github.com/polynaut)! - The network-drive remap result (`ensure_network_drives`) now goes through the FFI contract regime like every other structured return: zod-parsed at the invoke boundary (no more bare `invoke<T>()` cast) and pinned by a shared `contracts/remap-results.json` fixture tested on both the serde and zod side. The phantom `'unsupported'` status that no Rust path ever produced is gone from both sides. Remap failures for Explorer "reconnect at sign-in" mappings (Windows errors 1201/1202) now get actionable messages instead of a bare error number, and very long UNC paths no longer misreport as "unmapped".
+
 ## 0.44.2
 
 ## 0.44.1
