@@ -12,6 +12,10 @@
   gap: 48px;
   padding-top: 40px;
   padding-bottom: 72px;
+  /* Wider than the site's 1060px container: sidebar (240) + gap (48) + the
+     screenshots' native size (1280 CSS px at @2x) + padding — so on big
+     screens the images render 100%, unscaled. */
+  max-width: 1616px;
 }
 
 /* ------------------------------------------------------------- Sidebar */
@@ -61,7 +65,20 @@
 
 .guide-content {
   min-width: 0;
+  max-width: 1280px;
+}
+
+/* Text keeps a readable measure — only the screenshot paragraphs and the
+   collapsed detail cards may span the full 1280px column. */
+.guide-content > :not(p[align='center']):not(details) {
   max-width: 860px;
+}
+
+/* The app screenshots are 2560px @2x (1280 CSS px): render them at 100% of
+   the column, overriding the markdown's width="900" attribute. External
+   (Daz-side) photos keep their own size — no upscaling. */
+.guide-content img[src^='screenshots/'] {
+  width: 100%;
 }
 
 .guide-content h1 {
