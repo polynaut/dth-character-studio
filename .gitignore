@@ -4,22 +4,16 @@ dist
 dist-ssr
 *.local
 .env
-.nitro
-.tanstack
-.wrangler
-.output
-.vinxi
-__unconfig*
 todos.json
 
 # Personal character data + generated DTH files (repo is public)
 data/
 
-# Electron build + packaging output
-out/
-release/
 .claude/worktrees/
 
 # Playwright (e2e) run output
 test-results/
 playwright-report/
+
+# TanStack Router plugin temp output
+.tanstack

@@ -16,7 +16,14 @@ const version =
   process.argv[2] ||
   JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version
 
-const CHANGELOGS = ['apps/web/CHANGELOG.md', 'apps/desktop/CHANGELOG.md', 'packages/rom/CHANGELOG.md']
+// ALL fixed-group packages — a changeset naming only one of them must still
+// reach the release body (ui-only entries used to vanish silently).
+const CHANGELOGS = [
+  'apps/web/CHANGELOG.md',
+  'apps/desktop/CHANGELOG.md',
+  'packages/rom/CHANGELOG.md',
+  'packages/ui/CHANGELOG.md',
+]
 
 // Lines under `## <version>`, up to the next `## ` header.
 function extractSection(md) {

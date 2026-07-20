@@ -28,6 +28,7 @@ jobs:
     # the cache.)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       # pnpm version comes from package.json "packageManager".
@@ -52,6 +53,7 @@ jobs:
   smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
@@ -60,17 +62,32 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Cache the ~130 MB Chromium download, keyed on the installed Playwright
+      # version — uncached it re-downloads on every PR run (minutes + a
+      # download-flake surface). `--with-deps` below still apt-installs the
+      # system libraries; only the browser binaries live in this cache.
+      - name: Playwright version (cache key)
+        id: pw
+        shell: bash
+        run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright Chromium
         run: pnpm --filter @dth/web exec playwright install chromium --with-deps
       - name: Browser smoke (Playwright)
         run: pnpm --filter @dth/web smoke
 
-  # Every feature PR must ship a changeset (the three packages are a fixed group,
-  # so this is what actually bumps the product version and triggers a release).
+  # Every feature PR must ship a changeset (the four packages — web, desktop,
+  # rom, ui — are a fixed group, so this is what actually bumps the product
+  # version and triggers a release).
   # A PR that legitimately needs no version bump (CI/docs-only) can satisfy this
   # with an empty changeset: `pnpm changeset --empty`. The bot PR is exempt.
   changeset:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -89,6 +106,7 @@ jobs:
   # alloc pin) only surfaced at release time on main. This job catches both.
   rust:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
