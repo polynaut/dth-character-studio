@@ -1,4 +1,4 @@
-name: Signing smoke test
+name: 🔏 Signing smoke test
 
 # Manual end-to-end probe of the Certum/SimplySign Authenticode path: signs a
 # COPY of a previously released installer on the self-hosted signer runner and

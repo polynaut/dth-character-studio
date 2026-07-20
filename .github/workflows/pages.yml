@@ -4,7 +4,7 @@
 # The site is plain static HTML/CSS/JS — no build step; the folder is uploaded
 # as-is. Runs only when the site (or this workflow) changes on main.
 
-name: Deploy Pages
+name: 🌐 Deploy Pages
 
 on:
   push:

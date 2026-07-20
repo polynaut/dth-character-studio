@@ -1,4 +1,4 @@
-name: Release
+name: 🚀 Release
 
 # On every push to main: release only when there are no pending changesets (i.e.
 # the "version packages" PR has just merged, bumping apps/desktop/package.json)

@@ -1,4 +1,4 @@
-name: Runner self-check
+name: 🩺 Runner self-check
 
 # Manual-only readiness probe for the self-hosted Certum signer runner.
 # Confirms the runner picks up jobs and has the signing toolchain + a reachable
