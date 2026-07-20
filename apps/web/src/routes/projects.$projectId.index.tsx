@@ -76,10 +76,12 @@ function ScenePreview({ scenePath }: { scenePath: string }) {
 }
 
 export const Route = createFileRoute('/projects/$projectId/')({
-  loader: async ({ params }) => {
+  loader: async ({ params, preload }) => {
     // The route param IS the project's folder path. Pin it as the active project so
-    // avatars (in its `.dcsmeta`) resolve for this window.
-    setActiveProjectDir(params.projectId)
+    // avatars (in its `.dcsmeta`) resolve for this window — but NOT on a hover
+    // preload, which would repoint window-global avatar resolution for a
+    // navigation that may never happen.
+    if (!preload) setActiveProjectDir(params.projectId)
     const project = await fetchProject({ data: { projectId: params.projectId } })
     if (!project) throw notFound()
     // Deliberately NOT fetching the cross-project prefill candidates here: that
@@ -240,7 +242,9 @@ function ProjectCharactersPage() {
   }
 
   async function onCreate() {
-    if (!scenePath.trim() || !canCreate) return
+    // Guard `busy` too: the Create button is disabled while creating, but the
+    // Enter-key handler isn't, so a fast double-Enter could race two creates.
+    if (busy || !scenePath.trim() || !canCreate) return
     // Scene outside the project → ask whether to copy it into the character folder.
     if (!sceneInsideProject()) {
       setCopyBase(project.dazSubdir)
@@ -362,11 +366,13 @@ function ProjectCharactersPage() {
       const n = selectedChars.length
       sel.clear()
       setConfirmOpen(false)
-      await router.invalidate()
       toast.success(`Deleted ${n} character${n === 1 ? '' : 's'}`)
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e))
     } finally {
+      // Always refresh: on a mid-loop failure the ALREADY-deleted characters must
+      // not linger in the list (clicking one 404s; a retry would re-delete them).
+      void router.invalidate()
       setDeleting(false)
     }
   }

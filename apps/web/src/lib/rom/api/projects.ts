@@ -90,6 +90,25 @@ export async function openProject({ data }: { data: unknown }): Promise<void> {
   await openProjectWindow(dcsp)
 }
 
+/**
+ * Record the window's association-opened project in recents. A `.dcsp` launched
+ * via the OS file association boots straight into `activeProjectFile()` without
+ * going through {@link openProject}, so without this it never lands in recents —
+ * and since recents IS the project registry, the Home screen and every
+ * cross-project sweep (Refresh assets, note-media GC, version detection) would
+ * skip it. Best-effort: never blocks or fails boot.
+ */
+export async function rememberActiveProject(dcspPath: string): Promise<void> {
+  try {
+    const dcsp = joinPath(dcspPath)
+    if (!(await exists(dcsp))) return
+    const manifest = await storage.readManifest(dirname(dcsp))
+    await storage.rememberRecent(dcsp, manifest.name)
+  } catch {
+    // A boot-time recents write must never break window startup.
+  }
+}
+
 const renameProjectInput = z.object({ projectId: z.string().min(1), name: z.string().min(1) })
 
 /** Rename a project — updates the manifest name (the `.dcsp` file name stays put). */
@@ -132,13 +151,16 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
   // move the existing folders to the new location (links inside them are repointed).
   // Done before writing the manifest: if the move fails, the manifest still points
   // at where the folders actually are.
+  let repointFailures: Array<{ dest: string; error: string }> = []
   if (nextCharactersSubdir !== manifest.charactersSubdir) {
     const oldRoot = manifest.charactersSubdir ? joinPath(dir, manifest.charactersSubdir) : dir
     const newRoot = nextCharactersSubdir ? joinPath(dir, nextCharactersSubdir) : dir
     // Every character folder physically moves — the cached locations are all stale.
     invalidateCharacterLocations()
-    await withBusyCursor(storage.moveCharactersRoot(oldRoot, newRoot))
+    ;({ repointFailures } = await withBusyCursor(storage.moveCharactersRoot(oldRoot, newRoot)))
   }
+  // Write the manifest FIRST so it always points at where the folders actually
+  // are now, even if some characters' internal paths failed to repoint below.
   await storage.writeManifest(dir, {
     ...manifest,
     dazSubdir,
@@ -148,6 +170,14 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     dazProductsEnabled,
     charactersSubdir: nextCharactersSubdir,
   })
+  // Folders moved and the manifest is consistent, but N characters kept stale
+  // in-file paths (locked/unreadable JSON mid-move). Surface it so the user knows
+  // to re-save them, instead of silently leaving dead scene/groom links.
+  if (repointFailures.length > 0) {
+    throw new Error(
+      `Moved the character folders, but ${repointFailures.length} character(s) couldn't have their internal scene/Houdini paths updated — open and re-save each to repair its links.`,
+    )
+  }
   const project = await resolveProject(dir)
   // Toggling Daz Products on/off changes which Daz scripts each character emits, so
   // regenerate the project's Daz scripts to add (or clean up) the per-character

@@ -282,7 +282,17 @@ function ToolsPage() {
         onSave={() => void onSave()}
       />
 
-      <Tabs defaultValue={tab === 'refresh' ? 'refresh' : 'install'} className="max-w-3xl">
+      {/* CONTROLLED by the ?tab search param (not defaultValue) so the native
+          "Refresh assets" menu deep-link switches tabs even when already on
+          /tools — an uncontrolled Tabs ignored the URL change (same route match,
+          no remount). onValueChange keeps the URL in sync when the user clicks. */}
+      <Tabs
+        value={tab === 'refresh' ? 'refresh' : 'install'}
+        onValueChange={(value) =>
+          void router.navigate({ to: '/tools', search: value === 'refresh' ? { tab: 'refresh' } : {} })
+        }
+        className="max-w-3xl"
+      >
         <TabsList>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>

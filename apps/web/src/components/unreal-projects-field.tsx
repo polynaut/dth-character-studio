@@ -14,7 +14,7 @@ import {
   unrealDthContentPresent,
 } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { displayPath, normalizePath } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
@@ -177,7 +177,10 @@ export function UnrealProjectsBar({
   }
 
   function add(paths: Array<string>) {
-    const fresh = paths.filter((p) => !project.unrealProjects.includes(p))
+    // Case-insensitive de-dupe on the normalised path (Windows) — `d:/x.uproject`
+    // and `D:\x.uproject` are the same project, not two.
+    const linked = new Set(project.unrealProjects.map((p) => normalizePath(p).toLowerCase()))
+    const fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
     if (!fresh.length) {
       toast.info('That Unreal project is already linked.')
       return

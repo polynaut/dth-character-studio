@@ -31,10 +31,13 @@ export interface RomValidationError {
  */
 export function romValidationErrors(sections: RomSections): Array<RomValidationError> {
   const errors: Array<RomValidationError> = []
-  // Sanitized name → first relative frame, per suffix scope: two poses whose
-  // sanitized names collide within the same suffix become the SAME morph name
-  // in Unreal (the group suffix appends _l/_r), where one silently overwrites
-  // the other — flag the collision here instead.
+  // Resolved Unreal morph name -> first relative frame. The group suffix appends
+  // _l/_r (centre appends nothing — see romPoseSchema), so two poses collide when
+  // their sanitized-name-plus-suffix RESOLVE equal, even across different suffix
+  // scopes (a centre `Smile_l` and a left `Smile` both become `Smile_l`). Keying
+  // on the resolved name catches that cross-scope case, not just same-scope dupes;
+  // one silently overwrites the other in Unreal, so flag it here instead.
+  const suffixToken: Record<string, string> = { left: '_l', right: '_r', centre: '' }
   const seen = new Map<string, number>()
   for (const { section, group, pose, relativeFrame } of walkCustomPoses(sections)) {
     const at = `${SECTION_LABELS[section]} frame ${relativeFrame}`
@@ -57,7 +60,9 @@ export function romValidationErrors(sections: RomSections): Array<RomValidationE
         message: `${at}: the pose name has characters Houdini rejects — use letters, numbers and underscores only.`,
       })
     } else {
-      const key = `${group.suffix}:${sanitizePoseName(pose.name)}`
+      // The final Unreal morph name = sanitized pose name + the group's suffix
+      // token; collisions are keyed on that so cross-scope dupes are caught too.
+      const key = `${sanitizePoseName(pose.name)}${suffixToken[group.suffix] ?? ''}`
       const first = seen.get(key)
       if (first === undefined) {
         seen.set(key, relativeFrame)
@@ -68,7 +73,7 @@ export function romValidationErrors(sections: RomSections): Array<RomValidationE
           poseId: pose.id,
           field: 'name',
           relativeFrame,
-          message: `${at}: duplicate pose name — frame ${first} already uses it (same suffix), so both would become the same Unreal morph.`,
+          message: `${at}: duplicate morph name “${key}” — frame ${first} already resolves to it, so both would become the same Unreal morph.`,
         })
       }
     }

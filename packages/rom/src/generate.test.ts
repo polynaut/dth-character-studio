@@ -4,6 +4,7 @@ import {
   buildArtDirectionData,
   buildFbmData,
   generateAll,
+  GENERATION_TEMPLATE_CSV,
   poseAssetCsvValidated,
   presetFramesSignature,
   referenceFrames,
@@ -37,7 +38,8 @@ import {
   presetFrameCount,
   sectionsFromFlatFrames,
 } from './frames'
-import { characterSchema, defaultSections } from './types'
+import { characterSchema, defaultSections, GENERATIONS } from './types'
+import type { GenesisVersion } from './types'
 
 import type { PresetFrames } from './frames'
 import type { Character, RomGroup, RomSections } from './types'
@@ -280,6 +282,20 @@ describe('PoseAsset templates', () => {
       expect(count).toBe(1)
     })
   }
+
+  it('every generation that declares a template has a matching template CSV (and vice versa)', () => {
+    // GENERATIONS[g].template (the numbers poseAssetCsvValidated reads) and
+    // GENERATION_TEMPLATE_CSV (the raw CSV spliceTemplate splices into) must agree
+    // on which generations are validated. If one gains a row without the other,
+    // poseAssetCsvValidated reports "validated" while toPoseAssetCsv silently emits
+    // the experimental custom-only layout (or throws) — a truncated PoseAsset with
+    // no warning. Keep the two key sets identical.
+    const withTemplate = (Object.keys(GENERATIONS) as Array<GenesisVersion>)
+      .filter((g) => GENERATIONS[g].template != null)
+      .sort()
+    const withCsv = (Object.keys(GENERATION_TEMPLATE_CSV) as Array<GenesisVersion>).sort()
+    expect(withCsv).toEqual(withTemplate)
+  })
 })
 
 describe('toCharacterScriptDsa', () => {
@@ -751,6 +767,25 @@ describe('buildArtDirectionData', () => {
     expect(config.gpArtDirection).toBeUndefined()
     expect(config.dkArtDirection).toBeUndefined()
   })
+
+  it('drops art-direction frames that key at or beyond the measured block length', () => {
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    sections.GEN.artDirection = [
+      // In-range (GP block is 104): kept.
+      { id: 'ok', rom: 'gp', frame: 100, name: 'AnusOpen', morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }] },
+      // >= 104: would stamp at gpStart+5000, deep in the custom-frame range,
+      // corrupting a custom pose's deltas. Must be dropped.
+      { id: 'oob', rom: 'gp', frame: 5000, name: 'Bogus', morphs: [{ node: 'Genesis 9', prop: 'GP_Bogus', value: 1 }] },
+    ]
+    const character = makeCharacter({ sections })
+    const json = buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace', FRAMES.gp)
+    expect(json?.frames.map((f) => f.name)).toEqual(['AnusOpen'])
+    // Unbounded (no measured length) keeps both — the pure/web path where the
+    // runtime fails loud rather than guessing.
+    const unbounded = buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace')
+    expect(unbounded?.frames).toHaveLength(2)
+  })
 })
 
 describe('toPoseAssetCsv', () => {
@@ -830,6 +865,28 @@ describe('toPoseAssetCsv', () => {
     ])
   })
 
+  it('a male/DK character continues custom frames after base+dk (the dk term pinned)', () => {
+    // The dk term of presetEndFrame is where the one historical frame-math crack
+    // lived (a base+gp splice that lacked it). A G9 male with the Dicktator block
+    // falls to the experimental path (the G9 template bakes no DK), so custom rows
+    // continue right after base(328)+dk(54)=382.
+    const sections = makeSections()
+    sections.GEN.enabled = true
+    sections.GEN.presetAssets = ['DK9 - Dicktator.duf']
+    const character = makeCharacter({ gender: 'male', sections })
+    const file = toPoseAssetCsv(character, FRAMES, '2.0')
+    expect(file.experimental).toBe(true)
+    const first = file.content.trimEnd().split('\n').find((l) => l.startsWith('FBM,'))
+    expect(first).toBe('FBM,382,BodyTone,')
+    // referenceFrames derives from the SAME offset — alignment by construction.
+    const refSections = makeSections()
+    refSections.GEN.enabled = true
+    refSections.GEN.presetAssets = ['DK9 - Dicktator.duf']
+    refSections.FBM.groups[0].poses[0].boneScaleRef = true
+    const refChar = makeCharacter({ gender: 'male', sections: refSections })
+    expect(referenceFrames(refChar, FRAMES)[0]).toBe(382)
+  })
+
   it('a base-less character (only FBMs) starts custom frames at 0, not 1', () => {
     // The core-invariant regression guard: FBM-only, no JCM/FAC/GEN/PHY preset.
     const sections = makeSections()
@@ -900,6 +957,25 @@ describe('toPoseAssetCsv', () => {
     // CSV points at (previously it got the raw "A,B" and the paths diverged).
     const script = toCharacterScriptDsa(character, {}, FRAMES).content
     expect(script).toContain('doExport(dthExportDir, "A B",')
+  })
+
+  it('strips Windows-illegal filename chars from the reference-FBX figure name', () => {
+    const sections = makeSections()
+    sections.JCM.enabled = false
+    sections.GEN.enabled = false
+    sections.FBM.groups[0].poses[0].boneScaleRef = true
+    // `"` and `:` are legal in a character name but forbidden in a Windows file
+    // name — the exporter's `<name>_frame_N.fbx` write would fail/mangle while the
+    // CSV pointed at the clean name.
+    const character = makeCharacter({ name: 'Kira "Beach": v2', sections, exportPath: 'D:/Exports' })
+    const csv = toPoseAssetCsv(character, FRAMES).content
+    const ref = csv.split('\n').find((l) => l.includes('Reference Skeletons/')) ?? ''
+    expect(ref).not.toMatch(/["<>:*?|\\]/)
+    // The CSV path and the doExport name still match (single source).
+    const figure = ref.match(/Reference Skeletons\/(.+)_frame_/)?.[1] ?? ''
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).toContain(
+      `doExport(dthExportDir, "${figure}",`,
+    )
   })
 
   it('a custom PHY section flags the CSV experimental (physics payload not modeled)', () => {

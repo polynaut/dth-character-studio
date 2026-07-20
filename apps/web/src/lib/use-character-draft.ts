@@ -59,6 +59,21 @@ export function useCharacterDraft(options: {
     setBaseline(saved)
   }
 
+  /**
+   * Settle a save WITHOUT clobbering edits the user typed while it was in flight.
+   * `save`/`patchAndRegenerate` snapshot the draft, then run a multi-second
+   * save+generate during which the form stays editable — replacing the draft with
+   * the snapshot on completion silently reverted anything typed meanwhile. Instead:
+   * update the baseline to the persisted value always, but only replace the draft
+   * if it is still exactly the snapshot (no interim edits). If the user did edit,
+   * their draft is kept and `dirty` correctly reports the new pending changes.
+   */
+  function settleAfterSave(snapshot: Character, saved: Character) {
+    const frozen = JSON.stringify(snapshot)
+    setCharacter((current) => (JSON.stringify(current) === frozen ? saved : current))
+    setBaseline(saved)
+  }
+
   /** Sync just-persisted fields into the draft AND the baseline without
    *  discarding other unsaved edits — e.g. a folder move repointing the linked
    *  scene path while the user has pending form changes. */
@@ -80,12 +95,16 @@ export function useCharacterDraft(options: {
     }
   }
 
-  // Saving also (re)generates all DTH files in the same step.
-  async function save() {
-    // Block the save on invalid required custom-morph fields (empty, or a pose
-    // name with characters Houdini rejects) — and hand the errors to the page
-    // so it can jump to the first one (open the section, scroll the row in,
-    // focus the offending field).
+  /**
+   * Run every save-blocking check on the current draft and toast/jump on the
+   * first failure. Returns true when the draft is safe to persist+generate. Shared
+   * by `save` AND every immediate-persist flow (rename, avatar, scene/Houdini link,
+   * product store) so those can never persist an invalid character or regenerate
+   * broken artifacts behind the user's back. Pure-check + side-effecting toast.
+   */
+  function validate(): boolean {
+    // Invalid required custom-morph fields (empty, or a pose name with characters
+    // Houdini rejects) — hand the errors to the page so it can jump to the first.
     const errors = romValidationErrors(character.sections)
     if (errors.length > 0) {
       onValidationErrors(errors)
@@ -94,14 +113,11 @@ export function useCharacterDraft(options: {
           ? errors[0].message
           : `${errors.length} custom-morph fields need fixing before saving.`,
       )
-      return
+      return false
     }
     // Each active scene override generates its own artifacts from the MERGED
     // sections — validate those too, so an overridden/added row can't ship a
-    // broken scene script. The row jump rides along: when that scene's
-    // override view is on screen (the usual case — the user just edited it),
-    // the merged rows carry the same pose ids, so the reveal finds the row;
-    // with another scene selected it degrades to opening the section.
+    // broken scene script.
     for (const override of activeSceneOverrides(character)) {
       const sceneErrors = romValidationErrors(applySceneOverride(character.sections, override))
       if (sceneErrors.length > 0) {
@@ -112,7 +128,7 @@ export function useCharacterDraft(options: {
             ? `Scene override “${scene}”: ${sceneErrors[0].message}`
             : `Scene override “${scene}”: ${sceneErrors.length} custom-morph fields need fixing before saving.`,
         )
-        return
+        return false
       }
     }
     // Two linked scenes whose file names reduce to the same slug would generate
@@ -123,16 +139,28 @@ export function useCharacterDraft(options: {
       toast.error(
         `Two overridden scenes both generate as “${dupe}” — rename one scene file so the generated scripts don't clash.`,
       )
-      return
+      return false
     }
+    return true
+  }
+
+  // Saving also (re)generates all DTH files in the same step.
+  async function save() {
+    // Single-flight: the Save button is disabled while saving, but a keyboard
+    // shortcut or a racing immediate-persist flow could still re-enter — guard so
+    // two save+generate rounds can't interleave their script writes / settles.
+    if (saving) return
+    if (!validate()) return
     setSaving(true)
+    // Snapshot what we're persisting — the form stays editable during the
+    // save+generate, so settle must not revert edits typed in the meantime.
+    const snapshot = character
     try {
-      const saved = await saveCharacter({ data: { projectId, character } })
+      const saved = await saveCharacter({ data: { projectId, character: snapshot } })
       const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
-      // Settle everything in one batched render: reconcile the draft + baseline
-      // (so it's no longer "dirty") and drop the saving flag together.
-      setCharacter(saved)
-      setBaseline(saved)
+      // Settle in one batched render: reconcile baseline (so it's no longer
+      // "dirty") without clobbering any interim edits, and drop the saving flag.
+      settleAfterSave(snapshot, saved)
       setSaving(false)
       // Refresh the loader for re-entry/navigation, but don't await it — the
       // buttons no longer depend on it, so it stays off the visible path.
@@ -162,8 +190,8 @@ export function useCharacterDraft(options: {
     try {
       const saved = await saveCharacter({ data: { projectId, character: updated } })
       const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
-      setCharacter(saved)
-      setBaseline(saved)
+      // Preserve edits made during the in-flight save (see settleAfterSave).
+      settleAfterSave(updated, saved)
       setSaving(false)
       void router.invalidate()
       notifyGenerated(toastMsg ?? `Saved “${saved.name}”`, result)
@@ -183,6 +211,7 @@ export function useCharacterDraft(options: {
     syncPersisted,
     discard,
     save,
+    validate,
     patchAndRegenerate,
     notifyGenerated,
   }
