@@ -84,11 +84,17 @@ jobs:
         shell: bash
         run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
+        id: pw-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright Chromium
+        # Cache misses only (= once per Playwright version bump). On a hit the
+        # browser binaries come from the cache above, and the hosted runner
+        # image already ships Chromium's system libraries — re-running
+        # `--with-deps` would apt-install packages for ~30s on every PR.
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @dth/web exec playwright install chromium --with-deps
       - name: Browser smoke (Playwright)
         run: pnpm --filter @dth/web smoke
