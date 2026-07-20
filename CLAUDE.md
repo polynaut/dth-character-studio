@@ -153,6 +153,9 @@ Two scopes now:
   Steps are pre-zod, idempotent, and guard on `=== undefined`. Tools → Refresh assets migrates +
   re-saves stale definitions. **Full decision tree + copy-paste templates live atop `migrate.ts`** —
   read it before touching the schema.
+- **Dependabot merges don't release themselves** — its PRs are exempt from the changeset gate, so
+  product-relevant bumps (Rust crates, runtime npm deps) sit unreleased until a changeset follows.
+  The `/dep-release` skill (`.claude/skills/dep-release`) finds them and cuts the patch release.
 - **Releases are automated** (don't tag/publish by hand): feature PR + changeset → `main` → the
   **Version** workflow opens a "version packages" PR → merging it triggers the **Release** workflow
   (NSIS installer + signed updater `latest.json`). The Tauri version is read from
