@@ -104,15 +104,19 @@ token by **SimplySign Desktop**, which runs headless in a container on polynaut'
 
 ```
 release.yml
-  build    (windows-latest)             → unsigned NSIS installer artifact
-  sign     (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over the
-                                          p11-kit socket shared from
-                                          certum-container)
-                                        → regenerate updater .sig over the
-                                          signed bytes
-                                        → upload signed installer + .sig artifact
-  publish  (ubuntu-latest, hosted)      → download the signed artifact
-                                        → build latest.json + gh release create
+  build     (windows-latest)             → unsigned NSIS installer artifact
+  build-mac (macos-latest, opt-in)       → universal .app + .dmg, Developer-ID
+                                           signed + Apple-notarized inline
+  sign      (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over the
+                                           p11-kit socket shared from
+                                           certum-container)
+                                         → regenerate updater .sig over the signed
+                                           Windows + notarized macOS bytes
+                                         → upload signed installer + .sig
+                                           (+ mac bundle + .sig when built)
+  publish   (ubuntu-latest, hosted)      → download the signed artifacts
+                                         → build ONE latest.json (all platforms)
+                                           + gh release create
 ```
 
 Only the **`sign`** job runs in the protected **`release-signing` environment**
@@ -136,6 +140,31 @@ The NAS runs two containers:
   `/run/p11-kit/p11kit.sock` — recorded in the `CERTUM_P11_SOCKET` repo
   **variable**, which all signing workflows read (workflow inputs can
   override it per run).
+
+### macOS builds (opt-in)
+
+The `build-mac` job adds a **universal** (Intel + Apple Silicon) macOS build — a
+`.dmg` for fresh installs and a notarized `.app.tar.gz` the updater consumes —
+alongside the Windows installer. It's **off by default**; turn it on by setting
+the repo **variable** `ENABLE_MAC_RELEASE=true` once these secrets exist (one
+Developer ID covers every app under the Apple team):
+
+| secret | what |
+| --- | --- |
+| `APPLE_CERTIFICATE` | base64 of the Developer ID Application `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | the `.p12` export password |
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Name (TEAMID)` |
+| `APPLE_API_ISSUER` | App Store Connect API issuer UUID |
+| `APPLE_API_KEY` | App Store Connect API key ID |
+| `APPLE_API_KEY_P8` | the `AuthKey_*.p8` contents (for `notarytool`) |
+
+tauri-action Developer-ID-signs + notarizes the app inline on the mac runner (the
+real updater key never touches it — a throwaway key satisfies the build, same as
+Windows). The `sign` job then regenerates the updater `.sig` over the notarized
+tarball with the real key, and `publish` folds `darwin-x86_64` + `darwin-aarch64`
+entries (both the one universal tarball) into `latest.json`. If the mac build
+**fails**, the whole release fails loudly — it never silently ships Windows-only;
+a **skipped** mac build (flag off) releases Windows exactly as before.
 
 ### The SimplySign session (fully automated — no phone, no manual step)
 
