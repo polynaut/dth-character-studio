@@ -1,5 +1,13 @@
 # @dth/ui
 
+## 0.44.3
+
+### Patch Changes
+
+- [#354](https://github.com/polynaut/dth-character-studio/pull/354) [`98de896`](https://github.com/polynaut/dth-character-studio/commit/98de896b234423b327dbe1db868d8edd76fadd25) Thanks [@polynaut](https://github.com/polynaut)! - Keyboard and screen-reader accessibility sweep: a new `Modal` primitive (Radix Dialog — real focus trap, initial focus, focus restore, Escape/backdrop dismissal, proper dialog semantics) now backs every previously hand-rolled overlay (remove-asset, bulk-delete, scene-copy, avatar image, scene-copy prompt and the "Daz already open" notice — the avatar dialog gains Escape support it never had). The side panel manages focus properly instead of declaring `aria-modal` without containment. ROM section headers are real accordion buttons (focusable, Enter/Space, `aria-expanded`) instead of click-only divs. `Field` labels are programmatically associated with their controls and errors (`htmlFor`/`aria-describedby`). The linked-asset card's corner-open control works from the keyboard, `NumberField` commits on Enter, the editable page title keeps its heading semantics for assistive tech, the Home screen's "remove from recents" button becomes visible on keyboard focus, and the UI-config provider no longer re-renders all consumers on every host render.
+
+- [#356](https://github.com/polynaut/dth-character-studio/pull/356) [`0b2c8dd`](https://github.com/polynaut/dth-character-studio/commit/0b2c8dd8739f2e6531d6c1dc9dac74a603337cb3) Thanks [@polynaut](https://github.com/polynaut)! - Opportunistic cleanups: the Deduplicate tool's shared-file groups gain the "Accept" button its help text always promised — marking a group as legitimately shared now actually persists (it stopped appearing on the next scan) instead of being a dead code path. The Settings route's release/exporter pickers and the network-drives section move into `components/settings/`, and the UI kit's public surface drops exports nothing consumes (the unused `Slider` primitive, plus internal-only helpers). Inside the generation core, the thrice-copied groom "hide-tree" DzScript snippet is extracted into one name-parameterised builder (byte-identical output, pinned by the existing tests). Two more Playwright smoke flows cover the character editor's inline rename end-to-end.
+
 ## 0.44.2
 
 ## 0.44.1
