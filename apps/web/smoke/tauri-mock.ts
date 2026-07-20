@@ -28,6 +28,9 @@ export interface TauriMockSeed {
   activeProjectFile: string
   /** What `getVersion()` reports. */
   version: string
+  /** What the native file/folder picker (`plugin:dialog|open`) returns — a path
+   *  to simulate a pick, or undefined for "cancelled" (the default). */
+  dialogPath?: string
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -112,9 +115,16 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'plugin:fs|exists':
         return isFile(norm(args.path)) || isDir(norm(args.path))
       case 'plugin:fs|read_text_file':
-      case 'plugin:fs|read_file':
+      case 'plugin:fs|read_file': {
         // The wrapper expects BYTES (ArrayBuffer / number[]) and decodes itself.
-        return new TextEncoder().encode(mustRead(norm(args.path))).buffer
+        const content = mustRead(norm(args.path))
+        // A file seeded as a `data:…;base64,…` URL (e.g. a scene `.tip.png`
+        // thumbnail) returns its real decoded bytes — text-encoding binary would
+        // corrupt it.
+        const b64 = /^data:[^,]*;base64,(.*)$/s.exec(content)?.[1]
+        if (b64) return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer
+        return new TextEncoder().encode(content).buffer
+      }
       case 'plugin:fs|write_text_file':
       case 'plugin:fs|write_file':
         files.set(headerPath(options), new TextDecoder().decode(args))
@@ -182,7 +192,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'plugin:updater|check':
         return null // "up to date"
       case 'plugin:dialog|open':
-        return null // "picker cancelled"
+        // A seeded path simulates a pick (the scene picker in the create flow);
+        // undefined = the user cancelled.
+        return seed.dialogPath ?? null
       case 'plugin:dialog|ask':
       case 'plugin:dialog|message':
         return true
@@ -219,6 +231,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'ensure_network_drives':
         return []
       case 'daz_studio_running':
+        return false
+      case 'unreal_dth_present':
+        // The linked Unreal project in the docs fixture has no DTH content yet
+        // (the footer card's install button is live, not dimmed).
         return false
 
       default:
