@@ -140,7 +140,17 @@ export async function listNotesFiles(lib: string): Promise<Array<string>> {
   return out
 }
 
-export async function getCharacter(lib: string, id: string): Promise<Character | null> {
+export async function getCharacter(
+  lib: string,
+  id: string,
+  // When the definition path is already known (a caller that resolved the
+  // location once), read it directly — skips a full library scan.
+  definitionAbs?: string,
+): Promise<Character | null> {
+  if (definitionAbs) {
+    const character = await readCharacterAt(definitionAbs)
+    return character && character.id === id ? character : null
+  }
   return (await findEntry(lib, id))?.character ?? null
 }
 
@@ -402,12 +412,17 @@ export async function moveCharactersRoot(oldRoot: string, newRoot: string): Prom
   return moved
 }
 
-/** Absolute path to a character's folder (created if missing) — Generate's target. */
-export async function getCharacterFolder(lib: string, id: string): Promise<string> {
-  const entry = await findEntry(lib, id)
-  if (!entry) throw new Error(`Character ${id} not found`)
-  await mkdir(entry.folderAbs, { recursive: true })
-  return entry.folderAbs
+/** Absolute path to a character's folder (created if missing) — Generate's target.
+ *  Pass `folderAbs` (a caller that already resolved the location) to skip the scan. */
+export async function getCharacterFolder(
+  lib: string,
+  id: string,
+  folderAbs?: string,
+): Promise<string> {
+  const dir = folderAbs ?? (await findEntry(lib, id))?.folderAbs
+  if (!dir) throw new Error(`Character ${id} not found`)
+  await mkdir(dir, { recursive: true })
+  return dir
 }
 
 export async function getCharacterPath(lib: string, id: string): Promise<CharacterLocation | null> {
@@ -546,16 +561,18 @@ export async function setGeneratedDthVersion(
   lib: string,
   id: string,
   version: string,
+  // Known definition path (a caller that already resolved the location) — skips a scan.
+  definitionAbs?: string,
 ): Promise<void> {
-  const entry = await findEntry(lib, id)
-  if (!entry) return
+  const defAbs = definitionAbs ?? (await findEntry(lib, id))?.definitionAbs
+  if (!defAbs) return
   let raw: Record<string, unknown>
   try {
-    raw = JSON.parse(await readTextFile(entry.definitionAbs))
+    raw = JSON.parse(await readTextFile(defAbs))
   } catch {
     return
   }
   if (raw.generatedDthVersion === version) return
   raw.generatedDthVersion = version
-  await writeTextFile(entry.definitionAbs, JSON.stringify(raw, null, 2) + '\n')
+  await writeTextFile(defAbs, JSON.stringify(raw, null, 2) + '\n')
 }

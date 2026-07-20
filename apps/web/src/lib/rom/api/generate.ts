@@ -156,7 +156,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const writeHoudini = targets?.houdini ?? true
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
-  const character = await storage.getCharacter(lib, id)
+  // Resolve the character's location ONCE (one library scan) and reuse it for the
+  // read, the output folder, and the generated-version write below — those three
+  // storage calls used to each run their own full scan (O(N) per save; O(N²) over
+  // a Refresh-assets sweep).
+  const location = await storage.getCharacterPath(lib, id)
+  if (!location) throw new Error(`Character ${id} not found`)
+  const character = await storage.getCharacter(lib, id, location.definitionAbs)
   if (!character) throw new Error(`Character ${id} not found`)
   // Exact ROM paths from the active release's pose scan; {} when the folder is
   // unavailable — the script then falls back to DthOptions resolution.
@@ -168,7 +174,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // The character's own folder holds the canonical PoseAsset CSV. Its absolute
   // path is baked into the generated script so the script can move the CSV into
   // the resolved export dir (scene subfolder included) when it runs in Daz.
-  const outDir = await storage.getCharacterFolder(lib, id)
+  const outDir = await storage.getCharacterFolder(lib, id, location.folderAbs)
   // Stamp the generating studio version into the script header for traceability.
   const versioned = { ...character, studioVersion: await storage.studioVersion() }
   // The active DTH release selects the PoseAsset CSV era/variant (the Daz scripts
@@ -233,7 +239,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       ...overrideCsvNames(character.name).filter((name) => !writtenHoudini.includes(name)),
     ])
     // Record which DTH release the CSV was generated for (its era drives staleness).
-    await storage.setGeneratedDthVersion(lib, id, activeRelease)
+    await storage.setGeneratedDthVersion(lib, id, activeRelease, location.definitionAbs)
   }
 
   // The PoseAsset CSV is delivered to the export dir by the generated Daz script
