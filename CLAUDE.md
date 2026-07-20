@@ -168,6 +168,11 @@ Two scopes now:
 
 ## Key docs
 
+- **`.ai/` — agent deep-dive docs. Read the relevant one BEFORE scanning source:**
+  `architecture.md` (packages, routes, lib/ boundary, FFI surface),
+  `domain.md` (ROM/frame-math/CSV/runtime semantics), `conventions.md` (schema/FFI/
+  versioning rituals), `testing.md` (the four test layers), `release.md` (the
+  release train), `gotchas.md` (measured Daz/Tauri/build facts). Index: `.ai/README.md`.
 - `docs/development.md` — run/build/architecture
 - `docs/devops.md` — release pipeline, signing keys, branch policy
 - `apps/web/docs/poseasset-csv-spec.md` — the DazToHue PoseAsset CSV format (reverse-engineered from the HDA)
