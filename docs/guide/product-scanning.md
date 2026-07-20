@@ -25,13 +25,11 @@ the project's `.dcsp`). With it on:
   script, and
 - the character page gains a **Products** tab.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Settings → Project → Enable Daz Products" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Settings → Project → Enable Daz Products" src="screenshots/settings-daz-products.png" />
   <br>
   <sub><em>Enable Daz Products in Settings → Project.</em></sub>
 </p>
--->
 
 ## Set the DIM manifests folder (for names, SKUs, artists)
 
@@ -45,13 +43,11 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 - **Leave it empty and the scan still runs** — it just lists the used assets without
   naming products. A reminder appears on the Products tab when it's unset.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="DIM manifests folder field + Detect button" src="ADD_IMAGE_URL" />
+  <img width="900" alt="DIM manifests folder field + Detect button" src="screenshots/settings-dim-manifests.png" />
   <br>
   <sub><em>The DIM manifests folder field with its Detect button.</em></sub>
 </p>
--->
 
 ---
 
@@ -95,13 +91,11 @@ you delete the character) — see [Storage & housekeeping](./tools.md).
 Switch to the character's **Products** tab. **Check for scan results** re-reads the
 CSVs from disk.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Products tab, matched products table" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Products tab, matched products table" src="screenshots/products-tab.png" />
   <br>
   <sub><em>The matched products table on the character's Products tab.</em></sub>
 </p>
--->
 
 - **Matched products** — a table of **Product · Used as · SKU · Artist · Version ·
   Match** (with a per-scene filter when a character has several scanned scenes).

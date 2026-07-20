@@ -41,7 +41,7 @@ test('Home window: lists the recent project and opens it via the native shell', 
 
   // Clicking a recent hands off to the native shell (a new OS window on the
   // desktop) — assert the command went out with the right `.dcsp`.
-  await page.getByRole('button', { name: /Smoke Project/ }).click()
+  await page.getByRole('button', { name: /Demo/ }).click()
   await expect
     .poll(() => commandCalls(page, 'open_project_window'))
     .toEqual([{ path: P.dcsp }])
@@ -58,8 +58,8 @@ test('project window: character editor measures, edits and saves both artifacts'
   await page.goto('/')
 
   // Project page: the character library lists the fixture character.
-  await expect(page.getByRole('button', { name: 'Rename — Smoke Project' })).toBeVisible()
-  await page.getByRole('link', { name: /Electra/ }).click()
+  await expect(page.getByRole('button', { name: 'Rename — Demo' })).toBeVisible()
+  await page.getByRole('link', { name: /Kira/ }).click()
 
   // Character editor: header facts + the preset ROM measured from the fake
   // .duf assets (base block only — GEN/PHY are disabled by default).
@@ -95,23 +95,23 @@ test('project window: character editor measures, edits and saves both artifacts'
 
   // Save → persists the JSON and regenerates BOTH artifacts in one step.
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByText(/Saved “Electra”/)).toBeVisible()
+  await expect(page.getByText(/Saved “Kira”/)).toBeVisible()
 
   const written = await filesWritten(page)
   // Houdini PoseAsset CSV → next to the definition in the character folder.
-  expect(written).toContain(`${P.charFolder}/Electra_pose_asset.csv`)
+  expect(written).toContain(`${P.charFolder}/Kira_pose_asset.csv`)
   // Daz script → the per-character scripts folder in the DAZ library, with the
   // shared runtime installed at the scripts root.
-  const dsa = await fileContent(page, `${P.scriptsDir}/ROM_Electra_G9.dsa`)
+  const dsa = await fileContent(page, `${P.scriptsDir}/ROM_Kira_G9.dsa`)
   expect(dsa).toContain('ApplyDTHCharacter')
   expect(dsa).toMatch(/DTH-Runtime: v\d+/)
-  expect(written).toContain('C:/e2e/dazlib/Scripts/DTH-Character-Studio/.DthUtils.dsa')
+  expect(written).toContain(`${P.dazLib}/Scripts/DTH-Character-Studio/.DthUtils.dsa`)
   // Frame alignment reaches the artifacts: the script's config carries the
   // MEASURED preset block lengths (base ROM + the just-enabled Golden Palace).
   expect(dsa).toMatch(new RegExp(`"base":\\s*${FRAMES.base}`))
   expect(dsa).toMatch(new RegExp(`"gp":\\s*${FRAMES.gp}`))
   // The definition's provenance was re-stamped by the save.
-  const definition = await fileContent(page, `${P.charFolder}/Electra.json`)
+  const definition = await fileContent(page, `${P.charFolder}/Kira.json`)
   expect(JSON.parse(definition!).generatedDthVersion).toBe('2.4.3')
 
   // The completeness guard: every native call the flow made was one this mock
@@ -124,24 +124,24 @@ test('project window: inline rename moves the folder and regenerates the script'
 }) => {
   await page.addInitScript(installTauriMock, buildSeed({ activeProjectFile: P.dcsp }))
   await page.goto('/')
-  await page.getByRole('link', { name: /Electra/ }).click()
+  await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText('G9 · DQS · 0 custom ROM frames')).toBeVisible()
 
   // Rename via the title: the heading is a real button (EditableTitle), which
   // opens an inline input; Enter commits → onRenameCharacter saves + regenerates.
-  await page.getByRole('button', { name: /Rename — Electra/ }).click()
+  await page.getByRole('button', { name: /Rename — Kira/ }).click()
   const input = page.getByRole('textbox').first()
-  await input.fill('Kira')
+  await input.fill('Nova')
   await input.press('Enter')
-  await expect(page.getByText(/Renamed to “Kira”/)).toBeVisible()
+  await expect(page.getByText(/Renamed to “Nova”/)).toBeVisible()
 
   // The definition + generated Daz script now live under the new name; the
   // old-named script is gone (regeneration with previousName cleans it up).
   const written = await filesWritten(page)
-  const kiraFolder = `${P.project}/Kira`
-  expect(written).toContain(`${kiraFolder}/Kira.json`)
-  expect(written).toContain(`C:/e2e/dazlib/Scripts/DTH-Character-Studio/Smoke Project/Kira/ROM_Kira_G9.dsa`)
-  expect(JSON.parse((await fileContent(page, `${kiraFolder}/Kira.json`))!).name).toBe('Kira')
+  const novaFolder = `${P.project}/Nova`
+  expect(written).toContain(`${novaFolder}/Nova.json`)
+  expect(written).toContain(`${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`)
+  expect(JSON.parse((await fileContent(page, `${novaFolder}/Nova.json`))!).name).toBe('Nova')
 
   expect(await unhandledCommands(page)).toEqual([])
 })

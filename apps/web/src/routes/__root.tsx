@@ -144,8 +144,12 @@ function RootComponent() {
       <UpdatePromptHost />
       {/* Floating-UI tooltips for every title= attribute, app-wide. */}
       <TooltipHost />
-      {/* Dev-only: never ship the devtools button to installed/end-user builds. */}
-      {import.meta.env.DEV && (
+      {/* Dev-only: never ship the devtools button to installed/end-user builds.
+          The screenshot suite sets `window.__dthHideDevtools` before the bundle
+          runs so the floating trigger stays out of the doc screenshots (a DOM/CSS
+          hack loses to the widget re-mounting during Playwright's fullPage shot). */}
+      {import.meta.env.DEV &&
+        !(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools && (
         <TanStackDevtools
           config={{
             position: 'bottom-right',

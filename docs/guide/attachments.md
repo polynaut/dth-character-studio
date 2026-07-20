@@ -23,13 +23,11 @@ shows inside a project window) and turn on **Enable attachments**, then Save. Th
 setting is stored in that project's `.dcsp` file, so you enable it per project that
 wants it.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Settings → Project → Enable attachments" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Settings → Project → Enable attachments" src="screenshots/settings-attachments.png" />
   <br>
   <sub><em>Enable attachments in Settings → Project.</em></sub>
 </p>
--->
 
 With it **off**, the project shows characters only. With it **on**, the project page
 grows a **Characters / Attachments** tab bar, and the "Add" panel gains a **Character
@@ -51,13 +49,11 @@ On the **Attachments** tab, press **Add** and fill in:
    - Turn the copy switch **off** to **link in place** — the scene stays where it
      is and the attachment just records its path.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Add attachment panel" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Add attachment panel" src="screenshots/attachment-add-panel.png" />
   <br>
   <sub><em>The Add attachment panel with its scene thumbnail preview.</em></sub>
 </p>
--->
 
 **Copy vs link — the one thing to understand:**
 

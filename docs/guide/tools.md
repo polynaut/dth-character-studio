@@ -8,13 +8,11 @@ Tools is for the extras beyond that.
 
 It has two tabs.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Tools page, two tabs" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Tools page, two tabs" src="screenshots/tools-page.png" />
   <br>
   <sub><em>The Tools page and its two tabs.</em></sub>
 </p>
--->
 
 &nbsp;
 
@@ -44,13 +42,11 @@ there**. When two products ship the same file, the winner is picked automaticall
 the **bigger file** — so only the winning copy installs. **Scan** lists what's
 found; **Install** copies only what changed.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Daz assets install section" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Daz assets install section" src="screenshots/tools-daz-assets.png" />
   <br>
   <sub><em>The Daz assets install section.</em></sub>
 </p>
--->
 
 ### Deduplicate
 
@@ -65,13 +61,11 @@ download) — you **Accept** them instead, which tells the scan they're legitima
 shared. See also the [nested-zip handling](./tools.md) for store "wrapper"
 downloads (a zip inside a zip) — the scan looks inside them automatically.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Deduplicate section" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Deduplicate section" src="screenshots/tools-deduplicate.png" />
   <br>
   <sub><em>The Deduplicate section for redundant and conflicting assets.</em></sub>
 </p>
--->
 
 ### Custom morphs · Daz presets
 
@@ -97,13 +91,11 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 
 &nbsp;
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Danger zone" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Danger zone" src="screenshots/tools-danger-zone.png" />
   <br>
   <sub><em>The Danger zone for removing leftover Daz folders.</em></sub>
 </p>
--->
 
 ---
 
@@ -116,12 +108,10 @@ matter which window you run it from. **Your character definitions are never
 changed** — only their generated output. Problems per character are listed inline;
 the button pulses orange when a refresh is due.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Refresh assets tab" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Refresh assets tab" src="screenshots/tools-refresh.png" />
   <br>
   <sub><em>The Refresh assets tab.</em></sub>
 </p>
--->
 
 [← Guide overview](./README.md)

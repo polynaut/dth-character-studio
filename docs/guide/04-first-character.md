@@ -2,13 +2,11 @@
 
 ## Create it
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="project window, create character panel" src="ADD_IMAGE_URL" />
+  <img width="900" alt="project window, create character panel" src="screenshots/character-create-panel.png" />
   <br>
   <sub><em>The Add character panel in the project window.</em></sub>
 </p>
--->
 
 1. In the project window press **Add character** (or drop a `.duf` anywhere).   
 3. **Choose Daz scene…** — the character's scene file.
@@ -18,31 +16,16 @@
 5. **ROM prefill** — start **Empty** for a first character, or prefill from any
    of your own characters (across projects) to copy a working ROM definition.
 
-  <p align="center">
-    <img width="722" alt="Character details and ROM prefill" src="https://github.com/user-attachments/assets/3446cc99-9884-416a-88b0-e6e6f7cc8368" />
-    <br>
-    <sub><em>Set Genesis, gender, and the ROM prefill for the new character.</em></sub>
-  </p>
-   
 6. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
-   <p align="center">
-     <img width="1014" alt="The new character's page" src="https://github.com/user-attachments/assets/9e6b850e-9725-4f5c-9e18-64ee797ce18b" />
-     <br>
-     <sub><em>After Create, the scene is copied into the character's folder.</em></sub>
-   </p>
-
-
 ## The ROM definition
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="character page, ROM sections" src="ADD_IMAGE_URL" />
+  <img width="900" alt="character page, ROM sections" src="screenshots/character-rom-sections.png" />
   <br>
   <sub><em>The ROM sections on the character page.</em></sub>
 </p>
--->
 
 A ROM is a fixed sequence of eight sections. Each can be **enabled or disabled**,
 and runs in **Preset** mode (the DTH release's stock pose assets) or **Custom**
@@ -64,14 +47,6 @@ mode (your own poses and morphs):
 > [!NOTE]
 > The studio computes every frame number from this structure — you never type a
 > frame, and the Daz and Houdini outputs can't drift apart.
-
-&nbsp;
-
-<p align="center">
-  <img width="1014" alt="The ROM's eight fixed sections" src="https://github.com/user-attachments/assets/5e412f4b-d27f-4ac5-9fd7-8abb5f446fe4" />
-  <br>
-  <sub><em>The ROM's eight sections, each enabled and set to Preset or Custom.</em></sub>
-</p>
 
 Above the sections, a colored **timeline bar** maps the whole ROM: one segment per
 block (preset and custom), widths proportional to their frame counts — hover a
@@ -202,13 +177,11 @@ the pose row and the studio handles the rest end to end:
 - that FBX's path is filled into the PoseAsset CSV for you, resolved to the exact
   absolute location the exporter wrote — so Houdini finds it with nothing to type.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="the Bone scale toggle on a pose row" src="ADD_IMAGE_URL" />
+  <img width="900" alt="the Bone scale toggle on a pose row" src="screenshots/character-bone-scale-toggle.png" />
   <br>
   <sub><em>Tick Bone scale on a bone-scaling morph — its reference-skeleton FBX is exported and referenced for you.</em></sub>
 </p>
--->
 
 &nbsp;
 
@@ -362,13 +335,11 @@ Everything above covered the ROM. The page around it, box by box:
 <summary><strong>The header — avatar, rename, path chip, Save/Discard</strong></summary>
 <table><tr><td>
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="character page header" src="ADD_IMAGE_URL" />
+  <img width="900" alt="character page header" src="screenshots/character-header.png" />
   <br>
   <sub><em>The character page's header: avatar, name, path chip, Save/Discard.</em></sub>
 </p>
--->
 
 - **Avatar** — click the portrait to open the **Character image** dialog: pick one
   of the linked Daz scenes' thumbnails, drop an image file, or paste an image URL.

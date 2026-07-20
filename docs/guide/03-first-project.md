@@ -7,25 +7,16 @@ back it up with them, and you're done.
 
 ## Create it
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="home screen, new project panel" src="ADD_IMAGE_URL" />
+  <img width="900" alt="home screen, new project panel" src="screenshots/home-new-project.png" />
   <br>
   <sub><em>The New project panel on the Home screen.</em></sub>
 </p>
--->
 
 1. On the **Home** screen press **New project**.
 2. **Choose folder…** — pick the folder the project should live in.
    You can also just drop a folder anywhere onto the Home screen.
 4. Give it a **Project name** and press **Create**.
-
-   <p align="center">
-     <img width="722" alt="Naming the new project" src="https://github.com/user-attachments/assets/d3ce515a-3976-4d30-9451-4ba3019f901a" />
-     <br>
-     <sub><em>Give the project a name and press Create.</em></sub>
-   </p>
-
 
 The project opens **in its own window**. From now on you can also open it by
 double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent list.
@@ -45,13 +36,7 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
 - Per-project options (folder layout, optional [Assets](./attachments.md) and
   [Daz Products](./product-scanning.md) features) live in **Settings → Project** —
   the defaults are fine for a first run.
-  
-   <p align="center">
-     <img width="722" alt="Settings → Project tab" src="https://github.com/user-attachments/assets/8a59ab2a-9cc6-4499-86ad-bb6e51b82c03" />
-     <br>
-     <sub><em>Per-project options live in Settings → Project.</em></sub>
-   </p>
-  
+
 - **Path chips** — the monospace path badges all over the app — **copy the full
   path on click** (a check mark confirms it); **Alt+click opens the location
   in Explorer** (for a file, its folder). Where a chip carries a pencil, it
@@ -71,13 +56,6 @@ this studio project feeds. Link one or more `.uproject` files with the button or
 by dropping them onto the bar — links only: the files stay where they are, and
 unlinking never deletes anything.
 
-<p align="center">
-  <img width="727" alt="Unreal projects bar with a linked project" src="https://github.com/user-attachments/assets/f899c95b-d660-4c18-a0bf-995f4e995d29" />
-  <br>
-  <sub><em>The Unreal projects bar docked at the bottom of the window.</em></sub>
-</p>
-
-
 - **Click a card** to open that project in Unreal Engine — **Alt+click** shows it
   in Explorer instead.
 - **The small install button** on each card bootstraps the Unreal project with
@@ -88,12 +66,10 @@ unlinking never deletes anything.
   Settings (handy after switching the DTH release — files are copied over,
   project-local additions inside the folder survive).
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="Unreal projects footer bar with a linked project card" src="ADD_IMAGE_URL" />
+  <img width="900" alt="Unreal projects footer bar with a linked project card" src="screenshots/project-unreal-footer.png" />
   <br>
   <sub><em>A linked Unreal project card in the footer bar.</em></sub>
 </p>
--->
 
 [← One-time setup](./02-setup.md) · [Next: Your first character →](./04-first-character.md)
