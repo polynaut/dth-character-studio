@@ -2,6 +2,8 @@ import { exists, remove } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { withBusyCursor } from '../../busy-cursor.ts'
+
 import {
   activeSceneOverrides,
   characterScriptName,
@@ -352,7 +354,13 @@ export interface RefreshSummary {
  * Per-character failures are collected, not thrown, so one bad character can't
  * abort the sweep.
  */
-export async function refreshAllAssets(): Promise<RefreshSummary> {
+export function refreshAllAssets(): Promise<RefreshSummary> {
+  // A full refresh regenerates every stale character across every known
+  // project — minutes on large libraries; show the working cursor throughout.
+  return withBusyCursor(refreshAllAssetsInner())
+}
+
+async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   const settings = await storage.getSettings()
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
   const catalog = await fetchPoseAssets()
