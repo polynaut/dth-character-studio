@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.44.8
+
+### Patch Changes
+
+- [#389](https://github.com/polynaut/dth-character-studio/pull/389) [`314ec06`](https://github.com/polynaut/dth-character-studio/commit/314ec06e7095b8d26f62370ce4393cee23916b53) Thanks [@polynaut](https://github.com/polynaut)! - Modify JCM frames: dropped the redundant per-drive positive/negative selector — a drive's direction is now read from its angle range's sign (e.g. `Angle to` −115 = the negative bend), so a rule holds one signed drive list. Existing characters migrate automatically (the two lists merge) and the generated Daz script is byte-for-byte unchanged.
+
+- Updated dependencies []:
+  - @dth/rom@0.44.8
+  - @dth/ui@0.44.8
+
 ## 0.44.7
 
 ### Patch Changes
