@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.44.4
+
+### Patch Changes
+
+- [#363](https://github.com/polynaut/dth-character-studio/pull/363) [`cc109bf`](https://github.com/polynaut/dth-character-studio/commit/cc109bf101c0d28ae730ce1d3b85a8c1e3451d7a) Thanks [@polynaut](https://github.com/polynaut)! - DTH Character Studio is now also built and published for **macOS** — a universal (Intel + Apple Silicon) `.dmg` / `.app`, Developer-ID-signed and Apple-notarized, published alongside the Windows installer. The auto-updater serves the matching platform from the same `latest.json`. (The Daz DTH Exporter Plugin is still Windows-only, so the far side of the pipeline continues to need Windows.)
+
 ## 0.44.3
 
 ### Patch Changes
