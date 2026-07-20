@@ -12,7 +12,7 @@
 # The Pages project ($PROJECT) is created automatically on the first run.
 # Fork PRs: secrets aren't exposed to them, so the job skips (same-repo guard).
 
-name: 🔍 Site preview
+name: 🔍 Pull Request Pages preview
 
 on:
   pull_request:

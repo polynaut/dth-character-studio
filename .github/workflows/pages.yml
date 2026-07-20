@@ -7,7 +7,7 @@
 # scripts/build-guide-site.mjs, so it ships styled with the site. Runs when
 # the site, the guide, or this pipeline changes on main.
 
-name: 🌐 Deploy Pages
+name: 🌐 Pages deployment
 
 on:
   push:
