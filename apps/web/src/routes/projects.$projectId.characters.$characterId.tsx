@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
-import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
+import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, Tag, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
 import { PathCode } from '#/components/path-code.tsx'
 import { toast } from 'sonner'
 import { RomSections } from '#/components/rom-sections.tsx'
@@ -195,7 +195,10 @@ function CharacterPage() {
   const overrideEligible = effectiveScene !== '' && effectiveScene !== character.scenePath
   const sceneOverride = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
   const overrideActive = overrideEligible && sceneOverride?.enabled === true
-  const overrideSceneName =
+  /** The selected scene's display name (file stem) — the Override toggle's
+   *  label and, with more than one scene linked, the header tag after the
+   *  character name (so the active scene context rides the sticky header). */
+  const selectedSceneName =
     effectiveScene.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
   function setOverrideEnabled(enabled: boolean) {
     const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
@@ -495,12 +498,27 @@ function CharacterPage() {
           </span>
         </button>
         <div className="title-scroll pb-6">
-          <EditableTitle
-            name={character.name}
-            ariaLabel="Character name"
-            onEditingChange={setEditingTitle}
-            onSave={onRenameCharacter}
-          />
+          <div className="flex items-baseline gap-2.5">
+            <EditableTitle
+              name={character.name}
+              ariaLabel="Character name"
+              onEditingChange={setEditingTitle}
+              onSave={onRenameCharacter}
+            />
+            {/* With several scenes linked, the SELECTED scene rides the title —
+                groom lists and the ROM override follow that selection, and the
+                title row stays visible in the collapsed sticky header (the
+                subtitle below does not). Hidden while renaming. */}
+            {linkedScenes.length > 1 && selectedSceneName && !editingTitle && (
+              <Tag
+                tone="orange"
+                className="max-w-64 truncate normal-case"
+                title="The Daz scene selected in the scene cards — hair items and the ROM override follow it"
+              >
+                {selectedSceneName}
+              </Tag>
+            )}
+          </div>
           <p className="title-subtitle text-muted-foreground">
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
@@ -877,7 +895,7 @@ function CharacterPage() {
               className={`flex items-center gap-1 text-sm ${overrideEligible ? '' : 'text-muted-foreground'}`}
             >
               Override
-              {overrideEligible && <span className="font-medium">for “{overrideSceneName}”</span>}
+              {overrideEligible && <span className="font-medium">for “{selectedSceneName}”</span>}
               <InfoPopup label="Scene override — more information">
                 Drive <strong>different morphs for another Daz scene</strong> of this character
                 (e.g. a second outfit): select one of the extra scenes in the Daz scenes cards,
@@ -893,8 +911,8 @@ function CharacterPage() {
               title={
                 overrideEligible
                   ? overrideActive
-                    ? `Disable the ROM override for “${overrideSceneName}” (the stored override rows are kept)`
-                    : `Override ROM frames for “${overrideSceneName}”`
+                    ? `Disable the ROM override for “${selectedSceneName}” (the stored override rows are kept)`
+                    : `Override ROM frames for “${selectedSceneName}”`
                   : 'Select one of the extra Daz scenes (not the primary) in the Daz scenes cards to set up a per-scene override'
               }
               onCheckedChange={setOverrideEnabled}

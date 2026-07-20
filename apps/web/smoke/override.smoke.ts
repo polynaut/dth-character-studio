@@ -29,12 +29,18 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
+  // With several scenes linked the title row tags the SELECTED scene (primary
+  // by default) — the tag follows the card selection.
+  const titleRow = page.locator('.title-scroll')
+  await expect(titleRow.getByText('KiraDefault_G9_GP')).toBeVisible()
+
   // The toggle arms only once a non-primary scene is selected (its title —
   // and so its accessible name — flips with that state).
   await expect(
     page.getByRole('switch', { name: /Select one of the extra Daz scenes/ }),
   ).toBeDisabled()
   await page.getByText('KiraBeach', { exact: true }).first().click()
+  await expect(titleRow.getByText('KiraBeach')).toBeVisible()
   await page.getByRole('switch', { name: /Override ROM frames/ }).click()
   await expect(page.getByText(/Scene override active/)).toBeVisible()
 
