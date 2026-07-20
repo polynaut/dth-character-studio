@@ -471,6 +471,43 @@ a:hover {
   }
 }
 
+/* Features — the compact "why you'll want it" checklist. */
+
+.features {
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px 48px;
+}
+
+.features li {
+  display: flex;
+  gap: 12px;
+  font-size: 0.97rem;
+  color: color-mix(in oklab, var(--fg) 82%, var(--muted));
+}
+
+.features strong {
+  color: var(--fg-bright);
+}
+
+.feature-check {
+  width: 22px;
+  height: 22px;
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 1px;
+  stroke-width: 2.5;
+}
+
+@media (max-width: 720px) {
+  .features {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Steps */
 
 .steps {

@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="DTH Character Studio" src="brand/logo-transparent.png" width="200">
+  <a href="https://polynaut.github.io/dth-character-studio/"><img alt="DTH Character Studio" src="brand/logo-transparent.png" width="200"></a>
 </p>
 
 <h1 align="center">DTH Character Studio</h1>
@@ -13,6 +13,11 @@
 </p>
 
 <p align="center">
+  <a href="https://polynaut.github.io/dth-character-studio/"><strong>🌐 polynaut.github.io/dth-character-studio</strong></a><br>
+  features · downloads · getting started
+</p>
+
+<p align="center">
   <a href="https://polynaut.github.io/dth-character-studio/"><img alt="Website" src="https://img.shields.io/badge/website-polynaut.github.io-fe5c01"></a>
   <a href="https://github.com/polynaut/dth-character-studio/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/polynaut/dth-character-studio?label=download&color=ff5a1f"></a>
   <img alt="Windows | macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue">
@@ -21,30 +26,11 @@
 
 ---
 
-## Where ROMs get hard
-
-Building a Range of Motion from DTH's stock pose assets is the easy part. The work piles up when you add your own content — dozens of custom morphs across the **Full Body**, **Expressions**, and **Miscellaneous** sections. Each one has to sit on an exact frame, and Daz and Houdini have to agree on every one of those numbers. Miss a single frame and the morph quietly breaks in Unreal — stages later, with no clean fix but to redo the work.
-
-DTH Character Studio turns that bookkeeping into a **declaration**. List your morphs once — the studio places the frames and generates both sides, so they can't drift out of sync.
-
-## One definition. Both sides. Always in sync.
-
-From a single character definition, the studio produces:
-
-- 🎬 **Daz side** — a one-click script that applies the *entire* ROM in Daz Studio, replacing the hand-built per-character setup.
-- 🌀 **Houdini side** — the DazToHue **PoseAsset** import CSV, ready to drop into your network.
-
-Because both come from the same source, the "hundreds of frames must match 100%" problem disappears **by construction**. Change the character, regenerate, and Daz and Houdini stay perfectly aligned.
-
-## Why you'll want it
-
-- 🎯 **Frame-exact & validated.** The Genesis 9 path is verified byte-for-byte against hand-built artifacts on both sides.
-- 🖱️ **One-click everything.** Install the DTH runtime and exporter, generate, and apply — no manual file shuffling.
-- 🗂️ **Projects & character library.** Organize characters per game project and keep your library wherever you back up.
-- 🔄 **Always up to date.** The desktop app checks for updates on launch and installs them with a click.
-- 🤝 **Share recipes, not assets.** Definitions reference morphs by name and frame — freely shareable, with no licensed content baked in.
-
 ## How it works
+
+From one declarative character definition, the studio generates **both sides** of a
+Range of Motion — the Daz Studio apply-script and the Houdini PoseAsset CSV —
+frame-aligned **by construction**, so they cannot drift out of sync.
 
 1. **Describe** your character — pick the Genesis version, add ROM sections and body morphs.
 2. **Generate** — one click produces the Daz apply-script and the Houdini PoseAsset CSV.
