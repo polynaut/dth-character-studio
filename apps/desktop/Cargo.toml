@@ -68,7 +68,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # Windows-only: resolving / re-mapping network drives via the WNet API. 0.59 is
 # already in the tree (via tauri), so this pulls in no new windows-sys version.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_NetworkManagement_WNet",
   # Focusing another app's window after "Open in …" (see foreground.rs).
