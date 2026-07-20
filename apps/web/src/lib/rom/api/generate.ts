@@ -2,6 +2,8 @@ import { exists, remove } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { normalizePathLower } from '#/lib/path.ts'
+
 import {
   activeSceneOverrides,
   characterScriptName,
@@ -291,7 +293,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
           project.name,
           previousName,
         )
-        if (oldCharDir !== charDir && (await exists(oldCharDir))) {
+        // Case-only rename (kira → Kira): the two paths differ as strings but are
+        // the SAME physical dir on Windows, so a case-sensitive `!==` would delete
+        // the folder we just wrote the new scripts into. Compare case-insensitively.
+        if (
+          normalizePathLower(oldCharDir) !== normalizePathLower(charDir) &&
+          (await exists(oldCharDir))
+        ) {
           await remove(oldCharDir, { recursive: true })
         }
       }

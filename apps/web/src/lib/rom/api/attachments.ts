@@ -209,7 +209,12 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
     '// (clears it, then opens the file). With the default it merges into the open',
     '// scene, so opening a new card when a scene was already loaded did nothing visible.',
     '(function () {',
-    `  var path = ${JSON.stringify(scenePath.replace(/\\/g, '/'))};`,
+    // U+2028/U+2029 are LINE TERMINATORS to Daz's JS engine (see .ai/gotchas.md),
+    // so a scene path carrying one would end this string literal mid-line and the
+    // bridge would fail to parse. Escape them as data, like the core's dazJson.
+    `  var path = ${JSON.stringify(scenePath.replace(/\\/g, '/'))
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029')};`,
     '  try {',
     '    if (!App.getContentMgr().openFile(path, false)) {',
     '      MessageBox.warning("DTH: could not open the scene:\\n" + path, "DTH Character Studio", "&OK");',

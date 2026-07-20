@@ -46,9 +46,10 @@ export async function fetchAppVersion(): Promise<string> {
 }
 
 /**
- * The app's internal per-user data folder — where settings.json, projects.json
- * and avatar images live. Surfaced in Settings so the user can find (and back
- * up) the app's state.
+ * The app's internal per-user data folder — where settings.json, recents.json and
+ * network-drives.json live (projects.json + global avatars were migrated away to
+ * the `.dcsp` model; avatars are now per-project under `.dcsmeta/images`).
+ * Surfaced in Settings so the user can find (and back up) the app's machine state.
  */
 export async function fetchAppDataFolder(): Promise<string> {
   return dataPath()
@@ -233,9 +234,13 @@ export async function dedupDazAssets({ data }: { data: unknown }): Promise<Dedup
  *  library root, common Documents/Public spots, APPDATA DAZ 3D + Start Menu). */
 export async function defaultDazUninstallFolders(): Promise<Array<string>> {
   const s = await storage.getSettings()
-  return invoke<Array<string>>('default_daz_uninstall_folders', {
+  // Parse the native return through zod rather than a bare `invoke<T>()` cast:
+  // this list pre-fills the danger-zone RECURSIVE-DELETE targets, so a wrong shape
+  // must fail loud here, not feed junk into a delete.
+  const raw = await invoke('default_daz_uninstall_folders', {
     request: { dazLibFolder: s.dazLibraryFolder.trim() },
   })
+  return z.array(z.string()).parse(raw)
 }
 
 /** DANGER: recursively delete the configured leftover Daz folders (run after

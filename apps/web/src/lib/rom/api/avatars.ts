@@ -121,9 +121,10 @@ const uploadImageInput = z.object({
 })
 
 /**
- * Stores a dropped avatar image under <data>/images/ and returns its bare
- * filename — the portable canonical reference saved on the character (see
- * ./image). Avatars are global (keyed by character id), not per-project.
+ * Stores a dropped avatar image under the active project's `.dcsmeta/images/`
+ * (via {@link writeAvatarBytes}) and returns its bare filename — the portable
+ * canonical reference saved on the character (see ./image). Avatars are
+ * PER-PROJECT (they live in the project's hidden `.dcsmeta`), keyed by character id.
  */
 export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
   const input = uploadImageInput.parse(data)

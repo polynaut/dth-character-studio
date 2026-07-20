@@ -301,10 +301,19 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
   const storePath = joinPath(folder, LAST_ROM_RUN_FILE)
   try {
     if (ingest && (await exists(dazPath))) {
+      const text = await readTextFile(dazPath)
       let log: RomRunLog
       try {
-        log = parseRomRunLogText(await readTextFile(dazPath))
+        log = parseRomRunLogText(text)
       } catch {
+        // Parse failed — this can be a PARTIAL mid-write (a focus refetch can land
+        // while Daz is still writing the file), not a genuinely corrupt log. Only
+        // treat it as unreadable (store + delete) if the file is STABLE — identical
+        // on a second read. If it changed, Daz is still writing: throw to fall back
+        // to the stored copy and let the next refetch ingest the finished file,
+        // instead of deleting a log Daz is about to complete.
+        const stable = (await exists(dazPath)) && (await readTextFile(dazPath)) === text
+        if (!stable) throw new Error('run log still being written')
         log = unreadableRomRunLog()
       }
       await writeTextFile(storePath, JSON.stringify(log, null, 2))
