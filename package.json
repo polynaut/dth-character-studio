@@ -18,6 +18,7 @@
     "build:desktop": "pnpm --filter @dth/desktop tauri build",
     "generate-routes": "pnpm --filter @dth/web generate-routes",
     "screenshots": "pnpm --filter @dth/web screenshots",
+    "build:guide": "node scripts/build-guide-site.mjs",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint --config .oxlintrc.json --type-aware apps packages",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.1",
+    "marked": "^18.0.6",
     "oxlint": "^1.74.0",
     "oxlint-tsgolint": "^0.25.0"
   },

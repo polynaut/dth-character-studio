@@ -1,4 +1,4 @@
-name: ✅ Validate Pull Request
+name: ✅ Pull Request validation
 
 # Basic checks on every pull request: typecheck, tests, and a web build. The
 # version/release workflows only run on pushes to main, so this is the gate that

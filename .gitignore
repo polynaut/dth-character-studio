@@ -17,3 +17,6 @@ playwright-report/
 
 # TanStack Router plugin temp output
 .tanstack
+
+# Generated at deploy time by scripts/build-guide-site.mjs (pages.yml)
+site/guide/
