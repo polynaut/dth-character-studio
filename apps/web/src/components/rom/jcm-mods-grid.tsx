@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ChevronRight, FlipHorizontal2, Plus, Trash2 } from 'lucide-react'
 
 import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 
-import { cellInputClass } from './cells.tsx'
+import { cellInputClass, pctToValue, valueToPct } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
 
 import type { JcmMorphMod } from '@dth/rom'
@@ -71,28 +71,46 @@ function RawNumberCell({
   value,
   title,
   onCommit,
+  percent,
 }: {
   value: number
   title: string
   onCommit: (value: number) => void
+  /** Show/edit the 0–1 morph value as a Daz-style percentage (0–100%), like the
+   *  ROM pose value cells. Angle cells (degrees) stay raw. */
+  percent?: boolean
 }) {
-  const [draft, setDraft] = useState(String(value))
-  useEffect(() => setDraft(String(value)), [value])
-  return (
+  const format = useCallback((v: number) => (percent ? valueToPct(v) : String(v)), [percent])
+  const [draft, setDraft] = useState(() => format(value))
+  useEffect(() => setDraft(format(value)), [value, format])
+  const input = (
     <input
-      className={`${cellInputClass} w-16 text-right tabular-nums`}
+      className={`${cellInputClass} w-16 text-right tabular-nums ${percent ? 'pr-5' : ''}`}
       value={draft}
       title={title}
+      inputMode="decimal"
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
         const parsed = Number(draft)
-        if (Number.isFinite(parsed)) onCommit(parsed)
-        else setDraft(String(value))
+        if (!Number.isFinite(parsed)) {
+          setDraft(format(value))
+          return
+        }
+        onCommit(percent ? pctToValue(parsed) : parsed)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
       }}
     />
+  )
+  if (!percent) return input
+  return (
+    <span className="relative inline-block">
+      {input}
+      <span className="pointer-events-none absolute top-1/2 right-1.5 -translate-y-1/2 text-xs text-muted-foreground">
+        %
+      </span>
+    </span>
   )
 }
 
@@ -290,14 +308,16 @@ export function JcmModsGrid({
                           <td className="pr-1 text-right">
                             <RawNumberCell
                               value={drive.range.value.start}
-                              title="Morph value at the start angle (raw, 1 = 100%)"
+                              percent
+                              title="Morph value at the start angle (100% = full)"
                               onCommit={(n) => patchRange(i, dir, index, 'value', 'start', n)}
                             />
                           </td>
                           <td className="pr-2 text-right">
                             <RawNumberCell
                               value={drive.range.value.end}
-                              title="Morph value at the end angle (raw, 1 = 100%)"
+                              percent
+                              title="Morph value at the end angle (100% = full)"
                               onCommit={(n) => patchRange(i, dir, index, 'value', 'end', n)}
                             />
                           </td>

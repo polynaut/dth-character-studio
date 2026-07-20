@@ -21,13 +21,6 @@ extract the downloaded archives somewhere permanent first.
    you can select the **active** one. Adding another release later to the folder won't change the selection!
    You need to actively select the new version in the dropdown and re-install the files for Daz and Houdini.
    
-   <p align="center">
-     <img width="722" alt="Selecting the active DTH release version" src="https://github.com/user-attachments/assets/070c9f98-fcd8-4698-98b8-9a56bf51bc5c" />
-     <br>
-     <sub><em>Pick the active version when several releases are detected.</em></sub>
-   </p>
-
-   
 3. **My DAZ 3D Library** — your Daz content library (where Daz Studio loads content
    from, e.g. `…\Documents\DAZ 3D\Studio\My Library`). Press **Install** below it to
    copy the release's Daz content into the library. **Dry run** previews what would
