@@ -113,7 +113,11 @@ async function scanLibrary(lib: string): Promise<Array<LibraryEntry>> {
   if (!lib || !(await isDir(lib))) return []
   const entries: Array<LibraryEntry> = []
   const seen = new Set<string>()
-  for (const rel of await walkFiles(lib)) {
+  // Prune dot-folders: a character definition never lives in one, but `.dcsmeta`
+  // (avatars + up-to-100MB note media), `.assets`, and `.dth-moving` would
+  // otherwise be walked in full on every scan. Character/Daz/Houdini subfolders
+  // still descend (a moved character can nest arbitrarily).
+  for (const rel of await walkFiles(lib, '', (name) => name.startsWith('.'))) {
     if (!rel.toLowerCase().endsWith('.json')) continue
     const definitionAbs = join(lib, rel)
     let character: Character

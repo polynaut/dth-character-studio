@@ -185,14 +185,25 @@ function bytesToDataUrl(bytes: Uint8Array, fileName: string): string {
  * protocol isn't scoped to arbitrary project folders). Returns '' when there's no
  * active project or the file is missing, so the UI falls back to the placeholder.
  */
+// Resolved avatar data URLs, keyed by `<projectDir>|<image>`. The stored avatar
+// filename is content-versioned (`<id>-<ts>.<ext>`), so a changed avatar gets a
+// NEW key — the cache is self-invalidating and spares a file read + base64 encode
+// on every remount of a character grid (dozens of cards, re-run on each nav back).
+const imageSrcCache = new Map<string, string>()
+
 export async function resolveImageSrc(image: string): Promise<string> {
   if (!image) return ''
   if (isExternalImage(image)) return image
   const projectDir = await getActiveProjectDir()
   if (!projectDir) return ''
+  const key = `${projectDir}|${image}`
+  const cached = imageSrcCache.get(key)
+  if (cached) return cached
   try {
     const bytes = await readFile(joinPath(storage.metaImagesDir(projectDir), image))
-    return bytesToDataUrl(bytes, image)
+    const url = bytesToDataUrl(bytes, image)
+    imageSrcCache.set(key, url)
+    return url
   } catch {
     return ''
   }

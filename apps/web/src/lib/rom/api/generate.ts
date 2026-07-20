@@ -1,4 +1,4 @@
-import { exists, remove } from '@tauri-apps/plugin-fs'
+import { exists, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -52,16 +52,51 @@ interface MeasuredFrames {
   error: string
 }
 
-/** Measure the frame length of each `.duf` via the native command. The result
- *  is parsed through the contract schema (not a bare cast), so a Rust-side
- *  shape change throws HERE instead of desyncing frame numbers downstream. */
+/** Measured `.duf` frame counts, keyed on `path|<mtime>:<size>`. A `.duf`'s frame
+ *  count is deterministic per file version, so this spares re-parsing tens of MB of
+ *  DSON JSON on every hover-preload / generate. Self-invalidating: a replaced `.duf`
+ *  (a new DTH release) has a fresh mtime:size, so a stale entry is never served.
+ *  Only successful measures are cached (an error may be a transient locked file). */
+const measuredFramesCache = new Map<string, MeasuredFrames>()
+
+/** Measure the frame length of each `.duf` via the native command (through a cheap
+ *  mtime|size cache). The native result is parsed through the contract schema (not a
+ *  bare cast), so a Rust-side shape change throws HERE instead of desyncing frames. */
 async function measureFrames(paths: Array<string>): Promise<Map<string, MeasuredFrames>> {
   const unique = [...new Set(paths.filter(Boolean))]
   if (unique.length === 0) return new Map()
-  const results = z
-    .array(poseAssetFramesSchema)
-    .parse(await invoke('pose_asset_frames', { paths: unique }))
-  return new Map(results.map((r) => [r.path, { frames: r.frames, error: r.error }]))
+  const out = new Map<string, MeasuredFrames>()
+  const stamps = new Map<string, string>()
+  const need: Array<string> = []
+  // Cheap revalidation (one stat per path) gates the expensive native parse.
+  await Promise.all(
+    unique.map(async (path) => {
+      let stamp = ''
+      try {
+        const info = await stat(path)
+        const mtime = info.mtime?.getTime()
+        if (mtime !== undefined) stamp = `${mtime}:${info.size}`
+      } catch {
+        // unstattable → force a fresh measure so it errors meaningfully downstream
+      }
+      stamps.set(path, stamp)
+      const cached = stamp ? measuredFramesCache.get(`${path}|${stamp}`) : undefined
+      if (cached) out.set(path, cached)
+      else need.push(path)
+    }),
+  )
+  if (need.length > 0) {
+    const results = z
+      .array(poseAssetFramesSchema)
+      .parse(await invoke('pose_asset_frames', { paths: need }))
+    for (const r of results) {
+      const measured = { frames: r.frames, error: r.error }
+      out.set(r.path, measured)
+      const stamp = stamps.get(r.path)
+      if (stamp && !r.error) measuredFramesCache.set(`${r.path}|${stamp}`, measured)
+    }
+  }
+  return out
 }
 
 /** The fitted (conformed) items of a scene `.duf` — the groom-suggestion source
