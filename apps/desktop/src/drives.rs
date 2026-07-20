@@ -15,11 +15,14 @@ pub(crate) struct DriveMapping {
 }
 
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RemapResult {
     drive: String,
     unc: String,
-    /// "already" (mapped) | "remapped" | "conflict" | "failed" | "unsupported".
+    /// "already" (mapped) | "remapped" | "conflict" | "failed" — mirrored by the
+    /// zod enum in apps/web's `api/native-types.ts` and pinned by
+    /// `contracts/remap-results.json` (tests on both sides).
     status: String,
     detail: String,
 }
@@ -44,7 +47,7 @@ fn drive_letter(path: &str) -> Option<String> {
 /// for a local or unmapped drive.
 #[cfg(windows)]
 fn unc_for(path: &str) -> Option<String> {
-    use windows_sys::Win32::Foundation::NO_ERROR;
+    use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, NO_ERROR};
     use windows_sys::Win32::NetworkManagement::WNet::WNetGetConnectionW;
 
     let drive = drive_letter(path)?;
@@ -53,7 +56,13 @@ fn unc_for(path: &str) -> Option<String> {
     let mut len = buf.len() as u32;
     // SAFETY: `local` is a NUL-terminated wide string; `buf`/`len` describe a
     // valid, writable buffer.
-    let ret = unsafe { WNetGetConnectionW(local.as_ptr(), buf.as_mut_ptr(), &mut len) };
+    let mut ret = unsafe { WNetGetConnectionW(local.as_ptr(), buf.as_mut_ptr(), &mut len) };
+    if ret == ERROR_MORE_DATA && len as usize > buf.len() {
+        // The UNC didn't fit; `len` now carries the required size — retry once
+        // instead of reporting a very long share name as "unmapped".
+        buf = vec![0u16; len as usize];
+        ret = unsafe { WNetGetConnectionW(local.as_ptr(), buf.as_mut_ptr(), &mut len) };
+    }
     if ret == NO_ERROR {
         let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
         Some(String::from_utf16_lossy(&buf[..end]))
@@ -88,6 +97,11 @@ fn error_text(code: u32) -> String {
         67 => "network name not found — is the server reachable?".into(),
         85 => "drive letter already in use".into(),
         86 => "wrong password".into(),
+        // 1201/1202: what an Explorer "reconnect at sign-in" mapping typically
+        // returns in the elevated session — the very scenario the remap exists
+        // for. Name them instead of surfacing a bare number.
+        1201 => "the drive is remembered by Windows but its connection is unavailable — reconnect it once in Explorer".into(),
+        1202 => "the drive letter is already remembered by Windows (reconnect at sign-in) — disconnect that mapping in Explorer, then retry".into(),
         1219 => "conflicting credentials for that server".into(),
         1326 => "sign-in failed — the share needs credentials".into(),
         other => format!("error {other}"),
