@@ -75,6 +75,13 @@
   width: 100%;
 }
 
+/* Small UI-detail shots (screenshots/detail-*.png) keep their natural size —
+   stretching a 250px chip to column width would only blur it. */
+.guide-content img[src^='screenshots/detail-'] {
+  width: auto;
+  max-width: 100%;
+}
+
 .guide-content img {
   cursor: zoom-in;
 }

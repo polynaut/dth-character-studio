@@ -50,9 +50,15 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
   Daz scenes, Houdini projects and Unreal projects.
 
   <p align="center">
-    <img width="238" alt="A path chip" src="https://github.com/user-attachments/assets/959dcba5-8245-470d-99d7-c7a7b8507aed" />
+    <img width="160" alt="A path chip on hover — click copies the path" src="screenshots/detail-path-chip.png" />
     <br>
-    <sub><em>A path chip copies its full path on click.</em></sub>
+    <sub><em>Hovering a path chip — click copies the full path.</em></sub>
+  </p>
+
+  <p align="center">
+    <img width="160" alt="A path chip with Alt held — click opens the location in Explorer" src="screenshots/detail-path-chip-alt.png" />
+    <br>
+    <sub><em>Holding <strong>Alt</strong> flips the badge to a folder — Alt+click opens the path's location in Explorer.</em></sub>
   </p>
 
 ## Linking Unreal projects

@@ -400,7 +400,7 @@ characters:
   right node on that ROM entry — no more mismatched node/morph pairs.
 
   <p align="center">
-    <img width="638" alt="Morph name autocomplete suggestions" src="https://github.com/user-attachments/assets/3b5916c2-c664-4cb2-a6e1-68b5930264e8" />
+    <img width="508" alt="Morph name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />
     <br>
     <sub><em>Each Morph name field autocompletes from the scanned index.</em></sub>
   </p>

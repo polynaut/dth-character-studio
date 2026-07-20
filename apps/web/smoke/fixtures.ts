@@ -215,6 +215,18 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       // Machine-wide, but edited on the Settings → Project tab (product scanning).
       ...(opts.dimManifestsFolder ? { dimManifestsFolder: opts.dimManifestsFolder } : {}),
     }),
+    // Morph index (a Scan_Morphs_G9.dsa run's output) — feeds the Morph-name
+    // autocomplete (and its guide screenshot).
+    [`${P.appData}/morphs_G9.json`]: JSON.stringify({
+      morphs: [
+        { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute UpDown', name: 'SS_body_bs_Glute UpDown' },
+        { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Width', name: 'SS_body_bs_Glute Width' },
+        { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Width Upper', name: 'SS_body_bs_Glute Width Upper' },
+        { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Height Inner', name: 'SS_body_bs_Glute Height Inner' },
+        { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Angle', name: 'SS_body_bs_Glute Angle' },
+        { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glutes Widen (GP)', name: 'GP_GlutesWiden1_Both' },
+      ],
+    }),
     // NOTE: no projects.json / network-drives.json — their absence keeps the
     // legacy migration and the drive remapping paths inert at startup.
     [`${P.appData}/recents.json`]: JSON.stringify(
