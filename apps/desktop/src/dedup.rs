@@ -107,19 +107,24 @@ fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
     }
     let is_dir = src.is_dir();
     let copied = if is_dir { copy_dir(src, dst).is_ok() } else { fs::copy(src, dst).is_ok() };
-    let moved = copied
-        && if is_dir { fs::remove_dir_all(src).is_ok() } else { fs::remove_file(src).is_ok() };
-    if !moved {
-        // A partial copy — or a full copy whose source delete failed (the source
-        // stays the live copy) — must not linger in quarantine: the next run's
-        // name-collision loop would mint " (1)" duplicates of the same asset.
+    if !copied {
+        // The COPY itself failed — `dst` is partial/garbage. Roll it back so the
+        // next run's name-collision loop doesn't mint " (1)" duplicates from it.
+        // The source is untouched, so nothing is lost.
         if is_dir {
             let _ = fs::remove_dir_all(dst);
         } else {
             let _ = fs::remove_file(dst);
         }
+        return false;
     }
-    moved
+    // Copy succeeded — `dst` is now a COMPLETE copy. Delete the source. If that
+    // fails (e.g. Daz holds a file open, so `remove_dir_all` deletes some children
+    // and then errors), DO NOT roll back `dst`: after a partial source delete it is
+    // the only intact copy of the asset, and removing it would lose the user's
+    // downloaded asset entirely. Keep it and report failure — the (now partial)
+    // source is left for the user to clean up, never destroyed alongside its backup.
+    if is_dir { fs::remove_dir_all(src).is_ok() } else { fs::remove_file(src).is_ok() }
 }
 
 /// Rank a source folder by its Genesis number so newer wins (e.g. "_genesis 9" →
