@@ -19,6 +19,131 @@
 6. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
+## Character settings
+
+<p align="center">
+  <img width="900" alt="character page top — Genesis/Gender, Genesis 9 specific, linked Daz scene + Houdini project" src="screenshots/character-settings.png" />
+  <br>
+  <sub><em>The top of the character page: Genesis/Gender, the Genesis 9 box, the primary Daz scene, hair items, and the linked Houdini project.</em></sub>
+</p>
+
+The **Genesis** and **Gender** selects can be changed after creation — gender is
+what decides the [GEN section](#the-rom-definition)'s product (**Golden Palace**
+for a female character, **Dicktator** for a male). All four generations are
+selectable; the deeply validated path is **G9** (and G8.1 on the old pipeline) —
+for the others, DTH ships a subset of pose assets and the studio offers whatever
+the active release actually provides.
+
+G9 characters also get a **Genesis 9 specific** box next to the Genesis/Gender
+fields:
+
+- **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
+  **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
+  DTH's **Lacrimal Fluid** material lines up without you doing the manual
+  *Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only
+  matters if you use that material, and an example UE5 tear UV only ships for
+  Genesis 9 — so it's off by default and absent on other generations.
+- **FACS detail strength / Flexion strength** — the G9 strength dials
+  (**FACS Detail Strength** and **Flexion Automatic Strength**), applied at
+  frame 0 as the ROM builds. Daz-style percentages (0–100 %), like every morph
+  value in the studio. Leave them at `100 %` unless your character needs the
+  stock correctives dialed up or down.
+
+<details>
+<summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>
+<table><tr><td>
+
+- **Daz scenes** — the character's scene, plus any number of extra scenes
+  (outfit/look variants): **drop a `.duf`** on the card to add one; a dialog asks
+  whether to **copy it into the character's folder** (optionally under a
+  subfolder) or leave it where it is. The original scene can't be unlinked;
+  extras can be removed. **Scenes subfolder** moves the whole scenes folder. Each
+  scene has **Open in Daz** — if Daz Studio is already running with a scene
+  loaded, the studio walks you through closing it and the button flips to
+  **Open now** once Daz has quit.
+- **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
+  Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
+  its folder.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Hair items — keep hair out of the export</strong></summary>
+<table><tr><td>
+
+With **Hair items live in the Daz scenes** on (the default), each scene
+carries its full look — hair included — and the hair items you pick per scene
+are kept out of the DTH export: they're hidden right before the DTH Exporter
+runs and shown again afterwards, so hair never rides into the ROM's FBX/Alembic.
+The DTH Exporter Plugin **2.0.1+** unparents the hidden items itself, keeping
+them out of **both** the FBX and the Alembic (older plugins leak the hidden hair
+into the FBX — the character page warns when yours is too old). Turned **off**,
+nothing is excluded — the classic workflow where hair lives in separate Daz
+scene files.
+
+The picker under the scene cards edits the **selected** card's list — the lists
+are **per scene**, since outfit scenes carry different hair. The one generated
+script bakes every scene's list and applies the right one for whichever scene is
+open in Daz; a scene with no items listed exports as-is.
+
+- **List the top fitted item** (e.g. the hair cap) — its children ride along
+  automatically.
+- The dropdown offers the items found in the scene file (hair-ish names first,
+  type to filter). A label the scan doesn't offer can be typed exactly as it
+  appears in Daz's **Scene** pane and added.
+- A listed label that isn't found in the scene turns amber — the export stops
+  loudly on a label missing from the open scene rather than silently shipping a
+  hair-polluted export.
+
+Characters with hair items also get an `Export_Hair_…` script — it exports the
+`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
+worn, with everything else hidden).
+
+</td></tr></table>
+</details>
+
+## Script install location & export directory
+
+The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
+split export, `Export_…`) scripts install on Save:
+`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` — needs
+"My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
+first time a script is generated.
+
+The **Export directory** section drives [direct export](./05-rom-in-daz.md):
+**Choose folder…** opens the picker (starting at the character's Houdini folder
+as guidance), and **Clear** turns direct export off again. With no export
+directory set the studio generates the ROM only — **Bone scale** flags then just
+ride along as no-ops until you set one.
+
+<details>
+<summary><strong>Advanced options — storage location, preserve morphs &amp; node transforms</strong></summary>
+<table><tr><td>
+
+<p align="center">
+  <img width="900" alt="character page, Advanced options panel expanded" src="screenshots/character-advanced-options.png" />
+  <br>
+  <sub><em>The Advanced options panel expanded on the character page.</em></sub>
+</p>
+
+Expand **Advanced options** near the top of the character page — none of it is
+needed for a working ROM:
+
+- **Storage location** — shows where this character's files live and lets you
+  **move the folder** — handy when you reorganise a project. The scene and
+  generated-file paths are repointed for you.
+- **Preserve morphs after ROM loading** — the DTH ROM zeroes morphs as it loads.
+  Any morph you list here is **restored to the value you set afterwards** — use it
+  for body-shaping controls (e.g. breast or muscle morphs) you want to keep across
+  the whole ROM. Enter the morph's **property name** and its **hold value**.
+- **Preserve node transforms** — a node's transform is **memorized before** the ROM
+  loads and **restored after**, so posed nodes (e.g. the eyes) keep their
+  orientation instead of being reset. Enter the **node's label** as it appears in Daz.
+
+</td></tr></table>
+</details>
+
 ## The ROM definition
 
 <p align="center">
@@ -59,7 +184,7 @@ where every section lands before anything runs.
 <table><tr><td>
 
 <p align="center">
-  <img width="1028" height="449" alt="Screenshot 2026-07-14 115129" src="https://github.com/user-attachments/assets/dc32ca32-ce39-4374-b71d-112329b83013" />
+  <img width="900" alt="GEN section, Golden Palace art-direction frames" src="screenshots/gen-art-direction.png" />
   <br>
   <sub><em>The GEN section's Golden Palace art-direction frames — a morph set per frame.</em></sub>
 </p>
@@ -117,25 +242,17 @@ Each pose row has two name fields with very different jobs:
   Studio** (not its display label). A mismatch means that frame fails in the
   ROM run.
 
-<details>
-<summary><strong>Combining several morphs into one output</strong></summary>
-<table><tr><td>
-
-A pose usually maps one Daz morph to one generated output — but it doesn't have to.
-Each row has a **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
-more); expand it to drive the **one** output morph from **several** Daz morphs or
-controllers at once. That's how you bake a shape that only exists as a combination
-of dials — or a controller plus its corrective — into a single clean morph for
-Houdini and Unreal.
-
+A pose row can also drive its one output from **several Daz morphs at once** —
+expand its **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
+more).
 
 <p align="center">
-  <img width="1030" height="343" alt="Screenshot 2026-07-14 115731" src="https://github.com/user-attachments/assets/339bafa8-5fbf-487a-8cc0-29142629c04b" />
+  <img width="900" alt="A pose row expanded to drive one output from several morphs" src="screenshots/combine-morphs.png" />
   <br>
   <sub><em>A pose row expanded to drive one output from several morphs.</em></sub>
 </p>
 
-Each entry in the expanded list carries its own:
+Every entry in that expanded list carries its own:
 
 - **Node** — the scene node the morph lives on (`Genesis9`, `GoldenPalace_G9`, a
   bone, …); autocomplete fills it in when you pick a suggestion.
@@ -149,9 +266,16 @@ Each entry in the expanded list carries its own:
   morph's **current scene value** when the apply-script runs — handy when that
   resting value differs from character to character.
 
-All the listed morphs are keyed together on that one frame, so they blend into the
-single output named in **Name**. **Add morph** piles on more; the trash icon drops
-one (a pose always keeps at least one).
+<details>
+<summary><strong>Combining several morphs into one output — why you'd do it</strong></summary>
+<table><tr><td>
+
+A pose usually maps one Daz morph to one generated output. Combining bakes a shape
+that only exists as a combination of dials — or a controller plus its corrective —
+into a single clean morph for Houdini and Unreal. All the listed morphs are keyed
+together on that one frame, so they blend into the single output named in **Name**.
+**Add morph** piles on more; the trash icon drops one (a pose always keeps at least
+one).
 
 </td></tr></table>
 </details>
@@ -169,7 +293,8 @@ which the Houdini PoseAsset points at for that frame (its *Reference FBX File*
 input) to correct the skeleton to the pose.
 
 Building that FBX by hand used to be the only way. Now just tick **Bone scale** on
-the pose row and the studio handles the rest end to end:
+the pose row and — **when you export through the studio** (an export directory is
+set) — it handles the rest end to end:
 
 - the frame is handed to the **DTH Exporter Plugin**, which writes its
   reference-skeleton FBX automatically — into a `Reference Skeletons` subfolder of
@@ -186,9 +311,11 @@ the pose row and the studio handles the rest end to end:
 &nbsp;
 
 > [!NOTE]
-> Reference frames need an **Export directory** set (see [Build the ROM in
-> Daz](./05-rom-in-daz.md)) — that's where the exporter writes the FBX. The studio
-> warns you if you tick Bone scale without one.
+> **Bone scale only acts when an [Export directory](./05-rom-in-daz.md) is set** —
+> that's when the studio runs the exporter and writes the FBX. With no export
+> directory the studio generates the **ROM only** (no export call is involved), so a
+> ticked Bone scale is simply a no-op — you export the reference skeletons yourself.
+> Set an export directory later and it becomes live, no re-ticking needed.
 
 Only **GEN** and **FBM** poses can be reference frames — the two categories
 DazToHue supports reference skeletons in. DTH's own
@@ -321,6 +448,16 @@ Press **Save**. Every save regenerates the character's files in one go:
 - **`<Name>_pose_asset.csv`** — the Houdini PoseAsset import CSV, stored in the
   character's folder
 
+Two more scripts appear alongside the ROM one **only when their feature is on**:
+
+- **`Export_<Name>_G9.dsa`** *(optional)* — the standalone direct-export script.
+  It's split out only when an **Export directory** is set **and** *Run the export
+  with the ROM script* is turned off; otherwise the export runs inline at the tail
+  of the ROM script (no separate file).
+- **`Export_Hair_<Name>_G9.dsa`** *(optional)* — generated when the character lists
+  **hair items**: it exports the `_grooms.abc` for Houdini's **DazToHueGroom Import**
+  node (the groom worn, everything else hidden).
+
 &nbsp;
 
 > [!TIP]
@@ -385,113 +522,6 @@ After a ROM run in Daz had problems (a missing morph, a failed preset), a
 frame with its reason. Clicking an entry **jumps to and highlights the pose row**
 (failed rows are also tinted red in the tables). **Dismiss** clears it; a clean
 run clears it automatically.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Genesis &amp; Gender</strong></summary>
-<table><tr><td>
-
-The **Genesis** and **Gender** selects can be changed after creation — gender is
-what decides the GEN section's product (Golden Palace vs Dicktator, see above).
-All four generations are selectable; the deeply validated path is **G9** (and
-G8.1 on the old pipeline) — for the others, DTH ships a subset of pose assets and
-the studio offers whatever the active release actually provides.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>The Genesis 9 specific box</strong></summary>
-<table><tr><td>
-
-G9 characters get a **Genesis 9 specific** box next to the Genesis/Gender fields:
-
-- **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
-  **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
-  DTH's **Lacrimal Fluid** material lines up without you doing the manual
-  *Surfaces ▸ Genesis 9 Tear shader ▸ UV Set ▸ UE5* step every time. It only
-  matters if you use that material, and an example UE5 tear UV only ships for
-  Genesis 9 — so it's off by default and absent on other generations.
-- **FACS detail strength / Flexion strength** — the G9 strength dials
-  (**FACS Detail Strength** and **Flexion Automatic Strength**), applied at
-  frame 0 as the ROM builds. Daz-style percentages (0–100 %), like every morph
-  value in the studio. Leave them at `100 %` unless your character needs the
-  stock correctives dialed up or down.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Linked files — Daz scenes &amp; Houdini projects</strong></summary>
-<table><tr><td>
-
-- **Daz scenes** — the character's scene, plus any number of extra scenes
-  (outfit/look variants): **drop a `.duf`** on the card to add one; a dialog asks
-  whether to **copy it into the character's folder** (optionally under a
-  subfolder) or leave it where it is. The original scene can't be unlinked;
-  extras can be removed. **Scenes subfolder** moves the whole scenes folder. Each
-  scene has **Open in Daz** — if Daz Studio is already running with a scene
-  loaded, the studio walks you through closing it and the button flips to
-  **Open now** once Daz has quit.
-- **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
-  Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
-  its folder.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Hair items — keep hair out of the export</strong></summary>
-<table><tr><td>
-
-With **Hair items live in the Daz scenes** on (the default), each scene
-carries its full look — hair included — and the hair items you pick per scene
-are kept out of the DTH export: they're hidden right before the DTH Exporter
-runs and shown again afterwards, so hair never rides into the ROM's FBX/Alembic.
-The DTH Exporter Plugin **2.0.1+** unparents the hidden items itself, keeping
-them out of **both** the FBX and the Alembic (older plugins leak the hidden hair
-into the FBX — the character page warns when yours is too old). Turned **off**,
-nothing is excluded — the classic workflow where hair lives in separate Daz
-scene files.
-
-The picker under the scene cards edits the **selected** card's list — the lists
-are **per scene**, since outfit scenes carry different hair. The one generated
-script bakes every scene's list and applies the right one for whichever scene is
-open in Daz; a scene with no items listed exports as-is.
-
-- **List the top fitted item** (e.g. the hair cap) — its children ride along
-  automatically.
-- The dropdown offers the items found in the scene file (hair-ish names first,
-  type to filter). A label the scan doesn't offer can be typed exactly as it
-  appears in Daz's **Scene** pane and added.
-- A listed label that isn't found in the scene turns amber — the export stops
-  loudly on a label missing from the open scene rather than silently shipping a
-  hair-polluted export.
-
-Characters with hair items also get an `Export_Hair_…` script — it exports the
-`_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
-worn, with everything else hidden).
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Script install location &amp; export directory</strong></summary>
-<table><tr><td>
-
-The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
-split export, `Export_…`) scripts install on Save:
-`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` — needs
-"My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
-first time a script is generated.
-
-The **Export directory** section drives [direct export](./05-rom-in-daz.md):
-**Choose folder…** opens the picker (starting at the character's Houdini folder
-as guidance), **Clear** turns direct export off again, and an amber warning
-appears when poses are flagged **Bone scale** but no export directory is set —
-their reference-skeleton FBX needs the exporter.
 
 </td></tr></table>
 </details>

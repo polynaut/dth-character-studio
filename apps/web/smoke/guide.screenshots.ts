@@ -123,9 +123,10 @@ async function shootStrip(page: Page, path: string, topEl: Locator, bottomEl?: L
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await settle(page)
   await page.setViewportSize({ width: VW, height: MAX_H + HEADER })
-  // Drop the sticky header (if the page has one) so a mid-page strip can't sit
-  // under it. A one-shot querySelector — NOT a locator, whose auto-wait would
-  // hang for the full timeout on pages without one (the project overview).
+  // Drop the sticky page header (if any) so a mid-page strip can't sit under it.
+  // A one-shot querySelector — NOT a locator, whose auto-wait would hang for the
+  // full timeout on pages without one (the project overview). The pinned ROM
+  // section title / column headers are left alone (they're wanted as context).
   await page.evaluate(() => {
     const h = document.querySelector('header.sticky')
     if (h) (h as HTMLElement).style.display = 'none'
@@ -232,18 +233,6 @@ test('settings-dth-release', async ({ page }) => {
   await shoot(page, join(OUT, 'settings-dth-release.png'), card(page, 'Setup DTH Release'))
 })
 
-test('settings-exporter-plugin', async ({ page }) => {
-  await prime(page, buildSeed())
-  await page.goto('/')
-  await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
-  await page.getByRole('link', { name: 'Settings' }).click()
-  await shoot(
-    page,
-    join(OUT, 'settings-exporter-plugin.png'),
-    card(page, 'Setup DTH Exporter Plugin'),
-  )
-})
-
 test('home-new-project', async ({ page }) => {
   // First-run Home (no recents) + a seeded folder pick, so the create form fills
   // in with a chosen folder and its auto-derived name instead of staying empty.
@@ -279,14 +268,15 @@ async function shootTopThrough(page: Page, path: string, endFeature: Locator) {
   })
 }
 
-test('character-page', async ({ page }) => {
+test('character-settings', async ({ page }) => {
   await openCharacter(page)
-  // Taller than 16:9 (an exception) so the linked Daz scene card at the bottom
-  // of the form isn't cut off — down through the Hair-items toggle below it.
+  // The top of the character page ("Character settings"): Genesis/Gender + the
+  // Genesis-9-specific box, the primary Daz scene card, the Hair-items toggle +
+  // selected item, and the linked Houdini project. Taller than 16:9 (an exception).
   await shootTopThrough(
     page,
-    join(OUT, 'character-page.png'),
-    page.getByText('Hair items live in the Daz scenes'),
+    join(OUT, 'character-settings.png'),
+    page.getByRole('button', { name: /Add project/ }),
   )
 })
 
@@ -297,7 +287,11 @@ test('character-header', async ({ page }) => {
 
 test('character-rom-sections', async ({ page }) => {
   await openCharacter(page)
-  await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'))
+  // Extra offset so the full ROM timeline bar (+ its legend) clears the collapsed
+  // header instead of being clipped at the top.
+  await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'), {
+    headerOffset: 220,
+  })
 })
 
 test('character-export-directory', async ({ page }) => {
@@ -338,11 +332,90 @@ test('character-bone-scale-toggle', async ({ page }) => {
   // Expand the FBM section (a big custom morph list) — its pose table carries the
   // per-row "Bone scale" column (the reference-skeleton FBX marker).
   await page.getByRole('button', { name: /FBM/ }).click()
-  await page
-    .getByTitle('This morph scales bones — export a reference-skeleton FBX for it')
-    .first()
-    .waitFor()
-  await shoot(page, join(OUT, 'character-bone-scale-toggle.png'), page.locator('table').first())
+  const boxes = page.getByTitle(
+    'This morph scales bones — export a reference-skeleton FBX for it',
+  )
+  await boxes.first().waitFor()
+  // Tick the 2nd pose's Bone scale box, then park the cursor so the column's hover
+  // tooltip closes before the shot.
+  await boxes.nth(1).check()
+  await page.mouse.move(0, 0)
+  await settle(page)
+  await page.setViewportSize({ width: VW, height: 900 })
+  // Un-stick the page chrome so a short crop of the top rows has no pinned overlap
+  // (the character page stacks a header + section title + column headers, all
+  // sticky), then bring the pose table's column headers to the top.
+  await page.evaluate(() => {
+    const h = document.querySelector('header.sticky')
+    if (h) (h as HTMLElement).style.display = 'none'
+    document.querySelectorAll('.sticky').forEach((el) => {
+      ;(el as HTMLElement).style.position = 'static'
+    })
+  })
+  const thead = page.locator('table').first().locator('thead')
+  await thead.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  await settle(page)
+  const top = await thead.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
+  const theadH = await thead.evaluate((el) => el.getBoundingClientRect().height)
+  const rowH = await boxes
+    .nth(0)
+    .locator('xpath=ancestor::tr[1]')
+    .evaluate((el) => el.getBoundingClientRect().height)
+  // Header + exactly 3 pose rows (nth(2).bottom mis-measures with the un-stuck table).
+  const y = Math.max(0, top - 8)
+  const height = Math.ceil(theadH + 3 * rowH + 8)
+  await page.screenshot({
+    path: join(OUT, 'character-bone-scale-toggle.png'),
+    clip: { x: 0, y, width: VW, height },
+  })
+})
+
+test('gen-art-direction', async ({ page }) => {
+  await openCharacter(page)
+  // Expand the GEN section (preset Golden Palace), then its VaginaOpen art-direction
+  // frame — the fixture seeds one morph on it, the rest read "preset default".
+  await page.getByRole('button', { name: /Genitalia/ }).click()
+  await page.getByText('VaginaOpen').click()
+  const gen = page
+    .getByRole('button', { name: /Genitalia/ })
+    .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  await shoot(page, join(OUT, 'gen-art-direction.png'), gen, { headerOffset: 210 })
+})
+
+test('combine-morphs', async ({ page }) => {
+  await openCharacter(page)
+  await page.getByRole('button', { name: /FBM/ }).click()
+  // Two real multi-morph poses from the fixture: SLGlutesSS (4 morphs) and
+  // SLGlutesHipBendSpandex (2) — expand both to show the combined-morph editor.
+  await page.getByText('4 morphs', { exact: true }).click()
+  await page.getByText('2 morphs', { exact: true }).click()
+  await page.mouse.move(0, 0)
+  await settle(page)
+  await page.setViewportSize({ width: VW, height: 1200 })
+  // Scroll the first combined pose just below the pinned FBM section title +
+  // column headers, so both examples sit under them (the real scrolled view — the
+  // poses between are hidden behind the pinned headers, so nothing overlaps).
+  const firstRow = page.getByText('4 morphs combined').locator('xpath=ancestor::tr[1]')
+  await firstRow.evaluate((el) => {
+    ;(el as HTMLElement).style.scrollMarginTop = '205px'
+    el.scrollIntoView({ block: 'start' })
+  })
+  await settle(page)
+  // Capture from the pinned section title (context) down through the 2nd example —
+  // dropping the character page header above it (start the clip at the title).
+  const title = page
+    .getByRole('button', { name: /FBM/ })
+    .locator('xpath=ancestor::div[contains(@class,"sticky")][1]')
+  const top = await title.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
+  const bottom = await page
+    .getByRole('button', { name: 'Add morph', exact: true })
+    .last()
+    .evaluate((el) => Math.ceil(el.getBoundingClientRect().bottom))
+  const y = Math.max(0, top)
+  await page.screenshot({
+    path: join(OUT, 'combine-morphs.png'),
+    clip: { x: 0, y, width: VW, height: Math.min(bottom - y + 24, 1200 - y) },
+  })
 })
 
 test('products-tab', async ({ page }) => {
