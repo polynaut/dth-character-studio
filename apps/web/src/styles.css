@@ -117,6 +117,14 @@ html {
   overflow-anchor: none;
 }
 
+/* While a long native job runs (lib/busy-cursor.ts — installs, dedup scans,
+   refresh sweeps, folder moves), every element shows the OS progress cursor
+   (pointer + spinning ring), so "working" is visible wherever the mouse is. */
+html.busy-cursor,
+html.busy-cursor * {
+  cursor: progress !important;
+}
+
 body {
   margin: 0;
   background-color: var(--background);
