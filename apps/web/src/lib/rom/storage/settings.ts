@@ -73,14 +73,6 @@ export const studioSettingsSchema = z.object({
    */
   extraHoudiniDocsFolders: stringArray,
   /**
-   * "Solve hair assets by hiding": generated ROM/Export scripts exclude groom
-   * (hair) items by HIDING them (item + children; needs DTH Exporter Plugin
-   * 2.0+, which skips hidden nodes) instead of the default unfit + unparent
-   * bracket. Off by default — detach is the only mechanism measured to keep
-   * hair out of BOTH the FBX and the alembic (July 2026).
-   */
-  groomExcludeByHiding: z.boolean().catch(false),
-  /**
    * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
    * by the Daz Products scan to resolve scene assets to installed products
    * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs
