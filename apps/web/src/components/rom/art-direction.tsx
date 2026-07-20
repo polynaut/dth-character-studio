@@ -125,8 +125,13 @@ function ArtDirectionFrameRow({
 
   return (
     <div className="rounded-md border">
-      <div
-        className="flex cursor-pointer items-center gap-2 px-2 py-1.5 select-none"
+      {/* A real accordion button (was a click-only div) — focusable and
+          Enter/Space-operable, state announced via aria-expanded. Every child is
+          a plain span, so there's no nested-interactive concern here. */}
+      <button
+        type="button"
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left select-none"
         onClick={() => setOpen((o) => !o)}
       >
         {open ? (
@@ -149,7 +154,7 @@ function ArtDirectionFrameRow({
         <span className="ml-auto text-xs text-muted-foreground">
           {hasMorphs ? `${entry.morphs.length} ${entry.morphs.length === 1 ? 'morph' : 'morphs'}` : 'preset default'}
         </span>
-      </div>
+      </button>
       {open && (
         <div className="space-y-1 border-t px-2 py-2">
           {entry.morphs.map((morph, index) => (

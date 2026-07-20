@@ -165,28 +165,30 @@ export function JcmModsGrid({
 
   return (
     <div className="rounded-md border">
-      {/* A div, not a <button>: the InfoPopup inside is itself a button, and
-          button-in-button is invalid HTML (React warns, assistive tech
-          misreads it). Same pattern as the section title rows above. */}
-      <div
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm select-none"
-        onClick={() => setOpenGrid((o) => !o)}
-      >
-        <ChevronRight
-          className={`size-4 shrink-0 text-muted-foreground transition-transform ${openGrid ? 'rotate-90' : ''}`}
-        />
-        <span className="font-medium">Modify JCM frames</span>
-        <span onClick={(e) => e.stopPropagation()}>
-          <InfoPopup label="Modify JCM frames — more information" className="-my-1">
-            Drive <strong>additional morphs</strong> along the pre-defined JCM poses: a rule
-            watches one bone's rotation axis across the JCM ROM and sets its morphs
-            proportionally to the keyed angle — the angle range maps linearly onto the value
-            range. The <strong>direction</strong> a drive corrects is read from its angle
-            range's sign (e.g. <em>Angle to</em> −115 = the negative bend), so a rule can hold
-            drives for both bend directions at once. Example: add a custom calf-flex morph on
-            top of the shipped knee-bend poses.
-          </InfoPopup>
-        </span>
+      {/* A real accordion BUTTON (was a click-only div) — focusable and
+          Enter/Space-operable, announcing state via aria-expanded. The InfoPopup
+          stays OUTSIDE it: button-in-button is invalid HTML. */}
+      <div className="flex w-full items-center gap-2 px-3 py-2 text-sm">
+        <button
+          type="button"
+          aria-expanded={openGrid}
+          onClick={() => setOpenGrid((o) => !o)}
+          className="flex cursor-pointer items-center gap-2 text-left select-none"
+        >
+          <ChevronRight
+            className={`size-4 shrink-0 text-muted-foreground transition-transform ${openGrid ? 'rotate-90' : ''}`}
+          />
+          <span className="font-medium">Modify JCM frames</span>
+        </button>
+        <InfoPopup label="Modify JCM frames — more information" className="-my-1">
+          Drive <strong>additional morphs</strong> along the pre-defined JCM poses: a rule
+          watches one bone's rotation axis across the JCM ROM and sets its morphs
+          proportionally to the keyed angle — the angle range maps linearly onto the value
+          range. The <strong>direction</strong> a drive corrects is read from its angle
+          range's sign (e.g. <em>Angle to</em> −115 = the negative bend), so a rule can hold
+          drives for both bend directions at once. Example: add a custom calf-flex morph on
+          top of the shipped knee-bend poses.
+        </InfoPopup>
         {mods.length > 0 && (
           <span className="text-xs text-muted-foreground">
             {mods.length} rule{mods.length === 1 ? '' : 's'} · {driveCount} morph
