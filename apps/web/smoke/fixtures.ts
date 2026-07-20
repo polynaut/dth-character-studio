@@ -39,8 +39,7 @@ const JCM_MODS = [
   {
     boneLabel: 'Left Thigh',
     axis: 'XRotate',
-    positive: [],
-    negative: [
+    drives: [
       {
         morphName: 'SL_Glutes SS Left',
         range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } },
@@ -54,8 +53,7 @@ const JCM_MODS = [
   {
     boneLabel: 'Right Thigh',
     axis: 'XRotate',
-    positive: [],
-    negative: [
+    drives: [
       {
         morphName: 'SL_Glutes SS Right',
         range: { angle: { start: 0, end: -115 }, value: { start: 0, end: 0.33 } },

@@ -11,6 +11,7 @@ import {
   genAssetGender,
   GENERATIONS,
   genRomIncludes,
+  jcmMorphModForRuntime,
   poseAssetCsvEra,
   RUNTIME_VERSION,
 } from './types'
@@ -863,7 +864,10 @@ export function toCharacterScriptDsa(
   if (character.preserveMorphs.length) config.preserveMorphs = character.preserveMorphs
   if (character.preserveNodeTransforms.length)
     config.preserveNodeTransforms = character.preserveNodeTransforms
-  if (character.jcmMorphMods.length) config.jcmMorphMods = character.jcmMorphMods
+  // Split each rule's signed drives[] back into the positive/negative lists the
+  // runtime consumes (the stored model dropped the redundant selector).
+  if (character.jcmMorphMods.length)
+    config.jcmMorphMods = character.jcmMorphMods.map(jcmMorphModForRuntime)
   // All extra ROM frames inline (was <Name>_FBMs.json).
   config.extraFrames = buildFbmData(character)
   // Per-character art direction inline (was <Name>_<GP9|DK9>ArtDirection.json).
