@@ -97,12 +97,26 @@
 
 .guide-lightbox.open {
   display: flex;
+  flex-direction: column;
 }
 
-/* margin:auto centers the content in both axes and degrades gracefully when
-   the image is taller than the viewport (top stays reachable, overlay scrolls). */
+/* Golden-section placement: the flexible spacers split the free vertical
+   space 382:618, so the image sits in the upper part of the viewport. With
+   an image taller than the viewport the spacers collapse to zero and the
+   overlay simply scrolls (top stays reachable). */
+.guide-lightbox::before {
+  content: '';
+  flex: 382 0 0;
+}
+
+.guide-lightbox::after {
+  content: '';
+  flex: 618 0 0;
+}
+
 .guide-lightbox .lightbox-inner {
-  margin: auto;
+  flex: none;
+  margin-inline: auto;
 }
 
 .guide-lightbox img {
