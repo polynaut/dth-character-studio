@@ -84,6 +84,43 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Character page sticky stack:** the character header (`sticky top-0`), ROM
   section titles (`top-[128px]`) and pose-table column headers (`top-[176px]`)
   overlap screenshots/crops — the guide-screenshot suite compensates per shot.
+- **Immediate-persist flows must not settle from disk while the draft is dirty.**
+  The editor's rename / avatar / scene-link flows save immediately; a settle that
+  replaces draft+baseline with an on-disk read (which lacks unsaved edits) silently
+  discards them AND clears `dirty`, so the unsaved-changes guard never fires. Use
+  `syncPersisted` (merge only the changed fields) for these, never `settle`; the
+  scenes-folder move was the bug (it read from disk). The form also stays editable
+  during a save, so `save()` snapshots the draft and only replaces it on settle if
+  it's unchanged (`settleAfterSave`) — otherwise interim keystrokes are reverted.
+- **`readManifest` throws on a CORRUPT `.dcsp`** (an existing file that won't
+  parse) rather than returning defaults — else the next save writes defaults over
+  the real settings, and `fetchProject` can never 404. A MISSING `.dcsp` still
+  returns defaults. Every multi-project loop over recents must therefore
+  try/catch per project (findCharacterAcrossProjects/fetchAllCharacters/
+  projectsForSweep do).
+- **The shell.open scope regex is anchored by the PLUGIN, not the config.**
+  `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
+  `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's
+  pattern in `tauri.conf.json` need not carry `^…$` — and an audit that reads only
+  the `is_match` call in the plugin's `scope.rs` will wrongly conclude it's
+  unanchored. It is anchored: only URLs, the allow-listed extensions, and
+  trailing-separator folder paths match — NOT arbitrary `.exe`. The real residual
+  is that `.dsa` IS allow-listed (it must be, to open a generated ROM script), and
+  a `.dsa` executes in Daz — so `openNoteMedia`/attachments keep their OWN
+  extension allowlist rather than trusting the broad shell scope.
+- **A `.duf` frame count is deterministic per file version** — `measureFrames`
+  caches it by `path|mtime:size`, so hover-preloads/generation don't re-parse tens
+  of MB of DSON JSON. Resolved avatar data URLs cache by their content-versioned
+  filename. Both are self-invalidating; follow this pattern, don't add TTLs.
+- **Literal-char footgun when scripting edits:** writing a raw U+2028/U+2029 (or a
+  NUL) via an editor tool that decodes `\uXXXX` escapes lands a real control byte in
+  the source (grep then reports "binary file"; a raw U+2028 can even break the JS
+  parse, since it's a line terminator there too). Emit the escape-sequence TEXT
+  instead (author `\\u2028` so the file receives the escape sequence as text), or do the
+  replace with a `String.fromCharCode`-based Node script. A printable delimiter like
+  `|` (illegal in Windows paths) is a safe cache-key separator — never a NUL.
+  or a `String.fromCharCode`-based replace; a printable separator like `|` (illegal
+  in Windows paths) is a safe cache-key delimiter.
 
 ## Releases
 
