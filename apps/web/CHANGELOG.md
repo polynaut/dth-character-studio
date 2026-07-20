@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.44.7
+
+### Patch Changes
+
+- [#386](https://github.com/polynaut/dth-character-studio/pull/386) [`72fb0d1`](https://github.com/polynaut/dth-character-studio/commit/72fb0d1195204fdfcaa9b1976ca458c90095cdf4) Thanks [@polynaut](https://github.com/polynaut)! - Advanced options and Modify JCM frames now show and edit morph values as Daz-style percentages (e.g. `100%`, `33%`) instead of raw `0–1` numbers, matching the ROM pose value cells. Values are still stored 0–1, so generation is unchanged.
+
+- Updated dependencies []:
+  - @dth/rom@0.44.7
+  - @dth/ui@0.44.7
+
 ## 0.44.6
 
 ### Patch Changes
