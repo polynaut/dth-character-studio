@@ -22,11 +22,22 @@ name: 🔍 Pull Request Pages preview
 # changing the preview pipeline must prove it still deploys.
 on:
   pull_request:
+    # `closed` fires on merge AND plain close — that's the cleanup trigger;
+    # the other types redeploy the preview.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - 'site/**'
       - 'docs/guide/**'
       - 'scripts/build-guide-site.mjs'
       - '.github/workflows/site-preview.yml'
+  # Manual cleanup for a PR whose previews predate the cleanup job (or if a
+  # closed-event run was missed): pass the PR number.
+  workflow_dispatch:
+    inputs:
+      cleanup_pr:
+        description: 'PR number whose preview deployments to delete'
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -42,7 +53,10 @@ env:
 
 jobs:
   preview:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -123,3 +137,50 @@ jobs:
           else
             gh api -X POST "repos/${{ github.repository }}/issues/$num/comments" -f body="$body" >/dev/null
           fi
+
+  # The other end of the lifecycle: when a previewed PR merges or closes, its
+  # Cloudflare deployments (per-commit URLs + the pr-N alias) and its GitHub
+  # environment are deleted — previews never accumulate.
+  cleanup:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.action == 'closed') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete the PR's preview deployments + environment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pr="${{ github.event.pull_request.number || inputs.cleanup_pr }}"
+          branch="pr-${pr}"
+          env_name="site-preview-pr-${pr}"
+          # --- Cloudflare: delete every deployment of the PR's branch --------
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}"
+            for page in 1 2 3 4 5; do
+              ids=$(curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                "${base}/deployments?per_page=25&page=${page}" |
+                jq -r --arg b "$branch" '.result[]? | select(.deployment_trigger.metadata.branch == $b) | .id')
+              [ -z "$ids" ] && break
+              for id in $ids; do
+                echo "deleting Cloudflare deployment $id ($branch)"
+                curl -sS -X DELETE -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                  "${base}/deployments/${id}?force=true" >/dev/null
+              done
+            done
+          else
+            echo "::notice::Cloudflare secrets not set — skipped the Cloudflare half."
+          fi
+          # --- GitHub: deactivate + delete the deployments, drop the env -----
+          for id in $(gh api "repos/${{ github.repository }}/deployments?environment=${env_name}&per_page=100" -q '.[].id'); do
+            echo "removing GitHub deployment $id (${env_name})"
+            gh api -X POST "repos/${{ github.repository }}/deployments/${id}/statuses" \
+              -f state=inactive >/dev/null 2>&1 || true
+            gh api -X DELETE "repos/${{ github.repository }}/deployments/${id}" >/dev/null 2>&1 || true
+          done
+          gh api -X DELETE "repos/${{ github.repository }}/environments/${env_name}" >/dev/null 2>&1 || true
+          echo "cleanup done for PR #${pr}"
