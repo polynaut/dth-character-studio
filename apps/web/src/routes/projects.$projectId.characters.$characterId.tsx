@@ -522,7 +522,7 @@ function CharacterPage() {
                   tone="orange"
                   // Optical nudge: the bold 3xl title's visual weight sits below
                   // the line box's geometric center, so dead-center reads high.
-                  className="max-w-64 translate-y-[3px] truncate normal-case"
+                  className="max-w-64 translate-y-[5px] truncate normal-case"
                 >
                   {selectedSceneName}
                 </Tag>
