@@ -103,6 +103,20 @@ worn, with everything else hidden).
 </td></tr></table>
 </details>
 
+## Script install location & export directory
+
+The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
+split export, `Export_…`) scripts install on Save:
+`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` — needs
+"My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
+first time a script is generated.
+
+The **Export directory** section drives [direct export](./05-rom-in-daz.md):
+**Choose folder…** opens the picker (starting at the character's Houdini folder
+as guidance), and **Clear** turns direct export off again. With no export
+directory set the studio generates the ROM only — **Bone scale** flags then just
+ride along as no-ops until you set one.
+
 ## The ROM definition
 
 <p align="center">
@@ -471,25 +485,6 @@ After a ROM run in Daz had problems (a missing morph, a failed preset), a
 frame with its reason. Clicking an entry **jumps to and highlights the pose row**
 (failed rows are also tinted red in the tables). **Dismiss** clears it; a clean
 run clears it automatically.
-
-</td></tr></table>
-</details>
-
-<details>
-<summary><strong>Script install location &amp; export directory</strong></summary>
-<table><tr><td>
-
-The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
-split export, `Export_…`) scripts install on Save:
-`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` — needs
-"My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
-first time a script is generated.
-
-The **Export directory** section drives [direct export](./05-rom-in-daz.md):
-**Choose folder…** opens the picker (starting at the character's Houdini folder
-as guidance), and **Clear** turns direct export off again. With no export
-directory set the studio generates the ROM only — **Bone scale** flags then just
-ride along as no-ops until you set one.
 
 </td></tr></table>
 </details>
