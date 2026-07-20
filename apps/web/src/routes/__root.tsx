@@ -13,6 +13,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
 import { onMenu, openExternal } from '#/lib/desktop.ts'
+import { ConfirmProvider } from '#/lib/use-confirm.tsx'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
 import { Button, TooltipHost, UiConfigProvider, installAltMenuGuard } from '@dth/ui'
 
@@ -113,7 +114,9 @@ function RootComponent() {
         onOpenExternal: (url) => void openExternal(url),
       }}
     >
-      <Outlet />
+      <ConfirmProvider>
+        <Outlet />
+      </ConfirmProvider>
       <Toaster
         theme="light"
         position="top-center"
