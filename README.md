@@ -13,8 +13,9 @@
 </p>
 
 <p align="center">
+  <a href="https://polynaut.github.io/dth-character-studio/"><img alt="Website" src="https://img.shields.io/badge/website-polynaut.github.io-fe5c01"></a>
   <a href="https://github.com/polynaut/dth-character-studio/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/polynaut/dth-character-studio?label=download&color=ff5a1f"></a>
-  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-blue">
+  <img alt="Windows | macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue">
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/polynaut/dth-character-studio?color=green"></a>
 </p>
 
@@ -52,7 +53,8 @@ Because both come from the same source, the "hundreds of frames must match 100%"
 
 ## Get it
 
-**[⬇️ Download the latest release](https://github.com/polynaut/dth-character-studio/releases/latest)** (Windows installer). The app self-updates from there.
+**[🌐 Get it from the website](https://polynaut.github.io/dth-character-studio/)** — it detects your OS and offers the right installer. Or grab the
+**[latest release](https://github.com/polynaut/dth-character-studio/releases/latest)** directly (Windows installer / macOS build). The app self-updates from there.
 
 **[📖 Getting started guide](./docs/guide/README.md)** — from install to your first generated ROM in about 15 minutes.
 
@@ -67,8 +69,10 @@ Because both come from the same source, the "hundreds of frames must match 100%"
 | **Genesis 8 / 8.1** | ✅ Usable today for full morph ROMs (the G8.1 preset path was validated against the DazToHue 1.9.x pipeline) — genital (GEN) sections wait on DazToHue itself adding G8 support |
 | **Genesis 3** | 🧪 Selectable — DazToHue ships a subset of G3 pose assets; not yet validated end-to-end |
 
-DTH Character Studio is a **Windows** app by design — the installer, updater and
-code signing are all Windows-built. A macOS port is not planned.
+DTH Character Studio is **Windows-first** — the installer, updater and code
+signing are all Windows-built — and releases also ship a **macOS** build of the
+app. Note that the Daz-side **DTH Exporter Plugin** is Windows-only, so the
+export step into the DTH pipeline still needs a Windows machine.
 
 ## Share definitions, not assets
 
