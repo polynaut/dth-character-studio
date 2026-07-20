@@ -190,6 +190,12 @@
   color: var(--muted);
 }
 
+/* Screenshot paragraphs (image + <sub> caption): breathing room before the
+   following text picks up again. */
+.guide-content p[align='center'] {
+  margin-block: 28px 36px;
+}
+
 .guide-content code {
   padding: 0.12em 0.38em;
   background: var(--bg-raised);
