@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { CircleCheck, Download, Plus } from 'lucide-react'
 
@@ -91,6 +91,30 @@ function SettingsPage() {
   }
 
   const [settings, setSettings] = useState(initial)
+  // Reconcile the form when the loader data changes underneath it (another window
+  // saved settings and this window's route invalidated). Without this the form
+  // keeps its once-seeded state, so `dirty` compares against the NEW `initial` and
+  // lights up though the user changed nothing — and a Save then writes the stale
+  // value back over the other window's change. Fields the user actually edited are
+  // kept; fields still holding the previous loader value adopt the new one.
+  const prevInitialRef = useRef(initial)
+  useEffect(() => {
+    const prev = prevInitialRef.current
+    if (initial === prev) return
+    prevInitialRef.current = initial
+    setSettings((current) => {
+      const next = { ...current }
+      for (const key of Object.keys(initial) as Array<keyof typeof initial>) {
+        // Untouched field (form still equals the previous loader value) → adopt the
+        // new loader value; a user edit (differs from previous) stays put.
+        // (Object.assign avoids the union-key indexed-write type widening.)
+        if (JSON.stringify(current[key]) === JSON.stringify(prev[key])) {
+          Object.assign(next, { [key]: initial[key] })
+        }
+      }
+      return next
+    })
+  }, [initial])
   const [busy, setBusy] = useState(false)
   const [releases, setReleases] = useState<ReleasesState>({
     mode: 'none',
