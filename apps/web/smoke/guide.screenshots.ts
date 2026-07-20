@@ -387,17 +387,24 @@ test('combine-morphs', async ({ page }) => {
   await page.getByRole('button', { name: /FBM/ }).click()
   // Two real multi-morph poses from the fixture: SLGlutesSS (4 morphs) and
   // SLGlutesHipBendSpandex (2) — expand both to show the combined-morph editor.
+  // Also expand the last single-morph row (InvictaWaistGarterBelt — the one right
+  // above the combined examples) so the shot shows all three cases back to back:
+  // an expanded single morph, then the 4- and 2-morph combined poses.
+  await page.getByText('morphs', { exact: true }).last().click()
   await page.getByText('4 morphs', { exact: true }).click()
   await page.getByText('2 morphs', { exact: true }).click()
   await page.mouse.move(0, 0)
   await settle(page)
-  await page.setViewportSize({ width: VW, height: 1200 })
-  // Scroll the first combined pose just below the pinned FBM section title +
-  // column headers, so both examples sit under them (the real scrolled view — the
-  // poses between are hidden behind the pinned headers, so nothing overlaps).
-  const firstRow = page.getByText('4 morphs combined').locator('xpath=ancestor::tr[1]')
+  await page.setViewportSize({ width: VW, height: 1000 })
+  // Scroll the expanded single-morph row just below the pinned FBM section title +
+  // column headers, so all three expanded examples sit under them (the real
+  // scrolled view — poses above are hidden behind the pinned headers).
+  const firstRow = page
+    .getByText('morphs', { exact: true })
+    .last()
+    .locator('xpath=ancestor::tr[1]')
   await firstRow.evaluate((el) => {
-    ;(el as HTMLElement).style.scrollMarginTop = '205px'
+    ;(el as HTMLElement).style.scrollMarginTop = '250px'
     el.scrollIntoView({ block: 'start' })
   })
   await settle(page)
@@ -414,7 +421,7 @@ test('combine-morphs', async ({ page }) => {
   const y = Math.max(0, top)
   await page.screenshot({
     path: join(OUT, 'combine-morphs.png'),
-    clip: { x: 0, y, width: VW, height: Math.min(bottom - y + 24, 1200 - y) },
+    clip: { x: 0, y, width: VW, height: Math.min(bottom - y + 24, 1000 - y) },
   })
 })
 
