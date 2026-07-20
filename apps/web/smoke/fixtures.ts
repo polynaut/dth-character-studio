@@ -70,6 +70,24 @@ const JCM_MODS = [
 const PRESERVE_MORPHS = [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 1 }]
 const PRESERVE_NODES = [{ nodeLabel: 'Left Eye' }, { nodeLabel: 'Right Eye' }]
 
+/** The GEN section enabled in preset mode (Golden Palace, female) with one
+ *  art-direction morph on the VaginaOpen frame — so the ROM shows GEN enabled and
+ *  the GEN art-direction screenshot has a populated example. */
+const GEN_SECTION = {
+  enabled: true,
+  mode: 'preset',
+  presetAssets: ['GP9 - Golden Palace.duf'],
+  artDirection: [
+    {
+      id: 'ad-gp-vagina-open',
+      rom: 'gp',
+      frame: 96,
+      name: 'VaginaOpen',
+      morphs: [{ node: 'Genesis9', prop: 'GP_Vagina_Open_Stretch', value: 1 }],
+    },
+  ],
+}
+
 /** DTH release version the fixture ships — settings, provenance and the release
  *  folder name below must all agree on it (era-matching keeps staleness quiet). */
 const DTH_VERSION = '2.4.3'
@@ -154,7 +172,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       ? {
           scenePath: P.scene,
           image: AVATAR,
-          sections: { FBM: FBM_SECTION },
+          sections: { FBM: FBM_SECTION, GEN: GEN_SECTION },
           jcmMorphMods: JCM_MODS,
           preserveMorphs: PRESERVE_MORPHS,
           preserveNodeTransforms: PRESERVE_NODES,

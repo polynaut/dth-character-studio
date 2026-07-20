@@ -59,7 +59,7 @@ where every section lands before anything runs.
 <table><tr><td>
 
 <p align="center">
-  <img width="1028" height="449" alt="Screenshot 2026-07-14 115129" src="https://github.com/user-attachments/assets/dc32ca32-ce39-4374-b71d-112329b83013" />
+  <img width="900" alt="GEN section, Golden Palace art-direction frames" src="screenshots/gen-art-direction.png" />
   <br>
   <sub><em>The GEN section's Golden Palace art-direction frames — a morph set per frame.</em></sub>
 </p>
@@ -117,25 +117,17 @@ Each pose row has two name fields with very different jobs:
   Studio** (not its display label). A mismatch means that frame fails in the
   ROM run.
 
-<details>
-<summary><strong>Combining several morphs into one output</strong></summary>
-<table><tr><td>
-
-A pose usually maps one Daz morph to one generated output — but it doesn't have to.
-Each row has a **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
-more); expand it to drive the **one** output morph from **several** Daz morphs or
-controllers at once. That's how you bake a shape that only exists as a combination
-of dials — or a controller plus its corrective — into a single clean morph for
-Houdini and Unreal.
-
+A pose row can also drive its one output from **several Daz morphs at once** —
+expand its **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
+more).
 
 <p align="center">
-  <img width="1030" height="343" alt="Screenshot 2026-07-14 115731" src="https://github.com/user-attachments/assets/339bafa8-5fbf-487a-8cc0-29142629c04b" />
+  <img width="900" alt="A pose row expanded to drive one output from several morphs" src="screenshots/combine-morphs.png" />
   <br>
   <sub><em>A pose row expanded to drive one output from several morphs.</em></sub>
 </p>
 
-Each entry in the expanded list carries its own:
+Every entry in that expanded list carries its own:
 
 - **Node** — the scene node the morph lives on (`Genesis9`, `GoldenPalace_G9`, a
   bone, …); autocomplete fills it in when you pick a suggestion.
@@ -149,9 +141,16 @@ Each entry in the expanded list carries its own:
   morph's **current scene value** when the apply-script runs — handy when that
   resting value differs from character to character.
 
-All the listed morphs are keyed together on that one frame, so they blend into the
-single output named in **Name**. **Add morph** piles on more; the trash icon drops
-one (a pose always keeps at least one).
+<details>
+<summary><strong>Combining several morphs into one output — why you'd do it</strong></summary>
+<table><tr><td>
+
+A pose usually maps one Daz morph to one generated output. Combining bakes a shape
+that only exists as a combination of dials — or a controller plus its corrective —
+into a single clean morph for Houdini and Unreal. All the listed morphs are keyed
+together on that one frame, so they blend into the single output named in **Name**.
+**Add morph** piles on more; the trash icon drops one (a pose always keeps at least
+one).
 
 </td></tr></table>
 </details>

@@ -123,9 +123,10 @@ async function shootStrip(page: Page, path: string, topEl: Locator, bottomEl?: L
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await settle(page)
   await page.setViewportSize({ width: VW, height: MAX_H + HEADER })
-  // Drop the sticky header (if the page has one) so a mid-page strip can't sit
-  // under it. A one-shot querySelector — NOT a locator, whose auto-wait would
-  // hang for the full timeout on pages without one (the project overview).
+  // Drop the sticky page header (if any) so a mid-page strip can't sit under it.
+  // A one-shot querySelector — NOT a locator, whose auto-wait would hang for the
+  // full timeout on pages without one (the project overview). The pinned ROM
+  // section title / column headers are left alone (they're wanted as context).
   await page.evaluate(() => {
     const h = document.querySelector('header.sticky')
     if (h) (h as HTMLElement).style.display = 'none'
@@ -232,18 +233,6 @@ test('settings-dth-release', async ({ page }) => {
   await shoot(page, join(OUT, 'settings-dth-release.png'), card(page, 'Setup DTH Release'))
 })
 
-test('settings-exporter-plugin', async ({ page }) => {
-  await prime(page, buildSeed())
-  await page.goto('/')
-  await page.getByRole('heading', { name: 'DTH Character Studio' }).waitFor()
-  await page.getByRole('link', { name: 'Settings' }).click()
-  await shoot(
-    page,
-    join(OUT, 'settings-exporter-plugin.png'),
-    card(page, 'Setup DTH Exporter Plugin'),
-  )
-})
-
 test('home-new-project', async ({ page }) => {
   // First-run Home (no recents) + a seeded folder pick, so the create form fills
   // in with a chosen folder and its auto-derived name instead of staying empty.
@@ -343,6 +332,54 @@ test('character-bone-scale-toggle', async ({ page }) => {
     .first()
     .waitFor()
   await shoot(page, join(OUT, 'character-bone-scale-toggle.png'), page.locator('table').first())
+})
+
+test('gen-art-direction', async ({ page }) => {
+  await openCharacter(page)
+  // Expand the GEN section (preset Golden Palace), then its VaginaOpen art-direction
+  // frame — the fixture seeds one morph on it, the rest read "preset default".
+  await page.getByRole('button', { name: /Genitalia/ }).click()
+  await page.getByText('VaginaOpen').click()
+  const gen = page
+    .getByRole('button', { name: /Genitalia/ })
+    .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  await shoot(page, join(OUT, 'gen-art-direction.png'), gen, { headerOffset: 210 })
+})
+
+test('combine-morphs', async ({ page }) => {
+  await openCharacter(page)
+  await page.getByRole('button', { name: /FBM/ }).click()
+  // Two real multi-morph poses from the fixture: SLGlutesSS (4 morphs) and
+  // SLGlutesHipBendSpandex (2) — expand both to show the combined-morph editor.
+  await page.getByText('4 morphs', { exact: true }).click()
+  await page.getByText('2 morphs', { exact: true }).click()
+  await page.mouse.move(0, 0)
+  await settle(page)
+  await page.setViewportSize({ width: VW, height: 1200 })
+  // Scroll the first combined pose just below the pinned FBM section title +
+  // column headers, so both examples sit under them (the real scrolled view — the
+  // poses between are hidden behind the pinned headers, so nothing overlaps).
+  const firstRow = page.getByText('4 morphs combined').locator('xpath=ancestor::tr[1]')
+  await firstRow.evaluate((el) => {
+    ;(el as HTMLElement).style.scrollMarginTop = '205px'
+    el.scrollIntoView({ block: 'start' })
+  })
+  await settle(page)
+  // Capture from the pinned section title (context) down through the 2nd example —
+  // dropping the character page header above it (start the clip at the title).
+  const title = page
+    .getByRole('button', { name: /FBM/ })
+    .locator('xpath=ancestor::div[contains(@class,"sticky")][1]')
+  const top = await title.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
+  const bottom = await page
+    .getByRole('button', { name: 'Add morph', exact: true })
+    .last()
+    .evaluate((el) => Math.ceil(el.getBoundingClientRect().bottom))
+  const y = Math.max(0, top)
+  await page.screenshot({
+    path: join(OUT, 'combine-morphs.png'),
+    clip: { x: 0, y, width: VW, height: Math.min(bottom - y + 24, 1200 - y) },
+  })
 })
 
 test('products-tab', async ({ page }) => {
