@@ -18,9 +18,9 @@ import {
   saveProjectSettings,
   saveSettings,
 } from '#/lib/rom/api.ts'
-import { confirmDialog } from '#/lib/desktop.ts'
 import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
+import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
@@ -81,6 +81,7 @@ function projectSettingsFrom(project: Partial<ProjectSettings> | null | undefine
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
   const router = useRouter()
+  const confirm = useConfirm()
 
   // Reachable from several places, so return to wherever we came from (falling
   // back to the projects home if there's no history to pop) — like the About page.
@@ -166,9 +167,9 @@ function SettingsPage() {
     // folder to the new root — confirm before that destructive, non-trivial move.
     const subdirChanged = projectSettings.charactersSubdir.trim() !== (project.charactersSubdir ?? '')
     if (subdirChanged) {
-      const ok = await confirmDialog(
+      const ok = await confirm(
         'Change the characters subfolder?\n\nThis moves all existing character folders to the new location and repoints their scene/Houdini paths. Make sure no character files are open elsewhere.',
-        { title: 'Move character folders', kind: 'warning' },
+        { title: 'Move character folders', confirmLabel: 'Move folders' },
       )
       if (!ok) return
     }

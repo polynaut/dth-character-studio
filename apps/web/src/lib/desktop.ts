@@ -1,4 +1,4 @@
-import { ask, open } from '@tauri-apps/plugin-dialog'
+import { open } from '@tauri-apps/plugin-dialog'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -65,19 +65,6 @@ export function onMenu(name: string, handler: () => void): () => void {
     disposed = true
     unlisten?.()
   }
-}
-
-/**
- * A native yes/no confirmation for a destructive action, via the Tauri dialog
- * plugin (falls back to `window.confirm` in a plain browser). Returns whether the
- * user confirmed. Keeps native dialog access inside the desktop boundary.
- */
-export async function confirmDialog(
-  message: string,
-  opts?: { title?: string; kind?: 'info' | 'warning' | 'error' },
-): Promise<boolean> {
-  if (!isTauri()) return window.confirm(message)
-  return ask(message, { title: opts?.title, kind: opts?.kind, okLabel: 'Yes', cancelLabel: 'Cancel' })
 }
 
 /**
