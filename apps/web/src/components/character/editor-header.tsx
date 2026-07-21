@@ -16,15 +16,16 @@ import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
- * Scroll the page to the top with a rAF-driven ease-out — NOT
+ * Glide the page to a target scrollY with a rAF-driven ease-out — NOT
  * `behavior: 'smooth'`, which Windows' reduced-motion setting silently turns
  * into an instant jump; this glide is part of the interaction (the scene tag
  * "travels" to the scene cards it stands for), so it always animates. A wheel
  * or touch during the glide cancels it — the user's scroll wins.
  */
-function smoothScrollToTop() {
+function smoothScrollToY(target: number) {
+  const dest = Math.max(0, target)
   const start = window.scrollY
-  if (start === 0) return
+  if (Math.abs(dest - start) < 1) return
   const duration = 400
   const t0 = performance.now()
   let cancelled = false
@@ -36,7 +37,8 @@ function smoothScrollToTop() {
   const step = (now: number) => {
     if (cancelled) return
     const t = Math.min(1, (now - t0) / duration)
-    window.scrollTo(0, Math.round(start * Math.pow(1 - t, 3)))
+    const eased = 1 - Math.pow(1 - t, 3)
+    window.scrollTo(0, Math.round(start + (dest - start) * eased))
     if (t < 1) requestAnimationFrame(step)
     else {
       window.removeEventListener('wheel', cancel)
@@ -44,6 +46,35 @@ function smoothScrollToTop() {
     }
   }
   requestAnimationFrame(step)
+}
+
+/**
+ * Bring the "Daz scenes" section heading just below the sticky header — but ONLY
+ * when that means scrolling UP (the section sits above the current view). If
+ * reaching it would scroll DOWN, do nothing (the user is above it already). The
+ * offset is the sticky header's live height (collapsed while scrolled down).
+ */
+function scrollDazScenesIntoView() {
+  const el = document.getElementById('daz-scenes')
+  if (!el) return
+  const header = document.querySelector('header')
+  const offset = (header?.offsetHeight ?? 96) + 12
+  const target = window.scrollY + el.getBoundingClientRect().top - offset
+  if (target >= window.scrollY) return
+  smoothScrollToY(target)
+}
+
+/**
+ * The scene tag's display text: the scene's name with the character's name
+ * stripped out (case-insensitive) — "KiraDefault_G9_GP" reads "Default_G9_GP"
+ * for "Kira". Edge separators left by the removal are trimmed; if nothing
+ * remains, the full name is kept.
+ */
+function sceneTagText(tag: string, name: string): string {
+  if (!name) return tag
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const stripped = tag.replace(new RegExp(escaped, 'gi'), '').replace(/^[_\s-]+|[_\s-]+$/g, '')
+  return stripped || tag
 }
 
 /**
@@ -303,14 +334,15 @@ export function EditorHeader({
                 groom lists and the ROM override follow that selection, and the
                 title row stays visible in the collapsed sticky header (the
                 subtitle below does not). Hidden while renaming. Clicking it
-                scrolls back to the top, where the scene cards are — the one
-                place the selection can be switched. */}
+                scrolls the "Daz scenes" section into view (only when it's above
+                the current view), where the selection can be switched. The label
+                drops the character's name from the scene name. */}
             {sceneTag && !editingTitle && (
               <button
                 type="button"
                 className="cursor-pointer"
                 title="The Daz scene selected in the scene cards — hair items and the ROM override follow it. Click to jump to the scene cards and switch."
-                onClick={smoothScrollToTop}
+                onClick={scrollDazScenesIntoView}
               >
                 <Tag
                   tone="orange"
@@ -318,7 +350,7 @@ export function EditorHeader({
                   // the line box's geometric center, so dead-center reads high.
                   className="max-w-64 translate-y-[5px] truncate normal-case"
                 >
-                  {sceneTag}
+                  {sceneTagText(sceneTag, character.name)}
                 </Tag>
               </button>
             )}
