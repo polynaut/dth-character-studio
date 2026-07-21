@@ -216,8 +216,7 @@ Each pose row has two name fields with very different jobs:
   ROM run.
 
 A pose row can also drive its one output from **several Daz morphs at once** —
-expand its **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
-more).
+expand its **morphs** toggle.
 
 <p align="center">
   <img width="900" alt="Expanded pose rows: a single-morph row, and rows combining several morphs into one output" src="screenshots/combine-morphs.png" />
