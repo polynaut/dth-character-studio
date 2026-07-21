@@ -620,15 +620,7 @@ async function shootTight(page: Page, path: string, el: Locator) {
   })
 }
 
-test('detail-path-chip', async ({ page }) => {
-  await openProject(page)
-  // The project header's own path chip. Hovering shows the copy badge.
-  const chip = page.getByRole('button', { name: 'Copy path' }).first()
-  await settle(page)
-  await chip.hover()
-  await page.waitForTimeout(250)
-  await shootTight(page, join(OUT, 'detail-path-chip.png'), chip)
-})
+// (The plain hover/copy interaction is a GIF now — guide.gifs.ts' path-chip-copy.)
 
 test('detail-path-chip-alt', async ({ page }) => {
   await openProject(page)
@@ -701,13 +693,21 @@ test('detail-morph-autocomplete', async ({ page }) => {
 test('coverage: guide references and generated screenshots match 1:1', async () => {
   const guideDir = join(OUT, '..')
   const referenced = new Set<string>()
+  const referencedGifs = new Set<string>()
   for (const md of (await readdir(guideDir)).filter((f) => f.endsWith('.md'))) {
     const text = await readFile(join(guideDir, md), 'utf8')
     for (const m of text.matchAll(/screenshots\/([\w.-]+\.png)/g)) referenced.add(m[1])
+    for (const m of text.matchAll(/gifs\/([\w.-]+\.gif)/g)) referencedGifs.add(m[1])
   }
   const onDisk = (await readdir(OUT)).filter((f) => f.endsWith('.png'))
   const missing = [...referenced].filter((f) => !onDisk.includes(f)).sort()
   const orphans = onDisk.filter((f) => !referenced.has(f)).sort()
   expect(missing, `referenced in docs/guide but missing from screenshots/: ${missing.join(', ')}`).toEqual([])
   expect(orphans, `in screenshots/ but referenced by no guide page: ${orphans.join(', ')}`).toEqual([])
+  // Same lockstep for the interaction GIFs (guide.gifs.ts → docs/guide/gifs).
+  const gifsOnDisk = await readdir(join(guideDir, 'gifs')).catch(() => [] as string[])
+  const missingGifs = [...referencedGifs].filter((f) => !gifsOnDisk.includes(f)).sort()
+  const orphanGifs = gifsOnDisk.filter((f) => f.endsWith('.gif') && !referencedGifs.has(f)).sort()
+  expect(missingGifs, `referenced in docs/guide but missing from gifs/: ${missingGifs.join(', ')}`).toEqual([])
+  expect(orphanGifs, `in gifs/ but referenced by no guide page: ${orphanGifs.join(', ')}`).toEqual([])
 })
