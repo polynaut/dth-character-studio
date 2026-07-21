@@ -122,6 +122,28 @@ const unlisted = onDisk.filter((f) => !pages.includes(f))
 if (missing.length) throw new Error(`NAV lists missing guide pages: ${missing.join(', ')}`)
 if (unlisted.length) throw new Error(`docs/guide has pages not in NAV (place them): ${unlisted.join(', ')}`)
 
+// Screenshot references ↔ files on disk — the static mirror of the screenshot
+// suite's `coverage` test (guide.screenshots.ts), so a page referencing a
+// missing PNG (or a PNG no page references) fails the PR/deploy build instead
+// of shipping a broken image. Same reference regex as the coverage test.
+const shotsDir = join(SRC, 'screenshots')
+const referencedShots = new Set()
+for (const md of pages) {
+  const text = readFileSync(join(SRC, md), 'utf8')
+  for (const m of text.matchAll(/screenshots\/([\w.-]+\.png)/g)) referencedShots.add(m[1])
+}
+const shotsOnDisk = readdirSync(shotsDir).filter((f) => f.endsWith('.png'))
+const missingShots = [...referencedShots].filter((f) => !shotsOnDisk.includes(f)).sort()
+const orphanShots = shotsOnDisk.filter((f) => !referencedShots.has(f)).sort()
+if (missingShots.length)
+  throw new Error(
+    `guide references screenshots that don't exist (run \`pnpm screenshots\` or fix the reference): ${missingShots.join(', ')}`,
+  )
+if (orphanShots.length)
+  throw new Error(
+    `screenshots referenced by no guide page (delete them + their shot test, or reference them): ${orphanShots.join(', ')}`,
+  )
+
 const titleOf = (md) => {
   const first = readFileSync(join(SRC, md), 'utf8').split('\n', 1)[0]
   if (!first.startsWith('# ')) throw new Error(`${md}: first line must be an "# " title`)
