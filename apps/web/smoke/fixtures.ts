@@ -24,6 +24,9 @@ const HERE = dirname(fileURLToPath(import.meta.url))
  *  (`canonicalImage` keeps `data:` URLs verbatim, so no fake-fs image file is
  *  needed to render it). */
 const AVATAR = `data:image/png;base64,${readFileSync(joinNodePath(HERE, 'kira-avatar.png')).toString('base64')}`
+/** The Summertide outfit scene's own `.tip.png` — the extra scene card (and
+ *  the header when that scene is selected) must show a different look. */
+const AVATAR_SUMMERTIDE = `data:image/png;base64,${readFileSync(joinNodePath(HERE, 'kira-avatar-summertide.png')).toString('base64')}`
 /** A realistic FBM section (49 custom full-body morphs, lifted from a real Kira)
  *  so the docs show a populated ROM section instead of an empty one. */
 const FBM_SECTION = JSON.parse(readFileSync(joinNodePath(HERE, 'kira-fbm.json'), 'utf8'))
@@ -252,7 +255,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     // (the mock decodes the data URL to real bytes for readFile).
     [P.scene]: 'duf-fixture',
     [`${P.scene}.tip.png`]: AVATAR,
-    ...(opts.extraScene ? { [P.scene2]: 'duf-fixture', [`${P.scene2}.tip.png`]: AVATAR } : {}),
+    ...(opts.extraScene ? { [P.scene2]: 'duf-fixture', [`${P.scene2}.tip.png`]: AVATAR_SUMMERTIDE } : {}),
     [P.houdini]: 'hip-fixture',
     // A release root is marked by copyright.txt; the version parses from the
     // folder name (single-release mode).
