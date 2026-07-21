@@ -309,8 +309,10 @@
   opacity: 1;
 }
 
-/* Brief "copied" confirmation after a click (guide.js toggles the class). */
-.details-anchor.copied {
+/* Brief "copied" confirmation after a click (guide.js toggles the class) —
+   heading anchors and accordion anchors alike. */
+.details-anchor.copied,
+.guide-content .anchor.copied {
   color: var(--primary);
   opacity: 1;
 }

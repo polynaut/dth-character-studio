@@ -57,14 +57,17 @@ document.addEventListener('keydown', (e) => {
 // no toggle, no jump; clicking elsewhere on the title toggles as usual. And
 // visiting a link whose hash targets an accordion opens it and smooth-scrolls
 // its title into view once the page has loaded.
+// One behavior for BOTH anchor kinds — heading "#" links and accordion "#"
+// links: the anchor lands in the URL (no jump), the full link is copied, and
+// the glyph flashes orange as confirmation. For accordions preventDefault
+// also cancels the summary toggle. Clipboard access can be denied
+// (permissions, insecure context) — then the URL bar still carries the
+// anchor, so failing silently is fine.
 document.addEventListener('click', (e) => {
-  const a = e.target.closest('.details-anchor')
+  const a = e.target.closest('.details-anchor, .guide-content .anchor')
   if (!a) return
-  e.preventDefault() // cancels the summary toggle along with the navigation
+  e.preventDefault()
   history.replaceState(null, '', a.getAttribute('href'))
-  // Copy the full link too; the glyph flashes green as confirmation. Clipboard
-  // access can be denied (permissions, insecure context) — then the URL bar
-  // still carries the anchor, so failing silently is fine.
   navigator.clipboard?.writeText(location.href).then(
     () => {
       a.classList.add('copied')
