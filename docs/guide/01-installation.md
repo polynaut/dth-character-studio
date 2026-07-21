@@ -1,7 +1,6 @@
 # 1 · Install the app
 
-Download the Windows installer from the
-[latest release](https://github.com/polynaut/dth-character-studio/releases/latest)
+Download the Windows installer using the download button in the header
 (`DTH.Character.Studio_<version>_x64-setup.exe`) and run it.
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
