@@ -1,4 +1,4 @@
-# Deep dive: the Tools page
+# The Tools page
 
 The **Tools** page (top-right) is where you install and maintain *your own* Daz /
 Houdini content and keep the studio's generated files in sync. **Everything here

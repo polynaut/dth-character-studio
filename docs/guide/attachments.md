@@ -1,4 +1,4 @@
-# Deep dive: Attachments (optional)
+# Attachments
 
 An **attachment** is a reusable Daz scene (`.duf`) that **isn't a full character** — a
 base figure, a prop, an outfit, a look you start from — that you keep organized
