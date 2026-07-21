@@ -20,12 +20,16 @@ export function DirPathChip({
   dir,
   roots,
   onEdit,
+  className,
 }: {
   /** Display-formatted directory (see {@link displayDirOf} for file paths). */
   dir: string
   /** Display-formatted candidate roots, most specific first. */
   roots: Array<string>
   onEdit?: () => void
+  /** Extra classes on the chip's `<code>` (e.g. `flex h-9 items-center` to
+   *  match the fixed-height chips that sit beside `h-9` buttons). */
+  className?: string
 }) {
   const dirLower = dir.toLowerCase()
   const rootLen =
@@ -33,7 +37,7 @@ export function DirPathChip({
       .map((root) => (root && dirLower.startsWith(root.toLowerCase()) ? root.length : 0))
       .find((len) => len > 0) ?? 0
   return (
-    <PathCode path={dir} onEdit={onEdit}>
+    <PathCode path={dir} onEdit={onEdit} className={className}>
       {rootLen > 0 && <span className="text-muted-foreground/60">{dir.slice(0, rootLen)}</span>}
       <span className="text-foreground/80">{dir.slice(rootLen)}</span>
     </PathCode>

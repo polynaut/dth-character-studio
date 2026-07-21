@@ -227,7 +227,7 @@ a {
     transform: translateY(0);
   }
   to {
-    transform: translateY(-12%);
+    transform: translateY(-9%);
   }
 }
 @supports (animation-timeline: scroll()) {

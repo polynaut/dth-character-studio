@@ -31,7 +31,12 @@ export function ScriptsSection({
         </InfoPopup>
       </h2>
       {scriptsPath ? (
-        <DirPathChip dir={scriptsPath.dir} roots={[scriptsPath.root]} />
+        // h-9 chip, matching the Export directory chip beside its buttons.
+        <DirPathChip
+          dir={scriptsPath.dir}
+          roots={[scriptsPath.root]}
+          className="flex h-9 items-center"
+        />
       ) : (
         <p className="text-sm text-muted-foreground">
           Set “My DAZ 3D Library” in Settings to install the character script.
