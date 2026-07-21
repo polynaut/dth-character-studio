@@ -2,7 +2,9 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use crate::content::{zip_dir_level, CONTENT_FOLDERS, META_FOLDERS};
 use crate::fsutil::lock_dest;
+use crate::report::io_detail;
 
 // --- Decompression-bomb bounds ----------------------------------------------
 // Users share Daz asset zips with each other, so a hostile archive is in scope.
@@ -144,14 +146,22 @@ pub(crate) fn extract_nested_zip(
 }
 
 /// Central-directory pass over an archive: each file entry's index, normalized
-/// path and uncompressed size. Setting up `by_index` reads only the local header —
-/// no decompression happens here.
-pub(crate) fn zip_file_entries(archive: &mut zip::ZipArchive<fs::File>) -> Vec<(usize, String, u64)> {
+/// path and uncompressed size, plus how many entries could NOT be read (they are
+/// omitted from the list — a non-zero count means the inventory is incomplete,
+/// which quarantine decisions must refuse). Setting up `by_index` reads only the
+/// local header — no decompression happens here.
+pub(crate) fn zip_file_entries(
+    archive: &mut zip::ZipArchive<fs::File>,
+) -> (Vec<(usize, String, u64)>, u64) {
     let mut entries = Vec::new();
+    let mut skipped = 0u64;
     for i in 0..archive.len() {
         let entry = match archive.by_index(i) {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
         };
         if entry.is_dir() {
             continue;
@@ -163,7 +173,91 @@ pub(crate) fn zip_file_entries(archive: &mut zip::ZipArchive<fs::File>) -> Vec<(
         };
         entries.push((i, rel, entry.size()));
     }
-    entries
+    (entries, skipped)
+}
+
+/// The per-content-entry callback of `walk_zip_content`: the archive that owns
+/// the entry (so an installer can inflate it), the shared budget, the entry's
+/// index, its content-root-relative path, and its uncompressed size.
+pub(crate) type ZipEntryEmit<'a> = dyn FnMut(
+        &mut zip::ZipArchive<fs::File>,
+        &mut InflateBudget,
+        usize,
+        &str,
+        u64,
+    ) -> Result<(), String>
+    + 'a;
+
+/// The ONE shared nested-zip descent + content-level walk (install's diff and
+/// dedup's collect used to hand-roll it twice): find the archive's Daz content
+/// level — real content folders first, descending into nested package zips
+/// (wrapper downloads) when the archive has none of its own, `Documentation`
+/// as the last resort — and call `emit` for every content entry.
+///
+/// `strict` keeps the two callers' deliberate error postures: the install
+/// hard-errors on an unreadable nested zip (`Err` carries a step detail), dedup
+/// counts it in `read_errors` and keeps going. `read_errors` also counts
+/// central-directory entries that couldn't be read. `budget` is the TOP-LEVEL
+/// archive's inflate budget; nested archives share it, so one budget bounds the
+/// whole tree (a crafted wrapper can't mint a fresh allowance per inner zip).
+/// Returns whether a content level was found here or in a nested zip.
+pub(crate) fn walk_zip_content(
+    archive: &mut zip::ZipArchive<fs::File>,
+    depth: u32,
+    budget: &mut InflateBudget,
+    strict: bool,
+    read_errors: &mut u64,
+    emit: &mut ZipEntryEmit,
+) -> Result<bool, String> {
+    let (entries, skipped) = zip_file_entries(archive);
+    *read_errors += skipped;
+    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
+    let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
+    if content.is_none() && depth > 0 {
+        let mut found = false;
+        for (idx, path, _) in &entries {
+            if !path.to_ascii_lowercase().ends_with(".zip") {
+                continue;
+            }
+            let nested = (|| -> Result<bool, String> {
+                let tmp = extract_nested_zip(archive, *idx, budget)
+                    .map_err(|e| io_detail(&format!("unpack {path}"), &e))?;
+                let file =
+                    fs::File::open(&tmp.0).map_err(|e| io_detail(&format!("open {path}"), &e))?;
+                let mut inner =
+                    zip::ZipArchive::new(file).map_err(|e| format!("unzip {path} failed: {e}"))?;
+                // The inner archive shares the OUTER budget (see the fn doc).
+                budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
+                walk_zip_content(&mut inner, depth - 1, budget, strict, read_errors, emit)
+            })();
+            match nested {
+                Ok(f) => found |= f,
+                Err(e) if strict => return Err(e),
+                Err(_) => *read_errors += 1,
+            }
+        }
+        if found {
+            return Ok(true);
+        }
+    }
+    let (root, folders) = match content.or_else(|| zip_dir_level(&paths, &META_FOLDERS)) {
+        Some(level) => level,
+        None => return Ok(false),
+    };
+    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
+    for (idx, p, sz) in &entries {
+        // Keep only entries under <content-root>/<one of the chosen folders>.
+        let sub = match p.strip_prefix(&prefix) {
+            Some(s) => s,
+            None => continue,
+        };
+        let first = sub.split('/').next().unwrap_or("");
+        if !folders.iter().any(|f| f == first) {
+            continue;
+        }
+        emit(archive, budget, *idx, sub, *sz)?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]

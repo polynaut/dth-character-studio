@@ -91,7 +91,10 @@ pub fn uninstall_daz(request: UninstallDazRequest) -> InstallReport {
             continue;
         }
         if !looks_like_daz_folder(&canon) {
-            steps.push(step_err(trimmed, "refused: not a recognised Daz folder (no “DAZ” in the path)".into()));
+            steps.push(step_err(
+                trimmed,
+                "refused: not a recognised Daz folder (no “DAZ”-named segment in the path)".into(),
+            ));
             continue;
         }
         if !p.exists() {
