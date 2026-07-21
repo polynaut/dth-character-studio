@@ -121,7 +121,7 @@ export function IdentitySection({
           are locked on a non-primary scene until the override is armed) and the
           text goes muted. */}
       <div className="w-full">
-        {character.genesis === 'G9' && overrideEligible && (
+        {character.genesis === 'G9' && (
           <div className="mb-2.5 flex w-full justify-end">
             <PanelOverrideToggle
               eligible={overrideEligible}
