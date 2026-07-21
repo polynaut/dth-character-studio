@@ -2,7 +2,7 @@
 //!
 //! Daz scene thumbnails (`.tip.png`) are only 256×256, and a small cropped upload
 //! lands at 256×256 too — magnified into the character-header portrait they look
-//! soft. We upscale anything below 512² to 512² with **xBRZ**, an edge-directed
+//! soft. We upscale anything below 768² to 768² with **xBRZ**, an edge-directed
 //! magnifier that suits the flat-shaded Daz figures far better than a plain
 //! resample (which adds no real detail — see the investigation in the PR).
 //!
@@ -15,14 +15,16 @@ use std::path::Path;
 
 use image::{ImageFormat, RgbaImage};
 
-/// The square side length small avatars are upscaled up to.
-const TARGET: u32 = 512;
+/// The square side length small avatars are upscaled up to. 768 (not 512) so a
+/// 256px tip becomes an exact xBRZ ×3, and the source comfortably exceeds the
+/// header portrait's painted size on HiDPI displays.
+const TARGET: u32 = 768;
 
 /// Upscale the avatar PNG at `path` IN PLACE to a {@link TARGET}px square when it's
 /// smaller, using xBRZ (an integer magnification) followed by a Lanczos3 down-step
 /// to land exactly on TARGET. A no-op returning `false` when the image is already
 /// at least TARGET on both sides, so it's safe (and cheap) to call after every
-/// avatar write. Avatars are square, so the common case is an exact 256→512 (×2);
+/// avatar write. Avatars are square, so the common case is an exact 256→768 (×3);
 /// a non-square or oddly-sized source is handled by the same integer-then-downscale
 /// path.
 ///
@@ -48,7 +50,7 @@ fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     let min_side = w.min(h).max(1);
     // xBRZ magnifies by an INTEGER factor only (2..=6). Take the smallest that
     // reaches `target`, then Lanczos-downscale the (possibly larger) result to
-    // exactly target². For the 256px tip this is an exact ×2 (→512), so the
+    // exactly target². For the 256px tip this is an exact ×3 (→768), so the
     // resize below is an identity.
     let factor = target.div_ceil(min_side).clamp(2, 6);
     let up = xbrz::scale_rgba(rgba.as_raw(), w as usize, h as usize, factor as usize);
@@ -92,21 +94,21 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = write_png(&dir, "small.png", 256);
 
-        let changed = upscale_png_to_square(&path, 512).unwrap();
+        let changed = upscale_png_to_square(&path, 768).unwrap();
         assert!(changed, "a 256px source should be upscaled");
 
         let out = image::open(&path).unwrap();
-        assert_eq!((out.width(), out.height()), (512, 512));
+        assert_eq!((out.width(), out.height()), (768, 768));
     }
 
     #[test]
     fn leaves_a_large_enough_image_untouched() {
         let dir = std::env::temp_dir().join("dth-avatar-upscale-large");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = write_png(&dir, "large.png", 512);
+        let path = write_png(&dir, "large.png", 768);
         let before = std::fs::read(&path).unwrap();
 
-        let changed = upscale_png_to_square(&path, 512).unwrap();
+        let changed = upscale_png_to_square(&path, 768).unwrap();
         assert!(!changed, "an image already >= target must be a no-op");
         assert_eq!(std::fs::read(&path).unwrap(), before, "the file must be byte-identical");
     }

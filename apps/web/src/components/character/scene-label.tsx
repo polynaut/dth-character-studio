@@ -40,11 +40,14 @@ export function SceneLabel({
       )}
     >
       {/* Fixed h/w (not aspect-ratio) so the tile is a stable box; landscape
-          face-zoom matches the list-view framing. Greyscaled for the primary. */}
+          face-zoom matches the list-view framing. Greyscaled for the primary.
+          The lift MUST be a quoted `cn(...)` fraction util, not a leading
+          `-translate-y-[…]` in a template literal — Tailwind doesn't scan a
+          leading arbitrary token, so the rule wouldn't generate (see PR #468). */}
       <Portrait
         scenePath={scenePath}
         name={fallbackName ?? name}
-        imgClassName={`-translate-y-[16px]${muted ? ' grayscale' : ''}`}
+        imgClassName={cn('-translate-y-1/2', muted && 'grayscale')}
         className={`h-8 w-[56px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
         fallbackClassName="text-[8px]"
       />
