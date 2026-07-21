@@ -169,14 +169,14 @@ export function EditorHeader({
     parseAvatarName(character.image)?.kind === 'sc' ||
     (!!character.imageScene && character.imageScene === character.scenePath)
 
-  // What the small corner badge shows (see the badge JSX below), or null. `zoom`
-  // applies the scene-thumbnail "zoom in + lift up" framing whenever the badge
-  // is a Daz render (a scene path, or a `--sc-` snapshot of the main avatar);
-  // a custom square upload is shown object-top, unzoomed, like the gallery.
-  const cornerBadge: { image?: string; scenePath?: string; zoom: boolean } | null = sceneAvatarPath
-    ? { image: character.image, zoom: parseAvatarName(character.image)?.kind === 'sc' } // main avatar
+  // What the small corner badge shows (see the badge JSX below), or null. The
+  // badge always gets the scene-thumbnail "zoom in + lift up" framing (see the
+  // Portrait below), so a Daz render and a user's uploaded (or legacy-named)
+  // avatar read alike at thumbnail size — no flat, un-cropped odd one out.
+  const cornerBadge: { image?: string; scenePath?: string } | null = sceneAvatarPath
+    ? { image: character.image } // main avatar
     : character.scenePath && !avatarShowsPrimaryScene
-      ? { scenePath: character.scenePath, zoom: true } // custom avatar → the primary scene render
+      ? { scenePath: character.scenePath } // custom avatar → the primary scene render
       : null
 
   // Editing the main avatar is only allowed when the primary scene is the active
@@ -310,17 +310,14 @@ export function EditorHeader({
               }`}
               title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
             >
-              {/* Portrait, not Avatar: a scene render gets the same
-                  "zoom in + lift up" framing as every other scene thumbnail
-                  (its default zoom); a square upload shows object-top, unzoomed,
-                  like the header/gallery. The frame's bg-neutral-500 fills the
-                  scene tip's transparency. */}
+              {/* Portrait, not Avatar: the badge always takes Portrait's default
+                  "zoom in + lift up" framing (like every scene thumbnail), so a
+                  scene render and an uploaded avatar read alike at this size. The
+                  frame's bg-neutral-500 fills a scene tip's transparency. */}
               <Portrait
                 image={cornerBadge.image}
                 scenePath={cornerBadge.scenePath}
                 name={character.name}
-                zoom={cornerBadge.zoom}
-                imgClassName={cornerBadge.zoom ? undefined : 'object-top'}
                 className="aspect-[3/4] w-11 rounded-md border-0 shadow-[0_0_14px_4px_rgb(0_0_0_/_0.35)]"
                 fallbackClassName="text-sm"
               />
