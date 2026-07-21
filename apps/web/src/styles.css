@@ -454,6 +454,38 @@ a {
   }
 }
 
+/* macOS-vibrancy glass for the character header. A plain `backdrop-blur` ends in
+   a HARD line — sharp content below meets blurred content above — which reads as
+   a seam and looks nothing like Apple's title-bar glass, whose blur and tint
+   ramp smoothly to zero at the edge. The fix (joshwcomeau.com/css/backdrop-filter):
+   draw the effect on an absolutely-positioned `::before` that extends PAST the
+   header's bottom, and mask it with a vertical gradient so both the blur and the
+   translucent tint feather out. `saturate(180%)` is the classic Apple vibrancy
+   boost — colours behind the glass stay vivid instead of washing grey. The host
+   must be positioned (the sticky header already is); the `::before` sits at
+   z-index -1, behind the header's own content. Falls back to an opaque fill
+   where backdrop-filter is unsupported. */
+@utility liquid-glass-header {
+  background-color: var(--background);
+
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: transparent;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 -28px 0;
+      z-index: -1;
+      pointer-events: none;
+      background-color: color-mix(in oklab, var(--background) 62%, transparent);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
+    }
+  }
+}
+
 /* The "Refresh assets" action pulses a soft (light) orange when a refresh is
    needed, to pull the eye to it. Breathes a light primary-orange tint of the
    outline button's fill + border, plus a faint glow, in and out. Reduced-motion
