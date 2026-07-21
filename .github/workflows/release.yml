@@ -11,7 +11,7 @@ name: 🚀 Release
 #   build-mac  hosted macOS runner (opt-in via ENABLE_MAC_RELEASE) — builds a
 #              universal .app + .dmg, Developer-ID-signed + Apple-notarized
 #              inline; throwaway updater key here too (same rule as Windows)
-#   sign       self-hosted Certum signer (the NAS runner beside the always-on
+#   sign-win   self-hosted Certum signer (the NAS runner beside the always-on
 #              certum-container/SimplySign session) — Authenticode-signs the
 #              installer through the shared p11-kit socket and regenerates the
 #              updater .sig over the SIGNED Windows bytes AND (when present) the
@@ -245,7 +245,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  sign:
+  sign-win:
     needs: [check, build-win, build-mac]
     # Run when the Windows build succeeded and the mac build either succeeded or
     # was SKIPPED (flag off) — but NOT if the mac build FAILED, so a broken
@@ -406,7 +406,7 @@ jobs:
           retention-days: 3
 
   publish:
-    needs: [check, sign]
+    needs: [check, sign-win]
     # Publishing needs no signing secret — only GITHUB_TOKEN — so it runs on a
     # reliable hosted runner. Keeping it off the NAS means a GitHub API hiccup
     # can be re-run without re-signing, and shrinks the NAS's job to signing only.
