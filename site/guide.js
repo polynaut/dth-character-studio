@@ -77,6 +77,20 @@ document.addEventListener('click', (e) => {
   )
 })
 
+// Clicking a DOCKED accordion title (sticky, ridden down from its resting
+// place) doesn't close the box — closing would teleport the page content.
+// Instead it smooth-scrolls the accordion back to the top; a second click on
+// the now-resting title closes it as usual.
+document.addEventListener('click', (e) => {
+  const summary = e.target.closest('.guide-content details[open] > summary')
+  if (!summary || e.target.closest('.details-anchor')) return
+  const details = summary.parentElement
+  const docked = summary.getBoundingClientRect().top > details.getBoundingClientRect().top + 3
+  if (!docked) return
+  e.preventDefault()
+  details.scrollIntoView({ behavior: 'smooth', block: 'start' }) // rides the details' scroll-margin
+})
+
 function revealHashAccordion() {
   const id = decodeURIComponent(location.hash.slice(1))
   const details = id ? document.getElementById(id)?.closest('details') : null
