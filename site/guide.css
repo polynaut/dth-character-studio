@@ -163,7 +163,7 @@
   top: calc(var(--topbar-h) - 1px);
   z-index: 5;
   margin: 44px 0 12px;
-  padding-top: 20px;
+  padding-top: 36px;
   padding-bottom: 20px;
   border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
   background: var(--bg);
