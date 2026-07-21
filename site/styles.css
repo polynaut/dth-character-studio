@@ -754,6 +754,14 @@ a:hover {
   margin-inline: 6px;
 }
 
+/* GitHub link in the footer: octocat mark inline with the label. */
+.footer .gh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: bottom;
+}
+
 .footer-fine {
   font-size: 0.8rem;
   opacity: 0.75;
