@@ -256,7 +256,7 @@ export function EditorHeader({
                 name={character.name}
                 zoom={!!cornerBadge.scenePath}
                 imgClassName={cornerBadge.scenePath ? undefined : 'object-top'}
-                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 shadow-md"
+                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 shadow-md shadow-black/50"
                 fallbackClassName="text-sm"
               />
             </span>
