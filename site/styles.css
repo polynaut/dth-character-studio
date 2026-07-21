@@ -301,6 +301,7 @@ a:hover {
 @media (min-width: 1024px) {
   .hero {
     min-height: 85vh;
+    padding-bottom: 0;
   }
 }
 
