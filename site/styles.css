@@ -289,11 +289,16 @@ a:hover {
   position: relative;
   padding: clamp(56px, 10vh, 110px) 0 clamp(56px, 8vh, 96px);
   overflow: hidden;
-  /* Tall screens: the hero owns 75% of the viewport, and the guide teaser
-     link (margin-top: auto below) rides down to its bottom edge. On short
-     screens the content height wins and nothing changes. */
-  min-height: 75vh;
   display: flex;
+}
+
+/* Tablet/desktop: the hero owns 83% of the viewport, and the guide teaser
+   link (margin-top: auto below) rides down to its bottom edge. On phones
+   (and short screens) the content height wins and nothing changes. */
+@media (min-width: 768px) {
+  .hero {
+    min-height: 83vh;
+  }
 }
 
 /* Soft orange glow behind the logo — pure decoration, painted cheap. */
@@ -439,15 +444,15 @@ a:hover {
 
 /* Screenshot teaser atop the "why" section: the top of the real character page,
    cropped and fading out so the heading rides up into it. Geometry: the source
-   shot is 2560×2260 — 40% of its height stays fully visible, then it fades to
-   transparent over the next 10%, so the container crops at 50% (aspect-ratio
-   2560/1130) and the mask goes opaque→transparent across the last fifth. */
+   shot is 2560×2260 and the container crops it at 50% (aspect-ratio 2560/1130);
+   the mask keeps the upper half of the crop fully opaque and fades out across
+   the lower half, giving the heading a long ramp to ride up into. */
 .section-teaser {
   overflow: hidden;
   border-radius: var(--radius);
   aspect-ratio: 2560 / 1130;
-  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 50%, transparent 100%);
 }
 
 .section-teaser img {
@@ -478,7 +483,8 @@ a:hover {
 /* Cards */
 
 .cards {
-  margin-top: 40px;
+  /* Generous gap after the lead paragraph so the prose settles before the grid. */
+  margin-top: 64px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
@@ -561,55 +567,7 @@ a:hover {
   }
 }
 
-/* Steps */
-
-.steps {
-  margin: 40px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-.step {
-  position: relative;
-  padding: 22px 20px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.step-num {
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  color: var(--primary);
-}
-
-.step h3 {
-  margin-top: 6px;
-  font-size: 1.02rem;
-  font-weight: 800;
-}
-
-.step p {
-  margin-top: 6px;
-  font-size: 0.88rem;
-  color: color-mix(in oklab, var(--fg) 82%, var(--muted));
-}
-
-@media (max-width: 900px) {
-  .steps {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 540px) {
-  .steps {
-    grid-template-columns: 1fr;
-  }
-}
+/* The guide call-out closing the features section. */
 
 .cta-strip {
   margin-top: 40px;
