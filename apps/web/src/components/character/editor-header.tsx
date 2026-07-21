@@ -7,7 +7,7 @@ import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
+import { Button, EditableTitle, Tag, cn, useModifierHeld } from '@dth/ui'
 import { prettySceneName } from '#/lib/scene-name.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
@@ -299,7 +299,7 @@ export function EditorHeader({
                     name={character.name}
                     // Landscape face-zoom (the list-view framing), sized to the
                     // tag. Greyscaled when it's the primary scene.
-                    imgClassName={`-translate-y-[16px]${sceneAvatarPath ? '' : ' grayscale'}`}
+                    imgClassName={cn('-translate-y-1/2', !sceneAvatarPath && 'grayscale')}
                     className={`h-8 w-[56px] shrink-0 rounded${sceneAvatarPath ? '' : ' scene-label-tile'}`}
                     fallbackClassName="text-[8px]"
                   />
