@@ -709,8 +709,10 @@ function ProjectCharactersPage() {
                         image={character.image}
                         name={character.name}
                         className={cn(
-                          'aspect-[3/4] shrink-0 rounded-md',
-                          view === 'grid' ? 'w-16' : 'w-8',
+                          'shrink-0 rounded-md',
+                          // List view: landscape crop, same 13:9 ratio the character
+                          // page's sticky header settles into once collapsed.
+                          view === 'grid' ? 'aspect-[3/4] w-16' : 'aspect-[13/9] w-16',
                         )}
                         fallbackClassName={view === 'grid' ? 'text-2xl' : 'text-xs'}
                       />
