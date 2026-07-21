@@ -304,17 +304,14 @@
     color 120ms ease;
 }
 
+/* Stays the headings' muted gray on hover — only the copied flash colors it. */
 .guide-content summary:hover .details-anchor {
   opacity: 1;
 }
 
-.details-anchor:hover {
-  color: var(--primary-soft);
-}
-
 /* Brief "copied" confirmation after a click (guide.js toggles the class). */
 .details-anchor.copied {
-  color: #6cc794;
+  color: var(--primary);
   opacity: 1;
 }
 
