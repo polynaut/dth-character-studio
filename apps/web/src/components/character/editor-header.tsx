@@ -63,15 +63,17 @@ function scrollDazScenesIntoView() {
 
 /**
  * The scene tag's display text: the scene's name with the character's name
- * stripped out (case-insensitive) — "KiraDefault_G9_GP" reads "Default_G9_GP"
- * for "Kira". Edge separators left by the removal are trimmed; if nothing
- * remains, the full name is kept.
+ * stripped out (case-insensitive), then separators (underscores, dashes,
+ * whitespace runs) collapsed to single spaces and trimmed — "KiraDefault_G9_GP"
+ * reads "Default G9 GP" for "Kira". If stripping the name leaves nothing, the
+ * whole (spaced) tag is kept.
  */
 function sceneTagText(tag: string, name: string): string {
-  if (!name) return tag
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const stripped = tag.replace(new RegExp(escaped, 'gi'), '').replace(/^[_\s-]+|[_\s-]+$/g, '')
-  return stripped || tag
+  const withoutName = name
+    ? tag.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '')
+    : tag
+  const spaced = (s: string) => s.replace(/[_\s-]+/g, ' ').trim()
+  return spaced(withoutName) || spaced(tag)
 }
 
 /**
@@ -301,7 +303,7 @@ export function EditorHeader({
                   // not): the same --daz-green tint + border those cards use, a
                   // touch stronger since this is a small pill.
                   tone="green"
-                  className="inline-flex max-w-72 items-center gap-1.5 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-daz-green)_35%,var(--card))] py-1 pr-2 pl-1 text-sm normal-case"
+                  className="inline-flex max-w-72 items-center gap-3 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-daz-green)_35%,var(--card))] py-1 pr-2 pl-1 text-sm font-normal normal-case"
                 >
                   {/* The selected scene's render: the picked non-primary scene,
                       or the primary scene when it's the active selection. Fixed
@@ -312,7 +314,7 @@ export function EditorHeader({
                     // Landscape face-zoom (the list-view framing), sized to the
                     // tag. Greyscaled when it's the primary scene.
                     imgClassName={`-translate-y-[16px]${sceneAvatarPath ? '' : ' grayscale'}`}
-                    className="scene-label-tile h-8 w-[56px] shrink-0 rounded border-0"
+                    className={`h-8 w-[56px] shrink-0 rounded${sceneAvatarPath ? '' : ' scene-label-tile'}`}
                     fallbackClassName="text-[8px]"
                   />
                   <span className="truncate">{sceneTagText(sceneTag, character.name)}</span>
