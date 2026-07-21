@@ -8,15 +8,18 @@ name: 🚀 Release
 # Stages (see docs/devops.md → "Code signing"):
 #   check      gate + release notes
 #   build-win  hosted Windows runner — builds the NSIS installer (unsigned)
-#   build-mac  hosted macOS runner (opt-in via ENABLE_MAC_RELEASE) — builds a
-#              universal .app + .dmg, Developer-ID-signed + Apple-notarized
-#              inline; throwaway updater key here too (same rule as Windows)
-#   sign       self-hosted Certum signer (the NAS runner beside the always-on
+#   build-mac  hosted macOS runner (opt-in via ENABLE_MAC_RELEASE) — builds the
+#              UNSIGNED arm64 .app + .dmg; throwaway updater key here too
+#              (same rule as Windows: hosted build jobs see no real secrets)
+#   sign-win   self-hosted Certum signer (the NAS runner beside the always-on
 #              certum-container/SimplySign session) — Authenticode-signs the
 #              installer through the shared p11-kit socket and regenerates the
-#              updater .sig over the SIGNED Windows bytes AND (when present) the
-#              notarized macOS tarball, both with the real key. Uploads the
-#              signed installer + .sig and the macOS bundle + .sig.
+#              Windows updater .sig over the SIGNED bytes with the real key.
+#   sign-mac   hosted macOS runner behind the SAME release-signing gate —
+#              Developer-ID-signs the .app, notarizes + staples app and dmg,
+#              and regenerates the macOS updater .sig with the real key.
+#              sign-win and sign-mac run in PARALLEL; each needs its own
+#              manual approval on the release-signing environment.
 #   publish    hosted runner — downloads the signed artifacts, builds ONE
 #              latest.json across every platform, and creates the GitHub Release.
 #
@@ -34,7 +37,7 @@ name: 🚀 Release
 # secrets are in place (a Developer ID cert + an App Store Connect API key — the
 # same set already used elsewhere works, one Developer ID covers every app under
 # the team). Until then the mac build is skipped and Windows releases normally.
-# Required secrets for the mac build:
+# Required secrets for the mac side (used only by the gated sign-mac job):
 #   APPLE_CERTIFICATE            base64 of the Developer ID Application .p12
 #   APPLE_CERTIFICATE_PASSWORD   the .p12 export password
 #   APPLE_SIGNING_IDENTITY       e.g. "Developer ID Application: Name (TEAMID)"
@@ -171,7 +174,7 @@ jobs:
     needs: check
     # Opt-in: set repo variable ENABLE_MAC_RELEASE=true once the Apple secrets
     # (see the header) are in place. Until then this job is skipped and Windows
-    # releases normally (the sign job tolerates a skipped mac build).
+    # releases normally (the publish job tolerates a skipped mac side).
     if: needs.check.outputs.should_release == 'true' && vars.ENABLE_MAC_RELEASE == 'true'
     runs-on: macos-latest
     timeout-minutes: 60
@@ -211,50 +214,31 @@ jobs:
             echo "THROWAWAY_KEY_EOF"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
           } >> "$GITHUB_ENV"
-      # Materialize the App Store Connect API key (.p8) for notarytool.
-      - name: Write notarization API key
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$RUNNER_TEMP/api_key.p8"
-          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/api_key.p8" >> "$GITHUB_ENV"
-      # Apple Silicon (arm64) build; tauri-action Developer-ID-signs, notarizes
-      # and staples inline via the API key. Pinned SHA like Windows. `--bundles
-      # app,dmg` overrides the config's nsis-only target for macOS. (arm64-only,
-      # not universal: it halves the build; Intel Macs are unsupported. Switch
-      # back to `universal-apple-darwin` + re-add darwin-x86_64 below to restore.)
+      # Apple Silicon (arm64) UNSIGNED build — like build-win, this hosted job
+      # that runs the third-party tauri-action sees NO real signing material.
+      # Developer-ID signing + notarization happen in sign-mac, behind the
+      # release-signing approval gate. `--bundles app,dmg` overrides the
+      # config's nsis-only target for macOS. (arm64-only, not universal: it
+      # halves the build; Intel Macs are unsupported. Switch back to
+      # `universal-apple-darwin` + re-add darwin-x86_64 below to restore.)
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
         with:
           projectPath: apps/desktop
           args: --target aarch64-apple-darwin --bundles app,dmg
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: macos-bundle
+          name: unsigned-mac
           path: |
             apps/desktop/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             apps/desktop/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
           if-no-files-found: error
           retention-days: 3
 
-  sign:
-    needs: [check, build-win, build-mac]
-    # Run when the Windows build succeeded and the mac build either succeeded or
-    # was SKIPPED (flag off) — but NOT if the mac build FAILED, so a broken
-    # notarization surfaces loudly instead of silently shipping Windows-only.
-    if: >-
-      always() && needs.check.outputs.should_release == 'true'
-      && needs.build-win.result == 'success'
-      && needs.build-mac.result != 'failure'
-      && needs.build-mac.result != 'cancelled'
+  sign-win:
+    needs: [check, build-win]
     runs-on: [self-hosted, linux, certum-signer]
     # Keep a hung sign step from holding the SINGLE NAS runner for the 360-min
     # GitHub default — every later release would queue behind it.
@@ -276,13 +260,6 @@ jobs:
         with:
           name: unsigned-installer
           path: dist
-
-      # Present only when the mac build ran (flag on + success).
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        if: needs.build-mac.result == 'success'
-        with:
-          name: macos-bundle
-          path: dist-mac
 
       - name: Authenticode-sign via Certum SimplySign
         shell: bash
@@ -360,26 +337,6 @@ jobs:
             "$exe"
           test -s "$exe.sig"
 
-      # The macOS .app.tar.gz is already Developer-ID-signed + notarized (inline
-      # on the mac runner); the updater additionally verifies the minisign
-      # signature over its bytes — regenerate that with the real key here, same
-      # as Windows. The .dmg (fresh-install download) needs no updater .sig.
-      - name: Regenerate macOS updater signature (over the notarized tarball)
-        if: needs.build-mac.result == 'success'
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          tar=$(find dist-mac -name '*.app.tar.gz' | head -1)
-          [ -n "$tar" ] || { echo "::error::mac build succeeded but no .app.tar.gz found"; exit 1; }
-          npx --yes @tauri-apps/cli@2.11.2 signer sign \
-            --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
-            --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
-            "$tar"
-          test -s "$tar.sig"
-
       # Hand the SIGNED installer + its .sig to the hosted publish job. The
       # artifact round-trip is byte-exact, so the updater .sig still verifies.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -391,11 +348,112 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      # Signed macOS bundle (dmg + notarized tarball + its updater .sig), only
-      # when the mac build ran. A separate artifact so the Windows upload above
-      # keeps its strict if-no-files-found gate.
+  # The macOS half of the signing stage — parallel to sign-win, behind the SAME
+  # release-signing approval gate (each job pauses for its own approval). Runs
+  # on a hosted macOS runner because codesign/notarytool are macOS-only; the
+  # Apple Developer-ID certificate and the real updater key are only touched
+  # here, never in the unsigned build job.
+  sign-mac:
+    needs: [check, build-mac]
+    runs-on: macos-latest
+    # Notarization is Apple-paced (usually minutes, occasionally more).
+    timeout-minutes: 45
+    environment: release-signing
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: unsigned-mac
+          path: dist-mac
+
+      - name: Import the Developer ID certificate into a throwaway keychain
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/sign.keychain-db"
+          KEYCHAIN_PW="$(openssl rand -hex 24)"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 2700 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+      - name: Write notarization API key
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$RUNNER_TEMP/api_key.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/api_key.p8" >> "$GITHUB_ENV"
+
+      # Sign the .app, notarize + staple it, rebuild the updater tarball over
+      # the stapled bundle, then rebuild/sign/notarize/staple the dmg from the
+      # same signed app — filenames stay exactly as the build produced them.
+      - name: Developer-ID sign, notarize & staple (app tarball + dmg)
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+          notarize() {
+            xcrun notarytool submit "$1" \
+              --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" \
+              --issuer "$APPLE_API_ISSUER" --wait
+          }
+          tarball=$(find dist-mac -name '*.app.tar.gz' | head -1)
+          dmg=$(find dist-mac -name '*.dmg' | head -1)
+          [ -n "$tarball" ] && [ -n "$dmg" ] || { echo "::error::unsigned mac bundle incomplete"; exit 1; }
+          work="$RUNNER_TEMP/app-work"; mkdir -p "$work"
+          tar -xzf "$tarball" -C "$work"
+          app=$(find "$work" -maxdepth 1 -name '*.app' | head -1)
+          codesign --force --deep --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" "$app"
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/app.zip"
+          notarize "$RUNNER_TEMP/app.zip"
+          xcrun stapler staple "$app"
+          codesign --verify --deep --strict "$app"
+          # The updater downloads this tarball — rebuild it over the stapled app
+          # (COPYFILE_DISABLE keeps AppleDouble ._ files out of the archive).
+          rm -f "$tarball"
+          COPYFILE_DISABLE=1 tar -czf "$tarball" -C "$work" "$(basename "$app")"
+          # Fresh-install dmg from the same signed app, same filename as built.
+          rm -f "$dmg"
+          hdiutil create -volname "DTH Character Studio" -srcfolder "$app" \
+            -ov -format UDZO "$dmg"
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+          notarize "$dmg"
+          xcrun stapler staple "$dmg"
+
+      # The updater verifies the minisign signature over the exact bytes it
+      # downloads — sign the rebuilt (stapled) tarball with the real key. The
+      # .dmg (fresh-install download) needs no updater .sig.
+      - name: Regenerate macOS updater signature (over the stapled tarball)
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tar=$(find dist-mac -name '*.app.tar.gz' | head -1)
+          # Pin the CLI to the exact lockfile version — a floating `@^2` would pull
+          # unpinned code from npm at release time WITH the real updater key in env.
+          npx --yes @tauri-apps/cli@2.11.2 signer sign \
+            --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+            --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+            "$tar"
+          test -s "$tar.sig"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: needs.build-mac.result == 'success'
         with:
           name: signed-mac
           path: |
@@ -406,7 +464,14 @@ jobs:
           retention-days: 3
 
   publish:
-    needs: [check, sign]
+    needs: [check, sign-win, sign-mac]
+    # Windows must be signed; the mac side is either signed too or the whole
+    # mac half was skipped (ENABLE_MAC_RELEASE off). A FAILED sign-mac blocks
+    # the release instead of silently shipping Windows-only.
+    if: >-
+      always() && needs.check.outputs.should_release == 'true'
+      && needs.sign-win.result == 'success'
+      && (needs.sign-mac.result == 'success' || needs.sign-mac.result == 'skipped')
     # Publishing needs no signing secret — only GITHUB_TOKEN — so it runs on a
     # reliable hosted runner. Keeping it off the NAS means a GitHub API hiccup
     # can be re-run without re-signing, and shrinks the NAS's job to signing only.
