@@ -711,8 +711,8 @@ function ProjectCharactersPage() {
                         // Both views keep the portrait face-zoom; list view uses
                         // the landscape 13:9 crop (the ratio the character page's
                         // header settles into) and overrides the zoom's % lift
-                        // with a fixed −15px so the face sits right at the top.
-                        imgClassName={view === 'list' ? '-translate-y-[15px]' : undefined}
+                        // with a fixed −14px so the face sits right at the top.
+                        imgClassName={view === 'list' ? '-translate-y-[14px]' : undefined}
                         className={cn(
                           'shrink-0 rounded-md',
                           view === 'grid' ? 'aspect-[3/4] w-16' : 'aspect-[13/9] w-16',
