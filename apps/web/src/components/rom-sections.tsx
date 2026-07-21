@@ -419,14 +419,19 @@ export const RomSections = memo(function RomSections({
           // the title to its parent, which is exactly what makes the NEXT section's
           // title push the previous one out (iOS-contacts style) instead of stacking.
           <div key={section} className={`rounded-lg border ${effectiveEnabled ? '' : 'opacity-60'}`}>
-            {/* Sticky section title: pins below the character page's collapsed
-                sticky header (collapsed header = 90px avatar box + my-5 = 130px; pinned at 128px - a 2px tuck under the solid header hides any subpixel seam), z below
-                its z-10. Solid bg so rows can't show through; rounded-t so the
-                bg doesn't square out the card's top corners at rest. NB: the
-                ancestor `contain: layout paint` re-scopes position:fixed but NOT
-                sticky (sticky binds to the scrollport, which containment doesn't
-                create), and no ancestor up to the page scroller has overflow. */}
-            <div className="sticky top-[128px] z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none">
+            {/* Sticky section title: pins right below the character page's collapsed
+                sticky header via `--editor-header-h` (published live by EditorHeader,
+                since the header's collapsed height is dynamic — a hardcoded px drifts
+                as the design changes). z below its z-10. Solid bg so rows can't show
+                through; rounded-t so the bg doesn't square out the card's top corners
+                at rest. NB: the ancestor `contain: layout paint` re-scopes
+                position:fixed but NOT sticky (sticky binds to the scrollport, which
+                containment doesn't create), and no ancestor up to the page scroller
+                has overflow. */}
+            <div
+              className="sticky z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
+              style={{ top: 'var(--editor-header-h, 128px)' }}
+            >
               {/* A real accordion BUTTON (was a click-only div): the core editing
                   surface must be focusable and Enter/Space-operable, and announce
                   its state via aria-expanded. The Switch stays OUTSIDE it — a
