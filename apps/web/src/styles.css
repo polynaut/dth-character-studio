@@ -511,6 +511,7 @@ a {
   background: color-mix(in oklab, var(--color-green-800) 60%, transparent);
   filter: drop-shadow(2px 4px 6px black);
   mix-blend-mode: overlay;
+  opacity: 0.4;
 }
 
 /* The "Refresh assets" action pulses a soft (light) orange when a refresh is
