@@ -2,9 +2,12 @@ import { exists, mkdir, readDir, readFile, remove, writeFile } from '@tauri-apps
 import { z } from 'zod'
 
 import * as storage from '../storage'
+import { avatarFileName, avatarIdOf, avatarsToPrune, uploadsNewestFirst } from '../avatar-names'
 import { isExternalImage } from '../image'
 import { basename, getActiveProjectDir, joinPath } from './core'
 import { bytesToDataUrl, fileExt, IMAGE_EXT_MIME } from './data-url'
+
+import type { AvatarKind } from '../avatar-names'
 
 // Avatar images + Daz scene thumbnails: storing avatar bytes in the active
 // project's `.dcsmeta/images`, deriving avatars from a scene's `.tip.png`, and
@@ -30,39 +33,41 @@ export async function findTipImage(scenePath: string): Promise<string> {
 
 /**
  * Write a character's avatar bytes under a content-versioned filename
- * (`<id>-<ts>.<ext>`), removing any previous avatar for that id first. The version
- * in the name makes the stored reference change whenever the image does, so every
- * `<Avatar>` keyed on it re-resolves — a fixed `<id>.png` would look unchanged and
- * keep showing the cached old image (e.g. switching the avatar between two scenes).
- * Returns the stored filename.
+ * (`<id>--<kind>-<ts>.<ext>`, see avatar-names), then PRUNE — keeping a rolling
+ * history of the newest uploads and the newest scene snapshot rather than
+ * wiping every other variant. The timestamp makes the stored reference change
+ * whenever the image does, so every `<Avatar>` keyed on it re-resolves (a fixed
+ * name would keep showing the cached old image). Returns the stored filename.
  */
 export async function writeAvatarBytes(
   characterId: string,
   bytes: Uint8Array,
   ext: string,
+  kind: AvatarKind,
 ): Promise<string> {
   const projectDir = await getActiveProjectDir()
   if (!projectDir) throw new Error('No project is open.')
   const dir = storage.metaImagesDir(projectDir)
   await mkdir(dir, { recursive: true })
   const id = basename(characterId)
-  const fileName = `${id}-${Date.now()}.${ext}`
-  // Write the new avatar FIRST, then drop the previous variants — the reverse
-  // order leaves a window where a concurrent writer's just-written file (already
-  // referenced by a save) gets deleted, breaking the stored reference.
+  const fileName = avatarFileName(id, kind, Date.now(), ext)
+  // Write the new avatar FIRST, then prune — the reverse order leaves a window
+  // where a concurrent writer's just-written file (already referenced by a
+  // save) gets deleted, breaking the stored reference.
   await writeFile(joinPath(dir, fileName), bytes)
-  await removeCharacterAvatars(projectDir, id, fileName)
+  const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
+  await Promise.all(
+    avatarsToPrune(entries, id, fileName).map((name) => remove(joinPath(dir, name))),
+  )
   return fileName
 }
 
-/** Remove every avatar image stored for a character (old fixed name + versioned
- *  `<id>-<ts>.<ext>`), used both when replacing an avatar and when the character
- *  is deleted. `keep` spares one filename (the replacement just written).
+/** Remove every avatar image stored for a character (current `--kind--` scheme,
+ *  legacy `<id>-<ts>` / fixed `<id>.` names), used when the character is deleted.
  *  Best-effort per file; a missing images folder is a no-op. */
 export async function removeCharacterAvatars(
   projectDir: string,
   characterId: string,
-  keep = '',
 ): Promise<void> {
   const dir = storage.metaImagesDir(projectDir)
   const id = basename(characterId)
@@ -74,11 +79,26 @@ export async function removeCharacterAvatars(
       .filter(
         (entry) =>
           entry.isFile &&
-          entry.name !== keep &&
           (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`)),
       )
       .map((entry) => remove(joinPath(dir, entry.name))),
   )
+}
+
+/**
+ * The character's past UPLOADS (newest first, capped at the retained history) —
+ * the dialog's "recent images" gallery, so a user can switch back to an earlier
+ * upload after trying a scene avatar. Bare filenames (the portable references);
+ * '' entries are impossible. Empty when there's no active project or no uploads.
+ */
+export async function listCharacterUploads({ data }: { data: unknown }): Promise<Array<string>> {
+  const { characterId } = z.object({ characterId: z.string().min(1) }).parse(data)
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return []
+  const dir = storage.metaImagesDir(projectDir)
+  if (!(await exists(dir))) return []
+  const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
+  return uploadsNewestFirst(entries, basename(characterId))
 }
 
 /**
@@ -89,7 +109,7 @@ export async function removeCharacterAvatars(
 export async function copyTipImage(characterId: string, scenePath: string): Promise<string> {
   const tipPath = await findTipImage(scenePath)
   if (!tipPath) return ''
-  return writeAvatarBytes(characterId, await readFile(tipPath), 'png')
+  return writeAvatarBytes(characterId, await readFile(tipPath), 'png', 'sc')
 }
 
 const sceneAvatarInput = z.object({
@@ -157,7 +177,7 @@ export async function uploadCroppedAvatar({ data }: { data: unknown }): Promise<
       }),
     })
     .parse(data)
-  return writeAvatarBytes(characterId, bytes, 'png')
+  return writeAvatarBytes(characterId, bytes, 'png', 'up')
 }
 
 /** Inline raw image bytes as a `data:` URL, MIME inferred from the file name
@@ -186,8 +206,7 @@ const imageSrcCache = new Map<string, string>()
  *  under `projectDir` whose stored filename shares the id of `image`
  *  (`<id>-<ts>.<ext>`, or the legacy fixed `<id>.<ext>`), except `keepKey`. */
 function evictStaleAvatarUrls(projectDir: string, image: string, keepKey: string): void {
-  // The id is everything before the `-<timestamp>.<ext>` version suffix.
-  const id = image.replace(/-\d+\.[^.]+$/, '')
+  const id = avatarIdOf(image)
   if (id === image) return // not a versioned avatar name — nothing to relate
   const prefixes = [`${projectDir}|${id}-`, `${projectDir}|${id}.`]
   for (const key of [...imageSrcCache.keys()]) {

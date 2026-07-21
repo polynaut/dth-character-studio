@@ -682,7 +682,7 @@ async function doSyncAvatarWithScene(
   const tip = await readFile(tipPath)
   const avatar = await readAvatar()
   if (avatar && bytesEqual(tip, avatar)) return null
-  const image = await writeAvatarBytes(character.id, tip, 'png')
+  const image = await writeAvatarBytes(character.id, tip, 'png', 'sc')
   return saveAvatarFields({ image, imageScene: source })
 }
 

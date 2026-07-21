@@ -63,6 +63,7 @@ export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLo
 
 // --- avatars: avatar images + scene thumbnails ------------------------------
 export {
+  listCharacterUploads,
   readAvatarSourceFile,
   resolveImageSrc,
   resolveScenePreview,

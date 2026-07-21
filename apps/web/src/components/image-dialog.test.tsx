@@ -6,13 +6,16 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   bitmapSize = { width: 800, height: 600 }
+  recentUploads = []
 })
 
 const uploadCroppedAvatar = vi.fn(async () => 'uploaded-img')
+let recentUploads: Array<string> = []
 vi.mock('#/lib/rom/api.ts', () => ({
   uploadCroppedAvatar: () => uploadCroppedAvatar(),
   readAvatarSourceFile: async () => ({ bytes: new Uint8Array([1]), mimeType: 'image/png' }),
   setAvatarFromScene: async () => 'scene-img',
+  listCharacterUploads: async () => recentUploads,
   // Avatar resolves the stored reference asynchronously — identity is enough here.
   resolveImageSrc: async (image: string) => image,
 }))
@@ -120,5 +123,21 @@ describe('ImageDialog crop + persist flow', () => {
     await crop()
     await waitFor(() => expect(uploadCroppedAvatar).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(previewSrc()).toBe('uploaded-img'))
+  })
+
+  it('offers past uploads and re-selects one without re-uploading', async () => {
+    recentUploads = ['c1--up-200.png', 'c1--up-100.png']
+    const onApply = vi.fn(
+      async (produce: () => Promise<{ image: string; imageScene: string }>) => await produce(),
+    )
+    render(<ImageDialog {...baseProps} onApply={onApply} />)
+    // The gallery loads on open (both past uploads shown).
+    const buttons = await screen.findAllByRole('button', { name: 'Use this uploaded image' })
+    expect(buttons).toHaveLength(2)
+    // Clicking one persists that reference — no crop, no upload command.
+    fireEvent.click(buttons[1])
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(uploadCroppedAvatar).not.toHaveBeenCalled()
+    await waitFor(() => expect(previewSrc()).toBe('c1--up-100.png'))
   })
 })

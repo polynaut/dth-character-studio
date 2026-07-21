@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -7,6 +7,7 @@ import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Modal } from '@dth/ui'
 import { validateAvatarSource } from '#/lib/image-crop.ts'
 import {
+  listCharacterUploads,
   readAvatarSourceFile,
   setAvatarFromScene,
   uploadCroppedAvatar,
@@ -53,7 +54,20 @@ export function ImageDialog({
   const [error, setError] = useState('')
   /** A decoded, size-validated upload awaiting its 1:1 crop. */
   const [cropSource, setCropSource] = useState<ImageBitmap | null>(null)
+  /** Past uploads (newest first) offered for one-click re-selection. */
+  const [recent, setRecent] = useState<Array<string>>([])
   const fileInput = useRef<HTMLInputElement>(null)
+
+  // Load the recent-uploads gallery on open and after each new upload lands.
+  useEffect(() => {
+    let active = true
+    listCharacterUploads({ data: { characterId } })
+      .then((list) => active && setRecent(list))
+      .catch(() => active && setRecent([]))
+    return () => {
+      active = false
+    }
+  }, [characterId, url])
 
   // Every custom upload goes through decode → size validation (256..1024 on
   // both sides) → the 1:1 crop editor; only the CROPPED square is ever stored
@@ -160,6 +174,24 @@ export function ImageDialog({
     }
   }
 
+  // Re-select a past upload — no side effect, just point the reference at an
+  // already-stored file. Mirrors applyScene's refuse/reset handling.
+  async function applyRecent(fileName: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await onApply(async () => {
+        setUrl(fileName)
+        return { image: fileName, imageScene: '' }
+      })
+      if (saved === null) setUrl(image)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function cancelCrop() {
     cropSource?.close()
     setCropSource(null)
@@ -218,6 +250,31 @@ export function ImageDialog({
             </span>
           </button>
         </FileDropZone>
+
+        {/* Recent uploads — a rolling history so switching to a scene (or a
+            different upload) no longer loses the last one. Only past uploads,
+            newest first; the active one (if it's an upload) is ringed. */}
+        {recent.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-sm text-muted-foreground">Recent uploads:</p>
+            <div className="flex flex-wrap gap-2">
+              {recent.map((fileName) => (
+                <button
+                  key={fileName}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void applyRecent(fileName)}
+                  title="Use this uploaded image"
+                  className={`rounded-md ring-2 transition focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
+                    fileName === url ? 'ring-primary' : 'ring-transparent hover:ring-primary'
+                  }`}
+                >
+                  <Avatar image={fileName} name={name} className="size-16 rounded-md" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Offer the linked scenes' thumbnails whenever there's at least one — the
             current avatar may have come from a scene since unlinked, so even a
