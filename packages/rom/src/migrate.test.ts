@@ -5,6 +5,7 @@ import {
   migrateCharacterData,
   normalizeLegacyCharacter,
 } from './migrate'
+import { toCharacterScriptDsa } from './generate'
 import {
   CHARACTER_SCHEMA_VERSION,
   characterSchema,
@@ -428,6 +429,84 @@ describe('schema v18 — stable ids on JCM rules + drives (additive, zod default
     expect(JSON.stringify(runtime)).not.toContain('rule-1')
     expect(JSON.stringify(runtime)).not.toContain('drive-1')
     expect('id' in runtime.positive[0]).toBe(false)
+  })
+})
+
+describe('schema v19 — stable ids on pose + art-direction morph rows (additive, zod default)', () => {
+  const now = '2026-07-21T00:00:00.000Z'
+  const v18Character = (): Record<string, any> => ({
+    id: 'c',
+    name: 'X',
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 18,
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [
+          {
+            id: 'g1',
+            poses: [
+              {
+                id: 'p1',
+                name: 'BodyTone',
+                morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
+              },
+            ],
+          },
+        ],
+      },
+      GEN: {
+        enabled: true,
+        mode: 'preset',
+        artDirection: [
+          {
+            id: 'a1',
+            rom: 'gp',
+            frame: 100,
+            name: 'AnusOpen',
+            morphs: [{ node: 'GoldenPalace_G9', prop: 'GP9_Anus_Open', value: 0.9 }],
+          },
+        ],
+      },
+    },
+  })
+
+  it('mints morph ids on pose AND art-direction rows when a pre-v19 definition lacks them', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v18Character()))
+    const poseMorph = parsed.sections.FBM.groups[0].poses[0].morphs[0]
+    const artMorph = parsed.sections.GEN.artDirection[0].morphs[0]
+    expect(typeof poseMorph.id).toBe('string')
+    expect(poseMorph.id).not.toBe('')
+    expect(typeof artMorph.id).toBe('string')
+    expect(artMorph.id).not.toBe('')
+  })
+
+  it('keeps a stored morph id (parse → parse is stable once saved)', () => {
+    const raw = v18Character()
+    raw.sections.FBM.groups[0].poses[0].morphs[0] = {
+      ...raw.sections.FBM.groups[0].poses[0].morphs[0],
+      id: 'kept-morph-id',
+    }
+    const parsed = characterSchema.parse(migrateCharacterData(raw))
+    expect(parsed.sections.FBM.groups[0].poses[0].morphs[0].id).toBe('kept-morph-id')
+    // Idempotence in the saved state: re-parsing the parsed result changes nothing.
+    const again = characterSchema.parse(migrateCharacterData(structuredClone(parsed)))
+    expect(again).toEqual(parsed)
+  })
+
+  it('the minted ids never reach the generated output (extraFrames + art direction)', () => {
+    const character = characterSchema.parse(migrateCharacterData(v18Character()))
+    const script = toCharacterScriptDsa(character).content
+    const mintedIds = [
+      character.sections.FBM.groups[0].poses[0].morphs[0].id,
+      character.sections.GEN.artDirection[0].morphs[0].id,
+    ]
+    for (const id of mintedIds) expect(script).not.toContain(id)
+    // The emitted morph objects carry exactly the runtime fields — no `id` key
+    // anywhere in the config JSON's morph rows.
+    expect(script).not.toMatch(/"id":/)
   })
 })
 

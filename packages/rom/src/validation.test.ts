@@ -9,7 +9,7 @@ function pose(name: string, props: Array<string>): RomPose {
   return {
     id: `pose-${name}-${props.join('|')}`,
     name,
-    morphs: props.map((prop) => ({ node: 'Genesis9', prop, value: 1 })),
+    morphs: props.map((prop, index) => ({ id: `m-${name}-${index}`, node: 'Genesis9', prop, value: 1 })),
     boneScaleRef: false,
   }
 }
@@ -213,7 +213,7 @@ describe('romValidationErrors — art-direction morph names', () => {
         rom: 'gp',
         frame: 100,
         name: 'AnusOpen',
-        morphs: [{ node: 'GoldenPalace_G9', prop, value: 0.9 }],
+        morphs: [{ id: 'adm1', node: 'GoldenPalace_G9', prop, value: 0.9 }],
       },
     ]
     return s

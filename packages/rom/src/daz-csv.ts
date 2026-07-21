@@ -1,4 +1,5 @@
 import { parseCsvRecords } from './product-scan'
+import { newId } from './types'
 
 import type { Morph } from './types'
 
@@ -68,7 +69,8 @@ export function posesFromDazCsv(text: string): Array<ImportedPose> {
       if (!node || !prop || raw === '') continue
       const value = Number(raw)
       if (!Number.isFinite(value)) continue
-      morphs.push({ node, prop, value })
+      // New grid rows → new stable ids (schema v19), same as the editor mints.
+      morphs.push({ id: newId(), node, prop, value })
     }
     if (morphs.length === 0) continue
     poses.push({ frame, name: cleanMorphName(morphs[0].prop), morphs })

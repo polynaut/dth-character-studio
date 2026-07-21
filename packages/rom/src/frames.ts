@@ -318,7 +318,8 @@ export function mirrorGroup(group: RomGroup): RomGroup {
       id: newId(),
       name: pose.name,
       boneScaleRef: pose.boneScaleRef,
-      morphs: pose.morphs.map((morph) => ({ ...morph, prop: swap(morph.prop) })),
+      // New rows → new ids (the mirrored group is an independent grid).
+      morphs: pose.morphs.map((morph) => ({ ...morph, id: newId(), prop: swap(morph.prop) })),
     })),
   }
 }

@@ -104,6 +104,11 @@ export interface DthPoseAsset {
 
 /** One morph dialed on one node at a given frame. */
 export const morphSchema = z.object({
+  /** Stable row id for grid editing (minted on read when absent — schema v19,
+   *  the same pattern as the v18 JCM rule/drive ids). NEVER reaches generated
+   *  output: `morphJson` emits node/prop/value/base/autoBase only, on every
+   *  path (extraFrames, art direction). */
+  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
   /** Scene node the property lives on, e.g. "Genesis9". */
   node: z.string().max(MAX_NAME_LENGTH),
   /** Internal property name, e.g. "body_bs_BodyTone". */
@@ -706,8 +711,15 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       keys; minted on read via a zod default — no migration step). Never
  *       reaches the generated output: `jcmMorphModForRuntime` emits drives without
  *       it, so the runtime contract stays byte-for-byte unchanged.
+ *  19 — added a stable `id` to each pose MORPH row (and thereby each
+ *       art-direction morph row — both are `morphSchema`), mirroring v18:
+ *       grid row keys, minted on read via a zod default — no migration step.
+ *       Never reaches the generated output: `morphJson` emits
+ *       node/prop/value/base/autoBase only on every path (extraFrames,
+ *       gp/dkArtDirection), so the .dsa config contract stays byte-for-byte
+ *       unchanged.
  */
-export const CHARACTER_SCHEMA_VERSION = 18
+export const CHARACTER_SCHEMA_VERSION = 19
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime

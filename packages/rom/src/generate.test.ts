@@ -63,13 +63,13 @@ function fbmGroup(): RomGroup {
       {
         id: 'p1',
         name: 'BodyTone',
-        morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
+        morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
         boneScaleRef: false,
       },
       {
         id: 'p2',
         name: 'Glute UpDown',
-        morphs: [{ node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1 }],
+        morphs: [{ id: 'm2', node: 'Genesis9', prop: 'SS_body_bs_Glute UpDown', value: -1 }],
         boneScaleRef: false,
       },
     ],
@@ -207,7 +207,7 @@ describe('mirrorGroup', () => {
         {
           id: 'pl',
           name: 'MajoraPush1',
-          morphs: [{ node: 'Golden Palace', prop: 'GPL_Majora_Push 1_Left', value: 1 }],
+          morphs: [{ id: 'ml', node: 'Golden Palace', prop: 'GPL_Majora_Push 1_Left', value: 1 }],
           boneScaleRef: false,
         },
       ],
@@ -233,8 +233,8 @@ describe('mirrorGroup', () => {
           // "Cleft" contains "left" but is no side marker — the old blind swap
           // corrupted it into body_bs_CrightChin. Word-initial "left" still swaps.
           morphs: [
-            { node: 'Genesis9', prop: 'body_bs_CleftChin', value: 1 },
-            { node: 'Genesis9', prop: 'thigh_left_up', value: 1 },
+            { id: 'mc1', node: 'Genesis9', prop: 'body_bs_CleftChin', value: 1 },
+            { id: 'mc2', node: 'Genesis9', prop: 'thigh_left_up', value: 1 },
           ],
           boneScaleRef: false,
         },
@@ -290,6 +290,7 @@ describe('buildFbmData', () => {
   it('keeps base and autoBase morph fields, omitting them when unset', () => {
     const sections = makeSections()
     sections.FBM.groups[0].poses[0].morphs[0] = {
+      id: 'mb',
       node: 'GoldenPalace_G9',
       prop: 'GP9_Anus_Depth',
       value: 0.5,
@@ -416,7 +417,7 @@ describe('toCharacterScriptDsa', () => {
         rom: 'gp',
         frame: 100,
         name: 'AnusOpen',
-        morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
+        morphs: [{ id: 'am1', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
       },
     ]
     const config = characterConfig(toCharacterScriptDsa(makeCharacter({ sections })).content)
@@ -872,13 +873,14 @@ describe('buildArtDirectionData', () => {
         rom: 'gp',
         frame: 100,
         name: 'AnusOpen',
-        morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
+        morphs: [{ id: 'am1', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }],
       },
       { id: 'a2', rom: 'gp', frame: 96, name: 'VaginaOpen', morphs: [] },
     ]
     const character = makeCharacter({ sections })
     const json = buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace')
-    // Empty frames are skipped — only AnusOpen survives.
+    // Empty frames are skipped — only AnusOpen survives. toEqual is exact: the
+    // stored morph id ('am1', schema v19) must NOT reach the emitted payload.
     expect(json?.frames).toHaveLength(1)
     expect(json?.frames[0]).toEqual({
       frame: 100,
@@ -907,10 +909,10 @@ describe('buildArtDirectionData', () => {
     sections.GEN.enabled = true
     sections.GEN.artDirection = [
       // In-range (GP block is 104): kept.
-      { id: 'ok', rom: 'gp', frame: 100, name: 'AnusOpen', morphs: [{ node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }] },
+      { id: 'ok', rom: 'gp', frame: 100, name: 'AnusOpen', morphs: [{ id: 'aok', node: 'Genesis 9', prop: 'GP_Anus_Open', value: 0.9 }] },
       // >= 104: would stamp at gpStart+5000, deep in the custom-frame range,
       // corrupting a custom pose's deltas. Must be dropped.
-      { id: 'oob', rom: 'gp', frame: 5000, name: 'Bogus', morphs: [{ node: 'Genesis 9', prop: 'GP_Bogus', value: 1 }] },
+      { id: 'oob', rom: 'gp', frame: 5000, name: 'Bogus', morphs: [{ id: 'abo', node: 'Genesis 9', prop: 'GP_Bogus', value: 1 }] },
     ]
     const character = makeCharacter({ sections })
     const json = buildArtDirectionData(character, 'gp', 'GP9', 'Golden Palace', FRAMES.gp)
