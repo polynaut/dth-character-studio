@@ -1,5 +1,7 @@
 # @dth/desktop
 
+## 0.45.4
+
 ## 0.45.3
 
 ### Patch Changes
