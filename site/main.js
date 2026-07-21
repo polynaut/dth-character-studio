@@ -104,7 +104,7 @@ async function initDownload() {
     btn.removeAttribute('href');
     btn.classList.add('btn-disabled');
     btn.setAttribute('aria-disabled', 'true');
-    label.textContent = 'Desktop app for Windows & macOS';
+    label.textContent = 'App for Windows & macOS';
     sub.textContent = 'Open this page on your PC or Mac to download';
     topbarBtn.hidden = true;
     return;
