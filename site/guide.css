@@ -86,6 +86,12 @@
   max-width: 100%;
 }
 
+/* Side-by-side pairs (the align="top" images): vertical breathing room for
+   when the narrow column wraps them into a stack. */
+.guide-content img[align='top'] {
+  margin-block: 10px;
+}
+
 .guide-content img {
   cursor: zoom-in;
 }
@@ -360,6 +366,15 @@
 
 .guide-content details[open] summary {
   border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  /* Docks underneath the stuck chapter title (h2 box ≈ 84px tall) while the
+     accordion's content scrolls; the <details> bounds the sticky range, so
+     the box's end pushes the bar away. Opaque take on the summary surface —
+     the translucent details background would let content shine through. */
+  position: sticky;
+  top: calc(var(--topbar-h) + 82px);
+  z-index: 4;
+  background: color-mix(in oklab, var(--bg-raised) 60%, var(--bg));
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .guide-content details > table,
