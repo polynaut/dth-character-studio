@@ -572,7 +572,7 @@ function ProjectCharactersPage() {
           viewport, always visible (the loader revalidates on link/unlink, so
           loader data is the single source). The main element carries pb-20 so
           content scrolls clear of the bar. */}
-      <UnrealProjectsBar project={project} onChanged={() => {}} />
+      <UnrealProjectsBar project={project} />
 
       <Tabs
         value={!assetsEnabled && listTab === 'assets' ? 'characters' : listTab}

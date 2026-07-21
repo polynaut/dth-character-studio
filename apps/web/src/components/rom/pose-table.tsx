@@ -409,6 +409,10 @@ export function SortablePoseRow({
                 </span>
                 <span className="w-6" />
               </div>
+              {/* TODO(v19-integration): key={morph.id} — index-as-key holds
+                  wrong-row focus/stale cell drafts after a mid-list removal;
+                  schema v19 adds stable ids to pose-morph rows (like v18's JCM
+                  rule/drive ids). Swap the key once the id field lands. */}
               {pose.morphs.map((morph, morphIndex) => (
                 <div key={morphIndex} className="flex items-center gap-2">
                   <span className="w-5 text-right text-xs text-muted-foreground tabular-nums">
