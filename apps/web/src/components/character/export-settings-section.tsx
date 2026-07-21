@@ -86,10 +86,11 @@ export function ExportSettingsSection({
               path={displayPath(character.exportPath)}
               className="flex h-9 items-center"
             />
-            {/* Icon-only destructive button (the filled red look of Delete),
-                so Clear reads as a real action next to Change… — not a link. */}
+            {/* Icon-only, light-red-bordered destructive button so Clear reads
+                as a real action next to Change… (matching that chip/button
+                height + weight) rather than a link. */}
             <Button
-              variant="destructive"
+              variant="outline-destructive"
               size="icon"
               title="Clear the export directory"
               aria-label="Clear the export directory"
