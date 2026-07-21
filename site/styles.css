@@ -289,6 +289,11 @@ a:hover {
   position: relative;
   padding: clamp(56px, 10vh, 110px) 0 clamp(56px, 8vh, 96px);
   overflow: hidden;
+  /* Tall screens: the hero owns 75% of the viewport, and the guide teaser
+     link (margin-top: auto below) rides down to its bottom edge. On short
+     screens the content height wins and nothing changes. */
+  min-height: 75vh;
+  display: flex;
 }
 
 /* Soft orange glow behind the logo — pure decoration, painted cheap. */
@@ -308,6 +313,17 @@ a:hover {
   flex-direction: column;
   align-items: center;
   text-align: center;
+  width: 100%;
+}
+
+/* With the hero at 75vh, the guide teaser sinks to the section's bottom edge;
+   the download block's margin keeps a minimum gap on short screens. */
+.hero-inner > .btn-ghost {
+  margin-top: auto;
+}
+
+.download-block {
+  margin-bottom: 28px;
 }
 
 .hero-logo {
