@@ -169,8 +169,9 @@ export function EditorHeader({
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}
-        {/* top-5 matches the avatar's mt-5, so the link tops align. */}
-        <div className="absolute top-5 left-[150px] z-20">
+        {/* top-5 matches the avatar's mt-5, so the link tops align; left aligns
+            with the title beside the avatar (156px box + gap-5). */}
+        <div className="absolute top-5 left-[176px] z-20">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
@@ -203,19 +204,19 @@ export function EditorHeader({
           title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
-          {/* The wrapper owns the shrink: only its height animates (173 → 90). At
-              rest it's a 3:4 portrait (130×173) matching the gallery / scene
+          {/* The wrapper owns the shrink: only its height animates (208 → 90). At
+              rest it's a 3:4 portrait (156×208) matching the gallery / scene
               thumbnails and the crop editor's letterbox guide. It clips a
               fixed-size image via overflow-hidden, so the portrait is *cropped*
               top-down rather than re-fit every frame — the image is rasterized
               once and the box just changes its clip rect, which stays smooth even
               with the heavy form relaying out below the sticky header. */}
-          <div className="avatar-scroll-shrink h-[173px] w-[130px] overflow-hidden rounded-lg bg-neutral-500">
+          <div className="avatar-scroll-shrink h-[208px] w-[156px] overflow-hidden rounded-lg bg-neutral-500">
             <Avatar
               image={character.image}
               scenePath={sceneAvatarPath ?? undefined}
               name={character.name}
-              className="avatar-scroll-pan h-[173px] w-[130px] object-top"
+              className="avatar-scroll-pan h-[208px] w-[156px] object-top"
               fallbackClassName="text-6xl"
             />
           </div>
