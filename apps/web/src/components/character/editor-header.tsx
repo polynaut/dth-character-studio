@@ -133,11 +133,14 @@ export function EditorHeader({
     parseAvatarName(character.image)?.kind === 'sc' ||
     (!!character.imageScene && character.imageScene === character.scenePath)
 
-  // What the small corner badge shows (see the badge JSX below), or null.
-  const cornerBadge: { image?: string; scenePath?: string } | null = sceneAvatarPath
-    ? { image: character.image } // previewing a non-primary scene → the main avatar
+  // What the small corner badge shows (see the badge JSX below), or null. `zoom`
+  // applies the scene-thumbnail "zoom in + lift up" framing whenever the badge
+  // is a Daz render (a scene path, or a `--sc-` snapshot of the main avatar);
+  // a custom square upload is shown object-top, unzoomed, like the gallery.
+  const cornerBadge: { image?: string; scenePath?: string; zoom: boolean } | null = sceneAvatarPath
+    ? { image: character.image, zoom: parseAvatarName(character.image)?.kind === 'sc' } // main avatar
     : character.scenePath && !avatarShowsPrimaryScene
-      ? { scenePath: character.scenePath } // custom avatar → the primary scene render
+      ? { scenePath: character.scenePath, zoom: true } // custom avatar → the primary scene render
       : null
 
   // Editing the main avatar is only allowed when the primary scene is the active
@@ -280,8 +283,8 @@ export function EditorHeader({
                 image={cornerBadge.image}
                 scenePath={cornerBadge.scenePath}
                 name={character.name}
-                zoom={!!cornerBadge.scenePath}
-                imgClassName={cornerBadge.scenePath ? undefined : 'object-top'}
+                zoom={cornerBadge.zoom}
+                imgClassName={cornerBadge.zoom ? undefined : 'object-top'}
                 className="aspect-[3/4] w-11 rounded-md border-0 shadow-md shadow-black/50"
                 fallbackClassName="text-sm"
               />
