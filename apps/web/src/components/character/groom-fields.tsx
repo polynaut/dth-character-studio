@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { InfoPopup, MultiSelect, Switch } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -129,14 +130,10 @@ export function GroomFields({
         <span className="flex items-center gap-1 text-sm">
           Hair items live in the Daz scenes
           <InfoPopup label="Hair items live in the Daz scenes — more information">
-            <strong>On</strong>: each scene carries its full look, hair included — the hair
-            items listed per scene are HIDDEN around the DTH export and shown again after, so
-            hair never rides into the ROM artifacts. The DTH Exporter Plugin{' '}
-            <strong>{MIN_GROOM_EXPORTER_VERSION}+</strong> unparents the hidden items itself, which
-            keeps them out of both the FBX and the Alembic. The generated script carries every
-            scene's list and applies the right one for the scene open in Daz.{' '}
-            <strong>Off</strong>: the classic workflow — you keep hair in separate Daz scene
-            files and nothing is excluded.
+            <strong>On</strong>: each scene carries its full look; the listed hair is hidden around
+            the DTH export so it never rides into the ROM artifacts. <strong>Off</strong>: keep hair
+            in separate Daz scene files, nothing excluded.{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
           </InfoPopup>
         </span>
       </div>

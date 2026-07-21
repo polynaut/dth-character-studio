@@ -567,7 +567,12 @@ export function DazSceneField({
                 >
                   {busy ? 'Moving…' : 'Move'}
                 </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setEditDir(null)}>
+                <Button
+                  variant="ghost-destructive"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setEditDir(null)}
+                >
                   Cancel
                 </Button>
               </div>

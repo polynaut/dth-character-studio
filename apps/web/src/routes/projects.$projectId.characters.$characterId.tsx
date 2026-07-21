@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
+import { toast } from 'sonner'
 
-import { Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
+import { InfoPopup, Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import {
   fetchCharacter,
   fetchPoseAssets,
@@ -13,6 +15,7 @@ import {
   fetchSettings,
   fileExists,
   getCharacterPath,
+  moveCharacter,
   setActiveProjectDir,
   resolvePresetFrames,
 } from '#/lib/rom/api.ts'
@@ -31,9 +34,10 @@ import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
-import { parentDir } from '#/lib/path.ts'
+import { displayPath, parentDir } from '#/lib/path.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
+import { useFolderMove } from '#/lib/use-folder-move.tsx'
 import { useRomRunLog } from '#/lib/use-rom-run-log.ts'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
 import { presetFramesSignature } from '@dth/rom'
@@ -265,6 +269,30 @@ function CharacterPage() {
     draft.syncPersisted({ scenePath: moved.scenePath })
   }
 
+  // The header folder chip's edit-to-move — the SAME move as Advanced options'
+  // Storage location, through the shared lock gate + retry dialog (useFolderMove)
+  // so a scene open in Daz surfaces the "close it and continue" prompt.
+  const router = useRouter()
+  const { runMove, dialog: folderMoveDialog } = useFolderMove()
+  async function moveCharacterFolder(nextSubdir: string) {
+    if (!location) return
+    const fileName = location.definitionAbs.split(/[\\/]/).pop() ?? ''
+    const subdir = nextSubdir.split(/[\\/]+/).filter(Boolean).join('/')
+    const relPath = `${subdir}/${fileName}`
+    const { character: moved } = await moveCharacter({
+      data: { projectId, id: character.id, relPath },
+    })
+    await router.invalidate()
+    onCharacterMoved(moved)
+    toast.success(`Moved to ${displayPath(relPath)}`)
+  }
+  const folderMove = location
+    ? {
+        editValue: displayPath(location.relFolder),
+        onMove: (next: string) => runMove(() => moveCharacterFolder(next)),
+      }
+    : null
+
   // Moving the Daz SCENES folder repoints every in-folder path but reads the
   // character from disk (no unsaved edits) — using settle here would discard
   // unsaved ROM edits AND clear `dirty`, so the unsaved-changes guard would never
@@ -295,10 +323,12 @@ function CharacterPage() {
 
   return (
     <main className="p-8">
+      {folderMoveDialog}
       <EditorHeader
         projectId={projectId}
         draft={draft}
         folderChip={folderChip}
+        folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
         sceneTag={
           sceneSel.linkedScenes.length > 1 && sceneSel.selectedSceneName
@@ -415,8 +445,16 @@ function CharacterPage() {
       />
 
       <details className="mb-8 rounded-lg border bg-card">
-        <summary className="cursor-pointer px-5 py-3 font-medium select-none">
+        <summary className="flex cursor-pointer items-center gap-1 px-5 py-3 font-medium select-none">
           Advanced options
+          {/* preventDefault stops the info click from also toggling the <details>. */}
+          <span onClick={(e) => e.preventDefault()} className="inline-flex">
+            <InfoPopup label="Advanced options — more information">
+              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--storage-location-preserve-morphs---node-transforms">
+                Storage location, preserve morphs &amp; node transforms — open the guide
+              </GuideLink>
+            </InfoPopup>
+          </span>
         </summary>
         <div className="space-y-6 border-t p-5">
           <StorageLocation

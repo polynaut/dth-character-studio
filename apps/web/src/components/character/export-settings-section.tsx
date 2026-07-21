@@ -1,10 +1,17 @@
 import { FolderOpen, X } from 'lucide-react'
 
 import { PathCode } from '#/components/path-code.tsx'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { Button, InfoPopup, Switch } from '@dth/ui'
 import { isDirectory } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
+
+/** The guide's direct-export section — the single source of truth for how the
+ *  export directory + its two switches behave (the panel's info popup links here
+ *  instead of duplicating it). */
+const EXPORT_GUIDE_URL =
+  'https://polynaut.github.io/dth-character-studio/guide/05-rom-in-daz.html#direct-export-optional-recommended'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -65,18 +72,7 @@ export function ExportSettingsSection({
       <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
         Export directory
         <InfoPopup label="Export directory — more information">
-          Set an export directory and the generated Daz script runs the DTH Exporter Plugin
-          (v1.8.1+) automatically after building the ROM — writing{' '}
-          {character.exportPath ? (
-            <>
-              <code>{character.name}</code>.abc / .dth and copying the PoseAsset CSV into that
-              folder
-            </>
-          ) : (
-            'straight into the DTH pipeline'
-          )}
-          . Leave empty to skip auto-export. Reference frames are taken from the ROM's
-          reference-skeleton poses.
+          <GuideLink href={EXPORT_GUIDE_URL}>How the export directory works — open the guide</GuideLink>
         </InfoPopup>
       </h2>
       <div className="flex flex-wrap items-center gap-3">
@@ -85,9 +81,13 @@ export function ExportSettingsSection({
         </Button>
         {character.exportPath && (
           <>
-            <PathCode path={displayPath(character.exportPath)} />
+            {/* Taller chip so it lines up with the h-9 buttons on either side. */}
+            <PathCode
+              path={displayPath(character.exportPath)}
+              className="flex h-9 items-center"
+            />
             <Button
-              variant="ghost"
+              variant="ghost-destructive"
               size="sm"
               onClick={() =>
                 void persistPatch(
@@ -113,16 +113,9 @@ export function ExportSettingsSection({
           }
         />
         <span
-          className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
+          className={`text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
         >
           Generate subfolders based on Daz scenes
-          <InfoPopup label="Generate subfolders based on Daz scenes — more information">
-            When on, the export is nested under a subfolder named after the Daz scene open in Daz
-            when the script runs (resolved at run time) — so a character's scene/outfit variants
-            export side by side. The exporter output and the PoseAsset CSV land directly in that
-            scene subfolder. Falls back to the export root if no scene is saved.{' '}
-            {!character.exportPath && 'Set an export folder above to enable this.'}
-          </InfoPopup>
         </span>
       </div>
       <div className="mt-4 flex items-center gap-3">
@@ -141,17 +134,9 @@ export function ExportSettingsSection({
           }
         />
         <span
-          className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
+          className={`text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
         >
           Run the export with the ROM script
-          <InfoPopup label="Run the export with the ROM script — more information">
-            On: one <code>ROM_{character.name}_{character.genesis}.dsa</code> builds the ROM and
-            runs the export. Off: the export splits into its own{' '}
-            <code>Export_{character.name}_{character.genesis}.dsa</code> beside the ROM script, so
-            you can re-export — for another Daz scene, or after a failed export — without rebuilding
-            the ROM. Run the Export script after the ROM script in the same Daz session.{' '}
-            {!character.exportPath && 'Set an export folder above to enable this.'}
-          </InfoPopup>
         </span>
       </div>
     </section>

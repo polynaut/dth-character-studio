@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo } from 'react'
 
 import { InfoPopup, Switch } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
 import { applySceneOverride, characterSkinning, romTimeline } from '@dth/rom'
@@ -93,10 +94,9 @@ export const RomEditorSection = memo(function RomEditorSection({
         <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
           ROM
           <InfoPopup label="ROM — more information">
-            The eight pose asset categories in their canonical order. Pre-defined sections load
-            the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
-            section, group and pose order — the generated Daz script and PoseAsset CSV share them
-            automatically.
+            The eight pose-asset categories in canonical order. Frame numbers follow section, group
+            and pose order — the generated Daz script and PoseAsset CSV share them automatically.{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#the-rom-definition" />
           </InfoPopup>
         </h2>
         {/* Per-scene override toggle: armed only while an EXTRA scene is

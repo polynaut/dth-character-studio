@@ -1,4 +1,4 @@
-# Advanced character options
+# Advanced
 
 &nbsp;
 

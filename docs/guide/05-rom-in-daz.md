@@ -52,12 +52,15 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
 Two switches tune this:
 
 - **Generate subfolders based on Daz scenes** — nests each export under a folder
-  named after the currently open Daz scene, so outfit/scene variants of one
-  character export side by side.
+  named after the Daz scene open in Daz when the script runs (resolved at run
+  time), so outfit/scene variants of one character export side by side. The
+  exporter output **and** the PoseAsset CSV land directly in that scene
+  subfolder; it falls back to the export root if no scene is saved.
 - **Run the export with the ROM script** — on (the default): the one
-  `ROM_<Name>_G9.dsa` does both. Off: the export splits into its own
-  **`Export_<Name>_G9.dsa`** — run it after the ROM script; handy for
-  re-exporting (another scene, or after a hiccup) without rebuilding the ROM.
+  `ROM_<Name>_G9.dsa` builds the ROM and runs the export. Off: the export splits
+  into its own **`Export_<Name>_G9.dsa`** beside the ROM script — run it after
+  the ROM script in the same Daz session; handy for re-exporting (another scene,
+  or after a failed export) without rebuilding the ROM.
 
 &nbsp;
 
