@@ -23,6 +23,7 @@ export function PanelOverrideToggle({
   noun,
   info,
   onToggle,
+  compact = false,
 }: {
   eligible: boolean
   active: boolean
@@ -33,18 +34,23 @@ export function PanelOverrideToggle({
   noun: string
   info: ReactNode
   onToggle: (enabled: boolean) => void
+  /** A SMALLER pill: no mini render, no "OVERRIDE" eyebrow — just the scene name +
+   *  info. Used for the second (Genesis-9) toggle in the identity sidebar, where the
+   *  full pill already appears once (on the Hair row) right above it. */
+  compact?: boolean
 }) {
   // The primary scene IS the base — nothing to override — so the toggle is hidden
   // there; it appears only once an EXTRA scene is selected in the cards.
   if (!eligible) return null
   return (
     <span className="flex items-center gap-2">
-      {/* The "OVERRIDE" eyebrow + scene name ride the green pill; the info "i" sits
-          inline after the name. */}
+      {/* Full pill: mini render + "OVERRIDE" eyebrow over the scene name. Compact:
+          just the scene name (no render, no eyebrow). Info "i" inline after the name. */}
       <SceneLabel
         scenePath={scenePath}
         name={sceneName}
-        eyebrow="Override"
+        showAvatar={!compact}
+        eyebrow={compact ? undefined : 'Override'}
         trailing={<InfoPopup label="Scene override — more information">{info}</InfoPopup>}
       />
       <Switch checked={active} aria-label={`Override ${noun}`} onCheckedChange={onToggle} />

@@ -21,6 +21,7 @@ export function SceneLabel({
   fallbackName,
   eyebrow,
   trailing,
+  showAvatar = true,
   className,
 }: {
   /** The scene whose `.tip.png` renders in the pill. */
@@ -36,6 +37,9 @@ export function SceneLabel({
   eyebrow?: string
   /** Rendered inline right after the name (e.g. the override info "i" popup). */
   trailing?: ReactNode
+  /** Show the scene's mini render at the pill's start (default). `false` → a
+   *  compact, avatar-less pill (e.g. the Genesis-9 override toggle). */
+  showAvatar?: boolean
   className?: string
 }) {
   return (
@@ -44,7 +48,8 @@ export function SceneLabel({
       // since this is a small pill.
       tone="green"
       className={cn(
-        'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 pl-1.5 text-sm font-normal normal-case',
+        'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 text-sm font-normal normal-case',
+        showAvatar ? 'pl-1.5' : 'pl-3',
         className,
       )}
     >
@@ -53,13 +58,15 @@ export function SceneLabel({
           The lift MUST be a quoted `cn(...)` fraction util, not a leading
           `-translate-y-[…]` in a template literal — Tailwind doesn't scan a
           leading arbitrary token, so the rule wouldn't generate (see PR #468). */}
-      <Portrait
-        scenePath={scenePath}
-        name={fallbackName ?? name}
-        imgClassName={cn('-translate-y-1/2', muted && 'grayscale')}
-        className={`h-8 w-[56px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
-        fallbackClassName="text-[8px]"
-      />
+      {showAvatar && (
+        <Portrait
+          scenePath={scenePath}
+          name={fallbackName ?? name}
+          imgClassName={cn('-translate-y-1/2', muted && 'grayscale')}
+          className={`h-8 w-[56px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
+          fallbackClassName="text-[8px]"
+        />
+      )}
       {eyebrow ? (
         <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-none">
           <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">

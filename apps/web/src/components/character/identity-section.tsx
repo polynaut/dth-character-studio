@@ -129,6 +129,7 @@ export function IdentitySection({
               scenePath={scenePath}
               sceneName={selectedSceneName}
               noun="Genesis 9 settings"
+              compact
               onToggle={setIdentityOverrideEnabled}
               info={
                 <>
