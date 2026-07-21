@@ -520,7 +520,9 @@ export function DazSceneField({
       label={linked ? 'Drop a Daz scene (.duf) to add' : 'Drop a Daz scene (.duf) to link'}
       className="rounded-lg"
     >
-      <Label className="mb-1 block">Daz scenes</Label>
+      <Label id="daz-scenes" className="mb-1 block scroll-mt-28">
+        Daz scenes
+      </Label>
       {linked ? (
         folderMissing ? (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 text-sm text-muted-foreground">

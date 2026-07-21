@@ -2,9 +2,18 @@ import { exists, mkdir, readDir, readFile, remove, writeFile } from '@tauri-apps
 import { z } from 'zod'
 
 import * as storage from '../storage'
+import {
+  avatarFileName,
+  avatarIdOf,
+  avatarsToPrune,
+  parseAvatarName,
+  uploadsNewestFirst,
+} from '../avatar-names'
 import { isExternalImage } from '../image'
 import { basename, getActiveProjectDir, joinPath } from './core'
 import { bytesToDataUrl, fileExt, IMAGE_EXT_MIME } from './data-url'
+
+import type { AvatarKind } from '../avatar-names'
 
 // Avatar images + Daz scene thumbnails: storing avatar bytes in the active
 // project's `.dcsmeta/images`, deriving avatars from a scene's `.tip.png`, and
@@ -30,39 +39,41 @@ export async function findTipImage(scenePath: string): Promise<string> {
 
 /**
  * Write a character's avatar bytes under a content-versioned filename
- * (`<id>-<ts>.<ext>`), removing any previous avatar for that id first. The version
- * in the name makes the stored reference change whenever the image does, so every
- * `<Avatar>` keyed on it re-resolves — a fixed `<id>.png` would look unchanged and
- * keep showing the cached old image (e.g. switching the avatar between two scenes).
- * Returns the stored filename.
+ * (`<id>--<kind>-<ts>.<ext>`, see avatar-names), then PRUNE — keeping a rolling
+ * history of the newest uploads and the newest scene snapshot rather than
+ * wiping every other variant. The timestamp makes the stored reference change
+ * whenever the image does, so every `<Avatar>` keyed on it re-resolves (a fixed
+ * name would keep showing the cached old image). Returns the stored filename.
  */
 export async function writeAvatarBytes(
   characterId: string,
   bytes: Uint8Array,
   ext: string,
+  kind: AvatarKind,
 ): Promise<string> {
   const projectDir = await getActiveProjectDir()
   if (!projectDir) throw new Error('No project is open.')
   const dir = storage.metaImagesDir(projectDir)
   await mkdir(dir, { recursive: true })
   const id = basename(characterId)
-  const fileName = `${id}-${Date.now()}.${ext}`
-  // Write the new avatar FIRST, then drop the previous variants — the reverse
-  // order leaves a window where a concurrent writer's just-written file (already
-  // referenced by a save) gets deleted, breaking the stored reference.
+  const fileName = avatarFileName(id, kind, Date.now(), ext)
+  // Write the new avatar FIRST, then prune — the reverse order leaves a window
+  // where a concurrent writer's just-written file (already referenced by a
+  // save) gets deleted, breaking the stored reference.
   await writeFile(joinPath(dir, fileName), bytes)
-  await removeCharacterAvatars(projectDir, id, fileName)
+  const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
+  await Promise.all(
+    avatarsToPrune(entries, id, fileName).map((name) => remove(joinPath(dir, name))),
+  )
   return fileName
 }
 
-/** Remove every avatar image stored for a character (old fixed name + versioned
- *  `<id>-<ts>.<ext>`), used both when replacing an avatar and when the character
- *  is deleted. `keep` spares one filename (the replacement just written).
+/** Remove every avatar image stored for a character (current `--kind--` scheme,
+ *  legacy `<id>-<ts>` / fixed `<id>.` names), used when the character is deleted.
  *  Best-effort per file; a missing images folder is a no-op. */
 export async function removeCharacterAvatars(
   projectDir: string,
   characterId: string,
-  keep = '',
 ): Promise<void> {
   const dir = storage.metaImagesDir(projectDir)
   const id = basename(characterId)
@@ -74,11 +85,46 @@ export async function removeCharacterAvatars(
       .filter(
         (entry) =>
           entry.isFile &&
-          entry.name !== keep &&
           (entry.name.startsWith(`${id}.`) || entry.name.startsWith(`${id}-`)),
       )
       .map((entry) => remove(joinPath(dir, entry.name))),
   )
+}
+
+/**
+ * The character's past UPLOADS (newest first, capped at the retained history) —
+ * the dialog's "recent images" gallery, so a user can switch back to an earlier
+ * upload after trying a scene avatar. Bare filenames (the portable references);
+ * '' entries are impossible. Empty when there's no active project or no uploads.
+ */
+export async function listCharacterUploads({ data }: { data: unknown }): Promise<Array<string>> {
+  const { characterId } = z.object({ characterId: z.string().min(1) }).parse(data)
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return []
+  const dir = storage.metaImagesDir(projectDir)
+  if (!(await exists(dir))) return []
+  const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
+  return uploadsNewestFirst(entries, basename(characterId))
+}
+
+/**
+ * Delete one stored UPLOAD (the gallery's per-image ✕). Refuses anything that
+ * isn't an `up` avatar for this character — never a scene snapshot (those
+ * re-derive from the scene) or another character's file. The caller must not
+ * offer it for the currently-active avatar (deleting the referenced file would
+ * break the stored reference).
+ */
+export async function deleteCharacterUpload({ data }: { data: unknown }): Promise<void> {
+  const { characterId, fileName } = z
+    .object({ characterId: z.string().min(1), fileName: z.string().min(1) })
+    .parse(data)
+  const parsed = parseAvatarName(fileName)
+  if (!parsed || parsed.kind !== 'up' || parsed.id !== basename(characterId)) {
+    throw new Error('Only uploaded images can be deleted.')
+  }
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return
+  await remove(joinPath(storage.metaImagesDir(projectDir), fileName))
 }
 
 /**
@@ -89,7 +135,7 @@ export async function removeCharacterAvatars(
 export async function copyTipImage(characterId: string, scenePath: string): Promise<string> {
   const tipPath = await findTipImage(scenePath)
   if (!tipPath) return ''
-  return writeAvatarBytes(characterId, await readFile(tipPath), 'png')
+  return writeAvatarBytes(characterId, await readFile(tipPath), 'png', 'sc')
 }
 
 const sceneAvatarInput = z.object({
@@ -111,39 +157,9 @@ export async function setAvatarFromScene({ data }: { data: unknown }): Promise<s
   return fileName
 }
 
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-}
-
-const uploadImageInput = z.object({
-  characterId: z.string().min(1),
-  mimeType: z.string(),
-  /** Raw image data, base64 (no data-URL prefix). Capped at ~10 MB. */
-  dataBase64: z.string().max(14_000_000),
-})
-
-/**
- * Stores a dropped avatar image under the active project's `.dcsmeta/images/`
- * (via {@link writeAvatarBytes}) and returns its bare filename — the portable
- * canonical reference saved on the character (see ./image). Avatars are
- * PER-PROJECT (they live in the project's hidden `.dcsmeta`), keyed by character id.
- */
-export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
-  const input = uploadImageInput.parse(data)
-  const extension = IMAGE_EXTENSIONS[input.mimeType]
-  if (!extension) throw new Error(`Unsupported image type: ${input.mimeType}`)
-  const bytes = Uint8Array.from(atob(input.dataBase64), (c) => c.charCodeAt(0))
-  // extension is like ".png"; writeAvatarBytes wants the bare "png".
-  return writeAvatarBytes(input.characterId, bytes, extension.slice(1))
-}
-
 /** Extension → MIME for avatar images dropped as a file path (native drag-drop).
  *  An UPLOAD allowlist — deliberately narrower than the shared display table in
- *  data-url.ts (no svg/bmp/avif): every entry must map back through
- *  `IMAGE_EXTENSIONS` to a canonical stored extension. */
+ *  data-url.ts (no svg/bmp/avif): only formats the crop pipeline can decode. */
 const IMAGE_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -153,23 +169,41 @@ const IMAGE_MIME: Record<string, string> = {
 }
 
 /**
- * Store an avatar image from an absolute file path — native OS drag-drop hands us
- * a path, not file bytes. Reads it, infers the MIME from the extension, and
- * writes the bytes DIRECTLY via {@link writeAvatarBytes} — the old route
- * detoured through base64 (readFile → chunked btoa → atob → bytes), tripling
- * the memory of a multi-MB image for nothing.
+ * Read an image file (native OS drag-drop hands the webview a PATH, not bytes)
+ * so the avatar dialog can decode, validate and crop it — the ONLY native
+ * access the crop flow needs, kept in the lib layer per the boundary rule.
+ * Enforces the same extension allowlist and byte cap as the old direct upload.
  */
-export async function uploadCharacterImageFromPath({ data }: { data: unknown }): Promise<string> {
-  const { characterId, path } = z
-    .object({ characterId: z.string().min(1), path: z.string().min(1) })
-    .parse(data)
+export async function readAvatarSourceFile({
+  data,
+}: {
+  data: unknown
+}): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  const { path } = z.object({ path: z.string().min(1) }).parse(data)
   const ext = fileExt(path)
   const mimeType = IMAGE_MIME[ext]
   if (!mimeType) throw new Error(`Unsupported image type${ext ? `: .${ext}` : ''}`)
   const bytes = await readFile(path)
   if (bytes.length > 10 * 1024 * 1024) throw new Error('Image is larger than 10 MB.')
-  // Same canonical extension the base64 upload derives (jpeg → jpg).
-  return writeAvatarBytes(characterId, bytes, IMAGE_EXTENSIONS[mimeType].slice(1))
+  return { bytes, mimeType }
+}
+
+/**
+ * Store a CROPPED avatar produced by the 1:1 crop editor — always PNG, always
+ * one of the two square output sizes (the editor guarantees both; this is the
+ * only write path for user-uploaded avatars, so everything stored is square).
+ * Takes raw bytes DIRECTLY — no base64 round-trip through the webview.
+ */
+export async function uploadCroppedAvatar({ data }: { data: unknown }): Promise<string> {
+  const { characterId, bytes } = z
+    .object({
+      characterId: z.string().min(1),
+      bytes: z.instanceof(Uint8Array).refine((b) => b.length <= 4 * 1024 * 1024, {
+        message: 'Cropped avatar is unexpectedly large.',
+      }),
+    })
+    .parse(data)
+  return writeAvatarBytes(characterId, bytes, 'png', 'up')
 }
 
 /** Inline raw image bytes as a `data:` URL, MIME inferred from the file name
@@ -198,8 +232,7 @@ const imageSrcCache = new Map<string, string>()
  *  under `projectDir` whose stored filename shares the id of `image`
  *  (`<id>-<ts>.<ext>`, or the legacy fixed `<id>.<ext>`), except `keepKey`. */
 function evictStaleAvatarUrls(projectDir: string, image: string, keepKey: string): void {
-  // The id is everything before the `-<timestamp>.<ext>` version suffix.
-  const id = image.replace(/-\d+\.[^.]+$/, '')
+  const id = avatarIdOf(image)
   if (id === image) return // not a versioned avatar name — nothing to relate
   const prefixes = [`${projectDir}|${id}-`, `${projectDir}|${id}.`]
   for (const key of [...imageSrcCache.keys()]) {
