@@ -42,7 +42,7 @@ frame-aligned **by construction**, so they cannot drift out of sync.
 **[🌐 Get it from the website](https://polynaut.github.io/dth-character-studio/)** — it detects your OS and offers the right installer. Or grab the
 **[latest release](https://github.com/polynaut/dth-character-studio/releases/latest)** directly (Windows installer / macOS build). The app self-updates from there.
 
-**[📖 Getting started guide](https://polynaut.github.io/dth-character-studio/guide/)** — from install to your first generated ROM in about 15 minutes. (Also readable [right here in the repo](./docs/guide/README.md).)
+**[📖 Getting started guide](https://polynaut.github.io/dth-character-studio/guide/)** — from install to your first generated ROM. (Also readable [right here in the repo](./docs/guide/README.md).)
 
 > Prefer to run it yourself or build from source? See the [Development guide](./docs/development.md).
 
