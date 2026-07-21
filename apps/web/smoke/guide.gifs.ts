@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 import { buildSeed, P } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
@@ -24,6 +24,13 @@ async function prime(page: Page, seed: ReturnType<typeof buildSeed>) {
   await page.clock.setFixedTime(FIXED_TIME)
   await page.addInitScript(() => {
     ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
+    // Headless Chromium rejects the async clipboard API (permission grants
+    // included proved flaky) — stub it so click-to-copy takes its SUCCESS path
+    // and the "Copied" check badge shows in recordings. The app code path is
+    // unchanged; only the OS clipboard itself is faked.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: () => Promise.resolve() },
+    })
   })
   await page.addInitScript(installTauriMock, seed)
 }
@@ -56,6 +63,11 @@ test('path-chip-copy', async ({ page }) => {
   await rec.glideTo(target.x, target.y, 10) // hover: the copy badge pops in
   await rec.hold(600)
   await rec.click() // click: copies — the badge flips to the check mark
+  // The copy must actually land (clipboard stub!) — otherwise the GIF silently
+  // records a click with no feedback. NOTE: assert via a name-stable locator;
+  // the `chip` locator above filters BY the name 'Copy path' and so can never
+  // observe the 'Copied' state itself.
+  await expect(page.locator('span[data-alt-reveal]').first()).toHaveAccessibleName('Copied')
   await rec.hold(1400)
   rec.save(join(OUT, 'path-chip-copy.gif'))
 })
