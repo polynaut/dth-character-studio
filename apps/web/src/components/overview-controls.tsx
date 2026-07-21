@@ -36,11 +36,14 @@ export function sortItems<T>(
   return arr
 }
 
-/** Short locale date for an ISO timestamp; '' when absent / invalid. */
+/** Short locale date for an ISO timestamp; '' when absent / invalid.
+ *  Explicitly formatted for `navigator.language` (the OS UI language, in the
+ *  desktop webview) rather than relying on `toLocaleDateString()`'s implicit
+ *  default — EN reads MM/DD/YYYY, DE reads DD.MM.YYYY, etc. */
 export function formatDate(iso: string): string {
   if (!iso) return ''
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(navigator.language)
 }
 
 /** Grid / list segmented toggle. */
