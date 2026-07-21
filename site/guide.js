@@ -104,6 +104,39 @@ window.addEventListener('hashchange', revealHashAccordion)
 if (document.readyState === 'complete') revealHashAccordion()
 else window.addEventListener('load', revealHashAccordion)
 
+// ── Mobile: land on the new chapter's title ──────────────────────────────────
+// On a narrow viewport the sidebar stacks ABOVE the article (guide.css), so
+// following a chapter link drops the reader back at the nav, not the chapter.
+// Flag the click and, once the destination page has loaded on a mobile
+// viewport, glide its H1 into view (its scroll-margin clears the topbar).
+const isMobileGuide = () => window.matchMedia('(max-width: 900px)').matches
+const JUMP_KEY = 'dth-guide-jump-h1'
+
+document.addEventListener('click', (e) => {
+  if (!isMobileGuide() || !e.target.closest('.guide-sidebar a')) return
+  try {
+    sessionStorage.setItem(JUMP_KEY, '1')
+  } catch {
+    /* storage blocked — the jump just won't fire, no harm */
+  }
+})
+
+function jumpToChapterTitle() {
+  let flagged = null
+  try {
+    flagged = sessionStorage.getItem(JUMP_KEY)
+    if (flagged) sessionStorage.removeItem(JUMP_KEY)
+  } catch {
+    return
+  }
+  // No jump when there's no flag, on desktop, or when a hash already targets a
+  // spot in the page (a deep link wins over the title jump).
+  if (!flagged || !isMobileGuide() || location.hash) return
+  document.querySelector('.guide-content h1')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+if (document.readyState === 'complete') jumpToChapterTitle()
+else window.addEventListener('load', jumpToChapterTitle)
+
 // ── Direct download ──────────────────────────────────────────────────────────
 // The topbar Download button starts the right installer immediately — same
 // mechanism as the landing page (see main.js), sharing its sessionStorage
@@ -115,14 +148,21 @@ async function initGuideDownload() {
   if (!(btn instanceof HTMLAnchorElement)) return
   const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase()
   const ua = navigator.userAgent.toLowerCase()
-  if (/iphone|ipad|android/.test(ua)) return
-  const os =
-    platform.includes('win') || ua.includes('windows')
+  // Which desktop build fits this OS ('' = none: mobile, Linux, anything else).
+  const os = /iphone|ipad|android/.test(ua)
+    ? ''
+    : platform.includes('win') || ua.includes('windows')
       ? 'windows'
       : platform.includes('mac') || ua.includes('mac os')
         ? 'mac'
         : ''
-  if (!os) return
+  // Unsupported OS — there's no installer to hand this visitor, so drop the
+  // Download button rather than point it at a landing page they can't act on.
+  // (A supported OS whose API call fails keeps the button + its static href.)
+  if (!os) {
+    btn.remove()
+    return
+  }
   const CACHE_KEY = 'dth-latest-release'
   let release = null
   try {
