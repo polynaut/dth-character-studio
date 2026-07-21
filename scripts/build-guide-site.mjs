@@ -196,6 +196,7 @@ const shell = (md, content) => `<!doctype html>
           <span>DTH Character Studio</span>
         </a>
         <nav class="topbar-nav" aria-label="Guide">
+          <a href="../#features">Features</a>
           <a href="index.html">Guide</a>
           <a href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener">GitHub</a>
         </nav>
