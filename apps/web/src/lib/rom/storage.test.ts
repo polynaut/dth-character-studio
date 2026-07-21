@@ -256,6 +256,103 @@ describe('character library scan', () => {
     addDir('/games/Empty')
     expect(await storage.listCharacters('/games/Empty')).toEqual([])
   })
+
+  it('surfaces a torn definition as a scan problem instead of silently skipping it', async () => {
+    seedChar('/games/Nova/Hero/Hero.json', 'Hero')
+    addDir('/games/Nova/Kira')
+    files.set('/games/Nova/Kira/Kira.json', '{ "id": "torn-mid-wri') // torn write
+
+    const scan = await storage.scanCharacterLibrary('/games/Nova')
+    expect(scan.entries.map((e) => e.character.name)).toEqual(['Hero'])
+    expect(scan.problems).toHaveLength(1)
+    expect(scan.problems[0].path).toBe('/games/Nova/Kira/Kira.json')
+    expect(scan.problems[0].reason).toMatch(/JSON/i)
+    // The plain list keeps its shape — problems surface via the parallel channel.
+    expect((await storage.listCharacters('/games/Nova')).map((c) => c.name)).toEqual(['Hero'])
+  })
+
+  it('surfaces a definition-shaped JSON that fails the schema, but not foreign JSON', async () => {
+    seedChar('/games/Nova/Hero/Hero.json', 'Hero')
+    // Definition-shaped (id + name + genesis) but invalid → a problem.
+    files.set(
+      '/games/Nova/Bad/Bad.json',
+      JSON.stringify({ id: 'x', name: 'Bad', genesis: 'G99', gender: 'female' }),
+    )
+    addDir('/games/Nova/Bad')
+    // Foreign JSON (generated sidecar) → silently skipped, never a problem.
+    files.set('/games/Nova/Hero/Hero_FBMs.json', JSON.stringify({ frames: [1, 2] }))
+
+    const scan = await storage.scanCharacterLibrary('/games/Nova')
+    expect(scan.problems).toHaveLength(1)
+    expect(scan.problems[0].path).toBe('/games/Nova/Bad/Bad.json')
+    expect(scan.problems[0].reason).toMatch(/schema/i)
+  })
+
+  it('never reports app-internal / transport JSONs as problems (they may be mid-write)', async () => {
+    seedChar('/games/Nova/Hero/Hero.json', 'Hero')
+    files.set('/games/Nova/Hero/dth_rom_run_log.json', '{ torn') // Daz writing it right now
+    files.set('/games/Nova/Hero/.last_rom_run.json', '{ torn') // app-internal store
+
+    const scan = await storage.scanCharacterLibrary('/games/Nova')
+    expect(scan.problems).toEqual([])
+  })
+})
+
+describe('saveCharacter with a corrupt existing definition', () => {
+  const project = { id: 'p1', name: 'Nova', path: '/games/Nova' }
+
+  it('refuses to fork a "Name (2)" duplicate beside a torn definition', async () => {
+    // The character's own definition is torn — the scan can't see it, so the
+    // save would have treated the folder as free and forked "Kira (2)".
+    addDir('/games/Nova/Kira')
+    files.set('/games/Nova/Kira/Kira.json', '{ torn')
+    const kira = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    await expect(storage.saveCharacter(project, kira)).rejects.toThrow(/unreadable/i)
+    // No fork, no new definition anywhere; the corrupt file is untouched.
+    expect(dirs.has('/games/Nova/Kira (2)')).toBe(false)
+    expect(files.get('/games/Nova/Kira/Kira.json')).toBe('{ torn')
+    expect([...files.keys()].filter((k) => k.toLowerCase().endsWith('kira.json'))).toEqual([
+      '/games/Nova/Kira/Kira.json',
+    ])
+  })
+
+  it('a corrupt LOOSE definition at the library root also blocks the save', async () => {
+    addDir('/games/Nova')
+    files.set('/games/Nova/Solo.json', 'not json')
+    const solo = characterSchema.parse({
+      id: newId(),
+      name: 'Solo',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    await expect(storage.saveCharacter(project, solo)).rejects.toThrow(/unreadable/i)
+    expect(dirs.has('/games/Nova/Solo')).toBe(false)
+  })
+
+  it('an unrelated corrupt file elsewhere does NOT block saving a new character', async () => {
+    addDir('/games/Nova/Other')
+    files.set('/games/Nova/Other/Other.json', '{ torn')
+    const hero = characterSchema.parse({
+      id: newId(),
+      name: 'Hero',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    await storage.saveCharacter(project, hero)
+    expect(files.has('/games/Nova/Hero/Hero.json')).toBe(true)
+  })
 })
 
 describe('deleteCharacter', () => {
@@ -306,5 +403,25 @@ describe('deleteCharacter', () => {
     seedKira()
     await storage.deleteCharacter('/games/Nova', 'no-such-id')
     expect(files.has('/games/Nova/Kira/Kira.json')).toBe(true)
+  })
+
+  it('keepFolders handles a NESTED subdir: keeps exactly that subtree', async () => {
+    const c = seedKira()
+    // A project configured with dazSubdir 'scenes/daz': the scenes live nested.
+    addDir('/games/Nova/Kira/scenes/daz')
+    files.set('/games/Nova/Kira/scenes/daz/Kira.duf', 'duf')
+    files.set('/games/Nova/Kira/scenes/other.duf', 'other')
+
+    await storage.deleteCharacter('/games/Nova', c.id, { keepFolders: ['scenes/daz'] })
+
+    // The kept nested subtree survives WITH its contents…
+    expect(dirs.has('/games/Nova/Kira/scenes/daz')).toBe(true)
+    expect(files.get('/games/Nova/Kira/scenes/daz/Kira.duf')).toBe('duf')
+    // …its siblings inside `scenes` are removed (the old basename-only matching
+    // deleted all of `scenes`, taking the supposedly-kept Daz files with it)…
+    expect(files.has('/games/Nova/Kira/scenes/other.duf')).toBe(false)
+    // …and everything else in the character folder is gone.
+    expect(files.has('/games/Nova/Kira/Kira.json')).toBe(false)
+    expect(dirs.has('/games/Nova/Kira/houdini')).toBe(false)
   })
 })

@@ -51,24 +51,25 @@ export function notesPathFor(definitionPath: string): string {
 }
 
 /**
- * Validate + normalise a user-entered folder path relative to the library root.
- * Returns a clean '/'-separated relative path. Throws on anything that could
- * escape the library (absolute paths, drive letters, `..` segments) or that
- * contains a path-illegal character.
+ * The one validation + normalisation core behind {@link normalizeRelPath} and
+ * {@link normalizeRelFolder} (they used to be near-identical twins). Returns a
+ * clean '/'-separated relative path ('' for empty input). Throws on anything
+ * that could escape the scope (absolute paths, drive letters, `..` segments)
+ * or that contains a path-illegal character; `scopeLabel` names the scope in
+ * the error messages ("library" / "project").
  */
-export function normalizeRelPath(relPath: string): string {
+function normalizeRel(relPath: string, scopeLabel: string): string {
   const raw = (relPath ?? '').trim()
-  if (!raw) throw new Error('Path is empty.')
+  if (!raw) return ''
   if (/^([a-zA-Z]:|[\\/])/.test(raw)) {
-    throw new Error('Use a path relative to the library folder, not an absolute path.')
+    throw new Error(`Use a path relative to the ${scopeLabel} folder, not an absolute path.`)
   }
   const segments = raw
     .replace(/\\/g, '/')
     .split('/')
     .filter((s) => s && s !== '.')
-  if (segments.length === 0) throw new Error('Path is empty.')
   for (const segment of segments) {
-    if (segment === '..') throw new Error('Path cannot step outside the library folder ("..").')
+    if (segment === '..') throw new Error(`Path cannot step outside the ${scopeLabel} folder ("..").`)
     if (ILLEGAL_SEGMENT_CHARS.test(segment)) {
       throw new Error(`Illegal character in path segment: "${segment}"`)
     }
@@ -80,30 +81,21 @@ export function normalizeRelPath(relPath: string): string {
 }
 
 /**
+ * Validate + normalise a user-entered file path relative to the library root
+ * (the move-character "Path" field). Empty input throws — a file path must
+ * name something.
+ */
+export function normalizeRelPath(relPath: string): string {
+  const clean = normalizeRel(relPath, 'library')
+  if (!clean) throw new Error('Path is empty.')
+  return clean
+}
+
+/**
  * Validate + normalise a user-entered FOLDER path relative to the project root
- * (the create-form "Path" field). Returns a clean '/'-separated relative path,
- * or `''` for "store directly in the project root". Throws on anything that
- * could escape the project (absolute paths, drive letters, `..`) or contains a
- * path-illegal character.
+ * (the create-form "Path" field and the per-project subdir settings). Returns
+ * `''` for "the project root itself".
  */
 export function normalizeRelFolder(relPath: string): string {
-  const raw = (relPath ?? '').trim()
-  if (!raw) return ''
-  if (/^([a-zA-Z]:|[\\/])/.test(raw)) {
-    throw new Error('Use a path relative to the project folder, not an absolute path.')
-  }
-  const segments = raw
-    .replace(/\\/g, '/')
-    .split('/')
-    .filter((s) => s && s !== '.')
-  for (const segment of segments) {
-    if (segment === '..') throw new Error('Path cannot step outside the project folder ("..").')
-    if (ILLEGAL_SEGMENT_CHARS.test(segment)) {
-      throw new Error(`Illegal character in path segment: "${segment}"`)
-    }
-    if (/[. ]$/.test(segment)) {
-      throw new Error(`Path segment cannot end with a dot or space: "${segment}"`)
-    }
-  }
-  return segments.join('/')
+  return normalizeRel(relPath, 'project')
 }

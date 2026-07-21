@@ -1,5 +1,6 @@
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { readTextFile } from '@tauri-apps/plugin-fs'
 
+import { writeTextFileAtomic } from './fs'
 import { dataPath, ensureAppDir } from './app-data'
 
 // --- Known network drives (metadata) --------------------------------------
@@ -29,7 +30,10 @@ async function readKnownDrives(): Promise<Array<KnownDrive>> {
 
 async function writeKnownDrives(drives: Array<KnownDrive>): Promise<void> {
   await ensureAppDir()
-  await writeTextFile(await dataPath('network-drives.json'), JSON.stringify(drives, null, 2) + '\n')
+  await writeTextFileAtomic(
+    await dataPath('network-drives.json'),
+    JSON.stringify(drives, null, 2) + '\n',
+  )
 }
 
 export async function listKnownDrives(): Promise<Array<KnownDrive>> {
