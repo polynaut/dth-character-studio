@@ -29,6 +29,7 @@ export const RomEditorSection = memo(function RomEditorSection({
   overrideEligible,
   overrideActive,
   selectedSceneName,
+  scenePath,
   sceneOverride,
   setOverrideEnabled,
 }: {
@@ -44,6 +45,8 @@ export const RomEditorSection = memo(function RomEditorSection({
   overrideEligible: boolean
   overrideActive: boolean
   selectedSceneName: string
+  /** The selected scene's path — renders the override toggle label's mini render. */
+  scenePath: string
   sceneOverride: SceneOverride | undefined
   setOverrideEnabled: (enabled: boolean) => void
 }) {
@@ -107,6 +110,7 @@ export const RomEditorSection = memo(function RomEditorSection({
           <PanelOverrideToggle
             eligible={overrideEligible}
             active={overrideActive}
+            scenePath={scenePath}
             sceneName={selectedSceneName}
             noun="ROM frames"
             onToggle={setOverrideEnabled}

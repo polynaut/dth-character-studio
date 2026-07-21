@@ -6,8 +6,8 @@ import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { Portrait } from '#/components/portrait.tsx'
-import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
+import { SceneLabel } from '#/components/character/scene-label.tsx'
+import { Button, EditableTitle, useModifierHeld } from '@dth/ui'
 import { prettySceneName } from '#/lib/scene-name.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
@@ -284,27 +284,15 @@ export function EditorHeader({
                 className="label-scroll cursor-pointer"
                 onClick={scrollDazScenesIntoView}
               >
-                <Tag
-                  // Always the Daz-green "linked-scene card" look (primary or
-                  // not): the same --daz-green tint + border those cards use, a
-                  // touch stronger since this is a small pill.
-                  tone="green"
-                  className="inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 pl-1.5 text-sm font-normal normal-case"
-                >
-                  {/* The selected scene's render: the picked non-primary scene,
-                      or the primary scene when it's the active selection. Fixed
-                      h/w (not aspect-ratio) so the tile is a stable box. */}
-                  <Portrait
-                    scenePath={sceneAvatarPath ?? character.scenePath}
-                    name={character.name}
-                    // Landscape face-zoom (the list-view framing), sized to the
-                    // tag. Greyscaled when it's the primary scene.
-                    imgClassName={`-translate-y-[16px]${sceneAvatarPath ? '' : ' grayscale'}`}
-                    className={`h-8 w-[56px] shrink-0 rounded${sceneAvatarPath ? '' : ' scene-label-tile'}`}
-                    fallbackClassName="text-[8px]"
-                  />
-                  <span className="truncate">{prettySceneName(sceneTag, character.name)}</span>
-                </Tag>
+                {/* The selected scene as the shared green pill — the SAME label the
+                    per-scene override toggles use. `muted` (greyscale + plain tile)
+                    when the PRIMARY scene is the active selection. */}
+                <SceneLabel
+                  scenePath={sceneAvatarPath ?? character.scenePath}
+                  name={prettySceneName(sceneTag, character.name)}
+                  muted={!sceneAvatarPath}
+                  fallbackName={character.name}
+                />
               </button>
             )}
           </div>

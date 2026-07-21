@@ -394,6 +394,7 @@ function CharacterPage() {
           identityOverrideActive={sceneSel.identityOverrideActive}
           setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
           selectedSceneName={sceneSel.selectedSceneName}
+          scenePath={sceneSel.effectiveScene}
           sceneOverride={sceneSel.sceneOverride}
           patchOverride={sceneSel.patchOverride}
         />
@@ -483,6 +484,7 @@ function CharacterPage() {
             preserveOverrideActive={sceneSel.preserveOverrideActive}
             setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
             selectedSceneName={sceneSel.selectedSceneName}
+            scenePath={sceneSel.effectiveScene}
             sceneOverride={sceneSel.sceneOverride}
             patchOverride={sceneSel.patchOverride}
           />
@@ -501,6 +503,7 @@ function CharacterPage() {
         overrideEligible={sceneSel.overrideEligible}
         overrideActive={sceneSel.overrideActive}
         selectedSceneName={sceneSel.selectedSceneName}
+        scenePath={sceneSel.effectiveScene}
         sceneOverride={sceneSel.sceneOverride}
         setOverrideEnabled={sceneSel.setOverrideEnabled}
       />

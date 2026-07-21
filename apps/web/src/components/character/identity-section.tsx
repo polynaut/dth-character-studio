@@ -18,6 +18,7 @@ export function IdentitySection({
   identityOverrideActive,
   setIdentityOverrideEnabled,
   selectedSceneName,
+  scenePath,
   sceneOverride,
   patchOverride,
 }: {
@@ -28,6 +29,8 @@ export function IdentitySection({
   identityOverrideActive: boolean
   setIdentityOverrideEnabled: (enabled: boolean) => void
   selectedSceneName: string
+  /** The selected scene's path — renders the override toggle label's mini render. */
+  scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
 }) {
@@ -102,6 +105,7 @@ export function IdentitySection({
             <PanelOverrideToggle
               eligible={overrideEligible}
               active={identityOverrideActive}
+              scenePath={scenePath}
               sceneName={selectedSceneName}
               noun="Genesis 9 settings"
               onToggle={setIdentityOverrideEnabled}

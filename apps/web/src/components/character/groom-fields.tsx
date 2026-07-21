@@ -150,6 +150,7 @@ export function GroomFields({
           <PanelOverrideToggle
             eligible={overrideEligible}
             active={groomOverrideActive}
+            scenePath={selectedScene}
             sceneName={selectedSceneName}
             noun="hair"
             onToggle={setGroomOverrideEnabled}

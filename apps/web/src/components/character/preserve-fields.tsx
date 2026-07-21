@@ -18,6 +18,7 @@ export function PreserveFields({
   preserveOverrideActive,
   setPreserveOverrideEnabled,
   selectedSceneName,
+  scenePath,
   sceneOverride,
   patchOverride,
 }: {
@@ -28,6 +29,8 @@ export function PreserveFields({
   preserveOverrideActive: boolean
   setPreserveOverrideEnabled: (enabled: boolean) => void
   selectedSceneName: string
+  /** The selected scene's path — renders the override toggle label's mini render. */
+  scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
 }) {
@@ -54,6 +57,7 @@ export function PreserveFields({
         <PanelOverrideToggle
           eligible={overrideEligible}
           active={preserveOverrideActive}
+          scenePath={scenePath}
           sceneName={selectedSceneName}
           noun="preserve lists"
           onToggle={setPreserveOverrideEnabled}
