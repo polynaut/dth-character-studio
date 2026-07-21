@@ -91,7 +91,7 @@ directory set the studio generates the ROM only — **Bone scale** flags then ju
 ride along as no-ops until you set one.
 
 <details>
-<summary><strong>Advanced options — storage location, preserve morphs &amp; node transforms</strong></summary>
+<summary><strong>Advanced options — preserve morphs &amp; node transforms</strong></summary>
 <table><tr><td>
 
 <p align="center">
@@ -103,9 +103,6 @@ ride along as no-ops until you set one.
 Expand **Advanced options** near the top of the character page — none of it is
 needed for a working ROM:
 
-- **Storage location** — shows where this character's files live and lets you
-  **move the folder** — handy when you reorganise a project. The scene and
-  generated-file paths are repointed for you.
 - **Preserve morphs after ROM loading** — the DTH ROM zeroes morphs as it loads.
   Any morph you list here is **restored to the value you set afterwards** — use it
   for body-shaping controls (e.g. breast or muscle morphs) you want to keep across

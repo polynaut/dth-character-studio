@@ -56,13 +56,23 @@ export function IdentitySection({
     // Stacked into two rows for the narrow identity sidebar: Genesis + Gender, then
     // the Genesis-9 fieldset.
     <div className="flex flex-col gap-5">
+      {/* Genesis + Gender are CHARACTER-level, never per-scene — disabled while a
+          non-primary scene is selected (switch back to the primary to change them). */}
       <div className="flex flex-col gap-5">
-        <div className="flex flex-wrap gap-4">
+        <div
+          className="flex flex-wrap gap-4"
+          title={
+            overrideEligible
+              ? "Genesis and gender aren't per-scene — select the primary Daz scene to change them"
+              : undefined
+          }
+        >
           <div>
             <Label className="mb-1">Genesis</Label>
             <Select
               value={character.genesis}
               onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
+              disabled={overrideEligible}
             >
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -80,6 +90,7 @@ export function IdentitySection({
             <Select
               value={character.gender}
               onValueChange={(v) => patch({ gender: v as Character['gender'] })}
+              disabled={overrideEligible}
             >
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -102,7 +113,7 @@ export function IdentitySection({
           are locked on a non-primary scene until the override is armed) and the
           text goes muted. */}
       <div className="w-full">
-        {character.genesis === 'G9' && (
+        {character.genesis === 'G9' && overrideEligible && (
           <div className="mb-2.5 flex w-full justify-end">
             <PanelOverrideToggle
               eligible={overrideEligible}

@@ -32,7 +32,6 @@ import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
-import { StorageLocation } from '#/components/storage-location.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
@@ -269,9 +268,9 @@ function CharacterPage() {
     draft.syncPersisted({ scenePath: moved.scenePath })
   }
 
-  // The header folder chip's edit-to-move — the SAME move as Advanced options'
-  // Storage location, through the shared lock gate + retry dialog (useFolderMove)
-  // so a scene open in Daz surfaces the "close it and continue" prompt.
+  // The header folder chip's edit-to-move (the only character-folder mover now),
+  // through the lock gate + retry dialog (useFolderMove) so a scene open in Daz
+  // surfaces the "close it and continue" prompt.
   const router = useRouter()
   const { runMove, dialog: folderMoveDialog } = useFolderMove()
   async function moveCharacterFolder(nextSubdir: string) {
@@ -330,11 +329,7 @@ function CharacterPage() {
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
-        sceneTag={
-          sceneSel.linkedScenes.length > 1 && sceneSel.selectedSceneName
-            ? sceneSel.selectedSceneName
-            : null
-        }
+        sceneTag={sceneSel.overrideEligible ? sceneSel.selectedSceneName : null}
         sceneAvatarPath={
           sceneSel.effectiveScene && sceneSel.effectiveScene !== character.scenePath
             ? sceneSel.effectiveScene
@@ -475,19 +470,13 @@ function CharacterPage() {
           {/* preventDefault stops the info click from also toggling the <details>. */}
           <span onClick={(e) => e.preventDefault()} className="inline-flex">
             <InfoPopup label="Advanced options — more information">
-              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--storage-location-preserve-morphs---node-transforms">
-                Storage location, preserve morphs &amp; node transforms — open the guide
+              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+                Preserve morphs &amp; node transforms — open the guide
               </GuideLink>
             </InfoPopup>
           </span>
         </summary>
         <div className="space-y-6 border-t p-5">
-          <StorageLocation
-            projectId={projectId}
-            id={character.id}
-            location={location}
-            onMoved={onCharacterMoved}
-          />
           <PreserveFields
             character={character}
             patch={patch}
