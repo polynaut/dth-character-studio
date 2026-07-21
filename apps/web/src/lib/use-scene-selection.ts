@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 
+import { sceneOverrideSchema } from '@dth/rom'
 import type { Character, SceneOverride } from '@dth/rom'
 
 /**
@@ -42,7 +43,9 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
             )
           : [
               ...character.sceneOverrides,
-              { scenePath: effectiveScene, enabled, poses: [], additions: [] },
+              // Mint a complete override (identity/groom default off) so a
+              // freshly-armed scene carries every panel gate, not just ROM's.
+              sceneOverrideSchema.parse({ scenePath: effectiveScene, enabled }),
             ],
       })
     },

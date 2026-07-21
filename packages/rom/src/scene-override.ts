@@ -20,7 +20,7 @@ import type { Character, RomPose, RomSections, SceneOverride } from './types'
  */
 export function applySceneOverride(
   sections: RomSections,
-  override: SceneOverride,
+  override: Pick<SceneOverride, 'poses' | 'additions'>,
 ): RomSections {
   const replaced = new Map(override.poses.map((pose) => [pose.id, pose]))
   const additions = new Map(override.additions.map((entry) => [entry.groupId, entry.poses]))

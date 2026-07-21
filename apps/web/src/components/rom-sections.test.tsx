@@ -375,6 +375,8 @@ describe('scene override mode', () => {
       enabled: true,
       poses: [],
       additions: [],
+      identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
+      groom: { enabled: false },
     })
     return (
       <RomSections

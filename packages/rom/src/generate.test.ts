@@ -168,8 +168,6 @@ describe('sectionsFromFlatFrames', () => {
     expect(sections.MISC.groups[0].id).toBe(flatSectionGroupId('MISC'))
     // A scene override addressed at the flat group id reaches the imported poses.
     const merged = applySceneOverride(sections, {
-      scenePath: 'D:/s/Beach.duf',
-      enabled: true,
       poses: [],
       additions: [
         {

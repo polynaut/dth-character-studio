@@ -139,6 +139,61 @@ describe('schema v17 — sceneOverrides (additive, zod default)', () => {
   })
 })
 
+describe('schema v20 — per-scene identity/groom override blocks (additive, zod default)', () => {
+  const now = '2026-07-20T00:00:00.000Z'
+  it('fills identity + groom defaults on a legacy sceneOverride (pre-v20)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 19,
+        sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [] }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].identity).toEqual({
+      enabled: false,
+      facsDetailStrength: 1,
+      flexionStrength: 1,
+      applyUE5TearUV: false,
+    })
+    expect(parsed.sceneOverrides[0].groom).toEqual({ enabled: false })
+  })
+  it('round-trips explicit identity + groom override values', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: CHARACTER_SCHEMA_VERSION,
+        sceneOverrides: [
+          {
+            scenePath: 'D:/s.duf',
+            identity: {
+              enabled: true,
+              facsDetailStrength: 0.5,
+              flexionStrength: 0.75,
+              applyUE5TearUV: true,
+            },
+            groom: { enabled: true },
+          },
+        ],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].identity).toEqual({
+      enabled: true,
+      facsDetailStrength: 0.5,
+      flexionStrength: 0.75,
+      applyUE5TearUV: true,
+    })
+    expect(parsed.sceneOverrides[0].groom.enabled).toBe(true)
+  })
+})
+
 describe('migrateCharacterData — version handling', () => {
   it('leaves the stored schemaVersion untouched (bumping happens on save)', () => {
     expect(migrateCharacterData({ sections: {}, schemaVersion: 3 }).schemaVersion).toBe(3)

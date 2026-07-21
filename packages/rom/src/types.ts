@@ -454,6 +454,26 @@ export const sceneOverrideSchema = z.object({
       }),
     )
     .default([]),
+  /**
+   * Per-scene GENESIS-9 identity override (FACS detail / flexion strength / UE5
+   * tear UV) — the same three values as the base character's G9 fields. Its
+   * `enabled` gates the panel + generation exactly like the ROM `enabled` above;
+   * off keeps the stored values but stops contributing.
+   */
+  identity: z
+    .object({
+      enabled: z.boolean().default(false),
+      facsDetailStrength: z.number().default(1),
+      flexionStrength: z.number().default(1),
+      applyUE5TearUV: z.boolean().default(false),
+    })
+    .default({ enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false }),
+  /**
+   * Per-scene HAIR override gate. The hair lists already live per scene in
+   * `groomScenes` (keyed by scene path); this only opts the Hair panel in for a
+   * non-primary scene so it reads like the other overrides.
+   */
+  groom: z.object({ enabled: z.boolean().default(false) }).default({ enabled: false }),
 })
 export type SceneOverride = z.infer<typeof sceneOverrideSchema>
 
@@ -740,8 +760,13 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       node/prop/value/base/autoBase only on every path (extraFrames,
  *       gp/dkArtDirection), so the .dsa config contract stays byte-for-byte
  *       unchanged.
+ *  20 — added per-scene `identity` (G9 FACS/flexion/tear-UV) and `groom` (hair
+ *       gate) blocks to `sceneOverrideSchema`, generalizing per-scene overrides
+ *       beyond ROM. Additive nested objects with zod defaults — no migration
+ *       step (hair lists stay in `groomScenes`; `groom.enabled` is just the
+ *       panel opt-in).
  */
-export const CHARACTER_SCHEMA_VERSION = 19
+export const CHARACTER_SCHEMA_VERSION = 20
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
