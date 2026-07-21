@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
+import { InfoPopup, Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import {
   fetchCharacter,
   fetchPoseAssets,
@@ -444,8 +445,16 @@ function CharacterPage() {
       />
 
       <details className="mb-8 rounded-lg border bg-card">
-        <summary className="cursor-pointer px-5 py-3 font-medium select-none">
+        <summary className="flex cursor-pointer items-center gap-1 px-5 py-3 font-medium select-none">
           Advanced options
+          {/* preventDefault stops the info click from also toggling the <details>. */}
+          <span onClick={(e) => e.preventDefault()} className="inline-flex">
+            <InfoPopup label="Advanced options — more information">
+              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--storage-location-preserve-morphs---node-transforms">
+                Storage location, preserve morphs &amp; node transforms — open the guide
+              </GuideLink>
+            </InfoPopup>
+          </span>
         </summary>
         <div className="space-y-6 border-t p-5">
           <StorageLocation

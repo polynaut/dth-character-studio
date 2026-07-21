@@ -1,9 +1,10 @@
-import { ExternalLink, FolderOpen, X } from 'lucide-react'
+import { FolderOpen, X } from 'lucide-react'
 
 import { PathCode } from '#/components/path-code.tsx'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { Button, InfoPopup, Switch } from '@dth/ui'
 import { isDirectory } from '#/lib/rom/api.ts'
-import { openExternal, pickFolder } from '#/lib/desktop.ts'
+import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
 
 /** The guide's direct-export section — the single source of truth for how the
@@ -71,16 +72,7 @@ export function ExportSettingsSection({
       <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
         Export directory
         <InfoPopup label="Export directory — more information">
-          <a
-            href={EXPORT_GUIDE_URL}
-            onClick={(e) => {
-              e.preventDefault()
-              void openExternal(EXPORT_GUIDE_URL)
-            }}
-            className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2"
-          >
-            How the export directory works — open the guide <ExternalLink className="size-3.5" />
-          </a>
+          <GuideLink href={EXPORT_GUIDE_URL}>How the export directory works — open the guide</GuideLink>
         </InfoPopup>
       </h2>
       <div className="flex flex-wrap items-center gap-3">
