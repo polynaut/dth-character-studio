@@ -116,24 +116,39 @@ jobs:
   # rom, ui — are a fixed group, so this is what actually bumps the product
   # version and triggers a release).
   # A PR that legitimately needs no version bump (CI/docs-only) can satisfy this
-  # with an empty changeset: `pnpm changeset --empty`. The version PR and
-  # Dependabot are exempt (Dependabot can't author changesets — its bumps ride
-  # the next release train; add a changeset manually to release one alone).
+  # with an empty changeset: `pnpm changeset --empty`.
+  # The job runs on EVERY PR so the check always REPORTS — it is a required
+  # status check on main, and a skipped job would leave the check "Expected"
+  # forever, blocking the merge. The version PR and Dependabot are therefore
+  # exempted INSIDE the job (they report success without the requirement):
+  # Dependabot can't author changesets — its bumps ride the next release
+  # train; add a changeset manually to release one alone.
   changeset:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main' && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request'
+    env:
+      # Version PR (changeset-release/main) and Dependabot: requirement waived.
+      EXEMPT: ${{ github.head_ref == 'changeset-release/main' || github.actor == 'dependabot[bot]' }}
     steps:
+      - name: Changeset requirement waived (version PR / Dependabot)
+        if: env.EXEMPT == 'true'
+        run: echo "::notice::Changeset requirement waived for this PR (version PR / Dependabot)."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.EXEMPT != 'true'
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        if: env.EXEMPT != 'true'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: env.EXEMPT != 'true'
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        if: env.EXEMPT != 'true'
       - name: Require a changeset
+        if: env.EXEMPT != 'true'
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
 
   # The Rust backend wasn't built/tested on PRs — a broken crate (or a reverted
