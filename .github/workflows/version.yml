@@ -30,6 +30,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
+        id: changesets
         with:
           version: pnpm version-packages
           title: '🚀 chore: version packages'
@@ -43,3 +44,24 @@ jobs:
           # fires the checks normally — no babysitting. Falls back to
           # GITHUB_TOKEN when the secret is absent (old behaviour). See docs/devops.md.
           GITHUB_TOKEN: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # The action writes an npm-centric boilerplate intro ("…publish to npm
+      # yourself or setup this action to publish automatically…") that is wrong
+      # for this repo — everything IS automated. Replace the intro with what
+      # merging actually does, keep the generated "# Releases" section.
+      - name: De-boilerplate the version PR description
+        if: steps.changesets.outputs.pullRequestNumber
+        env:
+          GH_TOKEN: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          num='${{ steps.changesets.outputs.pullRequestNumber }}'
+          body=$(gh pr view "$num" --repo "$GITHUB_REPOSITORY" --json body -q .body)
+          case "$body" in
+            *'# Releases'*) ;;
+            *) echo "no '# Releases' section — leaving the body untouched"; exit 0 ;;
+          esac
+          rest="${body#*'# Releases'}"
+          printf '%s\n\n# Releases%s' \
+            '🚀 **The release train.** Kept up to date automatically — every merge to `main` that carries changesets refreshes this PR. **Merging it ships the release**: build → `sign-win` (one manual approval on the *release-signing* gate) → publish. Nothing is released by hand.' \
+            "$rest" | gh pr edit "$num" --repo "$GITHUB_REPOSITORY" --body-file -
