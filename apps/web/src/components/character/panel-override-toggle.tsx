@@ -56,9 +56,9 @@ export function PanelOverrideToggle({
           scene). */}
       <SceneLabel
         scenePath={scenePath}
-        name={compact ? 'OVERRIDE' : sceneName}
+        name={compact ? '' : sceneName}
         showAvatar={!compact}
-        eyebrow={compact ? undefined : 'Override'}
+        eyebrow="Override"
         trailing={
           compact ? undefined : <InfoPopup label="Scene override — more information">{info}</InfoPopup>
         }

@@ -72,10 +72,14 @@ export function SceneLabel({
           <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">
             {eyebrow}
           </span>
-          <span className="flex min-w-0 items-center gap-1">
-            <span className="truncate">{name}</span>
-            {trailing}
-          </span>
+          {/* No name → the eyebrow IS the whole label (the compact "OVERRIDE" pill),
+              so it keeps that same small eyebrow text size. */}
+          {name && (
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="truncate">{name}</span>
+              {trailing}
+            </span>
+          )}
         </span>
       ) : (
         <span className="flex min-w-0 items-center gap-1">
