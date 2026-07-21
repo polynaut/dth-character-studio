@@ -203,17 +203,19 @@ export function EditorHeader({
           title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
-          {/* The wrapper owns the shrink: only its height animates (227 → 96). It
-              clips a fixed-size image via overflow-hidden, so the portrait is
-              *cropped* top-down rather than re-fit every frame — the image is
-              rasterized once and the box just changes its clip rect, which stays
-              smooth even with the heavy form relaying out below the sticky header. */}
-          <div className="avatar-scroll-shrink h-[227px] w-[130px] overflow-hidden rounded-lg bg-neutral-500">
+          {/* The wrapper owns the shrink: only its height animates (173 → 90). At
+              rest it's a 3:4 portrait (130×173) matching the gallery / scene
+              thumbnails and the crop editor's letterbox guide. It clips a
+              fixed-size image via overflow-hidden, so the portrait is *cropped*
+              top-down rather than re-fit every frame — the image is rasterized
+              once and the box just changes its clip rect, which stays smooth even
+              with the heavy form relaying out below the sticky header. */}
+          <div className="avatar-scroll-shrink h-[173px] w-[130px] overflow-hidden rounded-lg bg-neutral-500">
             <Avatar
               image={character.image}
               scenePath={sceneAvatarPath ?? undefined}
               name={character.name}
-              className="avatar-scroll-pan h-[227px] w-[130px] object-top"
+              className="avatar-scroll-pan h-[173px] w-[130px] object-top"
               fallbackClassName="text-6xl"
             />
           </div>

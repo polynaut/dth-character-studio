@@ -181,17 +181,18 @@ a {
 }
 
 /* Collapsing header: this animates the HEIGHT of the avatar *wrapper* (not the
-   image). The wrapper is overflow-hidden around a fixed 170×227 image, so the
-   box goes 170×227 → 170×96 and simply crops the portrait top-down — its width,
-   right edge, and the title beside it never move. Animating the wrapper's clip
-   (rather than the <img>'s own height with object-cover) means the image is
-   rasterized once and never re-fit per frame, which keeps the scroll smooth. A
-   soft drop shadow fades in as it settles. Scroll-driven animation — Chromium /
-   WebView2 support it; browsers without scroll timelines just keep it full size.
-   The transparent `from` shadow guarantees a smooth fade. */
+   image). The wrapper is overflow-hidden around a fixed 130×173 image (a 3:4
+   portrait at rest), so the box goes 130×173 → 130×90 and simply crops the
+   portrait top-down — its width, right edge, and the title beside it never move.
+   Animating the wrapper's clip (rather than the <img>'s own height with
+   object-cover) means the image is rasterized once and never re-fit per frame,
+   which keeps the scroll smooth. A soft drop shadow fades in as it settles.
+   Scroll-driven animation — Chromium / WebView2 support it; browsers without
+   scroll timelines just keep it full size. The transparent `from` shadow
+   guarantees a smooth fade. */
 @keyframes dth-avatar-shrink {
   from {
-    height: 227px;
+    height: 173px;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
     border-color: transparent;
   }

@@ -29,6 +29,21 @@ export const AVATAR_OUTPUT_SIZES = [256, 512] as const
 export type AvatarOutputSize = (typeof AVATAR_OUTPUT_SIZES)[number]
 
 /**
+ * The PORTRAIT frame the square avatar is shown in — a 3:4 box, shared by the
+ * character header (editor-header.tsx, ~130×173 at rest) and the gallery / Daz
+ * scene thumbnails. The square is object-cover-cropped to this frame's centre
+ * width; the crop editor overlays it as a letterbox guide so the user keeps the
+ * subject inside the strip that survives portrait display, while the stored
+ * image is still the full 1:1 square.
+ */
+export const AVATAR_PORTRAIT_ASPECT = 3 / 4
+
+/** Each side letterbox bar's width, as a fraction of the square crop. */
+export function portraitBarFraction(): number {
+  return (1 - AVATAR_PORTRAIT_ASPECT) / 2
+}
+
+/**
  * Validate an upload's dimensions for the avatar pipeline: at least
  * {@link MIN_AVATAR_SOURCE_PX} and at most {@link MAX_AVATAR_SOURCE_PX} on
  * BOTH sides (aspect ratio is free — that's what the crop is for). Returns a

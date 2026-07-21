@@ -269,7 +269,17 @@ export function ImageDialog({
                     fileName === url ? 'ring-primary' : 'ring-transparent hover:ring-primary'
                   }`}
                 >
-                  <Avatar image={fileName} name={name} className="size-16 rounded-md" />
+                  {/* Same portrait frame as the scene thumbnails below, so the
+                      two rows read as one gallery. The stored upload is square;
+                      shown object-top (no zoom) it mirrors the header crop. */}
+                  <Portrait
+                    image={fileName}
+                    name={name}
+                    zoom={false}
+                    imgClassName="object-top"
+                    className="aspect-[3/4] w-16 rounded-md"
+                    fallbackClassName="text-lg"
+                  />
                 </button>
               ))}
             </div>
@@ -281,9 +291,7 @@ export function ImageDialog({
             single remaining scene needs to be selectable to switch back to it. */}
         {scenes.length > 0 && (
           <div>
-            <p className="mb-1.5 text-sm text-muted-foreground">
-              {scenes.length === 1 ? "Or use the linked Daz scene's image:" : "Or use a linked Daz scene's image:"}
-            </p>
+            <p className="mb-1.5 text-sm text-muted-foreground">Daz scene&rsquo;s image:</p>
             <div className="flex flex-wrap gap-2">
               {scenes.map((scene) => (
                 <button

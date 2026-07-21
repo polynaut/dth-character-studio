@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  AVATAR_PORTRAIT_ASPECT,
   avatarOutputSize,
   clampCrop,
   cropSizeForZoomFraction,
@@ -8,6 +9,7 @@ import {
   MAX_AVATAR_SOURCE_PX,
   MIN_AVATAR_SOURCE_PX,
   panCrop,
+  portraitBarFraction,
   validateAvatarSource,
   zoomCrop,
   zoomFraction,
@@ -124,5 +126,15 @@ describe('bounds constants', () => {
   it('match the spec', () => {
     expect(MIN_AVATAR_SOURCE_PX).toBe(256)
     expect(MAX_AVATAR_SOURCE_PX).toBe(2048)
+  })
+})
+
+describe('portraitBarFraction', () => {
+  it('is half the width cropped by the 3:4 portrait frame, per side', () => {
+    // A centred 3:4 strip survives, so each side bar covers (1 - 3/4)/2 = 1/8.
+    expect(portraitBarFraction()).toBeCloseTo(0.125)
+    expect(portraitBarFraction()).toBeCloseTo((1 - AVATAR_PORTRAIT_ASPECT) / 2)
+    // Two bars + the visible strip cover the whole square.
+    expect(2 * portraitBarFraction() + AVATAR_PORTRAIT_ASPECT).toBeCloseTo(1)
   })
 })

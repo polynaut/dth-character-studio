@@ -8,6 +8,7 @@ import {
   initialCrop,
   MIN_AVATAR_SOURCE_PX,
   panCrop,
+  portraitBarFraction,
   zoomCrop,
   zoomFraction,
 } from '#/lib/image-crop.ts'
@@ -87,37 +88,57 @@ export function ImageCropEditor({
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <canvas
-        ref={canvasRef}
-        width={VIEW_SIZE * 2}
-        height={VIEW_SIZE * 2}
-        style={{ width: VIEW_SIZE, height: VIEW_SIZE }}
-        className="cursor-grab touch-none rounded-lg border border-input active:cursor-grabbing"
-        role="img"
-        aria-label="Crop preview — drag to reposition, scroll to zoom"
-        onPointerDown={(e) => {
-          dragRef.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY }
-          e.currentTarget.setPointerCapture(e.pointerId)
-        }}
-        onPointerMove={(e) => {
-          const drag = dragRef.current
-          if (!drag || drag.pointerId !== e.pointerId) return
-          const dx = e.clientX - drag.lastX
-          const dy = e.clientY - drag.lastY
-          drag.lastX = e.clientX
-          drag.lastY = e.clientY
-          setCrop((c) => panCrop(c, dx, dy, VIEW_SIZE, bitmap.width, bitmap.height))
-        }}
-        onPointerUp={(e) => {
-          if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null
-        }}
-        onWheel={(e) => {
-          // Wheel up zooms in. The factor per notch is gentle — the slider
-          // covers the full range for coarse moves.
-          const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08
-          setCrop((c) => zoomCrop(c, factor, bitmap.width, bitmap.height))
-        }}
-      />
+      <div className="relative" style={{ width: VIEW_SIZE, height: VIEW_SIZE }}>
+        <canvas
+          ref={canvasRef}
+          width={VIEW_SIZE * 2}
+          height={VIEW_SIZE * 2}
+          style={{ width: VIEW_SIZE, height: VIEW_SIZE }}
+          className="cursor-grab touch-none rounded-lg border border-input active:cursor-grabbing"
+          role="img"
+          aria-label="Crop preview — drag to reposition, scroll to zoom"
+          onPointerDown={(e) => {
+            dragRef.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY }
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }}
+          onPointerMove={(e) => {
+            const drag = dragRef.current
+            if (!drag || drag.pointerId !== e.pointerId) return
+            const dx = e.clientX - drag.lastX
+            const dy = e.clientY - drag.lastY
+            drag.lastX = e.clientX
+            drag.lastY = e.clientY
+            setCrop((c) => panCrop(c, dx, dy, VIEW_SIZE, bitmap.width, bitmap.height))
+          }}
+          onPointerUp={(e) => {
+            if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null
+          }}
+          onWheel={(e) => {
+            // Wheel up zooms in. The factor per notch is gentle — the slider
+            // covers the full range for coarse moves.
+            const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08
+            setCrop((c) => zoomCrop(c, factor, bitmap.width, bitmap.height))
+          }}
+        />
+        {/* Portrait letterbox guide: the whole square IS the stored 1:1 output,
+            but the narrowest place it's shown (the character header) crops to a
+            portrait strip. Darken the two side bars 50% so the subject can be
+            kept inside the strip that survives portrait display. pointer-events
+            off so drag/zoom on the canvas beneath is unaffected. */}
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-l-lg bg-black/50"
+          style={{ width: `${portraitBarFraction() * 100}%` }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 rounded-r-lg bg-black/50"
+          style={{ width: `${portraitBarFraction() * 100}%` }}
+          aria-hidden
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The full square is saved; the darkened sides are cropped in portrait views.
+      </p>
       {zoomable && (
         <label className="flex w-full items-center gap-2 text-sm text-muted-foreground">
           Zoom
