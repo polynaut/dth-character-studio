@@ -2,4 +2,4 @@
 '@dth/web': patch
 ---
 
-The character header portrait now previews the selected Daz scene: selecting a non-primary scene swaps the avatar to that scene's `.tip.png` while it stays selected — the stored avatar itself is untouched.
+The character header portrait now previews the selected Daz scene: selecting a non-primary scene swaps the avatar to that scene's `.tip.png` while it stays selected — the stored avatar itself is untouched. The home screen title also gets the studio's logo mark, and the main nav gains a "Docs" link straight to the online guide.
