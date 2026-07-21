@@ -292,10 +292,10 @@ a:hover {
   display: flex;
 }
 
-/* Tablet/desktop: the hero owns 83% of the viewport, and the guide teaser
-   link (margin-top: auto below) rides down to its bottom edge. On phones
-   (and short screens) the content height wins and nothing changes. */
-@media (min-width: 768px) {
+/* Desktop and up: the hero owns 83% of the viewport, and the guide teaser
+   link (margin-top: auto below) rides down to its bottom edge. On phones and
+   tablets (and short screens) the content height wins and nothing changes. */
+@media (min-width: 1024px) {
   .hero {
     min-height: 83vh;
   }
@@ -424,12 +424,17 @@ a:hover {
   color: var(--fg-bright);
 }
 
-/* The guide teaser gets a shine: the text is painted with an orange gradient
-   (primary plus lighter hues) clipped to the glyphs, and a bright band sweeps
-   through it. The gradient starts and ends on the same color, so the linear
-   loop is seamless. Hover stays on the gradient (the arrow still slides). */
 .hero .btn-ghost {
   margin-top: 26px;
+}
+
+/* Shine: the text is painted with an orange gradient (primary plus lighter
+   hues) clipped to the glyphs, and a bright band sweeps through it. The
+   gradient starts and ends on the same color, so the linear loop is seamless.
+   Goes on the element whose only background IS the text (the hero teaser
+   link) or on a label span inside a surfaced button (the features CTA). */
+.text-shine,
+.text-shine:hover {
   background-image: linear-gradient(
     100deg,
     var(--primary) 0%,
@@ -445,10 +450,6 @@ a:hover {
   animation: guide-shine 3s linear infinite;
 }
 
-.hero .btn-ghost:hover {
-  color: transparent;
-}
-
 @keyframes guide-shine {
   from {
     background-position: 250% 0;
@@ -459,7 +460,8 @@ a:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero .btn-ghost {
+  .text-shine,
+  .text-shine:hover {
     animation: none;
   }
 }
