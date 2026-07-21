@@ -514,6 +514,10 @@
 
   .guide-sidebar {
     position: static;
+    /* The 128px desktop offset only exists to line the nav up with the chapter
+       title across the gutter — stacked above the article on mobile it's just
+       a big empty gap under the topbar, so drop it right down. */
+    margin-top: 24px;
     padding-bottom: 8px;
     border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
   }
