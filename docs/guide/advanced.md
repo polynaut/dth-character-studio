@@ -8,7 +8,7 @@
 > and the **Modify JCM frames** grid for morphs riding along the shipped joint
 > correctives. (The character page's collapsed **Advanced options** panel — storage
 > location, preserve morphs / node transforms — is covered in
-> [Your first character](./04-first-character.md).)
+> [Your first character](./04-first-character.md#advanced-options--storage-location-preserve-morphs---node-transforms).)
 
 &nbsp;
 
