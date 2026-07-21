@@ -33,7 +33,7 @@ jobs:
         id: changesets
         with:
           version: pnpm version-packages
-          title: '🚀 chore: version packages'
+          title: '🚢 chore: version packages'
           commit: 'chore: version packages'
         env:
           # Prefer a PAT / GitHub App token (secret CHANGESETS_TOKEN) over the
@@ -62,6 +62,9 @@ jobs:
             *) echo "no '# Releases' section — leaving the body untouched"; exit 0 ;;
           esac
           rest="${body#*'# Releases'}"
-          printf '%s\n\n# Releases%s' \
-            '🚀 **The release train.** Kept up to date automatically — every merge to `main` that carries changesets refreshes this PR. **Merging it ships the release**: build → `sign-win` + `sign-mac` in parallel (each pauses for its own manual approval on the *release-signing* gate; `sign-mac` only when the mac release is enabled) → publish. Nothing is released by hand.' \
+          printf '%s\n\n%s\n%s\n\n%s\n\n# Releases%s' \
+            '# The release train' \
+            '> Every merge to `main` that carries changesets refreshes this PR.' \
+            '> Merge to `main` will trigger the [🚀 Release workflow](https://github.com/polynaut/dth-character-studio/actions/workflows/release.yml) which runs: `build win/mac` → `⚠️ approval` → `sign win/mac` → `publish`' \
+            '🚢 Ship the release by merging this PR' \
             "$rest" | gh pr edit "$num" --repo "$GITHUB_REPOSITORY" --body-file -
