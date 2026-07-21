@@ -293,7 +293,7 @@ a:hover {
 }
 
 /* Desktop and up: the hero owns 83% of the viewport, and the guide teaser
-   link (margin-top: auto below) rides down to its bottom edge. On phones and
+   link gets extra clearance above it (see .hero .btn-ghost). On phones and
    tablets (and short screens) the content height wins and nothing changes. */
 @media (min-width: 1024px) {
   .hero {
@@ -319,12 +319,6 @@ a:hover {
   align-items: center;
   text-align: center;
   width: 100%;
-}
-
-/* With the hero at 75vh, the guide teaser sinks to the section's bottom edge;
-   the download block's margin keeps a minimum gap on short screens. */
-.hero-inner > .btn-ghost {
-  margin-top: auto;
 }
 
 .download-block {
@@ -428,6 +422,12 @@ a:hover {
   margin-top: 26px;
 }
 
+@media (min-width: 1024px) {
+  .hero .btn-ghost {
+    margin-top: 88px;
+  }
+}
+
 /* Shine: the text is painted with an orange gradient (primary plus lighter
    hues) clipped to the glyphs, and a bright band sweeps through it. The
    gradient starts and ends on the same color, so the linear loop is seamless.
@@ -461,7 +461,8 @@ a:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .text-shine,
-  .text-shine:hover {
+  .text-shine:hover,
+  .cta-strip .btn-secondary {
     animation: none;
   }
 }
@@ -605,7 +606,22 @@ a:hover {
   }
 }
 
-/* The guide call-out closing the features section. */
+/* The guide call-out closing the features section. Its button border pulses
+   toward orange in the same 3s rhythm as the label's shine sweep (peak at
+   mid-loop, when the bright band crosses the text). */
+.cta-strip .btn-secondary {
+  animation: guide-border-pulse 3s ease-in-out infinite;
+}
+
+@keyframes guide-border-pulse {
+  0%,
+  100% {
+    border-color: var(--border);
+  }
+  50% {
+    border-color: color-mix(in oklab, var(--primary-soft) 80%, var(--border));
+  }
+}
 
 .cta-strip {
   margin-top: 40px;
@@ -625,11 +641,10 @@ a:hover {
   color: var(--fg-bright);
 }
 
-/* The two prose sections (Why, About) center their heading and text on the
-   page axis — same axis as the hero and the card grids below them. */
+/* Every section heading sits centered on the page axis — same axis as the
+   hero and the card grids; About also centers its prose. */
 
-#why h2,
-#about h2 {
+.section h2 {
   text-align: center;
 }
 
