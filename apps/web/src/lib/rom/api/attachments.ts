@@ -1,4 +1,4 @@
-import { exists, mkdir, readFile, remove, stat, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
@@ -54,7 +54,9 @@ async function copySceneInto(
   const copied: Array<string> = []
   for (const src of sources) {
     if (await exists(src)) {
-      await writeFile(joinPath(destDir, basename(src)), await readFile(src))
+      // Whole-file copy stays native (plugin-fs copyFile) — a `.duf` can be tens
+      // of MB; round-tripping the bytes through the webview doubles the memory.
+      await copyFile(src, joinPath(destDir, basename(src)))
       copied.push(src)
     }
   }

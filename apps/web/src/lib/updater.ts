@@ -2,6 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { requestUpdatePrompt, skippedVersionsBetween } from './update-prompt'
 
@@ -38,7 +39,8 @@ export async function checkForUpdates({ manual = false }: { manual?: boolean } =
     // offline/rate-limited just means no list.
     let skipped: Array<{ version: string; url: string }> = []
     try {
-      const tags = await invoke<Array<string>>('app_release_tags')
+      // zod-parsed, not a bare invoke<T>() cast (primitive shape — no fixture).
+      const tags = z.array(z.string()).parse(await invoke('app_release_tags'))
       skipped = skippedVersionsBetween(tags, update.currentVersion, update.version)
     } catch {
       // No list — the latest release's notes above still cover the update itself.

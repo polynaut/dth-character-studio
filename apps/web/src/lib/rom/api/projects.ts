@@ -7,6 +7,7 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import {
+  cacheCharacterLocation,
   charsRoot,
   dirname,
   getActiveProjectDir,
@@ -145,37 +146,72 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
   } = projectSettingsInput.parse(data)
   const dir = await projectPath(projectId)
   const manifest = await storage.readManifest(dir)
-  // Validate + normalise the relative folder (throws on absolute paths / `..`); '' = project root.
+  // Validate + normalise EVERY relative-folder field through the same gate
+  // (throws on absolute paths / `..` / illegal chars). '' = project root for
+  // charactersSubdir, "use the default" for the daz/houdini subdirs (readManifest
+  // fills those back in). Nested values like `scenes/daz` are legit.
   const nextCharactersSubdir = normalizeRelFolder(charactersSubdir)
+  const nextDazSubdir = normalizeRelFolder(dazSubdir)
+  const nextHoudiniSubdir = normalizeRelFolder(houdiniSubdir)
   // The characters subfolder defines where character folders live, so a change must
   // move the existing folders to the new location (links inside them are repointed).
-  // Done before writing the manifest: if the move fails, the manifest still points
-  // at where the folders actually are.
-  let repointFailures: Array<{ dest: string; error: string }> = []
+  // Done before writing the manifest, so the manifest can be written to match
+  // where the folders ACTUALLY ended up.
+  let moveResult: storage.MoveCharactersRootResult | null = null
   if (nextCharactersSubdir !== manifest.charactersSubdir) {
     const oldRoot = manifest.charactersSubdir ? joinPath(dir, manifest.charactersSubdir) : dir
     const newRoot = nextCharactersSubdir ? joinPath(dir, nextCharactersSubdir) : dir
     // Every character folder physically moves — the cached locations are all stale.
     invalidateCharacterLocations()
-    ;({ repointFailures } = await withBusyCursor(storage.moveCharactersRoot(oldRoot, newRoot)))
+    moveResult = await withBusyCursor(storage.moveCharactersRoot(oldRoot, newRoot))
   }
-  // Write the manifest FIRST so it always points at where the folders actually
-  // are now, even if some characters' internal paths failed to repoint below.
+  // Decide which characters-root the manifest records — it must match REALITY:
+  //  - clean move (or no move): the requested new subdir;
+  //  - partial failure, fully rolled back: everything is back at the old root →
+  //    keep the OLD subdir (the "Characters folder" change simply didn't happen);
+  //  - partial failure AND failed rollback: characters live at both roots →
+  //    follow the MAJORITY so the scan sees as many as possible.
+  // Either failure case throws below, AFTER the manifest write, with a precise report.
+  let manifestCharactersSubdir = nextCharactersSubdir
+  let moveError: string | null = null
+  if (moveResult && moveResult.moveFailures.length > 0) {
+    const blocked = moveResult.moveFailures.map((f) => `${f.src} (${f.error})`).join('; ')
+    if (moveResult.atNewRoot === 0) {
+      manifestCharactersSubdir = manifest.charactersSubdir
+      moveError =
+        `Couldn't move the character folders — the change was rolled back, and the ` +
+        `"Characters folder" setting was left unchanged. Blocked by: ${blocked}`
+    } else if (moveResult.atNewRoot >= moveResult.atOldRoot) {
+      manifestCharactersSubdir = nextCharactersSubdir
+      moveError =
+        `Partially moved the character folders: ${moveResult.atOldRoot} character(s) could not be ` +
+        `moved and are still at the old location — move them by hand or retry. Blocked by: ${blocked}`
+    } else {
+      manifestCharactersSubdir = manifest.charactersSubdir
+      moveError =
+        `Couldn't move the character folders, and ${moveResult.atNewRoot} character(s) could not be ` +
+        `rolled back — they are stranded at the new location while the project still uses the old ` +
+        `one. Move them back by hand. Blocked by: ${blocked}`
+    }
+  }
+  // Write the manifest so it points at where the folders actually are now,
+  // even when part of the operation failed (surfaced by the throws below).
   await storage.writeManifest(dir, {
     ...manifest,
-    dazSubdir,
-    houdiniSubdir,
+    dazSubdir: nextDazSubdir,
+    houdiniSubdir: nextHoudiniSubdir,
     createHoudiniSubdir,
     assetsEnabled,
     dazProductsEnabled,
-    charactersSubdir: nextCharactersSubdir,
+    charactersSubdir: manifestCharactersSubdir,
   })
+  if (moveError) throw new Error(moveError)
   // Folders moved and the manifest is consistent, but N characters kept stale
   // in-file paths (locked/unreadable JSON mid-move). Surface it so the user knows
   // to re-save them, instead of silently leaving dead scene/groom links.
-  if (repointFailures.length > 0) {
+  if (moveResult && moveResult.repointFailures.length > 0) {
     throw new Error(
-      `Moved the character folders, but ${repointFailures.length} character(s) couldn't have their internal scene/Houdini paths updated — open and re-save each to repair its links.`,
+      `Moved the character folders, but ${moveResult.repointFailures.length} character(s) couldn't have their internal scene/Houdini paths updated — open and re-save each to repair its links.`,
     )
   }
   const project = await resolveProject(dir)
@@ -186,8 +222,14 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
   // is unaffected); per-character failures are swallowed so the save still succeeds.
   if (dazProductsEnabled !== manifest.dazProductsEnabled) {
     try {
-      const characters = await storage.listCharacters(charsRoot(project))
-      for (const character of characters) {
+      const root = charsRoot(project)
+      // One scan resolves every character's location; primed into the session
+      // cache so each generate below skips its own full library walk.
+      const scan = await storage.scanCharacterLibrary(root)
+      for (const { character, location } of scan.entries) {
+        cacheCharacterLocation(root, character.id, location)
+      }
+      for (const { character } of scan.entries) {
         try {
           await generateCharacterFiles({
             data: { projectId: project.path, id: character.id, targets: { daz: true, houdini: false } },

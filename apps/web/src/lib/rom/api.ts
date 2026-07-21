@@ -13,11 +13,13 @@
 
 export type {
   CharacterLocation,
+  CharacterScanProblem,
   DthExporterReleaseInfo,
   DthReleaseInfo,
   KnownDrive,
   Project,
 } from './storage'
+export { ProjectUnreachableError } from './storage'
 
 // --- core: active-project state + the session pose-asset catalog -----------
 export { fetchPoseAssets, rescanPoseAssets, setActiveProjectDir } from './api/core'
@@ -46,6 +48,7 @@ export {
   dismissRomRunLog,
   fetchAllCharacters,
   fetchCharacter,
+  fetchCharacterScanProblems,
   fetchMorphIndex,
   fetchCharacters,
   fetchRomRunLog,
