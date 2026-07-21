@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Pencil } from 'lucide-react'
-import { toast } from 'sonner'
+
+import { useUiConfig } from '../config.tsx'
 
 /**
  * A page title that becomes an inline input on click (pencil appears on hover).
  * Pressing Enter or blurring commits via `onSave` and returns to the title;
  * Escape, or an empty/unchanged value, cancels. `onEditingChange` lets the page
  * suppress navigation while editing (e.g. so a back-link's first click only
- * closes the edit).
+ * closes the edit). A rejected `onSave` rolls the value back and surfaces the
+ * error through the host's `UiConfig.onError` (the app wires it to its toast).
  */
 export function EditableTitle({
   name,
@@ -23,6 +25,7 @@ export function EditableTitle({
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
   const [busy, setBusy] = useState(false)
+  const { onError } = useUiConfig()
 
   useEffect(() => {
     onEditingChange?.(editing)
@@ -41,7 +44,7 @@ export function EditableTitle({
       await onSave(next)
     } catch (e) {
       setValue(name)
-      toast.error(e instanceof Error ? e.message : String(e))
+      onError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
       setEditing(false)

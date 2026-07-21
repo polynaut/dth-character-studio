@@ -3,8 +3,8 @@
   "plugins": ["react", "typescript", "import", "oxc"],
   "categories": {
     "correctness": "error",
-    "perf": "warn",
-    "suspicious": "warn"
+    "perf": "error",
+    "suspicious": "error"
   },
   "env": {
     "browser": true,
@@ -25,7 +25,19 @@
     "no-shadow": "error",
     "react/no-object-type-as-default-prop": "error",
     "react/jsx-no-constructed-context-values": "error",
-    "typescript/no-unnecessary-type-assertion": "error"
+    "typescript/no-unnecessary-type-assertion": "error",
+
+    // perf/suspicious are error categories, but these specific rules flag
+    // high-count INTENTIONAL patterns (see the note in
+    // validate-pull-request.yml) — they stay advisory warnings on purpose:
+    // sequential awaits are deliberate fs ordering, the react-markdown
+    // component maps are nested by design, the __TAURI_*/__tauriMock globals
+    // are the Tauri contract, and the map-spreads keep records immutable.
+    "no-await-in-loop": "warn",
+    "oxc/no-map-spread": "warn",
+    "react/no-unstable-nested-components": "warn",
+    "no-underscore-dangle": "warn",
+    "import/no-unassigned-import": "warn"
   },
   "overrides": [
     {

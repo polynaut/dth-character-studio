@@ -4,8 +4,9 @@
 // Utilities
 export { cn } from './cn.ts'
 
-// Host-behaviour injection seam
-export { UiConfigProvider, useUiConfig } from './config.tsx'
+// Host-behaviour injection seam. useUiConfig stays internal (kit components
+// import it via './config.tsx') — the app only ever provides the config.
+export { UiConfigProvider } from './config.tsx'
 export type { UiConfig } from './config.tsx'
 
 // Primitives
