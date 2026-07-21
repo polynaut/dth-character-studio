@@ -269,7 +269,7 @@ export function EditorHeader({
               portrait still opens the image dialog. */}
           {cornerBadge && (
             <span
-              className={`pointer-events-none absolute bottom-1.5 left-1.5 -translate-x-[10px] -translate-y-[9px] transition-opacity ${
+              className={`pointer-events-none absolute bottom-1.5 left-1.5 -translate-x-[21px] -translate-y-[9px] transition-opacity ${
                 canEditImage ? 'group-hover:opacity-50' : ''
               }`}
               title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
