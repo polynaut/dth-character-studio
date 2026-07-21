@@ -303,7 +303,7 @@ export function EditorHeader({
                   // not): the same --daz-green tint + border those cards use, a
                   // touch stronger since this is a small pill.
                   tone="green"
-                  className="inline-flex max-w-72 items-center gap-3 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-daz-green)_35%,var(--card))] py-1 pr-2 pl-1 text-sm font-normal normal-case"
+                  className="inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-daz-green)_35%,var(--card))] py-1 pr-2 pl-1.5 text-sm font-normal normal-case"
                 >
                   {/* The selected scene's render: the picked non-primary scene,
                       or the primary scene when it's the active selection. Fixed
