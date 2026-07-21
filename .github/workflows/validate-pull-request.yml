@@ -65,6 +65,13 @@ jobs:
           done
       - name: Build web
         run: pnpm --filter @dth/web build
+      # Cheap (<1s): renders docs/guide → site/guide and statically validates the
+      # screenshot references (missing/orphaned PNGs) — the same checks the
+      # screenshot suite's coverage test runs, but without Playwright, so a guide
+      # page pointing at a nonexistent image can't merge green and break the
+      # Pages deploy.
+      - name: Build guide site (validates screenshot references)
+        run: pnpm build:guide
 
   # The browser smoke suite: the real SPA against the in-memory fake of the
   # native layer (apps/web/smoke). Catches the integration regressions the unit

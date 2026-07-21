@@ -12,6 +12,76 @@ pub(crate) fn entry_is_real_dir(entry: &fs::DirEntry) -> bool {
     entry.file_type().map(|t| t.is_dir()).unwrap_or(false)
 }
 
+/// Case-normalized key for a destination-relative path. NTFS resolves paths
+/// case-insensitively, so every rel-path map key / lookup in the compare
+/// pipelines (install diff, winner resolution, dedup grouping) must fold case —
+/// otherwise a case-variant installed file is re-copied forever and case-variant
+/// shared files never meet in the same bucket. Unicode-aware (`to_lowercase`,
+/// not ascii-only — Daz assets carry non-ASCII names). Anything user-visible or
+/// written to disk keeps the ORIGINAL casing; only the KEYS fold.
+pub(crate) fn rel_key(rel: &str) -> String {
+    rel.to_lowercase()
+}
+
+/// Visitor for `walk_dir` — the ONE shared recursive walker, so every walk in
+/// the crate encodes the same links policy: a directory symlink/junction is a
+/// LEAF, never followed (following one can loop forever on a cycle or escape
+/// the tree). Callbacks return `io::Result` so a strict visitor (install
+/// copies) can abort the walk with `Err`; lenient visitors (scans, counts)
+/// record the problem and return `Ok`.
+pub(crate) trait DirVisitor {
+    /// Entering a real subdirectory (never called for the walk root).
+    fn enter_dir(&mut self, _entry: &fs::DirEntry, _rel: &Path) -> std::io::Result<()> {
+        Ok(())
+    }
+    /// A non-directory entry (a regular file, or a file symlink).
+    fn file(&mut self, entry: &fs::DirEntry, rel: &Path) -> std::io::Result<()>;
+    /// A directory symlink/junction — reported, never descended into.
+    fn dir_link(&mut self, _entry: &fs::DirEntry, _rel: &Path) -> std::io::Result<()> {
+        Ok(())
+    }
+    /// A directory listing / entry that couldn't be read. Strict visitors return
+    /// the error; lenient ones count it (an incomplete inventory must be VISIBLE
+    /// — dedup refuses to quarantine groups scanned with read errors).
+    fn unreadable(&mut self, path: &Path, e: std::io::Error) -> std::io::Result<()>;
+}
+
+/// Recursively walk `root` (which must be a directory), reporting every entry to
+/// `visitor` with its path relative to `root`. Directory links are leaves (see
+/// `DirVisitor`); the extra `is_dir` stat runs only for symlink entries.
+pub(crate) fn walk_dir<V: DirVisitor>(root: &Path, visitor: &mut V) -> std::io::Result<()> {
+    walk_below(root, Path::new(""), visitor)
+}
+
+fn walk_below<V: DirVisitor>(dir: &Path, rel: &Path, v: &mut V) -> std::io::Result<()> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => return v.unreadable(dir, e),
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                v.unreadable(dir, e)?;
+                continue;
+            }
+        };
+        let child_rel = rel.join(entry.file_name());
+        match entry.file_type() {
+            Ok(t) if t.is_dir() => {
+                v.enter_dir(&entry, &child_rel)?;
+                walk_below(&entry.path(), &child_rel, v)?;
+            }
+            // A symlink/junction to a directory (std reports junctions as
+            // symlinks too): a leaf, never followed.
+            Ok(t) if t.is_symlink() && entry.path().is_dir() => v.dir_link(&entry, &child_rel)?,
+            Ok(_) => v.file(&entry, &child_rel)?,
+            Err(e) => v.unreadable(&entry.path(), e)?,
+        }
+    }
+    Ok(())
+}
+
 /// Guard a user/settings-supplied path before a RECURSIVE delete: refuse a
 /// filesystem/drive root or a path so shallow (fewer than two real name segments)
 /// that deleting it would wipe a drive or a top-level profile folder. Returns
@@ -31,14 +101,39 @@ pub(crate) fn unsafe_recursive_target(path: &Path) -> Option<String> {
     None
 }
 
-/// Whether any path segment contains "daz" (case-insensitive) — a Daz-owned
-/// folder. Gates the uninstall's recursive deletes so a stray/poisoned path
-/// (e.g. the user's Documents) can never be wiped by the cleanup.
+/// Whether one path segment names a Daz-owned folder: "DAZ" as a whole word
+/// ("DAZ 3D", "My DAZ 3D Library", "DAZ_3D") or a known Daz product-folder
+/// prefix ("DAZStudio4", "Daz3D", "DazToHue"). A segment that merely CONTAINS
+/// the letters (a profile like `C:\Users\dazzler`) must NOT match — this gates
+/// recursive deletes.
+fn segment_is_daz(segment: &str) -> bool {
+    let lower = segment.to_lowercase();
+    if ["dazstudio", "daz3d", "daztohue"].iter().any(|p| lower.starts_with(p)) {
+        return true;
+    }
+    lower.split(|c: char| !c.is_alphanumeric()).any(|word| word == "daz")
+}
+
+/// Whether any path segment names a Daz-owned folder (see `segment_is_daz`).
+/// Gates the uninstall's recursive deletes so a stray/poisoned path
+/// (e.g. the user's Documents — or `C:\Users\dazzler`) can never be wiped by
+/// the cleanup.
 pub(crate) fn looks_like_daz_folder(path: &Path) -> bool {
     path.components().any(|c| match c {
-        std::path::Component::Normal(s) => s.to_string_lossy().to_lowercase().contains("daz"),
+        std::path::Component::Normal(s) => segment_is_daz(&s.to_string_lossy()),
         _ => false,
     })
+}
+
+/// Whether `inner` equals — or lives under — `outer`, compared per component and
+/// case-insensitively (NTFS). Callers should pass canonical paths (`rail_target`)
+/// so junctions/`..` spellings can't dodge the check.
+pub(crate) fn path_contains(outer: &Path, inner: &Path) -> bool {
+    let fold = |p: &Path| -> Vec<String> {
+        p.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).collect()
+    };
+    let (o, i) = (fold(outer), fold(inner));
+    i.len() >= o.len() && o.iter().zip(&i).all(|(a, b)| a == b)
 }
 
 /// The path the recursive-delete rails should judge: the CANONICAL form when the
@@ -53,57 +148,85 @@ pub(crate) fn rail_target(path: &Path) -> PathBuf {
 }
 
 /// Number of files (recursively) under `dir`; 0 when it can't be read. Does not
-/// follow directory symlinks/junctions (see `entry_is_real_dir`).
+/// follow directory symlinks/junctions (a link counts as one entry, like the
+/// delete/dry-run paths that consume this count treat it).
 pub(crate) fn count_files(dir: &Path) -> u64 {
-    let mut n = 0;
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if entry_is_real_dir(&entry) {
-                n += count_files(&entry.path());
-            } else {
-                n += 1;
-            }
+    struct Count(u64);
+    impl DirVisitor for Count {
+        fn file(&mut self, _entry: &fs::DirEntry, _rel: &Path) -> std::io::Result<()> {
+            self.0 += 1;
+            Ok(())
+        }
+        fn dir_link(&mut self, _entry: &fs::DirEntry, _rel: &Path) -> std::io::Result<()> {
+            self.0 += 1;
+            Ok(())
+        }
+        fn unreadable(&mut self, _path: &Path, _e: std::io::Error) -> std::io::Result<()> {
+            Ok(()) // lenient: an unreadable subfolder contributes nothing
         }
     }
-    n
+    let mut v = Count(0);
+    let _ = walk_dir(dir, &mut v);
+    v.0
 }
 
-/// Recursively copy `src` into `dst` (created if missing; overwrites), returning
-/// the number of files copied.
-pub(crate) fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<u64> {
-    fs::create_dir_all(dst)?;
-    let mut count = 0;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        if entry_is_real_dir(&entry) {
-            count += copy_dir(&from, &to)?;
-        } else {
-            fs::copy(&from, &to)?;
-            count += 1;
-        }
+/// What a recursive copy did: files written, plus directory symlinks/junctions
+/// it deliberately did NOT follow (skipping them silently hid the fact the copy
+/// was partial — callers surface the count in their report channel).
+pub(crate) struct CopyStats {
+    pub(crate) files: u64,
+    pub(crate) skipped_links: u64,
+}
+
+struct CopyVisitor<'a> {
+    dst_root: &'a Path,
+    /// false = add-only (never overwrite an existing destination file).
+    overwrite: bool,
+    stats: CopyStats,
+}
+impl DirVisitor for CopyVisitor<'_> {
+    fn enter_dir(&mut self, _entry: &fs::DirEntry, rel: &Path) -> std::io::Result<()> {
+        fs::create_dir_all(self.dst_root.join(rel))
     }
-    Ok(count)
+    fn file(&mut self, entry: &fs::DirEntry, rel: &Path) -> std::io::Result<()> {
+        let to = self.dst_root.join(rel);
+        if !self.overwrite && to.exists() {
+            return Ok(());
+        }
+        fs::copy(entry.path(), &to)?;
+        self.stats.files += 1;
+        Ok(())
+    }
+    fn dir_link(&mut self, _entry: &fs::DirEntry, _rel: &Path) -> std::io::Result<()> {
+        // Never follow a dir link while COPYING: a cycle would loop forever
+        // (filling the destination disk) and a link can escape the source tree.
+        // Same policy as every walker here — but counted, so it's reportable.
+        self.stats.skipped_links += 1;
+        Ok(())
+    }
+    fn unreadable(&mut self, _path: &Path, e: std::io::Error) -> std::io::Result<()> {
+        Err(e) // strict: a copy must not silently omit content
+    }
+}
+
+fn copy_dir_impl(src: &Path, dst: &Path, overwrite: bool) -> std::io::Result<CopyStats> {
+    fs::create_dir_all(dst)?;
+    let mut v = CopyVisitor { dst_root: dst, overwrite, stats: CopyStats { files: 0, skipped_links: 0 } };
+    walk_dir(src, &mut v)?;
+    Ok(v.stats)
+}
+
+/// Recursively copy `src` into `dst` (created if missing; overwrites).
+/// Directory symlinks/junctions are skipped (counted in the stats), exactly like
+/// every other walker here — they are not the tree's own content.
+pub(crate) fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<CopyStats> {
+    copy_dir_impl(src, dst, true)
 }
 
 /// Recursively copy `src` into `dst`, adding only files missing at the
-/// destination (never overwrites — preserves the user's edits). Returns files added.
-pub(crate) fn copy_dir_add_only(src: &Path, dst: &Path) -> std::io::Result<u64> {
-    fs::create_dir_all(dst)?;
-    let mut count = 0;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        if entry_is_real_dir(&entry) {
-            count += copy_dir_add_only(&from, &to)?;
-        } else if !to.exists() {
-            fs::copy(&from, &to)?;
-            count += 1;
-        }
-    }
-    Ok(count)
+/// destination (never overwrites — preserves the user's edits).
+pub(crate) fn copy_dir_add_only(src: &Path, dst: &Path) -> std::io::Result<CopyStats> {
+    copy_dir_impl(src, dst, false)
 }
 
 /// The display name of a path's final component.
@@ -175,6 +298,56 @@ mod tests {
         assert!(looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents\\DAZ 3D")));
         assert!(looks_like_daz_folder(Path::new("C:\\Program Files\\DAZ 3D\\DAZStudio6")));
         assert!(!looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents")));
+        // Every folder default_daz_uninstall_folders can emit still passes.
+        assert!(looks_like_daz_folder(Path::new("C:\\Users\\Bob\\Documents\\My DAZ 3D Library")));
+        assert!(looks_like_daz_folder(Path::new("C:\\Program Files\\DAZ 3D\\DAZStudio4")));
+        assert!(looks_like_daz_folder(Path::new(
+            "C:\\Users\\Bob\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\DAZ 3D"
+        )));
+        // "daz" as a mere SUBSTRING must not open the recursive-delete gate: a
+        // user profile like `dazzler` used to pass the old contains("daz") rail.
+        assert!(!looks_like_daz_folder(Path::new("C:\\Users\\dazzler\\Documents\\stuff")));
+        assert!(!looks_like_daz_folder(Path::new("D:\\media\\bedazzled\\photos")));
+        // Word-boundary + known product prefixes still match.
+        assert!(looks_like_daz_folder(Path::new("D:\\content\\DAZ_3D\\morphs")));
+        assert!(looks_like_daz_folder(Path::new("D:\\apps\\Daz3D")));
+    }
+
+    #[test]
+    fn path_contains_is_component_wise_and_case_insensitive() {
+        assert!(path_contains(Path::new("C:\\Assets"), Path::new("C:\\assets\\G9\\thing")));
+        assert!(path_contains(Path::new("C:\\Assets"), Path::new("C:\\ASSETS")));
+        // A sibling with the same PREFIX string is not contained.
+        assert!(!path_contains(Path::new("C:\\Assets"), Path::new("C:\\Assets2\\x")));
+        assert!(!path_contains(Path::new("C:\\Assets\\G9"), Path::new("C:\\Assets")));
+    }
+
+    #[test]
+    fn rel_key_folds_case_unicode_aware() {
+        assert_eq!(rel_key("Runtime/Textures/X.png"), "runtime/textures/x.png");
+        // Unicode, not ascii-only — Daz assets carry non-ASCII names.
+        assert_eq!(rel_key("data/Émilie/Ü.dsf"), "data/émilie/ü.dsf");
+    }
+
+    #[test]
+    fn copy_dir_copies_recursively_and_reports_stats() {
+        let base = unique_temp_dir("copy_stats");
+        let src = base.join("src");
+        fs::create_dir_all(src.join("sub")).unwrap();
+        fs::write(src.join("a.txt"), b"a").unwrap();
+        fs::write(src.join("sub").join("b.txt"), b"b").unwrap();
+        let dst = base.join("dst");
+        let stats = copy_dir(&src, &dst).unwrap();
+        assert_eq!(stats.files, 2);
+        assert_eq!(stats.skipped_links, 0);
+        assert_eq!(fs::read(dst.join("sub").join("b.txt")).unwrap(), b"b");
+        // Add-only never overwrites what's already there.
+        fs::write(dst.join("a.txt"), b"edited").unwrap();
+        fs::write(src.join("c.txt"), b"c").unwrap();
+        let stats = copy_dir_add_only(&src, &dst).unwrap();
+        assert_eq!(stats.files, 1, "only the new file is added");
+        assert_eq!(fs::read(dst.join("a.txt")).unwrap(), b"edited");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -1,26 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  CircleX,
-  FolderOpen,
-  Pencil,
-  Save,
-  Trash2,
-  Undo2,
-  X,
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 
-import { Avatar } from '#/components/avatar.tsx'
-import { Button, EditableTitle, InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsList, TabsTrigger, Tag, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
-import { PathCode } from '#/components/path-code.tsx'
-import { toast } from 'sonner'
-import { RomSections } from '#/components/rom-sections.tsx'
-import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
+import { Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
 import {
-  characterKeepFolders,
-  deleteCharacter,
-  dismissRomRunLog,
   fetchCharacter,
   fetchPoseAssets,
   fetchProductScan,
@@ -30,39 +12,32 @@ import {
   syncAvatarWithScene,
   fetchSettings,
   fileExists,
-  generateCharacterFiles,
   getCharacterPath,
-  isDirectory,
   setActiveProjectDir,
   resolvePresetFrames,
-  saveCharacter,
 } from '#/lib/rom/api.ts'
-import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
+import { DeleteCharacterSection } from '#/components/character/delete-character-section.tsx'
+import { EditorHeader } from '#/components/character/editor-header.tsx'
+import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
+import { IdentitySection } from '#/components/character/identity-section.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
+import { RomEditorSection } from '#/components/character/rom-editor-section.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
+import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
-import { ImageDialog } from '#/components/image-dialog.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
-import { pickFolder } from '#/lib/desktop.ts'
-import { studioCharScriptsDir } from '#/lib/rom/storage.ts'
+import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
-import { useConfirm } from '#/lib/use-confirm.tsx'
-import { displayPath, normalizePath } from '#/lib/path.ts'
-import {
-  applySceneOverride,
-  characterSkinning,
-  countPoses,
-  presetFramesSignature,
-  romTimeline,
-} from '@dth/rom'
+import { useRomRunLog } from '#/lib/use-rom-run-log.ts'
+import { useSceneSelection } from '#/lib/use-scene-selection.ts'
+import { presetFramesSignature } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
-import type { PresetFrames, RomSection } from '@dth/rom'
-import type { Character, GenesisVersion } from '@dth/rom'
+import type { Character, PresetFrames, RomSection } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
   loader: async ({ params, preload }) => {
@@ -138,37 +113,6 @@ function CharacterPageRoute() {
   return <CharacterPage key={characterId} />
 }
 
-/**
- * Scroll the page to the top with a rAF-driven ease-out — NOT
- * `behavior: 'smooth'`, which Windows' reduced-motion setting silently turns
- * into an instant jump; this glide is part of the interaction (the scene tag
- * "travels" to the scene cards it stands for), so it always animates. A wheel
- * or touch during the glide cancels it — the user's scroll wins.
- */
-function smoothScrollToTop() {
-  const start = window.scrollY
-  if (start === 0) return
-  const duration = 400
-  const t0 = performance.now()
-  let cancelled = false
-  const cancel = () => {
-    cancelled = true
-  }
-  window.addEventListener('wheel', cancel, { once: true, passive: true })
-  window.addEventListener('touchstart', cancel, { once: true, passive: true })
-  const step = (now: number) => {
-    if (cancelled) return
-    const t = Math.min(1, (now - t0) / duration)
-    window.scrollTo(0, Math.round(start * Math.pow(1 - t, 3)))
-    if (t < 1) requestAnimationFrame(step)
-    else {
-      window.removeEventListener('wheel', cancel)
-      window.removeEventListener('touchstart', cancel)
-    }
-  }
-  requestAnimationFrame(step)
-}
-
 function CharacterPage() {
   const { projectId } = Route.useParams()
   const {
@@ -183,7 +127,6 @@ function CharacterPage() {
     productScan,
     romRunLog: initialRomRunLog,
   } = Route.useLoaderData()
-  const router = useRouter()
   // A blocked-save validation error, sent to the ROM editor to open its section,
   // scroll the offending pose row in and focus its first empty field.
   const [revealPose, setRevealPose] = useState<{
@@ -206,23 +149,8 @@ function CharacterPage() {
       }))
     },
   })
-  const { character, dirty, saving, patch } = draft
-  const confirm = useConfirm()
+  const { character, patch } = draft
 
-  // Discard throws away every unsaved edit and can't be undone — unlike leaving the
-  // page, which already asks. Confirm before wiping non-trivial pending changes.
-  async function onDiscard() {
-    if (
-      dirty &&
-      !(await confirm('Discard all unsaved changes to this character?', {
-        title: 'Discard changes',
-        confirmLabel: 'Discard',
-      }))
-    ) {
-      return
-    }
-    draft.discard()
-  }
   // Preset ROM block lengths, re-measured from the .duf assets whenever the
   // preset/custom selections change (kept from the last good measure during a
   // re-measure; null only when an included asset can't be read).
@@ -230,47 +158,11 @@ function CharacterPage() {
   // Only meaningful when the project enables Daz Products: splits this page into a
   // "Character" tab (everything) and a "Products" tab (the scan section).
   const [activeTab, setActiveTab] = useState<'character' | 'products' | 'notes'>('character')
-  const [imageDialogOpen, setImageDialogOpen] = useState(false)
-  const [editingTitle, setEditingTitle] = useState(false)
-  // Which Daz scene card is selected (groom lists are per scene). Entering the
-  // character selects the primary scene by default; unlinking the selected
-  // extra scene falls back to it too (the stored path just stops matching).
-  const [selectedScene, setSelectedScene] = useState('')
-  const linkedScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
-  const effectiveScene = linkedScenes.includes(selectedScene) ? selectedScene : (character.scenePath || '')
-  // Scene override: an extra (non-primary) scene selected above can carry its
-  // own ROM override — most frames stay the base ROM's, a few rows replaced /
-  // appended for that outfit. The toggle sits atop the ROM grid; the override
-  // entry lives on the character (per scene path) and follows the selection.
-  const overrideEligible = effectiveScene !== '' && effectiveScene !== character.scenePath
-  const sceneOverride = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
-  const overrideActive = overrideEligible && sceneOverride?.enabled === true
-  /** The selected scene's display name (file stem) — the Override toggle's
-   *  label and, with more than one scene linked, the header tag after the
-   *  character name (so the active scene context rides the sticky header). */
-  const selectedSceneName =
-    effectiveScene.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
-  function setOverrideEnabled(enabled: boolean) {
-    const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
-    if (!existing && !enabled) return
-    patch({
-      sceneOverrides: existing
-        ? character.sceneOverrides.map((o) =>
-            o.scenePath === effectiveScene ? { ...o, enabled } : o,
-          )
-        : [
-            ...character.sceneOverrides,
-            { scenePath: effectiveScene, enabled, poses: [], additions: [] },
-          ],
-    })
-  }
-  // The ROM run log written by the Daz-side script (ingested into the studio's
-  // own store on read). Re-read whenever the window regains focus, so problems
-  // from a run surface the moment the user switches back from Daz to the studio.
-  const [romRunLog, setRomRunLog] = useState(initialRomRunLog)
-  useRefetchOnFocus(() => {
-    void fetchRomRunLog({ data: { projectId, id: initial.id } }).then(setRomRunLog)
-  }, [projectId, initial.id])
+  // Which Daz scene card is selected — groom lists, the header's scene tag and
+  // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
+  const sceneSel = useSceneSelection(character, patch)
+  // The ROM run log + the "reveal failed frame" signal for the editor.
+  const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
 
   // Scene-derived avatars mirror their source scene's preview, which Daz
   // rewrites on every scene save — re-sync on load and whenever the window
@@ -297,27 +189,6 @@ function CharacterPage() {
     [character.genesis],
     { immediate: true },
   )
-  async function onDismissRomRunLog() {
-    setRomRunLog(null)
-    await dismissRomRunLog({ data: { projectId, id: initial.id } })
-  }
-  const hasRunProblems = !!romRunLog && !romRunLog.ok
-  // Frames whose morphs failed in the last run — the matching editor rows go red.
-  const failedFrames = hasRunProblems
-    ? new Set(romRunLog.failedMorphs.map((morph) => morph.frame))
-    : undefined
-  // The "reveal frame N" signal a clicked failed morph sends to the ROM editor
-  // (nonce forces the effect to re-fire even for the same frame).
-  const [revealFrame, setRevealFrame] = useState<{ frame: number; nonce: number } | null>(null)
-  // Clicking a failed morph in the report opens its ROM section and scrolls its
-  // row into view (RomSections does the scroll off the nonce change).
-  function revealFailedFrame(frame: number) {
-    setRevealFrame((prev) => ({ frame, nonce: (prev?.nonce ?? 0) + 1 }))
-  }
-  const swallowNavRef = useRef(false)
-  // Power-user: holding Ctrl force-enables Save so the JSON can be re-written to
-  // disk even when nothing changed (handy during development).
-  const ctrlHeld = useModifierHeld('Control')
 
   // Re-measure the preset ROM block lengths when a preset/custom selection that
   // affects them changes (not on every custom-pose keystroke). Debounced; the
@@ -340,67 +211,14 @@ function CharacterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetSignature, catalog])
 
-  // The character's folder, shown under the header with the project library root
-  // dimmed as a label prefix and the rest emphasized. The definition filename is
-  // dropped (it's edited in the Filepath fields below) — just the folder remains.
-  const libRoot = displayPath(location?.libraryFolder ?? '')
-  const defAbs = displayPath(location?.definitionAbs ?? '')
-  const defSep = Math.max(defAbs.lastIndexOf('\\'), defAbs.lastIndexOf('/'))
-  const defDir = defSep >= 0 ? defAbs.slice(0, defSep) : defAbs
-  const defSuffix = defDir.startsWith(libRoot) ? defDir.slice(libRoot.length) : defDir
-  // Where the generated ROM_<Name>_<Genesis>.dsa lands in the Daz library, so
-  // the user knows where to find/run it in Daz. Empty until the DAZ library is set.
-  const scriptsLib = displayPath(settings.dazLibraryFolder)
-  const scriptsAbs =
-    settings.dazLibraryFolder && character.projectName
-      ? displayPath(
-          studioCharScriptsDir(settings.dazLibraryFolder, character.projectName, character.name),
-        )
-      : ''
-  const scriptsSuffix = scriptsAbs.startsWith(scriptsLib)
-    ? scriptsAbs.slice(scriptsLib.length)
-    : scriptsAbs
-  // With an export folder set and the export NOT combined with the ROM script,
-  // generation splits into the ROM_ build script + a standalone Export_ script
-  // (see generate.ts toCharacterScriptDsa / toExportScriptDsa). Otherwise it's
-  // one self-contained ROM_<Name>_<Genesis>.dsa. Drives the scripts-pane note.
-  const exportSet = character.exportPath.trim() !== ''
-  const exportSplit = exportSet && character.exportWithRomScript === false
-
-  // Inline rename from the title — persists immediately (like the avatar) so the
-  // new name + folder rename stick without needing the Save button.
-  async function onRenameCharacter(next: string) {
-    // An inline rename persists + regenerates immediately from the WHOLE draft, so
-    // it must run the same save-blocking checks — otherwise a rename would commit
-    // (and bake into scripts) an invalid unsaved ROM edit that Save itself refuses.
-    // Also single-flight against an in-progress save so the two can't interleave.
-    if (draft.saving) throw new Error('Still saving the previous change — try again in a moment.')
-    if (!draft.validate()) throw new Error('Fix the highlighted fields before renaming.')
-    const previousName = character.name
-    const updated = { ...character, name: next }
-    patch({ name: next })
-    let saved: Character
-    try {
-      saved = await saveCharacter({ data: { projectId, character: updated } })
-    } catch (e) {
-      // Roll the optimistic patch back — the folder/scripts still carry the old
-      // name, so the draft must not keep the failed name as a dirty edit (the
-      // avatar flow rolls back the same way). EditableTitle catches the rethrow
-      // to toast and reset its own text.
-      patch({ name: previousName })
-      throw e
-    }
-    draft.settle(saved)
-    // Renaming moves the character folder + renames the generated script, so
-    // regenerate at the new name and drop the old-named script in the shared folder.
-    const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
-    void router.invalidate()
-    draft.notifyGenerated(`Renamed to “${next}”`, result)
-  }
-
-  // Linking a Daz scene persists immediately (see relinkScene), so settle the
-  // draft + baseline on the saved result — like the inline rename / avatar.
-  const onSceneLinked = draft.settle
+  // The character's folder chip and where the generated scripts land — both
+  // derived in lib/character-paths.ts (dim root, bright remainder).
+  const folderChip = location ? characterFolderDisplay(location) : null
+  const scriptsPath = characterScriptsDisplay(
+    settings.dazLibraryFolder,
+    character.projectName,
+    character.name,
+  )
 
   // A folder move can repoint the linked scene (it travels with the folder when
   // it lives inside it). Sync just the scene path into the draft + baseline so
@@ -423,67 +241,6 @@ function CharacterPage() {
     })
   }
 
-  // --- Special operations (delete) ---
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState('')
-  // Whether the character has a Houdini subfolder on disk — gates the delete
-  // dialog's "keep Houdini files" toggle (checked when the dialog opens).
-  const [keepHoudiniAvailable, setKeepHoudiniAvailable] = useState(false)
-  useEffect(() => {
-    if (!deleteOpen) return
-    let cancelled = false
-    void characterKeepFolders({ data: { projectId, id: character.id } })
-      .then((f) => !cancelled && setKeepHoudiniAvailable(f.houdini))
-      .catch(() => !cancelled && setKeepHoudiniAvailable(false))
-    return () => {
-      cancelled = true
-    }
-  }, [deleteOpen, projectId, character.id])
-
-  // Guide the export-folder picker to where the export usually lands: re-choosing
-  // starts at the current dir; a first pick opens in the character's folder —
-  // already inside its Houdini subfolder when that subfolder exists on disk. The
-  // user can still browse elsewhere; this is only where the dialog opens.
-  async function defaultExportDir(): Promise<string | undefined> {
-    if (character.exportPath.trim()) return character.exportPath
-    const definitionAbs = location?.definitionAbs
-    if (!definitionAbs) return undefined
-    const charDir = normalizePath(definitionAbs).replace(/\/[^/]*$/, '')
-    const houSub = project?.houdiniSubdir?.trim()
-    if (houSub) {
-      const houDir = `${charDir}/${houSub}`
-      if (await isDirectory(houDir)) return houDir
-    }
-    return charDir
-  }
-
-  async function onPickExportDir() {
-    const picked = await pickFolder(
-      'Choose the export directory for the DTH Exporter',
-      await defaultExportDir(),
-    )
-    if (picked) await draft.patchAndRegenerate({ exportPath: picked }, 'Export folder set — script regenerated')
-  }
-
-  async function onDeleteCharacter({ keep, keep2 }: { keep: boolean; keep2: boolean }) {
-    setDeleting(true)
-    setDeleteError('')
-    try {
-      await deleteCharacter({
-        data: { projectId, id: character.id, keepDaz: keep, keepHoudini: keep2 },
-      })
-      toast.success(`Deleted “${character.name}”`)
-      // Navigation unmounts this editor — no need to reset the busy flag. The
-      // unsaved-changes guard is bypassed: the edited character no longer exists.
-      draft.unsavedGuard.bypass()
-      await router.navigate({ to: '/projects/$projectId', params: { projectId } })
-    } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : String(e))
-      setDeleting(false)
-    }
-  }
-
   // When Daz Products is enabled the body splits into two tabs ("Character" /
   // "Products"). We keep both groups mounted and toggle visibility with `hidden`
   // rather than unmounting — cheaper, and it preserves scroll/edit state when
@@ -493,155 +250,31 @@ function CharacterPage() {
 
   return (
     <main className="p-8">
-      <div className="mb-1">
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId }}
-          onMouseDown={() => {
-            swallowNavRef.current = editingTitle
-          }}
-          onClick={(e) => {
-            if (swallowNavRef.current) {
-              e.preventDefault()
-              swallowNavRef.current = false
-            }
-          }}
-          className="flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
-        >
-          <ArrowLeft className="size-4" /> Back
-        </Link>
-      </div>
-
-      <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background">
-        {/* Back stays reachable while scrolled: the page's own Back link lives
-            above this sticky header, so a second one fades in here (same
-            scroll-timeline as the header collapse) once that one is gone. */}
-        {/* top-5 matches the avatar's mt-5, so the link tops align. */}
-        <div className="absolute top-5 left-[150px] z-20">
-          <Link
-            to="/projects/$projectId"
-            params={{ projectId }}
-            className="backlink-scroll flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
-          >
-            <ArrowLeft className="size-4" /> Back
-          </Link>
-        </div>
-        {/* Top-centered, its own standalone element. The full-width wrapper
-            centers it via flexbox (robust regardless of the containing block);
-            the button fades/slides in on scroll (scroll-timeline, same range as
-            the subtitle collapse) so it's hidden at the top where the full report
-            is already visible. Click scrolls back up to the report. */}
-        {hasRunProblems && (
-          <div className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center">
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              title="Scroll to the run report"
-              className="runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
-            >
-              <CircleX className="size-4 shrink-0" />
-              Errors in the last ROM run — click to see details
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          className="group relative mt-5 mb-5 shrink-0"
-          title="Edit the character image"
-          onClick={() => setImageDialogOpen(true)}
-        >
-          {/* The wrapper owns the shrink: only its height animates (227 → 96). It
-              clips a fixed-size image via overflow-hidden, so the portrait is
-              *cropped* top-down rather than re-fit every frame — the image is
-              rasterized once and the box just changes its clip rect, which stays
-              smooth even with the heavy form relaying out below the sticky header. */}
-          <div className="avatar-scroll-shrink h-[227px] w-[130px] overflow-hidden rounded-lg bg-neutral-500">
-            <Avatar
-              image={character.image}
-              name={character.name}
-              className="avatar-scroll-pan h-[227px] w-[130px] object-top"
-              fallbackClassName="text-6xl"
-            />
-          </div>
-          <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <Pencil className="size-8 text-white" />
-          </span>
-        </button>
-        <div className="title-scroll pb-6">
-          <div className="flex items-center gap-2.5">
-            <EditableTitle
-              name={character.name}
-              ariaLabel="Character name"
-              onEditingChange={setEditingTitle}
-              onSave={onRenameCharacter}
-            />
-            {/* With several scenes linked, the SELECTED scene rides the title —
-                groom lists and the ROM override follow that selection, and the
-                title row stays visible in the collapsed sticky header (the
-                subtitle below does not). Hidden while renaming. Clicking it
-                scrolls back to the top, where the scene cards are — the one
-                place the selection can be switched. */}
-            {linkedScenes.length > 1 && selectedSceneName && !editingTitle && (
-              <button
-                type="button"
-                className="cursor-pointer"
-                title="The Daz scene selected in the scene cards — hair items and the ROM override follow it. Click to jump to the scene cards and switch."
-                onClick={smoothScrollToTop}
-              >
-                <Tag
-                  tone="orange"
-                  // Optical nudge: the bold 3xl title's visual weight sits below
-                  // the line box's geometric center, so dead-center reads high.
-                  className="max-w-64 translate-y-[5px] truncate normal-case"
-                >
-                  {selectedSceneName}
-                </Tag>
-              </button>
-            )}
-          </div>
-          <p className="title-subtitle text-muted-foreground">
-            {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-            {countPoses(character.sections)} custom ROM frames
-          </p>
-          {location && (
-            <p className="mt-1.5 text-xs">
-              <PathCode path={defDir}>
-                <span className="text-muted-foreground/60">{libRoot}</span>
-                <span className="text-foreground/80">{defSuffix}</span>
-              </PathCode>
-            </p>
-          )}
-        </div>
-        {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
-            box so the scale below anchors on that line). They ride the sticky
-            header, so they stay reachable as the form scrolls. */}
-        <div className="actions-scroll ml-auto flex shrink-0 gap-2 mb-6">
-          <Button variant="outline" onClick={() => void onDiscard()} disabled={saving || !dirty}>
-            <Undo2 /> Discard
-          </Button>
-          <Button
-            onClick={() => void draft.save()}
-            disabled={saving || (!dirty && !ctrlHeld)}
-            title={ctrlHeld && !dirty ? 'Force re-save the JSON to disk (Ctrl)' : undefined}
-          >
-            <Save /> {saving ? 'Saving…' : dirty ? 'Save' : ctrlHeld ? 'Re-save' : 'Saved'}
-          </Button>
-        </div>
-      </header>
+      <EditorHeader
+        projectId={projectId}
+        draft={draft}
+        folderChip={folderChip}
+        hasRunProblems={runLog.hasRunProblems}
+        sceneTag={
+          sceneSel.linkedScenes.length > 1 && sceneSel.selectedSceneName
+            ? sceneSel.selectedSceneName
+            : null
+        }
+      />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
           header collapses on scroll its height changes, and without this the whole
           (heavy) form would re-flow every frame on the main thread — the lag. With
-          containment the browser only re-positions this one cached layer. The two
-          popup dialogs below are portaled to <body> so this containment doesn't
+          containment the browser only re-positions this one cached layer. The
+          popup dialogs are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
       {/* Above the tabs, so the report is visible from the Products tab too. */}
-      {romRunLog && !romRunLog.ok && (
+      {runLog.romRunLog && !runLog.romRunLog.ok && (
         <RomRunLogReport
-          romRunLog={romRunLog}
-          onDismiss={() => void onDismissRomRunLog()}
-          onRevealFrame={revealFailedFrame}
+          romRunLog={runLog.romRunLog}
+          onDismiss={() => void runLog.dismiss()}
+          onRevealFrame={runLog.revealFailedFrame}
         />
       )}
 
@@ -674,104 +307,7 @@ function CharacterPage() {
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
-        <div className="flex flex-wrap gap-x-12 gap-y-5">
-          <div className="flex flex-col gap-5 pt-2">
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <Label className="mb-1">Genesis</Label>
-                <Select
-                  value={character.genesis}
-                  onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="G9">G9</SelectItem>
-                    <SelectItem value="G8.1">G8.1</SelectItem>
-                    <SelectItem value="G8">G8</SelectItem>
-                    <SelectItem value="G3">G3</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="mb-1">Gender</Label>
-                <Select
-                  value={character.gender}
-                  onValueChange={(v) => patch({ gender: v as Character['gender'] })}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="male">Male</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* The legend is positioned absolutely (a notch on the border) so it
-              doesn't consume a row of flow — that keeps the FACS / Flexion fields
-              on the same baseline as the Genesis row on the left (-mt-2 lifts the
-              box, pt-2 on the left column matches). The box always shows; on
-              non-G9 characters the native fieldset `disabled` turns off every
-              control inside (the strengths and tear UV only exist on Genesis 9
-              figures) and the text goes muted. */}
-          <fieldset
-            disabled={character.genesis !== 'G9'}
-            className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4"
-          >
-              <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
-                Genesis 9 Specific
-              </legend>
-              <div
-                className={`space-y-4${character.genesis === 'G9' ? '' : ' text-muted-foreground'}`}
-              >
-                {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
-                    percentages, same as every morph value field. */}
-                <div className="flex flex-wrap gap-4">
-                  <div>
-                    <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                      FACS detail strength
-                    </Label>
-                    <NumberField
-                      className="w-28 pr-6 text-right tabular-nums"
-                      suffix="%"
-                      value={+(character.facsDetailStrength * 100).toFixed(4)}
-                      onCommit={(pct) => patch({ facsDetailStrength: +(pct / 100).toFixed(6) })}
-                    />
-                  </div>
-                  <div>
-                    <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                      Flexion strength
-                    </Label>
-                    <NumberField
-                      className="w-28 pr-6 text-right tabular-nums"
-                      suffix="%"
-                      value={+(character.flexionStrength * 100).toFixed(4)}
-                      onCommit={(pct) => patch({ flexionStrength: +(pct / 100).toFixed(6) })}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={character.applyUE5TearUV}
-                    onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
-                  />
-                  <span className="flex items-center gap-1 text-sm">
-                    Set UE5 tear UV
-                    <InfoPopup label="Set UE5 tear UV — more information">
-                      Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
-                      ROM build, so DTH's Lacrimal Fluid material lines up without the manual
-                      Surfaces-tab step.
-                    </InfoPopup>
-                  </span>
-                </div>
-              </div>
-          </fieldset>
-        </div>
+        <IdentitySection character={character} patch={patch} />
         {location && (
           <div className="mt-6 space-y-4 border-t pt-5">
             <DazSceneField
@@ -781,61 +317,29 @@ function CharacterPage() {
               sceneExists={sceneExists}
               sceneFolderExists={sceneFolderExists}
               defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-              onLinked={onSceneLinked}
+              persistPatch={draft.persistPatch}
               onScenesFolderMoved={onScenesFolderMoved}
-              selectedScene={effectiveScene}
-              onSelectScene={setSelectedScene}
+              selectedScene={sceneSel.effectiveScene}
+              onSelectScene={sceneSel.selectScene}
             />
             {/* Groom lists are PER SCENE — living right under the scene cards makes
                 the card-selection ↔ hair-list connection visible while switching. */}
             <GroomFields
               character={character}
               patch={patch}
-              selectedScene={effectiveScene}
+              selectedScene={sceneSel.effectiveScene}
               dazInstallFolder={settings.dazInstallFolder}
             />
             <HoudiniProjectsField
-              projectId={projectId}
               character={character}
               location={location}
-              onChanged={onSceneLinked}
+              persistPatch={draft.persistPatch}
             />
           </div>
         )}
       </section>
 
-      <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          Daz scripts generated
-          <InfoPopup label="Daz scripts generated — more information">
-            {exportSplit ? (
-              <>
-                Where the generated <code>ROM_{character.name}_{character.genesis}.dsa</code> (builds
-                the ROM) and <code>Export_{character.name}_{character.genesis}.dsa</code> (runs the
-                exporter) scripts are installed in your DAZ library on Save — run the ROM script
-                first, then the Export script in the same Daz session.
-              </>
-            ) : (
-              <>
-                Where the generated <code>ROM_{character.name}_{character.genesis}.dsa</code> script
-                is installed in your DAZ library on Save — open it from Daz to build the ROM
-                {exportSet ? ' and run the export' : ''}.
-              </>
-            )}{' '}
-            The folder is created the first time a script is generated.
-          </InfoPopup>
-        </h2>
-        {scriptsAbs ? (
-          <PathCode path={scriptsAbs}>
-            <span className="text-muted-foreground/60">{scriptsLib}</span>
-            <span className="text-foreground/80">{scriptsSuffix}</span>
-          </PathCode>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Set “My DAZ 3D Library” in Settings to install the character script.
-          </p>
-        )}
-      </section>
+      <ScriptsSection character={character} scriptsPath={scriptsPath} />
       </div>
 
       {project?.dazProductsEnabled && (
@@ -845,102 +349,20 @@ function CharacterPage() {
             character={character}
             productScan={productScan}
             dimManifestsFolder={settings.dimManifestsFolder}
-            scriptsAbs={scriptsAbs}
-            scriptsLib={scriptsLib}
-            scriptsSuffix={scriptsSuffix}
-            onStored={draft.settle}
+            scriptsPath={scriptsPath}
+            persistPatch={draft.persistPatch}
           />
         </div>
       )}
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
-      <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
-          Export directory
-          <InfoPopup label="Export directory — more information">
-            Set an export directory and the generated Daz script runs the DTH Exporter Plugin
-            (v1.8.1+) automatically after building the ROM — writing{' '}
-            {character.exportPath ? (
-              <>
-                <code>{character.name}</code>.abc / .dth and copying the PoseAsset CSV into that
-                folder
-              </>
-            ) : (
-              'straight into the DTH pipeline'
-            )}
-            . Leave empty to skip auto-export. Reference frames are taken from the ROM's
-            reference-skeleton poses.
-          </InfoPopup>
-        </h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" onClick={onPickExportDir}>
-            <FolderOpen /> {character.exportPath ? 'Change…' : 'Choose folder…'}
-          </Button>
-          {character.exportPath && (
-            <>
-              <PathCode path={displayPath(character.exportPath)} />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void draft.patchAndRegenerate({ exportPath: '' }, 'Export folder cleared — script regenerated')}
-              >
-                <X /> Clear
-              </Button>
-            </>
-          )}
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          <Switch
-            checked={character.exportSceneSubfolders}
-            disabled={!character.exportPath || saving}
-            onCheckedChange={(exportSceneSubfolders) =>
-              void draft.patchAndRegenerate(
-                { exportSceneSubfolders },
-                `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated`,
-              )
-            }
-          />
-          <span
-            className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
-          >
-            Generate subfolders based on Daz scenes
-            <InfoPopup label="Generate subfolders based on Daz scenes — more information">
-              When on, the export is nested under a subfolder named after the Daz scene open in Daz
-              when the script runs (resolved at run time) — so a character's scene/outfit variants
-              export side by side. The exporter output and the PoseAsset CSV land directly in that
-              scene subfolder. Falls back to the export root if no scene is saved.{' '}
-              {!character.exportPath && 'Set an export folder above to enable this.'}
-            </InfoPopup>
-          </span>
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          <Switch
-            checked={character.exportWithRomScript}
-            disabled={!character.exportPath || saving}
-            onCheckedChange={(exportWithRomScript) =>
-              void draft.patchAndRegenerate(
-                { exportWithRomScript },
-                exportWithRomScript
-                  ? 'Combined ROM + export script'
-                  : 'Separate ROM and Export scripts',
-              )
-            }
-          />
-          <span
-            className={`flex items-center gap-1 text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
-          >
-            Run the export with the ROM script
-            <InfoPopup label="Run the export with the ROM script — more information">
-              On: one <code>ROM_{character.name}_{character.genesis}.dsa</code> builds the ROM and
-              runs the export. Off: the export splits into its own{' '}
-              <code>Export_{character.name}_{character.genesis}.dsa</code> beside the ROM script, so
-              you can re-export — for another Daz scene, or after a failed export — without rebuilding
-              the ROM. Run the Export script after the ROM script in the same Daz session.{' '}
-              {!character.exportPath && 'Set an export folder above to enable this.'}
-            </InfoPopup>
-          </span>
-        </div>
-      </section>
+      <ExportSettingsSection
+        character={character}
+        saving={draft.saving}
+        persistPatch={draft.persistPatch}
+        location={location}
+        houdiniSubdir={project?.houdiniSubdir}
+      />
 
       <details className="mb-8 rounded-lg border bg-card">
         <summary className="cursor-pointer px-5 py-3 font-medium select-none">
@@ -957,163 +379,31 @@ function CharacterPage() {
         </div>
       </details>
 
-      <section className="mb-8">
-        <div className="mb-3 flex items-center gap-3">
-          <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
-            ROM
-            <InfoPopup label="ROM — more information">
-              The eight pose asset categories in their canonical order. Pre-defined sections load
-              the DTH ROMs; custom sections define their own groups and poses. Frame numbers follow
-              section, group and pose order — the generated Daz script and PoseAsset CSV share them
-              automatically.
-            </InfoPopup>
-          </h2>
-          {/* Per-scene override toggle: armed only while an EXTRA scene is
-              selected in the Daz scenes cards (the primary scene IS the base
-              ROM). Toggling off keeps the stored override, just inactive. */}
-          <span className="ml-auto flex items-center gap-2">
-            <span
-              className={`flex items-center gap-1 text-sm ${overrideEligible ? '' : 'text-muted-foreground'}`}
-            >
-              Override
-              {overrideEligible && <span className="font-medium">for “{selectedSceneName}”</span>}
-              <InfoPopup label="Scene override — more information">
-                Drive <strong>different morphs for another Daz scene</strong> of this character
-                (e.g. a second outfit): select one of the extra scenes in the Daz scenes cards,
-                enable the override, then check <strong>Override</strong> on the rows to replace
-                for that scene or add frames at the end of a group. Everything unchecked stays
-                exactly as the base ROM. On Save the scene gets its <em>own</em> Daz script and
-                PoseAsset CSV next to the default ones.
-              </InfoPopup>
-            </span>
-            <Switch
-              checked={overrideActive}
-              disabled={!overrideEligible}
-              title={
-                overrideEligible
-                  ? overrideActive
-                    ? `Disable the ROM override for “${selectedSceneName}” (the stored override rows are kept)`
-                    : `Override ROM frames for “${selectedSceneName}”`
-                  : 'Select one of the extra Daz scenes (not the primary) in the Daz scenes cards to set up a per-scene override'
-              }
-              onCheckedChange={setOverrideEnabled}
-            />
-          </span>
-        </div>
-        {presetFrames && (
-          <div className="mb-4 rounded-lg border bg-card p-3">
-            <RomTimeline
-              segments={romTimeline(
-                overrideActive && sceneOverride
-                  ? applySceneOverride(character.sections, sceneOverride)
-                  : character.sections,
-                character.gender,
-                presetFrames,
-              )}
-            />
-          </div>
-        )}
-        <RomSections
-          sections={character.sections}
-          genesis={character.genesis}
-          gender={character.gender}
-          skinning={characterSkinning(character)}
-          catalog={catalog}
-          presetFrames={presetFrames}
-          failedFrames={failedFrames}
-          revealFrame={revealFrame}
-          revealPose={revealPose}
-          morphIndex={morphIndex}
-          jcmMorphMods={character.jcmMorphMods}
-          onJcmMorphModsChange={(jcmMorphMods) => patch({ jcmMorphMods })}
-          override={
-            overrideActive && sceneOverride
-              ? {
-                  data: sceneOverride,
-                  onChange: (next) =>
-                    patch({
-                      sceneOverrides: character.sceneOverrides.map((o) =>
-                        o.scenePath === next.scenePath ? next : o,
-                      ),
-                    }),
-                }
-              : undefined
-          }
-          onChange={(sections) => patch({ sections })}
-        />
-      </section>
+      <RomEditorSection
+        character={character}
+        patch={patch}
+        catalog={catalog}
+        presetFrames={presetFrames}
+        failedFrames={runLog.failedFrames}
+        revealFrame={runLog.revealFrame}
+        revealPose={revealPose}
+        morphIndex={morphIndex}
+        overrideEligible={sceneSel.overrideEligible}
+        overrideActive={sceneSel.overrideActive}
+        selectedSceneName={sceneSel.selectedSceneName}
+        sceneOverride={sceneSel.sceneOverride}
+        setOverrideEnabled={sceneSel.setOverrideEnabled}
+      />
 
-      {imageDialogOpen && (
-        <ImageDialog
-          image={character.image}
-          name={character.name}
-          characterId={character.id}
-          scenes={[...new Set([character.scenePath, ...character.extraScenes].filter(Boolean))]}
-          onApply={async (image, imageScene) => {
-            // Persist the avatar immediately — it's a deliberate change and
-            // should survive a reload without needing the Save button. The
-            // source scene ('' for uploads/URLs) rides along so the avatar
-            // auto-sync knows what to mirror.
-            const updated = { ...character, image, imageScene }
-            patch({ image, imageScene })
-            try {
-              const saved = await saveCharacter({ data: { projectId, character: updated } })
-              draft.settle(saved)
-              void router.invalidate()
-              toast.success('Image updated')
-            } catch (e) {
-              // Roll the optimistic update back so the editor isn't stuck dirty.
-              patch({ image: character.image, imageScene: character.imageScene })
-              toast.error(e instanceof Error ? e.message : String(e))
-            }
-          }}
-          onClose={() => setImageDialogOpen(false)}
-        />
-      )}
-
-      <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
-        <h2 className="mb-1 text-xl font-semibold">Operations</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Delete this character from the project.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={deleting}>
-            <Trash2 /> Delete
-          </Button>
-        </div>
-      </section>
+      <DeleteCharacterSection
+        projectId={projectId}
+        character={character}
+        dazSubdir={project?.dazSubdir ?? 'daz3d'}
+        houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
+        bypassUnsavedGuard={draft.unsavedGuard.bypass}
+      />
       </div>
       </div>
-
-      {deleteOpen && (
-        <BulkDeleteDialog
-          noun="character"
-          names={[character.name]}
-          message="This removes the character folder and its generated files. This cannot be undone."
-          keepLabel={
-            <>
-              Keep the Daz files folder{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                {project?.dazSubdir ?? 'daz3d'}
-              </code>
-            </>
-          }
-          keep2Label={
-            keepHoudiniAvailable ? (
-              <>
-                Keep the Houdini files folder{' '}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  {project?.houdiniSubdir ?? 'houdini'}
-                </code>
-              </>
-            ) : undefined
-          }
-          busy={deleting}
-          error={deleteError}
-          onConfirm={onDeleteCharacter}
-          onClose={() => setDeleteOpen(false)}
-        />
-      )}
     </main>
   )
 }

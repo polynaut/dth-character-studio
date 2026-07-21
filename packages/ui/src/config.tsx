@@ -15,6 +15,12 @@ export type UiConfig = {
   onNavigate: (path: string) => void
   /** Open an external URL / scheme (http(s), mailto, …) outside the app. */
   onOpenExternal: (url: string) => void
+  /**
+   * Surface a user-facing error message (e.g. a failed inline save). The host
+   * routes it into its toast system; the provider-less default only logs, so a
+   * bare-browser build never swallows the error silently.
+   */
+  onError: (message: string) => void
 }
 
 const defaultConfig: UiConfig = {
@@ -23,6 +29,9 @@ const defaultConfig: UiConfig = {
   },
   onOpenExternal: (url) => {
     if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer')
+  },
+  onError: (message) => {
+    console.error(message)
   },
 }
 
@@ -38,13 +47,14 @@ export function UiConfigProvider({
   // Memoized per handler, not per `value` object: hosts typically pass an
   // inline literal, and an unmemoized merge re-rendered every useUiConfig
   // consumer whenever the host root re-rendered.
-  const { onNavigate, onOpenExternal } = value
+  const { onNavigate, onOpenExternal, onError } = value
   const merged = useMemo(
     () => ({
       onNavigate: onNavigate ?? defaultConfig.onNavigate,
       onOpenExternal: onOpenExternal ?? defaultConfig.onOpenExternal,
+      onError: onError ?? defaultConfig.onError,
     }),
-    [onNavigate, onOpenExternal],
+    [onNavigate, onOpenExternal, onError],
   )
   return <UiConfigContext.Provider value={merged}>{children}</UiConfigContext.Provider>
 }

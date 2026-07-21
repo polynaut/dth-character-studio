@@ -410,7 +410,7 @@ export function SortablePoseRow({
                 <span className="w-6" />
               </div>
               {pose.morphs.map((morph, morphIndex) => (
-                <div key={morphIndex} className="flex items-center gap-2">
+                <div key={morph.id} className="flex items-center gap-2">
                   <span className="w-5 text-right text-xs text-muted-foreground tabular-nums">
                     {morphIndex + 1}.
                   </span>

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { z } from 'zod'
 
 import type { DthPoseAsset, GenesisVersion, RomSection } from '@dth/rom'
 
@@ -49,9 +50,11 @@ function classifyPose(relPath: string): DthPoseAsset {
 }
 
 /** Recursively list `.duf` paths under a Poses folder via the native walk (one
- *  IPC call; rel paths are '/'-separated, relative to `posesFolder`). */
+ *  IPC call; rel paths are '/'-separated, relative to `posesFolder`). Parsed
+ *  through zod rather than a bare `invoke<T>()` cast (primitive shape — no
+ *  contracts/ fixture needed; those pin structured returns). */
 async function scanDufPaths(posesFolder: string): Promise<Array<string>> {
-  return invoke<Array<string>>('scan_duf_files', { folder: posesFolder })
+  return z.array(z.string()).parse(await invoke('scan_duf_files', { folder: posesFolder }))
 }
 
 /**

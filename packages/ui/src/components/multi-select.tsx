@@ -66,10 +66,13 @@ export function MultiSelect({
     trimmed === ''
       ? remaining
       : remaining.filter((option) => option.toLowerCase().includes(trimmed.toLowerCase()))
+  // Case-insensitive against BOTH the remaining options and the already
+  // selected values — 'foo' next to a selected 'Foo' is a duplicate, not a
+  // new custom entry.
   const customCandidate =
     allowCustom &&
     trimmed !== '' &&
-    !selected.has(trimmed) &&
+    !values.some((value) => value.toLowerCase() === trimmed.toLowerCase()) &&
     !remaining.some((option) => option.toLowerCase() === trimmed.toLowerCase())
       ? trimmed
       : null

@@ -104,6 +104,11 @@ export interface DthPoseAsset {
 
 /** One morph dialed on one node at a given frame. */
 export const morphSchema = z.object({
+  /** Stable row id for grid editing (minted on read when absent — schema v19,
+   *  the same pattern as the v18 JCM rule/drive ids). NEVER reaches generated
+   *  output: `morphJson` emits node/prop/value/base/autoBase only, on every
+   *  path (extraFrames, art direction). */
+  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
   /** Scene node the property lives on, e.g. "Genesis9". */
   node: z.string().max(MAX_NAME_LENGTH),
   /** Internal property name, e.g. "body_bs_BodyTone". */
@@ -254,6 +259,19 @@ export const ART_DIRECTION_CATALOG: Record<
   ],
 }
 
+/**
+ * The default mode of a section — the FIRST entry of its {@link SECTION_MODES}
+ * row (preset where DTH ships one, else custom). THE single source both
+ * {@link defaultSections} and the per-section schema healing consume: a
+ * partially-written file like `{ RET: { enabled: true } }` must heal its
+ * missing `mode` to the SECTION's default, not a global 'custom' — RET-custom
+ * fails the SECTION_MODES superRefine (rejecting the whole character), and a
+ * partial GEN healed to custom silently generated a different ROM.
+ */
+export function defaultSectionMode(section: RomSection): SectionMode {
+  return SECTION_MODES[section][0]
+}
+
 export const romSectionConfigSchema = z.object({
   enabled: z.boolean().default(false),
   mode: sectionModeSchema.default('custom'),
@@ -276,28 +294,43 @@ export const romSectionConfigSchema = z.object({
 export type RomSectionConfig = z.infer<typeof romSectionConfigSchema>
 
 export function defaultSections(): Record<RomSection, RomSectionConfig> {
-  const config = (enabled: boolean, mode: SectionMode): RomSectionConfig => ({
+  const config = (section: RomSection, enabled: boolean): RomSectionConfig => ({
     enabled,
-    mode,
+    // Single source with the schema healing: SECTION_MODES[section][0].
+    mode: defaultSectionMode(section),
     presetAssets: [],
     artDirection: [],
     groups: [],
     customAssetPath: '',
   })
   return {
-    RET: config(true, 'preset'),
-    JCM: config(true, 'preset'),
-    FAC: config(true, 'preset'),
-    EXP: config(false, 'custom'),
-    GEN: config(false, 'preset'),
+    RET: config('RET', true),
+    JCM: config('JCM', true),
+    FAC: config('FAC', true),
+    EXP: config('EXP', false),
+    GEN: config('GEN', false),
     // Preset-first like GEN — the editor drops to 'custom' on enable when the
     // installed release ships no PHY asset for the character's generation.
-    PHY: config(false, 'preset'),
+    PHY: config('PHY', false),
     // FBM (custom full-body morphs) starts disabled — a new character without a
     // pre-filled ROM has nothing to put there until the user adds morphs.
-    FBM: config(false, 'custom'),
-    MISC: config(false, 'custom'),
+    FBM: config('FBM', false),
+    MISC: config('MISC', false),
   }
+}
+
+/**
+ * The section's config schema with ITS mode default ({@link defaultSectionMode})
+ * instead of the generic 'custom': a partial object like `{ enabled: true }`
+ * under RET must heal to RET-preset, not RET-custom (which the SECTION_MODES
+ * superRefine would reject, hard-failing the whole character), and a partial
+ * GEN must heal to the preset mode `defaultSections()` gives it, not to a
+ * silently different custom ROM.
+ */
+function sectionConfigSchema(section: RomSection) {
+  return romSectionConfigSchema.extend({
+    mode: sectionModeSchema.default(defaultSectionMode(section)),
+  })
 }
 
 const sectionsSchema = z
@@ -305,15 +338,17 @@ const sectionsSchema = z
     // Per-key defaults from defaultSections() (function form → a fresh object per
     // parse): a hand-edited / partially-written file missing a section HEALS to
     // that section's default instead of hard-failing the whole character — the
-    // tolerant posture everywhere else in the schema.
-    RET: romSectionConfigSchema.default(() => defaultSections().RET),
-    JCM: romSectionConfigSchema.default(() => defaultSections().JCM),
-    FAC: romSectionConfigSchema.default(() => defaultSections().FAC),
-    EXP: romSectionConfigSchema.default(() => defaultSections().EXP),
-    GEN: romSectionConfigSchema.default(() => defaultSections().GEN),
-    PHY: romSectionConfigSchema.default(() => defaultSections().PHY),
-    FBM: romSectionConfigSchema.default(() => defaultSections().FBM),
-    MISC: romSectionConfigSchema.default(() => defaultSections().MISC),
+    // tolerant posture everywhere else in the schema. The per-SECTION config
+    // schema extends that healing to sub-key granularity (a present-but-partial
+    // section object heals its mode to the section's own default).
+    RET: sectionConfigSchema('RET').default(() => defaultSections().RET),
+    JCM: sectionConfigSchema('JCM').default(() => defaultSections().JCM),
+    FAC: sectionConfigSchema('FAC').default(() => defaultSections().FAC),
+    EXP: sectionConfigSchema('EXP').default(() => defaultSections().EXP),
+    GEN: sectionConfigSchema('GEN').default(() => defaultSections().GEN),
+    PHY: sectionConfigSchema('PHY').default(() => defaultSections().PHY),
+    FBM: sectionConfigSchema('FBM').default(() => defaultSections().FBM),
+    MISC: sectionConfigSchema('MISC').default(() => defaultSections().MISC),
   })
   // SECTION_MODES was advisory data — nothing rejected a crafted file putting a
   // section into a mode it doesn't support (e.g. RET custom), whose groups would
@@ -329,6 +364,28 @@ const sectionsSchema = z
         })
       }
     }
+  })
+  // Duplicate group/pose ids HEAL on parse (shared, hand-edited JSONs are in
+  // scope — reject would brick the file): a duplicated group id merges the two
+  // groups' `groupRanges` frame spans in the generated FBM meta and makes a
+  // scene override's `additions` land in both groups; a duplicated pose id
+  // double-applies a scene override's replacement row. Re-mint the LATER
+  // occurrences — the FIRST keeps the stored id, so any override keyed on it
+  // keeps its (previously ambiguous) target deterministically.
+  .transform((sections) => {
+    const groupIds = new Set<string>()
+    const poseIds = new Set<string>()
+    for (const section of ROM_SECTIONS) {
+      for (const group of sections[section].groups) {
+        if (groupIds.has(group.id)) group.id = newId()
+        groupIds.add(group.id)
+        for (const pose of group.poses) {
+          if (poseIds.has(pose.id)) pose.id = newId()
+          poseIds.add(pose.id)
+        }
+      }
+    }
+    return sections
   })
 export type RomSections = z.infer<typeof sectionsSchema>
 
@@ -654,8 +711,15 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       keys; minted on read via a zod default — no migration step). Never
  *       reaches the generated output: `jcmMorphModForRuntime` emits drives without
  *       it, so the runtime contract stays byte-for-byte unchanged.
+ *  19 — added a stable `id` to each pose MORPH row (and thereby each
+ *       art-direction morph row — both are `morphSchema`), mirroring v18:
+ *       grid row keys, minted on read via a zod default — no migration step.
+ *       Never reaches the generated output: `morphJson` emits
+ *       node/prop/value/base/autoBase only on every path (extraFrames,
+ *       gp/dkArtDirection), so the .dsa config contract stays byte-for-byte
+ *       unchanged.
  */
-export const CHARACTER_SCHEMA_VERSION = 18
+export const CHARACTER_SCHEMA_VERSION = 19
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1185,6 +1249,12 @@ export function characterSkinning(
   const jcm = character.sections.JCM
   const asset =
     jcm.mode === 'preset' ? jcm.presetAssets[0] : jcm.mode === 'custom' ? jcm.customAssetPath : undefined
-  if (asset) return /\bDQS\b/i.test(asset) ? 'dqs' : 'linear'
+  if (asset) {
+    // Match the FILE name only: a custom base ROM is a full path, and a folder
+    // named e.g. "DQS Library" holding "My Linear Base.duf" must not force DQS
+    // (wrong skinning = wrong measured frame counts downstream).
+    const baseName = asset.replace(/\\/g, '/').split('/').pop() ?? asset
+    return /\bDQS\b/i.test(baseName) ? 'dqs' : 'linear'
+  }
   return GENERATIONS[character.genesis ?? 'G9'].skinningDefault
 }

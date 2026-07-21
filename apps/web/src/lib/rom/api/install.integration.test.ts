@@ -75,7 +75,14 @@ describe('dedupDazAssets — FFI request shape + DedupReport validation', () => 
     mockIPC((cmd, p) => {
       expect(cmd).toBe('dedup_daz_assets')
       payload = p as Record<string, unknown>
-      return { dryRun: true, conflicts: [], duplicates: [], assetsQuarantined: 0, backupDir: 'Q:/q' }
+      return {
+        dryRun: true,
+        conflicts: [],
+        duplicates: [],
+        assetsQuarantined: 0,
+        backupDir: 'Q:/q',
+        errors: [],
+      }
     })
 
     const report = await dedupDazAssets({ data: { dryRun: true } })

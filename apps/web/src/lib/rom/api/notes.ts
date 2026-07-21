@@ -133,8 +133,10 @@ const MEDIA_REF_RE = /media:\/\/([^\s)"'<>]+)/g
 
 /** Every media filename referenced by any of the project's notes files: the
  *  project `notes.md` + every character `<Name>.notes.md` under the characters
- *  root. A notes file that exists but can't be read aborts the collection (and
- *  with it the GC) — treating it as empty would delete media it references. */
+ *  root. STRICT throughout: a notes file that exists but can't be read — or an
+ *  unreadable subtree of the characters root (listNotesFiles walks strictly) —
+ *  aborts the collection (and with it the GC). Treating either as empty would
+ *  make media that IS still referenced look orphaned and get deleted. */
 async function referencedMedia(projectDir: string): Promise<Set<string>> {
   const notesFiles = [
     joinPath(projectDir, 'notes.md'),
@@ -176,7 +178,18 @@ export async function gcNoteMedia(
   } catch {
     return result // no media folder (or an unreachable project) — nothing to GC
   }
-  const referenced = await referencedMedia(projectDir)
+  // The reference set must be COMPLETE to delete safely. If it can't be built
+  // in full (an unreadable notes file or subtree — flaky network share), skip
+  // this project's GC entirely and delete NOTHING; the next save/sweep retries.
+  let referenced: Set<string>
+  try {
+    referenced = await referencedMedia(projectDir)
+  } catch (err) {
+    console.warn(
+      `Skipping note-media GC for ${projectDir} — the media reference set could not be built in full: ${String(err)}`,
+    )
+    return result
+  }
   const now = Date.now()
   for (const entry of entries) {
     if (!entry.isFile || referenced.has(entry.name)) continue

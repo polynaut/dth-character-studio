@@ -43,6 +43,10 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  // A native <button> defaults to type="submit", so a kit Button inside any
+  // host <form> would silently submit it on click — default to "button"
+  // (still overridable). asChild passes the caller's type through untouched.
+  type = asChild ? undefined : "button",
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -55,6 +59,7 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      type={type}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

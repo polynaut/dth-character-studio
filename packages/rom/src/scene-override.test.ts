@@ -25,13 +25,13 @@ function fbmGroup(): RomGroup {
       {
         id: 'p1',
         name: 'BodyTone',
-        morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
+        morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
         boneScaleRef: false,
       },
       {
         id: 'p2',
         name: 'GluteSize',
-        morphs: [{ node: 'Genesis9', prop: 'body_bs_GluteSize', value: -1 }],
+        morphs: [{ id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: -1 }],
         boneScaleRef: false,
       },
     ],
@@ -68,7 +68,7 @@ describe('applySceneOverride', () => {
         {
           id: 'p1',
           name: 'BeachBodyTone',
-          morphs: [{ node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
+          morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
           boneScaleRef: false,
         },
       ],
@@ -95,7 +95,7 @@ describe('applySceneOverride', () => {
             {
               id: 'a1',
               name: 'BeachDress',
-              morphs: [{ node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+              morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
               boneScaleRef: false,
             },
           ],
@@ -190,7 +190,7 @@ describe('generateSceneOverride', () => {
       {
         id: 'p1',
         name: 'BeachBodyTone',
-        morphs: [{ node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
+        morphs: [{ id: 'mo2', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
         boneScaleRef: false,
       },
     ],
@@ -201,7 +201,7 @@ describe('generateSceneOverride', () => {
           {
             id: 'a1',
             name: 'BeachDress',
-            morphs: [{ node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+            morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
             boneScaleRef: false,
           },
         ],

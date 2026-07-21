@@ -30,12 +30,10 @@ export function normalizePathLower(path: string): string {
 }
 
 /** Everything but the last path segment ('/'-joined) — e.g. the folder of a
- *  `.dcsp` file. THE single copy (was re-implemented in main.tsx + Home). */
-export function dirOf(p: string): string {
-  const norm = p.replace(/[\\/]+$/g, '')
-  const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
-  return idx >= 0 ? norm.slice(0, idx).replace(/\\/g, '/') : norm
-}
+ *  `.dcsp` file. A re-export of the single dirname implementation in
+ *  storage/fs.ts (this, api/core's dirname and storage's dirname used to be
+ *  three drifting copies). */
+export { dirname as dirOf } from './rom/storage/fs'
 
 /**
  * Normalize a filesystem path for display: rewrite every `/` or `\` to the

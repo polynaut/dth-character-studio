@@ -12,13 +12,60 @@
   "duplicates": [
     {
       "members": [
-        { "label": "GP9 UD", "source": "_genesis 9", "fileCount": 2147, "isZip": false, "isKeeper": true },
-        { "label": "GP9 UPDATE", "source": "_genesis 9", "fileCount": 2140, "isZip": true, "isKeeper": false }
+        {
+          "label": "GP9 UD",
+          "source": "_genesis 9",
+          "path": "X:/assets/_genesis 9/GP9 UD",
+          "fileCount": 2147,
+          "isZip": false,
+          "isKeeper": true,
+          "moved": false,
+          "error": ""
+        },
+        {
+          "label": "GP9 UPDATE",
+          "source": "_genesis 9",
+          "path": "X:/assets/_genesis 9/GP9 UPDATE.zip",
+          "fileCount": 2140,
+          "isZip": true,
+          "isKeeper": false,
+          "moved": true,
+          "error": ""
+        }
       ],
       "kind": "version",
       "fixed": true
+    },
+    {
+      "members": [
+        {
+          "label": "Same Label",
+          "source": "_genesis 8",
+          "path": "X:/assets/_genesis 8/Same Label",
+          "fileCount": 12,
+          "isZip": false,
+          "isKeeper": true,
+          "moved": false,
+          "error": ""
+        },
+        {
+          "label": "Same Label",
+          "source": "_genesis 9",
+          "path": "X:/assets/_genesis 9/Same Label",
+          "fileCount": 12,
+          "isZip": false,
+          "isKeeper": false,
+          "moved": false,
+          "error": "copy to quarantine failed: Access is denied. (os error 5)"
+        }
+      ],
+      "kind": "exact",
+      "fixed": false
     }
   ],
   "assetsQuarantined": 1,
-  "backupDir": "X:/dedup-quarantine/2026-07-17"
+  "backupDir": "X:/dedup-quarantine/2026-07-17",
+  "errors": [
+    "Chosen keeper no longer found: X:/assets/_genesis 8/Old Copy — the folders changed since the scan; re-scan and pick again."
+  ]
 }

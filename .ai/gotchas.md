@@ -16,6 +16,14 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Byte-identical output tests are the contract.** Refactors of `generate.ts`
   must not change a single output byte unless the change is the point (then the
   templates/tests move with it and `RUNTIME_VERSION` is bumped).
+- **zod 4's `z.number()` already rejects `Infinity`/`-Infinity`/`NaN`** (verified
+  against zod 4.3.6) — do NOT add `.finite()` (dead noise); the reject posture is
+  pinned by tests in `types.test.ts` instead so a zod major bump can't silently
+  regress it.
+- **The validated G9 template ships label-less `GENGROUP` rows** (`GENGROUP,0,0,1`;
+  `FACGROUP` has no label column at all) — an empty bones label is a VALID state
+  for GEN custom groups. Only JCM/PHY groups require a driver bone, and
+  `romValidationErrors` enforces exactly that split.
 
 ## Daz Studio integration (measured behavior)
 
@@ -50,6 +58,29 @@ current code before relying on details, but assume the *lesson* still holds.
   `tauri.conf.json` (it is — creating `.dcsmeta/images` failed on macOS without it).
 - **I/O-heavy commands must be `#[tauri::command(async)]`** or they freeze the
   window during long scans/installs.
+- **NTFS is case-insensitive; byte-exact rel-path keys never converge.** Any
+  HashMap keyed by relative path in a compare pipeline (install diff, dedup
+  grouping, winner maps) must key on a Unicode-folded `rel_key()` — Windows
+  preserves the DESTINATION's casing on overwrite, so a byte-exact lookup misses
+  a case-variant installed file and re-copies it forever. Keep original casing in
+  everything user-visible or written to disk (`fsutil.rs`).
+- **Rust std reports NTFS junctions as symlinks** (`file_type().is_symlink()`
+  true, `is_dir()` false). All fs walkers share `fsutil::walk_dir` with one
+  explicit dir-link policy (link = leaf, counted) — a hand-rolled walker that
+  forgets this either escapes into the junction target or `fs::copy`s a reparse
+  point and fails the whole step.
+- **A window-label reservation races the async `build()`** — webview registration
+  lags by hundreds of ms, so "reservation present, window absent" is only provably
+  stale while holding a creation lock across find→build (`PROJECT_WINDOW_LOCK`,
+  like `HOME_WINDOW_LOCK`). Take that lock ONLY on worker threads and never hold
+  the map mutex across the build (a main-thread `active_project_file` waits on it).
+- **tauri-build's default Windows manifest is ONLY the Common-Controls
+  dependency.** Overriding via `WindowsAttributes::app_manifest`
+  (`apps/desktop/windows-app-manifest.xml`) must reproduce it verbatim; our
+  override adds `<longPathAware>`, which is **inert unless the machine-wide
+  `LongPathsEnabled` registry bit is set** — which is why the walkers ALSO count
+  unreadable entries (`read_errors`) and dedup refuses to quarantine any group
+  whose scan was incomplete.
 
 ## Web app
 
@@ -84,20 +115,39 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Character page sticky stack:** the character header (`sticky top-0`), ROM
   section titles (`top-[128px]`) and pose-table column headers (`top-[176px]`)
   overlap screenshots/crops — the guide-screenshot suite compensates per shot.
-- **Immediate-persist flows must not settle from disk while the draft is dirty.**
-  The editor's rename / avatar / scene-link flows save immediately; a settle that
-  replaces draft+baseline with an on-disk read (which lacks unsaved edits) silently
-  discards them AND clears `dirty`, so the unsaved-changes guard never fires. Use
-  `syncPersisted` (merge only the changed fields) for these, never `settle`; the
-  scenes-folder move was the bug (it read from disk). The form also stays editable
-  during a save, so `save()` snapshots the draft and only replaces it on settle if
-  it's unchanged (`settleAfterSave`) — otherwise interim keystrokes are reverted.
+- **Immediate-persist flows go through `useCharacterDraft.persistPatch` — never a
+  bare `saveCharacter` + settle from a component.** The audited bug class: scene/
+  Houdini-link, avatar, and product-store flows persisted without `validate()`,
+  without the `saving` single-flight, without regenerating artifacts, then wiped
+  the dirty signal — silently committing invalid drafts with stale artifacts.
+  `persistPatch` owns all of it (guards → optimistic patch → persist → regenerate
+  → interim-edit-safe settle → rollback of exactly the patched fields on failure);
+  side-effecting steps (file copies/moves) belong INSIDE its async patch producer
+  so they run only past the guards. The form stays editable during a save, so
+  `save()` snapshots the draft and only replaces it on settle if unchanged
+  (`settleAfterSave`) — otherwise interim keystrokes are reverted. The hook has
+  its own test suite (`use-character-draft.test.tsx`) — extend it with any new
+  settle semantics.
 - **`readManifest` throws on a CORRUPT `.dcsp`** (an existing file that won't
   parse) rather than returning defaults — else the next save writes defaults over
-  the real settings, and `fetchProject` can never 404. A MISSING `.dcsp` still
-  returns defaults. Every multi-project loop over recents must therefore
-  try/catch per project (findCharacterAcrossProjects/fetchAllCharacters/
-  projectsForSweep do).
+  the real settings, and `fetchProject` can never 404. It also throws a typed
+  **`ProjectUnreachableError`** for a MISSING/OFFLINE project folder (an offline
+  network share must not render as a phantom empty project); only an EXISTING
+  folder without a `.dcsp` still reads defaults. Every multi-project loop over
+  recents must therefore try/catch per project (findCharacterAcrossProjects/
+  fetchAllCharacters/sweepTargets do).
+- **Radix's modal `Dialog` sets `pointer-events: none` on `<body>`, and
+  `document.elementsFromPoint` skips pointer-events-disabled elements** — so a
+  modal Radix overlay silently breaks `lib/file-drop.ts`'s drop-through
+  hit-testing. That's why `SidePanel` is built from the `radix-ui/internal`
+  primitives (`FocusScope` + `DismissableLayer` — the exact pieces Dialog
+  composes) instead of Dialog itself. Related: `DismissableLayer`'s Escape is a
+  document-CAPTURE listener, so a component swallowing Escape via React
+  `stopPropagation` (MultiSelect) cannot block a surrounding Radix layer's
+  dismissal.
+- **`role="combobox"` removes an input from `getByRole('textbox')` queries** —
+  after the morph-autocomplete a11y work, tests locate those cells by
+  `combobox`/`option` roles (rom-sections tests hit this).
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
   `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
   `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's
