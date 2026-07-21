@@ -60,15 +60,22 @@ pub(crate) fn zip_dir_level(paths: &[&str], wanted: &[&str]) -> Option<(String, 
             children.entry(parent).or_default().insert(comps[i].to_string());
         }
     }
+    // Case-insensitive like the folder walk (NTFS resolves `DATA` and `data` to
+    // the same library folder, and archives are cased however the author zipped
+    // them). Returns the ACTUAL entry casing so callers can prefix-match the
+    // archive's own paths — install/extraction then preserves that casing.
     fn folders_in(
         dir: &str,
         children: &HashMap<String, BTreeSet<String>>,
         wanted: &[&str],
     ) -> Vec<String> {
         match children.get(dir) {
-            Some(kids) => {
-                wanted.iter().filter(|f| kids.contains(**f)).map(|f| (*f).to_string()).collect()
-            }
+            Some(kids) => wanted
+                .iter()
+                .flat_map(|f| {
+                    kids.iter().filter(|k| k.to_lowercase() == f.to_lowercase()).cloned()
+                })
+                .collect(),
             None => Vec::new(),
         }
     }
@@ -149,6 +156,18 @@ mod tests {
     fn zip_content_level_none() {
         let paths = vec!["random/file.txt", "other.bin"];
         assert!(find_zip_content_level(&paths).is_none());
+    }
+
+    #[test]
+    fn zip_content_level_matches_case_insensitively_keeping_the_archive_casing() {
+        // A `DATA/`-cased archive is the same library folder on NTFS — it must
+        // not report "no Daz content". The ACTUAL casing comes back so entry
+        // paths still prefix-match.
+        let paths = vec!["Pkg/DATA/foo.dsf", "Pkg/runtime/Textures/x.png"];
+        let (root, mut folders) = find_zip_content_level(&paths).unwrap();
+        folders.sort();
+        assert_eq!(root, "Pkg");
+        assert_eq!(folders, vec!["DATA".to_string(), "runtime".to_string()]);
     }
 
     #[test]

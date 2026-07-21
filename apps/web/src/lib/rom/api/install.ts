@@ -221,8 +221,12 @@ export async function setAcceptedConflicts(
 }
 
 /** Find (dry run) or resolve duplicate assets + conflicting shared files. Apply
- *  rewrites every smaller copy — and the library copy — to the largest version,
- *  and quarantines redundant duplicate assets. Reversible (originals backed up). */
+ *  quarantines the redundant duplicate copies (a reversible move — downloaded
+ *  files are never edited); shared-file conflicts are informational, resolved by
+ *  Accept. `keepers` carries the full asset PATHS the user chose to keep (paths,
+ *  not labels — an exact-dup group's members share a label by construction).
+ *  Quarantine failures and stale keeper choices come back in `report.errors` /
+ *  per-member `error`. */
 export async function dedupDazAssets({ data }: { data: unknown }): Promise<DedupReport> {
   const { dryRun, keepers } = z
     .object({ dryRun: z.boolean().optional(), keepers: z.array(z.string()).optional() })
