@@ -49,6 +49,7 @@ export {
   fetchAllCharacters,
   fetchCharacter,
   fetchCharacterScanProblems,
+  fetchCharactersWithProblems,
   fetchMorphIndex,
   fetchCharacters,
   fetchRomRunLog,

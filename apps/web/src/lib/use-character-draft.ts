@@ -9,6 +9,7 @@ import {
   applySceneOverride,
   romValidationErrors,
   sceneOverrideSlug,
+  templateBakedPoseNames,
 } from '@dth/rom'
 
 import type { Character, RomValidationError } from '@dth/rom'
@@ -152,7 +153,11 @@ export function useCharacterDraft(options: {
     const { character: current, onValidationErrors } = stateRef.current
     // Invalid required custom-morph fields (empty, or a pose name with characters
     // Houdini rejects) — hand the errors to the page so it can jump to the first.
-    const errors = romValidationErrors(current.sections)
+    // Template-baked pose names are reserved: a custom pose sharing one would
+    // silently collide in Unreal (presets are override-invariant, so the same
+    // reserved set applies to the scene-override checks below).
+    const reserved = templateBakedPoseNames(current)
+    const errors = romValidationErrors(current.sections, reserved)
     if (errors.length > 0) {
       onValidationErrors(errors)
       toast.error(
@@ -166,7 +171,10 @@ export function useCharacterDraft(options: {
     // sections — validate those too, so an overridden/added row can't ship a
     // broken scene script.
     for (const override of activeSceneOverrides(current)) {
-      const sceneErrors = romValidationErrors(applySceneOverride(current.sections, override))
+      const sceneErrors = romValidationErrors(
+        applySceneOverride(current.sections, override),
+        reserved,
+      )
       if (sceneErrors.length > 0) {
         const scene = sceneOverrideSlug(override.scenePath)
         onValidationErrors(sceneErrors)

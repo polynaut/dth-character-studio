@@ -28,7 +28,7 @@ import {
   createCharacter,
   deleteCharacter,
   fetchAllCharacters,
-  fetchCharacters,
+  fetchCharactersWithProblems,
   fetchProject,
   generateCharacterFiles,
   renameProject,
@@ -87,15 +87,20 @@ export const Route = createFileRoute('/projects/$projectId/')({
     // Deliberately NOT fetching the cross-project prefill candidates here: that
     // walks EVERY recent project's library, and one cold network share would
     // stall this whole page. They load lazily when the prefill picker opens.
-    const characters = await fetchCharacters({ data: { projectId: params.projectId } })
-    return { project, characters }
+    // One walk returns the characters AND the scan problems (torn writes,
+    // too-new schemas) — a problem file must warn here, not silently render
+    // as a missing character.
+    const { characters, problems } = await fetchCharactersWithProblems({
+      data: { projectId: params.projectId },
+    })
+    return { project, characters, scanProblems: problems }
   },
   component: ProjectCharactersPage,
 })
 
 function ProjectCharactersPage() {
   const { projectId } = Route.useParams()
-  const { project, characters } = Route.useLoaderData()
+  const { project, characters, scanProblems } = Route.useLoaderData()
   // The reusable Daz-scene "assets" feature is opt-in per project (its manifest).
   // Off → the project shows characters only (no Assets tab).
   const assetsEnabled = project.assetsEnabled
@@ -588,6 +593,25 @@ function ProjectCharactersPage() {
           <NotesEditor projectId={projectId} />
         </TabsContent>
         <TabsContent value="characters">
+          {scanProblems.length > 0 && (
+            <div
+              role="alert"
+              className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+            >
+              <p className="font-medium">
+                {scanProblems.length === 1
+                  ? '1 character file could not be read and is not shown:'
+                  : `${scanProblems.length} character files could not be read and are not shown:`}
+              </p>
+              <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                {scanProblems.map((p) => (
+                  <li key={p.path}>
+                    <PathCode path={displayPath(p.path)} /> — {p.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {characters.length === 0 ? (
             <div className="flex flex-col items-start gap-4">
               <p className="text-muted-foreground">

@@ -157,12 +157,8 @@ function ArtDirectionFrameRow({
       </button>
       {open && (
         <div className="space-y-1 border-t px-2 py-2">
-          {/* TODO(v19-integration): key={morph.id} — index-as-key holds
-              wrong-row focus/stale cell drafts after a mid-list removal;
-              schema v19 adds stable ids to art-direction morph rows (like
-              v18's JCM rule/drive ids). Swap the key once the id field lands. */}
           {entry.morphs.map((morph, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={morph.id} className="flex items-center gap-2">
               <div className="w-44">
                 <TextCell
                   value={morph.node}
@@ -205,6 +201,7 @@ function ArtDirectionFrameRow({
                 morphs: [
                   ...entry.morphs,
                   {
+                    id: newId(),
                     node: entry.morphs[entry.morphs.length - 1]?.node ??
                       (entry.rom === 'gp' ? 'GoldenPalace_G9' : 'DicktatorG9'),
                     prop: '',

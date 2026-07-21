@@ -44,6 +44,25 @@ export async function fetchCharacters({ data }: { data: unknown }): Promise<Arra
   return storage.listCharacters(await charactersRoot(projectIdInput.parse(data).projectId))
 }
 
+/**
+ * Characters + scan problems from ONE library walk — for the project page,
+ * which wants both without paying for two scans (the loader is latency-critical
+ * on cold network shares). Also primes the location cache like the scan always
+ * does.
+ */
+export async function fetchCharactersWithProblems({ data }: { data: unknown }): Promise<{
+  characters: Array<Character>
+  problems: Array<storage.CharacterScanProblem>
+}> {
+  const { projectId } = projectIdInput.parse(data)
+  const root = await charactersRoot(projectId)
+  const scan = await storage.scanCharacterLibrary(root)
+  for (const { character, location } of scan.entries) {
+    cacheCharacterLocation(root, character.id, location)
+  }
+  return { characters: scan.entries.map((e) => e.character), problems: scan.problems }
+}
+
 /** A character tagged with the project it belongs to — for cross-project pickers
  *  like ROM prefill, which can copy from any project's character. */
 export type CharacterWithProject = Character & { projectId: string; projectName: string }

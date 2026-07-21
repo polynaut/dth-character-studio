@@ -3,6 +3,7 @@ import { exists, mkdir, readDir, readTextFile, remove, rename } from '@tauri-app
 import {
   CHARACTER_SCHEMA_VERSION,
   characterSchema,
+  CharacterSchemaTooNewError,
   migrateCharacterData,
   ROM_RUN_LOG_FILE,
 } from '@dth/rom'
@@ -169,6 +170,13 @@ async function scanLibrary(lib: string): Promise<LibraryScan> {
     try {
       character = parseCharacter(raw)
     } catch (e) {
+      // A file saved by a NEWER app build must never be silently downgraded
+      // (parse throws before any normalization) — surface "update the app",
+      // not "corrupt". The definition is left untouched on disk.
+      if (e instanceof CharacterSchemaTooNewError) {
+        problems.push({ path: definitionAbs, reason: e.message })
+        continue
+      }
       // Foreign JSON (a generated sidecar) is simply not a character; a
       // definition-shaped object failing the schema is a real problem.
       if (!internal && looksLikeCharacter(raw)) {

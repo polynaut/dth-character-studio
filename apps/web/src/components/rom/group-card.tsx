@@ -166,13 +166,16 @@ export const GroupCard = memo(function GroupCard({
       const pose = displayPoses[rowIndex]
       const morphs = pose.morphs.length
         ? pose.morphs.map((m, mi) => (mi === morphIndex ? { ...m, ...patch } : m))
-        : [{ node: '', prop: '', value: 1, ...patch }]
+        : [{ id: newId(), node: '', prop: '', value: 1, ...patch }]
       patchPose(rowIndex, { morphs })
     },
     addMorph: (rowIndex) => {
       const pose = displayPoses[rowIndex]
       patchPose(rowIndex, {
-        morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 }],
+        morphs: [
+          ...pose.morphs,
+          { id: newId(), node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 },
+        ],
       })
     },
     removeMorphAt: (rowIndex, morphIndex) => {
@@ -207,7 +210,7 @@ export const GroupCard = memo(function GroupCard({
       poses.splice(index, 0, {
         id,
         name: '',
-        morphs: [{ node, prop: '', value: 1 }],
+        morphs: [{ id: newId(), node, prop: '', value: 1 }],
         boneScaleRef: false,
       })
       change({ ...group, poses })
@@ -243,7 +246,7 @@ export const GroupCard = memo(function GroupCard({
     const pose: RomPose = {
       id: newId(),
       name: '',
-      morphs: [{ node: lastNode, prop: '', value: 1 }],
+      morphs: [{ id: newId(), node: lastNode, prop: '', value: 1 }],
       boneScaleRef: false,
     }
     if (override && additions) {
