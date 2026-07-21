@@ -338,6 +338,8 @@ function CharacterPage() {
         scenePath={sceneSel.effectiveScene}
         sceneName={sceneSel.selectedSceneName}
         show={sceneSel.overrideEligible}
+        active={sceneSel.groomOverrideActive}
+        onToggle={sceneSel.setGroomOverrideEnabled}
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
@@ -429,8 +431,6 @@ function CharacterPage() {
                   dazInstallFolder={settings.dazInstallFolder}
                   overrideEligible={sceneSel.overrideEligible}
                   groomOverrideActive={sceneSel.groomOverrideActive}
-                  setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
-                  selectedSceneName={sceneSel.selectedSceneName}
                 />
               }
             />

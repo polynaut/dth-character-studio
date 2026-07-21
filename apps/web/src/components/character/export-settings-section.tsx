@@ -1,4 +1,4 @@
-import { FolderOpen, X } from 'lucide-react'
+import { FolderOpen, Trash2 } from 'lucide-react'
 
 import { PathCode } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
@@ -86,12 +86,12 @@ export function ExportSettingsSection({
               path={displayPath(character.exportPath)}
               className="flex h-9 items-center"
             />
-            {/* Icon-only, light-red-bordered destructive button so Clear reads
-                as a real action next to Change… (matching that chip/button
-                height + weight) rather than a link. */}
+            {/* Bin icon matching the KeyedListEditor row delete (Advanced options'
+                preserve lists), so "clear" reads the same everywhere. */}
             <Button
-              variant="outline-destructive"
+              variant="ghost"
               size="icon"
+              className="size-7 shrink-0"
               title="Clear the export directory"
               aria-label="Clear the export directory"
               onClick={() =>
@@ -101,7 +101,7 @@ export function ExportSettingsSection({
                 )
               }
             >
-              <X />
+              <Trash2 className="size-3.5 text-destructive" />
             </Button>
           </>
         )}

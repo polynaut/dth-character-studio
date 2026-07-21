@@ -144,9 +144,11 @@ export function IdentitySection({
         )}
         <fieldset
           disabled={fieldsetDisabled}
-          className="relative rounded-md border px-4 pt-4 pb-4"
+          // -mx-4 extends the box past the column so its px-4 content lands on the
+          // same left baseline as the Genesis / Hair fields above it.
+          className="relative -mx-4 rounded-md border px-4 pt-4 pb-4"
         >
-          <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
+          <legend className="absolute -top-2 left-4 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
             Genesis 9 Specific
           </legend>
           <div className={`space-y-4${fieldsetDisabled ? ' text-muted-foreground' : ''}`}>

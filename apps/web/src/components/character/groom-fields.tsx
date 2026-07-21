@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 
 import { InfoPopup, MultiSelect } from '@dth/ui'
-import { GuideLink } from '#/components/guide-link.tsx'
-import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -43,8 +41,6 @@ export function GroomFields({
   dazInstallFolder,
   overrideEligible,
   groomOverrideActive,
-  setGroomOverrideEnabled,
-  selectedSceneName,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -54,12 +50,11 @@ export function GroomFields({
    *  Exporter Plugin's DLL version and warn when it's too old for hide-only groom. */
   dazInstallFolder: string
   /** Per-scene override arming, from useSceneSelection. On a non-primary scene the
-   *  hair list is locked until the override is armed (the list is per scene, but
-   *  editing an outfit scene's hair is an explicit opt-in like the other panels). */
+   *  hair list is locked until the override is armed. The ARMING switch is the page's
+   *  sticky OVERRIDE bar (the first, big toggle) — this field only reads the state to
+   *  lock/unlock; the switch no longer lives here. */
   overrideEligible: boolean
   groomOverrideActive: boolean
-  setGroomOverrideEnabled: (enabled: boolean) => void
-  selectedSceneName: string
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
@@ -143,30 +138,9 @@ export function GroomFields({
             Each scene carries its own hair — the items you list here are hidden around the DTH
             export so they never ride into the ROM artifacts. None listed means the scene has no
             hair to exclude. For a hair-only variant, link it as its own scene (or use
-            Attachments).
+            Attachments). On a non-primary scene this list locks until you arm the OVERRIDE bar at
+            the top of the page.
           </InfoPopup>
-        </span>
-        <span className="ml-auto">
-          <PanelOverrideToggle
-            eligible={overrideEligible}
-            active={groomOverrideActive}
-            scenePath={selectedScene}
-            sceneName={selectedSceneName}
-            noun="hair"
-            compact
-            onToggle={setGroomOverrideEnabled}
-            info={
-              <>
-                Edit <strong>this Daz scene's own hair list</strong>: select one of the extra
-                scenes in the Daz scenes cards and enable the override to pick that outfit's hair.
-                The generated Daz script bakes every scene's list and hides the right one when that
-                scene is open — so one script covers them all. Unlike the ROM/Genesis panels,
-                disarming here only <strong>re-locks editing</strong> — the hair you listed stays
-                this scene's (hair is per scene by presence).{' '}
-                <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
-              </>
-            }
-          />
         </span>
       </div>
       {exporterTooOld && (
