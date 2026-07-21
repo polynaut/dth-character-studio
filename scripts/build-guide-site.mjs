@@ -233,7 +233,7 @@ const shell = (md, content) => `<!doctype html>
         </a>
         <nav class="topbar-nav" aria-label="Guide">
           <a href="../#features">Why?</a>
-          <a href="index.html">Guide</a>
+          <a href="index.html"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Guide</a>
         </nav>
         <a class="btn btn-primary btn-compact" href="../">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

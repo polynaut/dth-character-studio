@@ -337,15 +337,9 @@ routes still work when you just need a single name.
 
 
 <p align="center">
-  <img width="504" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />
+  <img width="440" align="top" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img width="355" align="top" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
   <br>
-  <sub><em>A morph's internal name differs from its slider label.</em></sub>
-</p>
-
-<p align="center">
-  <img width="404" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
-  <br>
-  <sub><em>A manual route to a morph's internal Daz name.</em></sub>
+  <sub><em>Left: a morph's internal name differs from its slider label. Right: the manual route via Parameter Settings.</em></sub>
 </p>
 
 <details>

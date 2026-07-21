@@ -272,6 +272,12 @@ a:hover {
   fill: currentColor;
 }
 
+/* Inline nav icons (the Guide link's book) match the gh-mark's size. */
+.topbar-nav .icon {
+  width: 1.05em;
+  height: 1.05em;
+}
+
 .topbar-nav a:hover {
   color: var(--fg-bright);
 }
