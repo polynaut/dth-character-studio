@@ -88,6 +88,11 @@ interface RomSectionsProps {
    * scene's own script + CSV generate.
    */
   override?: { data: SceneOverride; onChange: (next: SceneOverride) => void }
+  /** A non-primary scene is selected but its ROM override isn't armed yet — the
+   *  whole ROM is read-only (a dimmed base view) until the page's Override toggle
+   *  arms it, exactly like the other per-scene panels. Sections still expand so
+   *  the rows can be inspected. */
+  locked?: boolean
   onChange: (sections: RomSectionsModel) => void
 }
 
@@ -135,6 +140,7 @@ export const RomSections = memo(function RomSections({
   jcmMorphMods,
   onJcmMorphModsChange,
   override,
+  locked = false,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
@@ -382,13 +388,6 @@ export const RomSections = memo(function RomSections({
           numbers are unavailable. Make sure the DTH release is scanned in Settings and reachable.
         </div>
       )}
-      {overrideCtl && (
-        <div className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
-          Scene override active — the base setup is locked. Check <strong>Override</strong> on a
-          row to replace it for this scene, or add frames at the end of a group; everything left
-          transparent stays exactly as the base ROM.
-        </div>
-      )}
       {ROM_SECTIONS.map((section) => {
         const config = sections[section]
         const modes = SECTION_MODES[section]
@@ -462,10 +461,10 @@ export const RomSections = memo(function RomSections({
               <span>
                 <Switch
                   checked={effectiveEnabled}
-                  disabled={tiedToJcm || !!overrideCtl}
+                  disabled={tiedToJcm || !!overrideCtl || locked}
                   title={
-                    overrideCtl
-                      ? 'Sections are part of the base setup — locked while a scene override is active'
+                    overrideCtl || locked
+                      ? 'Sections are part of the base setup — locked for a per-scene override'
                       : tiedToJcm
                         ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
                         : effectiveEnabled
@@ -497,7 +496,11 @@ export const RomSections = memo(function RomSections({
             </div>
 
             {isOpen && (
-              <div className="space-y-3 border-t px-4 py-4">
+              // Locked (non-primary scene, override unarmed): the native fieldset
+              // disable cascades to every editing control below, so the rows show
+              // as a dimmed read-only base view. The accordion button + section
+              // Switch sit in the header ABOVE, so expanding still works.
+              <fieldset disabled={locked} className={`space-y-3 border-t px-4 py-4${locked ? ' opacity-60' : ''}`}>
                 {modes.length > 1 && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Mode:</span>
@@ -654,7 +657,7 @@ export const RomSections = memo(function RomSections({
                     <JcmModsGrid mods={jcmMorphMods} onChange={onJcmMorphModsChange} />
                   </div>
                 )}
-              </div>
+              </fieldset>
             )}
           </div>
         )

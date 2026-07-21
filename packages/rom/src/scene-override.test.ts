@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { generateSceneOverride } from './generate'
+import { generateAll } from './generate'
 import {
   activeSceneOverrides,
   applySceneOverride,
   clonePose,
+  mergeSceneOverride,
+  sceneOverrideBuildsRom,
   sceneOverrideSlug,
 } from './scene-override'
 import { characterSchema, defaultSections, flatSectionGroupId, sceneOverrideSchema } from './types'
@@ -57,8 +59,11 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
   })
 }
 
+// Defaults the ROM gate ON (the schema now defaults it off) — most cases here
+// want a ROM-active override; pass `enabled: false` for the identity/groom-only
+// cases.
 function makeOverride(patch: Partial<SceneOverride> = {}): SceneOverride {
-  return sceneOverrideSchema.parse({ scenePath: 'D:\\scenes\\Electra Beach.duf', ...patch })
+  return sceneOverrideSchema.parse({ scenePath: 'D:\\scenes\\Electra Beach.duf', enabled: true, ...patch })
 }
 
 describe('applySceneOverride', () => {
@@ -183,9 +188,13 @@ describe('clonePose', () => {
   })
 })
 
-describe('generateSceneOverride', () => {
+describe('generateAll — scene overrides folded into the one script', () => {
+  const scene = 'D:\\scenes\\Electra Beach.duf'
+  // The open-scene key the generated lookup computes from Scene.getFilename():
+  // forward-slashed and lowercased.
+  const sceneKey = 'd:/scenes/electra beach.duf'
   const override = makeOverride({
-    scenePath: 'D:\\scenes\\Electra Beach.duf',
+    scenePath: scene,
     poses: [
       {
         id: 'p1',
@@ -208,55 +217,138 @@ describe('generateSceneOverride', () => {
       },
     ],
   })
+  // A scene override only generates once its scene is a LINKED extra scene.
+  const withScene = (extra: Partial<Character> = {}): Character =>
+    makeCharacter({ extraScenes: [scene], sceneOverrides: [override], ...extra })
 
-  it('names the scene artifacts with the scene slug, next to the default ones', () => {
-    const files = generateSceneOverride(makeCharacter(), override, {}, FRAMES)
+  // Pull a `var <name> = { … };` object literal back out of a generated script.
+  const grabObject = (script: string, name: string) => {
+    const marker = `var ${name} = `
+    const open = script.indexOf(marker) + marker.length
+    return JSON.parse(script.slice(open, script.indexOf('\n};', open) + 2))
+  }
+
+  it('emits ONE ROM script + base CSV + the scene-suffixed CSV (no per-scene script)', () => {
+    const files = generateAll(withScene(), {}, FRAMES)
     expect(files.map((f) => f.fileName)).toEqual([
-      'ROM_ElectraG9_G9_ElectraBeach.dsa',
+      'ROM_ElectraG9_G9.dsa',
+      'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',
     ])
   })
 
-  it('compiles the MERGED rows: replaced content + additions after the base rows', () => {
-    const files = generateSceneOverride(makeCharacter(), override, {}, FRAMES)
+  it('embeds the MERGED rows as the open scene’s config delta; base rows untouched', () => {
+    const files = generateAll(withScene(), {}, FRAMES)
     const script = files[0].content
-    const marker = 'var dthCharacterConfig = '
-    const open = script.indexOf(marker) + marker.length
-    const config = JSON.parse(script.slice(open, script.indexOf('\n};', open) + 2))
-    expect(config.extraFrames.frames.map((f: { name: string }) => f.name)).toEqual([
+    // The base config carries the primary scene's frames …
+    expect(grabObject(script, 'dthCharacterConfig').extraFrames.frames.map((f: { name: string }) => f.name)).toEqual([
+      'BodyTone',
+      'GluteSize',
+    ])
+    // … the scene delta carries the merged rows (replaced content + addition).
+    const overrides = grabObject(script, 'dthSceneOverrides')
+    expect(overrides[sceneKey].extraFrames.frames.map((f: { name: string }) => f.name)).toEqual([
       'BeachBodyTone',
       'GluteSize',
       'BeachDress',
     ])
-    const csv = files[1].content
+    // The scene's own CSV reflects the merged rows, not the base ones.
+    const csv = files[2].content
     expect(csv).toContain('BeachBodyTone')
     expect(csv).toContain('BeachDress')
     expect(csv).not.toContain('FBM,328,BodyTone')
   })
 
-  it('splits off a scene-suffixed Export_ script when the character splits its export', () => {
-    const files = generateSceneOverride(
-      makeCharacter({ exportPath: 'D:\\export', exportWithRomScript: false }),
-      override,
-      {},
-      FRAMES,
-    )
+  it('splits ONE Export_ script (not per-scene) when the character splits its export', () => {
+    const files = generateAll(withScene({ exportPath: 'D:\\export', exportWithRomScript: false }), {}, FRAMES)
     expect(files.map((f) => f.fileName)).toEqual([
-      'ROM_ElectraG9_G9_ElectraBeach.dsa',
-      'Export_ElectraG9_G9_ElectraBeach.dsa',
+      'ROM_ElectraG9_G9.dsa',
+      'Export_ElectraG9_G9.dsa',
+      'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',
     ])
   })
 
-  it('delivers the SCENE CSV from the combined script, not the default one', () => {
-    const files = generateSceneOverride(
-      makeCharacter({ exportPath: 'D:\\export' }),
-      override,
+  it('the combined script selects the scene CSV by open scene', () => {
+    const script = generateAll(withScene({ exportPath: 'D:\\export' }), {}, FRAMES, 'C:\\project\\Electra')[0]
+      .content
+    // The export block's scene→CSV lookup carries the override CSV, keyed by scene,
+    // while the base name stays the default every other scene rides.
+    expect(script).toContain('dthCsvByScene')
+    expect(script).toContain('"ElectraG9_ElectraBeach_pose_asset.csv"')
+    expect(script).toContain('"ElectraG9_pose_asset.csv"')
+    expect(script).toContain(sceneKey)
+  })
+
+  it('an identity-only override adds a config delta but NO scene CSV', () => {
+    const idOverride = makeOverride({
+      scenePath: scene,
+      enabled: false,
+      identity: { enabled: true, facsDetailStrength: 0.5, flexionStrength: 0.5, applyUE5TearUV: true },
+    })
+    const files = generateAll(
+      makeCharacter({ extraScenes: [scene], sceneOverrides: [idOverride] }),
       {},
       FRAMES,
-      'C:\\project\\Electra',
     )
-    expect(files[0].content).toContain('"ElectraG9_ElectraBeach_pose_asset.csv"')
-    expect(files[0].content).not.toContain('"ElectraG9_pose_asset.csv"')
+    // Base ROM script + base CSV only — no scene-suffixed CSV (frames unchanged).
+    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta).toMatchObject({ FACsDetailStrength: 0.5, FlexionStrength: 0.5, bApplyUE5TearUV: true })
+    expect(delta.extraFrames).toBeUndefined()
+    // sceneOverrideBuildsRom is what gates the extra CSV.
+    expect(sceneOverrideBuildsRom(idOverride)).toBe(false)
+  })
+
+  it('mergeSceneOverride merges the ROM sections only (frames), not identity dials', () => {
+    const romOverride = makeOverride({
+      scenePath: scene,
+      poses: [
+        {
+          id: 'p1',
+          name: 'BeachTone',
+          morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5 }],
+          boneScaleRef: false,
+        },
+      ],
+      identity: { enabled: true, facsDetailStrength: 0.25, flexionStrength: 0.75, applyUE5TearUV: true },
+    })
+    const merged = mergeSceneOverride(makeCharacter(), romOverride)
+    // Sections reflect the ROM override…
+    expect(merged.sections.FBM.groups[0].poses[0].name).toBe('BeachTone')
+    // …but the identity dials stay the base's (they ride as a config delta instead).
+    expect(merged.facsDetailStrength).toBe(1)
+    expect(merged.flexionStrength).toBe(1)
+    expect(merged.applyUE5TearUV).toBe(false)
+  })
+
+  it('a preserve-only override full-replaces the base lists (empty overrides too), NO scene CSV', () => {
+    const preserveOverride = makeOverride({
+      scenePath: scene,
+      enabled: false,
+      preserve: {
+        enabled: true,
+        morphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }],
+        nodeTransforms: [],
+      },
+    })
+    const files = generateAll(
+      makeCharacter({
+        extraScenes: [scene],
+        sceneOverrides: [preserveOverride],
+        preserveMorphs: [{ name: 'base_morph', keepValue: 1 }],
+        preserveNodeTransforms: [{ nodeLabel: 'Left Eye' }],
+      }),
+      {},
+      FRAMES,
+    )
+    // Frames unchanged → no scene-suffixed CSV.
+    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.preserveMorphs).toEqual([{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }])
+    // The empty list is emitted so it OVERRIDES the base's [Left Eye] (delete-all).
+    expect(delta.preserveNodeTransforms).toEqual([])
+    expect(delta.extraFrames).toBeUndefined()
+    expect(sceneOverrideBuildsRom(preserveOverride)).toBe(false)
   })
 })

@@ -9,8 +9,8 @@
  *  - csv.ts — the PoseAsset-CSV pipeline: template gate + splice, custom-row
  *    emitters, exporter reference frames (`toPoseAssetCsv`,
  *    `poseAssetCsvValidated`, `templateBakedPoseNames`, …).
- *  - dsa.ts — the `.dsa` generators + the `generateAll` /
- *    `generateSceneOverride` entry points.
+ *  - dsa.ts — the `.dsa` generators + the `generateAll` entry point (per-scene
+ *    overrides fold into the one character script).
  *
  * The embedded-DzScript snippet bodies live in dz-snippets.ts, which stays
  * package-internal (not re-exported).

@@ -20,7 +20,7 @@ import type { Character, RomPose, RomSections, SceneOverride } from './types'
  */
 export function applySceneOverride(
   sections: RomSections,
-  override: SceneOverride,
+  override: Pick<SceneOverride, 'poses' | 'additions'>,
 ): RomSections {
   const replaced = new Map(override.poses.map((pose) => [pose.id, pose]))
   const additions = new Map(override.additions.map((entry) => [entry.groupId, entry.poses]))
@@ -67,18 +67,55 @@ export function sceneOverrideSlug(scenePath: string): string {
 }
 
 /**
- * The overrides that generate scene-specific artifacts: enabled AND still
- * pointing at a linked EXTRA scene (an override for an unlinked scene stays
- * stored but inert; the primary scene is by definition the base ROM). THE
- * single gate — generation, stale-artifact cleanup and save validation all ask
- * here, so they can't disagree.
+ * The overrides that feed generation: at least one panel gate armed (ROM
+ * `enabled`, `identity.enabled`, or `groom.enabled`) AND still pointing at a
+ * linked EXTRA scene (an override for an unlinked scene stays stored but inert;
+ * the primary scene is by definition the base). THE single gate — the one
+ * character script's per-scene config map, stale-artifact cleanup and save
+ * validation all ask here, so they can't disagree. Use {@link sceneOverrideBuildsRom}
+ * to narrow to the subset that also needs its own PoseAsset CSV.
  */
 export function activeSceneOverrides(
   character: Pick<Character, 'extraScenes' | 'sceneOverrides'>,
 ): Array<SceneOverride> {
   return character.sceneOverrides.filter(
-    (override) => override.enabled && character.extraScenes.includes(override.scenePath),
+    (override) =>
+      (override.enabled ||
+        override.identity.enabled ||
+        override.groom.enabled ||
+        override.preserve.enabled) &&
+      character.extraScenes.includes(override.scenePath),
   )
+}
+
+/**
+ * Whether a scene override changes the ROM itself (its `enabled` ROM panel) —
+ * the only kind that produces MERGED sections, and so its own scene-suffixed
+ * PoseAsset CSV. An identity- or groom-only override keeps the base frames (its
+ * effect is a run-time config delta / the per-scene hair list), so it rides the
+ * base CSV. Callers that mint per-scene CSVs or check for file-name clashes
+ * filter on this.
+ */
+export function sceneOverrideBuildsRom(override: Pick<SceneOverride, 'enabled'>): boolean {
+  return override.enabled
+}
+
+/**
+ * The scene's effective character for FRAME purposes: the base definition with
+ * the ROM panel's merged sections folded in when it's armed
+ * ({@link applySceneOverride}). Feeds the scene's `extraFrames` AND its PoseAsset
+ * CSV — both derive from `sections` only, and that single shared derivation is
+ * what keeps the Daz timeline and the Houdini CSV frame-aligned per scene.
+ *
+ * The identity dials and preserve lists do NOT merge here: they don't change
+ * frames or the CSV, so they ride as a run-time config DELTA computed straight
+ * from the override in `buildSceneConfigMap` (dsa.ts). The groom gate has no
+ * generation effect at all (hair lives per scene in `groomScenes`).
+ */
+export function mergeSceneOverride(character: Character, override: SceneOverride): Character {
+  return override.enabled
+    ? { ...character, sections: applySceneOverride(character.sections, override) }
+    : character
 }
 
 /** A deep copy of a pose, safe to store as an override row and edit freely. */

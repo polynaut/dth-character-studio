@@ -375,6 +375,9 @@ describe('scene override mode', () => {
       enabled: true,
       poses: [],
       additions: [],
+      identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
+      groom: { enabled: false },
+      preserve: { enabled: false, morphs: [], nodeTransforms: [] },
     })
     return (
       <RomSections
@@ -409,7 +412,6 @@ describe('scene override mode', () => {
         }}
       />,
     )
-    expect(screen.getByText(/Scene override active/)).toBeTruthy()
     fireEvent.click(screen.getByText('Full Body'))
     expect(screen.queryByLabelText('Insert a frame here')).toBeNull()
     expect(screen.queryByTitle('Drag to reorder')).toBeNull()

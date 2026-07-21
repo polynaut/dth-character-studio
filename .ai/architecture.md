@@ -18,8 +18,9 @@ no build step and no stale dist.
 
 `Character` definition (zod-validated, `types.ts`) → `generateAll()`
 (`generate.ts`) → the Daz `.dsa` ROM script + the Houdini PoseAsset CSV (+
-optional Export/Hair/Scan scripts, + a scene-suffixed pair per active scene
-override via `generateSceneOverride()`). `generate.ts` is a **barrel** over the
+optional Export/Hair/Scan scripts, + a scene-suffixed CSV per ROM-override
+scene). The ONE ROM script embeds every scene's overrides and selects the open
+scene at run time (no per-scene scripts). `generate.ts` is a **barrel** over the
 split generation modules: `resolve.ts` (catalog/path resolution, FAC support via
 `facPresetSupport`, `presetFramesSignature`), `csv.ts` (the CSV pipeline +
 template splice + `templateBakedPoseNames`), `dsa.ts` (the `.dsa` generators),
@@ -93,7 +94,7 @@ a plain browser with native features as no-ops):
 Route loaders fetch via `api.ts`; mutations call api then `router.invalidate()`.
 The character editor keeps a draft + baseline (`dirty` by JSON comparison);
 `save()` = validate (`romValidationErrors` on the base sections AND on each
-active scene override's merged sections) → `saveCharacter` →
+ROM-override scene's merged sections — `sceneOverrideBuildsRom`) → `saveCharacter` →
 `generateCharacterFiles` → settle draft+baseline in one paint → invalidate in the
 background. The editor's page-local **selected scene** (the Daz scene cards)
 drives every per-scene feature: the hair list, the ROM Override toggle, and —
