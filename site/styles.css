@@ -48,7 +48,9 @@ body {
 }
 
 .container {
-  max-width: 1060px;
+  /* Matches the guide's content area (sidebar + article, guide.css
+     .guide-layout) so headers and sections share the same edges everywhere. */
+  max-width: 1196px;
   margin-inline: auto;
   padding-inline: 24px;
 }
@@ -227,13 +229,6 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 28px;
-}
-
-/* The topbar's edges line up with the guide's content area (sidebar +
-   article = 1196px, see guide.css .guide-layout) — same width on the landing
-   page so both headers match. */
-.topbar .container {
-  max-width: 1196px;
 }
 
 .topbar-brand {
