@@ -439,6 +439,12 @@ a:hover {
   margin-top: 26px;
 }
 
+/* Book symbol on the guide buttons (hero teaser + features CTA) — outside
+   the shine span, since background-clip: text would leave an SVG invisible. */
+.btn-book {
+  color: var(--primary);
+}
+
 @media (min-width: 1024px) {
   .hero .btn-ghost {
     margin-top: 30px;
@@ -637,6 +643,7 @@ a:hover {
   animation: guide-border-pulse 3s ease-in-out infinite;
 }
 
+
 @keyframes guide-border-pulse {
   0%,
   60%,
@@ -644,7 +651,7 @@ a:hover {
     border-color: var(--border);
   }
   80% {
-    border-color: color-mix(in oklab, var(--primary-soft) 80%, var(--border));
+    border-color: color-mix(in oklab, var(--primary-soft) 40%, var(--border));
   }
 }
 
