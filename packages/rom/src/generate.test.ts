@@ -40,7 +40,8 @@ import {
   presetFrameCount,
   sectionsFromFlatFrames,
 } from './frames'
-import { characterSchema, defaultSections, GENERATIONS } from './types'
+import { applySceneOverride } from './scene-override'
+import { characterSchema, defaultSections, flatSectionGroupId, GENERATIONS } from './types'
 import { romValidationErrors } from './validation'
 import type { GenesisVersion } from './types'
 
@@ -147,6 +148,50 @@ describe('sectionsFromFlatFrames', () => {
     expect(sections.FBM.groups[0].poses.map((p) => p.name)).toEqual(['Heavy'])
     expect(sections.MISC.enabled).toBe(true)
     expect(sections.MISC.groups[0].poses[0].name).toBe('Odd')
+  })
+
+  it('coalesces ALTERNATING flat-section runs into ONE stable group per flat section', () => {
+    // Flat sections (FBM/MISC) have exactly one group by definition — an
+    // interleaved legacy file (FBM, MISC, FBM) used to mint a SECOND FBM group,
+    // a shape the editor never produces. The single group must carry the stable
+    // flatSectionGroupId so scene-override additions can target imported flat
+    // sections exactly like the editor's implicit group.
+    const sections = sectionsFromFlatFrames([
+      { section: 'FBM', name: 'Heavy', morphs: [] },
+      { section: 'MISC', name: 'Odd', morphs: [] },
+      { section: 'FBM', name: 'Tall', morphs: [] },
+    ])
+    expect(sections.FBM.groups).toHaveLength(1)
+    expect(sections.FBM.groups[0].id).toBe(flatSectionGroupId('FBM'))
+    expect(sections.FBM.groups[0].poses.map((p) => p.name)).toEqual(['Heavy', 'Tall'])
+    expect(sections.MISC.groups).toHaveLength(1)
+    expect(sections.MISC.groups[0].id).toBe(flatSectionGroupId('MISC'))
+    // A scene override addressed at the flat group id reaches the imported poses.
+    const merged = applySceneOverride(sections, {
+      scenePath: 'D:/s/Beach.duf',
+      enabled: true,
+      poses: [],
+      additions: [
+        {
+          groupId: flatSectionGroupId('FBM'),
+          poses: [{ id: 'add1', name: 'BeachFix', morphs: [], boneScaleRef: false }],
+        },
+      ],
+    })
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['Heavy', 'Tall', 'BeachFix'])
+  })
+
+  it('grouped sections still split alternating runs into separate groups', () => {
+    // EXP/JCM/… keep run semantics: a run boundary IS a group boundary there.
+    const sections = sectionsFromFlatFrames([
+      { section: 'EXP', name: 'Angry', morphs: [] },
+      { section: 'JCM', name: 'Bend', morphs: [] },
+      { section: 'EXP', name: 'Happy', morphs: [] },
+    ])
+    expect(sections.EXP.groups).toHaveLength(2)
+    expect(sections.EXP.groups[0].poses.map((p) => p.name)).toEqual(['Angry'])
+    expect(sections.EXP.groups[1].poses.map((p) => p.name)).toEqual(['Happy'])
+    expect(sections.EXP.groups[0].id).not.toBe(sections.EXP.groups[1].id)
   })
 })
 

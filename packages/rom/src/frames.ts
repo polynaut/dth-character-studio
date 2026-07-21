@@ -1,6 +1,8 @@
 import {
   defaultSections,
+  flatSectionGroupId,
   genRomIncludes,
+  GROUPED_SECTIONS,
   newId,
   REFERENCE_FBX_SECTIONS,
   ROM_SECTIONS,
@@ -242,8 +244,14 @@ export function countPoses(sections: RomSections): number {
 
 /**
  * Builds sections from a flat frame list (DazToHue-Scripts FBM JSONs, legacy
- * studio data): consecutive frames of the same section become one group in
- * that section, which is enabled and switched to custom mode.
+ * studio data): consecutive frames of the same GROUPED section become one group
+ * in that section, which is enabled and switched to custom mode. FLAT sections
+ * (FBM/MISC) have exactly ONE group by definition — every run coalesces into
+ * it, and it carries the stable {@link flatSectionGroupId} (not a random
+ * `newId()`), so a scene override's flat-section additions can target an
+ * imported flat group the same way they target the editor's implicit one.
+ * (Alternating runs used to mint a SECOND flat group — a shape the editor
+ * never produces and overrides couldn't address.)
  */
 export function sectionsFromFlatFrames(
   frames: Array<{ section: string; name: string; morphs: Array<Morph> }>,
@@ -267,12 +275,13 @@ export function sectionsFromFlatFrames(
       morphs: frame.morphs,
       boneScaleRef: false,
     }
+    const flat = !GROUPED_SECTIONS.includes(section)
     const lastGroup = config.groups[config.groups.length - 1]
-    if (section === lastSection && lastGroup) {
+    if (flat ? lastGroup !== undefined : section === lastSection && lastGroup) {
       lastGroup.poses.push(pose)
     } else {
       config.groups.push({
-        id: newId(),
+        id: flat ? flatSectionGroupId(section) : newId(),
         label: '',
         suffix: 'centre',
         method: 'default',
