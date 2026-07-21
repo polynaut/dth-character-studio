@@ -19,8 +19,10 @@
 /** Uploaded avatars must measure at least this on BOTH sides. */
 export const MIN_AVATAR_SOURCE_PX = 256
 /** …and at most this on both sides — bigger sources are refused outright
- *  (export a smaller copy first), keeping crop memory and stored files bounded. */
-export const MAX_AVATAR_SOURCE_PX = 1024
+ *  (export a smaller copy first), keeping crop memory bounded. The STORED
+ *  avatar is always downscaled to at most 512² regardless (see
+ *  {@link avatarOutputSize}); this only bounds the source we'll crop from. */
+export const MAX_AVATAR_SOURCE_PX = 2048
 
 /** The two stored avatar resolutions (square). */
 export const AVATAR_OUTPUT_SIZES = [256, 512] as const

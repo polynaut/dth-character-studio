@@ -214,7 +214,7 @@ export function ImageDialog({
           >
             {busy ? 'Reading…' : 'Drop an image here, or click to pick one'}
             <span className="mt-1 text-xs text-muted-foreground/70">
-              256–1024px, any shape — you&rsquo;ll crop it to a square
+              256–2048px, any shape — you&rsquo;ll crop it to a square
             </span>
           </button>
         </FileDropZone>

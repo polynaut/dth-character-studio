@@ -78,8 +78,8 @@ describe('ImageDialog crop + persist flow', () => {
     expect(onApply).not.toHaveBeenCalled()
   })
 
-  it('rejects an image larger than 1024px on either side', async () => {
-    bitmapSize = { width: 2000, height: 500 }
+  it('rejects an image larger than 2048px on either side', async () => {
+    bitmapSize = { width: 3000, height: 500 }
     const onApply = vi.fn(async () => null)
     render(<ImageDialog {...baseProps} onApply={onApply} />)
     pickFile()

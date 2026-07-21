@@ -14,11 +14,12 @@ import {
 } from './image-crop.ts'
 
 describe('validateAvatarSource', () => {
-  it('accepts anything within 256..1024 on both sides, any aspect', () => {
+  it('accepts anything within 256..2048 on both sides, any aspect', () => {
     expect(validateAvatarSource(256, 256)).toBeNull()
-    expect(validateAvatarSource(1024, 1024)).toBeNull()
-    expect(validateAvatarSource(1024, 300)).toBeNull() // wide, still valid
-    expect(validateAvatarSource(300, 1024)).toBeNull() // tall, still valid
+    expect(validateAvatarSource(2048, 2048)).toBeNull()
+    expect(validateAvatarSource(2048, 300)).toBeNull() // wide, still valid
+    expect(validateAvatarSource(300, 2048)).toBeNull() // tall, still valid
+    expect(validateAvatarSource(896, 1192)).toBeNull() // the real case that was wrongly rejected
   })
 
   it('rejects too small on either side with the dimensions', () => {
@@ -27,8 +28,8 @@ describe('validateAvatarSource', () => {
   })
 
   it('rejects too large on either side', () => {
-    expect(validateAvatarSource(1025, 512)).toMatch(/too large.*1025×512/)
-    expect(validateAvatarSource(512, 2000)).toMatch(/too large/)
+    expect(validateAvatarSource(2049, 512)).toMatch(/too large.*2049×512/)
+    expect(validateAvatarSource(512, 3000)).toMatch(/too large/)
   })
 })
 
@@ -122,6 +123,6 @@ describe('zoomFraction round-trips with cropSizeForZoomFraction', () => {
 describe('bounds constants', () => {
   it('match the spec', () => {
     expect(MIN_AVATAR_SOURCE_PX).toBe(256)
-    expect(MAX_AVATAR_SOURCE_PX).toBe(1024)
+    expect(MAX_AVATAR_SOURCE_PX).toBe(2048)
   })
 })
