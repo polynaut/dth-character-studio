@@ -197,6 +197,29 @@ describe('project manifest (.dcsp)', () => {
     expect(after.dazSubdir).toBe('scenes')
   })
 
+  it('renameManifestFile renames the .dcsp to match the new name', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const next = await storage.renameManifestFile('/games/Nova', 'Nova Redux')
+    expect(next).toBe('/games/Nova/Nova Redux.dcsp')
+    expect(await storage.findManifestPath('/games/Nova')).toBe('/games/Nova/Nova Redux.dcsp')
+    // The old file is gone; the manifest reads back unchanged from the new file.
+    expect(files.has('/games/Nova/Nova.dcsp')).toBe(false)
+    expect((await storage.readManifest('/games/Nova')).name).toBe('Nova')
+  })
+
+  it('renameManifestFile is a no-op for a case-only name change', async () => {
+    const dcsp = await storage.createProjectManifest('/games/Nova', 'Nova')
+    // "nova" sanitizes to the same filename stem (case-insensitive match) — the
+    // file is left as-is rather than attempting a case-only rename.
+    expect(await storage.renameManifestFile('/games/Nova', 'nova')).toBe(dcsp)
+    expect(await storage.findManifestPath('/games/Nova')).toBe(dcsp)
+  })
+
+  it('renameManifestFile returns null when there is no manifest', async () => {
+    addDir('/games/Bare')
+    expect(await storage.renameManifestFile('/games/Bare', 'Whatever')).toBeNull()
+  })
+
   it('defaults a missing manifest to the folder name', async () => {
     addDir('/games/Empty')
     const m = await storage.readManifest('/games/Empty')

@@ -1,4 +1,4 @@
-import { mkdir, readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { mkdir, readDir, readTextFile, rename } from '@tauri-apps/plugin-fs'
 
 import { newId } from '@dth/rom'
 
@@ -195,6 +195,22 @@ export async function writeManifest(dir: string, manifest: DcspManifest): Promis
   const path = existing ?? join(dir, dcspFileName(manifest.name))
   await writeTextFileAtomic(path, JSON.stringify(manifest, null, 2) + '\n')
   return manifest
+}
+
+/**
+ * Rename the project's `.dcsp` file to match `name`, so the filename (and the
+ * window title derived from it) track the project name. Returns the resulting
+ * `.dcsp` path — unchanged when there's no manifest, or when the filename would
+ * only differ by case (a case-only rename is a no-op / can fail on
+ * case-insensitive filesystems).
+ */
+export async function renameManifestFile(dir: string, name: string): Promise<string | null> {
+  const existing = await findManifestPath(dir)
+  if (!existing) return null
+  const target = join(dir, dcspFileName(name))
+  if (basename(existing).toLowerCase() === basename(target).toLowerCase()) return existing
+  await rename(existing, target)
+  return target
 }
 
 /**
