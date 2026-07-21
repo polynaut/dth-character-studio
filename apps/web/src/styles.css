@@ -181,17 +181,18 @@ a {
 }
 
 /* Collapsing header: this animates the HEIGHT of the avatar *wrapper* (not the
-   image). The wrapper is overflow-hidden around a fixed 170×227 image, so the
-   box goes 170×227 → 170×96 and simply crops the portrait top-down — its width,
-   right edge, and the title beside it never move. Animating the wrapper's clip
-   (rather than the <img>'s own height with object-cover) means the image is
-   rasterized once and never re-fit per frame, which keeps the scroll smooth. A
-   soft drop shadow fades in as it settles. Scroll-driven animation — Chromium /
-   WebView2 support it; browsers without scroll timelines just keep it full size.
-   The transparent `from` shadow guarantees a smooth fade. */
+   image). The wrapper is overflow-hidden around a fixed 156×208 image (a 3:4
+   portrait at rest), so the box goes 156×208 → 156×90 and simply crops the
+   portrait top-down — its width, right edge, and the title beside it never move.
+   Animating the wrapper's clip (rather than the <img>'s own height with
+   object-cover) means the image is rasterized once and never re-fit per frame,
+   which keeps the scroll smooth. A soft drop shadow fades in as it settles.
+   Scroll-driven animation — Chromium / WebView2 support it; browsers without
+   scroll timelines just keep it full size. The transparent `from` shadow
+   guarantees a smooth fade. */
 @keyframes dth-avatar-shrink {
   from {
-    height: 227px;
+    height: 208px;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
     border-color: transparent;
   }
@@ -212,17 +213,21 @@ a {
 }
 
 /* A second, *staggered* scroll animation layered on the image itself: while the
-   wrapper above crops the box, the image drifts up by 8% of its height — on a
-   later, longer range than the crop (130 → 320 vs 100 → 242) so the two motions
-   don't move in lockstep and the portrait gently pans as it settles. translateY
-   is composited, so this stays smooth and never touches layout. The clipped
-   wrapper hides the top edge the drift exposes. */
+   wrapper above crops the box, the image drifts UP as it settles — on a later,
+   longer range than the crop so the two motions don't move in lockstep and the
+   portrait gently pans. translateY is composited, so this stays smooth and never
+   touches layout.
+   `from` MUST rest at 0: the image is object-top flush with the clip box, so any
+   downward (positive) offset at scroll-top slides its top edge down and exposes
+   the wrapper's grey fill as a strip along the top — invisible on a transparent
+   Daz tip (grey shows through everywhere), but an obvious band on a full-bleed
+   photo. The drift only ever goes negative (up), which the clipped wrapper hides. */
 @keyframes dth-avatar-pan {
   from {
-    transform: translateY(2%);
+    transform: translateY(0);
   }
   to {
-    transform: translateY(-10%);
+    transform: translateY(-12%);
   }
 }
 @supports (animation-timeline: scroll()) {

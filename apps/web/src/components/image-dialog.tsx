@@ -1,13 +1,18 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import { ImageCropEditor } from '#/components/image-crop-editor.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Modal } from '@dth/ui'
+import { validateAvatarSource } from '#/lib/image-crop.ts'
 import {
+  deleteCharacterUpload,
+  listCharacterUploads,
+  readAvatarSourceFile,
   setAvatarFromScene,
-  uploadCharacterImage,
-  uploadCharacterImageFromPath,
+  uploadCroppedAvatar,
 } from '#/lib/rom/api.ts'
 
 /**
@@ -26,7 +31,9 @@ export function ImageDialog({
   image: string
   name: string
   characterId: string
-  /** Linked Daz scene paths — each offers its `.tip.png` as a pickable avatar. */
+  /** The PRIMARY Daz scene (as a 0-or-1 array), offering its `.tip.png` as a
+   *  pickable avatar. Only the primary is selectable — a non-primary scene
+   *  can be previewed in the header but never set as the stored avatar. */
   scenes: Array<string>
   /** Persists a new stored image reference. Receives an async PRODUCER of
    *  `{ image, imageScene }` (`imageScene` is the linked scene whose preview
@@ -49,28 +56,63 @@ export function ImageDialog({
   const [url, setUrl] = useState(image)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /** A decoded, size-validated upload awaiting its 1:1 crop. */
+  const [cropSource, setCropSource] = useState<ImageBitmap | null>(null)
+  /** Past uploads (newest first) offered for one-click re-selection. */
+  const [recent, setRecent] = useState<Array<string>>([])
   const fileInput = useRef<HTMLInputElement>(null)
 
-  // Native OS drag-drop gives a path — read + upload it server-side. The upload
-  // runs INSIDE the persist producer — after persistPatch's single-flight and
-  // validation guards — so an up-front refusal can never have already written
-  // the file; once the upload HAS run, the hook persists at least the image
-  // patch itself, so the preview never shows an avatar that failed to persist
-  // (only a genuinely failed save resets it below).
+  // Load the recent-uploads gallery on open and after each new upload lands.
+  useEffect(() => {
+    let active = true
+    listCharacterUploads({ data: { characterId } })
+      .then((list) => active && setRecent(list))
+      .catch(() => active && setRecent([]))
+    return () => {
+      active = false
+    }
+  }, [characterId, url])
+
+  // Every custom upload goes through decode → size validation (256..1024 on
+  // both sides) → the 1:1 crop editor; only the CROPPED square is ever stored
+  // (so previews render consistently everywhere). Decoding and validating are
+  // side-effect free and run up front — the actual write waits inside the
+  // persist producer (see applyCrop).
+  async function startCrop(blob: Blob) {
+    setBusy(true)
+    setError('')
+    try {
+      let bitmap: ImageBitmap
+      try {
+        bitmap = await createImageBitmap(blob)
+      } catch {
+        throw new Error('Could not read that image.')
+      }
+      const problem = validateAvatarSource(bitmap.width, bitmap.height)
+      if (problem) {
+        bitmap.close()
+        throw new Error(problem)
+      }
+      setCropSource(bitmap)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Native OS drag-drop gives a path — the lib layer reads the bytes (extension
+  // allowlist + byte cap live there), then the same decode/validate/crop flow.
   async function uploadPath(path: string) {
     setBusy(true)
     setError('')
     try {
-      const saved = await onApply(async () => {
-        const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
-        setUrl(served)
-        return { image: served, imageScene: '' }
-      })
-      // Refused or failed → reset the preview to the last persisted image.
-      if (saved === null) setUrl(image)
+      const { bytes, mimeType } = await readAvatarSourceFile({ data: { path } })
+      // Copy into a fresh ArrayBuffer-backed view — the plugin-fs Uint8Array is
+      // typed over ArrayBufferLike, which BlobPart no longer accepts directly.
+      await startCrop(new Blob([new Uint8Array(bytes)], { type: mimeType }))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
       setBusy(false)
     }
   }
@@ -84,28 +126,30 @@ export function ImageDialog({
       setError('Image is larger than 10 MB.')
       return
     }
+    await startCrop(file)
+  }
+
+  // The crop editor produced the final square PNG — store it. The write runs
+  // INSIDE the persist producer — after persistPatch's single-flight and
+  // validation guards — so an up-front refusal can never have already written
+  // the file; once the upload HAS run, the hook persists at least the image
+  // patch itself, so the preview never shows an avatar that failed to persist
+  // (only a genuinely failed save resets it below).
+  async function applyCrop(png: Uint8Array) {
     setBusy(true)
     setError('')
+    // Leave the crop step either way — a refused/failed persist returns to the
+    // main view with the avatar preview reset (and any error shown); a success
+    // shows the new avatar. Either way the staged bitmap is done.
+    cropSource?.close()
+    setCropSource(null)
     try {
-      // Reading the picked file is side-effect free, so it may run up front;
-      // the actual upload waits inside the producer (see uploadPath).
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-        reader.onerror = () => reject(new Error('Could not read the file'))
-        reader.readAsDataURL(file)
-      })
       const saved = await onApply(async () => {
-        const served = await uploadCharacterImage({
-          data: {
-            characterId,
-            mimeType: file.type,
-            dataBase64: dataUrl.split(',')[1] ?? '',
-          },
-        })
+        const served = await uploadCroppedAvatar({ data: { characterId, bytes: png } })
         setUrl(served)
         return { image: served, imageScene: '' }
       })
+      // Refused or failed → reset the preview to the last persisted image.
       if (saved === null) setUrl(image)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -134,11 +178,69 @@ export function ImageDialog({
     }
   }
 
+  // Re-select a past upload — no side effect, just point the reference at an
+  // already-stored file. Mirrors applyScene's refuse/reset handling.
+  async function applyRecent(fileName: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await onApply(async () => {
+        setUrl(fileName)
+        return { image: fileName, imageScene: '' }
+      })
+      if (saved === null) setUrl(image)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Delete a past upload from the gallery (never the active one — its ✕ is
+  // disabled). Drops it from the list optimistically on success.
+  async function deleteRecent(fileName: string) {
+    setBusy(true)
+    setError('')
+    try {
+      await deleteCharacterUpload({ data: { characterId, fileName } })
+      setRecent((r) => r.filter((f) => f !== fileName))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function cancelCrop() {
+    cropSource?.close()
+    setCropSource(null)
+    setError('')
+  }
+
   // The Modal primitive carries the dialog semantics the old hand-rolled portal
   // was missing: focus trap, initial focus, ESCAPE (there was none here), and
   // focus restore to the opener.
   return (
-    <Modal open onClose={onClose} title="Character image" showClose>
+    <Modal
+      open
+      onClose={() => {
+        cropSource?.close()
+        onClose()
+      }}
+      title={cropSource ? 'Crop to a square' : 'Character image'}
+      showClose
+    >
+      {/* Once an upload is staged, the dialog becomes the crop step — only the
+          cropped square is ever stored, so every avatar preview is 1:1. */}
+      {cropSource ? (
+        <ImageCropEditor
+          bitmap={cropSource}
+          busy={busy}
+          onApply={(png) => void applyCrop(png)}
+          onCancel={cancelCrop}
+        />
+      ) : (
+        <>
         <div className="flex justify-center">
           <Avatar
             image={url}
@@ -161,18 +263,70 @@ export function ImageDialog({
             className="flex w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-input px-4 py-6 text-center text-sm text-muted-foreground transition-colors hover:border-primary"
             onClick={() => fileInput.current?.click()}
           >
-            {busy ? 'Uploading…' : 'Drop an image here, or click to pick one'}
+            {busy ? 'Reading…' : 'Drop an image here, or click to pick one'}
+            <span className="mt-1 text-xs text-muted-foreground/70">
+              256–2048px, any shape — you&rsquo;ll crop it to a square
+            </span>
           </button>
         </FileDropZone>
 
-        {/* Offer the linked scenes' thumbnails whenever there's at least one — the
-            current avatar may have come from a scene since unlinked, so even a
-            single remaining scene needs to be selectable to switch back to it. */}
+        {/* Recent uploads — a rolling history so switching to a scene (or a
+            different upload) no longer loses the last one. Only past uploads,
+            newest first; the active one (if it's an upload) is ringed. */}
+        {recent.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-sm text-muted-foreground">Recent uploads:</p>
+            <div className="flex flex-wrap gap-2">
+              {recent.map((fileName) => (
+                <div key={fileName} className="relative">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void applyRecent(fileName)}
+                    title="Use this uploaded image"
+                    className={`block rounded-md ring-2 transition focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
+                      fileName === url ? 'ring-primary' : 'ring-transparent hover:ring-primary'
+                    }`}
+                  >
+                    {/* Same portrait frame as the scene thumbnails below, so the
+                        two rows read as one gallery. The stored upload is square;
+                        shown object-top (no zoom) it mirrors the header crop. */}
+                    <Portrait
+                      image={fileName}
+                      name={name}
+                      zoom={false}
+                      imgClassName="object-top"
+                      className="aspect-[3/4] w-16 rounded-md"
+                      fallbackClassName="text-lg"
+                    />
+                  </button>
+                  {/* Delete ✕ — a sibling (not nested in the select button).
+                      Disabled for the active image (deleting the referenced file
+                      would break the avatar). Scene thumbnails have no ✕: they
+                      re-derive from the scene and aren't stored uploads. */}
+                  <button
+                    type="button"
+                    disabled={busy || fileName === url}
+                    onClick={() => void deleteRecent(fileName)}
+                    title={
+                      fileName === url ? "Can't delete the current image" : 'Delete this upload'
+                    }
+                    aria-label="Delete this upload"
+                    className="absolute -top-1.5 -right-1.5 rounded-full border border-background bg-neutral-900 p-0.5 text-white shadow transition hover:bg-destructive disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Offer the PRIMARY scene's thumbnail as an avatar source (only when a
+            primary is linked). Non-primary scenes are intentionally not offered. */}
         {scenes.length > 0 && (
           <div>
-            <p className="mb-1.5 text-sm text-muted-foreground">
-              {scenes.length === 1 ? "Or use the linked Daz scene's image:" : "Or use a linked Daz scene's image:"}
-            </p>
+            <p className="mb-1.5 text-sm text-muted-foreground">Primary Daz scene image:</p>
             <div className="flex flex-wrap gap-2">
               {scenes.map((scene) => (
                 <button
@@ -220,7 +374,6 @@ export function ImageDialog({
             Apply
           </Button>
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
       <input
         ref={fileInput}
         type="file"
@@ -232,6 +385,9 @@ export function ImageDialog({
           e.target.value = ''
         }}
       />
+        </>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </Modal>
   )
 }
