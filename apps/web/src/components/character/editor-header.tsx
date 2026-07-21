@@ -5,6 +5,7 @@ import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
+import { Portrait } from '#/components/portrait.tsx'
 import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
@@ -244,12 +245,19 @@ export function EditorHeader({
               className="pointer-events-none absolute bottom-1.5 left-1.5"
               title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
             >
-              <Avatar
-                image={cornerBadge.image ?? ''}
+              {/* Portrait, not Avatar: a scene render gets the same
+                  "zoom in + lift up" framing as every other scene thumbnail
+                  (its default zoom); a square upload shows object-top, unzoomed,
+                  like the header/gallery. The frame's bg-neutral-500 fills the
+                  scene tip's transparency. */}
+              <Portrait
+                image={cornerBadge.image}
                 scenePath={cornerBadge.scenePath}
                 name={character.name}
-                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 bg-neutral-500 object-top shadow-md"
-                fallbackClassName="rounded-md border border-neutral-900 text-sm shadow-md"
+                zoom={!!cornerBadge.scenePath}
+                imgClassName={cornerBadge.scenePath ? undefined : 'object-top'}
+                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 shadow-md"
+                fallbackClassName="text-sm"
               />
             </span>
           )}
