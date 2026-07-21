@@ -174,6 +174,8 @@ export const DIM_FOLDER = 'E:/DAZ 3D/Install Manager/ManifestFiles'
 
 export interface SeedOptions {
   activeProjectFile?: string
+  /** Files `probe_locked_files` reports as locked — drives the move dialog. */
+  lockedFiles?: Array<string>
   /** The rich docs character (linked scene, avatar, populated FBM/JCM/preserve). */
   demo?: boolean
   /** Link a second (outfit) Daz scene with its own hair item — the multi-scene
@@ -333,6 +335,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     },
     appDataDir: P.appData,
     activeProjectFile: opts.activeProjectFile ?? '',
+    lockedFiles: opts.lockedFiles,
     version: '0.0.0-e2e',
   }
 }

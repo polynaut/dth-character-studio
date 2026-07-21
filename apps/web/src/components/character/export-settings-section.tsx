@@ -85,9 +85,13 @@ export function ExportSettingsSection({
         </Button>
         {character.exportPath && (
           <>
-            <PathCode path={displayPath(character.exportPath)} />
+            {/* Taller chip so it lines up with the h-9 buttons on either side. */}
+            <PathCode
+              path={displayPath(character.exportPath)}
+              className="flex h-9 items-center"
+            />
             <Button
-              variant="ghost"
+              variant="ghost-destructive"
               size="sm"
               onClick={() =>
                 void persistPatch(

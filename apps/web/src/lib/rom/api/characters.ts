@@ -32,6 +32,7 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
+import { assertMovable } from './move'
 import { isExternalImage } from '../image'
 
 import type { Character, GenesisVersion, ImportedPose } from '@dth/rom'
@@ -520,8 +521,13 @@ export async function moveCharacter({
   data: unknown
 }): Promise<{ location: storage.CharacterLocation; character: Character }> {
   const { projectId, id, relPath } = moveInput.parse(data)
+  const root = await charactersRoot(projectId)
+  // The shared lock gate: refuse (with the file list) before touching disk if
+  // the character folder has files open in Daz/Houdini.
+  const loc = await locateCharacter(root, id)
+  if (loc) await assertMovable(loc.folderAbs)
   invalidateCharacterLocations()
-  return withBusyCursor(storage.moveCharacter(await charactersRoot(projectId), id, relPath))
+  return withBusyCursor(storage.moveCharacter(root, id, relPath))
 }
 
 const moveScenesFolderInput = z.object({
@@ -567,6 +573,9 @@ export async function moveCharacterScenesFolder({
   const newDir = `${charFolder}/${rel}`
   let next = character
   if (normalizePathLower(newDir) !== normalizePathLower(oldDir)) {
+    // Same lock gate as every folder move — refuse with the file list if a
+    // scene under the folder is open in Daz.
+    await assertMovable(oldDir)
     await withBusyCursor(storage.moveFolder(oldDir, newDir))
     // Everything that lived under the old folder travels with the rename —
     // through THE single repoint site (storage/characters.ts), so this move can't

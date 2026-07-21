@@ -4,6 +4,7 @@ import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
+import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
@@ -98,6 +99,7 @@ export function EditorHeader({
   projectId,
   draft,
   folderChip,
+  folderMove,
   hasRunProblems,
   sceneTag,
   sceneAvatarPath,
@@ -107,6 +109,9 @@ export function EditorHeader({
   /** The character's folder chip (dim library root, bright remainder), or null
    *  while the location is unresolved. */
   folderChip: RootedDir | null
+  /** Enables the folder chip's edit-to-move affordance: the current subfolder to
+   *  seed the input, and the move handler (null → a plain read-only chip). */
+  folderMove: { editValue: string; onMove: (next: string) => Promise<unknown> } | null
   /** Show the "errors in the last ROM run" scroll-up button. */
   hasRunProblems: boolean
   /** The selected scene's tag next to the title (null hides it — single scene
@@ -254,7 +259,17 @@ export function EditorHeader({
           </p>
           {folderChip && (
             <p className="mt-1.5 text-xs">
-              <DirPathChip dir={folderChip.dir} roots={[folderChip.root]} />
+              {folderMove ? (
+                <FolderMoveChip
+                  dir={folderChip.dir}
+                  roots={[folderChip.root]}
+                  editValue={folderMove.editValue}
+                  editLabel="Folder"
+                  onMove={folderMove.onMove}
+                />
+              ) : (
+                <DirPathChip dir={folderChip.dir} roots={[folderChip.root]} />
+              )}
             </p>
           )}
         </div>

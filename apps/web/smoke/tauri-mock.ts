@@ -31,6 +31,9 @@ export interface TauriMockSeed {
   /** What the native file/folder picker (`plugin:dialog|open`) returns — a path
    *  to simulate a pick, or undefined for "cancelled" (the default). */
   dialogPath?: string
+  /** Files `probe_locked_files` reports as locked (open in Daz/Houdini) — drives
+   *  the "close those apps" move dialog. Default: nothing locked. */
+  lockedFiles?: Array<string>
   /** Conformed items a scene's `.duf` reports (`scene_wearables`) — the groom
    *  picker's suggestions; a listed hair item resolves against these. */
   sceneWearables?: Array<{ id: string; label: string; conformTarget: string }>
@@ -235,6 +238,8 @@ export function installTauriMock(seed: TauriMockSeed): void {
       // --- the app's own Rust commands --------------------------------------
       case 'active_project_file':
         return seed.activeProjectFile
+      case 'probe_locked_files':
+        return seed.lockedFiles ?? []
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
       case 'scan_duf_files': {

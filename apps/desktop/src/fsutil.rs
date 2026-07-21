@@ -82,6 +82,55 @@ fn walk_below<V: DirVisitor>(dir: &Path, rel: &Path, v: &mut V) -> std::io::Resu
     Ok(())
 }
 
+/// Visitor collecting files another process holds with a deny-write/rename lock
+/// — the ones a folder move would fail on. See `probe_locked_files`.
+struct LockedFiles {
+    locked: Vec<String>,
+}
+
+impl DirVisitor for LockedFiles {
+    fn file(&mut self, entry: &fs::DirEntry, _rel: &Path) -> std::io::Result<()> {
+        let path = entry.path();
+        // Probe by opening for write: a Windows sharing violation (os error 32)
+        // means another process holds it without share-delete — it can't be
+        // renamed/moved. Opening read+write never truncates an existing file.
+        // Everything else (opened fine, permission denied, gone mid-walk) counts
+        // as movable; Unix has no mandatory locks, so its files read as unlocked
+        // and moves there generally succeed regardless.
+        let locked = match fs::OpenOptions::new().read(true).write(true).open(&path) {
+            Ok(_) => false,
+            Err(e) => e.raw_os_error() == Some(32),
+        };
+        if locked {
+            self.locked.push(path.to_string_lossy().replace('\\', "/"));
+        }
+        Ok(())
+    }
+
+    fn unreadable(&mut self, _path: &Path, _e: std::io::Error) -> std::io::Result<()> {
+        // A folder we can't list isn't a per-file lock — let the move itself
+        // surface that error.
+        Ok(())
+    }
+}
+
+/// The files under `dir` currently locked by another process (open in Daz Studio
+/// / Houdini), which a folder move can't relocate — surfaced to the user so they
+/// can close those apps and retry. `/`-normalised absolute paths, sorted. Empty
+/// when `dir` is missing or nothing is locked. Best-effort on Unix (no mandatory
+/// locks). Async so the per-file probe walk runs off the main thread.
+#[tauri::command(async)]
+pub fn probe_locked_files(dir: String) -> Vec<String> {
+    let root = Path::new(&dir);
+    if !root.is_dir() {
+        return Vec::new();
+    }
+    let mut v = LockedFiles { locked: Vec::new() };
+    let _ = walk_dir(root, &mut v);
+    v.locked.sort();
+    v.locked
+}
+
 /// Guard a user/settings-supplied path before a RECURSIVE delete: refuse a
 /// filesystem/drive root or a path so shallow (fewer than two real name segments)
 /// that deleting it would wipe a drive or a top-level profile folder. Returns
