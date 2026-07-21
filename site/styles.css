@@ -229,6 +229,13 @@ a:hover {
   gap: 28px;
 }
 
+/* The topbar's edges line up with the guide's content area (sidebar +
+   article = 1196px, see guide.css .guide-layout) — same width on the landing
+   page so both headers match. */
+.topbar .container {
+  max-width: 1196px;
+}
+
 .topbar-brand {
   display: inline-flex;
   align-items: center;

@@ -50,3 +50,65 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && overlay.classList.contains('open')) close()
 })
+
+// ── Direct download ──────────────────────────────────────────────────────────
+// The topbar Download button starts the right installer immediately — same
+// mechanism as the landing page (see main.js), sharing its sessionStorage
+// cache so both pages together make at most one GitHub API call per session.
+// Fallbacks (unsupported OS, API rate limit, JS off): the static href to the
+// landing page, which carries the full download block.
+async function initGuideDownload() {
+  const btn = document.querySelector('.topbar .btn-primary')
+  if (!(btn instanceof HTMLAnchorElement)) return
+  const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase()
+  const ua = navigator.userAgent.toLowerCase()
+  if (/iphone|ipad|android/.test(ua)) return
+  const os =
+    platform.includes('win') || ua.includes('windows')
+      ? 'windows'
+      : platform.includes('mac') || ua.includes('mac os')
+        ? 'mac'
+        : ''
+  if (!os) return
+  const CACHE_KEY = 'dth-latest-release'
+  let release = null
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY))
+    if (cached && Date.now() - cached.at < 60 * 60 * 1000) release = cached.release
+  } catch {
+    /* corrupt cache — refetch */
+  }
+  if (!release) {
+    try {
+      const res = await fetch('https://api.github.com/repos/polynaut/dth-character-studio/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      release = {
+        tag: data.tag_name,
+        url: data.html_url,
+        assets: data.assets.map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size })),
+      }
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release }))
+      } catch {
+        /* storage full/blocked — fine, just uncached */
+      }
+    } catch {
+      return
+    }
+  }
+  const win = release.assets.find((a) => a.name.endsWith('-setup.exe'))
+  const dmgs = release.assets.filter((a) => a.name.endsWith('.dmg'))
+  const mac =
+    dmgs.find((a) => a.name.includes('universal')) ||
+    dmgs.find((a) => a.name.includes('aarch64')) ||
+    dmgs[0]
+  const asset = os === 'windows' ? win : mac
+  if (asset) {
+    btn.href = asset.url
+    btn.title = `${release.tag} · direct download`
+  }
+}
+void initGuideDownload()
