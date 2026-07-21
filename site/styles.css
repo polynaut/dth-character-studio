@@ -424,8 +424,44 @@ a:hover {
   color: var(--fg-bright);
 }
 
+/* The guide teaser gets a shine: the text is painted with an orange gradient
+   (primary plus lighter hues) clipped to the glyphs, and a bright band sweeps
+   through it. The gradient starts and ends on the same color, so the linear
+   loop is seamless. Hover stays on the gradient (the arrow still slides). */
 .hero .btn-ghost {
   margin-top: 26px;
+  background-image: linear-gradient(
+    100deg,
+    var(--primary) 0%,
+    var(--primary-soft) 40%,
+    #ffc9a1 50%,
+    var(--primary-soft) 60%,
+    var(--primary) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: guide-shine 3s linear infinite;
+}
+
+.hero .btn-ghost:hover {
+  color: transparent;
+}
+
+@keyframes guide-shine {
+  from {
+    background-position: 250% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero .btn-ghost {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------- Sections */
