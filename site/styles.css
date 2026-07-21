@@ -394,14 +394,17 @@ a:hover {
   display: none !important;
 }
 
-.dl-note {
-  max-width: 420px;
-  font-size: 0.98rem;
+/* Unsupported OS (mobile, Linux): main.js strips the href and adds this
+   class — same big hero button, just gray and inert. */
+.btn-primary.btn-disabled,
+.btn-primary.btn-disabled:hover {
+  background: var(--bg-raised);
   color: var(--muted);
-}
-
-.dl-note strong {
-  color: var(--fg);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  transform: none;
+  cursor: default;
+  pointer-events: none;
 }
 
 .dl-alt {

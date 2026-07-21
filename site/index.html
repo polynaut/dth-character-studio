@@ -101,12 +101,9 @@
           </p>
 
           <div class="download-block">
-            <!-- On an unsupported OS (mobile, Linux) main.js hides the button
-                 and unhides this note instead — the app only runs on desktop. -->
-            <p class="dl-note" id="dl-note" hidden>
-              DTH&nbsp;Character&nbsp;Studio is a <strong>desktop app</strong> for Windows&nbsp;&amp;&nbsp;macOS —
-              open this page on your PC or Mac to download.
-            </p>
+            <!-- On an unsupported OS (mobile, Linux) main.js turns this button
+                 into the gray .btn-disabled variant — the app only runs on
+                 desktop, but the hero keeps the same shape everywhere. -->
             <a class="btn btn-primary btn-hero" id="dl-btn" href="https://github.com/polynaut/dth-character-studio/releases/latest">
               <span class="dl-icon" id="dl-icon">
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

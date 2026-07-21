@@ -97,12 +97,16 @@ async function initDownload() {
 
   const os = detectOS();
 
-  // Unsupported OS (mobile, Linux, unknown): no download button at all — just
-  // the note that this is a desktop app, plus the releases link below it.
+  // Unsupported OS (mobile, Linux, unknown): the same big button, but gray
+  // and inert — its label explains this is a desktop app. The hero reads the
+  // same on every device.
   if (os !== 'windows' && os !== 'mac') {
-    btn.hidden = true;
+    btn.removeAttribute('href');
+    btn.classList.add('btn-disabled');
+    btn.setAttribute('aria-disabled', 'true');
+    label.textContent = 'Desktop app for Windows & macOS';
+    sub.textContent = 'Open this page on your PC or Mac to download';
     topbarBtn.hidden = true;
-    document.getElementById('dl-note').hidden = false;
     return;
   }
 
