@@ -1,18 +1,22 @@
-// Deterministic GIF recording for the guide: interactions rendered as a fixed
-// sequence of screenshot FRAMES (not a video capture), with a fake cursor
-// overlay standing in for the OS pointer headless Chromium never draws.
-// Identical frames encode to byte-identical GIFs (gifenc is pure JS), so the
-// screenshot pipeline's contract — a second run leaves `git diff` empty —
-// holds for GIFs too. App transitions are pinned to 0ms while recording; the
-// cursor gliding between UI states provides the motion instead.
+// Deterministic animated-WebP recording for the guide: interactions rendered as
+// a fixed sequence of screenshot FRAMES (not a video capture), with a fake cursor
+// overlay standing in for the OS pointer headless Chromium never draws. App
+// transitions are pinned to 0ms while recording; the cursor gliding between UI
+// states provides the motion instead.
+//
+// The same frames encode to the same WebP on a given machine (sharp/libwebp is
+// deterministic for a pinned version + options), so the screenshot pipeline's
+// contract — regenerating leaves `git diff` empty — holds for these clips too.
+// WebP replaces the old 256-colour GIF: crisp UI text (lossless) at a fraction
+// of the size.
 
 import { writeFileSync } from 'node:fs'
 import { PNG } from 'pngjs'
-import { GIFEncoder, quantize, applyPalette } from 'gifenc'
+import sharp from 'sharp'
 
 import type { Page } from '@playwright/test'
 
-export interface GifClip {
+export interface WebpClip {
   x: number
   y: number
   width: number
@@ -22,14 +26,14 @@ export interface GifClip {
 /** Ease the cursor like a hand would — slow in, fast middle, slow out. */
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 
-export class GifRecorder {
-  private frames: Array<{ data: Uint8Array; delay: number }> = []
+export class WebpRecorder {
+  private frames: Array<{ data: Buffer; delay: number }> = []
   private size: { width: number; height: number } | null = null
   private cursor = { x: 0, y: 0 }
 
   constructor(
     private page: Page,
-    private clip?: GifClip,
+    private clip?: WebpClip,
   ) {}
 
   /**
@@ -76,7 +80,7 @@ export class GifRecorder {
     const shot = await this.page.screenshot(this.clip ? { clip: this.clip } : {})
     const png = PNG.sync.read(shot)
     if (!this.size) this.size = { width: png.width, height: png.height }
-    this.frames.push({ data: new Uint8Array(png.data), delay })
+    this.frames.push({ data: Buffer.from(png.data), delay })
   }
 
   /** Hold the current state for a while (one long-delay frame). */
@@ -113,16 +117,26 @@ export class GifRecorder {
     await this.frame(90)
   }
 
-  /** Encode all frames and write the GIF. */
-  save(path: string) {
+  /** Encode all frames and write the animated WebP. */
+  async save(path: string) {
     if (!this.size) throw new Error('no frames recorded')
-    const gif = GIFEncoder()
-    for (const frame of this.frames) {
-      const palette = quantize(frame.data, 256)
-      const index = applyPalette(frame.data, palette)
-      gif.writeFrame(index, this.size.width, this.size.height, { palette, delay: frame.delay })
-    }
-    gif.finish()
-    writeFileSync(path, gif.bytes())
+    const { width, height } = this.size
+    // sharp joins an array of images into one animation; it needs decodable
+    // inputs (raw pixel buffers aren't accepted by `join`), so encode each frame
+    // to PNG first, then join to a lossless animated WebP with per-frame delays.
+    const pngs = await Promise.all(
+      this.frames.map((frame) =>
+        sharp(frame.data, { raw: { width, height, channels: 4 } }).png().toBuffer(),
+      ),
+    )
+    const webp = await sharp(pngs, { join: { animated: true } })
+      .webp({
+        delay: this.frames.map((frame) => frame.delay),
+        loop: 0,
+        lossless: true,
+        effort: 6,
+      })
+      .toBuffer()
+    writeFileSync(path, webp)
   }
 }

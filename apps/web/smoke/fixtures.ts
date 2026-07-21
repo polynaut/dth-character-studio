@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join as joinNodePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// ── Shared page helpers for the docs suites (guide.screenshots / guide.gifs) ─
+// ── Shared page helpers for the docs suites (guide.screenshots / guide.clips) ─
 
 /** Every date/time the app renders resolves against this frozen instant — file
  *  mtimes from the mock (statOf uses Date.now IN the page), "saved …" stamps,

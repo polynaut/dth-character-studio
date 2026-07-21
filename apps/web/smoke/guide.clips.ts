@@ -1,24 +1,24 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { buildSeed, P, prime, settle } from './fixtures.ts'
-import { GifRecorder } from './gif-recorder.ts'
+import { WebpRecorder } from './webp-recorder.ts'
 
-// Interaction GIFs for docs/guide/* — the moving-picture siblings of
-// guide.screenshots.ts. Same fixture world, same determinism contract (a
-// second full run must leave `git diff` empty): interactions are scripted as
-// FIXED frame sequences — a fake cursor glides between UI states, every frame
-// is a plain screenshot, gifenc encodes them reproducibly. See
-// smoke/gif-recorder.ts for the machinery.
+// Interaction clips (animated WebP) for docs/guide/* — the moving-picture
+// siblings of guide.screenshots.ts. Same fixture world, same determinism
+// contract (regenerating leaves `git diff` empty): interactions are scripted as
+// FIXED frame sequences — a fake cursor glides between UI states, every frame is
+// a plain screenshot, sharp encodes them to a lossless animated WebP. See
+// smoke/webp-recorder.ts for the machinery.
 //
-// Run: pnpm --filter @dth/web gifs
+// Run: pnpm --filter @dth/web clips
 
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../docs/guide/gifs')
+const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../docs/guide/clips')
 
 // prime()/settle()/FIXED_TIME are shared with guide.screenshots.ts — they live
-// in fixtures.ts. Only the clipboard stub is gif-specific:
+// in fixtures.ts. Only the clipboard stub is clip-specific:
 // headless Chromium rejects the async clipboard API (permission grants
 // included proved flaky) — stub it so click-to-copy takes its SUCCESS path
 // and the "Copied" check badge shows in recordings. The app code path is
@@ -42,7 +42,7 @@ test('path-chip-copy', async ({ page }) => {
   const target = { x: box.x + box.width * 0.55, y: box.y + box.height * 0.6 }
 
   // Clip: the chip's neighbourhood, wide enough to show the approach.
-  const rec = new GifRecorder(page, {
+  const rec = new WebpRecorder(page, {
     x: Math.max(0, box.x - 120),
     y: Math.max(0, box.y - 56),
     width: box.width + 240,
@@ -54,11 +54,11 @@ test('path-chip-copy', async ({ page }) => {
   await rec.glideTo(target.x, target.y, 10) // hover: the copy badge pops in
   await rec.hold(600)
   await rec.click() // click: copies — the badge flips to the check mark
-  // The copy must actually land (clipboard stub!) — otherwise the GIF silently
+  // The copy must actually land (clipboard stub!) — otherwise the clip silently
   // records a click with no feedback. NOTE: assert via a name-stable locator;
   // the `chip` locator above filters BY the name 'Copy path' and so can never
   // observe the 'Copied' state itself.
   await expect(page.locator('span[data-alt-reveal]').first()).toHaveAccessibleName('Copied')
   await rec.hold(1400)
-  rec.save(join(OUT, 'path-chip-copy.gif'))
+  await rec.save(join(OUT, 'path-chip-copy.webp'))
 })
