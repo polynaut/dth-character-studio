@@ -10,6 +10,8 @@ import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
+import { parseAvatarName } from '#/lib/rom/avatar-names.ts'
+
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
@@ -122,10 +124,19 @@ export function EditorHeader({
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
+  // Does the MAIN avatar already show the primary Daz scene? A stored scene
+  // snapshot (`--sc-` filename) is always the primary (non-primary scenes can't
+  // be set as the avatar), and a recorded `imageScene` matching the primary
+  // covers legacy names. When true, the big portrait already IS the primary
+  // render, so no counterpart badge is needed.
+  const avatarShowsPrimaryScene =
+    parseAvatarName(character.image)?.kind === 'sc' ||
+    (!!character.imageScene && character.imageScene === character.scenePath)
+
   // What the small corner badge shows (see the badge JSX below), or null.
   const cornerBadge: { image?: string; scenePath?: string } | null = sceneAvatarPath
     ? { image: character.image } // previewing a non-primary scene → the main avatar
-    : character.scenePath && character.imageScene !== character.scenePath
+    : character.scenePath && !avatarShowsPrimaryScene
       ? { scenePath: character.scenePath } // custom avatar → the primary scene render
       : null
 
