@@ -1,11 +1,14 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
+import { ArrowLeft, BookOpen, ExternalLink, Globe } from 'lucide-react'
 import { openExternal } from '#/lib/desktop.ts'
+import { Button } from '@dth/ui'
 
 import { detectAssetVersions, fetchAppVersion } from '#/lib/rom/api.ts'
 
 const GITHUB_URL = 'https://github.com/polynaut/dth-character-studio'
 const DISCUSSIONS_URL = `${GITHUB_URL}/discussions`
+const LANDING_URL = 'https://polynaut.github.io/dth-character-studio/'
+const DOCS_URL = `${LANDING_URL}guide/index.html`
 
 export const Route = createFileRoute('/about')({
   loader: async () => ({
@@ -65,6 +68,14 @@ function AboutPage() {
           The bundled Daz runtime descends from <strong>DazToHue-Scripts</strong> by Soltude —
           everything the workflow needs ships with the studio; there is nothing extra to install.
         </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Button variant="outline" size="lg" onClick={() => void openExternal(LANDING_URL)}>
+            <Globe className="size-4" /> Landing page
+          </Button>
+          <Button variant="outline" size="lg" onClick={() => void openExternal(DOCS_URL)}>
+            <BookOpen className="size-4" /> Docs
+          </Button>
+        </div>
         {assets && assets.total > 0 && (
           <p className="mt-6 max-w-prose leading-relaxed text-muted-foreground">
             {assets.refreshNeeded ? (
