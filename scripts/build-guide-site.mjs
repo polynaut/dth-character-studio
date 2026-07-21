@@ -196,7 +196,7 @@ const shell = (md, content) => `<!doctype html>
           <span>DTH Character Studio</span>
         </a>
         <nav class="topbar-nav" aria-label="Guide">
-          <a href="../#features">Features</a>
+          <a href="../#features">Why</a>
           <a href="index.html">Guide</a>
         </nav>
         <a class="btn btn-primary btn-compact" href="../">
