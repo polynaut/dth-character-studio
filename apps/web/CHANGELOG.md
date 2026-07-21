@@ -1,5 +1,23 @@
 # @dth/web
 
+## 0.45.3
+
+### Patch Changes
+
+- [#450](https://github.com/polynaut/dth-character-studio/pull/450) [`4c8f0ec`](https://github.com/polynaut/dth-character-studio/commit/4c8f0ec52cd46ad2049d21158a3e50aa7ab3b0cf) Thanks [@polynaut](https://github.com/polynaut)! - Custom avatar images are now always square. When you upload an image (drop or pick), it's checked for size — at least 256×256 and at most 2048×2048, any aspect ratio — and then opened in a small crop editor where you drag to reposition and scroll or use the slider to zoom. Only the cropped 1:1 result is stored (at most 512×512), so every avatar preview looks consistent and the project metadata stays small. Images that are too small or too large are rejected with a clear message instead of being stored at odd sizes. Your recent uploads are now kept and shown in the image dialog, so switching to a Daz scene avatar (or a different upload) no longer discards the last one — click any recent image to switch back.
+
+- [#448](https://github.com/polynaut/dth-character-studio/pull/448) [`2ff2410`](https://github.com/polynaut/dth-character-studio/commit/2ff241092640c7fe258962fb686870c758db9de5) Thanks [@polynaut](https://github.com/polynaut)! - The Daz Studio / Houdini brand badges on the scene and Houdini-project cards are tucked flush into the bottom-left corner (`bottom-0 left-0`), sized down slightly (`size-6`), and carry a stronger 60%-opacity drop shadow so they read clearly over any avatar.
+
+- [#447](https://github.com/polynaut/dth-character-studio/pull/447) [`cc385cc`](https://github.com/polynaut/dth-character-studio/commit/cc385ccae7afb1c7dab0c7675005bbeaad8e2236) Thanks [@polynaut](https://github.com/polynaut)! - The sticky headers on the character page and the Settings / Tools pages now have a liquid-glass background — a translucent fill with a heavy backdrop blur, so content scrolling beneath frosts through them, echoing the native macOS title bar above. Falls back to the opaque background where `backdrop-filter` isn't supported.
+
+- [#446](https://github.com/polynaut/dth-character-studio/pull/446) [`29ed1bb`](https://github.com/polynaut/dth-character-studio/commit/29ed1bb63f9fa187d979da3b869b33e9959930a9) Thanks [@polynaut](https://github.com/polynaut)! - The character overview's **list view** now shows each avatar in a landscape crop (the same 13:9 ratio the character page's sticky header settles into), instead of the portrait crop used by the grid. Dates across the app (overview list, scan picker) are also formatted for the OS UI language — e.g. `DD.MM.YYYY` under a German system, `MM/DD/YYYY` under English — rather than a fixed default.
+
+- [#440](https://github.com/polynaut/dth-character-studio/pull/440) [`1d8beae`](https://github.com/polynaut/dth-character-studio/commit/1d8beae3f906d914a3eb8e1225f651cab6e610d1) Thanks [@polynaut](https://github.com/polynaut)! - The character header portrait now previews the selected Daz scene: selecting a non-primary scene swaps the avatar to that scene's `.tip.png` while it stays selected — the stored avatar itself is untouched. The home screen title also gets the studio's logo mark, and the main nav gains a "Docs" link straight to the online guide.
+
+- Updated dependencies [[`0792e99`](https://github.com/polynaut/dth-character-studio/commit/0792e99d8a47b099bcdf976359db08eefe1f44ce), [`38a7687`](https://github.com/polynaut/dth-character-studio/commit/38a76877937c074f5ab6e5aadaaf4668845105b3), [`364625a`](https://github.com/polynaut/dth-character-studio/commit/364625a9a4cdc4836120cd9499a457f8dba3ec0f), [`9515a2a`](https://github.com/polynaut/dth-character-studio/commit/9515a2acca31ee1ec6ce1afe495fe9f1c2b89cab), [`1c53147`](https://github.com/polynaut/dth-character-studio/commit/1c531470f82d5f4e2f7faad4f52d93af1dfe44b5)]:
+  - @dth/rom@0.45.3
+  - @dth/ui@0.45.3
+
 ## 0.45.2
 
 ### Patch Changes
