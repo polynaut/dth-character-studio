@@ -84,7 +84,7 @@ split export, `Export_…`) scripts install on Save:
 "My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
 first time a script is generated.
 
-The **Export directory** section drives [direct export](./05-rom-in-daz.md):
+The **Export directory** section drives [direct export](./05-rom-in-daz.md#direct-export-optional-recommended):
 **Choose folder…** opens the picker (starting at the character's Houdini folder
 as guidance), and **Clear** turns direct export off again. With no export
 directory set the studio generates the ROM only — **Bone scale** flags then just
