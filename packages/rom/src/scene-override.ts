@@ -101,29 +101,21 @@ export function sceneOverrideBuildsRom(override: Pick<SceneOverride, 'enabled'>)
 }
 
 /**
- * A character as it should build for one linked scene: its base definition with
- * that scene's ARMED override panels folded in — the ROM sections merged when
- * the ROM panel is armed ({@link applySceneOverride}), the Genesis-9 identity
- * dials (FACS detail / flexion strength / UE5 tear UV) swapped when the identity
- * panel is armed. The groom gate has no effect here: the per-scene hair lists
- * already live in `groomScenes`, selected by the open scene at run time. Feeds
- * both the scene's PoseAsset CSV and the run-time config delta the one character
- * script embeds.
+ * The scene's effective character for FRAME purposes: the base definition with
+ * the ROM panel's merged sections folded in when it's armed
+ * ({@link applySceneOverride}). Feeds the scene's `extraFrames` AND its PoseAsset
+ * CSV — both derive from `sections` only, and that single shared derivation is
+ * what keeps the Daz timeline and the Houdini CSV frame-aligned per scene.
+ *
+ * The identity dials and preserve lists do NOT merge here: they don't change
+ * frames or the CSV, so they ride as a run-time config DELTA computed straight
+ * from the override in `buildSceneConfigMap` (dsa.ts). The groom gate has no
+ * generation effect at all (hair lives per scene in `groomScenes`).
  */
 export function mergeSceneOverride(character: Character, override: SceneOverride): Character {
-  let merged = character
-  if (override.enabled) {
-    merged = { ...merged, sections: applySceneOverride(merged.sections, override) }
-  }
-  if (override.identity.enabled) {
-    merged = {
-      ...merged,
-      facsDetailStrength: override.identity.facsDetailStrength,
-      flexionStrength: override.identity.flexionStrength,
-      applyUE5TearUV: override.identity.applyUE5TearUV,
-    }
-  }
-  return merged
+  return override.enabled
+    ? { ...character, sections: applySceneOverride(character.sections, override) }
+    : character
 }
 
 /** A deep copy of a pose, safe to store as an override row and edit freely. */

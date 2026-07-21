@@ -197,6 +197,40 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
     })
     expect(parsed.sceneOverrides[0].groom.enabled).toBe(true)
   })
+
+  // The ROM `enabled` gate's default flipped true → false at v20 (fresh override
+  // = fully disabled). The v20 migrate step keeps a PRE-v20 override that omits
+  // `enabled` ACTIVE, so the flip can't silently deactivate a stored scene's ROM
+  // override (a quiet frame regression next to the core invariant).
+  it('a pre-v20 override missing `enabled` heals to ACTIVE (old default preserved)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 19,
+        sceneOverrides: [{ scenePath: 'D:/s.duf' }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].enabled).toBe(true)
+  })
+
+  it('a v20+ bare override defaults to DISABLED (the new default, no step)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: CHARACTER_SCHEMA_VERSION,
+        sceneOverrides: [{ scenePath: 'D:/s.duf' }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].enabled).toBe(false)
+  })
 })
 
 describe('migrateCharacterData — version handling', () => {

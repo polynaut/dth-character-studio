@@ -158,7 +158,9 @@ export function GroomFields({
                 Edit <strong>this Daz scene's own hair list</strong>: select one of the extra
                 scenes in the Daz scenes cards and enable the override to pick that outfit's hair.
                 The generated Daz script bakes every scene's list and hides the right one when that
-                scene is open — so one script covers them all.{' '}
+                scene is open — so one script covers them all. Unlike the ROM/Genesis panels,
+                disarming here only <strong>re-locks editing</strong> — the hair you listed stays
+                this scene's (hair is per scene by presence).{' '}
                 <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
               </>
             }

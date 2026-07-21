@@ -300,15 +300,26 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(sceneOverrideBuildsRom(idOverride)).toBe(false)
   })
 
-  it('mergeSceneOverride swaps the G9 dials for an identity override', () => {
-    const idOverride = makeOverride({
+  it('mergeSceneOverride merges the ROM sections only (frames), not identity dials', () => {
+    const romOverride = makeOverride({
       scenePath: scene,
+      poses: [
+        {
+          id: 'p1',
+          name: 'BeachTone',
+          morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5 }],
+          boneScaleRef: false,
+        },
+      ],
       identity: { enabled: true, facsDetailStrength: 0.25, flexionStrength: 0.75, applyUE5TearUV: true },
     })
-    const merged = mergeSceneOverride(makeCharacter(), idOverride)
-    expect(merged.facsDetailStrength).toBe(0.25)
-    expect(merged.flexionStrength).toBe(0.75)
-    expect(merged.applyUE5TearUV).toBe(true)
+    const merged = mergeSceneOverride(makeCharacter(), romOverride)
+    // Sections reflect the ROM override…
+    expect(merged.sections.FBM.groups[0].poses[0].name).toBe('BeachTone')
+    // …but the identity dials stay the base's (they ride as a config delta instead).
+    expect(merged.facsDetailStrength).toBe(1)
+    expect(merged.flexionStrength).toBe(1)
+    expect(merged.applyUE5TearUV).toBe(false)
   })
 
   it('a preserve-only override full-replaces the base lists (empty overrides too), NO scene CSV', () => {
