@@ -84,7 +84,7 @@ export function FolderMoveChip({
       <Button variant="outline" size="sm" disabled={!canMove} onClick={() => void move()}>
         {busy ? 'Moving…' : 'Move'}
       </Button>
-      <Button variant="ghost-destructive" size="sm" disabled={busy} onClick={() => setDraft(null)}>
+      <Button variant="outline-destructive" size="sm" disabled={busy} onClick={() => setDraft(null)}>
         Cancel
       </Button>
     </span>

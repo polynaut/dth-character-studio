@@ -18,6 +18,13 @@ const router = getRouter()
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element #root not found')
 
+// Tag the OS on <html> so CSS can go native per-platform. Currently only the
+// header's vibrancy glass, which is macOS-only (on Windows/WebView2 the same
+// backdrop blur reads muddy rather than glassy — those keep a plain background).
+if (/mac/i.test(navigator.platform) || /mac os/i.test(navigator.userAgent)) {
+  document.documentElement.classList.add('os-macos')
+}
+
 createRoot(rootElement).render(
   <StrictMode>
     <RouterProvider router={router} />
