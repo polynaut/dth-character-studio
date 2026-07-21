@@ -1,4 +1,5 @@
 ---
+"@dth/web": patch
 ---
 
-docs: regenerate the guide screenshots against the current UI (docs-only, no release).
+Softer drop shadow on the character header's avatar corner badge (0.7 → 0.35 alpha) so it reads less heavy. Guide screenshots regenerated to match.
