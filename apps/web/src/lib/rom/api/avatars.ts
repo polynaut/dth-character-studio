@@ -1,3 +1,4 @@
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { exists, mkdir, readDir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
@@ -60,7 +61,21 @@ export async function writeAvatarBytes(
   // Write the new avatar FIRST, then prune — the reverse order leaves a window
   // where a concurrent writer's just-written file (already referenced by a
   // save) gets deleted, breaking the stored reference.
-  await writeFile(joinPath(dir, fileName), bytes)
+  const filePath = joinPath(dir, fileName)
+  await writeFile(filePath, bytes)
+  // Upscale a small avatar — a 256px Daz scene `.tip.png` or a 256px cropped
+  // upload — to 512² with xBRZ (in Rust, edge-directed), so the header portrait
+  // isn't blowing up a tiny source. IN PLACE + idempotent: an image already ≥512²
+  // is left untouched, so re-writes are safe. Best-effort — a failed upscale keeps
+  // the just-written original rather than blocking the avatar set. Native-only,
+  // like the fs writes above.
+  if (isTauri()) {
+    try {
+      await invoke('upscale_avatar_file', { path: filePath })
+    } catch (e) {
+      console.warn('avatar upscale failed; keeping the original image', e)
+    }
+  }
   const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
   await Promise.all(
     avatarsToPrune(entries, id, fileName).map((name) => remove(joinPath(dir, name))),
