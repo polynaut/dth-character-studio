@@ -223,6 +223,25 @@ export function EditorHeader({
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <Pencil className="size-8 text-white" />
           </span>
+          {/* Previewing a NON-primary scene (sceneAvatarPath set): keep the
+              character's own main avatar (the custom upload / primary snapshot)
+              visible as a small badge in the corner, so the header still
+              identifies the character while you inspect an outfit scene. Lives
+              outside the clipping box so it's never cropped; pointer-events-none
+              so the whole portrait still opens the image dialog. */}
+          {sceneAvatarPath && (
+            <span
+              className="pointer-events-none absolute bottom-1.5 left-1.5"
+              title="Main avatar"
+            >
+              <Avatar
+                image={character.image}
+                name={character.name}
+                className="size-11 rounded-md border-2 border-neutral-900 object-top shadow-md"
+                fallbackClassName="rounded-md border-2 border-neutral-900 text-sm shadow-md"
+              />
+            </span>
+          )}
         </button>
         <div className="title-scroll pb-6">
           <div className="flex items-center gap-2.5">
