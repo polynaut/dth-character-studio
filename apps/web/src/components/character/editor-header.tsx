@@ -11,8 +11,6 @@ import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
-import { parseAvatarName } from '#/lib/rom/avatar-names.ts'
-
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
@@ -50,19 +48,17 @@ function smoothScrollToY(target: number) {
 }
 
 /**
- * Bring the "Daz scenes" section heading just below the sticky header — but ONLY
- * when that means scrolling UP (the section sits above the current view). If
- * reaching it would scroll DOWN, do nothing (the user is above it already). The
- * offset is the sticky header's live height (collapsed while scrolled down).
+ * Scroll the "Daz scenes" section heading to just below the sticky header, from
+ * wherever the page is (up OR down) — clicking the header's scene label jumps to
+ * the scene cards. The offset is the sticky header's live height (collapsed
+ * while scrolled down).
  */
 function scrollDazScenesIntoView() {
   const el = document.getElementById('daz-scenes')
   if (!el) return
   const header = document.querySelector('header')
   const offset = (header?.offsetHeight ?? 96) + 12
-  const target = window.scrollY + el.getBoundingClientRect().top - offset
-  if (target >= window.scrollY) return
-  smoothScrollToY(target)
+  smoothScrollToY(window.scrollY + el.getBoundingClientRect().top - offset)
 }
 
 /**
@@ -160,29 +156,11 @@ export function EditorHeader({
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
-  // Does the MAIN avatar already show the primary Daz scene? A stored scene
-  // snapshot (`--sc-` filename) is always the primary (non-primary scenes can't
-  // be set as the avatar), and a recorded `imageScene` matching the primary
-  // covers legacy names. When true, the big portrait already IS the primary
-  // render, so no counterpart badge is needed.
-  const avatarShowsPrimaryScene =
-    parseAvatarName(character.image)?.kind === 'sc' ||
-    (!!character.imageScene && character.imageScene === character.scenePath)
-
-  // What the small corner badge shows (see the badge JSX below), or null. The
-  // badge always gets the scene-thumbnail "zoom in + lift up" framing (see the
-  // Portrait below), so a Daz render and a user's uploaded (or legacy-named)
-  // avatar read alike at thumbnail size — no flat, un-cropped odd one out.
-  const cornerBadge: { image?: string; scenePath?: string } | null = sceneAvatarPath
-    ? { image: character.image } // main avatar
-    : character.scenePath && !avatarShowsPrimaryScene
-      ? { scenePath: character.scenePath } // custom avatar → the primary scene render
-      : null
-
-  // Editing the main avatar is only allowed when the primary scene is the active
-  // selection — otherwise the big portrait shows a NON-primary scene (the avatar
-  // is only the small badge), so "edit the character image" would be confusing.
-  const canEditImage = !sceneAvatarPath
+  // A character has ONE main avatar (`character.image`), shown in this big
+  // portrait and everywhere else in the app. Selecting a non-primary scene no
+  // longer swaps the portrait — instead that scene rides the title as a small
+  // thumbnail (`sceneAvatarPath`, in the title row below), so the avatar stays
+  // constant and editable in EVERY state.
 
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button. Routed
@@ -233,8 +211,8 @@ export function EditorHeader({
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}
         {/* top-5 matches the avatar's mt-5, so the link tops align; left aligns
-            with the title beside the avatar (156px box + gap-5). */}
-        <div className="absolute top-5 left-[176px] z-20">
+            with the title beside the avatar (208px box + gap-5). */}
+        <div className="absolute top-5 left-[228px] z-20">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
@@ -263,91 +241,82 @@ export function EditorHeader({
         )}
         <button
           type="button"
-          className="group relative mt-5 mb-5 shrink-0 disabled:cursor-default"
-          title={
-            canEditImage
-              ? 'Edit the character image'
-              : 'Select the primary scene to edit the character image'
-          }
-          disabled={!canEditImage}
+          className="group relative mt-5 mb-5 shrink-0"
+          title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
-          {/* The wrapper owns the shrink: only its height animates (208 → 90). At
-              rest it's a 3:4 portrait (156×208) matching the gallery / scene
-              thumbnails and the crop editor's letterbox guide. It clips a
-              fixed-size image via overflow-hidden, so the portrait is *cropped*
-              top-down rather than re-fit every frame — the image is rasterized
-              once and the box just changes its clip rect, which stays smooth even
-              with the heavy form relaying out below the sticky header. */}
-          <div className="avatar-scroll-shrink h-[208px] w-[156px] overflow-hidden rounded-lg bg-neutral-500">
+          {/* The wrapper owns the shrink: only its height animates (277 → 120).
+              At rest it's a 3:4 portrait (208×277); collapsed it's a 26:15
+              landscape (208×120). It clips a fixed-size image via overflow-hidden,
+              so the portrait is *cropped* top-down rather than re-fit every frame
+              — the image is rasterized once and the box just changes its clip
+              rect, which stays smooth even with the heavy form relaying out below
+              the sticky header. */}
+          <div className="avatar-scroll-shrink h-[277px] w-[208px] overflow-hidden rounded-lg bg-neutral-500">
             <Avatar
               image={character.image}
-              scenePath={sceneAvatarPath ?? undefined}
               name={character.name}
-              className="avatar-scroll-pan h-[208px] w-[156px] object-top"
+              // A square image the zoom over-scans to fill the wrapper (see the
+              // avatar-scroll-pan/zoom keyframes) — simpler than sizing it to the
+              // wrapper's changing 3:4 → landscape aspect.
+              className="avatar-scroll-pan aspect-square w-full object-top"
               fallbackClassName="text-6xl"
             />
           </div>
-          {/* Edit affordance only when editing is allowed (primary selected). */}
-          {canEditImage && (
-            <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-              <Pencil className="size-8 text-white" />
-            </span>
-          )}
-          {/* Corner badge: the "other" view of the character, so the big
-              portrait and the badge together always show both the avatar and the
-              primary Daz render. Previewing a non-primary scene → the big shows
-              that scene, the badge the MAIN avatar; a custom main avatar with a
-              primary scene linked → the big shows the avatar, the badge the
-              PRIMARY scene render. Otherwise (the big already IS the primary
-              scene, or none is linked) there's no badge. Lives outside the
-              clipping box so it's never cropped; pointer-events-none so the whole
-              portrait still opens the image dialog. */}
-          {cornerBadge && (
-            <span
-              className={`pointer-events-none absolute bottom-1.5 left-1.5 -translate-x-[21px] -translate-y-[9px] transition-opacity ${
-                canEditImage ? 'group-hover:opacity-50' : ''
-              }`}
-              title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
-            >
-              {/* Portrait, not Avatar: the badge always takes Portrait's default
-                  "zoom in + lift up" framing (like every scene thumbnail), so a
-                  scene render and an uploaded avatar read alike at this size. The
-                  frame's bg-neutral-500 fills a scene tip's transparency. */}
-              <Portrait
-                image={cornerBadge.image}
-                scenePath={cornerBadge.scenePath}
-                name={character.name}
-                className="aspect-[3/4] w-11 rounded-md border-0 shadow-[0_0_14px_4px_rgb(0_0_0_/_0.35)]"
-                fallbackClassName="text-sm"
-              />
-            </span>
-          )}
+          {/* Hover affordance — the avatar is editable in every state now (a
+              scene selection no longer replaces the portrait). */}
+          <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <Pencil className="size-8 text-white" />
+          </span>
         </button>
         <div className="title-scroll pb-6">
-          <div className="flex items-center gap-2.5">
-            <EditableTitle
-              name={character.name}
-              ariaLabel="Character name"
-              onEditingChange={setEditingTitle}
-              onSave={onRenameCharacter}
-            />
-            {/* With several scenes linked, the SELECTED scene rides the title —
-                groom lists and the ROM override follow that selection, and the
-                title row stays visible in the collapsed sticky header (the
-                subtitle below does not). Hidden while renaming. Clicking it
-                scrolls the "Daz scenes" section into view (only when it's above
-                the current view), where the selection can be switched. The label
-                drops the character's name from the scene name. */}
+          {/* Name + scene label in one row, bottom-aligned (items-end) so they
+              share a baseline under the big title. */}
+          <div className="flex items-end gap-4">
+            {/* Nudged up to optically center the name with the taller scene
+                label beside it. */}
+            {/* Override EditableTitle's hardcoded text-3xl for this header only
+                (arbitrary variant reaches its inner h1 + edit input). Matches the
+                dth-title-text scroll animation's `from` so there's no jump. */}
+            <span className="-translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
+              <EditableTitle
+                name={character.name}
+                ariaLabel="Character name"
+                onEditingChange={setEditingTitle}
+                onSave={onRenameCharacter}
+              />
+            </span>
+            {/* The SELECTED scene rides the title as a "label" AFTER the name —
+                ONE orange tag holding a small landscape thumbnail of the scene
+                (or a plain "P" box for the PRIMARY scene) at its start, then the
+                scene name. Clicking it jumps to the scene cards. Only with
+                several scenes linked; hidden while renaming. */}
             {sceneTag && !editingTitle && (
-              <button type="button" className="cursor-pointer" onClick={scrollDazScenesIntoView}>
+              <button
+                type="button"
+                className="label-scroll cursor-pointer"
+                onClick={scrollDazScenesIntoView}
+              >
                 <Tag
-                  tone="orange"
-                  // Optical nudge: the bold 3xl title's visual weight sits below
-                  // the line box's geometric center, so dead-center reads high.
-                  className="max-w-64 translate-y-[5px] truncate normal-case"
+                  // Always the Daz-green "linked-scene card" look (primary or
+                  // not): the same --daz-green tint + border those cards use, a
+                  // touch stronger since this is a small pill.
+                  tone="green"
+                  className="inline-flex max-w-72 items-center gap-1.5 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-daz-green)_35%,var(--card))] py-1 pr-2 pl-1 text-sm normal-case"
                 >
-                  {sceneTagText(sceneTag, character.name)}
+                  {/* The selected scene's render: the picked non-primary scene,
+                      or the primary scene when it's the active selection. Fixed
+                      h/w (not aspect-ratio) so the tile is a stable box. */}
+                  <Portrait
+                    scenePath={sceneAvatarPath ?? character.scenePath}
+                    name={character.name}
+                    // Landscape face-zoom (the list-view framing), sized to the
+                    // tag. Greyscaled when it's the primary scene.
+                    imgClassName={`-translate-y-[16px]${sceneAvatarPath ? '' : ' grayscale'}`}
+                    className="h-8 w-[56px] shrink-0 rounded border-0"
+                    fallbackClassName="text-[8px]"
+                  />
+                  <span className="truncate">{sceneTagText(sceneTag, character.name)}</span>
                 </Tag>
               </button>
             )}
