@@ -33,7 +33,7 @@ const OUT = join(ROOT, 'site/guide')
 // screenshot suite's coverage test).
 const NAV = [
   {
-    group: 'Guide',
+    group: 'Guides',
     pages: [
       'README.md',
       '01-installation.md',

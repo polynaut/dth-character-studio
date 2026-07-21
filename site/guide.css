@@ -377,6 +377,18 @@
   border-radius: var(--radius) var(--radius) 0 0;
 }
 
+/* Push the docked bar away 48px BEFORE the box actually ends: sticky is
+   bounded by the details' CONTENT box, so trading 48px of it for padding
+   (with the body pulled back over the padding) ends the range early while
+   the rendered box stays pixel-identical. */
+.guide-content details[open] {
+  padding-bottom: 48px;
+}
+
+.guide-content details[open] > table {
+  margin-bottom: -48px;
+}
+
 .guide-content details > table,
 .guide-content details > table tr,
 .guide-content details > table td {
