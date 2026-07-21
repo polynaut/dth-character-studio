@@ -153,13 +153,29 @@
   color: var(--fg-bright);
 }
 
+/* Sticky chapter titles: an h2 sticks right under the topbar and stays until
+   its section ends — the next chapter's title pushes it away (each h2 chunk
+   is wrapped in a .guide-section by build-guide-site.mjs, which bounds the
+   sticky range). The opaque background covers content scrolling beneath. */
 .guide-content h2 {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
   margin: 44px 0 12px;
   padding-top: 20px;
+  padding-bottom: 8px;
   border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  background: var(--bg);
   font-size: 1.45rem;
   font-weight: 750;
   color: var(--fg-bright);
+}
+
+/* Hash navigation lands headings below the topbar (and the stuck title). */
+.guide-content h1,
+.guide-content h2,
+.guide-content h3 {
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
 }
 
 .guide-content h3 {
@@ -274,8 +290,9 @@
 }
 
 .guide-content details {
-  /* Hash navigation / the reveal scroll land below the sticky topbar. */
-  scroll-margin-top: calc(var(--topbar-h) + 24px);
+  /* Hash navigation / the reveal scroll land below the sticky topbar AND the
+     chapter title stuck beneath it (~56px tall). */
+  scroll-margin-top: calc(var(--topbar-h) + 88px);
 }
 
 .guide-content details summary {

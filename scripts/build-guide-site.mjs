@@ -131,6 +131,18 @@ function renderPage(source) {
       `<a class="details-anchor" href="#${id}" aria-label="Copy link to this section">#</a></summary>`
     )
   })
+  // Sticky chapter titles: wrap each h2-to-h2 chunk in a <section> so the
+  // sticky heading is bounded by its own section — the next chapter's title
+  // then pushes the stuck one away instead of overlapping it (guide.css).
+  const parts = html.split(/(?=<h2 )/)
+  if (parts.length > 1) {
+    html =
+      parts[0] +
+      parts
+        .slice(1)
+        .map((chunk) => `<section class="guide-section">\n${chunk}</section>\n`)
+        .join('')
+  }
   return html
 }
 
