@@ -481,11 +481,10 @@ a:hover {
   letter-spacing: -0.015em;
 }
 
-/* Screenshot teaser atop the "why" section: the top of the real character page,
-   cropped and fading out so the heading rides up into it. Geometry: the source
-   shot is 2560×2260 and the container crops it at 50% (aspect-ratio 2560/1130);
-   the mask keeps the upper half of the crop fully opaque and fades out across
-   the lower half, giving the heading a long ramp to ride up into. */
+/* Screenshot teasers atop the "why" and "about" sections: the top of a real
+   app page, cropped to a fixed 2560/1130 band and fading out so the heading
+   rides up into it. The mask keeps the upper half of the band fully opaque
+   and fades out across the lower half, giving the heading a long ramp. */
 .section-teaser {
   overflow: hidden;
   border-radius: var(--radius);
