@@ -2,6 +2,8 @@ import { Tag, cn } from '@dth/ui'
 
 import { Portrait } from '#/components/portrait.tsx'
 
+import type { ReactNode } from 'react'
+
 /**
  * The Daz-green "linked-scene" pill: a small landscape render of the scene's
  * `.tip.png` followed by its (already-prettified) name — the same look the
@@ -17,6 +19,8 @@ export function SceneLabel({
   name,
   muted = false,
   fallbackName,
+  eyebrow,
+  trailing,
   className,
 }: {
   /** The scene whose `.tip.png` renders in the pill. */
@@ -27,6 +31,11 @@ export function SceneLabel({
   muted?: boolean
   /** Portrait initial shown when the scene has no tip (defaults to `name`). */
   fallbackName?: string
+  /** A tiny UPPERCASE line stacked above the name (e.g. "Override" on the per-scene
+   *  override toggles). Omitted → the name is a single line (the header tag). */
+  eyebrow?: string
+  /** Rendered inline right after the name (e.g. the override info "i" popup). */
+  trailing?: ReactNode
   className?: string
 }) {
   return (
@@ -51,7 +60,22 @@ export function SceneLabel({
         className={`h-8 w-[56px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
         fallbackClassName="text-[8px]"
       />
-      <span className="truncate">{name}</span>
+      {eyebrow ? (
+        <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-none">
+          <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">
+            {eyebrow}
+          </span>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="truncate">{name}</span>
+            {trailing}
+          </span>
+        </span>
+      ) : (
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate">{name}</span>
+          {trailing}
+        </span>
+      )}
     </Tag>
   )
 }
