@@ -191,11 +191,6 @@ export function GroomFields({
               scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
             }
           />
-          {groomLocked && (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Enable the hair override for “{selectedSceneName}” to edit this scene's list.
-            </p>
-          )}
           {missing.length > 0 && (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
               Not found in “{sceneName}”: <strong>{missing.join(', ')}</strong> — the export

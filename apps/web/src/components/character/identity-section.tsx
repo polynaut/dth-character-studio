@@ -53,8 +53,10 @@ export function IdentitySection({
   const fieldsetDisabled = character.genesis !== 'G9' || (overrideEligible && !overriding)
 
   return (
-    <div className="flex flex-wrap gap-x-12 gap-y-5">
-      <div className="flex flex-col gap-5 pt-2">
+    // Stacked into two rows for the narrow identity sidebar: Genesis + Gender, then
+    // the Genesis-9 fieldset.
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5">
         <div className="flex flex-wrap gap-4">
           <div>
             <Label className="mb-1">Genesis</Label>
@@ -99,7 +101,7 @@ export function IdentitySection({
           control inside (the strengths and tear UV only exist on Genesis 9, and
           are locked on a non-primary scene until the override is armed) and the
           text goes muted. */}
-      <div className="w-fit self-start">
+      <div className="w-full">
         {character.genesis === 'G9' && (
           <div className="mb-2.5 flex w-full justify-end">
             <PanelOverrideToggle

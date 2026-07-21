@@ -387,51 +387,62 @@ function CharacterPage() {
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
-        <IdentitySection
-          character={character}
-          patch={patch}
-          overrideEligible={sceneSel.overrideEligible}
-          identityOverrideActive={sceneSel.identityOverrideActive}
-          setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
-          selectedSceneName={sceneSel.selectedSceneName}
-          scenePath={sceneSel.effectiveScene}
-          sceneOverride={sceneSel.sceneOverride}
-          patchOverride={sceneSel.patchOverride}
-        />
-        {location && (
-          <div className="mt-6 space-y-4 border-t pt-5">
-            <DazSceneField
-              projectId={projectId}
-              character={character}
-              location={location}
-              sceneExists={sceneExists}
-              sceneFolderExists={sceneFolderExists}
-              defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-              persistPatch={draft.persistPatch}
-              onScenesFolderMoved={onScenesFolderMoved}
-              selectedScene={sceneSel.effectiveScene}
-              onSelectScene={sceneSel.selectScene}
-            />
-            {/* Groom lists are PER SCENE — living right under the scene cards makes
-                the card-selection ↔ hair-list connection visible while switching. */}
-            <GroomFields
+        {/* Wide scenes column beside a narrow identity sidebar. */}
+        <div className="flex flex-col gap-8 lg:flex-row lg:gap-10">
+          <div className="min-w-0 flex-1 space-y-4">
+            {location && (
+              <>
+                <DazSceneField
+                  projectId={projectId}
+                  character={character}
+                  location={location}
+                  sceneExists={sceneExists}
+                  sceneFolderExists={sceneFolderExists}
+                  defaultSubdir={project?.dazSubdir ?? 'daz3d'}
+                  persistPatch={draft.persistPatch}
+                  onScenesFolderMoved={onScenesFolderMoved}
+                  selectedScene={sceneSel.effectiveScene}
+                  onSelectScene={sceneSel.selectScene}
+                />
+                <HoudiniProjectsField
+                  character={character}
+                  location={location}
+                  persistPatch={draft.persistPatch}
+                />
+              </>
+            )}
+          </div>
+          <div className="shrink-0 lg:w-96">
+            <IdentitySection
               character={character}
               patch={patch}
-              selectedScene={sceneSel.effectiveScene}
-              dazInstallFolder={settings.dazInstallFolder}
               overrideEligible={sceneSel.overrideEligible}
-              groomOverrideActive={sceneSel.groomOverrideActive}
-              setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+              identityOverrideActive={sceneSel.identityOverrideActive}
+              setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
               selectedSceneName={sceneSel.selectedSceneName}
-            />
-            <HoudiniProjectsField
-              character={character}
-              location={location}
-              persistPatch={draft.persistPatch}
+              scenePath={sceneSel.effectiveScene}
+              sceneOverride={sceneSel.sceneOverride}
+              patchOverride={sceneSel.patchOverride}
             />
           </div>
-        )}
+        </div>
       </section>
+
+      {/* Hair items — its own panel, right before the generated-scripts panel. */}
+      {location && (
+        <section className="mb-8 rounded-lg border bg-card p-5">
+          <GroomFields
+            character={character}
+            patch={patch}
+            selectedScene={sceneSel.effectiveScene}
+            dazInstallFolder={settings.dazInstallFolder}
+            overrideEligible={sceneSel.overrideEligible}
+            groomOverrideActive={sceneSel.groomOverrideActive}
+            setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+            selectedSceneName={sceneSel.selectedSceneName}
+          />
+        </section>
+      )}
 
       <ScriptsSection character={character} scriptsPath={scriptsPath} />
       </div>
