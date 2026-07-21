@@ -154,7 +154,8 @@ export const housekeepingResultSchema = z.object({
   /** Files past the cutoff the sweep could NOT delete (locked/readonly) — so
    *  every-delete-failing no longer reads as "0 files freed, nothing to do".
    *  Rust always sends it; optional here so browser no-op / aggregated results
-   *  (maintenance.ts) stay constructible without it. Not surfaced in the UI yet. */
+   *  (maintenance.ts) stay constructible without it. Surfaced by the
+   *  Housekeeping "Clean up now" toast (the launch sweep stays silent). */
   filesFailed: z.number().optional(),
 })
 

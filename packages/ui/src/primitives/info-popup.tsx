@@ -55,9 +55,15 @@ export function InfoPopup({
   const arrowRef = React.useRef<SVGSVGElement>(null)
   const { onNavigate, onOpenExternal } = useUiConfig()
 
-  function handleOpenChange(next: boolean) {
+  function handleOpenChange(next: boolean, _event?: Event, reason?: string) {
+    // useFocus stays subscribed while pinned (its escape-key block-focus guard
+    // must arm — see the useFocus call below), which also leaves its reference
+    // blur-close live: Shift+Tabbing from the pinned dialog back over the "i"
+    // and out would silently dismiss the pin. A pinned popup ignores
+    // focus-reason closes; Escape ('escape-key') and outside-press still close.
+    if (!next && reason === 'focus' && pinned) return
     setOpen(next)
-    // Any close (pointer leave, outside press, Escape) drops the pin too.
+    // Any close (outside press, Escape, unpin-click) drops the pin too.
     if (!next) setPinned(false)
   }
 

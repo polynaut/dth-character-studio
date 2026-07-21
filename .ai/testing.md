@@ -107,3 +107,34 @@ are generated, not hand-shot. **The full runbook lives in the header comment of
   byte-reproducibly (no video capture, no ffmpeg). Same fixtures/frozen clock;
   transitions are pinned to 0ms while recording; the coverage test guards
   gifs/ ↔ guide references too. Machinery: `smoke/gif-recorder.ts`.
+
+## 5. Full-codebase audits (measured method, 2026-07)
+
+Four audit rounds ran across two days (PRs #435, #438, #441, #445); the yield
+curve and the method are worth more than re-deriving them:
+
+- **Yield converges per AREA, not per round**: 55 -> 58 -> 29 -> 10 findings,
+  but the middle bump was a deliberate re-slice into never-audited surface
+  (settings/notes/housekeeping/CI). Where coverage repeated, decay was steep
+  (rom core: 5 -> 2 lows). Once every area has been swept twice, another full
+  sweep re-reads verified-clean code - switch to per-PR review.
+- **Diff-audit every large fix wave**: each ~2,000-line fix round introduced
+  its own findings (29 on round three's diff, 10 on round four's), including
+  2 highs CAUGHT BEFORE MERGE (a lock/canonicalize UI freeze; a version marker
+  that neutered the forced runtime repair). A fix commit is new code with a
+  defect rate - grill it like any other code, scoped to `git diff <fix>^ <fix>`.
+- **Audit agents need**: verified-findings-only (read the code paths, no
+  speculation), per-finding severity/file:line/failure-scenario/minimal-fix,
+  explicit "clean" statements for what they checked, and cross-fix interaction
+  questions when auditing parallel-written code. Fix agents need STRICTLY
+  disjoint file ownership and targeted-tests-only (repo-wide gates run once at
+  the end by the coordinator).
+- **Fail-then-pass is the bar for regression tests**: temporarily re-introduce
+  the bug, watch the new test fail, restore the fix. Several "pinning" tests
+  written without this turned out to mask the exact bug they claimed to pin
+  (the info-popup :focus-visible stub, the same-parent tie-break fixtures).
+- **The local gate that matches CI**: `pnpm -r typecheck` + `pnpm lint` +
+  `pnpm -r test` + `cargo clippy --locked --all-targets -- -D warnings` +
+  `cargo test --locked` + `pnpm --filter @dth/web smoke`. No cargo fmt (see
+  gotchas). Findings land as fixes + tests + a changeset + .ai learnings in
+  ONE PR per round.

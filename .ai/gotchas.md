@@ -79,9 +79,17 @@ current code before relying on details, but assume the *lesson* still holds.
   (`-D warnings`) + `cargo test --locked` only. Never run `cargo fmt` (it would
   reformat the whole crate); match the surrounding hand style.
 - **A JS mirror of a Rust decision must be pinned by the SAME test cases on both
-  sides** — the UI's `genesisRank` (dedup-report-list) silently inverted the
-  Rust `genesis_rank` winner for "Genesis 9 (2024)"-style names until twin tests
-  pinned both. If a rule lives on both sides of the FFI, its tests do too.
+  sides** — the UI's `genesisRank`/`conflictWinner` (dedup-report-list) diverged
+  from the Rust install THREE separate times: last-vs-first digit run, u32
+  overflow (Rust `parse().unwrap_or(0)` saturates, JS `Number()` doesn't), and
+  path ordering. If a rule lives on both sides of the FFI, its tests do too —
+  with fixtures that exercise the divergent shapes, not just happy pairs.
+- **Rust `Path` ordering is COMPONENT-wise, not full-string.** At a fork where
+  one side ends a component (`…/_genesis 8/…` vs `…/_genesis 8.1/…`) the string
+  compare sees `.` (0x2E) < `/` (0x2F) and picks the OTHER order (verified
+  empirically). A JS mirror of any Rust path-ordered decision must split on
+  separators and compare per component; same-parent test fixtures cannot catch
+  this — the twin cases must fork across different parent folders.
 - **Rust std reports NTFS junctions as symlinks** (`file_type().is_symlink()`
   true, `is_dir()` false). All fs walkers share `fsutil::walk_dir` with one
   explicit dir-link policy (link = leaf, counted) — a hand-rolled walker that
@@ -187,6 +195,18 @@ current code before relying on details, but assume the *lesson* still holds.
   block a surrounding Radix layer's dismissal. The working counter (MultiSelect):
   a WINDOW-level capture listener registered while the widget is open — capture
   visits window before document, beating Radix regardless of registration order.
+  An IME-cancel Escape (`isComposing`) must be CLAIMED there too —
+  `stopImmediatePropagation` with no `preventDefault` and no action — or it
+  falls through and closes the surrounding dialog mid-composition (Radix checks
+  only `event.key`).
+- **floating-ui's `useFocus` must stay enabled while an InfoPopup is pinned**
+  (its escape-key handler arms the block-focus guard that stops the
+  return-focus from re-peeking the popup) — but that also leaves its reference
+  BLUR-close live, so `handleOpenChange` must ignore closes with
+  `reason === 'focus'` while pinned, or Shift+Tabbing out silently drops the
+  pin. Gating the hook off while pinned reintroduces the Escape re-peek loop;
+  both edges are test-pinned in `info-popup.test.tsx` (with a switchable
+  `:focus-visible` stub — a permanently-mouse stub masks the re-peek bug).
 - **`role="combobox"` removes an input from `getByRole('textbox')` queries** —
   after the morph-autocomplete a11y work, tests locate those cells by
   `combobox`/`option` roles (rom-sections tests hit this).
