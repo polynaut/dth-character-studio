@@ -145,7 +145,10 @@ function HomePage() {
 
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">DTH Character Studio</h1>
+          <h1 className="flex items-center gap-3 text-3xl font-bold">
+            <img src="/logo192.png" alt="" width={36} height={36} className="shrink-0" />
+            DTH Character Studio
+          </h1>
           <div className="mt-1 h-5" aria-hidden />
         </div>
         <HeaderNav />
