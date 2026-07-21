@@ -1,5 +1,15 @@
 # @dth/web
 
+## 0.45.4
+
+### Patch Changes
+
+- [#454](https://github.com/polynaut/dth-character-studio/pull/454) [`bb7711b`](https://github.com/polynaut/dth-character-studio/commit/bb7711b55757531da3c38a38bb0283e4e0744545) Thanks [@polynaut](https://github.com/polynaut)! - Softer drop shadow on the character header's avatar corner badge (0.7 → 0.35 alpha) so it reads less heavy. Guide screenshots regenerated to match.
+
+- Updated dependencies []:
+  - @dth/rom@0.45.4
+  - @dth/ui@0.45.4
+
 ## 0.45.3
 
 ### Patch Changes
