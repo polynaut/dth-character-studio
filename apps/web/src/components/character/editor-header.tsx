@@ -242,7 +242,7 @@ export function EditorHeader({
               portrait still opens the image dialog. */}
           {cornerBadge && (
             <span
-              className="pointer-events-none absolute bottom-1.5 left-1.5 opacity-100 transition-opacity group-hover:opacity-25"
+              className="pointer-events-none absolute bottom-1.5 left-1.5 opacity-100 transition-opacity group-hover:opacity-50"
               title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
             >
               {/* Portrait, not Avatar: a scene render gets the same
