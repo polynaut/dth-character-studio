@@ -153,6 +153,7 @@ export function GroomFields({
             scenePath={selectedScene}
             sceneName={selectedSceneName}
             noun="hair"
+            compact
             onToggle={setGroomOverrideEnabled}
             info={
               <>

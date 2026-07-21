@@ -22,6 +22,7 @@ import {
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
 import { DeleteCharacterSection } from '#/components/character/delete-character-section.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
+import { StickyOverrideBar } from '#/components/character/sticky-override-bar.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
@@ -329,6 +330,14 @@ function CharacterPage() {
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
+      />
+
+      {/* The persistent "OVERRIDE · <scene>" indicator, sticky under the header, so
+          the scene context follows you down and every panel toggle can stay compact. */}
+      <StickyOverrideBar
+        scenePath={sceneSel.effectiveScene}
+        sceneName={sceneSel.selectedSceneName}
+        show={sceneSel.overrideEligible}
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky

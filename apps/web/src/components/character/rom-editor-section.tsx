@@ -113,6 +113,7 @@ export const RomEditorSection = memo(function RomEditorSection({
             scenePath={scenePath}
             sceneName={selectedSceneName}
             noun="ROM frames"
+            compact
             onToggle={setOverrideEnabled}
             info={
               <>

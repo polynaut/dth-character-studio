@@ -60,6 +60,7 @@ export function PreserveFields({
           scenePath={scenePath}
           sceneName={selectedSceneName}
           noun="preserve lists"
+          compact
           onToggle={setPreserveOverrideEnabled}
           info={
             <>

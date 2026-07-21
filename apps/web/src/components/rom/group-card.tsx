@@ -384,13 +384,13 @@ export const GroupCard = memo(function GroupCard({
               <tr key={headerGroup.id}>
                 <th
                   className="sticky z-[4] w-7 bg-background shadow-[inset_0_-1px_0_0_var(--color-border)]"
-                  style={{ top: 'calc(var(--editor-header-h, 128px) + 48px)' }}
+                  style={{ top: 'calc(var(--editor-header-h, 128px) + var(--override-bar-h, 0px) + 48px)' }}
                 />
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     className="sticky z-[4] bg-background px-2 py-1.5 text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border)]"
-                    style={{ top: 'calc(var(--editor-header-h, 128px) + 48px)' }}
+                    style={{ top: 'calc(var(--editor-header-h, 128px) + var(--override-bar-h, 0px) + 48px)' }}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>

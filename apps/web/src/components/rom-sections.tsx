@@ -430,7 +430,7 @@ export const RomSections = memo(function RomSections({
                 has overflow. */}
             <div
               className="sticky z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
-              style={{ top: 'var(--editor-header-h, 128px)' }}
+              style={{ top: 'calc(var(--editor-header-h, 128px) + var(--override-bar-h, 0px))' }}
             >
               {/* A real accordion BUTTON (was a click-only div): the core editing
                   surface must be focusable and Enter/Space-operable, and announce
