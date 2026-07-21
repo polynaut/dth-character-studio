@@ -6,7 +6,9 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::archive::{extract_zip_entry, walk_zip_content, InflateBudget, NESTED_ZIP_DEPTH};
+use crate::archive::{
+    extract_zip_entry, walk_zip_content, InflateBudget, ZipWalkState, NESTED_ZIP_DEPTH,
+};
 use crate::dedup::{collect_asset_files, genesis_rank, AssetFiles};
 use crate::fsutil::{folder_name, join_rel, lock_dest, rel_key};
 use crate::report::{
@@ -225,10 +227,12 @@ fn process_zip_asset(
         &mut archive,
         asset,
         NESTED_ZIP_DEPTH,
-        &mut budget,
-        true,
-        &mut read_errors,
-        None,
+        &mut ZipWalkState {
+            budget: &mut budget,
+            strict: true,
+            read_errors: &mut read_errors,
+            keep_temps: None,
+        },
         &mut |archive, budget, _apath, idx, sub, size| {
             total += 1;
             fp_add(&mut fp, sub);

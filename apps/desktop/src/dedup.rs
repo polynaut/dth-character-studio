@@ -6,7 +6,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::archive::{walk_zip_content, InflateBudget, TempFile, NESTED_ZIP_DEPTH};
+use crate::archive::{walk_zip_content, InflateBudget, TempFile, ZipWalkState, NESTED_ZIP_DEPTH};
 use crate::content::find_content_level;
 use crate::fsutil::{
     copy_dir, folder_name, path_contains, rail_target, rel_key, unsafe_recursive_target,
@@ -303,10 +303,12 @@ pub(crate) fn collect_asset_files(asset: &Path, keep_zip_handles: bool) -> Optio
             &mut archive,
             asset,
             NESTED_ZIP_DEPTH,
-            &mut budget,
-            false,
-            &mut read_errors,
-            if keep_zip_handles { Some(&mut nested_temps) } else { None },
+            &mut ZipWalkState {
+                budget: &mut budget,
+                strict: false,
+                read_errors: &mut read_errors,
+                keep_temps: if keep_zip_handles { Some(&mut nested_temps) } else { None },
+            },
             &mut |_archive, _budget, apath, idx, sub, size| {
                 files.push((sub.to_string(), size));
                 if keep_zip_handles {
