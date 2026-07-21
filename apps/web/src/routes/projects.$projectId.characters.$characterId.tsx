@@ -296,6 +296,11 @@ function CharacterPage() {
             ? sceneSel.selectedSceneName
             : null
         }
+        sceneAvatarPath={
+          sceneSel.effectiveScene && sceneSel.effectiveScene !== character.scenePath
+            ? sceneSel.effectiveScene
+            : null
+        }
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky

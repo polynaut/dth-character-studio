@@ -57,11 +57,8 @@
           <span>DTH Character Studio</span>
         </a>
         <nav class="topbar-nav" aria-label="Sections">
-          <a href="#why">Why</a>
-          <a href="#features">Features</a>
-          <a href="#how">How it works</a>
-          <a href="#resources">Resources</a>
-          <a href="guide/">Guide</a>
+          <a href="#features">Why?</a>
+          <a href="guide/"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting started</a>
         </nav>
         <a class="btn btn-primary btn-compact" id="topbar-dl" href="https://github.com/polynaut/dth-character-studio/releases/latest">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -104,12 +101,9 @@
           </p>
 
           <div class="download-block">
-            <!-- On an unsupported OS (mobile, Linux) main.js hides the button
-                 and unhides this note instead — the app only runs on desktop. -->
-            <p class="dl-note" id="dl-note" hidden>
-              DTH&nbsp;Character&nbsp;Studio is a <strong>desktop app</strong> for Windows&nbsp;&amp;&nbsp;macOS —
-              open this page on your PC or Mac to download.
-            </p>
+            <!-- On an unsupported OS (mobile, Linux) main.js turns this button
+                 into the gray .btn-disabled variant — the app only runs on
+                 desktop, but the hero keeps the same shape everywhere. -->
             <a class="btn btn-primary btn-hero" id="dl-btn" href="https://github.com/polynaut/dth-character-studio/releases/latest">
               <span class="dl-icon" id="dl-icon">
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -125,8 +119,8 @@
           </div>
 
           <a class="btn btn-ghost" href="guide/">
-            New here? Follow the getting-started guide
-            <span class="arrow" aria-hidden="true">→</span>
+            <svg class="icon btn-book" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <span class="text-shine">Follow the getting-started guide</span>
           </a>
         </div>
       </section>
@@ -209,39 +203,14 @@
               <div><strong>Free &amp; open source.</strong> MIT-licensed and developed in the open — issues and ideas welcome.</div>
             </li>
           </ul>
-        </div>
-      </section>
-
-      <!-- ======================================================= How -->
-      <section class="section" id="how">
-        <div class="container">
-          <h2>How it works</h2>
-          <ol class="steps">
-            <li class="step">
-              <span class="step-num">01</span>
-              <h3>Describe</h3>
-              <p>Pick the Genesis version, enable ROM sections, list your body morphs and expressions.</p>
-            </li>
-            <li class="step">
-              <span class="step-num">02</span>
-              <h3>Generate</h3>
-              <p>One click produces the Daz apply-script and the Houdini PoseAsset CSV.</p>
-            </li>
-            <li class="step">
-              <span class="step-num">03</span>
-              <h3>Apply</h3>
-              <p>Run the script in Daz Studio, drop the CSV into your Houdini network.</p>
-            </li>
-            <li class="step">
-              <span class="step-num">04</span>
-              <h3>Export</h3>
-              <p>Hand off to Unreal Engine — every frame already matching, by design.</p>
-            </li>
-          </ol>
           <div class="cta-strip">
-            <p>From install to your first generated ROM in about <strong>15&nbsp;minutes</strong>.</p>
+            <p>From install to your <strong>first generated ROM</strong> — the guide walks you through.</p>
             <a class="btn btn-secondary" href="guide/">
-              Read the getting-started guide <span class="arrow" aria-hidden="true">→</span>
+              <!-- The icon sits outside the shine span: background-clip: text
+                   only paints glyphs, an SVG inside would go invisible (and on
+                   the anchor it would swallow the button surface). -->
+              <svg class="icon btn-book" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              <span class="text-shine">Read the getting-started guide <span class="arrow" aria-hidden="true">→</span></span>
             </a>
           </div>
         </div>
@@ -250,6 +219,13 @@
       <!-- ======================================================= About -->
       <section class="section" id="about">
         <div class="container">
+          <div class="section-teaser" aria-hidden="true">
+            <img
+              src="https://github.com/polynaut/dth-character-studio/raw/main/docs/guide/screenshots/character-rom-sections.png"
+              alt=""
+              loading="lazy"
+            />
+          </div>
           <h2>About</h2>
           <p>
             DTH Character Studio is a free, open-source desktop app by
@@ -268,19 +244,19 @@
           <h2>Resources</h2>
           <div class="resources">
             <a class="resource featured" href="guide/">
-              <h3>Getting-started guide</h3>
+              <h3><svg class="icon resource-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting-started guide</h3>
               <p>From a fresh install to your first generated ROM — six short steps, screenshots included.</p>
             </a>
             <a class="resource" href="https://www.artstation.com/marketplace/p/BLM5K/daztohue" target="_blank" rel="noopener">
-              <h3>DazToHue by mrpdean <span class="ext" aria-hidden="true">↗</span></h3>
+              <h3><svg class="icon resource-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>DazToHue by mrpdean <span class="ext" aria-hidden="true">↗</span></h3>
               <p>The Houdini/UE toolset this studio targets — the PoseAsset node, ROMs and pose presets.</p>
             </a>
             <a class="resource" href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener">
-              <h3>Source on GitHub <span class="ext" aria-hidden="true">↗</span></h3>
+              <h3><svg class="gh-mark resource-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Source on GitHub <span class="ext" aria-hidden="true">↗</span></h3>
               <p>MIT-licensed monorepo — the pure generation core, the app, and the docs.</p>
             </a>
             <a class="resource" href="https://github.com/polynaut/dth-character-studio/issues" target="_blank" rel="noopener">
-              <h3>Report an issue <span class="ext" aria-hidden="true">↗</span></h3>
+              <h3><svg class="icon resource-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Report an issue <span class="ext" aria-hidden="true">↗</span></h3>
               <p>Found a bug or missing a feature? Open an issue — feedback is welcome.</p>
             </a>
           </div>
@@ -291,10 +267,9 @@
     <footer class="footer">
       <div class="container footer-inner">
         <p>
-          <a href="https://github.com/polynaut/dth-character-studio/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
-          © Polynaut
+          <a href="https://github.com/polynaut/dth-character-studio/blob/main/LICENSE" target="_blank" rel="noopener">MIT license</a>
           <span class="footer-sep">·</span>
-          <a href="https://github.com/polynaut/dth-character-studio/releases" target="_blank" rel="noopener">Releases</a>
+          <a class="gh-link" href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener"><svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
         </p>
         <p class="footer-fine">Not affiliated with Daz 3D, SideFX, or Epic Games.</p>
       </div>

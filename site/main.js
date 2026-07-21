@@ -8,8 +8,6 @@
 //    limit hit — the button still works, just less specifically.
 
 const REPO = 'polynaut/dth-character-studio';
-const RELEASES_URL = `https://github.com/${REPO}/releases`;
-const LATEST_URL = `${RELEASES_URL}/latest`;
 
 // --------------------------------------------------------------- Topbar
 
@@ -92,17 +90,20 @@ async function initDownload() {
   const icon = document.getElementById('dl-icon');
   const label = document.getElementById('dl-label');
   const sub = document.getElementById('dl-sub');
-  const alt = document.getElementById('dl-alt');
   const topbarBtn = document.getElementById('topbar-dl');
 
   const os = detectOS();
 
-  // Unsupported OS (mobile, Linux, unknown): no download button at all — just
-  // the note that this is a desktop app, plus the releases link below it.
+  // Unsupported OS (mobile, Linux, unknown): the same big button, but gray
+  // and inert — its label explains this is a desktop app. The hero reads the
+  // same on every device.
   if (os !== 'windows' && os !== 'mac') {
-    btn.hidden = true;
+    btn.removeAttribute('href');
+    btn.classList.add('btn-disabled');
+    btn.setAttribute('aria-disabled', 'true');
+    label.textContent = 'App for Windows & macOS';
+    sub.textContent = 'Open this page on your PC or Mac to download';
     topbarBtn.hidden = true;
-    document.getElementById('dl-note').hidden = false;
     return;
   }
 
@@ -115,31 +116,24 @@ async function initDownload() {
 
   const { win, mac } = pickAssets(release.assets);
 
-  const altParts = [];
-  const altLink = (text, href) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
-
   if (os === 'windows' && win) {
     btn.href = win.url;
     topbarBtn.href = win.url;
     icon.innerHTML = WINDOWS_ICON;
     label.textContent = 'Download for Windows';
     sub.textContent = `${release.tag} · 64-bit installer · ${megabytes(win.size)}`;
-    if (mac) altParts.push(altLink(`Also for macOS (${macArchLabel(mac.name)})`, mac.url));
   } else if (os === 'mac' && mac) {
     btn.href = mac.url;
     topbarBtn.href = mac.url;
     icon.innerHTML = APPLE_ICON;
     label.textContent = 'Download for macOS';
     sub.textContent = `${release.tag} · ${macArchLabel(mac.name)} · ${megabytes(mac.size)}`;
-    if (win) altParts.push(altLink('Also for Windows', win.url));
   } else {
     // Detected OS but its asset is missing from the release — generic fallback.
     label.textContent = 'Download the latest release';
     sub.textContent = `${release.tag} · for Windows & macOS`;
   }
-
-  altParts.push(altLink('All releases', RELEASES_URL));
-  alt.innerHTML = altParts.join(' <span aria-hidden="true">·</span> ');
+  // The "All releases" link below the button is static in the HTML.
 }
 
 initDownload();

@@ -216,8 +216,7 @@ Each pose row has two name fields with very different jobs:
   ROM run.
 
 A pose row can also drive its one output from **several Daz morphs at once** —
-expand its **morphs** toggle (it reads *"2 morphs"*, *"3 morphs"*… once you add
-more).
+expand its **morphs** toggle.
 
 <p align="center">
   <img width="900" alt="Expanded pose rows: a single-morph row, and rows combining several morphs into one output" src="screenshots/combine-morphs.png" />
@@ -338,15 +337,9 @@ routes still work when you just need a single name.
 
 
 <p align="center">
-  <img width="504" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />
+  <img width="440" align="top" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img width="355" align="top" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
   <br>
-  <sub><em>A morph's internal name differs from its slider label.</em></sub>
-</p>
-
-<p align="center">
-  <img width="404" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
-  <br>
-  <sub><em>A manual route to a morph's internal Daz name.</em></sub>
+  <sub><em>Left: a morph's internal name differs from its slider label. Right: the manual route via Parameter Settings.</em></sub>
 </p>
 
 <details>

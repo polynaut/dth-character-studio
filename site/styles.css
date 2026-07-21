@@ -24,7 +24,7 @@
   --on-primary: #2b1200;
   --border: #484848;
   --radius: 12px;
-  --topbar-h: 58px;
+  --topbar-h: 72px;
   --font: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -48,7 +48,9 @@ body {
 }
 
 .container {
-  max-width: 1060px;
+  /* Matches the guide's content area (sidebar + article, guide.css
+     .guide-layout) so headers and sections share the same edges everywhere. */
+  max-width: 1196px;
   margin-inline: auto;
   padding-inline: 24px;
 }
@@ -137,7 +139,10 @@ a:hover {
 }
 
 .btn-hero {
-  padding: 16px 30px;
+  /* Left padding = icon-text gap, so the icon sits centered between the
+     button's left edge and the text (text stays put: 20+30+20 = 30+30+10). */
+  padding: 16px 30px 16px 20px;
+  gap: 20px;
   text-align: left;
 }
 
@@ -226,7 +231,7 @@ a:hover {
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 40px;
 }
 
 .topbar-brand {
@@ -246,15 +251,31 @@ a:hover {
 
 .topbar-nav {
   display: flex;
-  gap: 22px;
+  gap: 40px;
   margin-left: auto;
 }
 
 .topbar-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+/* The GitHub mark is a FILL glyph — the stroke-based .icon class would blank it. */
+.gh-mark {
+  width: 1.05em;
+  height: 1.05em;
+  fill: currentColor;
+}
+
+/* Inline nav icons (the Guide link's book) match the gh-mark's size. */
+.topbar-nav .icon {
+  width: 1.05em;
+  height: 1.05em;
 }
 
 .topbar-nav a:hover {
@@ -277,6 +298,17 @@ a:hover {
   position: relative;
   padding: clamp(56px, 10vh, 110px) 0 clamp(56px, 8vh, 96px);
   overflow: hidden;
+  display: flex;
+}
+
+/* Desktop and up: the hero owns 85% of the viewport, and the guide teaser
+   link gets extra clearance above it (see .hero .btn-ghost). On phones and
+   tablets (and short screens) the content height wins and nothing changes. */
+@media (min-width: 1024px) {
+  .hero {
+    min-height: 85vh;
+    padding-bottom: 0;
+  }
 }
 
 /* Soft orange glow behind the logo — pure decoration, painted cheap. */
@@ -296,6 +328,11 @@ a:hover {
   flex-direction: column;
   align-items: center;
   text-align: center;
+  width: 100%;
+}
+
+.download-block {
+  margin-bottom: 28px;
 }
 
 .hero-logo {
@@ -367,14 +404,17 @@ a:hover {
   display: none !important;
 }
 
-.dl-note {
-  max-width: 420px;
-  font-size: 0.98rem;
+/* Unsupported OS (mobile, Linux): main.js strips the href and adds this
+   class — same big hero button, just gray and inert. */
+.btn-primary.btn-disabled,
+.btn-primary.btn-disabled:hover {
+  background: var(--bg-raised);
   color: var(--muted);
-}
-
-.dl-note strong {
-  color: var(--fg);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  transform: none;
+  cursor: default;
+  pointer-events: none;
 }
 
 .dl-alt {
@@ -391,8 +431,69 @@ a:hover {
   color: var(--fg-bright);
 }
 
+/* Mobile: compress the hero — the pipeline line (subtitle + tool chips) and
+   the alt-download links go; title, tagline and the buttons carry it. Sits
+   after the base rules above so it wins on source order. */
+@media (max-width: 720px) {
+  .pipeline,
+  .dl-alt {
+    display: none;
+  }
+}
+
 .hero .btn-ghost {
   margin-top: 26px;
+}
+
+/* Book symbol on the guide buttons (hero teaser + features CTA) — outside
+   the shine span, since background-clip: text would leave an SVG invisible. */
+.btn-book {
+  color: var(--primary);
+}
+
+@media (min-width: 1024px) {
+  .hero .btn-ghost {
+    margin-top: 30px;
+  }
+}
+
+/* Shine: the text is painted with an orange gradient (primary plus lighter
+   hues) clipped to the glyphs, and a bright band sweeps through it. The
+   gradient starts and ends on the same color, so the linear loop is seamless.
+   Goes on the element whose only background IS the text (the hero teaser
+   link) or on a label span inside a surfaced button (the features CTA). */
+.text-shine,
+.text-shine:hover {
+  background-image: linear-gradient(
+    100deg,
+    var(--primary) 0%,
+    var(--primary-soft) 40%,
+    #ffc9a1 50%,
+    var(--primary-soft) 60%,
+    var(--primary) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: guide-shine 3s linear infinite;
+}
+
+@keyframes guide-shine {
+  from {
+    background-position: 250% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text-shine,
+  .text-shine:hover,
+  .cta-strip .btn-secondary {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------- Sections */
@@ -409,17 +510,16 @@ a:hover {
   letter-spacing: -0.015em;
 }
 
-/* Screenshot teaser atop the "why" section: the top of the real character page,
-   cropped and fading out so the heading rides up into it. Geometry: the source
-   shot is 2560×2260 — 40% of its height stays fully visible, then it fades to
-   transparent over the next 10%, so the container crops at 50% (aspect-ratio
-   2560/1130) and the mask goes opaque→transparent across the last fifth. */
+/* Screenshot teasers atop the "why" and "about" sections: the top of a real
+   app page, cropped to a fixed 2560/1130 band and fading out so the heading
+   rides up into it. The mask keeps the upper half of the band fully opaque
+   and fades out across the lower half, giving the heading a long ramp. */
 .section-teaser {
   overflow: hidden;
   border-radius: var(--radius);
   aspect-ratio: 2560 / 1130;
-  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 50%, transparent 100%);
 }
 
 .section-teaser img {
@@ -431,7 +531,14 @@ a:hover {
 /* Pull the heading up into the teaser's faded zone so title and image blend. */
 .section-teaser + h2 {
   position: relative;
-  margin-top: clamp(-48px, -4vw, -24px);
+  margin-top: -40px;
+}
+
+/* The About teaser holds more of its shot before fading (the why teaser
+   starts its fade at 50%). */
+#about .section-teaser {
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
 }
 
 .section h2 em {
@@ -450,7 +557,8 @@ a:hover {
 /* Cards */
 
 .cards {
-  margin-top: 40px;
+  /* Generous gap after the lead paragraph so the prose settles before the grid. */
+  margin-top: 128px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
@@ -499,12 +607,12 @@ a:hover {
 /* Features — the compact "why you'll want it" checklist. */
 
 .features {
-  margin: 36px 0 0;
+  margin: 64px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px 48px;
+  gap: 32px 64px;
 }
 
 .features li {
@@ -533,58 +641,28 @@ a:hover {
   }
 }
 
-/* Steps */
-
-.steps {
-  margin: 40px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+/* The guide call-out closing the features section. Its button border pulses
+   toward orange in step with the label's shine: the sweep travels 250% of
+   the box per 3s loop, so the bright band is actually over the text only
+   during the ~67–93% stretch — the border peaks with it at 80%. */
+.cta-strip .btn-secondary {
+  animation: guide-border-pulse 3s ease-in-out infinite;
 }
 
-.step {
-  position: relative;
-  padding: 22px 20px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
 
-.step-num {
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  color: var(--primary);
-}
-
-.step h3 {
-  margin-top: 6px;
-  font-size: 1.02rem;
-  font-weight: 800;
-}
-
-.step p {
-  margin-top: 6px;
-  font-size: 0.88rem;
-  color: color-mix(in oklab, var(--fg) 82%, var(--muted));
-}
-
-@media (max-width: 900px) {
-  .steps {
-    grid-template-columns: repeat(2, 1fr);
+@keyframes guide-border-pulse {
+  0%,
+  60%,
+  100% {
+    border-color: var(--border);
   }
-}
-
-@media (max-width: 540px) {
-  .steps {
-    grid-template-columns: 1fr;
+  80% {
+    border-color: color-mix(in oklab, var(--primary-soft) 40%, var(--border));
   }
 }
 
 .cta-strip {
-  margin-top: 40px;
+  margin-top: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -601,11 +679,10 @@ a:hover {
   color: var(--fg-bright);
 }
 
-/* The two prose sections (Why, About) center their heading and text on the
-   page axis — same axis as the hero and the card grids below them. */
+/* Every section heading sits centered on the page axis — same axis as the
+   hero and the card grids; About also centers its prose. */
 
-#why h2,
-#about h2 {
+.section h2 {
   text-align: center;
 }
 
@@ -618,7 +695,7 @@ a:hover {
 /* Resources */
 
 .resources {
-  margin-top: 36px;
+  margin-top: 64px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
@@ -645,12 +722,20 @@ a:hover {
   font-size: 0.99rem;
   font-weight: 800;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
+/* The symbol in front of each card title; the octocat variant carries
+   .gh-mark for its fill, this class sizes and colors them all alike. */
+.resource-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--primary);
+}
+
 .resource .ext {
+  margin-left: auto;
   color: var(--muted);
   font-weight: 600;
   transition: color 160ms ease, transform 160ms ease;
@@ -714,6 +799,14 @@ a:hover {
 
 .footer-sep {
   margin-inline: 6px;
+}
+
+/* GitHub link in the footer: octocat mark inline with the label. */
+.footer .gh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: bottom;
 }
 
 .footer-fine {
