@@ -139,6 +139,100 @@ describe('schema v17 — sceneOverrides (additive, zod default)', () => {
   })
 })
 
+describe('schema v20 — per-scene identity/groom override blocks (additive, zod default)', () => {
+  const now = '2026-07-20T00:00:00.000Z'
+  it('fills identity + groom defaults on a legacy sceneOverride (pre-v20)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 19,
+        sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [] }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].identity).toEqual({
+      enabled: false,
+      facsDetailStrength: 1,
+      flexionStrength: 1,
+      applyUE5TearUV: false,
+    })
+    expect(parsed.sceneOverrides[0].groom).toEqual({ enabled: false })
+    expect(parsed.sceneOverrides[0].preserve).toEqual({
+      enabled: false,
+      morphs: [],
+      nodeTransforms: [],
+    })
+  })
+  it('round-trips explicit identity + groom override values', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: CHARACTER_SCHEMA_VERSION,
+        sceneOverrides: [
+          {
+            scenePath: 'D:/s.duf',
+            identity: {
+              enabled: true,
+              facsDetailStrength: 0.5,
+              flexionStrength: 0.75,
+              applyUE5TearUV: true,
+            },
+            groom: { enabled: true },
+          },
+        ],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].identity).toEqual({
+      enabled: true,
+      facsDetailStrength: 0.5,
+      flexionStrength: 0.75,
+      applyUE5TearUV: true,
+    })
+    expect(parsed.sceneOverrides[0].groom.enabled).toBe(true)
+  })
+
+  // The ROM `enabled` gate's default flipped true → false at v20 (fresh override
+  // = fully disabled). The v20 migrate step keeps a PRE-v20 override that omits
+  // `enabled` ACTIVE, so the flip can't silently deactivate a stored scene's ROM
+  // override (a quiet frame regression next to the core invariant).
+  it('a pre-v20 override missing `enabled` heals to ACTIVE (old default preserved)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 19,
+        sceneOverrides: [{ scenePath: 'D:/s.duf' }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].enabled).toBe(true)
+  })
+
+  it('a v20+ bare override defaults to DISABLED (the new default, no step)', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: CHARACTER_SCHEMA_VERSION,
+        sceneOverrides: [{ scenePath: 'D:/s.duf' }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].enabled).toBe(false)
+  })
+})
+
 describe('migrateCharacterData — version handling', () => {
   it('leaves the stored schemaVersion untouched (bumping happens on save)', () => {
     expect(migrateCharacterData({ sections: {}, schemaVersion: 3 }).schemaVersion).toBe(3)
@@ -270,17 +364,14 @@ describe('characterSchema — v15 groomScenes (additive)', () => {
   })
 })
 
-// v14 added `groomMode` — additive with a 'scene' default, so there is no
-// migrate step; zod fills it when reading an older definition.
-describe('characterSchema — v14 groomMode (additive)', () => {
+// v20 REMOVED `groomMode`: hair is per-scene by presence now. A removed field
+// needs no migrate step — zod strips the old value on read.
+describe('characterSchema — v20 groomMode removal', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it("fills groomMode with 'scene' for a v13-shaped definition", () => {
-    expect(characterSchema.parse({ ...base, schemaVersion: 13 }).groomMode).toBe('scene')
-  })
-
-  it('round-trips the separate-scenes mode', () => {
-    expect(characterSchema.parse({ ...base, groomMode: 'separate' }).groomMode).toBe('separate')
+  it('strips a stored groomMode instead of carrying it', () => {
+    const parsed = characterSchema.parse({ ...base, groomMode: 'separate' }) as Record<string, unknown>
+    expect(parsed.groomMode).toBeUndefined()
   })
 })
 

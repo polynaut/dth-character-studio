@@ -21,8 +21,8 @@ the product**.
 | **Art direction** | Named override frames inside the GP/DK preset blocks (e.g. `VaginaOpen` @ GP frame 96) carrying their own morph values (`ART_DIRECTION_CATALOG`). |
 | **JCM morph mods** | Rules riding custom morphs along the shipped joint-corrective bends: per bone/axis, a signed `drives[]` list (angle range → value range; the **sign of the angle extreme picks the bend direction**). Split into runtime `positive[]`/`negative[]` by `jcmMorphModForRuntime` at generation. |
 | **Bone scale** | Per-pose flag (`boneScaleRef`) marking a morph that scales bones. Only meaningful in **GEN and FBM** (`REFERENCE_FBX_SECTIONS`) — a reference path on a MIS row breaks the HDA import. |
-| **Groom / hair** | Daz-side it's "hair", Houdini-side "groom". Per-scene lists of fitted hair items (`groomScenes`); the generated script hides them for the ROM export (hide-only, needs Exporter Plugin ≥ 2.0.1 = `MIN_GROOM_EXPORTER_VERSION`), and a separate `Export_Hair_…` script produces the `_grooms.abc`. |
-| **Scene override** | A per-EXTRA-scene ROM delta (`sceneOverrides` on `Character`, schema v17): replaced rows keyed by the base pose's **id** (content swaps, frame stays) + additions appended at group ends (`flatSectionGroupId` covers flat sections without a stored group). `applySceneOverride` (`packages/rom/src/scene-override.ts`) merges; **both** the editor's frame display and generation consume that one merge, so the invariant holds per scene. `activeSceneOverrides` (enabled + scene still in `extraScenes`) is THE single gate for generation, artifact sweep and save validation. Disabled/unlinked overrides keep their data; their files retire on the next save. |
+| **Groom / hair** | Daz-side it's "hair", Houdini-side "groom". Hair is ALWAYS per scene by presence (no more `groomMode` — removed in schema v20): a scene's `groomScenes` items ARE its hair, none listed → nothing excluded. The generated script hides them for the ROM export (hide-only, needs Exporter Plugin ≥ 2.0.1 = `MIN_GROOM_EXPORTER_VERSION`), and a separate `Export_Hair_…` script produces the `_grooms.abc`. |
+| **Scene override** | A per-EXTRA-scene delta (`sceneOverrides` on `Character`, schema v17; per-panel gates since v20): four independently-armed panels — **ROM** (`enabled` + `poses`/`additions`: replaced rows keyed by the base pose's **id**, content swaps, frame stays, + additions appended at group ends; `flatSectionGroupId` covers flat sections without a stored group), **identity** (`identity.enabled` + G9 FACS-detail/flexion/tear-UV), **groom** (`groom.enabled`, a UI gate only — hair lists live per scene in `groomScenes`), **preserve** (`preserve.enabled` + own `morphs`/`nodeTransforms` — a FULL replacement of the base preserve lists, emitted even when empty so a scene can clear them). `applySceneOverride` merges ROM; `mergeSceneOverride` yields the scene's effective character (ROM sections + identity dials). All gates default OFF, so a fresh scene starts fully disabled; arming identity/preserve seeds from the base. `activeSceneOverrides` (any panel armed + scene still in `extraScenes`) is THE single gate; `sceneOverrideBuildsRom` narrows to the ROM subset that also mints a scene-suffixed CSV. Disabled/unlinked overrides keep their data; their files retire on the next save. |
 
 ## The core invariant (do not break)
 
@@ -55,16 +55,22 @@ offsets byte-identically — if a generation change moves them, the change is wr
   character JSON and copied into the export dir by the ROM script's export block.
 - Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (groom
   alembic), `Scan_Products_…` (product scan).
-- Per **active scene override**: `generateSceneOverride()` compiles the merged
-  sections into a scene-suffixed pair next to the defaults —
-  `ROM_<Name>_<Genesis>_<Scene>.dsa` + `<Name>_<Scene>_pose_asset.csv` (+ a scene
-  `Export_…` when the export is split; no groom/scan variants — those resolve the
-  open scene at run time). `<Scene>` = `sceneOverrideSlug(scenePath)` (file stem,
-  `[A-Za-z0-9_]` only); duplicate slugs across scenes are refused at save.
+- **Scene overrides fold into the ONE ROM script** (runtime v32): it embeds a
+  `dthSceneOverrides` map (normalized open-scene path → the few config fields that
+  scene changes — a fresh `extraFrames` for a ROM override, the G9 dials for an
+  identity override) and merges the open scene's delta onto `dthCharacterConfig`
+  before the build. So one script serves the primary AND every outfit scene (like
+  the groom map / `sceneConfigLookupSnippet` in `dz-snippets.ts`), replacing the
+  old per-scene `ROM_…_<Scene>.dsa`. A **ROM**-override scene still gets its own
+  `<Name>_<Scene>_pose_asset.csv` (Houdini has no runtime to select frames); the
+  export block picks it by open scene (`sceneCsvLookupSnippet`). `<Scene>` =
+  `sceneOverrideSlug(scenePath)` (file stem, `[A-Za-z0-9_]` only); duplicate ROM
+  slugs across scenes are refused at save. The legacy per-scene scripts are swept
+  on the next save/refresh.
 
 ## The DTH runtime is studio-owned
 
-The `.dsa` runtime (currently `RUNTIME_VERSION = 31`, history in `types.ts`) lives
+The `.dsa` runtime (currently `RUNTIME_VERSION = 32`, history in `types.ts`) lives
 in this repo and ships with the app — there is **no external script dependency**;
 only the `.duf` pose presets come from the DTH release. The runtime accepts
 **inline config only**: file-based config (extra JSONs, art-direction paths) aborts

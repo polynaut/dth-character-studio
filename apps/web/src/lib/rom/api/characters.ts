@@ -122,7 +122,6 @@ function romFields(src: Character): Partial<Character> {
     preserveMorphs: src.preserveMorphs,
     preserveNodeTransforms: src.preserveNodeTransforms,
     groomScenes: src.groomScenes,
-    groomMode: src.groomMode,
     jcmMorphMods: src.jcmMorphMods,
     // Like groomScenes: per-scene data whose scene paths point at the SOURCE
     // character's scenes — inert until those scenes are linked here too (the

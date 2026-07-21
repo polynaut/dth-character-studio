@@ -168,8 +168,6 @@ describe('sectionsFromFlatFrames', () => {
     expect(sections.MISC.groups[0].id).toBe(flatSectionGroupId('MISC'))
     // A scene override addressed at the flat group id reaches the imported poses.
     const merged = applySceneOverride(sections, {
-      scenePath: 'D:/s/Beach.duf',
-      enabled: true,
       poses: [],
       additions: [
         {
@@ -1605,11 +1603,6 @@ describe('groom items (hair kept out of the export)', () => {
       groomScenes: [{ scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: '  ' }] }],
     })
     expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
-  })
-
-  it("separate-scenes groom mode disables the bracket even with items listed", () => {
-    const content = toCharacterScriptDsa(groomChar({ groomMode: 'separate' }), {}, FRAMES).content
-    expect(content).not.toContain('dthGroom')
   })
 
   it('generateAll emits the groom script only with an export path AND groom lists', () => {

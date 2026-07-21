@@ -96,6 +96,21 @@ export const characterMigrations: Record<
     }
     return data
   },
+  // v20 — the ROM `enabled` gate's zod default flipped true → false (a fresh
+  // override starts fully disabled). A pre-v20 override that OMITS `enabled` was
+  // ACTIVE under the old default; preserve that, so the flip only affects NEW
+  // overrides. The UI has always written `enabled` explicitly, so this is a
+  // belt-and-suspenders guard against a hand-edited / bare stored override
+  // silently deactivating — and its scene CSV vanishing — on the next regenerate.
+  20: (data) => {
+    if (Array.isArray(data.sceneOverrides)) {
+      for (const override of data.sceneOverrides) {
+        if (!override || typeof override !== 'object') continue
+        if (override.enabled === undefined) override.enabled = true
+      }
+    }
+    return data
+  },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────
   //
   // Case A — rename / restructure an existing field:

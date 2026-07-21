@@ -74,6 +74,46 @@ export function groomSceneLookupSnippet(groomMap: Record<string, Array<string>>)
 }
 
 /**
+ * The per-scene CONFIG selection the one character script embeds: a map of
+ * normalized scene path → the config delta for that scene (a few overridden
+ * fields — new `extraFrames` for a ROM override, the G9 identity dials for an
+ * identity override), plus the lookup that merges the OPEN scene's delta onto
+ * `dthCharacterConfig` before the build. One script serves every linked scene:
+ * the primary builds the base config; an outfit scene whose Hair/ROM/G9 panels
+ * were overridden swaps in just those fields. Same scene-key normalization as
+ * {@link groomSceneLookupSnippet} — a change to one must land in the other, or
+ * the two disagree on which scene is open. Base indent 0; must run AFTER the
+ * `var dthCharacterConfig = …;` it mutates.
+ */
+export function sceneConfigLookupSnippet(sceneConfigMap: Record<string, unknown>): string {
+  return `var dthSceneOverrides = ${dazJson(sceneConfigMap, 2)};
+var dthOpenScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthSceneDelta = dthSceneOverrides[dthOpenScene];
+if (dthSceneDelta) {
+    for (var dthOk in dthSceneDelta) {
+        if (dthSceneDelta.hasOwnProperty(dthOk)) dthCharacterConfig[dthOk] = dthSceneDelta[dthOk];
+    }
+    print("DTH: per-scene override applied for " + dthOpenScene);
+}
+`
+}
+
+/**
+ * The scene → PoseAsset-CSV-name lookup the export block uses to deliver the
+ * RIGHT CSV for the open scene: a ROM-override scene has its own scene-suffixed
+ * CSV, every other scene rides the base one. Emitted only when at least one
+ * linked scene overrides the ROM. Declares `dthCsvName` (the base name),
+ * reassigning it when the open scene has an override CSV. Base indent 0.
+ */
+export function sceneCsvLookupSnippet(baseCsvName: string, sceneCsvMap: Record<string, string>): string {
+  return `var dthCsvName = ${dazJson(baseCsvName)};
+var dthCsvByScene = ${dazJson(sceneCsvMap, 2)};
+var dthCsvScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+if (dthCsvByScene[dthCsvScene]) dthCsvName = dthCsvByScene[dthCsvScene];
+`
+}
+
+/**
  * Strip the characters that could break OUT of a `//` comment line in a generated
  * Daz script — CR/LF and the Unicode line separators U+2028/U+2029 that Daz's
  * ECMAScript engine also treats as line terminators. Without this, a crafted

@@ -387,7 +387,16 @@ function CharacterPage() {
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
-        <IdentitySection character={character} patch={patch} />
+        <IdentitySection
+          character={character}
+          patch={patch}
+          overrideEligible={sceneSel.overrideEligible}
+          identityOverrideActive={sceneSel.identityOverrideActive}
+          setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
+          selectedSceneName={sceneSel.selectedSceneName}
+          sceneOverride={sceneSel.sceneOverride}
+          patchOverride={sceneSel.patchOverride}
+        />
         {location && (
           <div className="mt-6 space-y-4 border-t pt-5">
             <DazSceneField
@@ -409,6 +418,10 @@ function CharacterPage() {
               patch={patch}
               selectedScene={sceneSel.effectiveScene}
               dazInstallFolder={settings.dazInstallFolder}
+              overrideEligible={sceneSel.overrideEligible}
+              groomOverrideActive={sceneSel.groomOverrideActive}
+              setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+              selectedSceneName={sceneSel.selectedSceneName}
             />
             <HoudiniProjectsField
               character={character}
@@ -463,7 +476,16 @@ function CharacterPage() {
             location={location}
             onMoved={onCharacterMoved}
           />
-          <PreserveFields character={character} patch={patch} />
+          <PreserveFields
+            character={character}
+            patch={patch}
+            overrideEligible={sceneSel.overrideEligible}
+            preserveOverrideActive={sceneSel.preserveOverrideActive}
+            setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
+            selectedSceneName={sceneSel.selectedSceneName}
+            sceneOverride={sceneSel.sceneOverride}
+            patchOverride={sceneSel.patchOverride}
+          />
         </div>
       </details>
 

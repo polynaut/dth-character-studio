@@ -8,6 +8,7 @@ import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
+import { prettySceneName } from '#/lib/scene-name.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -59,21 +60,6 @@ function scrollDazScenesIntoView() {
   const header = document.querySelector('header')
   const offset = (header?.offsetHeight ?? 96) + 12
   smoothScrollToY(window.scrollY + el.getBoundingClientRect().top - offset)
-}
-
-/**
- * The scene tag's display text: the scene's name with the character's name
- * stripped out (case-insensitive), then separators (underscores, dashes,
- * whitespace runs) collapsed to single spaces and trimmed — "KiraDefault_G9_GP"
- * reads "Default G9 GP" for "Kira". If stripping the name leaves nothing, the
- * whole (spaced) tag is kept.
- */
-function sceneTagText(tag: string, name: string): string {
-  const withoutName = name
-    ? tag.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '')
-    : tag
-  const spaced = (s: string) => s.replace(/[_\s-]+/g, ' ').trim()
-  return spaced(withoutName) || spaced(tag)
 }
 
 /**
@@ -317,7 +303,7 @@ export function EditorHeader({
                     className={`h-8 w-[56px] shrink-0 rounded${sceneAvatarPath ? '' : ' scene-label-tile'}`}
                     fallbackClassName="text-[8px]"
                   />
-                  <span className="truncate">{sceneTagText(sceneTag, character.name)}</span>
+                  <span className="truncate">{prettySceneName(sceneTag, character.name)}</span>
                 </Tag>
               </button>
             )}
