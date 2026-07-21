@@ -68,15 +68,31 @@ pub(crate) fn build_app_menu<R: tauri::Runtime>(
     MenuBuilder::new(handle).item(&main).item(&help).build()
 }
 
+/// Serializes PROJECT-window creation, the same way HOME_WINDOW_LOCK does for
+/// Home windows. A project window's map reservation exists BEFORE its webview
+/// registers (`build()` takes hundreds of ms), so without this lock a racing
+/// second open of the same `.dcsp` sees the reservation, finds no window with
+/// that label yet, wrongly concludes the mapping is stale, prunes it and builds
+/// a SECOND window on the same project → concurrent character writes. Held
+/// across find → build, the second caller waits until the first window is
+/// registered, then focuses it. Only ever taken on worker threads (the commands
+/// are `(async)`), so blocking here never blocks the main thread `build()`
+/// dispatches to.
+#[cfg(desktop)]
+static PROJECT_WINDOW_LOCK: Mutex<()> = Mutex::new(());
+
 /// Open a project in its own window — or focus the one already showing it.
 #[cfg(desktop)]
 pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result<()> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let _creation_guard = PROJECT_WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let norm = path.replace('\\', "/");
     let projects = app.state::<WindowProjects>();
-    // Hold the lock across find → (prune stale) → allocate → insert so two racing
-    // launches (double-clicking two .dcsp files, or a file-assoc launch racing the
-    // frontend) can't compute the SAME label or map two paths to one window.
+    // Hold the map lock across find → (prune stale) → allocate → insert so two
+    // racing launches (double-clicking two .dcsp files, or a file-assoc launch
+    // racing the frontend) can't compute the SAME label or map two paths to one
+    // window. The map lock stays SHORT (never across build) — `active_project_file`
+    // runs on the main thread and must never wait on a window build.
     let label = {
         let mut map = lock_windows(&projects);
         if let Some(label) =
@@ -86,7 +102,17 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
                 let _ = app.get_webview_window(&label).map(|w| w.set_focus());
                 return Ok(());
             }
-            // Window was closed but its mapping lingered — drop it and reopen.
+            // The startup ("main") window's mapping is inserted in setup(), BEFORE
+            // tauri builds that window — a file-assoc second launch arriving in
+            // that gap must not prune it and open a duplicate. The starting main
+            // window will show this project itself.
+            if label == "main" {
+                return Ok(());
+            }
+            // Any other project label is only built while PROJECT_WINDOW_LOCK is
+            // held (which we hold now), so "mapping present, window absent" here
+            // genuinely means stale (destroyed window / failed build) — drop it
+            // and reopen.
             map.remove(&label);
         }
         // A label that's neither a live window nor already reserved in the map.
@@ -105,7 +131,7 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title(format!("{stem} — DTH Character Studio"))
         .inner_size(1440.0, 920.0)
         .min_inner_size(960.0, 640.0)
@@ -115,7 +141,13 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
         // Runtime windows don't inherit the app menu (only the config "main" window
         // does) — give this one its own so Main/Help show here too.
         .menu(build_app_menu(app)?)
-        .build()?;
+        .build();
+    if let Err(e) = built {
+        // A failed build must not leave its reservation behind — the next open of
+        // this project would "focus" a window that never existed.
+        lock_windows(&projects).remove(&label);
+        return Err(e);
+    }
     Ok(())
 }
 
