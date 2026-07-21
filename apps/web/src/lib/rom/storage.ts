@@ -76,6 +76,7 @@ export {
   ProjectUnreachableError,
   readManifest,
   rememberRecent,
+  renameManifestFile,
   writeManifest,
 } from './storage/projects'
 export type { DcspManifest, Project, RecentProject } from './storage/projects'
