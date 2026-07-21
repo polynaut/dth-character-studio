@@ -60,11 +60,19 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await expect(page.getByText(/Saved “Kira”/)).toBeVisible()
   const written = await filesWritten(page)
   expect(written).toContain(`${P.charFolder}/Kira_pose_asset.csv`)
+  // The ROM-override scene still gets its OWN PoseAsset CSV (Houdini has no
+  // runtime to select frames)…
   expect(written).toContain(`${P.charFolder}/Kira_KiraBeach_pose_asset.csv`)
+  // …but there's now just ONE ROM script: it embeds every scene's override in a
+  // dthSceneOverrides map and selects the open scene at run time, so the old
+  // per-scene ROM_…_<Scene>.dsa is gone.
   expect(written).toContain(`${P.scriptsDir}/ROM_Kira_G9.dsa`)
-  const sceneDsa = await fileContent(page, `${P.scriptsDir}/ROM_Kira_G9_KiraBeach.dsa`)
-  expect(sceneDsa).toContain('ApplyDTHCharacter')
-  expect(sceneDsa).toContain('Scene override "KiraBeach"')
+  expect(written).not.toContain(`${P.scriptsDir}/ROM_Kira_G9_KiraBeach.dsa`)
+  const romDsa = await fileContent(page, `${P.scriptsDir}/ROM_Kira_G9.dsa`)
+  expect(romDsa).toContain('ApplyDTHCharacter')
+  expect(romDsa).toContain('dthSceneOverrides')
+  // The KiraBeach delta is keyed by the open scene's normalized (lowercased) path.
+  expect(romDsa).toContain(extraScene.toLowerCase())
 
   // The persisted definition carries the override entry.
   const definition = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!)

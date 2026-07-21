@@ -8,6 +8,7 @@ import {
   activeSceneOverrides,
   applySceneOverride,
   romValidationErrors,
+  sceneOverrideBuildsRom,
   sceneOverrideSlug,
   templateBakedPoseNames,
 } from '@dth/rom'
@@ -191,10 +192,11 @@ export function useCharacterDraft(options: {
       )
       return false
     }
-    // Each active scene override generates its own artifacts from the MERGED
-    // sections — validate those too, so an overridden/added row can't ship a
-    // broken scene script.
-    for (const override of activeSceneOverrides(current)) {
+    // Each ROM-override scene generates its own CSV from the MERGED sections —
+    // validate those too, so an overridden/added row can't ship a broken scene.
+    // Identity/groom-only overrides don't touch the sections, so they need no
+    // extra ROM validation.
+    for (const override of activeSceneOverrides(current).filter(sceneOverrideBuildsRom)) {
       const sceneErrors = romValidationErrors(
         applySceneOverride(current.sections, override),
         reserved,
@@ -210,9 +212,12 @@ export function useCharacterDraft(options: {
         return false
       }
     }
-    // Two linked scenes whose file names reduce to the same slug would generate
-    // the same file names — refuse instead of silently overwriting one.
-    const slugs = activeSceneOverrides(current).map((o) => sceneOverrideSlug(o.scenePath))
+    // Two ROM-override scenes whose file names reduce to the same slug would
+    // generate the same per-scene CSV name — refuse instead of silently
+    // overwriting one. Only ROM overrides mint that CSV, so only they can clash.
+    const slugs = activeSceneOverrides(current)
+      .filter(sceneOverrideBuildsRom)
+      .map((o) => sceneOverrideSlug(o.scenePath))
     const dupe = slugs.find((slug, i) => slugs.indexOf(slug) < i)
     if (dupe) {
       toast.error(

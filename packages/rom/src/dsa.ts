@@ -6,10 +6,17 @@ import {
   groomSceneLookupSnippet,
   hideTreeSnippet,
   indentLines,
+  sceneConfigLookupSnippet,
+  sceneCsvLookupSnippet,
   sceneSubfolderSnippet,
 } from './dz-snippets'
 import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
-import { applySceneOverride, sceneOverrideSlug } from './scene-override'
+import {
+  activeSceneOverrides,
+  mergeSceneOverride,
+  sceneOverrideBuildsRom,
+  sceneOverrideSlug,
+} from './scene-override'
 import {
   characterSkinning,
   characterSlug,
@@ -22,12 +29,12 @@ import {
 import type { GeneratedFile } from './csv'
 import type { PresetFrames } from './frames'
 import type { RomPaths } from './resolve'
-import type { ArtDirectionFrame, Character, SceneOverride } from './types'
+import type { ArtDirectionFrame, Character } from './types'
 
 /**
  * The `.dsa` generators: the self-contained character/ROM script, the split
  * Export script, the groom (hair) export, the product scan — plus the
- * generateAll/generateSceneOverride entry points that pair them with the
+ * generateAll entry point that pairs them with the
  * PoseAsset CSV (csv.ts). Formats are taken from real files in
  * soltude/DazToHue-Scripts (ElectraG9_FBMs.json / .csv, DthWorkflowElectraG9.dsa)
  * and from the PoseAsset node CSV sample provided by mrpdean. Catalog/path
@@ -132,9 +139,11 @@ export function buildArtDirectionData(
 }
 
 /**
- * File base name for the self-contained character script: `<Name>_<Genesis>`,
- * or `<Name>_<Genesis>_<Scene>` for a scene override's variant (see
- * {@link generateSceneOverride}).
+ * File base name for the self-contained character script: `<Name>_<Genesis>`.
+ * The optional `sceneSlug` yields the old `<Name>_<Genesis>_<Scene>` form that
+ * per-scene ROM scripts used before the one-script model — kept only so the web
+ * layer can name the legacy scene scripts it sweeps away (they are no longer
+ * generated; the one script now selects the open scene's override at run time).
  */
 export function characterScriptName(character: Character, sceneSlug?: string): string {
   return `${characterSlug(character)}_${character.genesis}${sceneSlug ? `_${sceneSlug}` : ''}`
@@ -156,8 +165,9 @@ function buildExportBlock(
   character: Character,
   frames: PresetFrames | undefined,
   charFolderAbs: string | undefined,
-  /** Scene-override variant: the delivered CSV is the scene-suffixed one. */
-  sceneSlug?: string,
+  /** Scene → PoseAsset-CSV-name lookup: the ROM-override scenes whose delivered
+   *  CSV is the scene-suffixed one. Empty ⇒ every scene rides the base CSV. */
+  sceneCsvMap: Record<string, string> = {},
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -167,13 +177,21 @@ function buildExportBlock(
   const sceneSubfolderBlock = character.exportSceneSubfolders
     ? indentLines(sceneSubfolderSnippet())
     : ''
+  // The CSV to deliver: the base name, or — when some linked scene overrides the
+  // ROM — the open scene's scene-suffixed CSV, resolved at run time. Kept
+  // self-contained (declares its own dthCsvScene) so the block works both
+  // appended to the ROM script and as the standalone Export_ script.
+  const csvNameBlock =
+    Object.keys(sceneCsvMap).length === 0
+      ? `    var dthCsvName = ${dazJson(poseAssetFileName(character))};`
+      : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
   const csvCopyBlock = charFolderAbs
     ? `    // Copy the generated PoseAsset CSV next to the exporter output, resolving
     // the {{DTH_EXPORT_DIR}} token in any bone-scale reference-FBX path to the
     // real (run-time) export dir — Houdini's PoseAsset wants absolute paths, and
     // the dir (scene subfolder included) is only known now. Source is left intact
     // so the next scene's export can reuse it.
-    var dthCsvName = ${dazJson(poseAssetFileName(character, sceneSlug))};
+${csvNameBlock}
     var dthCsvSrcDir = new DzDir(${dazJson(charFolderAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
@@ -277,6 +295,50 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
 }
 
 /**
+ * The run-time config deltas the ONE character script embeds: normalized scene
+ * path → the handful of `dthCharacterConfig` fields the open scene overrides. A
+ * ROM override contributes a fresh `extraFrames` (from the merged sections); an
+ * identity override contributes the Genesis-9 dials (FACS detail / flexion /
+ * UE5 tear UV, each honouring the same G9 gate as the base config). A scene with
+ * no field to change is dropped. Same key normalization as {@link groomSceneMap}.
+ */
+function buildSceneConfigMap(character: Character): Record<string, Record<string, unknown>> {
+  const g9Dials = GENERATIONS[character.genesis].hasStrengthDials
+  const map: Record<string, Record<string, unknown>> = {}
+  for (const override of activeSceneOverrides(character)) {
+    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    if (key === '') continue
+    const delta: Record<string, unknown> = {}
+    if (override.enabled) delta.extraFrames = buildFbmData(mergeSceneOverride(character, override))
+    if (override.identity.enabled) {
+      delta.FACsDetailStrength = g9Dials ? override.identity.facsDetailStrength : 0
+      delta.FlexionStrength = g9Dials ? override.identity.flexionStrength : 0
+      delta.bApplyUE5TearUV = character.genesis === 'G9' && override.identity.applyUE5TearUV
+    }
+    if (Object.keys(delta).length > 0) map[key] = delta
+  }
+  return map
+}
+
+/**
+ * Scene → PoseAsset-CSV-name for every linked scene that overrides the ROM (and
+ * so has its own scene-suffixed CSV, built from the merged sections). Keyed by
+ * the open scene's normalized path, matching {@link buildSceneConfigMap}. The
+ * export block (in the combined ROM script AND the split Export_ script)
+ * resolves the CSV to deliver through this; an identity/groom-only scene isn't
+ * here and rides the base CSV.
+ */
+function buildSceneCsvMap(character: Character): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const override of activeSceneOverrides(character)) {
+    if (!sceneOverrideBuildsRom(override)) continue
+    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    if (key !== '') map[key] = poseAssetFileName(character, sceneOverrideSlug(override.scenePath))
+  }
+  return map
+}
+
+/**
  * The one self-contained Daz script for a character: `ROM_<Name>_<Genesis>.dsa`.
  * It includes the DTH runtime (DthWorkflow.dsa, installed alongside it) and
  * makes a single `ApplyDTHCharacter(config)` call whose argument carries the
@@ -294,12 +356,6 @@ export function toCharacterScriptDsa(
    * contexts, where the move block is skipped.
    */
   charFolderAbs?: string,
-  /**
-   * Scene-override variant (see {@link generateSceneOverride}): suffixes the
-   * script + delivered-CSV names so the scene's artifacts coexist with the
-   * default ones. The passed character already carries the MERGED sections.
-   */
-  sceneSlug?: string,
 ): GeneratedFile {
   const { sections } = character
   // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
@@ -391,6 +447,18 @@ export function toCharacterScriptDsa(
   if (gpArt) config.gpArtDirection = gpArt
   if (dkArt) config.dkArtDirection = dkArt
 
+  // Per-scene overrides folded into the ONE script: each linked scene with an
+  // armed panel contributes a small run-time config delta (a ROM override → a
+  // fresh extraFrames; an identity override → the G9 dials); a ROM override also
+  // mints its own PoseAsset CSV (merged frames) the export block delivers by the
+  // same scene lookup. The config lookup swaps the open scene's delta onto
+  // dthCharacterConfig before the build — emitted only when some scene overrides
+  // (else the config stands as the primary scene's).
+  const sceneConfigMap = buildSceneConfigMap(character)
+  const sceneCsvMap = buildSceneCsvMap(character)
+  const sceneSelectBlock =
+    Object.keys(sceneConfigMap).length > 0 ? `\n${sceneConfigLookupSnippet(sceneConfigMap)}` : ''
+
   // Optional auto-export: when an export directory is set, the ROM build is
   // followed by a DTH Exporter run. With `exportWithRomScript` (the default) that
   // export block is appended here — one combined script. Otherwise it's split off
@@ -399,7 +467,7 @@ export function toCharacterScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneSlug)
+${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -407,9 +475,10 @@ ${buildExportBlock(character, frames, charFolderAbs, sceneSlug)
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
-// DTH ROM for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.${sceneSlug ? `
-// Scene override "${commentSafe(sceneSlug)}" — run this with that Daz scene open;
-// the default ROM_ script stays the one for the character's primary scene.` : ''}
+// DTH ROM for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.${sceneSelectBlock ? `
+// One script for every linked scene: it applies the open Daz scene's Hair / ROM
+// / Genesis-9 overrides by file name at run time (see dthSceneOverrides below);
+// the primary scene builds the base config.` : ''}
 // DTH-Runtime: v${RUNTIME_VERSION}
 // Self-contained: this single ApplyDTHCharacter() call carries the full
 // character config AND all ROM morph definitions inline. It needs the DTH
@@ -418,7 +487,7 @@ ${buildExportBlock(character, frames, charFolderAbs, sceneSlug)
 // this script's <project>/<character>/ subfolder.
 
 var dthCharacterConfig = ${dazJson(config, 2)};
-
+${sceneSelectBlock}
 // Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
     try {
@@ -499,7 +568,7 @@ ${exportBlock}        }` : ''}
     }
 }
 `
-  const baseName = characterScriptName(character, sceneSlug)
+  const baseName = characterScriptName(character)
   return { fileName: `ROM_${baseName}.dsa`, content, target: 'daz' }
 }
 
@@ -516,8 +585,6 @@ export function toExportScriptDsa(
   character: Character,
   frames?: PresetFrames,
   charFolderAbs?: string,
-  /** Scene-override variant — see {@link toCharacterScriptDsa}. */
-  sceneSlug?: string,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -525,18 +592,18 @@ export function toExportScriptDsa(
 // DTH-Runtime: v${RUNTIME_VERSION}
 // Runs the DTH Exporter on the ROM already built on the timeline and delivers
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
-// (ROM_${characterScriptName(character, sceneSlug)}.dsa) in the same Daz session.
+// (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
 ${figureAutoSelectSnippet(character.genesis)}if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, sceneSlug)
+${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character))
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
 `
   return {
-    fileName: `Export_${characterScriptName(character, sceneSlug)}.dsa`,
+    fileName: `Export_${characterScriptName(character)}.dsa`,
     content,
     target: 'daz',
   }
@@ -691,7 +758,10 @@ DthScanProducts(${dazJson(config, 2)});
  * the PoseAsset CSV (Houdini), plus the optional split Export_ script and the
  * per-character product-scan script. Everything the character script needs (FBM
  * frames, art direction) is inlined via {@link buildFbmData} /
- * {@link buildArtDirectionData}.
+ * {@link buildArtDirectionData}. Every linked scene is served by the ONE
+ * character script (it selects the open scene's overrides at run time); a
+ * ROM-override scene additionally gets its own scene-suffixed PoseAsset CSV,
+ * since its Houdini side (no runtime) can't select frames.
  */
 export function generateAll(
   character: Character,
@@ -715,41 +785,23 @@ export function generateAll(
   // Groom lists + an export dir -> also the standalone groom (.abc) script.
   const groom =
     character.exportPath.trim() !== '' && Object.keys(groomSceneMap(character)).length > 0
+  const era = poseAssetCsvEra(dthReleaseVersion ?? '')
+  // A ROM-override scene builds different frames, so it gets its OWN PoseAsset
+  // CSV from the merged sections; the one script's export block delivers the
+  // right CSV by open scene. Identity/groom-only overrides keep the base frames
+  // (their effect is a run-time config delta / the per-scene hair list), so they
+  // ride the base CSV — no extra file.
+  const overrideCsvs = activeSceneOverrides(character)
+    .filter(sceneOverrideBuildsRom)
+    .map((override) =>
+      toPoseAssetCsv(mergeSceneOverride(character, override), frames, era, sceneOverrideSlug(override.scenePath)),
+    )
   return [
     toCharacterScriptDsa(character, romPaths, frames, charFolderAbs),
     ...(split ? [toExportScriptDsa(character, frames, charFolderAbs)] : []),
     ...(groom ? [toGroomExportScriptDsa(character)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
-    toPoseAssetCsv(character, frames, poseAssetCsvEra(dthReleaseVersion ?? '')),
-  ]
-}
-
-/**
- * The scene-specific artifacts of one scene override: the ROM script + PoseAsset
- * CSV (and the split Export_ script when the character splits its export), all
- * generated from the base sections MERGED with the override
- * ({@link applySceneOverride}) and named with the scene's slug — so they live
- * next to the default artifacts without clashing. The preset blocks are
- * untouched by an override, so the same measured `frames` apply. No groom or
- * product-scan script: both already resolve the OPEN scene at run time, so the
- * default ones cover every linked scene.
- */
-export function generateSceneOverride(
-  character: Character,
-  override: SceneOverride,
-  romPaths: RomPaths,
-  frames: PresetFrames,
-  /** Absolute character-folder path — see {@link toCharacterScriptDsa}. */
-  charFolderAbs?: string,
-  /** Active DTH release version — CSV era only, see {@link generateAll}. */
-  dthReleaseVersion?: string,
-): Array<GeneratedFile> {
-  const merged = { ...character, sections: applySceneOverride(character.sections, override) }
-  const slug = sceneOverrideSlug(override.scenePath)
-  const split = character.exportPath.trim() !== '' && character.exportWithRomScript === false
-  return [
-    toCharacterScriptDsa(merged, romPaths, frames, charFolderAbs, slug),
-    ...(split ? [toExportScriptDsa(merged, frames, charFolderAbs, slug)] : []),
-    toPoseAssetCsv(merged, frames, poseAssetCsvEra(dthReleaseVersion ?? ''), slug),
+    toPoseAssetCsv(character, frames, era),
+    ...overrideCsvs,
   ]
 }

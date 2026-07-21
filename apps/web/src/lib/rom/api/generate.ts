@@ -6,11 +6,9 @@ import { normalizePathLower } from '#/lib/path.ts'
 import { withBusyCursor } from '../../busy-cursor.ts'
 
 import {
-  activeSceneOverrides,
   characterScriptName,
   characterSlug,
   generateAll,
-  generateSceneOverride,
   genRomIncludes,
   jcmIsBaseRom,
   poseAssetFileName,
@@ -261,19 +259,16 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         dazLibraryFolder: settings.dazLibraryFolder,
       }
     : undefined
-  const defaultFiles = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
-  // Scene overrides: every enabled override for a linked extra scene compiles
-  // its own scene-suffixed ROM script + CSV pair from the merged sections —
-  // the "default artifacts for the primary scene, specific ones per outfit
-  // scene" split. Written to the same two destinations as the defaults.
-  const overrideFiles = activeSceneOverrides(versioned).flatMap((override) =>
-    generateSceneOverride(versioned, override, romPaths, frames, outDir, activeRelease),
-  )
-  const files = [...defaultFiles, ...overrideFiles]
+  // The ONE character script embeds every linked scene's overrides and selects
+  // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
+  // for each ROM-override scene (Houdini has no runtime to select frames). Both
+  // destinations get them below.
+  const files = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just
-  // written, this removes exactly the artifacts of overrides that were disabled
-  // or whose scene was unlinked (their data stays in the JSON; the files go).
+  // written, this removes the per-scene CSV of an override whose ROM was
+  // disarmed / scene unlinked, and (always, since they're no longer generated)
+  // the LEGACY per-scene ROM/Export scripts from before the one-script model.
   const overrideCsvNames = (name: string) =>
     character.sceneOverrides.map((o) =>
       poseAssetFileName({ ...character, name }, sceneOverrideSlug(o.scenePath)),

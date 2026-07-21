@@ -429,11 +429,14 @@ export const sceneOverrideSchema = z.object({
    *  Repointed alongside `scenePath`/`extraScenes` on folder moves. */
   scenePath: z.string().max(MAX_PATH_LENGTH),
   /**
-   * Whether the override is active: drives the editor's override mode for the
-   * scene AND the generation of its scene-specific artifacts. Toggling off
-   * keeps the stored rows (re-enabling restores them) but stops generating.
+   * Whether the ROM override panel is armed for this scene — the ROM-frames
+   * gate, parallel to `identity.enabled` / `groom.enabled` below. Armed, the
+   * scene's merged rows drive its config delta + its own PoseAsset CSV; disarmed
+   * keeps the stored rows (re-arming restores them) but stops contributing.
+   * Defaults OFF so a freshly-minted override for a new scene starts fully
+   * disabled — the user opts each panel in.
    */
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(false),
   /**
    * Replaced rows: each pose's `id` names the BASE pose it substitutes, so the
    * replacement survives base-row reordering. An entry whose base pose no
@@ -764,7 +767,10 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       gate) blocks to `sceneOverrideSchema`, generalizing per-scene overrides
  *       beyond ROM. Additive nested objects with zod defaults — no migration
  *       step (hair lists stay in `groomScenes`; `groom.enabled` is just the
- *       panel opt-in).
+ *       panel opt-in). The ROM `enabled` gate's default flipped true → false so
+ *       a fresh override starts fully disabled; this needs no step either —
+ *       every stored override already carries an explicit `enabled`, so nothing
+ *       relies on the default on read.
  */
 export const CHARACTER_SCHEMA_VERSION = 20
 
@@ -959,8 +965,17 @@ export const CHARACTER_SCHEMA_VERSION = 20
  *       NB: requires the plugin build that does the hidden-node unparent — an
  *       older Exporter would leak hair back into the FBX. Refresh assets to
  *       regenerate existing characters onto the hide-only export block.
+ *  32 — Per-scene overrides collapse into the ONE character script. The
+ *       generated `ROM_<Name>_<Genesis>.dsa` now embeds a `dthSceneOverrides`
+ *       map (normalized open-scene path → the few config fields that scene
+ *       changes) and merges the open scene's delta onto dthCharacterConfig
+ *       before the build — so one script serves the primary AND every outfit
+ *       scene, instead of a separate `ROM_…_<Scene>.dsa` per override. The
+ *       export block likewise selects the scene's PoseAsset CSV by open scene.
+ *       Refresh assets to regenerate onto the one script (the old per-scene
+ *       scripts are swept on the next save/refresh).
  */
-export const RUNTIME_VERSION = 31
+export const RUNTIME_VERSION = 32
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
