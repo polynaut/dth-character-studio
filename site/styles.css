@@ -418,6 +418,16 @@ a:hover {
   color: var(--fg-bright);
 }
 
+/* Mobile: compress the hero — the pipeline line (subtitle + tool chips) and
+   the alt-download links go; title, tagline and the buttons carry it. Sits
+   after the base rules above so it wins on source order. */
+@media (max-width: 720px) {
+  .pipeline,
+  .dl-alt {
+    display: none;
+  }
+}
+
 .hero .btn-ghost {
   margin-top: 26px;
 }
@@ -503,6 +513,13 @@ a:hover {
 .section-teaser + h2 {
   position: relative;
   margin-top: -40px;
+}
+
+/* The About teaser holds more of its shot before fading (the why teaser
+   starts its fade at 50%). */
+#about .section-teaser {
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
 }
 
 .section h2 em {
@@ -606,18 +623,20 @@ a:hover {
 }
 
 /* The guide call-out closing the features section. Its button border pulses
-   toward orange in the same 3s rhythm as the label's shine sweep (peak at
-   mid-loop, when the bright band crosses the text). */
+   toward orange in step with the label's shine: the sweep travels 250% of
+   the box per 3s loop, so the bright band is actually over the text only
+   during the ~67–93% stretch — the border peaks with it at 80%. */
 .cta-strip .btn-secondary {
   animation: guide-border-pulse 3s ease-in-out infinite;
 }
 
 @keyframes guide-border-pulse {
   0%,
+  60%,
   100% {
     border-color: var(--border);
   }
-  50% {
+  80% {
     border-color: color-mix(in oklab, var(--primary-soft) 80%, var(--border));
   }
 }
