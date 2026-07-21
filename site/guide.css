@@ -20,8 +20,12 @@
 
 .guide-sidebar {
   position: sticky;
-  top: calc(var(--topbar-h) + 32px);
+  top: calc(var(--topbar-h) + 21px);
   align-self: start;
+  /* At the top of the page (not yet stuck) the nav starts well below the
+     chapter title instead of hugging the topbar; once scrolling sticks it,
+     only the sticky `top` above governs. */
+  margin-top: 128px;
   font-size: 0.92rem;
 }
 
@@ -80,6 +84,12 @@
 .guide-content img[src^='screenshots/detail-'] {
   width: auto;
   max-width: 100%;
+}
+
+/* Side-by-side pairs (the align="top" images): vertical breathing room for
+   when the narrow column wraps them into a stack. */
+.guide-content img[align='top'] {
+  margin-block: 10px;
 }
 
 .guide-content img {
@@ -149,13 +159,44 @@
   color: var(--fg-bright);
 }
 
+/* Sticky chapter titles: an h2 sticks right under the topbar and stays until
+   its section ends — the next chapter's title pushes it away (each h2 chunk
+   is wrapped in a .guide-section by build-guide-site.mjs, which bounds the
+   sticky range). The opaque background covers content scrolling beneath. */
 .guide-content h2 {
+  position: sticky;
+  /* -1px tucks the title under the topbar's border so no seam shows. */
+  top: calc(var(--topbar-h) - 1px);
+  z-index: 5;
   margin: 44px 0 12px;
-  padding-top: 20px;
+  padding-top: 36px;
+  padding-bottom: 20px;
   border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  background: var(--bg);
   font-size: 1.45rem;
   font-weight: 750;
   color: var(--fg-bright);
+}
+
+/* The inter-chapter gap lives INSIDE each section (::after) instead of on the
+   next h2's top margin — the gap then counts toward the sticky range, so a
+   stuck title keeps sticking through it and only gets pushed away when the
+   next chapter's divider actually reaches it. */
+.guide-section:not(:last-of-type)::after {
+  content: '';
+  display: block;
+  height: 44px;
+}
+
+.guide-section + .guide-section h2 {
+  margin-top: 0;
+}
+
+/* Hash navigation lands headings below the topbar (and the stuck title). */
+.guide-content h1,
+.guide-content h2,
+.guide-content h3 {
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
 }
 
 .guide-content h3 {
@@ -269,14 +310,83 @@
   background: color-mix(in oklab, var(--bg-raised) 60%, transparent);
 }
 
+.guide-content details {
+  /* Hash navigation / the reveal scroll land below the sticky topbar AND the
+     chapter title stuck beneath it (~56px tall). */
+  scroll-margin-top: calc(var(--topbar-h) + 88px);
+}
+
 .guide-content details summary {
-  padding: 12px 16px;
+  position: relative;
+  padding: 12px 44px 12px 16px;
   cursor: pointer;
+  color: var(--fg-bright);
+}
+
+/* Accordion anchor: the same "#" glyph the headings carry, in the summary's
+   top right, shown on hover. Clicking it puts the accordion's #anchor in the
+   URL and copies the full link to the clipboard (guide.js) — clicking
+   anywhere else on the title still toggles the box. */
+/* Scoped under .guide-content so this outranks the `.guide-content a` link
+   color — otherwise the glyph renders orange instead of the muted gray. */
+.guide-content .details-anchor {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+/* Stays the headings' muted gray on hover — only the copied flash colors it. */
+.guide-content summary:hover .details-anchor {
+  opacity: 1;
+}
+
+/* Brief "copied" confirmation after a click (guide.js toggles the class) —
+   heading anchors and accordion anchors alike. */
+.guide-content .details-anchor.copied,
+.guide-content .anchor.copied {
+  color: var(--primary);
+  opacity: 1;
+}
+
+/* The GitHub button the build injects after the intro on the guide's landing
+   page (build-guide-site.mjs, GH_BUTTON). */
+.guide-content .btn-gh {
+  margin-top: 18px;
   color: var(--fg-bright);
 }
 
 .guide-content details[open] summary {
   border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  /* Docks underneath the stuck chapter title (h2 box ≈ 84px tall) while the
+     accordion's content scrolls; the <details> bounds the sticky range, so
+     the box's end pushes the bar away. Opaque take on the summary surface —
+     the translucent details background would let content shine through. */
+  position: sticky;
+  top: calc(var(--topbar-h) + 82px);
+  z-index: 4;
+  background: color-mix(in oklab, var(--bg-raised) 60%, var(--bg));
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* Push the docked bar away 48px BEFORE the box actually ends: sticky is
+   bounded by the details' CONTENT box, so trading 48px of it for padding
+   (with the body pulled back over the padding) ends the range early while
+   the rendered box stays pixel-identical. */
+.guide-content details[open] {
+  padding-bottom: 48px;
+}
+
+.guide-content details[open] > table {
+  margin-bottom: -48px;
 }
 
 .guide-content details > table,
