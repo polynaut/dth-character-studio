@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 
 import { createPortal } from 'react-dom'
 import {
@@ -23,18 +23,9 @@ import type { Gender, RomGroup, RomPose, RomSection } from '@dth/rom'
 
 import { GroupCard } from './group-card.tsx'
 
-/**
- * Scene-override mode for a whole section's groups (built once in RomSections,
- * shared by every group): replaced rows are keyed by base pose id, additions
- * by group id — the GroupCards slice their own view out of it.
- */
-export interface SectionOverrideCtl {
-  overriddenById: ReadonlyMap<string, RomPose>
-  additionsFor: (groupId: string) => Array<RomPose>
-  onToggleRow: (pose: RomPose, on: boolean) => void
-  onReplacePose: (pose: RomPose) => void
-  onAdditionsChange: (groupId: string, poses: Array<RomPose>) => void
-}
+import type { SectionOverrideCtl } from './group-card.tsx'
+
+export type { SectionOverrideCtl } from './group-card.tsx'
 
 /**
  * Cross-group drag-and-drop for a section's pose groups: one DndContext spans
@@ -44,8 +35,14 @@ export interface SectionOverrideCtl {
  * used for the flat FBM/MISC list (a single group → reorder only). In scene-
  * override mode the drag handles disappear (GroupCard/pose-table), so no drag
  * can start — the base order is fixed there.
+ *
+ * Memoized, with all GroupCard callbacks identity-stable (latest-ref + id
+ * routing): editing one section must not re-render every other section's
+ * tables, and a page-level render (modifier keys, polling) must not re-render
+ * any of them. `onGroupsChange` reports the SECTION alongside the groups, so
+ * the parent can hand every section the same stable handler.
  */
-export function PoseGroupsEditor({
+export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   section,
   groups,
   gender,
@@ -62,7 +59,7 @@ export function PoseGroupsEditor({
   failedFrames?: Set<number>
   removable: boolean
   override?: SectionOverrideCtl
-  onGroupsChange: (groups: Array<RomGroup>) => void
+  onGroupsChange: (section: RomSection, groups: Array<RomGroup>) => void
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -82,13 +79,49 @@ export function PoseGroupsEditor({
     })
   }, [display])
 
-  const toggleExpanded = (poseId: string) =>
-    setExpandedIds((ids) => {
-      const next = new Set(ids)
-      if (next.has(poseId)) next.delete(poseId)
-      else next.add(poseId)
-      return next
-    })
+  // Latest-ref: the stable id-routing callbacks below always see the CURRENT
+  // groups/section/onGroupsChange while keeping ONE identity for GroupCard memo.
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
+  const sectionRef = useRef(section)
+  sectionRef.current = section
+  const emitRef = useRef(onGroupsChange)
+  emitRef.current = onGroupsChange
+  const emitGroups = useCallback((next: Array<RomGroup>) => {
+    emitRef.current(sectionRef.current, next)
+  }, [])
+  const changeGroup = useCallback(
+    (groupId: string, updated: RomGroup) => {
+      emitGroups(groupsRef.current.map((g) => (g.id === groupId ? updated : g)))
+    },
+    [emitGroups],
+  )
+  const removeGroup = useCallback(
+    (groupId: string) => {
+      emitGroups(groupsRef.current.filter((g) => g.id !== groupId))
+    },
+    [emitGroups],
+  )
+  const mirrorGroupAfter = useCallback(
+    (groupId: string) => {
+      const list = groupsRef.current
+      const i = list.findIndex((g) => g.id === groupId)
+      if (i < 0) return
+      emitGroups([...list.slice(0, i + 1), mirrorGroup(list[i]), ...list.slice(i + 1)])
+    },
+    [emitGroups],
+  )
+
+  const toggleExpanded = useCallback(
+    (poseId: string) =>
+      setExpandedIds((ids) => {
+        const next = new Set(ids)
+        if (next.has(poseId)) next.delete(poseId)
+        else next.add(poseId)
+        return next
+      }),
+    [],
+  )
 
   // The group index owning a draggable id within `list`: a pose id (search each
   // group's poses) or a group's own id (its container droppable).
@@ -189,7 +222,7 @@ export function PoseGroupsEditor({
         }
       }
     }
-    onGroupsChange(result)
+    emitGroups(result)
     setDragGroups(null)
     setActivePose(null)
   }
@@ -220,25 +253,10 @@ export function PoseGroupsEditor({
             removable={removable}
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
-            override={
-              override
-                ? {
-                    overriddenById: override.overriddenById,
-                    additions: override.additionsFor(group.id),
-                    onToggleRow: override.onToggleRow,
-                    onReplacePose: override.onReplacePose,
-                    onAdditionsChange: (poses) => override.onAdditionsChange(group.id, poses),
-                  }
-                : undefined
-            }
-            onChange={(updated) =>
-              onGroupsChange(groups.map((g) => (g.id === group.id ? updated : g)))
-            }
-            onRemove={() => onGroupsChange(groups.filter((g) => g.id !== group.id))}
-            onMirror={() => {
-              const i = groups.findIndex((g) => g.id === group.id)
-              onGroupsChange([...groups.slice(0, i + 1), mirrorGroup(group), ...groups.slice(i + 1)])
-            }}
+            override={override}
+            onChange={changeGroup}
+            onRemove={removeGroup}
+            onMirror={mirrorGroupAfter}
           />
         ))}
         {display.length === 0 && (
@@ -266,7 +284,7 @@ export function PoseGroupsEditor({
       )}
     </DndContext>
   )
-}
+})
 
 /** The implicit single group of a flat FBM/MISC section (no group management).
  *  Its id comes from the core (`flatSectionGroupId`) — scene-override additions
