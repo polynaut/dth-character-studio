@@ -112,6 +112,9 @@ function RootComponent() {
         // the OS browser (Tauri) — the seam that keeps @dth/ui native-free.
         onNavigate: (path) => void (navigate as (opts: { to: string }) => unknown)({ to: path }),
         onOpenExternal: (url) => void openExternal(url),
+        // Kit-internal errors (e.g. a failed EditableTitle save) surface as the
+        // app's toast — the kit itself has no sonner dependency.
+        onError: (message) => void toast.error(message),
       }}
     >
       <ConfirmProvider>
