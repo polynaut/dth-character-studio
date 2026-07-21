@@ -312,7 +312,7 @@ export function EditorHeader({
                     // Landscape face-zoom (the list-view framing), sized to the
                     // tag. Greyscaled when it's the primary scene.
                     imgClassName={`-translate-y-[16px]${sceneAvatarPath ? '' : ' grayscale'}`}
-                    className="h-8 w-[56px] shrink-0 rounded border-0"
+                    className="scene-label-tile h-8 w-[56px] shrink-0 rounded border-0"
                     fallbackClassName="text-[8px]"
                   />
                   <span className="truncate">{sceneTagText(sceneTag, character.name)}</span>

@@ -494,6 +494,25 @@ a {
   }
 }
 
+/* A tinted, drop-shadowed offset layer sitting OVER the header scene-label's
+   thumbnail (`width/height: inherit` = the tile's own size, nudged 5px down/right
+   and clipped by the tile's overflow-hidden). */
+.scene-label-tile {
+  position: relative;
+}
+.scene-label-tile::before {
+  content: '';
+  position: absolute;
+  width: inherit;
+  height: inherit;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  background: color-mix(in oklab, var(--color-green-800) 60%, transparent);
+  filter: drop-shadow(2px 4px 6px black);
+  opacity: 0.5;
+}
+
 /* The "Refresh assets" action pulses a soft (light) orange when a refresh is
    needed, to pull the eye to it. Breathes a light primary-orange tint of the
    outline button's fill + border, plus a faint glow, in and out. Reduced-motion
