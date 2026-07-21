@@ -58,9 +58,11 @@ export function IdentitySection({
   const fieldsetDisabled = character.genesis !== 'G9' || (overrideEligible && !overriding)
 
   return (
-    // Stacked into two rows for the narrow identity sidebar: Genesis + Gender, then
-    // the Genesis-9 fieldset.
+    // Sidebar rows: Hair items, then Genesis + Gender, then the Genesis-9 fieldset.
     <div className="flex flex-col gap-5">
+      {/* Hair items — the first sidebar row (carries its own override toggle). */}
+      {hairSlot}
+
       {/* Genesis + Gender are CHARACTER-level, never per-scene — disabled while a
           non-primary scene is selected (switch back to the primary to change them). */}
       <div className="flex flex-col gap-5">
@@ -108,9 +110,6 @@ export function IdentitySection({
           </div>
         </div>
       </div>
-
-      {/* Hair items — the middle sidebar row (carries its own override toggle). */}
-      {hairSlot}
 
       {/* The legend is positioned absolutely (a notch on the border) so it
           doesn't consume a row of flow. The override toggle sits in its own row
