@@ -31,22 +31,15 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  // With several scenes linked the title row tags the SELECTED scene (primary
-  // by default) — the tag follows the card selection. The tag STRIPS the
-  // character name and spaces the separators, so "KiraDefault_G9_GP" reads
-  // "Default G9 GP" (see prettySceneName in lib/scene-name.ts).
-  const titleRow = page.locator('.title-scroll')
-  await expect(titleRow.getByText('Default G9 GP')).toBeVisible()
+  // The PRIMARY scene is selected by default — it IS the base definition, so the
+  // per-panel override toggles are hidden entirely.
+  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(0)
 
-  // The toggle arms only once a non-primary scene is selected (its title —
-  // and so its accessible name — flips with that state). Each overridable panel
-  // now has its own override switch, so target the ROM one by its noun.
-  await expect(
-    page.getByRole('switch', { name: /Override ROM frames/ }),
-  ).toBeDisabled()
+  // Selecting a non-primary scene reveals the override toggles; the ROM one's label
+  // carries the scene as a green pill ("KiraBeach" reads "Beach", see prettySceneName).
   await page.getByText('KiraBeach', { exact: true }).first().click()
-  // Same name-stripping: "KiraBeach" rides the title as just "Beach".
-  await expect(titleRow.getByText('Beach', { exact: true })).toBeVisible()
+  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(1)
+  await expect(page.getByText('Beach', { exact: true }).first()).toBeVisible()
   await page.getByRole('switch', { name: /Override ROM frames/ }).click()
 
   // Arming unlocks the ROM: the FBM rows' Override checkboxes appear. Check the

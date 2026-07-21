@@ -22,6 +22,7 @@ import {
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
 import { DeleteCharacterSection } from '#/components/character/delete-character-section.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
+import { StickyOverrideBar } from '#/components/character/sticky-override-bar.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
@@ -32,7 +33,6 @@ import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
-import { StorageLocation } from '#/components/storage-location.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
 import { displayPath, parentDir } from '#/lib/path.ts'
 import { repointCharacterPaths } from '#/lib/rom/storage.ts'
@@ -269,9 +269,9 @@ function CharacterPage() {
     draft.syncPersisted({ scenePath: moved.scenePath })
   }
 
-  // The header folder chip's edit-to-move — the SAME move as Advanced options'
-  // Storage location, through the shared lock gate + retry dialog (useFolderMove)
-  // so a scene open in Daz surfaces the "close it and continue" prompt.
+  // The header folder chip's edit-to-move (the only character-folder mover now),
+  // through the lock gate + retry dialog (useFolderMove) so a scene open in Daz
+  // surfaces the "close it and continue" prompt.
   const router = useRouter()
   const { runMove, dialog: folderMoveDialog } = useFolderMove()
   async function moveCharacterFolder(nextSubdir: string) {
@@ -330,16 +330,14 @@ function CharacterPage() {
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
-        sceneTag={
-          sceneSel.linkedScenes.length > 1 && sceneSel.selectedSceneName
-            ? sceneSel.selectedSceneName
-            : null
-        }
-        sceneAvatarPath={
-          sceneSel.effectiveScene && sceneSel.effectiveScene !== character.scenePath
-            ? sceneSel.effectiveScene
-            : null
-        }
+      />
+
+      {/* The persistent "OVERRIDE · <scene>" indicator, sticky under the header, so
+          the scene context follows you down and every panel toggle can stay compact. */}
+      <StickyOverrideBar
+        scenePath={sceneSel.effectiveScene}
+        sceneName={sceneSel.selectedSceneName}
+        show={sceneSel.overrideEligible}
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
@@ -387,52 +385,58 @@ function CharacterPage() {
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
-        <IdentitySection
-          character={character}
-          patch={patch}
-          overrideEligible={sceneSel.overrideEligible}
-          identityOverrideActive={sceneSel.identityOverrideActive}
-          setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
-          selectedSceneName={sceneSel.selectedSceneName}
-          sceneOverride={sceneSel.sceneOverride}
-          patchOverride={sceneSel.patchOverride}
-        />
-        {location && (
-          <div className="mt-6 space-y-4 border-t pt-5">
-            <DazSceneField
-              projectId={projectId}
-              character={character}
-              location={location}
-              sceneExists={sceneExists}
-              sceneFolderExists={sceneFolderExists}
-              defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-              persistPatch={draft.persistPatch}
-              onScenesFolderMoved={onScenesFolderMoved}
-              selectedScene={sceneSel.effectiveScene}
-              onSelectScene={sceneSel.selectScene}
-            />
-            {/* Groom lists are PER SCENE — living right under the scene cards makes
-                the card-selection ↔ hair-list connection visible while switching. */}
-            <GroomFields
+        {/* Wide scenes column beside a narrow identity sidebar. */}
+        <div className="flex flex-col gap-8 lg:flex-row lg:gap-10">
+          <div className="min-w-0 flex-1 space-y-4">
+            {location && (
+              <>
+                <DazSceneField
+                  projectId={projectId}
+                  character={character}
+                  location={location}
+                  sceneExists={sceneExists}
+                  sceneFolderExists={sceneFolderExists}
+                  defaultSubdir={project?.dazSubdir ?? 'daz3d'}
+                  persistPatch={draft.persistPatch}
+                  onScenesFolderMoved={onScenesFolderMoved}
+                  selectedScene={sceneSel.effectiveScene}
+                  onSelectScene={sceneSel.selectScene}
+                />
+                <HoudiniProjectsField
+                  character={character}
+                  location={location}
+                  persistPatch={draft.persistPatch}
+                />
+              </>
+            )}
+          </div>
+          <div className="shrink-0 lg:w-[27rem] xl:w-[32rem]">
+            <IdentitySection
               character={character}
               patch={patch}
-              selectedScene={sceneSel.effectiveScene}
-              dazInstallFolder={settings.dazInstallFolder}
               overrideEligible={sceneSel.overrideEligible}
-              groomOverrideActive={sceneSel.groomOverrideActive}
-              setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+              identityOverrideActive={sceneSel.identityOverrideActive}
+              setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
               selectedSceneName={sceneSel.selectedSceneName}
-            />
-            <HoudiniProjectsField
-              character={character}
-              location={location}
-              persistPatch={draft.persistPatch}
+              scenePath={sceneSel.effectiveScene}
+              sceneOverride={sceneSel.sceneOverride}
+              patchOverride={sceneSel.patchOverride}
+              hairSlot={
+                <GroomFields
+                  character={character}
+                  patch={patch}
+                  selectedScene={sceneSel.effectiveScene}
+                  dazInstallFolder={settings.dazInstallFolder}
+                  overrideEligible={sceneSel.overrideEligible}
+                  groomOverrideActive={sceneSel.groomOverrideActive}
+                  setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+                  selectedSceneName={sceneSel.selectedSceneName}
+                />
+              }
             />
           </div>
-        )}
+        </div>
       </section>
-
-      <ScriptsSection character={character} scriptsPath={scriptsPath} />
       </div>
 
       {project?.dazProductsEnabled && (
@@ -457,38 +461,6 @@ function CharacterPage() {
         houdiniSubdir={project?.houdiniSubdir}
       />
 
-      <details className="mb-8 rounded-lg border bg-card">
-        <summary className="flex cursor-pointer items-center gap-1 px-5 py-3 font-medium select-none">
-          Advanced options
-          {/* preventDefault stops the info click from also toggling the <details>. */}
-          <span onClick={(e) => e.preventDefault()} className="inline-flex">
-            <InfoPopup label="Advanced options — more information">
-              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--storage-location-preserve-morphs---node-transforms">
-                Storage location, preserve morphs &amp; node transforms — open the guide
-              </GuideLink>
-            </InfoPopup>
-          </span>
-        </summary>
-        <div className="space-y-6 border-t p-5">
-          <StorageLocation
-            projectId={projectId}
-            id={character.id}
-            location={location}
-            onMoved={onCharacterMoved}
-          />
-          <PreserveFields
-            character={character}
-            patch={patch}
-            overrideEligible={sceneSel.overrideEligible}
-            preserveOverrideActive={sceneSel.preserveOverrideActive}
-            setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
-            selectedSceneName={sceneSel.selectedSceneName}
-            sceneOverride={sceneSel.sceneOverride}
-            patchOverride={sceneSel.patchOverride}
-          />
-        </div>
-      </details>
-
       <RomEditorSection
         character={character}
         patch={patch}
@@ -501,9 +473,34 @@ function CharacterPage() {
         overrideEligible={sceneSel.overrideEligible}
         overrideActive={sceneSel.overrideActive}
         selectedSceneName={sceneSel.selectedSceneName}
+        scenePath={sceneSel.effectiveScene}
         sceneOverride={sceneSel.sceneOverride}
         setOverrideEnabled={sceneSel.setOverrideEnabled}
       />
+
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+          Advanced options
+          <InfoPopup label="Advanced options — more information">
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+              Preserve morphs &amp; node transforms — open the guide
+            </GuideLink>
+          </InfoPopup>
+        </h2>
+        <PreserveFields
+          character={character}
+          patch={patch}
+          overrideEligible={sceneSel.overrideEligible}
+          preserveOverrideActive={sceneSel.preserveOverrideActive}
+          setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
+          selectedSceneName={sceneSel.selectedSceneName}
+          scenePath={sceneSel.effectiveScene}
+          sceneOverride={sceneSel.sceneOverride}
+          patchOverride={sceneSel.patchOverride}
+        />
+      </section>
+
+      <ScriptsSection character={character} scriptsPath={scriptsPath} />
 
       <DeleteCharacterSection
         projectId={projectId}

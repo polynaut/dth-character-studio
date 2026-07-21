@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
@@ -6,61 +6,12 @@ import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { Portrait } from '#/components/portrait.tsx'
-import { Button, EditableTitle, Tag, cn, useModifierHeld } from '@dth/ui'
-import { prettySceneName } from '#/lib/scene-name.ts'
+import { Button, EditableTitle, useModifierHeld } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
-
-/**
- * Glide the page to a target scrollY with a rAF-driven ease-out — NOT
- * `behavior: 'smooth'`, which Windows' reduced-motion setting silently turns
- * into an instant jump; this glide is part of the interaction (the scene tag
- * "travels" to the scene cards it stands for), so it always animates. A wheel
- * or touch during the glide cancels it — the user's scroll wins.
- */
-function smoothScrollToY(target: number) {
-  const dest = Math.max(0, target)
-  const start = window.scrollY
-  if (Math.abs(dest - start) < 1) return
-  const duration = 400
-  const t0 = performance.now()
-  let cancelled = false
-  const cancel = () => {
-    cancelled = true
-  }
-  window.addEventListener('wheel', cancel, { once: true, passive: true })
-  window.addEventListener('touchstart', cancel, { once: true, passive: true })
-  const step = (now: number) => {
-    if (cancelled) return
-    const t = Math.min(1, (now - t0) / duration)
-    const eased = 1 - Math.pow(1 - t, 3)
-    window.scrollTo(0, Math.round(start + (dest - start) * eased))
-    if (t < 1) requestAnimationFrame(step)
-    else {
-      window.removeEventListener('wheel', cancel)
-      window.removeEventListener('touchstart', cancel)
-    }
-  }
-  requestAnimationFrame(step)
-}
-
-/**
- * Scroll the "Daz scenes" section heading to just below the sticky header, from
- * wherever the page is (up OR down) — clicking the header's scene label jumps to
- * the scene cards. The offset is the sticky header's live height (collapsed
- * while scrolled down).
- */
-function scrollDazScenesIntoView() {
-  const el = document.getElementById('daz-scenes')
-  if (!el) return
-  const header = document.querySelector('header')
-  const offset = (header?.offsetHeight ?? 96) + 12
-  smoothScrollToY(window.scrollY + el.getBoundingClientRect().top - offset)
-}
 
 /**
  * Discard + Save, in their own component ON PURPOSE: `useModifierHeld` flips
@@ -119,8 +70,6 @@ export function EditorHeader({
   folderChip,
   folderMove,
   hasRunProblems,
-  sceneTag,
-  sceneAvatarPath,
 }: {
   projectId: string
   draft: CharacterDraft
@@ -132,23 +81,37 @@ export function EditorHeader({
   folderMove: { editValue: string; onMove: (next: string) => Promise<unknown> } | null
   /** Show the "errors in the last ROM run" scroll-up button. */
   hasRunProblems: boolean
-  /** The selected scene's tag next to the title (null hides it — single scene
-   *  or while renaming). */
-  sceneTag: string | null
-  /** With a non-primary scene selected, the portrait previews that scene's
-   *  `.tip.png` instead of the stored avatar (null → stored avatar). */
-  sceneAvatarPath: string | null
 }) {
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
+  const headerRef = useRef<HTMLElement>(null)
+
+  // The sticky header's height is DYNAMIC — its content (and so its collapsed
+  // height) changes as the design evolves, and the ROM section / column-title
+  // tiers pin right below it. Publish the live height as `--editor-header-h` so
+  // their sticky `top` tracks it instead of a hardcoded px that silently drifts.
+  // ResizeObserver covers the scroll-driven collapse AND content/resize reflows;
+  // the sections only pin once the header is fully collapsed (they're far down the
+  // page), so the value is stable whenever it actually matters.
+  useEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+    const root = document.documentElement
+    const update = () => root.style.setProperty('--editor-header-h', `${header.offsetHeight}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(header)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty('--editor-header-h')
+    }
+  }, [])
 
   // A character has ONE main avatar (`character.image`), shown in this big
-  // portrait and everywhere else in the app. Selecting a non-primary scene no
-  // longer swaps the portrait — instead that scene rides the title as a small
-  // thumbnail (`sceneAvatarPath`, in the title row below), so the avatar stays
-  // constant and editable in EVERY state.
+  // portrait and everywhere else in the app — it stays constant and editable in
+  // EVERY state (a scene selection never swaps it).
 
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button. Routed
@@ -193,7 +156,10 @@ export function EditorHeader({
           saturated backdrop blur that FEATHERS at its lower edge (no hard blur
           seam), echoing the native macOS title bar above. The effect + opaque
           fallback live in `liquid-glass-header` (styles.css). */}
-      <header className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5">
+      <header
+        ref={headerRef}
+        className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5"
+      >
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}
@@ -273,40 +239,6 @@ export function EditorHeader({
                 onSave={onRenameCharacter}
               />
             </span>
-            {/* The SELECTED scene rides the title as a "label" AFTER the name —
-                ONE orange tag holding a small landscape thumbnail of the scene
-                (or a plain "P" box for the PRIMARY scene) at its start, then the
-                scene name. Clicking it jumps to the scene cards. Only with
-                several scenes linked; hidden while renaming. */}
-            {sceneTag && !editingTitle && (
-              <button
-                type="button"
-                className="label-scroll cursor-pointer"
-                onClick={scrollDazScenesIntoView}
-              >
-                <Tag
-                  // Always the Daz-green "linked-scene card" look (primary or
-                  // not): the same --daz-green tint + border those cards use, a
-                  // touch stronger since this is a small pill.
-                  tone="green"
-                  className="inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 pl-1.5 text-sm font-normal normal-case"
-                >
-                  {/* The selected scene's render: the picked non-primary scene,
-                      or the primary scene when it's the active selection. Fixed
-                      h/w (not aspect-ratio) so the tile is a stable box. */}
-                  <Portrait
-                    scenePath={sceneAvatarPath ?? character.scenePath}
-                    name={character.name}
-                    // Landscape face-zoom (the list-view framing), sized to the
-                    // tag. Greyscaled when it's the primary scene.
-                    imgClassName={cn('-translate-y-1/2', !sceneAvatarPath && 'grayscale')}
-                    className={`h-8 w-[56px] shrink-0 rounded${sceneAvatarPath ? '' : ' scene-label-tile'}`}
-                    fallbackClassName="text-[8px]"
-                  />
-                  <span className="truncate">{prettySceneName(sceneTag, character.name)}</span>
-                </Tag>
-              </button>
-            )}
           </div>
           <p className="title-subtitle text-muted-foreground">
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
