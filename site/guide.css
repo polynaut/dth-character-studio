@@ -22,6 +22,10 @@
   position: sticky;
   top: calc(var(--topbar-h) + 32px);
   align-self: start;
+  /* At the top of the page (not yet stuck) the nav starts a bit below the
+     chapter title instead of hugging the topbar; once scrolling sticks it,
+     only the sticky `top` above governs. */
+  margin-top: 48px;
   font-size: 0.92rem;
 }
 
