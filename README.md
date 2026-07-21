@@ -77,4 +77,6 @@ assets.
 
 ## License
 
-[MIT](./LICENSE) © Polynaut
+The **libraries and web app** — `@dth/rom`, `@dth/ui`, `@dth/web` — are [MIT](./LICENSE) © Polynaut, so the reusable generation core and UI kit stay freely reusable.
+
+The **distributed desktop application** (`apps/desktop`) is [GPL-3.0](./apps/desktop/LICENSE) © Polynaut. It links [`xbrz-rs`](https://crates.io/crates/xbrz-rs) (GPL-3.0) to upscale low-resolution Daz avatar thumbnails, and GPL-3.0 is copyleft, so the combined binary is GPL-3.0. The MIT libraries above compile into it unchanged (MIT is GPL-compatible) while remaining MIT wherever else they're used.
