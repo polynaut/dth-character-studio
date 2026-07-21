@@ -1,7 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { buildSeed, DIM_FOLDER, P, UPROJECT, type SeedOptions } from './fixtures.ts'
-import { installTauriMock } from './tauri-mock.ts'
+import { buildSeed, DIM_FOLDER, P, UPROJECT, prime, settle, type SeedOptions } from './fixtures.ts'
 
 // Documentation screenshots for docs/guide/*. Reuses the smoke Tauri fake +
 // fixture world (one project "Demo", one character "Kira"). Each `test`
@@ -54,29 +53,8 @@ const VW = 1280
 /** 16:9 of the width — a realistic widescreen viewport; the height cap. */
 const MAX_H = 720
 
-/** Every date/time the app renders resolves against this frozen instant — file
- *  mtimes from the mock (statOf uses Date.now IN the page), "saved …" stamps,
- *  recents. Frozen so a regeneration never diffs on timestamps alone. */
-const FIXED_TIME = new Date('2026-07-01T12:00:00')
-
-/** Prime the page BEFORE the app bundle runs: freeze the clock (see
- *  FIXED_TIME — timers keep running, only Date is pinned), set the flag that
- *  gates the dev TanStack devtools trigger off (so it stays out of the shots —
- *  a DOM/CSS hack loses to the widget re-mounting during the capture), then
- *  install the in-memory Tauri fake with the fixture world. */
-async function prime(page: Page, seed: ReturnType<typeof buildSeed>) {
-  await page.clock.setFixedTime(FIXED_TIME)
-  await page.addInitScript(() => {
-    ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
-  })
-  await page.addInitScript(installTauriMock, seed)
-}
-
-/** Let the route settle (fonts/images/layout) before measuring or shooting. */
-async function settle(page: Page) {
-  await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(400)
-}
+// prime() (frozen clock + devtools flag + Tauri fake) and settle() are shared
+// with guide.gifs.ts — they live in fixtures.ts (see FIXED_TIME there).
 
 /**
  * Screenshot the documented feature at a realistic height — you work on a 16:9

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { Outlet, createRootRoute, useNavigate } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
@@ -105,18 +105,22 @@ function RootComponent() {
     return () => unsub.forEach((u) => u())
   }, [navigate])
 
+  // UiConfigProvider memoizes per HANDLER — inline arrows here would hand it
+  // three fresh functions every root re-render and defeat that memo, re-rendering
+  // every useUiConfig consumer. Keep each handler referentially stable.
+  // In-app links (InfoPopup) go through the router; external URLs open in
+  // the OS browser (Tauri) — the seam that keeps @dth/ui native-free.
+  const onNavigate = useCallback(
+    (path: string) => void (navigate as (opts: { to: string }) => unknown)({ to: path }),
+    [navigate],
+  )
+  const onOpenExternal = useCallback((url: string) => void openExternal(url), [])
+  // Kit-internal errors (e.g. a failed EditableTitle save) surface as the
+  // app's toast — the kit itself has no sonner dependency.
+  const onError = useCallback((message: string) => void toast.error(message), [])
+
   return (
-    <UiConfigProvider
-      value={{
-        // In-app links (InfoPopup) go through the router; external URLs open in
-        // the OS browser (Tauri) — the seam that keeps @dth/ui native-free.
-        onNavigate: (path) => void (navigate as (opts: { to: string }) => unknown)({ to: path }),
-        onOpenExternal: (url) => void openExternal(url),
-        // Kit-internal errors (e.g. a failed EditableTitle save) surface as the
-        // app's toast — the kit itself has no sonner dependency.
-        onError: (message) => void toast.error(message),
-      }}
-    >
+    <UiConfigProvider value={{ onNavigate, onOpenExternal, onError }}>
       <ConfirmProvider>
         <Outlet />
       </ConfirmProvider>

@@ -273,6 +273,35 @@ describe('mirrorGroup', () => {
     expect(right.poses[0].morphs[1].prop).toBe('r_thigh')
   })
 
+  it('swaps mid-name prefix markers after _ or digits symmetrically in both cases', () => {
+    const left: RomGroup = {
+      id: 'gl',
+      label: '',
+      suffix: 'left',
+      method: 'individual',
+      calculateFrom: 'default',
+      poses: [
+        {
+          id: 'pl',
+          name: 'Bend',
+          morphs: [
+            // `_` and digits are word chars, so `\b` never fired here — the
+            // uppercase prefix rule must use the same letter-only lookbehind
+            // as its lowercase twin.
+            { id: 'm1', node: 'Genesis9', prop: 'Foot_L_Bend', value: 1 },
+            { id: 'm2', node: 'Genesis9', prop: 'Foot_l_Bend', value: 1 },
+            { id: 'm3', node: 'Genesis9', prop: 'x3L_twist', value: 1 },
+          ],
+          boneScaleRef: false,
+        },
+      ],
+    }
+    const right = mirrorGroup(left)
+    expect(right.poses[0].morphs[0].prop).toBe('Foot_R_Bend')
+    expect(right.poses[0].morphs[1].prop).toBe('Foot_r_Bend')
+    expect(right.poses[0].morphs[2].prop).toBe('x3R_twist')
+  })
+
   it('leaves non-marker _L / l_ letter runs untouched (Ball_Large, Curl_lower)', () => {
     const left: RomGroup = {
       id: 'gl',
@@ -1599,6 +1628,15 @@ describe('groom items (hair kept out of the export)', () => {
     const script = toGroomExportScriptDsa(groomChar())
     expect(script.fileName).toBe('Export_Hair_Electra_G9.dsa')
     expect(script.content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
+    // Byte-identity of the emitted scene-lookup fold (backslash escapes intact):
+    // the Daz-side `.split("\\")` must reach the script as exactly two
+    // characters — an escaping regression here silently breaks the scene-path
+    // match and the groom list resolves to [] for every scene.
+    expect(script.content).toContain(
+      '    var dthGroomByScene = {"x:/scenes/karen.duf":["dForce Black Tie Cap"]};\n' +
+        '    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();\n' +
+        '    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];',
+    )
     // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
     expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
     expect(script.content).toContain('} finally {')

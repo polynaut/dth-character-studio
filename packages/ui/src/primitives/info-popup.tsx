@@ -4,6 +4,7 @@ import {
   autoUpdate,
   flip,
   FloatingArrow,
+  FloatingFocusManager,
   FloatingPortal,
   offset,
   safePolygon,
@@ -73,15 +74,20 @@ export function InfoPopup({
     whileElementsMounted: autoUpdate,
   })
 
-  // Hover + focus drive the popup only while it isn't pinned. safePolygon lets
-  // the pointer travel from the "i" onto the popup (to reach links) without it
+  // Hover peeks the popup only while it isn't pinned. safePolygon lets the
+  // pointer travel from the "i" onto the popup (to reach links) without it
   // closing underneath the cursor.
   const hover = useHover(context, {
     enabled: !pinned,
     delay: { open: 90, close: 120 },
     handleClose: safePolygon(),
   })
-  const focus = useFocus(context, { enabled: !pinned })
+  // useFocus stays enabled while pinned (opening an already-open popup is a
+  // no-op) — it must be SUBSCRIBED when useDismiss emits 'escape-key', or its
+  // internal block-focus guard never arms and FloatingFocusManager's return
+  // focus (:focus-visible under keyboard modality) re-peeks the popup the
+  // instant Escape dismissed it.
+  const focus = useFocus(context)
   const dismiss = useDismiss(context) // Escape + outside press — closes a pinned popup
   const role = useRole(context, { role: 'dialog' })
 
@@ -148,24 +154,32 @@ export function InfoPopup({
 
       {isMounted && (
         <FloatingPortal>
-          <div
-            ref={refs.setFloating}
-            style={{ ...floatingStyles, ...transitionStyles }}
-            className="z-50 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
-            {...getFloatingProps({ onClick: onContentClick })}
-          >
-            {children}
-            <FloatingArrow
-              ref={arrowRef}
-              context={context}
-              height={ARROW_HEIGHT}
-              width={ARROW_HEIGHT * 2}
-              tipRadius={2}
-              className="fill-neutral-900"
-              stroke="rgb(255 255 255 / 0.1)"
-              strokeWidth={1}
-            />
-          </div>
+          {/* Pinned = a real role="dialog" the user opened on purpose — move
+              focus into it (first link, or the popup itself) so its links are
+              reachable without tabbing across the whole page, and return focus
+              to the "i" on close. Disabled while merely hover-peeking, so a
+              pointer pass-over never steals focus. Non-modal: the popup isn't
+              a focus trap, just a focus target. */}
+          <FloatingFocusManager context={context} disabled={!pinned} modal={false}>
+            <div
+              ref={refs.setFloating}
+              style={{ ...floatingStyles, ...transitionStyles }}
+              className="z-50 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+              {...getFloatingProps({ onClick: onContentClick })}
+            >
+              {children}
+              <FloatingArrow
+                ref={arrowRef}
+                context={context}
+                height={ARROW_HEIGHT}
+                width={ARROW_HEIGHT * 2}
+                tipRadius={2}
+                className="fill-neutral-900"
+                stroke="rgb(255 255 255 / 0.1)"
+                strokeWidth={1}
+              />
+            </div>
+          </FloatingFocusManager>
         </FloatingPortal>
       )}
     </>

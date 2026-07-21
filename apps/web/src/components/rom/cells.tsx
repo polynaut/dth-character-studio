@@ -77,6 +77,13 @@ export function NumberCell({ value, onCommit }: { value: number; onCommit: (valu
         inputMode="decimal"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
+          // `Number('')` (and whitespace) is 0, not NaN — a cleared cell must
+          // revert like any other non-number, not silently commit 0 (the same
+          // guard as the kit's NumberField).
+          if (draft.trim() === '') {
+            setDraft(valueToPct(value))
+            return
+          }
           const parsed = Number(draft)
           const next = pctToValue(parsed)
           if (!Number.isNaN(parsed) && next !== value) onCommit(next)

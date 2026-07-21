@@ -8,6 +8,7 @@ import {
   detectDimManifestsFolder,
   fetchActiveProject,
   fetchAppDataFolder,
+  fetchPoseAssets,
   fetchSettings,
   installDthPlugin,
   installDthRelease,
@@ -140,6 +141,14 @@ function SettingsPage() {
     error: null,
   })
   const [releasesLoading, setReleasesLoading] = useState(false)
+  // Pinned-release health of the SAVED selection, read from the session pose
+  // catalog (storage/releases.ts threads it through scanPoseAssets): when the
+  // saved `currentDthVersion` no longer exists on disk, the cascade silently
+  // scans the newest release instead — surface that swap here instead of
+  // letting generation quietly run against a release the user never chose.
+  const [pinnedMissing, setPinnedMissing] = useState<{ missing: string; using: string } | null>(
+    null,
+  )
   const [exporter, setExporter] = useState<ExporterReleasesState>({
     mode: 'none',
     version: '',
@@ -227,7 +236,7 @@ function SettingsPage() {
       // the machine settings — saved by onSaveProjectSettings alongside the manifest.
       settings.dimManifestsFolder !== initial.dimManifestsFolder)
 
-  async function onSaveProjectSettings() {
+  async function onSaveProjectSettings(machineSettingsSaved = false) {
     if (!project) return
     // The manifest-normalized values — the ONE shape both the payload below and
     // the dirty comparison use (see normalizeProjectSettings).
@@ -245,8 +254,11 @@ function SettingsPage() {
     setSavingProject(true)
     try {
       // The DIM manifests folder lives under the Daz Products toggle on this tab
-      // but is a machine setting (settings.json, not the .dcsp) — persist it too.
-      if (settings.dimManifestsFolder !== initial.dimManifestsFolder) {
+      // but is a machine setting (settings.json, not the .dcsp) — persist it too,
+      // UNLESS the header's Save-all just ran onSave: that already wrote the full
+      // settings object, and a second write here would ride the stale `initial`
+      // baseline.
+      if (!machineSettingsSaved && settings.dimManifestsFolder !== initial.dimManifestsFolder) {
         await saveSettings({ data: { settings, baseline: initial } })
       }
       await saveProjectSettings({
@@ -273,6 +285,24 @@ function SettingsPage() {
     void fetchAppDataFolder().then(setAppDataFolder)
   }, [])
 
+  // Seed the pinned-release warning from the session catalog on entry (Save and
+  // the release install refresh it via rebuildCatalog). Errors stay silent here:
+  // an unconfigured/unreachable release already surfaces through the pickers.
+  useEffect(() => {
+    let active = true
+    fetchPoseAssets()
+      .then((result) => {
+        if (active)
+          setPinnedMissing(
+            result.pinnedMissing ? { missing: result.pinnedMissing, using: result.version } : null,
+          )
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Inspect the DTH folder whenever it changes (debounced — typing shouldn't
   // hammer the filesystem; Browse sets it directly). Detects a single release vs
   // a folder of versioned releases.
@@ -292,6 +322,17 @@ function SettingsPage() {
       try {
         const result = await listDthReleases({ data: { folder } })
         if (!cancelled) setReleases(result)
+      } catch (e) {
+        // Without this, a rejected inspection was an unhandled rejection AND the
+        // pane kept showing the previous folder's releases — clear them and use
+        // the pane's existing error surface instead.
+        if (!cancelled)
+          setReleases({
+            mode: 'none',
+            version: '',
+            releases: [],
+            error: e instanceof Error ? e.message : String(e),
+          })
       } finally {
         if (!cancelled) setReleasesLoading(false)
       }
@@ -317,6 +358,15 @@ function SettingsPage() {
       try {
         const result = await listDthExporterReleases({ data: { folder } })
         if (!cancelled) setExporter(result)
+      } catch (e) {
+        // Clear the stale list + show the error (see the releases effect above).
+        if (!cancelled)
+          setExporter({
+            mode: 'none',
+            version: '',
+            releases: [],
+            error: e instanceof Error ? e.message : String(e),
+          })
       } finally {
         if (!cancelled) setExporterLoading(false)
       }
@@ -359,20 +409,34 @@ function SettingsPage() {
   }, [exporter])
 
   // Read the version of the exporter DLL already installed in the Daz plugins
-  // folder, so the pane can show up-to-date / update-available. Debounced so
-  // typing the install path doesn't re-read the DLL on every keystroke.
+  // folder, so the pane can show up-to-date / update-available. ONE cancel-aware
+  // reader shared by the debounced effect below and the post-install refresh: a
+  // read only stamps its result while it is still the NEWEST read (sequence
+  // check) for the CURRENT folder (ref check) — a slow read can never stamp a
+  // stale version over a fresher one, and a folder change discards in-flight
+  // reads for the previous folder.
+  const exporterReadSeq = useRef(0)
+  const dazInstallFolderRef = useRef(settings.dazInstallFolder)
+  dazInstallFolderRef.current = settings.dazInstallFolder
   const loadInstalledExporter = useCallback(async () => {
+    const seq = ++exporterReadSeq.current
+    const folder = dazInstallFolderRef.current
+    const version = folder ? await installedExporterVersion(folder) : null
+    if (seq === exporterReadSeq.current && folder === dazInstallFolderRef.current)
+      setInstalledExporter(version)
+  }, [])
+
+  // Debounced so typing the install path doesn't re-read the DLL on every
+  // keystroke (an emptied folder clears immediately). The timer only guards the
+  // START of a read — in-flight staleness is the helper's own validity check.
+  useEffect(() => {
     if (!settings.dazInstallFolder) {
-      setInstalledExporter(null)
+      void loadInstalledExporter()
       return
     }
-    setInstalledExporter(await installedExporterVersion(settings.dazInstallFolder))
-  }, [settings.dazInstallFolder])
-
-  useEffect(() => {
     const timer = setTimeout(() => void loadInstalledExporter(), 350)
     return () => clearTimeout(timer)
-  }, [loadInstalledExporter])
+  }, [settings.dazInstallFolder, loadInstalledExporter])
 
   // Scoped to the machine-setting fields the General tab edits. Save still writes the
   // full settings object, but the Tools-page fields are untouched here so they never
@@ -402,16 +466,26 @@ function SettingsPage() {
   // can tailor their own toast.
   async function rebuildCatalog() {
     const result = await rescanPoseAssets()
+    // Keep the release pane's pinned-release warning in step with the scan just
+    // run — saving a valid pick clears it; a still-broken pin keeps it up.
+    setPinnedMissing(
+      result.pinnedMissing ? { missing: result.pinnedMissing, using: result.version } : null,
+    )
     await router.invalidate()
     return result
   }
 
   // Saving stores the settings and re-scans the active release's poses — there's
-  // no separate scan step.
-  async function onSave() {
+  // no separate scan step. Returns whether the settings WRITE reached disk, so
+  // Save-all can tell the project save the truth (a failed write must not make
+  // it skip its own dim-manifests write as "already saved"); a failed re-scan
+  // after a successful write still counts as saved.
+  async function onSave(): Promise<boolean> {
     setBusy(true)
+    let saved = false
     try {
       await saveSettings({ data: { settings, baseline: initial } })
+      saved = true
       const result = await rebuildCatalog()
       if (result.error) toast.error(result.error)
       else
@@ -425,6 +499,7 @@ function SettingsPage() {
     } finally {
       setBusy(false)
     }
+    return saved
   }
 
   // Two independent installs: the DTH release content (Daz library + Houdini),
@@ -470,8 +545,12 @@ function SettingsPage() {
   // one always-visible button regardless of which tab was edited.
   const anyDirty = dirty || projectDirty
   async function onSaveAll() {
-    if (dirty) await onSave()
-    if (projectDirty) await onSaveProjectSettings()
+    // When onSave just ran AND SUCCEEDED it wrote the FULL settings object (dim
+    // manifests folder included) — tell the project save so it doesn't write
+    // them again. `onSave` swallows its own failures, so `dirty` alone would
+    // report a FAILED save as "already saved" and skip that write entirely.
+    const machineSettingsSaved = dirty ? await onSave() : false
+    if (projectDirty) await onSaveProjectSettings(machineSettingsSaved)
   }
   function onDiscardAll() {
     setSettings(initial)
@@ -527,6 +606,15 @@ function SettingsPage() {
                 value={settings.currentDthVersion}
                 onChange={(version) => setSettings((s) => ({ ...s, currentDthVersion: version }))}
               />
+              {pinnedMissing && (
+                <div className="mt-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                  Pinned version {pinnedMissing.missing} is missing —{' '}
+                  {pinnedMissing.using
+                    ? `using ${pinnedMissing.using}`
+                    : 'using the newest available release'}
+                  . Pick a version and Save to re-pin.
+                </div>
+              )}
             </div>
 
             {(canInstallDaz || canInstallHoudini) && (

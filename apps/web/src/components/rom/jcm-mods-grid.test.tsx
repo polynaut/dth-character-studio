@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { JcmMorphMod } from '@dth/rom'
 
-import { mirrorMod, mirrorSide } from './jcm-mods-grid.tsx'
+import { JcmModsGrid, mirrorMod, mirrorSide } from './jcm-mods-grid.tsx'
+
+afterEach(cleanup)
 
 describe('mirrorSide', () => {
   it('flips Left/Right words, preserving case', () => {
@@ -80,5 +84,46 @@ describe('mirrorMod', () => {
     const out = mirrorMod(src)
     out.drives[0].range.angle.end = 999
     expect(src.drives[0].range.angle.end).toBe(30)
+  })
+})
+
+describe('RawNumberCell (through the rendered grid)', () => {
+  function oneRule(): JcmMorphMod {
+    return {
+      id: 'rule-0',
+      boneLabel: 'Left Thigh Bend',
+      axis: 'XRotate',
+      drives: [
+        {
+          id: 'd0',
+          morphName: 'body_cbs_ThighFlex',
+          range: { angle: { start: 10, end: 90 }, value: { start: 0, end: 1 } },
+        },
+      ],
+    }
+  }
+
+  // `Number('')` is 0, not NaN — without the trim guard, blurring a cleared
+  // angle cell silently committed 0 (the kit's NumberField got the same fix).
+  it('reverts a cleared cell on blur instead of committing 0', () => {
+    const onChange = vi.fn()
+    render(<JcmModsGrid mods={[oneRule()]} onChange={onChange} />)
+    fireEvent.click(screen.getByText('Modify JCM frames'))
+    const angleFrom = screen.getByTitle(
+      'Bone angle (degrees) where the morph starts ramping',
+    ) as HTMLInputElement
+    expect(angleFrom.value).toBe('10')
+
+    fireEvent.change(angleFrom, { target: { value: '' } })
+    fireEvent.blur(angleFrom)
+    expect(onChange).not.toHaveBeenCalled()
+    expect(angleFrom.value).toBe('10')
+
+    // An explicitly typed 0 still commits.
+    fireEvent.change(angleFrom, { target: { value: '0' } })
+    fireEvent.blur(angleFrom)
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const next = onChange.mock.calls[0][0] as Array<JcmMorphMod>
+    expect(next[0].drives[0].range.angle.start).toBe(0)
   })
 })

@@ -146,34 +146,51 @@ pub(crate) fn extract_nested_zip(
 }
 
 /// Central-directory pass over an archive: each file entry's index, normalized
-/// path and uncompressed size, plus how many entries could NOT be read (they are
-/// omitted from the list — a non-zero count means the inventory is incomplete,
-/// which quarantine decisions must refuse). Setting up `by_index` reads only the
-/// local header — no decompression happens here.
+/// path and uncompressed size, plus TWO counts of entries omitted from the
+/// list: `unreadable` (the reader couldn't open them — an access/format problem
+/// the user might fix) and `unsafe_names` (enclosed_name rejected the name as
+/// absolute/`..` — zip-slip, refused by POLICY and unfixable). Either count
+/// non-zero means the inventory is incomplete, which quarantine decisions must
+/// refuse — but they surface differently: unreadable entries hard-error an
+/// install ("fix access and retry" is actionable), while name-refused entries
+/// can never install anyway, so the install proceeds with the safe subset and
+/// says so accurately (see assets.rs — folding them into one counter turned a
+/// previously-installable sloppy archive into a permanent, misleading access
+/// error). Setting up `by_index` reads only the local header — no decompression
+/// happens here.
 pub(crate) fn zip_file_entries(
     archive: &mut zip::ZipArchive<fs::File>,
-) -> (Vec<(usize, String, u64)>, u64) {
+) -> (Vec<(usize, String, u64)>, u64, u64) {
     let mut entries = Vec::new();
-    let mut skipped = 0u64;
+    let mut unreadable = 0u64;
+    let mut unsafe_names = 0u64;
     for i in 0..archive.len() {
         let entry = match archive.by_index(i) {
             Ok(e) => e,
             Err(_) => {
-                skipped += 1;
+                unreadable += 1;
                 continue;
             }
         };
         if entry.is_dir() {
             continue;
         }
-        // enclosed_name rejects absolute / `..` paths (zip-slip).
+        // enclosed_name rejects absolute / `..` paths (zip-slip). A rejected
+        // name is an entry the inventory DROPPED — count it (separately from
+        // the unreadable ones: it's a name-safety refusal, not an access
+        // failure), or a malicious/broken archive still reads as a complete
+        // inventory to the incomplete-inventory gates (dedup could quarantine
+        // on partial data).
         let rel = match entry.enclosed_name() {
             Some(p) => p.to_string_lossy().replace('\\', "/"),
-            None => continue,
+            None => {
+                unsafe_names += 1;
+                continue;
+            }
         };
         entries.push((i, rel, entry.size()));
     }
-    (entries, skipped)
+    (entries, unreadable, unsafe_names)
 }
 
 /// The per-content-entry callback of `walk_zip_content`: the archive that owns
@@ -215,6 +232,10 @@ pub(crate) struct ZipWalkState<'a> {
     pub(crate) strict: bool,
     /// Central-directory entries + nested zips that couldn't be read.
     pub(crate) read_errors: &'a mut u64,
+    /// Entries whose NAMES were refused (absolute/`..` — zip-slip; see
+    /// `zip_file_entries`). Kept apart from `read_errors`: a policy refusal is
+    /// not an access failure, and the two carry different messages/postures.
+    pub(crate) unsafe_names: &'a mut u64,
     /// When `Some`, every nested temp inflation whose tree held content is
     /// handed to the caller INSTEAD of being deleted at the end of the walk —
     /// so a real install can extract from it later without inflating the
@@ -232,8 +253,9 @@ pub(crate) fn walk_zip_content(
     state: &mut ZipWalkState,
     emit: &mut ZipEntryEmit,
 ) -> Result<bool, String> {
-    let (entries, skipped) = zip_file_entries(archive);
-    *state.read_errors += skipped;
+    let (entries, unreadable, unsafe_names) = zip_file_entries(archive);
+    *state.read_errors += unreadable;
+    *state.unsafe_names += unsafe_names;
     let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
     let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
     if content.is_none() && depth > 0 {
@@ -313,5 +335,30 @@ mod tests {
         assert!(budget.check_entry_count(MAX_ZIP_ENTRIES).is_ok());
         let err = budget.check_entry_count(MAX_ZIP_ENTRIES + 1).unwrap_err();
         assert!(err.to_string().contains("many.zip"), "error must name the archive: {err}");
+    }
+
+    #[test]
+    fn zip_slip_names_count_separately_from_unreadable_entries() {
+        use crate::testutil::{unique_temp_dir, write_zip};
+        // An entry whose name escapes the archive (zip-slip) is rejected by
+        // enclosed_name — it must COUNT, so the archive reads as an INCOMPLETE
+        // inventory to the quarantine gates instead of a clean one, but in its
+        // OWN counter: counting it as "unreadable" fed the install's
+        // "fix access and retry" hard error, which is both misleading (there is
+        // no access problem) and un-actionable (a bad name can't be fixed).
+        let base = unique_temp_dir("zip_slip_skipped");
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("evil.zip");
+        write_zip(
+            &path,
+            &[("data/ok.dsf", b"ok".as_slice()), ("../evil.dsf", b"evil".as_slice())],
+        );
+        let mut archive = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let (entries, unreadable, unsafe_names) = zip_file_entries(&mut archive);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].1, "data/ok.dsf");
+        assert_eq!(unreadable, 0, "a refused NAME is not an access failure");
+        assert_eq!(unsafe_names, 1, "the rejected zip-slip name is counted, not silently dropped");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

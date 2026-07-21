@@ -51,6 +51,13 @@ export const conflictCopySchema = z.object({
   label: z.string(),
   /** Source folder the copy lives in (e.g. "_genesis 9"). */
   source: z.string(),
+  /** Full path of the ASSET shipping this copy — the install's full-tie
+   *  breaker: `winner_skip_map` (assets.rs) resolves an equal (genesis, size)
+   *  tie to the lexicographically first asset path, and `conflictWinner`
+   *  (dedup-report-list) mirrors that tiebreak with this key. Rust always
+   *  sends it; optional here so report literals built without it (tests,
+   *  browser no-ops) stay constructible. */
+  path: z.string().optional(),
   size: z.number(),
   inZip: z.boolean(),
 })
@@ -144,6 +151,11 @@ export const sceneWearablesSchema = z.object({
 export const housekeepingResultSchema = z.object({
   filesDeleted: z.number(),
   bytesFreed: z.number(),
+  /** Files past the cutoff the sweep could NOT delete (locked/readonly) — so
+   *  every-delete-failing no longer reads as "0 files freed, nothing to do".
+   *  Rust always sends it; optional here so browser no-op / aggregated results
+   *  (maintenance.ts) stay constructible without it. Not surfaced in the UI yet. */
+  filesFailed: z.number().optional(),
 })
 
 // --- network-drive remap (drives.rs `RemapResult`) ----------------------------

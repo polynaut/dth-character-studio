@@ -78,27 +78,12 @@ function notePick(path: string): string {
 }
 
 /**
- * Native FBX picker via the Tauri dialog plugin. Returns the picked absolute
- * path, or '' if the user cancelled.
- */
-export async function pickFbxPath(): Promise<string> {
-  // Every pick* helper no-ops in a plain browser, like the rest of this file —
-  // without the guard each Browse button was an unhandled rejection there.
-  if (!isTauri()) return ''
-  const selected = await open({
-    multiple: false,
-    directory: false,
-    title: 'Select reference skeleton FBX',
-    filters: [{ name: 'FBX files', extensions: ['fbx'] }],
-  })
-  return notePick(typeof selected === 'string' ? selected : '')
-}
-
-/**
  * Native .duf pose-preset picker via the Tauri dialog plugin. Returns the
  * picked absolute path, or '' if the user cancelled.
  */
 export async function pickDufPath(title: string): Promise<string> {
+  // Every pick* helper no-ops in a plain browser, like the rest of this file —
+  // without the guard each Browse button was an unhandled rejection there.
   if (!isTauri()) return ''
   const selected = await open({
     multiple: false,

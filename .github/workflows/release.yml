@@ -26,7 +26,8 @@ name: 🚀 Release
 # Why sign and publish are separate jobs: the NAS is the single point of failure
 # in this pipeline (it holds the SimplySign session), so the NAS job is kept as
 # small as possible — ONLY the operations that need the real key/cert. The
-# GitHub publish (which needs no signing secret, just GITHUB_TOKEN) runs on a
+# GitHub publish (which needs no signing secret — it authenticates with
+# RELEASE_PAT, falling back to GITHUB_TOKEN; see the publish step) runs on a
 # reliable hosted runner, so a publish hiccup can be re-run without re-signing,
 # and the real updater key never has to leave the self-hosted signer.
 #
@@ -142,7 +143,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx --yes @tauri-apps/cli@2.11.2 signer generate --ci --password "" -f -w throwaway.key
+          npx --yes @tauri-apps/cli@2.11.4 signer generate --ci --password "" -f -w throwaway.key
           # printf'ing the command substitution guarantees exactly one trailing
           # newline — the generated key file has NONE, and without it the heredoc
           # delimiter lands on the key's own line and GitHub's env parser fails
@@ -207,7 +208,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx --yes @tauri-apps/cli@2.11.2 signer generate --ci --password "" -f -w throwaway.key
+          npx --yes @tauri-apps/cli@2.11.4 signer generate --ci --password "" -f -w throwaway.key
           {
             echo "TAURI_SIGNING_PRIVATE_KEY<<THROWAWAY_KEY_EOF"
             printf '%s\n' "$(cat throwaway.key)"
@@ -331,7 +332,7 @@ jobs:
           exe=$(ls dist/*_"${VERSION}"_*-setup.exe)
           # Pin the CLI to the exact lockfile version — a floating `@^2` would pull
           # unpinned code from npm at release time WITH the real updater key in env.
-          npx --yes @tauri-apps/cli@2.11.2 signer sign \
+          npx --yes @tauri-apps/cli@2.11.4 signer sign \
             --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
             --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
             "$exe"
@@ -389,9 +390,11 @@ jobs:
 
       - name: Write notarization API key
         shell: bash
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
-          printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$RUNNER_TEMP/api_key.p8"
+          printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/api_key.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/api_key.p8" >> "$GITHUB_ENV"
 
       # Sign the .app, notarize + staple it, rebuild the updater tarball over
@@ -447,7 +450,7 @@ jobs:
           tar=$(find dist-mac -name '*.app.tar.gz' | head -1)
           # Pin the CLI to the exact lockfile version — a floating `@^2` would pull
           # unpinned code from npm at release time WITH the real updater key in env.
-          npx --yes @tauri-apps/cli@2.11.2 signer sign \
+          npx --yes @tauri-apps/cli@2.11.4 signer sign \
             --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
             --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
             "$tar"
@@ -464,16 +467,23 @@ jobs:
           retention-days: 3
 
   publish:
-    needs: [check, sign-win, sign-mac]
-    # Windows must be signed; the mac side is either signed too or the whole
-    # mac half was skipped (ENABLE_MAC_RELEASE off). A FAILED sign-mac blocks
-    # the release instead of silently shipping Windows-only.
+    needs: [check, build-mac, sign-win, sign-mac]
+    # Windows must be signed; the mac side is either signed too or was never
+    # ATTEMPTED (build-mac skipped — ENABLE_MAC_RELEASE was off when the run
+    # was scheduled). Gating on build-mac's actual result rather than
+    # re-reading the repo var means flipping ENABLE_MAC_RELEASE mid-run can't
+    # invert the gate: any attempted-but-unsigned mac half (build-mac or
+    # sign-mac failed) blocks the release instead of silently shipping
+    # Windows-only and stranding mac updaters. `!cancelled()` (not `always()`)
+    # so a cancelled run can never mint the immutable GitHub release.
     if: >-
-      always() && needs.check.outputs.should_release == 'true'
+      !cancelled() && needs.check.outputs.should_release == 'true'
       && needs.sign-win.result == 'success'
-      && (needs.sign-mac.result == 'success' || needs.sign-mac.result == 'skipped')
-    # Publishing needs no signing secret — only GITHUB_TOKEN — so it runs on a
-    # reliable hosted runner. Keeping it off the NAS means a GitHub API hiccup
+      && (needs.sign-mac.result == 'success'
+      || needs.build-mac.result == 'skipped')
+    # Publishing needs no signing secret — only a GitHub token (RELEASE_PAT,
+    # falling back to GITHUB_TOKEN; see the publish step's env) — so it runs on
+    # a reliable hosted runner. Keeping it off the NAS means a GitHub API hiccup
     # can be re-run without re-signing, and shrinks the NAS's job to signing only.
     runs-on: ubuntu-latest
     timeout-minutes: 15

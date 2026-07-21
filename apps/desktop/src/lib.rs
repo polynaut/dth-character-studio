@@ -18,7 +18,7 @@ mod testutil;
 mod uninstall;
 mod windows;
 
-use crate::windows::{dcsp_from_args, lock_windows, WindowProjects};
+use crate::windows::{dcsp_from_args, lock_windows, ProjectMapping, WindowProjects};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -43,8 +43,13 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
             if let Some(dcsp) = dcsp_from_args(&std::env::args().collect::<Vec<_>>()) {
+                // Build the mapping FIRST — its identity key canonicalizes (I/O)
+                // and must never run under the map lock (windows::ProjectPathKey).
+                // Setup runs before any window shows, and the file was just
+                // double-clicked, so the one-time cost here is fine.
+                let mapping = ProjectMapping::new(dcsp);
                 let projects = app.state::<WindowProjects>();
-                lock_windows(&projects).insert("main".into(), dcsp);
+                lock_windows(&projects).insert("main".into(), mapping);
             }
             Ok(())
         });
@@ -52,8 +57,9 @@ pub fn run() {
     // Updater + relaunch + single-instance + the native app menu are desktop-only.
     #[cfg(desktop)]
     {
-        use tauri::Emitter;
-        use crate::windows::{build_app_menu, open_home_window_impl, open_project_window_impl};
+        use crate::windows::{
+            build_app_menu, emit_menu_to_focused, open_home_window_impl, open_project_window_impl,
+        };
 
         builder = builder
             // A second launch (e.g. opening another `.dcsp` from Explorer) is routed
@@ -96,15 +102,13 @@ pub fn run() {
                         }
                     });
                 }
-                "refresh_assets" => {
-                    let _ = app.emit("menu-refresh-assets", ());
-                }
-                "about" => {
-                    let _ = app.emit("menu-about", ());
-                }
-                "check_updates" => {
-                    let _ = app.emit("menu-check-updates", ());
-                }
+                // These frontend-driven items go to the FOCUSED window only — a
+                // broadcast (`app.emit`) reaches every window, so with two open
+                // windows one "Check for Updates" click used to spawn an update
+                // check (and its prompt) in each of them.
+                "refresh_assets" => emit_menu_to_focused(app, "menu-refresh-assets"),
+                "about" => emit_menu_to_focused(app, "menu-about"),
+                "check_updates" => emit_menu_to_focused(app, "menu-check-updates"),
                 _ => {}
             });
     }

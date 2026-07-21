@@ -75,6 +75,7 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
     // signature (names + mtimes + sizes), serve the cached merge instead of
     // re-reading and re-parsing every file on each navigation to the character.
     const listing: Array<{ name: string; modifiedAt: string; size: number }> = []
+    let anyUnstattable = false
     for (const entry of await readDir(dir)) {
       if (!entry.isFile || !entry.name.toLowerCase().endsWith('.csv')) continue
       let modifiedAt = ''
@@ -84,8 +85,10 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
         modifiedAt = info.mtime ? info.mtime.toISOString() : ''
         size = info.size
       } catch {
-        // mtime unavailable — leave '' (and a -1 size keeps the entry "unstable",
-        // so an unstattable file is simply re-read next time)
+        // stat failed — the entry can't be revalidated, so this run neither
+        // trusts the cache (its `|-1` stamp won't match a healthy signature)
+        // nor stores its result (see below)
+        anyUnstattable = true
       }
       listing.push({ name: entry.name, modifiedAt, size })
     }
@@ -121,7 +124,10 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
       )
       result = { exists: true, scan: mergeProductScans(scans), dir, files }
     }
-    productScanCache.set(dir, { signature, result })
+    // An unstattable entry can't prove itself unchanged later — storing this
+    // run would only park a result under a signature no future run can match
+    // (permanently unservable). Skip the store; the next run re-reads.
+    if (!anyUnstattable) productScanCache.set(dir, { signature, result })
     return result
   } catch {
     return { exists: false, scan: null, dir, files: [] }

@@ -64,6 +64,8 @@ export function installTauriMock(seed: TauriMockSeed): void {
     if (content === undefined) throw new Error(`[tauri-mock] no such file: ${p}`)
     return content
   }
+  /** The base64 payload of a binary entry stored as a data:URL, else undefined. */
+  const dataUrlB64 = (content: string) => /^data:[^,]*;base64,(.*)$/s.exec(content)?.[1]
   /** Immediate children of a dir, from the file map + explicit mkdirs. */
   const listDir = (p: string) => {
     if (!isDir(p)) throw new Error(`[tauri-mock] no such directory: ${p}`)
@@ -88,6 +90,15 @@ export function installTauriMock(seed: TauriMockSeed): void {
       isSymlink: false,
     }))
   }
+  /** Reported byte size of an entry: binary entries (base64 data:URLs, see
+   *  write_file) decode to their real byte length — the URL string's length
+   *  would be ~4/3 of it. Text entries report the string length, i.e. UTF-16
+   *  code units, which under-counts multi-byte UTF-8 on-disk bytes — fine for
+   *  the smoke specs, which only care about zero vs non-zero / rough size. */
+  const sizeOf = (content: string): number => {
+    const b64 = dataUrlB64(content)
+    return b64 === undefined ? content.length : atob(b64).length
+  }
   const statOf = (p: string) => {
     if (!isFile(p) && !isDir(p)) throw new Error(`[tauri-mock] no such path: ${p}`)
     const file = isFile(p)
@@ -96,7 +107,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
       isFile: file,
       isDirectory: !file,
       isSymlink: false,
-      size: file ? files.get(p)!.length : 0,
+      size: file ? sizeOf(files.get(p)!) : 0,
       mtime: now,
       atime: now,
       birthtime: now,
@@ -124,14 +135,31 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // A file seeded as a `data:…;base64,…` URL (e.g. a scene `.tip.png`
         // thumbnail) returns its real decoded bytes — text-encoding binary would
         // corrupt it.
-        const b64 = /^data:[^,]*;base64,(.*)$/s.exec(content)?.[1]
+        const b64 = dataUrlB64(content)
         if (b64) return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer
         return new TextEncoder().encode(content).buffer
       }
       case 'plugin:fs|write_text_file':
-      case 'plugin:fs|write_file':
-        files.set(headerPath(options), new TextDecoder().decode(args))
+      case 'plugin:fs|write_file': {
+        // The payload arrives as raw bytes. Text stays a plain string in the
+        // map (specs read `files` contents directly) — but a BINARY payload
+        // (non-UTF-8, e.g. a copied image) is stored as a base64 data URL, the
+        // same form binary SEEDS use, so read_file above returns the exact
+        // bytes instead of a lossily TextDecoder-mangled string.
+        const path = headerPath(options)
+        const bytes = args instanceof Uint8Array ? args : new Uint8Array(args)
+        try {
+          // ignoreBOM: without it the decoder EATS a leading EF BB BF, so a
+          // BOM'd UTF-8 payload would round-trip 3 bytes short through the map.
+          files.set(path, new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes))
+        } catch {
+          let bin = ''
+          for (let i = 0; i < bytes.length; i += 0x8000)
+            bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+          files.set(path, `data:application/octet-stream;base64,${btoa(bin)}`)
+        }
         return null
+      }
       case 'plugin:fs|read_dir':
         return listDir(norm(args.path))
       case 'plugin:fs|mkdir': {

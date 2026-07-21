@@ -65,6 +65,32 @@ describe('TooltipHost (global title → floating tooltip)', () => {
     expect(tip.textContent).toBe('Copied!')
   })
 
+  it('sweeping across children of one anchor does not restart the hover delay', async () => {
+    render(
+      <>
+        {/* A multi-child card: every child mouseover resolves to the same
+            [title] anchor via closest(). */}
+        <div title="Card tooltip">
+          <span data-testid="child-a">thumb</span>
+          <span data-testid="child-b">title</span>
+          <span data-testid="child-c">path</span>
+        </div>
+        <TooltipHost />
+      </>,
+    )
+    fireEvent.mouseOver(screen.getByTestId('child-a'))
+    await vi.advanceTimersByTimeAsync(150)
+    fireEvent.mouseOver(screen.getByTestId('child-b'))
+    await vi.advanceTimersByTimeAsync(150)
+    fireEvent.mouseOver(screen.getByTestId('child-c'))
+    // 150+150+100 = 400ms since the FIRST enter — if each child restarted the
+    // 350ms delay, the tooltip would still be hidden here.
+    await vi.advanceTimersByTimeAsync(100)
+    const tip = screen.getByRole('tooltip', { hidden: true })
+    expect(tip.style.display).toBe('block')
+    expect(tip.textContent).toBe('Card tooltip')
+  })
+
   it('shows immediately on keyboard focus and never overwrites an existing label', async () => {
     render(
       <>

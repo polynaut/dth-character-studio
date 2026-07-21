@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 #[cfg(desktop)]
 use std::collections::HashSet;
-#[cfg(desktop)]
 use std::path::Path;
 use std::sync::Mutex;
+
+use crate::fsutil::rail_target;
 
 // --- Multi-window: one project (.dcsp) per window -------------------------
 // Each window is pinned to the `.dcsp` it was opened with. The map (window label →
@@ -12,7 +13,7 @@ use std::sync::Mutex;
 // second launch, or the Home "Open") creates — or focuses — its own window.
 
 #[derive(Default)]
-pub(crate) struct WindowProjects(Mutex<HashMap<String, String>>);
+pub(crate) struct WindowProjects(Mutex<HashMap<String, ProjectMapping>>);
 
 /// The `.dcsp` path passed on the command line (the OS hands a double-clicked file
 /// to the app as an argument), '/'-normalised. None when launched without one.
@@ -23,20 +24,86 @@ pub(crate) fn dcsp_from_args(args: &[String]) -> Option<String> {
         .map(|a| a.replace('\\', "/"))
 }
 
-/// Whether two `.dcsp` spellings identify the same project file. NTFS resolves
-/// paths case-insensitively, and the fold must be Unicode-aware like
+/// Precomputed identity of one `.dcsp` spelling. NTFS resolves paths
+/// case-insensitively, and the fold must be Unicode-aware like
 /// `fsutil::rel_key` — `eq_ignore_ascii_case` missed non-ASCII variants
 /// (Ärger.dcsp vs ärger.dcsp), letting two windows open on ONE project: the
-/// exact hazard `PROJECT_WINDOW_LOCK` exists to prevent.
+/// exact hazard `PROJECT_WINDOW_LOCK` exists to prevent. A fold alone still
+/// misses different SPELLINGS of one file — a mapped drive (`X:\proj.dcsp`) vs
+/// its UNC (`\\host\share\proj.dcsp`, a routine pair via drives.rs), a
+/// `..`-laden path, a junction — so the canonical form (`rail_target`, like
+/// the dedup source rails) is folded in too. Residual: std can only
+/// canonicalize EXISTING paths, so two spellings of a missing/offline file
+/// keep the fold-only compare and could still open two windows — but a
+/// `.dcsp` being opened exists in practice, and the fold catches the common
+/// same-spelling case regardless.
+///
+/// Both keys are computed in `new` — the only place any I/O happens — so
+/// `matches` is a pair of plain string compares. That split is load-bearing:
+/// `rail_target` canonicalization can block seconds (up to ~30s on an offline
+/// SMB share), and the windows-map mutex is also taken by the sync main-thread
+/// `active_project_file` — canonicalizing per map entry inside the in-lock
+/// find froze every window's UI (the "map lock stays SHORT" rule). Build a key
+/// BEFORE taking the map lock; only compare inside it.
+pub(crate) struct ProjectPathKey {
+    /// Unicode case fold of the spelling as given — the common same-spelling
+    /// compare, and the only compare available for missing/offline paths.
+    fold: String,
+    /// Case fold of the canonical form; equal to `fold` when the path can't
+    /// be canonicalized (missing/offline — `rail_target` returns it raw).
+    canon_fold: String,
+}
+
+impl ProjectPathKey {
+    /// Computes the keys — including the possibly-slow canonicalize. Never
+    /// call while holding the windows-map lock.
+    pub(crate) fn new(path: &str) -> Self {
+        Self {
+            fold: path.to_lowercase(),
+            canon_fold: rail_target(Path::new(path)).to_string_lossy().to_lowercase(),
+        }
+    }
+
+    /// Whether two spellings identify the same project file: equal raw folds
+    /// (case variants of one spelling; the offline fallback) or equal
+    /// canonical folds (variant spellings of one existing file). Pure string
+    /// compares — safe inside the map lock.
+    pub(crate) fn matches(&self, other: &Self) -> bool {
+        self.fold == other.fold || self.canon_fold == other.canon_fold
+    }
+}
+
+/// A window's mapping: the `.dcsp` it was opened with, plus that path's
+/// identity key precomputed at insert time — so the in-lock duplicate-window
+/// find in `open_project_window_impl` never touches the filesystem.
+pub(crate) struct ProjectMapping {
+    /// The '/'-normalised path as opened — what `active_project_file` returns.
+    pub(crate) path: String,
+    key: ProjectPathKey,
+}
+
+impl ProjectMapping {
+    /// Computes the identity key (possibly slow I/O — see `ProjectPathKey::new`);
+    /// build the mapping BEFORE taking the windows-map lock.
+    pub(crate) fn new(path: String) -> Self {
+        let key = ProjectPathKey::new(&path);
+        Self { path, key }
+    }
+}
+
+/// Whether two `.dcsp` spellings identify the same project file — the one-shot
+/// form of `ProjectPathKey::matches` (production precomputes the keys at
+/// insert time instead, so no canonicalize runs under the map lock).
+#[cfg(test)]
 pub(crate) fn same_project_path(a: &str, b: &str) -> bool {
-    a.to_lowercase() == b.to_lowercase()
+    ProjectPathKey::new(a).matches(&ProjectPathKey::new(b))
 }
 
 /// Lock the window→project map, recovering from a poisoned mutex (the guarded map
 /// is plain data — a peer thread panicking must not wedge every later window op).
 pub(crate) fn lock_windows(
     projects: &WindowProjects,
-) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
+) -> std::sync::MutexGuard<'_, HashMap<String, ProjectMapping>> {
     projects.0.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -77,6 +144,29 @@ pub(crate) fn build_app_menu<R: tauri::Runtime>(
     MenuBuilder::new(handle).item(&main).item(&help).build()
 }
 
+/// Emit a frontend-driven menu event to the window whose menu bar was clicked —
+/// the FOCUSED one, like `open_home_window_impl`'s `emit_to`. A broadcast
+/// (`app.emit`) reaches every window, so with 2+ windows one menu click used to
+/// navigate/spawn an update check in each of them. Menu events don't carry
+/// their window in tauri 2, but clicking a native menu bar focuses its window,
+/// so the focused window IS the clicked one. If none reports focus (nothing to
+/// go on), deliver to exactly ONE window — the first — rather than
+/// broadcasting: the click is still never dropped, and the N-update-prompts
+/// bug can't resurface through the fallback.
+#[cfg(desktop)]
+pub(crate) fn emit_menu_to_focused(app: &tauri::AppHandle, event: &str) {
+    use tauri::{Emitter, Manager};
+    let windows = app.webview_windows();
+    let target = windows
+        .iter()
+        .find(|(_, w)| w.is_focused().unwrap_or(false))
+        .or_else(|| windows.iter().next())
+        .map(|(label, _)| label.clone());
+    if let Some(label) = target {
+        let _ = app.emit_to(&label, event, ());
+    }
+}
+
 /// Serializes PROJECT-window creation, the same way HOME_WINDOW_LOCK does for
 /// Home windows. A project window's map reservation exists BEFORE its webview
 /// registers (`build()` takes hundreds of ms), so without this lock a racing
@@ -94,18 +184,23 @@ static PROJECT_WINDOW_LOCK: Mutex<()> = Mutex::new(());
 #[cfg(desktop)]
 pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> tauri::Result<()> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-    let _creation_guard = PROJECT_WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let norm = path.replace('\\', "/");
+    // The incoming path's identity key canonicalizes (slow on an offline SMB
+    // share) — computed ONCE, before ANY lock, so the in-lock find below runs
+    // pure string compares against the keys stored at insert time.
+    let incoming = ProjectMapping::new(norm.clone());
+    let _creation_guard = PROJECT_WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let projects = app.state::<WindowProjects>();
     // Hold the map lock across find → (prune stale) → allocate → insert so two
     // racing launches (double-clicking two .dcsp files, or a file-assoc launch
     // racing the frontend) can't compute the SAME label or map two paths to one
-    // window. The map lock stays SHORT (never across build) — `active_project_file`
-    // runs on the main thread and must never wait on a window build.
+    // window. The map lock stays SHORT (never across build, no filesystem I/O
+    // inside — every key is precomputed) — `active_project_file` runs on the
+    // main thread and must never wait on a window build or a canonicalize.
     let label = {
         let mut map = lock_windows(&projects);
         if let Some(label) =
-            map.iter().find(|(_, p)| same_project_path(p, &norm)).map(|(l, _)| l.clone())
+            map.iter().find(|(_, m)| m.key.matches(&incoming.key)).map(|(l, _)| l.clone())
         {
             if app.get_webview_window(&label).is_some() {
                 let _ = app.get_webview_window(&label).map(|w| w.set_focus());
@@ -133,7 +228,7 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
             }
             i += 1;
         };
-        map.insert(label.clone(), norm.clone());
+        map.insert(label.clone(), incoming);
         label
     };
     let stem = Path::new(&norm)
@@ -206,7 +301,7 @@ pub(crate) fn open_home_window_impl(app: &tauri::AppHandle, new_project: bool) -
 /// The `.dcsp` this window was opened with ('' for the Home window).
 #[tauri::command]
 pub fn active_project_file(window: tauri::Window, projects: tauri::State<WindowProjects>) -> String {
-    lock_windows(&projects).get(window.label()).cloned().unwrap_or_default()
+    lock_windows(&projects).get(window.label()).map(|m| m.path.clone()).unwrap_or_default()
 }
 
 // `(async)` runs this on a worker thread, not the main thread. Building a webview
@@ -238,5 +333,57 @@ mod tests {
         assert!(same_project_path("D:/P/Ärger.dcsp", "D:/P/ärger.dcsp"));
         assert!(same_project_path("D:/P/proj.dcsp", "D:/P/PROJ.DCSP"));
         assert!(!same_project_path("D:/P/a.dcsp", "D:/P/b.dcsp"));
+    }
+
+    #[test]
+    fn same_project_path_canonicalizes_variant_spellings_of_an_existing_file() {
+        use crate::testutil::unique_temp_dir;
+        let base = unique_temp_dir("same_project_canon");
+        std::fs::create_dir_all(base.join("sub")).unwrap();
+        let file = base.join("proj.dcsp");
+        std::fs::write(&file, b"{}").unwrap();
+        let direct = file.to_string_lossy().replace('\\', "/");
+        // A `..`-laden spelling of the same existing file: the raw fold differs,
+        // canonicalization unifies them. (A unit-testable stand-in for the
+        // mapped-drive X:\… vs UNC \\host\share\… pair, which true drive↔UNC
+        // equivalence needs a real mapping for — same rail, same mechanism.)
+        let sneaky =
+            base.join("sub").join("..").join("proj.dcsp").to_string_lossy().replace('\\', "/");
+        assert_ne!(direct.to_lowercase(), sneaky.to_lowercase(), "the raw folds must differ");
+        assert!(same_project_path(&direct, &sneaky));
+        // A different (missing) file stays different — the fold-only fallback.
+        assert!(!same_project_path(&direct, "D:/P/definitely-missing.dcsp"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn mapping_keys_precompute_and_preserve_the_offline_fallback() {
+        use crate::testutil::unique_temp_dir;
+        // A mapping's key is computed once, at insert time — the in-lock find
+        // then compares stored strings only. This pins that a stored key still
+        // carries the full compare semantics: canonical match while the file
+        // exists, raw-fold match (and ONLY that) once it's gone.
+        let base = unique_temp_dir("project_key");
+        std::fs::create_dir_all(base.join("sub")).unwrap();
+        let file = base.join("proj.dcsp");
+        std::fs::write(&file, b"{}").unwrap();
+        let direct = file.to_string_lossy().replace('\\', "/");
+        let sneaky =
+            base.join("sub").join("..").join("proj.dcsp").to_string_lossy().replace('\\', "/");
+        let mapping = ProjectMapping::new(direct.clone());
+        assert_eq!(mapping.path, direct, "the user-visible spelling is kept verbatim");
+        assert!(
+            mapping.key.matches(&ProjectPathKey::new(&sneaky)),
+            "variant spellings of the existing file meet on the canonical fold"
+        );
+        // Offline fallback: with the file gone, a fresh key of the SAME
+        // spelling still matches the stored one on the raw fold — while a
+        // variant spelling no longer resolves (the documented residual).
+        let _ = std::fs::remove_dir_all(&base);
+        assert!(mapping.key.matches(&ProjectPathKey::new(&direct)));
+        assert!(
+            !mapping.key.matches(&ProjectPathKey::new(&sneaky)),
+            "missing files keep the fold-only compare"
+        );
     }
 }

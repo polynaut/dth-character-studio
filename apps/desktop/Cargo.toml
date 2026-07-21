@@ -49,9 +49,10 @@ tauri-plugin-process = "2"
 # One OS process, many windows: a second launch (e.g. double-clicking another
 # `.dcsp`) is routed into the running app, which opens it in its own window.
 tauri-plugin-single-instance = "2"
-# Server-side download of the soltude/DazToHue-Scripts repo zip (Tools installer) —
-# the webview can't fetch it (codeload's CORS only allows render.githubusercontent.com),
-# but Rust has no CORS. reqwest 0.13 is ALREADY in the tree via tauri-plugin-updater
+# GitHub API calls from Rust (github.rs — today just `app_release_tags`, the
+# updater dialog's "versions you skipped" list): the webview can't reach GitHub
+# itself (the strict CSP allows IPC only), and Rust has no CORS/CSP to fight.
+# reqwest 0.13 is ALREADY in the tree via tauri-plugin-updater
 # (built with its rustls stack — see Cargo.lock: hyper-rustls/tokio-rustls/ring). We
 # request NO features here: Cargo unifies features for the same crate version in the
 # same target, so this reqwest builds with the updater's already-enabled rustls and

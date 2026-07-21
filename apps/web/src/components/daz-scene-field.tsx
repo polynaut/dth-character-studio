@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from '@tanstack/react-router'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -156,7 +155,6 @@ export function DazSceneField({
   selectedScene?: string
   onSelectScene?: (scene: string) => void
 }) {
-  const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // A scene click while Daz is already running: the studio can't switch a running
@@ -328,8 +326,11 @@ export function DazSceneField({
     setBusy(true)
     setError('')
     // The copy runs INSIDE the persist primitive's async patch producer — after
-    // its validate/single-flight guards — so a refused persist can never leave a
-    // copied (or, with deleteOriginal, MOVED) file behind unlinked.
+    // its validate/single-flight guards, so an up-front refusal never runs it.
+    // Once it HAS run, the hook guarantees the copied (or, with deleteOriginal,
+    // MOVED) file is never stranded: if interim edits typed during the copy
+    // invalidate the merged draft, the patch alone still persists (against the
+    // pre-producer draft), keeping those edits dirty on top.
     const saved = await persistPatch(
       async () => {
         const finalScene = copyInto
@@ -476,19 +477,35 @@ export function DazSceneField({
 
   async function onMoveScenesDir() {
     if (editDir === null || !editDir.trim()) return
+    const newSubdir = editDir
     setBusy(true)
     setError('')
     try {
-      const saved = await moveCharacterScenesFolder({
-        data: { projectId, id: character.id, newSubdir: editDir },
-      })
-      // MERGE the repointed paths into the draft — this `saved` came from DISK and
-      // lacks any unsaved edits, so replacing the draft wholesale (onLinked) would
-      // silently discard them and clear `dirty` so the guard never fires.
-      onScenesFolderMoved(saved)
-      setEditDir(null)
-      void router.invalidate()
-      toast.success('Moved the Daz scenes folder')
+      // Through the draft's persist primitive, like every other persisting flow:
+      // the single-flight `saving` flag is held for the whole move+save+generate
+      // (a bare api call raced an in-flight save), and persistPatch's
+      // notifyGenerated surfaces the success toast + a soft scriptsError warning
+      // exactly once. The move itself is the PERSIST step — it saves the draft
+      // with its scene paths repointed and returns the persisted character.
+      const saved = await persistPatch(
+        {},
+        {
+          toast: 'Moved the Daz scenes folder',
+          // The inline editor owns the error surface — a failed move/save shows
+          // next to the input (guard refusals still toast in the hook).
+          rethrow: true,
+          persist: (updated) =>
+            moveCharacterScenesFolder({ data: { projectId, character: updated, newSubdir } }),
+        },
+      )
+      if (saved) {
+        // MERGE the repointed paths into the draft + baseline — edits typed
+        // DURING the move aren't in `saved`, so the hook's settle keeps the
+        // draft; without this merge those kept scene paths would still point at
+        // the old folder (and read as pending reverse-changes).
+        onScenesFolderMoved(saved)
+        setEditDir(null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
