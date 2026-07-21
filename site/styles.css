@@ -295,12 +295,12 @@ a:hover {
   display: flex;
 }
 
-/* Desktop and up: the hero owns 83% of the viewport, and the guide teaser
+/* Desktop and up: the hero owns 85% of the viewport, and the guide teaser
    link gets extra clearance above it (see .hero .btn-ghost). On phones and
    tablets (and short screens) the content height wins and nothing changes. */
 @media (min-width: 1024px) {
   .hero {
-    min-height: 83vh;
+    min-height: 85vh;
   }
 }
 
