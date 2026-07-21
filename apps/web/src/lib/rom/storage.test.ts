@@ -23,7 +23,9 @@ function addDir(p: string): void {
 vi.mock('@tauri-apps/api/path', () => ({ appLocalDataDir: async () => '/appdata' }))
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '0.0.0' }))
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: async () => null,
+  // A vi.fn so individual tests can stub a native command's return (e.g. the
+  // pose scan's `scan_duf_files`) with a one-shot mockResolvedValueOnce.
+  invoke: vi.fn(async () => null),
   isTauri: () => false,
   convertFileSrc: (p: string) => p,
 }))
@@ -583,6 +585,33 @@ describe('DTH release resolution (pinned version)', () => {
     expect(pinned.pinnedMissing).toBeUndefined()
     expect((await storage.resolveActiveReleaseRoot('/dth', '')).pinnedMissing).toBeUndefined()
   })
+
+  it('scanPoseAssets carries pinnedMissing into the catalog (what the Settings release pane reads)', async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    // One extracted release with a Poses folder; the pinned version is gone.
+    addDir('/dth/Release 2.4.3/Daz Studio Content/DazToHue/Poses')
+    files.set('/dth/Release 2.4.3/copyright.txt', 'c')
+    await storage.saveSettings({
+      ...(await storage.getSettings()),
+      dthPosesFolder: '/dth',
+      currentDthVersion: '2.3.0',
+    })
+
+    vi.mocked(invoke).mockResolvedValueOnce(['Genesis 9/DQS/JCM - Base.duf']) // scan_duf_files
+    const catalog = await storage.scanPoseAssets()
+
+    // The scan succeeded against the fallback release…
+    expect(catalog.version).toBe('2.4.3')
+    expect(catalog.error).toBeNull()
+    expect(catalog.assets).toHaveLength(1)
+    // …and the broken pin is DISCOVERABLE on the catalog the UI consumes.
+    expect(catalog.pinnedMissing).toBe('2.3.0')
+
+    // A pin that resolves carries no signal.
+    await storage.saveSettings({ ...(await storage.getSettings()), currentDthVersion: '2.4.3' })
+    vi.mocked(invoke).mockResolvedValueOnce([])
+    expect((await storage.scanPoseAssets()).pinnedMissing).toBeUndefined()
+  })
 })
 
 describe('copyRuntimeFiles', () => {
@@ -605,6 +634,23 @@ describe('copyRuntimeFiles', () => {
     files.set(`${root}/.dth-runtime-installed`, 'v1|/appdata')
     await storage.copyRuntimeFiles(root)
     expect(files.get(`${root}/.DthWorkflow.dsa`)).not.toBe('tampered')
+    expect(files.get(`${root}/.dth-runtime-installed`)).toBe(marker)
+  })
+
+  it('force re-copies despite a FRESH marker (Tools → Refresh repairs a broken install)', async () => {
+    await storage.copyRuntimeFiles(root)
+    const marker = files.get(`${root}/.dth-runtime-installed`)
+
+    // A runtime file corrupted/deleted AFTER a completed install — the marker
+    // still reads current, so the routine path would skip forever.
+    files.set(`${root}/.DthWorkflow.dsa`, 'corrupted')
+    files.delete(`${root}/.DthUtils.dsa`)
+
+    await storage.copyRuntimeFiles(root, { force: true })
+
+    expect(files.get(`${root}/.DthWorkflow.dsa`)).not.toBe('corrupted')
+    expect(files.has(`${root}/.DthUtils.dsa`)).toBe(true)
+    // The marker is re-stamped (still written last, same content).
     expect(files.get(`${root}/.dth-runtime-installed`)).toBe(marker)
   })
 })

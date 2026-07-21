@@ -467,17 +467,20 @@ jobs:
           retention-days: 3
 
   publish:
-    needs: [check, sign-win, sign-mac]
-    # Windows must be signed; the mac side is either signed too or the whole
-    # mac half was DISABLED (ENABLE_MAC_RELEASE off). A skipped sign-mac only
-    # passes with the flag off — with it on, a skip means build-mac failed
-    # (skipping its dependants), so ANY mac failure blocks the release instead
-    # of silently shipping Windows-only and stranding mac updaters.
+    needs: [check, build-mac, sign-win, sign-mac]
+    # Windows must be signed; the mac side is either signed too or was never
+    # ATTEMPTED (build-mac skipped — ENABLE_MAC_RELEASE was off when the run
+    # was scheduled). Gating on build-mac's actual result rather than
+    # re-reading the repo var means flipping ENABLE_MAC_RELEASE mid-run can't
+    # invert the gate: any attempted-but-unsigned mac half (build-mac or
+    # sign-mac failed) blocks the release instead of silently shipping
+    # Windows-only and stranding mac updaters. `!cancelled()` (not `always()`)
+    # so a cancelled run can never mint the immutable GitHub release.
     if: >-
-      always() && needs.check.outputs.should_release == 'true'
+      !cancelled() && needs.check.outputs.should_release == 'true'
       && needs.sign-win.result == 'success'
       && (needs.sign-mac.result == 'success'
-      || (needs.sign-mac.result == 'skipped' && vars.ENABLE_MAC_RELEASE != 'true'))
+      || needs.build-mac.result == 'skipped')
     # Publishing needs no signing secret — only a GitHub token (RELEASE_PAT,
     # falling back to GITHUB_TOKEN; see the publish step's env) — so it runs on
     # a reliable hosted runner. Keeping it off the NAS means a GitHub API hiccup

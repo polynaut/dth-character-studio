@@ -1628,6 +1628,15 @@ describe('groom items (hair kept out of the export)', () => {
     const script = toGroomExportScriptDsa(groomChar())
     expect(script.fileName).toBe('Export_Hair_Electra_G9.dsa')
     expect(script.content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
+    // Byte-identity of the emitted scene-lookup fold (backslash escapes intact):
+    // the Daz-side `.split("\\")` must reach the script as exactly two
+    // characters — an escaping regression here silently breaks the scene-path
+    // match and the groom list resolves to [] for every scene.
+    expect(script.content).toContain(
+      '    var dthGroomByScene = {"x:/scenes/karen.duf":["dForce Black Tie Cap"]};\n' +
+        '    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();\n' +
+        '    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];',
+    )
     // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
     expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
     expect(script.content).toContain('} finally {')

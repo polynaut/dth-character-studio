@@ -104,17 +104,27 @@ const RUNTIME_MARKER_FILE = '.dth-runtime-installed'
  * matches this app's RUNTIME_VERSION (and app-data path): the runtime files
  * only change with a RUNTIME_VERSION bump, so rewriting them on EVERY
  * save+generate was pure overhead.
+ *
+ * `force` bypasses that marker skip (the marker is still re-stamped LAST): the
+ * marker only proves an install once COMPLETED — a runtime file deleted or
+ * corrupted since would be skipped forever on the routine path. The user-forced
+ * Tools → Refresh passes it so "refresh anyway" genuinely repairs the install.
  */
-export async function copyRuntimeFiles(destDir: string): Promise<void> {
+export async function copyRuntimeFiles(
+  destDir: string,
+  options?: { force?: boolean },
+): Promise<void> {
   // The visible scan scripts get the app-data folder baked in below — it's part
   // of what "installed and current" means, so it joins the marker stamp.
   const appData = (await dataDir()).replace(/\\/g, '/')
   const markerPath = join(destDir, RUNTIME_MARKER_FILE)
   const stamp = `v${RUNTIME_VERSION}|${appData}`
-  try {
-    if ((await readTextFile(markerPath)) === stamp) return // already current
-  } catch {
-    // no marker (fresh/legacy/partial install) — do the full install below
+  if (!options?.force) {
+    try {
+      if ((await readTextFile(markerPath)) === stamp) return // already current
+    } catch {
+      // no marker (fresh/legacy/partial install) — do the full install below
+    }
   }
   await mkdir(destDir, { recursive: true })
   for (const [name, raw] of Object.entries(RUNTIME_FILES)) {

@@ -1,6 +1,5 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
-import { toast } from 'sonner'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
 
@@ -33,7 +32,6 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
-import { generateCharacterFiles } from './generate'
 import { isExternalImage } from '../image'
 
 import type { Character, GenesisVersion, ImportedPose } from '@dth/rom'
@@ -528,7 +526,9 @@ export async function moveCharacter({
 
 const moveScenesFolderInput = z.object({
   projectId: z.string().min(1),
-  id: z.string().min(1),
+  /** The editor's DRAFT character — this is what persists (with its paths
+   *  repointed), so the flow composes with persistPatch like relinkScene. */
+  character: z.unknown(),
   /** New scenes subfolder, relative to the character folder (e.g. "daz3d"). */
   newSubdir: z.string().min(1),
 })
@@ -539,18 +539,24 @@ const moveScenesFolderInput = z.object({
  * disk, then repoints every linked scene path underneath it and saves. The
  * scenes folder must live INSIDE the character folder — a scene linked from
  * elsewhere has no subfolder to edit.
+ *
+ * This is a PERSIST STEP for the draft hook's `persistPatch` (the
+ * relinkScene pattern): it saves the passed draft itself and returns the
+ * persisted character. Regeneration of the DTH artifacts — whose installed
+ * scripts embed the repointed paths (the groom map is keyed by ABSOLUTE scene
+ * path, and the CSV-delivery path is baked in) — runs in persistPatch's own
+ * generate step, which also surfaces a soft `scriptsError` exactly once.
  */
 export async function moveCharacterScenesFolder({
   data,
 }: {
   data: unknown
 }): Promise<Character> {
-  const { projectId, id, newSubdir } = moveScenesFolderInput.parse(data)
+  const { projectId, character: raw, newSubdir } = moveScenesFolderInput.parse(data)
+  const character = characterSchema.parse(raw)
   const root = await charactersRoot(projectId)
-  const loc = await locateCharacter(root, id)
-  const located = loc ? await storage.readCharacterAt(loc.definitionAbs) : null
-  const character = located?.id === id ? located : null
-  if (!character?.scenePath || !loc) throw new Error('No Daz scene linked.')
+  const loc = await locateCharacter(root, character.id)
+  if (!character.scenePath || !loc) throw new Error('No Daz scene linked.')
   const charFolder = normalizePath(loc.folderAbs)
   const oldDir = parentDir(character.scenePath)
   if (!normalizePathLower(oldDir).startsWith(normalizePathLower(charFolder) + '/')) {
@@ -559,30 +565,20 @@ export async function moveCharacterScenesFolder({
   const rel = normalizeRelFolder(newSubdir) // separators, no '..' / absolute / illegal chars
   if (!rel) throw new Error('Enter a subfolder name.')
   const newDir = `${charFolder}/${rel}`
-  if (normalizePathLower(newDir) === normalizePathLower(oldDir)) return character
-  await withBusyCursor(storage.moveFolder(oldDir, newDir))
-  // Everything that lived under the old folder travels with the rename —
-  // through THE single repoint site (storage/characters.ts), so this move can't
-  // drift from what a folder rename/move repoints (the local copy this replaced
-  // had already drifted: it omitted `houdiniProjects`).
-  const next = storage.repointCharacterPaths(character, oldDir, newDir)
+  let next = character
+  if (normalizePathLower(newDir) !== normalizePathLower(oldDir)) {
+    await withBusyCursor(storage.moveFolder(oldDir, newDir))
+    // Everything that lived under the old folder travels with the rename —
+    // through THE single repoint site (storage/characters.ts), so this move can't
+    // drift from what a folder rename/move repoints (the local copy this replaced
+    // had already drifted: it omitted `houdiniProjects`).
+    next = storage.repointCharacterPaths(character, oldDir, newDir)
+  }
+  // Same-subfolder no-op still SAVES: a persist step must return what is
+  // actually on disk (persistPatch settles the baseline to it).
   const project = await resolveProject(projectId)
   const saved = await storage.saveCharacter(project, next, root)
   cacheCharacterLocation(root, saved.character.id, saved.location)
-  // The installed ROM/Export scripts embed the repointed paths (the groom map is
-  // keyed by ABSOLUTE scene path, and the CSV-delivery path is baked in) — a
-  // repointed save without regeneration leaves them targeting the old folder.
-  // Regenerate like every other persisting flow; a failure here is a warning on
-  // top of a LANDED save (the persistPatch posture), never a rollback.
-  try {
-    await generateCharacterFiles({ data: { projectId, id } })
-  } catch (e) {
-    toast.warning(
-      `Moved the scenes folder, but couldn't regenerate the DTH files: ${
-        e instanceof Error ? e.message : String(e)
-      }`,
-    )
-  }
   return saved.character
 }
 

@@ -169,16 +169,26 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       return
     }
     setInstallingPath(path)
+    // Ctrl/Cmd is an explicit overwrite regardless of what the probe said: a
+    // FAILED probe reads as "absent", so `!!present` alone sent overwrite:false,
+    // the install errored "Ctrl+click to overwrite", and Ctrl+click looped the
+    // same error — user intent wins over a possibly-wrong probe.
+    const overwrite = !!present || e.ctrlKey || e.metaKey
     try {
       const files = await installUnrealDthContent({
-        data: { uprojectPath: path, overwrite: !!present },
+        data: { uprojectPath: path, overwrite },
       })
       toast.success(
         `${present ? 'Overwrote' : 'Installed'} DTH Unreal content — ${files} file(s)`,
       )
       setDthStatus((s) => ({ ...s, [path]: true }))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      // The install just proved the content IS there — adopt that over the stale
+      // probe result, so the next plain click gets the overwrite hint instead of
+      // re-running into the same error.
+      if (message.includes('already exists')) setDthStatus((s) => ({ ...s, [path]: true }))
+      toast.error(message)
     } finally {
       setInstallingPath('')
     }

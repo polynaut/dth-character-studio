@@ -18,7 +18,7 @@ mod testutil;
 mod uninstall;
 mod windows;
 
-use crate::windows::{dcsp_from_args, lock_windows, WindowProjects};
+use crate::windows::{dcsp_from_args, lock_windows, ProjectMapping, WindowProjects};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -43,8 +43,13 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
             if let Some(dcsp) = dcsp_from_args(&std::env::args().collect::<Vec<_>>()) {
+                // Build the mapping FIRST — its identity key canonicalizes (I/O)
+                // and must never run under the map lock (windows::ProjectPathKey).
+                // Setup runs before any window shows, and the file was just
+                // double-clicked, so the one-time cost here is fine.
+                let mapping = ProjectMapping::new(dcsp);
                 let projects = app.state::<WindowProjects>();
-                lock_windows(&projects).insert("main".into(), dcsp);
+                lock_windows(&projects).insert("main".into(), mapping);
             }
             Ok(())
         });

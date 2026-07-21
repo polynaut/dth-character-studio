@@ -101,6 +101,15 @@ export function MultiSelect({
     if (!open) return
     const swallowEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      // An IME-cancel Escape (Firefox reports key 'Escape' with isComposing)
+      // only dismisses the composition — it must not close the list and wipe
+      // the query.
+      if (event.isComposing) return
+      // Only an Escape that belongs to this widget is ours to eat. open ⟺
+      // focus-within, so if focus is elsewhere the event is meant for some
+      // other overlay (a document-level tooltip hide, a hover-peeked info
+      // popup) — leave it alone.
+      if (!rootRef.current?.contains(document.activeElement)) return
       event.preventDefault()
       event.stopImmediatePropagation()
       close()

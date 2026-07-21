@@ -422,7 +422,54 @@ describe('useCharacterDraft persistPatch()', () => {
     expect(result.current.dirty).toBe(false)
   })
 
-  it('re-validates the MERGED result: interim edits that invalidate it refuse the persist', async () => {
+  it('interim edits that invalidate the MERGE: persists the patch against the pre-producer draft', async () => {
+    const { result, onValidationErrors } = setup()
+    const producing = deferred<Partial<Character> | null>()
+    saveMock.mockImplementationOnce(async ({ data }) => stamped((data as { character: Character }).character))
+    generateMock.mockResolvedValueOnce(generated)
+
+    let done!: Promise<Character | null>
+    act(() => {
+      done = result.current.persistPatch(() => producing.promise)
+    })
+    await waitFor(() => expect(result.current.saving).toBe(true))
+    // While the producer runs, the user types the draft into a save-blocking
+    // state (an enabled custom FBM pose with an empty name). The producer's
+    // side effect (a MOVED .duf / an uploaded avatar) already happened by the
+    // time it resolves — refusing the persist outright would strand it. The
+    // patch alone (against the pre-producer draft) is valid, so THAT persists.
+    const invalidSections = makeInvalidCharacter().sections
+    act(() => result.current.patch({ sections: invalidSections }))
+
+    let saved: Character | null = null
+    await act(async () => {
+      producing.resolve({ exportPath: 'D:/export' })
+      saved = await done
+    })
+
+    // The patch persisted — WITHOUT the invalid interim sections.
+    expect(saved).not.toBeNull()
+    expect(saveMock).toHaveBeenCalledWith({
+      data: {
+        projectId: 'X:/proj',
+        character: expect.objectContaining({
+          exportPath: 'D:/export',
+          sections: makeCharacter().sections, // pre-producer, valid
+        }),
+      },
+    })
+    expect(generateMock).toHaveBeenCalledTimes(1)
+    // The interim edits stay in the DRAFT as dirty edits on top of the new
+    // baseline; the user was pointed at them (validate toasted + jumped).
+    expect(result.current.character.sections).toEqual(invalidSections)
+    expect(result.current.character.exportPath).toBe('D:/export')
+    expect(result.current.dirty).toBe(true)
+    expect(onValidationErrors).toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalled()
+    expect(result.current.saving).toBe(false)
+  })
+
+  it('refuses outright when the producer PATCH itself is invalid: nothing persisted', async () => {
     const { result, onValidationErrors } = setup()
     const producing = deferred<Partial<Character> | null>()
 
@@ -431,26 +478,22 @@ describe('useCharacterDraft persistPatch()', () => {
       done = result.current.persistPatch(() => producing.promise)
     })
     await waitFor(() => expect(result.current.saving).toBe(true))
-    // While the producer runs, the user types the draft into a save-blocking
-    // state (an enabled custom FBM pose with an empty name). The step-2 check
-    // only saw the pre-producer draft — without the merged re-check, this
-    // invalid state would persist and regenerate broken artifacts.
-    act(() => result.current.patch({ sections: makeInvalidCharacter().sections }))
 
     let saved: Character | null = makeCharacter()
     await act(async () => {
-      producing.resolve({ exportPath: 'D:/export' })
+      // The producer hands back a save-blocking patch — invalid on its own, so
+      // there is no valid state to persist at all.
+      producing.resolve({ sections: makeInvalidCharacter().sections, exportPath: 'D:/export' })
       saved = await done
     })
 
-    // Guard-refusal semantics: nothing persisted, errors handed to the page,
-    // the patch NOT applied to the draft (the interim edits stay as-is).
     expect(saved).toBeNull()
     expect(saveMock).not.toHaveBeenCalled()
     expect(generateMock).not.toHaveBeenCalled()
     expect(onValidationErrors).toHaveBeenCalled()
-    expect(toast.error).toHaveBeenCalled()
+    // The refused patch is NOT applied to the draft.
     expect(result.current.character.exportPath).toBe('')
+    expect(result.current.dirty).toBe(false)
     expect(result.current.saving).toBe(false)
   })
 

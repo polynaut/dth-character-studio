@@ -10,7 +10,7 @@ use crate::archive::{
     extract_zip_entry, walk_zip_content, InflateBudget, ZipWalkState, NESTED_ZIP_DEPTH,
 };
 use crate::dedup::{collect_asset_files, genesis_rank, AssetFiles};
-use crate::fsutil::{folder_name, join_rel, lock_dest, rel_key};
+use crate::fsutil::{folder_name, join_rel, lock_dest, rail_target, rel_key};
 use crate::report::{
     io_detail, step_err, step_header, step_ok, step_skip, InstallReport, InstallStep,
 };
@@ -65,16 +65,36 @@ impl DestSizes {
     }
 }
 
-/// Format the final step for an asset once its diff is known.
-fn finish_step(name: &str, diff_files: Vec<String>, total: u64, dry: bool) -> InstallStep {
-    if diff_files.is_empty() {
-        return step_skip(name, format!("already installed · {total} files"));
+/// Format the final step for an asset once its diff is known. `unsafe_names`
+/// entries were refused by the zip-slip rail (absolute/`..` names — see
+/// `zip_file_entries`): they can never install, so the safe subset installs and
+/// the refusal is surfaced accurately on the step — hard-erroring here (like
+/// the unreadable-entry posture) turned a sloppy-but-real archive permanently
+/// uninstallable behind a misleading "fix access and retry". Quarantine
+/// decisions still refuse such incomplete inventories (dedup.rs).
+fn finish_step(
+    name: &str,
+    diff_files: Vec<String>,
+    total: u64,
+    dry: bool,
+    unsafe_names: u64,
+) -> InstallStep {
+    let mut step = if diff_files.is_empty() {
+        step_skip(name, format!("already installed · {total} files"))
+    } else {
+        let verb = if dry { "to copy" } else { "copied" };
+        let diff = diff_files.len() as u64;
+        let mut s = step_ok(name, diff, format!("{diff}/{total} files {verb}"));
+        s.files_list = diff_files.into_iter().take(200).collect();
+        s
+    };
+    if unsafe_names > 0 {
+        let plural = if unsafe_names == 1 { "y" } else { "ies" };
+        step.detail.push_str(&format!(
+            " · {unsafe_names} entr{plural} with unsafe names (absolute or '..' paths) refused"
+        ));
     }
-    let verb = if dry { "to copy" } else { "copied" };
-    let diff = diff_files.len() as u64;
-    let mut s = step_ok(name, diff, format!("{diff}/{total} files {verb}"));
-    s.files_list = diff_files.into_iter().take(200).collect();
-    s
+    step
 }
 
 /// An asset's report step plus the fingerprint of its destination file set (None
@@ -188,7 +208,7 @@ fn process_collected_asset(
             }
         }
     }
-    (finish_step(name, diff_files, af.files.len() as u64, dry), Some(fp))
+    (finish_step(name, diff_files, af.files.len() as u64, dry, af.unsafe_names), Some(fp))
 }
 
 /// Diff (and, unless `dry`, install) one `.zip` asset — read straight from the
@@ -223,6 +243,7 @@ fn process_zip_asset(
     let mut diff_files: Vec<String> = Vec::new();
     let (mut total, mut fp) = (0u64, 0u64);
     let mut read_errors = 0u64;
+    let mut unsafe_names = 0u64;
     let walked = walk_zip_content(
         &mut archive,
         asset,
@@ -231,6 +252,7 @@ fn process_zip_asset(
             budget: &mut budget,
             strict: true,
             read_errors: &mut read_errors,
+            unsafe_names: &mut unsafe_names,
             keep_temps: None,
         },
         &mut |archive, budget, _apath, idx, sub, size| {
@@ -267,7 +289,7 @@ fn process_zip_asset(
                 None,
             )
         }
-        Ok(true) => (finish_step(name, diff_files, total, dry), Some(fp)),
+        Ok(true) => (finish_step(name, diff_files, total, dry, unsafe_names), Some(fp)),
     }
 }
 
@@ -395,7 +417,18 @@ struct CollectedSources {
 fn collect_sources(sources: &[String], keep_zip_handles: bool, only: &[String]) -> CollectedSources {
     let mut listings = Vec::new();
     let mut files = HashMap::new();
+    // Source rail (mirroring dedup's): the same folder listed twice — verbatim
+    // or a case/`..`/mapped-drive variant spelling — lists every asset twice,
+    // and `process_assets` MOVES each asset's inventory out of `files` on first
+    // use, so the second pass reported every folder asset "no Daz content"
+    // (`None` meant both "no content" and "already consumed"); a variant
+    // spelling additionally split winner resolution into a self-tie. Canonical-
+    // fold + dedupe, keeping each source's first-listed spelling.
+    let mut seen: HashSet<String> = HashSet::new();
     for source in sources {
+        if !seen.insert(rail_target(Path::new(source)).to_string_lossy().to_lowercase()) {
+            continue;
+        }
         let listing = collect_assets(source);
         if let Ok(assets) = &listing {
             let genesis = genesis_rank(&folder_name(Path::new(source)));
@@ -646,6 +679,37 @@ mod tests {
     }
 
     #[test]
+    fn zip_with_unsafe_names_installs_the_safe_subset_and_surfaces_the_refusal() {
+        // A sloppy archive carrying a zip-slip name beside real content: the
+        // unsafe entry is refused (never extracted) but the archive still
+        // installs — counting the refusal as "unreadable" flipped a previously-
+        // installable archive into a permanent, misleading "fix access and
+        // retry" (there is no access problem to fix). The refusal is surfaced
+        // accurately on the step instead; truly UNREADABLE entries still
+        // hard-error (the ZipCrypto test above).
+        let base = unique_temp_dir("zip_unsafe_names");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("sloppy.zip");
+        write_zip(&path, &[("data/ok.dsf", b"ok".as_slice()), ("../evil.dsf", b"evil".as_slice())]);
+        let dest = base.join("lib");
+        // The re-walking zip path.
+        let (step, fp) = process_zip_asset(&path, "sloppy.zip", &dest, false, false, &HashSet::new());
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert!(step.detail.contains("unsafe names"), "detail: {}", step.detail);
+        assert!(fp.is_some());
+        assert_eq!(fs::read(join_rel(&dest, "data/ok.dsf")).unwrap(), b"ok");
+        assert!(!base.join("evil.dsf").exists(), "the refused entry never lands anywhere");
+        // The collected path (what a real install runs) keeps the same posture.
+        let af = collect_asset_files(&path, true).unwrap();
+        assert_eq!(af.unsafe_names, 1);
+        assert_eq!(af.read_errors, 0);
+        let (step, _) = process_collected_asset(&af, "sloppy.zip", &dest, false, true, &HashSet::new());
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert!(step.detail.contains("unsafe names"), "detail: {}", step.detail);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn wrapper_zip_installs_from_its_collected_inventory() {
         // End-to-end through install_daz_assets: the collected inventory (with
         // its KEPT nested-zip inflation) drives the real install — the nested
@@ -708,33 +772,82 @@ mod tests {
     }
 
     #[test]
-    fn install_drops_a_zip_assets_temps_when_its_step_finishes() {
-        // The kept nested-temp inflations must live only as long as their
-        // asset's install step — not until the whole command returns (a full
-        // real install used to hold EVERY asset's temps to the end).
+    fn install_drops_a_zip_assets_temps_when_its_own_step_finishes() {
+        // Per-STEP scoping, not end-of-batch: right after asset A's step ran,
+        // A's nested-temp inflation is gone while B's — whose step hasn't run —
+        // still lives. (The old single-asset assertion checked only after the
+        // whole batch returned, so it couldn't tell a per-step drop from one at
+        // the end of the batch.)
         let base = unique_temp_dir("temps_scoped");
         let source = base.join("src");
         fs::create_dir_all(&source).unwrap();
-        write_wrapper_zip(&source.join("67582_Meipe.zip"));
+        // Distinct content per wrapper, so neither loses its files to the other
+        // in winner resolution.
+        let inner_a = zip_bytes(&[("Content/data/A/a.dsf", b"a".as_slice())]);
+        write_zip(&source.join("AAA.zip"), &[("pkgA.zip", inner_a.as_slice())]);
+        let inner_b = zip_bytes(&[("Content/data/B/b.dsf", b"b".as_slice())]);
+        write_zip(&source.join("BBB.zip"), &[("pkgB.zip", inner_b.as_slice())]);
         let sources = vec![source.to_string_lossy().to_string()];
         let CollectedSources { listings, mut files } = collect_sources(&sources, true, &[]);
-        let temp_paths: Vec<PathBuf> = files
-            .values()
-            .flat_map(|(_, af)| af.nested_temps.iter().map(|t| t.0.clone()))
-            .collect();
-        assert_eq!(temp_paths.len(), 1);
-        assert!(temp_paths[0].is_file(), "the nested inflation is kept for the install");
+        let temp_of = |files: &HashMap<PathBuf, (u32, AssetFiles)>, name: &str| -> PathBuf {
+            files
+                .iter()
+                .find(|(p, _)| folder_name(p) == name)
+                .map(|(_, (_, af))| af.nested_temps[0].0.clone())
+                .unwrap()
+        };
+        let temp_a = temp_of(&files, "AAA.zip");
+        let temp_b = temp_of(&files, "BBB.zip");
+        assert!(temp_a.is_file() && temp_b.is_file(), "both inflations are kept for the install");
         let Ok(assets) = &listings[0].1 else { panic!("listing failed") };
         let dest = base.join("lib");
         let skip_map = winner_skip_map(&files, &HashSet::new());
-        let steps = process_assets(assets, &mut files, &dest, false, false, &[], &skip_map);
+        // Run ONLY asset A's step through the real pipeline.
+        let only_a = vec!["AAA.zip".to_string()];
+        let steps = process_assets(assets, &mut files, &dest, false, false, &only_a, &skip_map);
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].0.status, "ok", "detail: {}", steps[0].0.detail);
-        // The asset's inventory was consumed BY its step — its temp is gone
-        // now, not at command end.
+        assert!(!temp_a.exists(), "A's temp drops with A's OWN step");
+        assert!(temp_b.exists(), "B's temp must still live — its step hasn't run yet");
+        assert!(join_rel(&dest, "data/A/a.dsf").is_file());
+        // B's step then consumes — and drops — ITS temp.
+        let only_b = vec!["BBB.zip".to_string()];
+        let steps = process_assets(assets, &mut files, &dest, false, false, &only_b, &skip_map);
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].0.status, "ok", "detail: {}", steps[0].0.detail);
+        assert!(!temp_b.exists(), "B's temp drops with B's step");
         assert!(files.is_empty(), "each inventory is consumed by its asset's step");
-        assert!(!temp_paths[0].exists(), "the nested temp drops with the step");
-        assert!(join_rel(&dest, "data/Meipe/morph.dsf").is_file());
+        assert!(join_rel(&dest, "data/B/b.dsf").is_file());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn duplicate_source_listings_fold_to_one_pass() {
+        // The same source listed twice (verbatim + a `..`-laden variant
+        // spelling): `process_assets` moves each asset's inventory out of the
+        // collected map, so the second pass used to report every folder asset
+        // "no Daz content". Sources are canonical-folded + deduped (mirroring
+        // dedup's source rails), so each asset is listed and processed once.
+        let base = unique_temp_dir("dup_sources");
+        let source = base.join("src");
+        let asset = source.join("Thing");
+        fs::create_dir_all(asset.join("data")).unwrap();
+        fs::write(asset.join("data").join("x.dsf"), b"x").unwrap();
+        let spelled = source.to_string_lossy().to_string();
+        let sneaky = source.join("..").join("src").to_string_lossy().to_string();
+        let report = list_daz_assets(AssetScanRequest {
+            sources: vec![spelled.clone(), spelled, sneaky],
+            dest: base.join("lib").to_string_lossy().to_string(),
+            accepted: vec![],
+        });
+        let thing_steps: Vec<_> = report.steps.iter().filter(|s| s.label == "Thing").collect();
+        assert_eq!(thing_steps.len(), 1, "one listing, one step");
+        assert_eq!(thing_steps[0].status, "ok", "detail: {}", thing_steps[0].detail);
+        assert!(
+            !report.steps.iter().any(|s| s.detail == "no Daz content"),
+            "a consumed inventory must not read as content-less"
+        );
+        assert_eq!(report.steps.iter().filter(|s| s.status == "header").count(), 1);
         let _ = fs::remove_dir_all(&base);
     }
 

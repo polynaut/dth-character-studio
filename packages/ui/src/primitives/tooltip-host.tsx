@@ -55,6 +55,10 @@ export function TooltipHost() {
     }
 
     const show = (el: HTMLElement, text: string) => {
+      // The anchor may have left the DOM while the show-timer counted down (or
+      // between a title flip and the observer callback) — a detached anchor
+      // has no position, only a ghost tooltip. Drop it.
+      if (!el.isConnected) return hide()
       // Never float a tooltip above content that's been covered — e.g. a modal
       // dialog that opened over the anchor (the tooltip is z-100, dialogs z-50).
       // If the top-most element at the anchor's centre is in a different subtree
@@ -121,7 +125,10 @@ export function TooltipHost() {
         () => show(target, text),
         e.type === 'focusin' ? 0 : SHOW_DELAY_MS,
       )
-      // Attached exactly once per pending anchor (the bail above guarantees it).
+      // The bail above stops pairs from STACKING while a timer counts down; a
+      // show → pointerdown-hide cycle on the same still-hovered anchor can
+      // still attach a second pair (anchor/pending were reset by hide()).
+      // That's harmless: each pair removes itself the first time it fires.
       const cancel = () => {
         target.removeEventListener('mouseleave', cancel)
         target.removeEventListener('blur', cancel)

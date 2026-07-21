@@ -547,11 +547,14 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   const force = !items.some((i) => i.targets.schema || i.targets.runtime || i.targets.csv)
 
   // Refresh the bundled runtime files once when scripts will be (re)written — any
-  // runtime mismatch, or a forced full refresh.
+  // runtime mismatch, or a forced full refresh. The forced refresh bypasses the
+  // install marker (`force`): the user clicked Refresh with nothing stale, which
+  // is exactly the "repair a deleted/corrupted runtime file" path — the marker
+  // would otherwise skip the copy and still report `runtime: { ok: true }`.
   let runtime: RefreshSummary['runtime'] = null
   if (hasDazLibrary && (force || items.some((i) => i.targets.runtime))) {
     try {
-      await storage.copyRuntimeFiles(storage.studioScriptsDir(settings.dazLibraryFolder))
+      await storage.copyRuntimeFiles(storage.studioScriptsDir(settings.dazLibraryFolder), { force })
       runtime = { ok: true }
     } catch (e) {
       runtime = { ok: false, detail: e instanceof Error ? e.message : String(e) }

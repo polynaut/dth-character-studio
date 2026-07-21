@@ -96,6 +96,13 @@ current code before relying on details, but assume the *lesson* still holds.
   scanned once as a source and once as its parent's "asset"; either way apply
   would quarantine the only real copy. Sources are canonical-folded + deduped
   and nesting is a hard pre-scan error (test-pinned in `dedup.rs`).
+- **Never do filesystem I/O (especially `fs::canonicalize`) while holding
+  `PROJECT_WINDOW_LOCK` or the windows-map mutex** — the sync main-thread
+  `active_project_file` waits on that mutex, and canonicalize on an offline
+  SMB path blocks for the network timeout (seconds to ~30s), freezing every
+  window. Precompute path keys BEFORE locking: each `ProjectMapping` stores
+  its Unicode fold + canonical fold at insert time, so the in-lock find is
+  pure string compares (`windows.rs`).
 - **A window-label reservation races the async `build()`** — webview registration
   lags by hundreds of ms, so "reservation present, window absent" is only provably
   stale while holding a creation lock across find→build (`PROJECT_WINDOW_LOCK`,

@@ -15,14 +15,27 @@ export function genesisRank(source: string): number {
   const i = lower.indexOf('genesis')
   if (i === -1) return 0
   const digits = /\d+/.exec(lower.slice(i + 'genesis'.length))
-  return digits ? Number(digits[0]) : 0
+  const n = digits ? Number(digits[0]) : 0
+  // Rust parses the digit run as a u32 (`parse().unwrap_or(0)`), so an
+  // overflowing run saturates to 0 THERE — clamp identically, or a
+  // "_genesis 4294967296" source ranks 0 in the install and huge here,
+  // inverting the "◀ keeps" marker.
+  return n > 0xffffffff ? 0 : n
 }
-/** The copy the install keeps for a shared file: newer Genesis, then bigger. */
-function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
+/** The copy the install keeps for a shared file: newer Genesis, then bigger,
+ *  then — on a full (genesis, size) tie — the lexicographically FIRST asset
+ *  path, mirroring the Rust `winner_skip_map`'s max over
+ *  (genesis, size, Reverse(asset path)) in apps/desktop/src/assets.rs.
+ *  Exported for the twin test of the Rust
+ *  `winner_tie_breaks_deterministically_by_asset_path`. */
+export function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
   return copies.reduce((best, cp) => {
+    const rank = genesisRank(cp.source)
+    const bestRank = genesisRank(best.source)
     const better =
-      genesisRank(cp.source) > genesisRank(best.source) ||
-      (genesisRank(cp.source) === genesisRank(best.source) && cp.size > best.size)
+      rank > bestRank ||
+      (rank === bestRank && cp.size > best.size) ||
+      (rank === bestRank && cp.size === best.size && (cp.path ?? '') < (best.path ?? ''))
     return better ? cp : best
   })
 }

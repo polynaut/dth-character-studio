@@ -62,12 +62,6 @@ export interface ProductScanResult {
   files: Array<ProductScanFile>
 }
 
-/** Monotonic per-run stamp appended to a listing signature that contains a
- *  stat-FAILED entry: an unstattable CSV can't prove it's unchanged, so its
- *  signature must never match a stored one (a bare `name||-1` is the same
- *  string every run and would serve the cached merge forever). */
-let unstattableRun = 0
-
 export async function fetchProductScan({ data }: { data: unknown }): Promise<ProductScanResult> {
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
@@ -91,19 +85,15 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
         modifiedAt = info.mtime ? info.mtime.toISOString() : ''
         size = info.size
       } catch {
-        // stat failed — the entry can't be revalidated; taint the signature
-        // below so this run (and the next) re-reads instead of trusting cache
+        // stat failed — the entry can't be revalidated, so this run neither
+        // trusts the cache (its `|-1` stamp won't match a healthy signature)
+        // nor stores its result (see below)
         anyUnstattable = true
       }
       listing.push({ name: entry.name, modifiedAt, size })
     }
     listing.sort((a, b) => a.name.localeCompare(b.name))
-    // The per-run nonce makes a stat-failed listing genuinely unstable: it can
-    // never equal the stored signature, so the cache is bypassed AND the stored
-    // entry from such a run can never be served later.
-    const signature =
-      listing.map((f) => `${f.name}|${f.modifiedAt}|${f.size}`).join('\n') +
-      (anyUnstattable ? `\n!unstattable:${++unstattableRun}` : '')
+    const signature = listing.map((f) => `${f.name}|${f.modifiedAt}|${f.size}`).join('\n')
     const cached = productScanCache.get(dir)
     if (cached && cached.signature === signature) return cached.result
 
@@ -134,7 +124,10 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
       )
       result = { exists: true, scan: mergeProductScans(scans), dir, files }
     }
-    productScanCache.set(dir, { signature, result })
+    // An unstattable entry can't prove itself unchanged later — storing this
+    // run would only park a result under a signature no future run can match
+    // (permanently unservable). Skip the store; the next run re-reads.
+    if (!anyUnstattable) productScanCache.set(dir, { signature, result })
     return result
   } catch {
     return { exists: false, scan: null, dir, files: [] }

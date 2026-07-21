@@ -30,7 +30,7 @@ describe('housekeepingSweep — FFI request shape + return validation', () => {
     mockIPC((cmd, p) => {
       expect(cmd).toBe('housekeeping_sweep')
       payloads.push(p as Record<string, unknown>)
-      return { filesDeleted: 7, bytesFreed: 4096 }
+      return { filesDeleted: 7, bytesFreed: 4096, filesFailed: 2 }
     })
 
     const result = await housekeepingSweep()
@@ -42,8 +42,15 @@ describe('housekeepingSweep — FFI request shape + return validation', () => {
     for (const p of payloads) {
       expect((p.request as { maxAgeDays: number }).maxAgeDays).toBeGreaterThan(0)
     }
-    // product scans (7/4096) + scan-frames (7/4096) + note-media (0/0)
-    expect(result).toEqual({ filesDeleted: 14, bytesFreed: 8192 })
+    // product scans (7/4096/2) + scan-frames (7/4096/2) + note-media (0/0) —
+    // filesFailed travels into the aggregate instead of being dropped.
+    expect(result).toEqual({ filesDeleted: 14, bytesFreed: 8192, filesFailed: 4 })
+  })
+
+  it('tolerates a native return WITHOUT filesFailed (older desktop): aggregates 0', async () => {
+    mockIPC(() => ({ filesDeleted: 1, bytesFreed: 10 }))
+    const result = await housekeepingSweep()
+    expect(result).toEqual({ filesDeleted: 2, bytesFreed: 20, filesFailed: 0 })
   })
 
   it('THROWS if the native return drifts from the HousekeepingResult schema', async () => {

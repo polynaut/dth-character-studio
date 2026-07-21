@@ -51,6 +51,13 @@ export const conflictCopySchema = z.object({
   label: z.string(),
   /** Source folder the copy lives in (e.g. "_genesis 9"). */
   source: z.string(),
+  /** Full path of the ASSET shipping this copy — the install's full-tie
+   *  breaker: `winner_skip_map` (assets.rs) resolves an equal (genesis, size)
+   *  tie to the lexicographically first asset path, and `conflictWinner`
+   *  (dedup-report-list) mirrors that tiebreak with this key. Rust always
+   *  sends it; optional here so report literals built without it (tests,
+   *  browser no-ops) stay constructible. */
+  path: z.string().optional(),
   size: z.number(),
   inZip: z.boolean(),
 })

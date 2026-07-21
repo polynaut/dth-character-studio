@@ -14,12 +14,13 @@ beforeAll(() => {
   }
   globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver
 
-  // Emulate MOUSE modality. On close, FloatingFocusManager return-focuses the
-  // trigger; floating-ui's useFocus re-peeks on any focus it considers
-  // ":focus-visible" — and its matchesFocusVisible() hard-codes `true` under a
-  // jsdom user agent, so the popup would reopen forever here, which a real
-  // mouse-modality browser never does. Hide the jsdom UA so the real check
-  // runs, and make that check report "not focus-visible" (= mouse modality).
+  // Emulate MOUSE modality by default. On close, FloatingFocusManager
+  // return-focuses the trigger; floating-ui's useFocus re-peeks on any focus it
+  // considers ":focus-visible" — and its matchesFocusVisible() hard-codes
+  // `true` under a jsdom user agent, so the popup would reopen forever here,
+  // which a real mouse-modality browser never does. Hide the jsdom UA so the
+  // real check runs, and make that check report `focusVisible` (false = mouse
+  // modality; a test flips it to true to emulate keyboard modality).
   Object.defineProperty(navigator, 'userAgent', {
     value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0 Safari/537.36',
     configurable: true,
@@ -30,12 +31,18 @@ beforeAll(() => {
     selector: string,
   ) => boolean
   Element.prototype.matches = function (this: Element, selector: string) {
-    if (selector === ':focus-visible') return false
+    if (selector === ':focus-visible') return focusVisible
     return realMatches.call(this, selector)
   } as typeof Element.prototype.matches
 })
 
-afterEach(cleanup)
+/** What the `:focus-visible` stub reports — see the modality note above. */
+let focusVisible = false
+
+afterEach(() => {
+  focusVisible = false
+  cleanup()
+})
 
 function renderPopup(config: { onNavigate?: (p: string) => void; onOpenExternal?: (u: string) => void } = {}) {
   return render(
@@ -59,6 +66,26 @@ describe('InfoPopup', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     // The close transition (150ms) keeps it mounted briefly, then it goes.
     await waitFor(() => expect(queryByRole('dialog')).toBeNull())
+  })
+
+  it('Escape on a pinned dialog closes it for good — keyboard-modality return focus must not re-peek it', async () => {
+    // KEYBOARD modality: the trigger reports :focus-visible when the focus
+    // manager returns focus to it. useFocus must stay subscribed while pinned,
+    // or its escape-key block-focus guard never arms and that return focus
+    // immediately re-opens the popup.
+    focusVisible = true
+    const { getByRole, queryByRole } = renderPopup()
+    const trigger = getByRole('button', { name: 'More information' })
+    fireEvent.click(trigger) // pin
+    const dialog = await waitFor(() => getByRole('dialog'))
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    await waitFor(() => expect(queryByRole('dialog')).toBeNull())
+    // FloatingFocusManager has returned focus to the "i"…
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+    // …and that :focus-visible focus must not have peeked the popup back open.
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(queryByRole('dialog')).toBeNull()
   })
 
   it('moves focus into the pinned dialog so its links are reachable', async () => {

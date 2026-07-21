@@ -120,6 +120,10 @@ describe('MultiSelect', () => {
         </div>,
       )
       const input = getByRole('combobox')
+      // Real focus first — the swallow only claims an Escape while focus is
+      // within the widget. The act-wrapped synthetic event then flushes the
+      // open (a bare .focus() outside act may not).
+      input.focus()
       fireEvent.focus(input)
       expect(queryByRole('listbox')).toBeTruthy()
       fireEvent.keyDown(input, { key: 'Escape' })
@@ -132,6 +136,44 @@ describe('MultiSelect', () => {
     } finally {
       document.removeEventListener('keydown', radixLikeCapture, { capture: true })
     }
+  })
+
+  it('leaves an Escape alone when focus is outside the widget — it belongs to another overlay (tooltip hide, hover-peeked popup)', () => {
+    const docCapture = vi.fn()
+    document.addEventListener('keydown', docCapture, { capture: true })
+    try {
+      const { getByRole, queryByRole } = render(
+        <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,
+      )
+      // A synthetic focus event opens the list WITHOUT moving real focus —
+      // document.activeElement stays on <body>: exactly the open-but-not-
+      // focus-within transient the guard covers.
+      fireEvent.focus(getByRole('combobox'))
+      expect(queryByRole('listbox')).toBeTruthy()
+      expect(document.activeElement).toBe(document.body)
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      // Not ours to eat: document-level listeners still see it, and the
+      // swallow neither closed the list nor consumed the event.
+      expect(docCapture).toHaveBeenCalledTimes(1)
+      expect(queryByRole('listbox')).toBeTruthy()
+    } finally {
+      document.removeEventListener('keydown', docCapture, { capture: true })
+    }
+  })
+
+  it('ignores an IME-cancel Escape (isComposing) — the list stays open and the query survives', () => {
+    const { getByRole, queryByRole } = render(
+      <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,
+    )
+    const input = getByRole('combobox') as HTMLInputElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'ban' } })
+    expect(queryByRole('listbox')).toBeTruthy()
+    // Firefox reports an Escape that cancels an IME composition with
+    // isComposing: true — it dismisses the composition, not the list.
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true })
+    expect(queryByRole('listbox')).toBeTruthy()
+    expect(input.value).toBe('ban')
   })
 
   it('allowCustom offers adding an unknown query via Enter', () => {

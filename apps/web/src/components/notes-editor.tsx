@@ -190,6 +190,11 @@ export function NotesEditor({
 
   function scheduleSave(value: string) {
     setText(value)
+    // Sync the ref NOW, not at the next render: two programmatic updates in the
+    // same microtask batch (e.g. two overlapping media drops resolving together)
+    // would otherwise both read the ref as it was BEFORE either update, and the
+    // second would splice from stale text — discarding the first's markdown.
+    textRef.current = value
     setSaveState('saving')
     window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => void persist(value), SAVE_DEBOUNCE_MS)

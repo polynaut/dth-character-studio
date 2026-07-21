@@ -44,7 +44,12 @@ export interface PersistPatchOptions {
  * the patched draft AND regenerates the DTH files, then settles without
  * clobbering interim edits. The patch may be an async producer — it runs only
  * AFTER the guards, so a flow with a side effect (copying a scene file into the
- * project) can't perform it and then be refused; returning `null` aborts.
+ * project) can't perform it and then be refused; returning `null` aborts. Once
+ * the producer HAS run, its side effects are real (a moved `.duf`, an uploaded
+ * avatar) — so if interim edits typed during it make the merged result invalid,
+ * the producer's patch alone is persisted against the pre-producer draft (the
+ * interim edits stay as dirty edits on top); only a patch that is invalid BY
+ * ITSELF refuses outright.
  * Resolves to the persisted character, or `null` when refused or the persist
  * failed. A generate failure AFTER a successful persist still resolves to the
  * persisted character (it warns; the change is on disk).
@@ -258,7 +263,12 @@ export function useCharacterDraft(options: {
    *    files) while the form stays editable, so a pre-producer snapshot would
    *    silently discard everything typed during it — and re-run `validate` on
    *    the MERGED result (patch + interim edits): step 2 only saw the
-   *    pre-producer draft, and what actually persists is this merge
+   *    pre-producer draft, and what actually persists is this merge. When the
+   *    merge fails but the patch applied to the PRE-producer snapshot alone is
+   *    valid, THAT is persisted instead — the producer's side effects (a moved
+   *    scene file, an uploaded avatar) already happened, so refusing here would
+   *    strand them; the offending interim edits stay as dirty draft edits.
+   *    Only a patch invalid by itself still refuses (nothing persisted)
    * 4. apply it to the draft optimistically + persist
    * 5. `settleAfterSave` — baseline := saved; interim edits are preserved —
    *    BEFORE regenerating, so a generate failure can't leave the editor
@@ -275,9 +285,13 @@ export function useCharacterDraft(options: {
         return null
       }
       if (!validate()) return null
-      // Snapshotted AFTER the producer resolves (step 3) — this pre-producer
-      // value is only a placeholder for the type.
-      let before = stateRef.current.character
+      // The draft as the up-front guards saw it — step 3's fallback persists
+      // the producer's patch against THIS snapshot when interim edits typed
+      // during the producer invalidate the merged result.
+      const preProducer = stateRef.current.character
+      // Re-snapshotted AFTER the producer resolves (step 3) — it keys the
+      // patch application and the rollback.
+      let before = preProducer
       // Set once the patch is applied to the draft — the catch rolls exactly
       // these fields back (an abort before application has nothing to undo).
       let appliedPatch: Partial<Character> | null = null
@@ -295,24 +309,37 @@ export function useCharacterDraft(options: {
         // Re-snapshot now: edits typed while the producer ran belong to `before`
         // (they must survive the patch application AND key the rollback).
         before = stateRef.current.character
-        const updated = { ...before, ...p }
+        const merged = { ...before, ...p }
         // Re-validate the MERGED result: the step-2 check saw the PRE-producer
         // draft, but interim edits typed during a slow producer (or the patch
-        // itself) can make what would actually persist invalid. Same refusal
-        // semantics as the up-front guard: nothing applied, nothing persisted.
-        if (!validate(updated)) {
-          setSaving(false)
-          return null
+        // itself) can make what would actually persist invalid.
+        let toPersist = merged
+        if (!validate(merged)) {
+          // The producer already ran — its side effects are on disk (applyAdd
+          // MOVES the user's .duf; the avatar dialog uploads + deletes the old
+          // image), so a flat refusal would strand them unlinked. If the patch
+          // applied to the PRE-producer snapshot is valid on its own, persist
+          // that: the offending interim edits stay as dirty draft edits on top
+          // (validate already toasted + jumped to them). Refuse outright only
+          // when the patch ITSELF is invalid.
+          const patchOnly = { ...preProducer, ...p }
+          if (!validate(patchOnly)) {
+            setSaving(false)
+            return null
+          }
+          toPersist = patchOnly
         }
-        setCharacter(updated)
+        setCharacter(merged)
         appliedPatch = p
         const saved = opts?.persist
-          ? await opts.persist(updated)
-          : await saveCharacter({ data: { projectId, character: updated } })
+          ? await opts.persist(toPersist)
+          : await saveCharacter({ data: { projectId, character: toPersist } })
         // The persist landed — settle BEFORE generating, preserving edits made
-        // during the in-flight save (see settleAfterSave).
+        // during the in-flight save (see settleAfterSave). In the patch-only
+        // fallback the draft (the merge) differs from `toPersist`, so the
+        // interim edits survive as dirty edits over the new baseline.
         persisted = saved
-        settleAfterSave(updated, saved)
+        settleAfterSave(toPersist, saved)
         const result = await generateCharacterFiles({
           data: {
             projectId,

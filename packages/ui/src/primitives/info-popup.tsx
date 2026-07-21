@@ -74,15 +74,20 @@ export function InfoPopup({
     whileElementsMounted: autoUpdate,
   })
 
-  // Hover + focus drive the popup only while it isn't pinned. safePolygon lets
-  // the pointer travel from the "i" onto the popup (to reach links) without it
+  // Hover peeks the popup only while it isn't pinned. safePolygon lets the
+  // pointer travel from the "i" onto the popup (to reach links) without it
   // closing underneath the cursor.
   const hover = useHover(context, {
     enabled: !pinned,
     delay: { open: 90, close: 120 },
     handleClose: safePolygon(),
   })
-  const focus = useFocus(context, { enabled: !pinned })
+  // useFocus stays enabled while pinned (opening an already-open popup is a
+  // no-op) — it must be SUBSCRIBED when useDismiss emits 'escape-key', or its
+  // internal block-focus guard never arms and FloatingFocusManager's return
+  // focus (:focus-visible under keyboard modality) re-peeks the popup the
+  // instant Escape dismissed it.
+  const focus = useFocus(context)
   const dismiss = useDismiss(context) // Escape + outside press — closes a pinned popup
   const role = useRole(context, { role: 'dialog' })
 

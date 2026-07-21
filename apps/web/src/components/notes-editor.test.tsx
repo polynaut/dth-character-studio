@@ -150,6 +150,34 @@ describe('NotesEditor', () => {
     expect(area.value).toContain('Raised in the wastes. Typed during the copy.')
   })
 
+  it('keeps BOTH inserts when two overlapping drops resolve in the same microtask batch', async () => {
+    // Two drops, both copies in flight at once, resolved back-to-back so the
+    // second drop's splice runs BEFORE React re-renders the first one — the ref
+    // was only synced during render, so the second used to splice from stale
+    // text and silently discard the first drop's markdown.
+    let finishA!: (v: { fileName: string; markdown: string }) => void
+    let finishB!: (v: { fileName: string; markdown: string }) => void
+    vi.mocked(addNoteMedia)
+      .mockImplementationOnce(() => new Promise((resolve) => (finishA = resolve)))
+      .mockImplementationOnce(() => new Promise((resolve) => (finishB = resolve)))
+    render(<NotesEditor projectId="X:/proj" />)
+    fireEvent.click(await screen.findByLabelText('Edit notes'))
+    const area = (await screen.findByRole('textbox')) as HTMLTextAreaElement
+    await waitFor(() => expect(area.value).toContain('Raised in the wastes.'))
+
+    act(() => dropHandler!(['C:/shots/a.png']))
+    act(() => dropHandler!(['C:/shots/b.png']))
+    await act(async () => {
+      finishA({ fileName: 'a.png', markdown: '![a](media://a.png)' })
+      finishB({ fileName: 'b.png', markdown: '![b](media://b.png)' })
+    })
+
+    await waitFor(() => expect(area.value).toContain('![b](media://b.png)'))
+    // The first drop's markdown survives the second's splice.
+    expect(area.value).toContain('![a](media://a.png)')
+    expect(area.value).toContain('Raised in the wastes.')
+  })
+
   it('surfaces a failed initial load with Retry instead of a dead disabled editor', async () => {
     const { fetchNotes } = await import('#/lib/rom/api.ts')
     vi.mocked(fetchNotes).mockRejectedValueOnce(new Error('share offline'))
