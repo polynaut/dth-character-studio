@@ -237,8 +237,8 @@ export function EditorHeader({
               <Avatar
                 image={character.image}
                 name={character.name}
-                className="size-11 rounded-md border-2 border-neutral-900 object-top shadow-md"
-                fallbackClassName="rounded-md border-2 border-neutral-900 text-sm shadow-md"
+                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 object-top shadow-md"
+                fallbackClassName="rounded-md border border-neutral-900 text-sm shadow-md"
               />
             </span>
           )}
