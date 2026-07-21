@@ -131,11 +131,23 @@ export function useCharacterDraft(options: {
 
   /** Sync just-persisted fields into the draft AND the baseline without
    *  discarding other unsaved edits — e.g. a folder move repointing the linked
-   *  scene path while the user has pending form changes. */
-  const syncPersisted = useCallback((p: Partial<Character>) => {
-    setCharacter((c) => ({ ...c, ...p }))
-    setBaseline((b) => ({ ...b, ...p }))
-  }, [])
+   *  scene path while the user has pending form changes. Also accepts an
+   *  UPDATER, for patches that must derive from each copy's CURRENT value: the
+   *  scenes-folder move repoints whatever paths the draft holds at settle time
+   *  (interim edits included), which a fixed partial computed from a stale
+   *  closure could not do. The updater runs once per copy — against the draft
+   *  and against the baseline — so an already-settled baseline can no-op. */
+  const syncPersisted = useCallback(
+    (p: Partial<Character> | ((current: Character) => Partial<Character>)) => {
+      const apply = (c: Character): Character => ({
+        ...c,
+        ...(typeof p === 'function' ? p(c) : p),
+      })
+      setCharacter(apply)
+      setBaseline(apply)
+    },
+    [],
+  )
 
   const discard = useCallback(() => {
     setCharacter(stateRef.current.baseline)
@@ -322,6 +334,13 @@ export function useCharacterDraft(options: {
           // that: the offending interim edits stay as dirty draft edits on top
           // (validate already toasted + jumped to them). Refuse outright only
           // when the patch ITSELF is invalid.
+          // No interim edits (the draft object is still the pre-producer one) →
+          // the patch-only fallback IS `merged`, which just failed — skip the
+          // re-validate so one refusal doesn't toast + jump twice.
+          if (before === preProducer) {
+            setSaving(false)
+            return null
+          }
           const patchOnly = { ...preProducer, ...p }
           if (!validate(patchOnly)) {
             setSaving(false)

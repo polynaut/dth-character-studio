@@ -65,4 +65,19 @@ describe('conflictWinner (mirrors Rust winner_skip_map)', () => {
     expect(conflictWinner([alpha, bravo])).toBe(alpha)
     expect(conflictWinner([bravo, alpha])).toBe(alpha)
   })
+
+  it('ties across DIFFERENT parent folders order component-wise, like Rust Path', () => {
+    // Twin of the Rust cross-parent assertion: Path ordering is per component,
+    // so "_genesis 8" sorts before "_genesis 8.1" even though the full STRING
+    // "…_genesis 8/…" > "…_genesis 8.1/…" ('.' 0x2E < '/' 0x2F at the fork).
+    // A raw-string compare highlighted the copy the install does NOT keep.
+    const g8 = copy('Prod', '_genesis 8', 4, 'D:/lib/_genesis 8/Prod')
+    const g81 = copy('Prod', '_genesis 8.1', 4, 'D:/lib/_genesis 8.1/Prod')
+    expect(conflictWinner([g81, g8])).toBe(g8)
+    expect(conflictWinner([g8, g81])).toBe(g8)
+    // Same class with rank-0 sources: "daz" vs "daz-extra" fork on '-' < '/'.
+    const daz = copy('Prod', 'stuff', 4, 'D:/daz/Prod')
+    const dazExtra = copy('Prod', 'stuff', 4, 'D:/daz-extra/Prod')
+    expect(conflictWinner([dazExtra, daz])).toBe(daz)
+  })
 })

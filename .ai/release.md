@@ -45,6 +45,15 @@ installer bytes). Details, session keepalive, and troubleshooting:
 The `publish` job (hosted runner) creates the GitHub release with all assets +
 one cross-platform `latest.json`.
 
+- **The gate keys on job RESULTS, not repo variables:** publish requires
+  `sign-win == success` and (`sign-mac == success` OR `build-mac == skipped`).
+  `build-mac == skipped` ⟺ mac was disabled when the run scheduled — so a
+  FAILED mac build blocks the release instead of silently shipping
+  Windows-only, and flipping `ENABLE_MAC_RELEASE` mid-run can't invert the
+  gate (an earlier version re-read the variable at publish time — it could).
+  The `if` uses `!cancelled()`, never `always()`: `always()` runs through
+  cancellation, and a cancelled run must not mint the immutable release.
+
 - **It authenticates with the `RELEASE_PAT` secret** (fine-grained PAT, this repo,
   Contents: read+write), falling back to `GITHUB_TOKEN`. Reason:
   `github-actions[bot]` gets `403 Resource not accessible by integration` on

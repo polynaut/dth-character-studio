@@ -393,6 +393,14 @@ pub(crate) struct UnrealInstallRequest {
     overwrite: bool,
 }
 
+/// The refusal when `Content/DazToHue` already exists and `overwrite` is off.
+/// CONTRACT with the UI: apps/web/src/components/unreal-projects-field.tsx
+/// matches the "already exists" substring of this message to adopt the
+/// installed state over a stale probe — the test below pins the exact phrase so
+/// a rewording fails there instead of silently reverting that UI behaviour.
+pub(crate) const UNREAL_CONTENT_EXISTS_ERROR: &str =
+    "Content/DazToHue already exists in this project — Ctrl+click to overwrite.";
+
 /// Install the release's Unreal Engine content (`Unreal Engine Content/DazToHue`)
 /// into the linked project's `Content/DazToHue` — the instant DTH bootstrap for a
 /// fresh Unreal project. Refuses when the path isn't a real `.uproject` file,
@@ -420,9 +428,7 @@ pub fn install_unreal_dth(request: UnrealInstallRequest) -> Result<u64, String> 
     }
     let dest = project_dir.join("Content").join("DazToHue");
     if dest.exists() && !request.overwrite {
-        return Err(
-            "Content/DazToHue already exists in this project — Ctrl+click to overwrite.".into(),
-        );
+        return Err(UNREAL_CONTENT_EXISTS_ERROR.into());
     }
     // This command returns a bare file count (no step report to carry a
     // skipped-links note) — the links policy still applies via copy_dir.
@@ -483,6 +489,37 @@ mod tests {
         assert!(!wire_houdini_env(&docs, &docs.join("p")).unwrap());
         assert_eq!(fs::read_to_string(&env).unwrap(), wired, "file untouched");
         let _ = fs::remove_dir_all(&docs);
+    }
+
+    #[test]
+    fn unreal_exists_refusal_pins_the_ui_matched_phrase() {
+        // A real refusal: release ships Unreal content, the project already has
+        // Content/DazToHue, overwrite off → the command must return EXACTLY the
+        // pinned message. unreal-projects-field.tsx matches its 'already exists'
+        // substring (see UNREAL_CONTENT_EXISTS_ERROR) — reword both together.
+        let root = unique_temp_dir("unreal_exists");
+        let release = root.join("release");
+        fs::create_dir_all(release.join("Unreal Engine Content").join("DazToHue")).unwrap();
+        let project = root.join("proj");
+        fs::create_dir_all(project.join("Content").join("DazToHue")).unwrap();
+        let uproject = project.join("Game.uproject");
+        fs::write(&uproject, "{}").unwrap();
+
+        let err = install_unreal_dth(UnrealInstallRequest {
+            release_root: release.to_string_lossy().into_owned(),
+            uproject_path: uproject.to_string_lossy().into_owned(),
+            overwrite: false,
+        })
+        .unwrap_err();
+
+        assert_eq!(err, UNREAL_CONTENT_EXISTS_ERROR);
+        assert_eq!(
+            UNREAL_CONTENT_EXISTS_ERROR,
+            "Content/DazToHue already exists in this project — Ctrl+click to overwrite."
+        );
+        // The load-bearing substring the UI's `message.includes(...)` keys on.
+        assert!(UNREAL_CONTENT_EXISTS_ERROR.contains("already exists"));
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

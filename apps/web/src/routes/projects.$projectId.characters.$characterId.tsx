@@ -31,6 +31,8 @@ import { DazSceneField } from '#/components/daz-scene-field.tsx'
 import { HoudiniProjectsField } from '#/components/houdini-projects-field.tsx'
 import { StorageLocation } from '#/components/storage-location.tsx'
 import { characterFolderDisplay, characterScriptsDisplay } from '#/lib/character-paths.ts'
+import { parentDir } from '#/lib/path.ts'
+import { repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from '#/lib/use-character-draft.ts'
 import { useRomRunLog } from '#/lib/use-rom-run-log.ts'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
@@ -263,17 +265,24 @@ function CharacterPage() {
     draft.syncPersisted({ scenePath: moved.scenePath })
   }
 
-  // Moving the Daz SCENES folder repoints every in-folder scene path but reads the
-  // character from disk (no unsaved edits). MERGE only those path fields into the
-  // draft + baseline via syncPersisted — using settle here would discard unsaved
-  // ROM edits AND clear `dirty`, so the unsaved-changes guard would never fire.
+  // Moving the Daz SCENES folder repoints every in-folder path but reads the
+  // character from disk (no unsaved edits) — using settle here would discard
+  // unsaved ROM edits AND clear `dirty`, so the unsaved-changes guard would never
+  // fire. Instead, repoint the DRAFT's own paths old-dir→new-dir through THE
+  // single repoint site (storage's repointCharacterPaths, the same one the move
+  // used on disk): a hand-merged field list drifted from it before — it omitted
+  // `sections[*].customAssetPath` and `houdiniProjects`, leaving phantom dirty
+  // state whose next Save wrote the dead OLD paths back to disk. The updater
+  // form runs per copy, so the already-settled baseline (paths at the new dir)
+  // no-ops while a draft holding interim edits gets its old paths repointed.
   function onScenesFolderMoved(moved: Character) {
-    draft.syncPersisted({
-      scenePath: moved.scenePath,
-      extraScenes: moved.extraScenes,
-      imageScene: moved.imageScene,
-      groomScenes: moved.groomScenes,
-      sceneOverrides: moved.sceneOverrides,
+    const newDir = parentDir(moved.scenePath)
+    draft.syncPersisted((current) => {
+      const oldDir = parentDir(current.scenePath)
+      // Already at the new folder (the settled baseline / a no-op move) —
+      // nothing to repoint.
+      if (!oldDir || !newDir || oldDir.toLowerCase() === newDir.toLowerCase()) return {}
+      return repointCharacterPaths(current, oldDir, newDir)
     })
   }
 

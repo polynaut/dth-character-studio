@@ -19,9 +19,16 @@ export function useSettingsActions(ctx: {
   dirty: boolean
   settings: StudioSettings
   baseline: StudioSettings
+  /** Ran after `saveIfDirty` actually WROTE (never when clean). Settings passes
+   *  its catalog rebuild here: a save-before-action persists an edited release
+   *  selection (e.g. `currentDthVersion`) exactly like Save does, so the session
+   *  pose catalog + the pinned-release banner must refresh too — even when the
+   *  action itself is only a dry run. Own your failures inside it: a throw here
+   *  aborts the caller's action. */
+  onSaved?: () => Promise<void> | void
 }) {
   const router = useRouter()
-  const { dirty, settings, baseline } = ctx
+  const { dirty, settings, baseline, onSaved } = ctx
 
   /** Persist any pending settings edits (field-level baseline-merge) and refresh the
    *  loader, so the following action sees the just-chosen folders. No-op when clean. */
@@ -29,8 +36,9 @@ export function useSettingsActions(ctx: {
     if (dirty) {
       await saveSettings({ data: { settings, baseline } })
       await router.invalidate()
+      await onSaved?.()
     }
-  }, [dirty, settings, baseline, router])
+  }, [dirty, settings, baseline, router, onSaved])
 
   /**
    * The shared install/dry-run runner: saves pending edits, runs `install`, shows

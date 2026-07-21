@@ -20,6 +20,8 @@ import { toast } from 'sonner'
 import { characterSchema, defaultSections } from '@dth/rom'
 
 import { generateCharacterFiles, saveCharacter } from '#/lib/rom/api.ts'
+import { parentDir } from '#/lib/path.ts'
+import { repointCharacterPaths } from '#/lib/rom/storage.ts'
 import { useCharacterDraft } from './use-character-draft.ts'
 
 import type { Character, RomValidationError } from '@dth/rom'
@@ -490,11 +492,77 @@ describe('useCharacterDraft persistPatch()', () => {
     expect(saved).toBeNull()
     expect(saveMock).not.toHaveBeenCalled()
     expect(generateMock).not.toHaveBeenCalled()
-    expect(onValidationErrors).toHaveBeenCalled()
+    // Exactly ONE toast + jump for the one refusal: with no interim edits the
+    // merged draft and the patch-only fallback are the same content, so the
+    // fallback re-validate is skipped instead of firing the pair twice.
+    expect(onValidationErrors).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledTimes(1)
     // The refused patch is NOT applied to the draft.
     expect(result.current.character.exportPath).toBe('')
     expect(result.current.dirty).toBe(false)
     expect(result.current.saving).toBe(false)
+  })
+
+  it('syncPersisted(updater): the scenes-folder-move settle repoints the DRAFT, keeps interim edits, no-ops on the baseline', async () => {
+    // In-scenes-folder paths of EVERY repointable kind — including the two the
+    // route's old fixed field list dropped (per-section customAssetPath and
+    // houdiniProjects), which left phantom dirty state re-saving dead old paths.
+    const initial = makeCharacter({
+      scenePath: 'X:/proj/Kira/daz3d/Kira.duf',
+      extraScenes: ['X:/proj/Kira/daz3d/Outfit.duf'],
+      houdiniProjects: ['X:/proj/Kira/daz3d/houdini'],
+    })
+    initial.sections.JCM.customAssetPath = 'X:/proj/Kira/daz3d/Custom Base.duf'
+    const { result } = setup(initial)
+
+    // The move is a slow custom persist step (moveCharacterScenesFolder): it
+    // saves the draft with its paths repointed while the form stays editable.
+    const saved = stamped(
+      repointCharacterPaths(initial, 'X:/proj/Kira/daz3d', 'X:/proj/Kira/scenes'),
+    )
+    const pending = deferred<Character>()
+    const persist = vi.fn().mockReturnValue(pending.promise)
+    generateMock.mockResolvedValueOnce(generated)
+    let done!: Promise<Character | null>
+    act(() => {
+      done = result.current.persistPatch({}, { persist })
+    })
+    await waitFor(() => expect(result.current.saving).toBe(true))
+    // Typed while the folder is physically moving on disk.
+    act(() => result.current.patch({ name: 'Interim' }))
+    await act(async () => {
+      pending.resolve(saved)
+      await done
+    })
+    // The settle kept the edited draft — its paths still point at the OLD folder.
+    expect(result.current.character.scenePath).toBe('X:/proj/Kira/daz3d/Kira.duf')
+
+    // The route's onScenesFolderMoved: repoint each copy's CURRENT paths through
+    // THE single repoint site; a copy already at the new folder no-ops.
+    const newDir = parentDir(saved.scenePath)
+    act(() =>
+      result.current.syncPersisted((current) => {
+        const oldDir = parentDir(current.scenePath)
+        if (!oldDir || !newDir || oldDir.toLowerCase() === newDir.toLowerCase()) return {}
+        return repointCharacterPaths(current, oldDir, newDir)
+      }),
+    )
+
+    // Draft: every path field repointed, the interim edit kept — `dirty` now
+    // reports ONLY the interim edit, not phantom path reversals.
+    expect(result.current.character.scenePath).toBe('X:/proj/Kira/scenes/Kira.duf')
+    expect(result.current.character.extraScenes).toEqual(['X:/proj/Kira/scenes/Outfit.duf'])
+    expect(result.current.character.houdiniProjects).toEqual(['X:/proj/Kira/scenes/houdini'])
+    expect(result.current.character.sections.JCM.customAssetPath).toBe(
+      'X:/proj/Kira/scenes/Custom Base.duf',
+    )
+    expect(result.current.character.name).toBe('Interim')
+    expect(result.current.dirty).toBe(true)
+    // Baseline: already the saved (repointed) character — the updater no-oped on
+    // it, so discarding lands exactly on what is on disk.
+    act(() => result.current.discard())
+    expect(result.current.character).toEqual(saved)
+    expect(result.current.dirty).toBe(false)
   })
 
   it('a generate failure AFTER a successful persist keeps the patch, warns, resolves saved', async () => {

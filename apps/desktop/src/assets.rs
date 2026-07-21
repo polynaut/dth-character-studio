@@ -878,6 +878,16 @@ mod tests {
         // Bravo loses the tie deterministically — its copy is never flagged.
         assert_eq!(step("Bravo").status, "skipped", "detail: {}", step("Bravo").detail);
         assert_eq!(fs::read(dest.join("data").join("shared.dsf")).unwrap(), b"aaaa");
+        // Twin-pinned with the JS mirror (dedup-report-list.test.ts): `Path`
+        // ordering is COMPONENT-wise, so "_genesis 8" sorts before
+        // "_genesis 8.1" although the full STRING compares the other way
+        // ('.' 0x2E < '/' 0x2F at the fork). The UI's tie-break must match
+        // THIS ordering, not a raw string compare.
+        assert!(
+            std::path::Path::new(r"D:\lib\_genesis 8\Prod")
+                < std::path::Path::new(r"D:\lib\_genesis 8.1\Prod")
+        );
+        assert!(r"D:\lib\_genesis 8\Prod" > r"D:\lib\_genesis 8.1\Prod");
         let _ = fs::remove_dir_all(&base);
     }
 

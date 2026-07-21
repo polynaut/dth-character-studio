@@ -35,11 +35,23 @@ export function HousekeepingSection() {
     setCleanupBusy(true)
     try {
       const result = await housekeepingSweep()
-      toast.success(
-        result.filesDeleted > 0
-          ? `Freed ${formatBytes(result.bytesFreed)} — removed ${result.filesDeleted} stale file(s)`
-          : 'Nothing to clean up — no stale scans or unused note media',
-      )
+      const failed = result.filesFailed ?? 0
+      // Stale files the sweep could NOT delete (locked/read-only) get their own
+      // warning — without it, every delete failing still read as the cheerful
+      // "Nothing to clean up".
+      if (failed > 0) {
+        toast.warning(
+          result.filesDeleted > 0
+            ? `Freed ${formatBytes(result.bytesFreed)} — removed ${result.filesDeleted} stale file(s), but ${failed} couldn't be deleted (locked or read-only)`
+            : `Nothing was cleaned up — ${failed} stale file(s) couldn't be deleted (locked or read-only)`,
+        )
+      } else {
+        toast.success(
+          result.filesDeleted > 0
+            ? `Freed ${formatBytes(result.bytesFreed)} — removed ${result.filesDeleted} stale file(s)`
+            : 'Nothing to clean up — no stale scans or unused note media',
+        )
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {

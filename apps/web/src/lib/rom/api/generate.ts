@@ -420,8 +420,8 @@ export interface RefreshSummary {
     csv: number
   }
   results: Array<RefreshResult>
-  /** Outcome of refreshing the bundled DTH runtime files (null = not refreshed this
-   *  run — no DAZ library, or no character needed its scripts rewritten). */
+  /** Outcome of force-reinstalling the bundled DTH runtime files (a refresh
+   *  always repairs them; null = no DAZ library configured, nothing to copy to). */
   runtime: { ok: boolean; detail?: string } | null
 }
 
@@ -546,15 +546,19 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
 
   const force = !items.some((i) => i.targets.schema || i.targets.runtime || i.targets.csv)
 
-  // Refresh the bundled runtime files once when scripts will be (re)written — any
-  // runtime mismatch, or a forced full refresh. The forced refresh bypasses the
-  // install marker (`force`): the user clicked Refresh with nothing stale, which
-  // is exactly the "repair a deleted/corrupted runtime file" path — the marker
-  // would otherwise skip the copy and still report `runtime: { ok: true }`.
+  // Refresh the bundled runtime files — ALWAYS forced past the install marker on
+  // this user-initiated path: Refresh is the "repair a deleted/corrupted runtime
+  // file" button, and the ~11-file copy is cheap. Deriving `force` from "nothing
+  // else stale" made a corrupted root runtime coexisting with any stale character
+  // need TWO clicks (the first ran marker-gated, skipped the copy, and still
+  // reported `runtime: { ok: true }`). The routine save+generate path
+  // (generateCharacterFiles above) keeps the marker skip.
   let runtime: RefreshSummary['runtime'] = null
-  if (hasDazLibrary && (force || items.some((i) => i.targets.runtime))) {
+  if (hasDazLibrary) {
     try {
-      await storage.copyRuntimeFiles(storage.studioScriptsDir(settings.dazLibraryFolder), { force })
+      await storage.copyRuntimeFiles(storage.studioScriptsDir(settings.dazLibraryFolder), {
+        force: true,
+      })
       runtime = { ok: true }
     } catch (e) {
       runtime = { ok: false, detail: e instanceof Error ? e.message : String(e) }
