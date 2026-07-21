@@ -69,7 +69,7 @@ function HoudiniCard({
           src={houdiniLogo}
           alt=""
           aria-hidden
-          className="pointer-events-none absolute bottom-1 left-1 size-8 object-contain drop-shadow-md"
+          className="pointer-events-none absolute bottom-0 left-0 size-6 object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]"
         />
       }
       chip={
