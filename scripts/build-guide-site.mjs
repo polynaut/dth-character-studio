@@ -151,6 +151,13 @@ const titleOf = (md) => {
 }
 const titles = new Map(pages.map((p) => [p, titleOf(p)]))
 
+// Sidebar labels drop the "Deep dive: " title prefix — it's noise under the
+// "Deep dives" group heading (the page H1s and the pager keep it).
+const sidebarLabel = (md) => {
+  const t = titles.get(md).replace(/^Deep dive: /, '')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
 const sidebar = (current) =>
   NAV.map(
     (g) => `
@@ -159,7 +166,7 @@ const sidebar = (current) =>
         ${g.pages
           .map((p) => {
             const cls = p === current ? ' class="active" aria-current="page"' : ''
-            return `<li><a href="${htmlName(p)}"${cls}>${escapeHtml(titles.get(p))}</a></li>`
+            return `<li><a href="${htmlName(p)}"${cls}>${escapeHtml(sidebarLabel(p))}</a></li>`
           })
           .join('\n        ')}
       </ul>`,
