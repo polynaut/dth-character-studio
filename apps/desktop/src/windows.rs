@@ -45,6 +45,7 @@ pub(crate) fn dcsp_from_args(args: &[String]) -> Option<String> {
 /// `active_project_file` — canonicalizing per map entry inside the in-lock
 /// find froze every window's UI (the "map lock stays SHORT" rule). Build a key
 /// BEFORE taking the map lock; only compare inside it.
+#[derive(Clone)]
 pub(crate) struct ProjectPathKey {
     /// Unicode case fold of the spelling as given — the common same-spelling
     /// compare, and the only compare available for missing/offline paths.
@@ -76,6 +77,7 @@ impl ProjectPathKey {
 /// A window's mapping: the `.dcsp` it was opened with, plus that path's
 /// identity key precomputed at insert time — so the in-lock duplicate-window
 /// find in `open_project_window_impl` never touches the filesystem.
+#[derive(Clone)]
 pub(crate) struct ProjectMapping {
     /// The '/'-normalised path as opened — what `active_project_file` returns.
     pub(crate) path: String,
@@ -89,6 +91,22 @@ impl ProjectMapping {
         let key = ProjectPathKey::new(&path);
         Self { path, key }
     }
+
+    /// Whether this window's project file is the one identified by `key`. Pure
+    /// string compares (the key is precomputed) — safe inside the map lock.
+    #[cfg(desktop)]
+    pub(crate) fn matches(&self, key: &ProjectPathKey) -> bool {
+        self.key.matches(key)
+    }
+}
+
+/// A project window's title: `"<.dcsp stem> — DTH Character Studio"`.
+fn project_window_title(path: &str) -> String {
+    let stem = Path::new(path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    format!("{stem} — DTH Character Studio")
 }
 
 /// Whether two `.dcsp` spellings identify the same project file — the one-shot
@@ -231,12 +249,8 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
         map.insert(label.clone(), incoming);
         label
     };
-    let stem = Path::new(&norm)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_default();
     let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
-        .title(format!("{stem} — DTH Character Studio"))
+        .title(project_window_title(&norm))
         .inner_size(1440.0, 920.0)
         .min_inner_size(960.0, 640.0)
         // The app UI is dark; force it so tao applies dark-mode theming to the native
@@ -302,6 +316,55 @@ pub(crate) fn open_home_window_impl(app: &tauri::AppHandle, new_project: bool) -
 #[tauri::command]
 pub fn active_project_file(window: tauri::Window, projects: tauri::State<WindowProjects>) -> String {
     lock_windows(&projects).get(window.label()).map(|m| m.path.clone()).unwrap_or_default()
+}
+
+/// Keep the open windows consistent after a project's `.dcsp` file was renamed
+/// (`old_path` → `new_path`): every window still pinned to the old file is
+/// live-re-titled to the new name and re-pinned to the new file, so an open
+/// project window's native title bar tracks the rename without being closed
+/// and reopened. A no-op on a case-only rename (the frontend skips the call).
+#[tauri::command]
+pub fn sync_renamed_project_window(
+    app: tauri::AppHandle,
+    projects: tauri::State<WindowProjects>,
+    old_path: String,
+    new_path: String,
+) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        // Keys/mapping built BEFORE the map lock — canonicalize can block on an
+        // offline share (the "map lock stays SHORT" rule); the clone under the
+        // lock is a pair of plain-string copies, no I/O.
+        let old_key = ProjectPathKey::new(&old_path);
+        let new_mapping = ProjectMapping::new(new_path.clone());
+        let title = project_window_title(&new_path);
+
+        let mut labels: Vec<String> = Vec::new();
+        {
+            let mut map = lock_windows(&projects);
+            for (label, mapping) in map.iter() {
+                if mapping.matches(&old_key) {
+                    labels.push(label.clone());
+                }
+            }
+            for label in &labels {
+                map.insert(label.clone(), new_mapping.clone());
+            }
+        }
+        // Window ops OUTSIDE the lock.
+        for label in labels {
+            if let Some(w) = app.get_webview_window(&label) {
+                let _ = w.set_title(&title);
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, projects, old_path, new_path);
+        Ok(())
+    }
 }
 
 // `(async)` runs this on a worker thread, not the main thread. Building a webview

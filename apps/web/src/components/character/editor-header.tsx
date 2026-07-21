@@ -165,7 +165,12 @@ export function EditorHeader({
         </Link>
       </div>
 
-      <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background">
+      {/* Liquid-glass sticky header: content scrolling beneath frosts through a
+          translucent background + heavy backdrop blur (echoing the native macOS
+          title bar above). Opaque background is the fallback where
+          backdrop-filter isn't supported (else content would bleed through
+          sharp). */}
+      <header className="sticky top-0 z-10 mb-8 flex items-end gap-5 bg-background backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}

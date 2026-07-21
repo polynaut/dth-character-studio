@@ -112,14 +112,28 @@ export async function rememberActiveProject(dcspPath: string): Promise<void> {
 
 const renameProjectInput = z.object({ projectId: z.string().min(1), name: z.string().min(1) })
 
-/** Rename a project — updates the manifest name (the `.dcsp` file name stays put). */
+/**
+ * Rename a project: update the manifest name AND rename the `.dcsp` file to
+ * match (so the filename — and the window title derived from it — track the
+ * name). Recents key off the `.dcsp` path, so the old entry is forgotten and
+ * the new one remembered. Finally, any open window for the project is
+ * live-re-titled and re-pinned to the new file via `sync_renamed_project_window`.
+ */
 export async function renameProject({ data }: { data: unknown }): Promise<ProjectInfo> {
   const { projectId, name } = renameProjectInput.parse(data)
   const dir = await projectPath(projectId)
+  const oldDcsp = await storage.findManifestPath(dir)
   const manifest = await storage.readManifest(dir)
   await storage.writeManifest(dir, { ...manifest, name: name.trim() })
-  const dcsp = await storage.findManifestPath(dir)
-  if (dcsp) await storage.rememberRecent(dcsp, name.trim())
+  const newDcsp = (await storage.renameManifestFile(dir, name.trim())) ?? oldDcsp
+  if (newDcsp) {
+    const moved = !!oldDcsp && oldDcsp.toLowerCase() !== newDcsp.toLowerCase()
+    if (moved) await storage.forgetRecent(oldDcsp)
+    await storage.rememberRecent(newDcsp, name.trim())
+    if (moved && isTauri()) {
+      await invoke('sync_renamed_project_window', { oldPath: oldDcsp, newPath: newDcsp })
+    }
+  }
   return resolveProject(dir)
 }
 

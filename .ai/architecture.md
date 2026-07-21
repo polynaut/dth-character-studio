@@ -110,12 +110,19 @@ drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview C
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
 (recursive-delete rails), `report.rs`, `contract_tests.rs`.
 
-**FFI surface: 23 commands** registered in `generate_handler!` — installs
+A project window's **native title is `"<.dcsp stem> — DTH Character Studio"`** —
+derived from the `.dcsp` *filename*, set at creation. Renaming a project
+(`api/projects.renameProject`) therefore renames the `.dcsp` file too
+(`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
+live-re-title + re-pin every open window on the old file (no close/reopen).
+
+**FFI surface: 24 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
-(`open_project_window`/`active_project_file`; the home window opens via the
-native menu's Rust-side `open_home_window_impl`, no command), Daz bridge
+(`open_project_window`/`active_project_file`/`sync_renamed_project_window`; the
+home window opens via the native menu's Rust-side `open_home_window_impl`, no
+command), Daz bridge
 (`daz_studio_running`/`run_daz_script`/`focus_app_window`), drives
 (`unc_for_path`/`ensure_network_drives`), `housekeeping_sweep`,
 `app_release_tags`, `unreal_dth_present`. Nearly all are
