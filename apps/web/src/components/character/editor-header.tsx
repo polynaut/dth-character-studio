@@ -129,6 +129,11 @@ export function EditorHeader({
       ? { scenePath: character.scenePath } // custom avatar → the primary scene render
       : null
 
+  // Editing the main avatar is only allowed when the primary scene is the active
+  // selection — otherwise the big portrait shows a NON-primary scene (the avatar
+  // is only the small badge), so "edit the character image" would be confusing.
+  const canEditImage = !sceneAvatarPath
+
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button. Routed
   // through persistPatch so it runs the SAME guards as every persisting flow —
@@ -208,8 +213,13 @@ export function EditorHeader({
         )}
         <button
           type="button"
-          className="group relative mt-5 mb-5 shrink-0"
-          title="Edit the character image"
+          className="group relative mt-5 mb-5 shrink-0 disabled:cursor-default"
+          title={
+            canEditImage
+              ? 'Edit the character image'
+              : 'Select the primary scene to edit the character image'
+          }
+          disabled={!canEditImage}
           onClick={() => setImageDialogOpen(true)}
         >
           {/* The wrapper owns the shrink: only its height animates (208 → 90). At
@@ -228,9 +238,12 @@ export function EditorHeader({
               fallbackClassName="text-6xl"
             />
           </div>
-          <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <Pencil className="size-8 text-white" />
-          </span>
+          {/* Edit affordance only when editing is allowed (primary selected). */}
+          {canEditImage && (
+            <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              <Pencil className="size-8 text-white" />
+            </span>
+          )}
           {/* Corner badge: the "other" view of the character, so the big
               portrait and the badge together always show both the avatar and the
               primary Daz render. Previewing a non-primary scene → the big shows
@@ -242,7 +255,9 @@ export function EditorHeader({
               portrait still opens the image dialog. */}
           {cornerBadge && (
             <span
-              className="pointer-events-none absolute bottom-1.5 left-1.5 opacity-100 transition-opacity group-hover:opacity-50"
+              className={`pointer-events-none absolute bottom-1.5 left-1.5 -translate-x-[10px] -translate-y-[9px] transition-opacity ${
+                canEditImage ? 'group-hover:opacity-50' : ''
+              }`}
               title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
             >
               {/* Portrait, not Avatar: a scene render gets the same
