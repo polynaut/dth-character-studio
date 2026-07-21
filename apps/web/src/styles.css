@@ -212,17 +212,21 @@ a {
 }
 
 /* A second, *staggered* scroll animation layered on the image itself: while the
-   wrapper above crops the box, the image drifts up by 8% of its height — on a
-   later, longer range than the crop (130 → 320 vs 100 → 242) so the two motions
-   don't move in lockstep and the portrait gently pans as it settles. translateY
-   is composited, so this stays smooth and never touches layout. The clipped
-   wrapper hides the top edge the drift exposes. */
+   wrapper above crops the box, the image drifts UP as it settles — on a later,
+   longer range than the crop so the two motions don't move in lockstep and the
+   portrait gently pans. translateY is composited, so this stays smooth and never
+   touches layout.
+   `from` MUST rest at 0: the image is object-top flush with the clip box, so any
+   downward (positive) offset at scroll-top slides its top edge down and exposes
+   the wrapper's grey fill as a strip along the top — invisible on a transparent
+   Daz tip (grey shows through everywhere), but an obvious band on a full-bleed
+   photo. The drift only ever goes negative (up), which the clipped wrapper hides. */
 @keyframes dth-avatar-pan {
   from {
-    transform: translateY(2%);
+    transform: translateY(0);
   }
   to {
-    transform: translateY(-10%);
+    transform: translateY(-12%);
   }
 }
 @supports (animation-timeline: scroll()) {
