@@ -1,6 +1,6 @@
 import { sanitizePoseName } from './generate.ts'
 import { jcmIsBaseRom, walkCustomPoses } from './frames.ts'
-import { SECTION_LABELS } from './types.ts'
+import { GROUP_SUFFIX_TOKENS, SECTION_LABELS } from './types.ts'
 import type { RomSection, RomSections } from './types.ts'
 
 /** A required custom-section field that's empty, a pose name Houdini can't
@@ -94,12 +94,11 @@ export function romValidationErrors(
   }
 
   // Resolved Unreal morph name -> first relative frame. The group suffix appends
-  // _l/_r (centre appends nothing — see romPoseSchema), so two poses collide when
-  // their sanitized-name-plus-suffix RESOLVE equal, even across different suffix
-  // scopes (a centre `Smile_l` and a left `Smile` both become `Smile_l`). Keying
-  // on the resolved name catches that cross-scope case, not just same-scope dupes;
-  // one silently overwrites the other in Unreal, so flag it here instead.
-  const suffixToken: Record<string, string> = { left: '_l', right: '_r', centre: '' }
+  // _l/_r (centre appends nothing — see GROUP_SUFFIX_TOKENS), so two poses collide
+  // when their sanitized-name-plus-suffix RESOLVE equal, even across different
+  // suffix scopes (a centre `Smile_l` and a left `Smile` both become `Smile_l`).
+  // Keying on the resolved name catches that cross-scope case, not just same-scope
+  // dupes; one silently overwrites the other in Unreal, so flag it here instead.
   const seen = new Map<string, number>()
   const reserved = new Set(reservedPoseNames ?? [])
   for (const { section, group, pose, relativeFrame, firstInGroup } of walkCustomPoses(sections)) {
@@ -138,7 +137,7 @@ export function romValidationErrors(
     } else {
       // The final Unreal morph name = sanitized pose name + the group's suffix
       // token; collisions are keyed on that so cross-scope dupes are caught too.
-      const key = `${sanitizePoseName(pose.name)}${suffixToken[group.suffix] ?? ''}`
+      const key = `${sanitizePoseName(pose.name)}${GROUP_SUFFIX_TOKENS[group.suffix]}`
       const first = seen.get(key)
       if (reserved.has(key)) {
         errors.push({

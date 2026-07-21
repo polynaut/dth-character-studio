@@ -94,6 +94,20 @@ interface RomSectionsProps {
 /** Shared empty-additions fallback — a stable identity (see overrideCtl). */
 const EMPTY_POSES: Array<RomPose> = []
 
+/** Stable per-section fallback for an EMPTY flat FBM/MISC section. flatGroup is
+ *  deterministic per section (its id is the core's `flatSectionGroupId`), but a
+ *  freshly built `[flatGroup(section)]` each render defeated the
+ *  PoseGroupsEditor/GroupCard memo chain — so the singleton is cached here. */
+const FLAT_GROUP_FALLBACKS = new Map<RomSection, Array<RomGroup>>()
+function flatGroupFallback(section: RomSection): Array<RomGroup> {
+  let groups = FLAT_GROUP_FALLBACKS.get(section)
+  if (!groups) {
+    groups = [flatGroup(section)]
+    FLAT_GROUP_FALLBACKS.set(section, groups)
+  }
+  return groups
+}
+
 function sectionSummary(config: RomSectionConfig): string {
   if (!config.enabled) return 'disabled'
   if (config.mode === 'preset') return 'enabled'
@@ -575,7 +589,7 @@ export const RomSections = memo(function RomSections({
                   <div className="space-y-3">
                     <PoseGroupsEditor
                       section={section}
-                      groups={config.groups.length > 0 ? config.groups : [flatGroup(section)]}
+                      groups={config.groups.length > 0 ? config.groups : flatGroupFallback(section)}
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}

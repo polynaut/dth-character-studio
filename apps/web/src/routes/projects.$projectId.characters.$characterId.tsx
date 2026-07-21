@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 
 import { Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
@@ -103,6 +103,22 @@ export const Route = createFileRoute('/projects/$projectId/characters/$character
 })
 
 /**
+ * Same scanned morph index, by content? Entries are four short strings each, so
+ * a full field compare stays far cheaper than the downstream cost of a false
+ * "changed" (re-running the ROM-editor memos over the whole index).
+ */
+function sameMorphIndex(a: Array<MorphIndexEntry>, b: Array<MorphIndexEntry>): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((e, i) => {
+    const o = b[i]
+    return (
+      e.node === o.node && e.name === o.name && e.label === o.label && e.nodeLabel === o.nodeLabel
+    )
+  })
+}
+
+/**
  * Keys the editor by the character id so it remounts on an editor→editor
  * navigation (e.g. Clone jumping to the new copy). Without this, only the URL
  * param changes — the same `CharacterPage` instance stays mounted and its draft
@@ -170,9 +186,14 @@ function CharacterPage() {
   // Custom uploads have no source scene and are never touched.
   useRefetchOnFocus(
     () => {
-      void syncAvatarWithScene({ data: { projectId, id: initial.id } }).then((changed) => {
-        if (changed) draft.syncPersisted(changed)
-      })
+      void syncAvatarWithScene({ data: { projectId, id: initial.id } })
+        .then((changed) => {
+          if (changed) draft.syncPersisted(changed)
+        })
+        // Best-effort: the project share can be briefly unreachable on refocus —
+        // the avatar just stays stale until the next focus, never an unhandled
+        // rejection.
+        .catch(() => {})
     },
     [projectId, initial.id],
     { immediate: true },
@@ -184,7 +205,14 @@ function CharacterPage() {
   const [morphIndex, setMorphIndex] = useState<Array<MorphIndexEntry>>([])
   useRefetchOnFocus(
     () => {
-      void fetchMorphIndex(character.genesis).then(setMorphIndex)
+      // Content-compare before storing: fetchMorphIndex returns a NEW array
+      // identity when there is no scan file (or no readable stamp), so a plain
+      // setMorphIndex would break the RomEditorSection/RomSections memos and
+      // re-lowercase the whole index on every tab-back from Daz. Identity only
+      // changes when the data does.
+      void fetchMorphIndex(character.genesis).then((entries) =>
+        setMorphIndex((prev) => (sameMorphIndex(prev, entries) ? prev : entries)),
+      )
     },
     [character.genesis],
     { immediate: true },
@@ -196,7 +224,15 @@ function CharacterPage() {
   // flicker. Null only when an included asset can't be read. Which fields count
   // is owned by @dth/rom (next to the path resolution), not hand-mirrored here.
   const presetSignature = presetFramesSignature(character)
+  // Seeded with the mount signature: the loader just resolved these exact
+  // selections, so the effect must not re-run them 300ms after mount (on a cold
+  // network share the per-.duf stats stall). Only a real signature change
+  // re-measures; the ref then tracks the last signature a measure was scheduled
+  // for.
+  const measuredSignatureRef = useRef(presetSignature)
   useEffect(() => {
+    if (presetSignature === measuredSignatureRef.current) return
+    measuredSignatureRef.current = presetSignature
     let cancelled = false
     const timer = setTimeout(() => {
       resolvePresetFrames(character, catalog)

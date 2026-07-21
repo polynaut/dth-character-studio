@@ -309,6 +309,13 @@ export function mirrorGroup(group: RomGroup): RomGroup {
       .replace(/(?<![A-Za-z])left/g, 'right')
       .replace(/_l\b/g, '_r')
       .replace(/\bL_/g, 'R_')
+      // The case twins of the two markers above: stock Daz JCM names carry an
+      // UPPERCASE _L suffix (pJCMShldrDown_40_L) and G9 bone names a lowercase
+      // l_ prefix (l_thigh). `\b` / the lookbehind keep non-marker letters
+      // safe (Ball_Large, Curl_lower stay untouched), and none of the swaps
+      // produces text an earlier or later one re-swaps.
+      .replace(/_L\b/g, '_R')
+      .replace(/(?<![A-Za-z])l_/g, 'r_')
   return {
     ...group,
     id: newId(),

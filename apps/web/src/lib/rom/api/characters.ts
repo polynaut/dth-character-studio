@@ -11,12 +11,10 @@ import {
   defaultSections,
   genderSchema,
   genesisVersionSchema,
-  morphSchema,
   newId,
   posesFromDazCsv,
-  sectionsFromFlatFrames,
 } from '@dth/rom'
-import { normalizePathLower } from '#/lib/path.ts'
+import { normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
 import {
   cacheCharacterLocation,
   characterLocationCache,
@@ -39,10 +37,6 @@ import { isExternalImage } from '../image'
 import type { Character, GenesisVersion, ImportedPose } from '@dth/rom'
 
 // --- Characters (scoped to a project) -------------------------------------
-
-export async function fetchCharacters({ data }: { data: unknown }): Promise<Array<Character>> {
-  return storage.listCharacters(await charactersRoot(projectIdInput.parse(data).projectId))
-}
 
 /**
  * Characters + scan problems from ONE library walk — for the project page,
@@ -87,29 +81,6 @@ export async function fetchAllCharacters(): Promise<Array<CharacterWithProject>>
     }),
   )
   return lists.flat()
-}
-
-/**
- * The problems the character scan found in a project's library: definition-
- * shaped `.json` files that could not be read or parsed (a torn write, a failed
- * migration). `fetchCharacters` keeps returning the plain character list the
- * routes render; this parallel accessor is the surfaced channel — a project
- * page can call it alongside and warn instead of silently showing the character
- * as missing.
- */
-export async function fetchCharacterScanProblems({
-  data,
-}: {
-  data: unknown
-}): Promise<Array<storage.CharacterScanProblem>> {
-  const { projectId } = projectIdInput.parse(data)
-  const root = await charactersRoot(projectId)
-  const scan = await storage.scanCharacterLibrary(root)
-  // The scan just resolved every character's location — prime the cache.
-  for (const { character, location } of scan.entries) {
-    cacheCharacterLocation(root, character.id, location)
-  }
-  return scan.problems
 }
 
 export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
@@ -474,45 +445,6 @@ export async function characterKeepFolders({
   }
 }
 
-/** Shape of an existing DazToHue-Scripts FBM file (e.g. ElectraG9_FBMs.json). */
-const fbmJsonSchema = z.object({
-  frames: z.array(
-    z.object({
-      frame: z.number(),
-      section: z.string(),
-      name: z.string(),
-      morphs: z.array(morphSchema),
-    }),
-  ),
-})
-
-const importInput = z.object({
-  projectId: z.string().min(1),
-  name: z.string().min(1),
-  genesis: genesisVersionSchema,
-  gender: genderSchema,
-  /** Absolute path to an existing *_FBMs.json on this machine. */
-  filePath: z.string().min(1),
-})
-
-/** Seeds a new character from an existing DazToHue-Scripts FBM JSON file. */
-export async function importCharacterFromJson({ data }: { data: unknown }): Promise<Character> {
-  const input = importInput.parse(data)
-  const raw = fbmJsonSchema.parse(JSON.parse(await readTextFile(input.filePath)))
-  const now = new Date().toISOString()
-  const character: Character = characterSchema.parse({
-    id: newId(),
-    name: input.name,
-    genesis: input.genesis,
-    gender: input.gender,
-    createdAt: now,
-    updatedAt: now,
-    sections: sectionsFromFlatFrames([...raw.frames].sort((a, b) => a.frame - b.frame)),
-  })
-  const project = await resolveProject(input.projectId)
-  return storage.saveCharacter(project, character, charsRoot(project))
-}
-
 const csvImportInput = z.object({ filePath: z.string().min(1) })
 
 /**
@@ -612,32 +544,21 @@ export async function moveCharacterScenesFolder({
   const located = loc ? await storage.readCharacterAt(loc.definitionAbs) : null
   const character = located?.id === id ? located : null
   if (!character?.scenePath || !loc) throw new Error('No Daz scene linked.')
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
-  const charFolder = norm(loc.folderAbs)
-  const oldDir = norm(character.scenePath).replace(/\/[^/]*$/, '')
-  if (!oldDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')) {
+  const charFolder = normalizePath(loc.folderAbs)
+  const oldDir = parentDir(character.scenePath)
+  if (!normalizePathLower(oldDir).startsWith(normalizePathLower(charFolder) + '/')) {
     throw new Error('The scenes folder lives outside the character folder.')
   }
   const rel = normalizeRelFolder(newSubdir) // separators, no '..' / absolute / illegal chars
   if (!rel) throw new Error('Enter a subfolder name.')
   const newDir = `${charFolder}/${rel}`
-  if (norm(newDir).toLowerCase() === oldDir.toLowerCase()) return character
+  if (normalizePathLower(newDir) === normalizePathLower(oldDir)) return character
   await withBusyCursor(storage.moveFolder(oldDir, newDir))
-  // Everything that lived under the old folder travels with the rename.
-  const repoint = (p: string) => {
-    const n = norm(p)
-    return n.toLowerCase().startsWith(oldDir.toLowerCase() + '/')
-      ? `${newDir}${n.slice(oldDir.length)}`
-      : p
-  }
-  const next: Character = {
-    ...character,
-    scenePath: repoint(character.scenePath),
-    extraScenes: character.extraScenes.map(repoint),
-    imageScene: repoint(character.imageScene),
-    groomScenes: character.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
-    sceneOverrides: character.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),
-  }
+  // Everything that lived under the old folder travels with the rename —
+  // through THE single repoint site (storage/characters.ts), so this move can't
+  // drift from what a folder rename/move repoints (the local copy this replaced
+  // had already drifted: it omitted `houdiniProjects`).
+  const next = storage.repointCharacterPaths(character, oldDir, newDir)
   const project = await resolveProject(projectId)
   return storage.saveCharacter(project, next, root)
 }

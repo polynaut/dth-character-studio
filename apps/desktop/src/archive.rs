@@ -177,11 +177,15 @@ pub(crate) fn zip_file_entries(
 }
 
 /// The per-content-entry callback of `walk_zip_content`: the archive that owns
-/// the entry (so an installer can inflate it), the shared budget, the entry's
-/// index, its content-root-relative path, and its uncompressed size.
+/// the entry (so an installer can inflate it), the shared budget, the PHYSICAL
+/// path of that archive (the top-level `.zip`, or the nested temp inflation the
+/// entry lives in — only durable when the caller keeps the temps, see
+/// `walk_zip_content`'s `keep_temps`), the entry's index, its content-root-
+/// relative path, and its uncompressed size.
 pub(crate) type ZipEntryEmit<'a> = dyn FnMut(
         &mut zip::ZipArchive<fs::File>,
         &mut InflateBudget,
+        &Path,
         usize,
         &str,
         u64,
@@ -194,23 +198,42 @@ pub(crate) type ZipEntryEmit<'a> = dyn FnMut(
 /// (wrapper downloads) when the archive has none of its own, `Documentation`
 /// as the last resort — and call `emit` for every content entry.
 ///
-/// `strict` keeps the two callers' deliberate error postures: the install
-/// hard-errors on an unreadable nested zip (`Err` carries a step detail), dedup
-/// counts it in `read_errors` and keeps going. `read_errors` also counts
-/// central-directory entries that couldn't be read. `budget` is the TOP-LEVEL
-/// archive's inflate budget; nested archives share it, so one budget bounds the
-/// whole tree (a crafted wrapper can't mint a fresh allowance per inner zip).
+/// The two callers keep deliberately different error postures and budgets ride
+/// the whole tree (a crafted wrapper can't mint a fresh allowance per inner
+/// zip) — all of that travels in {@link ZipWalkState} below.
+///
+/// The state a `walk_zip_content` descent threads through unchanged — one
+/// struct so the walk's signature stays a walk (archive, where it lives, how
+/// deep, state, emit) instead of a parameter list that grows with every
+/// posture knob.
+pub(crate) struct ZipWalkState<'a> {
+    /// The TOP-LEVEL archive's inflate budget; nested archives share it (see
+    /// `walk_zip_content`'s doc).
+    pub(crate) budget: &'a mut InflateBudget,
+    /// Install posture: hard-error on an unreadable nested zip. Dedup's
+    /// lenient collect counts it in `read_errors` instead.
+    pub(crate) strict: bool,
+    /// Central-directory entries + nested zips that couldn't be read.
+    pub(crate) read_errors: &'a mut u64,
+    /// When `Some`, every nested temp inflation whose tree held content is
+    /// handed to the caller INSTEAD of being deleted at the end of the walk —
+    /// so a real install can extract from it later without inflating the
+    /// nested package zip a second time. `None` keeps delete-on-drop.
+    pub(crate) keep_temps: Option<&'a mut Vec<TempFile>>,
+}
+
+/// `archive_path` is the physical file `archive` was opened from — passed
+/// through to `emit` (nested descents pass their temp file's path instead).
 /// Returns whether a content level was found here or in a nested zip.
 pub(crate) fn walk_zip_content(
     archive: &mut zip::ZipArchive<fs::File>,
+    archive_path: &Path,
     depth: u32,
-    budget: &mut InflateBudget,
-    strict: bool,
-    read_errors: &mut u64,
+    state: &mut ZipWalkState,
     emit: &mut ZipEntryEmit,
 ) -> Result<bool, String> {
     let (entries, skipped) = zip_file_entries(archive);
-    *read_errors += skipped;
+    *state.read_errors += skipped;
     let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
     let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
     if content.is_none() && depth > 0 {
@@ -219,21 +242,31 @@ pub(crate) fn walk_zip_content(
             if !path.to_ascii_lowercase().ends_with(".zip") {
                 continue;
             }
-            let nested = (|| -> Result<bool, String> {
-                let tmp = extract_nested_zip(archive, *idx, budget)
+            let nested = (|| -> Result<(bool, TempFile), String> {
+                let tmp = extract_nested_zip(archive, *idx, state.budget)
                     .map_err(|e| io_detail(&format!("unpack {path}"), &e))?;
                 let file =
                     fs::File::open(&tmp.0).map_err(|e| io_detail(&format!("open {path}"), &e))?;
                 let mut inner =
                     zip::ZipArchive::new(file).map_err(|e| format!("unzip {path} failed: {e}"))?;
                 // The inner archive shares the OUTER budget (see the fn doc).
-                budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
-                walk_zip_content(&mut inner, depth - 1, budget, strict, read_errors, emit)
+                state.budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
+                let f = walk_zip_content(&mut inner, &tmp.0, depth - 1, state, emit)?;
+                Ok((f, tmp))
             })();
             match nested {
-                Ok(f) => found |= f,
-                Err(e) if strict => return Err(e),
-                Err(_) => *read_errors += 1,
+                Ok((f, tmp)) => {
+                    found |= f;
+                    if f {
+                        // Hand the inflation to the caller (see `keep_temps`);
+                        // otherwise `tmp` drops here and deletes itself.
+                        if let Some(sink) = state.keep_temps.as_deref_mut() {
+                            sink.push(tmp);
+                        }
+                    }
+                }
+                Err(e) if state.strict => return Err(e),
+                Err(_) => *state.read_errors += 1,
             }
         }
         if found {
@@ -255,7 +288,7 @@ pub(crate) fn walk_zip_content(
         if !folders.iter().any(|f| f == first) {
             continue;
         }
-        emit(archive, budget, *idx, sub, *sz)?;
+        emit(archive, state.budget, archive_path, *idx, sub, *sz)?;
     }
     Ok(true)
 }

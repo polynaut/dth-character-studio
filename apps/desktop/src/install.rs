@@ -43,7 +43,11 @@ pub(crate) struct PluginInstallRequest {
 }
 
 /// Append `SHARED_PRESETS` + `HOUDINI_PATH` to `<houdini_docs>/houdini.env` if not
-/// already present (idempotent). Returns whether it changed the file.
+/// already present (idempotent). "Present" is judged per-line on NON-comment
+/// lines — a commented-out `# SHARED_PRESETS = …` used to count as wired,
+/// yielding a `HOUDINI_PATH` that references an undefined variable. The rewrite
+/// is atomic (temp file + rename), so a mid-write failure can never leave the
+/// user's houdini.env truncated. Returns whether it changed the file.
 fn wire_houdini_env(houdini_docs: &Path, presets_dir: &Path) -> std::io::Result<bool> {
     let env_path = houdini_docs.join("houdini.env");
     let presets_fwd = presets_dir.display().to_string().replace('\\', "/");
@@ -58,12 +62,22 @@ fn wire_houdini_env(houdini_docs: &Path, presets_dir: &Path) -> std::io::Result<
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e),
     };
-    let lower = existing.to_lowercase();
+    // Only lines that aren't comments count as existing wiring.
+    let active_lines: Vec<String> = existing
+        .lines()
+        .map(|l| l.trim_start())
+        .filter(|l| !l.starts_with('#'))
+        .map(|l| l.to_lowercase())
+        .collect();
+    let defines = active_lines.iter().any(|l| {
+        l.contains('=') && l.split('=').next().is_some_and(|name| name.trim() == "shared_presets")
+    });
+    let references = active_lines.iter().any(|l| l.contains("$shared_presets"));
     let mut add = String::new();
-    if !lower.contains("shared_presets =") && !lower.contains("shared_presets=") {
+    if !defines {
         add.push_str(&format!("SHARED_PRESETS = \"{presets_fwd}\"\n"));
     }
-    if !lower.contains("$shared_presets") {
+    if !references {
         add.push_str("HOUDINI_PATH = $HOUDINI_PATH;$SHARED_PRESETS\n");
     }
     if add.is_empty() {
@@ -74,7 +88,15 @@ fn wire_houdini_env(houdini_docs: &Path, presets_dir: &Path) -> std::io::Result<
         content.push('\n');
     }
     content.push_str(&add);
-    fs::write(&env_path, content)?;
+    // Atomic replace: `fs::write` truncates before writing, so a crash mid-write
+    // would destroy the file. Write beside it, then rename over (`fs::rename`
+    // replaces an existing destination file on Windows).
+    let tmp = houdini_docs.join("houdini.env.dth-tmp");
+    fs::write(&tmp, &content)?;
+    if let Err(e) = fs::rename(&tmp, &env_path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
     Ok(true)
 }
 
@@ -187,12 +209,17 @@ fn install_plugin_dlls(label: &str, exporter_folder: &Path, daz_install: &Path, 
     let mut files = 0u64;
     for dll in &dlls {
         let to = plugins.join(dll.file_name().unwrap());
-        if fs::copy(dll, &to).is_err() {
+        if let Err(e) = fs::copy(dll, &to) {
             // Writing into Program Files needs elevation, and Windows also locks
-            // plugin DLLs that a running Daz Studio has loaded — both surface here.
+            // plugin DLLs that a running Daz Studio has loaded — but surface the
+            // ACTUAL error too: a disk-full/other failure must not be
+            // misdiagnosed as an elevation problem.
             return step_err(
                 label,
-                format!("couldn't write {} — {ADMIN_HINT} (Daz also locks loaded plugin DLLs)", to.display()),
+                format!(
+                    "couldn't write {}: {e} — {ADMIN_HINT} (Daz also locks loaded plugin DLLs)",
+                    to.display()
+                ),
             );
         }
         files += 1;
@@ -414,4 +441,58 @@ pub fn unreal_dth_present(uproject_path: String) -> bool {
         .parent()
         .map(|dir| dir.join("Content").join("DazToHue").is_dir())
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::unique_temp_dir;
+
+    #[test]
+    fn wire_houdini_env_ignores_commented_lines_and_writes_atomically() {
+        let docs = unique_temp_dir("houdini_env");
+        fs::create_dir_all(&docs).unwrap();
+        let env = docs.join("houdini.env");
+        // Commented-out lines are NOT wiring — the old substring match counted
+        // them, yielding a HOUDINI_PATH referencing an undefined variable.
+        fs::write(&env, "# SHARED_PRESETS = \"C:/old\"\nOTHER = 1\n").unwrap();
+        let presets = docs.join("my_presets");
+        assert!(wire_houdini_env(&docs, &presets).unwrap());
+        let content = fs::read_to_string(&env).unwrap();
+        assert!(content.contains("\nSHARED_PRESETS = "), "content: {content}");
+        assert!(
+            content.contains("HOUDINI_PATH = $HOUDINI_PATH;$SHARED_PRESETS"),
+            "content: {content}"
+        );
+        // The user's existing lines survive, and no temp debris is left behind.
+        assert!(content.starts_with("# SHARED_PRESETS = \"C:/old\"\nOTHER = 1\n"));
+        assert!(!docs.join("houdini.env.dth-tmp").exists());
+        // Idempotent: a second run changes nothing.
+        assert!(!wire_houdini_env(&docs, &presets).unwrap());
+        let _ = fs::remove_dir_all(&docs);
+    }
+
+    #[test]
+    fn wire_houdini_env_respects_real_uncommented_wiring() {
+        let docs = unique_temp_dir("houdini_env_wired");
+        fs::create_dir_all(&docs).unwrap();
+        let env = docs.join("houdini.env");
+        // Spacing/case variants of a REAL definition + reference count as wired.
+        let wired = "shared_presets=\"C:/mine\"\nHOUDINI_PATH = $HOUDINI_PATH;$SHARED_PRESETS\n";
+        fs::write(&env, wired).unwrap();
+        assert!(!wire_houdini_env(&docs, &docs.join("p")).unwrap());
+        assert_eq!(fs::read_to_string(&env).unwrap(), wired, "file untouched");
+        let _ = fs::remove_dir_all(&docs);
+    }
+
+    #[test]
+    fn wire_houdini_env_creates_a_fresh_file() {
+        let docs = unique_temp_dir("houdini_env_fresh");
+        fs::create_dir_all(&docs).unwrap();
+        assert!(wire_houdini_env(&docs, &docs.join("my_presets")).unwrap());
+        let content = fs::read_to_string(docs.join("houdini.env")).unwrap();
+        assert!(content.starts_with("SHARED_PRESETS = "), "content: {content}");
+        assert!(content.contains("$SHARED_PRESETS"), "content: {content}");
+        let _ = fs::remove_dir_all(&docs);
+    }
 }

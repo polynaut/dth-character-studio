@@ -41,7 +41,7 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "**/testutil.*", "**/*.gen.ts"],
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/testutil.*"],
       "rules": {
         "typescript/no-floating-promises": "off",
         "typescript/no-misused-promises": "off",

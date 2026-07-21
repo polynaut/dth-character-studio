@@ -3,6 +3,8 @@ use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
+use crate::fsutil::{walk_dir, DirVisitor};
+
 // --- Pose-asset frame counts ----------------------------------------------
 // A Daz pose preset (.duf) is DSON — JSON, sometimes gzip-compressed. The ROM
 // length a preset occupies on the timeline is the highest animation key time ×
@@ -184,38 +186,31 @@ pub fn scene_wearables(path: String) -> SceneWearables {
 }
 
 /// Recursively collect every `.duf` under `folder`, as paths relative to it
-/// ('/'-separated). The frontend classifies these into pose assets on each open /
-/// release change — there's no on-disk catalog to build or go stale. One native
-/// walk replaces the old per-directory JS round-trips (much faster on a network
-/// share). Unreadable subfolders (locked / permission / network) are skipped so
-/// one bad directory can't fail the whole scan.
+/// ('/'-separated), via the ONE shared walker (`fsutil::walk_dir`) — so this
+/// scan carries the same dir-link policy as every other walk (a junction/
+/// symlink is a leaf, never followed). The frontend classifies these into pose
+/// assets on each open / release change — there's no on-disk catalog to build
+/// or go stale. One native walk replaces the old per-directory JS round-trips
+/// (much faster on a network share). Lenient visitor: unreadable subfolders
+/// (locked / permission / network) are skipped so one bad directory can't fail
+/// the whole scan.
 #[tauri::command(async)]
 pub fn scan_duf_files(folder: String) -> Vec<String> {
-    let root = Path::new(&folder);
-    let mut out = Vec::new();
-    collect_duf(root, root, &mut out);
-    out
-}
-
-fn collect_duf(root: &Path, dir: &Path, out: &mut Vec<String>) {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let file_type = match entry.file_type() {
-            Ok(ft) => ft,
-            Err(_) => continue,
-        };
-        let path = entry.path();
-        if file_type.is_dir() {
-            collect_duf(root, &path, out);
-        } else if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("duf")) {
-            if let Ok(rel) = path.strip_prefix(root) {
-                out.push(rel.to_string_lossy().replace('\\', "/"));
+    struct DufCollect(Vec<String>);
+    impl DirVisitor for DufCollect {
+        fn file(&mut self, _entry: &fs::DirEntry, rel: &Path) -> std::io::Result<()> {
+            if rel.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("duf")) {
+                self.0.push(rel.to_string_lossy().replace('\\', "/"));
             }
+            Ok(())
+        }
+        fn unreadable(&mut self, _path: &Path, _e: std::io::Error) -> std::io::Result<()> {
+            Ok(())
         }
     }
+    let mut v = DufCollect(Vec::new());
+    let _ = walk_dir(Path::new(&folder), &mut v); // visitor never errors
+    v.0
 }
 
 #[cfg(test)]
@@ -269,6 +264,21 @@ mod tests {
         let missing = scene_wearables(dir.join("nope.duf").to_string_lossy().to_string());
         assert!(missing.items.is_empty());
         assert!(missing.error.contains("nope.duf"), "error: {}", missing.error);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_duf_files_collects_recursively_with_forward_slashes() {
+        let dir = unique_temp_dir("scan_duf");
+        fs::create_dir_all(dir.join("sub").join("deep")).unwrap();
+        fs::write(dir.join("a.duf"), b"x").unwrap();
+        fs::write(dir.join("sub").join("deep").join("B.DUF"), b"x").unwrap();
+        fs::write(dir.join("sub").join("note.txt"), b"x").unwrap();
+        let mut out = scan_duf_files(dir.to_string_lossy().to_string());
+        out.sort();
+        assert_eq!(out, vec!["a.duf".to_string(), "sub/deep/B.DUF".to_string()]);
+        // A missing folder degrades to an empty list, never a panic.
+        assert!(scan_duf_files(dir.join("nope").to_string_lossy().to_string()).is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 

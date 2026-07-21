@@ -1,18 +1,16 @@
 import { useRef, useState } from 'react'
-import { Link, useRouter } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, Tag, useModifierHeld } from '@dth/ui'
-import { generateCharacterFiles, saveCharacter } from '#/lib/rom/api.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
-import type { Character } from '@dth/rom'
 
 /**
  * Scroll the page to the top with a rAF-driven ease-out — NOT
@@ -114,42 +112,27 @@ export function EditorHeader({
    *  or while renaming). */
   sceneTag: string | null
 }) {
-  const router = useRouter()
-  const { character, saving } = draft
+  const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
   // Inline rename from the title — persists immediately (like the avatar) so the
-  // new name + folder rename stick without needing the Save button.
+  // new name + folder rename stick without needing the Save button. Routed
+  // through persistPatch so it runs the SAME guards as every persisting flow —
+  // validation, and the single-flight flag held for the whole save+generate (the
+  // old hand-rolled version checked `saving` but never SET it, letting a racing
+  // Save interleave a second save+generate round mid-rename). `previousName`
+  // rides into generation (renaming moves the character folder + renames the
+  // generated script, so the old-named script in the shared folder is dropped);
+  // `rethrow` hands a persist failure to EditableTitle, which resets its own
+  // text and toasts. A refusal (validation / a save in flight) has already
+  // toasted inside persistPatch — returning normally just closes the editor.
   async function onRenameCharacter(next: string) {
-    // An inline rename persists + regenerates immediately from the WHOLE draft, so
-    // it must run the same save-blocking checks — otherwise a rename would commit
-    // (and bake into scripts) an invalid unsaved ROM edit that Save itself refuses.
-    // Also single-flight against an in-progress save so the two can't interleave.
-    // Not persistPatch: generation needs `previousName` (old-script cleanup) and
-    // EditableTitle needs the rethrow to reset its own text.
-    if (saving) throw new Error('Still saving the previous change — try again in a moment.')
-    if (!draft.validate()) throw new Error('Fix the highlighted fields before renaming.')
-    const previousName = character.name
-    const updated = { ...character, name: next }
-    draft.patch({ name: next })
-    let saved: Character
-    try {
-      saved = await saveCharacter({ data: { projectId, character: updated } })
-    } catch (e) {
-      // Roll the optimistic patch back — the folder/scripts still carry the old
-      // name, so the draft must not keep the failed name as a dirty edit.
-      // EditableTitle catches the rethrow to toast and reset its own text.
-      draft.patch({ name: previousName })
-      throw e
-    }
-    draft.settle(saved)
-    // Renaming moves the character folder + renames the generated script, so
-    // regenerate at the new name and drop the old-named script in the shared folder.
-    const result = await generateCharacterFiles({ data: { projectId, id: saved.id, previousName } })
-    void router.invalidate()
-    draft.notifyGenerated(`Renamed to “${next}”`, result)
+    await draft.persistPatch(
+      { name: next },
+      { toast: `Renamed to “${next}”`, previousName: character.name, rethrow: true },
+    )
   }
 
   return (
@@ -284,14 +267,14 @@ export function EditorHeader({
           name={character.name}
           characterId={character.id}
           scenes={[...new Set([character.scenePath, ...character.extraScenes].filter(Boolean))]}
-          onApply={async (image, imageScene) => {
-            // Persist the avatar immediately — it's a deliberate change and
-            // should survive a reload without needing the Save button. The
-            // source scene ('' for uploads/URLs) rides along so the avatar
-            // auto-sync knows what to mirror. persistPatch validates, blocks
-            // racing saves, regenerates and rolls back on failure.
-            await draft.persistPatch({ image, imageScene }, { toast: 'Image updated' })
-          }}
+          // Persist the avatar immediately — it's a deliberate change and
+          // should survive a reload without needing the Save button. The
+          // dialog hands a PRODUCER (the upload/copy runs inside it, past
+          // persistPatch's single-flight/validate guards); the produced patch
+          // carries the source scene ('' for uploads/URLs) so the avatar
+          // auto-sync knows what to mirror. persistPatch validates, blocks
+          // racing saves, regenerates and rolls back on failure.
+          onApply={(produce) => draft.persistPatch(produce, { toast: 'Image updated' })}
           onClose={() => setImageDialogOpen(false)}
         />
       )}

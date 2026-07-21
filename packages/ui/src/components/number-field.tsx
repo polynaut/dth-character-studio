@@ -42,6 +42,13 @@ export function NumberField({
         if (e.key === 'Enter') e.currentTarget.blur()
       }}
       onBlur={() => {
+        // `Number('')` (and whitespace) is 0, not NaN — an emptied field must
+        // revert like any other non-number, not silently commit 0 (0% in
+        // percent mode).
+        if (draft.trim() === '') {
+          setDraft(format(value))
+          return
+        }
         const parsed = Number(draft)
         if (Number.isNaN(parsed)) {
           setDraft(format(value))

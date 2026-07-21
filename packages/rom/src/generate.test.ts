@@ -244,6 +244,60 @@ describe('mirrorGroup', () => {
     expect(right.poses[0].morphs[0].prop).toBe('body_bs_CleftChin')
     expect(right.poses[0].morphs[1].prop).toBe('thigh_right_up')
   })
+
+  it('swaps the case twins: uppercase _L suffix and lowercase l_ prefix', () => {
+    const left: RomGroup = {
+      id: 'gl',
+      // G9 bones are lowercase l_-prefixed — the driver-bone label mirrors too.
+      label: 'l_thigh',
+      suffix: 'left',
+      method: 'individual',
+      calculateFrom: 'default',
+      poses: [
+        {
+          id: 'pl',
+          name: 'ShldrDown',
+          morphs: [
+            // Stock Daz JCM naming: the uppercase suffix twin of _l.
+            { id: 'm1', node: 'Genesis9', prop: 'pJCMShldrDown_40_L', value: 1 },
+            // G9 bone naming: the lowercase prefix twin of L_.
+            { id: 'm2', node: 'Genesis9', prop: 'l_thigh', value: 1 },
+          ],
+          boneScaleRef: false,
+        },
+      ],
+    }
+    const right = mirrorGroup(left)
+    expect(right.label).toBe('r_thigh')
+    expect(right.poses[0].morphs[0].prop).toBe('pJCMShldrDown_40_R')
+    expect(right.poses[0].morphs[1].prop).toBe('r_thigh')
+  })
+
+  it('leaves non-marker _L / l_ letter runs untouched (Ball_Large, Curl_lower)', () => {
+    const left: RomGroup = {
+      id: 'gl',
+      label: '',
+      suffix: 'left',
+      method: 'individual',
+      calculateFrom: 'default',
+      poses: [
+        {
+          id: 'pl',
+          name: 'Guard',
+          morphs: [
+            // `_L` continuing into a word is no side marker (would become _Rarge).
+            { id: 'mg1', node: 'Genesis9', prop: 'Ball_Large', value: 1 },
+            // `l_` preceded by a letter is no bone prefix (would become Curr_lower).
+            { id: 'mg2', node: 'Genesis9', prop: 'Curl_lower', value: 1 },
+          ],
+          boneScaleRef: false,
+        },
+      ],
+    }
+    const right = mirrorGroup(left)
+    expect(right.poses[0].morphs[0].prop).toBe('Ball_Large')
+    expect(right.poses[0].morphs[1].prop).toBe('Curl_lower')
+  })
 })
 
 describe('genRomStartFrame ↔ presetEndFrame coupling', () => {
@@ -1230,10 +1284,10 @@ describe('toPoseAssetCsv', () => {
   })
 })
 
-// Finding 2: the G9 gate pins the baked block lengths (base 328, GP 104) the same
-// way the G8.1 gate pins 188 — a base/GP that measures differently (a future or
-// custom asset) can't silently splice custom rows at the wrong offset; it falls to
-// the experimental custom-only path instead.
+// Finding 2: the G9 gate pins the baked block lengths (base 328, GP 104, phys 43)
+// the same way the G8.1 gate pins 188 — a base/GP/phys that measures differently
+// (a future or custom asset) can't silently splice custom rows at the wrong
+// offset; it falls to the experimental custom-only path instead.
 describe('toPoseAssetCsv — G9 baked-length guard', () => {
   it('stays experimental on an unexpected base length', () => {
     expect(toPoseAssetCsv(makeCharacter(), { ...FRAMES, base: 330 }, '2.0').experimental).toBe(true)
@@ -1268,6 +1322,30 @@ describe('toPoseAssetCsv — G9 baked-length guard', () => {
     expect(poseAssetCsvValidated(character, '2.0', 328, 104)).toBe(true)
     // GP not included → the gp measurement stays irrelevant either way.
     expect(poseAssetCsvValidated(makeCharacter(), '2.0', 328, undefined)).toBe(true)
+  })
+
+  it('stays experimental when PHY preset is on but the physics block measures ≠ 43', () => {
+    // The fixed PHY block splices as 43 baked rows renumbered from
+    // presetEndFrame — a physics asset that measures differently would shift
+    // every custom frame after it, so it de-validates the CSV instead.
+    const sections = makeSections()
+    sections.PHY.enabled = true
+    sections.PHY.mode = 'preset'
+    const file = toPoseAssetCsv(makeCharacter({ sections }), { ...FRAMES, phys: 40 }, '2.0')
+    expect(file.experimental).toBe(true)
+  })
+
+  it('ignores the phys length when PHY is off (no physics block is spliced)', () => {
+    expect(toPoseAssetCsv(makeCharacter(), { ...FRAMES, phys: 40 }, '2.0').experimental).toBeUndefined()
+  })
+
+  it('an UNMEASURED phys with PHY preset on is not validated (same polarity as base/GP)', () => {
+    const sections = makeSections()
+    sections.PHY.enabled = true
+    sections.PHY.mode = 'preset'
+    const character = makeCharacter({ sections })
+    expect(poseAssetCsvValidated(character, '2.0', 328, undefined)).toBe(false)
+    expect(poseAssetCsvValidated(character, '2.0', 328, undefined, 43)).toBe(true)
   })
 })
 

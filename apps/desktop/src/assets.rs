@@ -6,7 +6,9 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::archive::{extract_zip_entry, walk_zip_content, InflateBudget, NESTED_ZIP_DEPTH};
+use crate::archive::{
+    extract_zip_entry, walk_zip_content, InflateBudget, ZipWalkState, NESTED_ZIP_DEPTH,
+};
 use crate::dedup::{collect_asset_files, genesis_rank, AssetFiles};
 use crate::fsutil::{folder_name, join_rel, lock_dest, rel_key};
 use crate::report::{
@@ -82,10 +84,12 @@ type AssetStep = (InstallStep, Option<u64>);
 
 /// Diff (and, unless `dry`, install) one asset from its COLLECTED inventory —
 /// the walk `collect_sources` already did, instead of re-walking the folder /
-/// re-reading the zip. Folder assets run both modes here (a real install copies
-/// each differing file from `af.content_root`); zip assets only DIFF here (dry
-/// runs) — extraction needs the archive, so real zip installs go through
-/// `process_zip_asset`.
+/// re-reading the zip. Folder assets copy each differing file from
+/// `af.content_root`; zip assets extract each differing entry from the archives
+/// the collect kept handles to (`zip_entries`: the asset `.zip` and/or its
+/// nested temp inflations) — so a real wrapper-zip install no longer inflates
+/// the nested package zip a second time. A zip collected WITHOUT handles only
+/// diffs here (dry runs); its real install goes through `process_zip_asset`.
 fn process_collected_asset(
     af: &AssetFiles,
     name: &str,
@@ -94,7 +98,10 @@ fn process_collected_asset(
     force: bool,
     skip: &HashSet<String>,
 ) -> AssetStep {
-    debug_assert!(!af.is_zip || dry, "real zip installs re-open the archive");
+    debug_assert!(
+        !af.is_zip || dry || af.zip_entries.len() == af.files.len(),
+        "a real zip install needs the collected archive handles"
+    );
     if af.read_errors > 0 {
         // The install pipeline hard-errors rather than acting on a partial
         // inventory (a lenient walker silently omitting entries would report
@@ -114,7 +121,10 @@ fn process_collected_asset(
     let mut dest_sizes = DestSizes::new();
     let mut diff_files: Vec<String> = Vec::new();
     let mut fp = 0u64;
-    for (rel, size) in &af.files {
+    // Zip extraction: each referenced archive (the outer `.zip` / a nested temp)
+    // is opened lazily, once, with its own inflate budget.
+    let mut archives: HashMap<&Path, (zip::ZipArchive<fs::File>, InflateBudget)> = HashMap::new();
+    for (i, (rel, size)) in af.files.iter().enumerate() {
         fp_add(&mut fp, rel);
         // An accepted (legitimately-shared) or winner-lost file is already in sync.
         let needs = !skip.contains(&rel_key(rel))
@@ -123,9 +133,46 @@ fn process_collected_asset(
             continue;
         }
         diff_files.push(rel.clone());
-        if !dry {
+        if dry {
+            continue;
+        }
+        let to = join_rel(dest, rel);
+        if af.is_zip {
+            let (apath, idx) = &af.zip_entries[i];
+            let slot = match archives.entry(apath.as_path()) {
+                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    let file = match fs::File::open(apath) {
+                        Ok(f) => f,
+                        Err(err) => {
+                            return (
+                                step_err(
+                                    name,
+                                    io_detail(&format!("open {}", apath.display()), &err),
+                                ),
+                                None,
+                            )
+                        }
+                    };
+                    let compressed_len = file.metadata().map(|m| m.len()).unwrap_or(0);
+                    let archive = match zip::ZipArchive::new(file) {
+                        Ok(a) => a,
+                        Err(err) => {
+                            return (
+                                step_err(name, format!("unzip {} failed: {err}", apath.display())),
+                                None,
+                            )
+                        }
+                    };
+                    e.insert((archive, InflateBudget::new(name, compressed_len)))
+                }
+            };
+            // extract_zip_entry creates parent dirs and takes the dest lock itself.
+            if let Err(e) = extract_zip_entry(&mut slot.0, *idx, &to, &mut slot.1) {
+                return (step_err(name, io_detail(&format!("extract {rel}"), &e)), None);
+            }
+        } else {
             let from = join_rel(&af.content_root, rel);
-            let to = join_rel(dest, rel);
             if let Some(parent) = to.parent() {
                 if let Err(e) = fs::create_dir_all(parent) {
                     return (
@@ -178,11 +225,15 @@ fn process_zip_asset(
     let mut read_errors = 0u64;
     let walked = walk_zip_content(
         &mut archive,
+        asset,
         NESTED_ZIP_DEPTH,
-        &mut budget,
-        true,
-        &mut read_errors,
-        &mut |archive, budget, idx, sub, size| {
+        &mut ZipWalkState {
+            budget: &mut budget,
+            strict: true,
+            read_errors: &mut read_errors,
+            keep_temps: None,
+        },
+        &mut |archive, budget, _apath, idx, sub, size| {
             total += 1;
             fp_add(&mut fp, sub);
             let needs = !skip.contains(&rel_key(sub))
@@ -201,6 +252,21 @@ fn process_zip_asset(
     match walked {
         Err(detail) => (step_err(name, detail), None),
         Ok(false) => (step_skip(name, "no Daz content".into()), None),
+        // Mirror the collected path's posture: an incomplete inventory must not
+        // report ok — a plain install of a zip with unreadable entries used to
+        // silently install just the readable subset.
+        Ok(true) if read_errors > 0 => {
+            let plural = if read_errors == 1 { "y" } else { "ies" };
+            (
+                step_err(
+                    name,
+                    format!(
+                        "{read_errors} unreadable entr{plural} while scanning the source — fix access and retry"
+                    ),
+                ),
+                None,
+            )
+        }
         Ok(true) => (finish_step(name, diff_files, total, dry), Some(fp)),
     }
 }
@@ -228,11 +294,15 @@ fn process_asset(
     let empty = HashSet::new();
     let skip = skip_map.get(asset).unwrap_or(&empty);
     Some(match af {
-        // Folder assets (both modes) + zip dry runs: the collected inventory IS
-        // the diff input — no second walk of the source.
-        Some(af) if !af.is_zip || dry => process_collected_asset(af, &name, dest, dry, force, skip),
-        // Real zip installs re-open the archive (extraction needs the entries);
-        // an uncollected zip (no content / bomb rail) reproduces its skip/error.
+        // The collected inventory IS the diff input — no second walk of the
+        // source. A real zip install additionally needs the archive handles the
+        // collect kept (`zip_entries`, one per file); without them it falls
+        // through to the re-walking path below.
+        Some(af) if !af.is_zip || dry || af.zip_entries.len() == af.files.len() => {
+            process_collected_asset(af, &name, dest, dry, force, skip)
+        }
+        // A zip without kept handles re-opens the archive; an uncollected zip
+        // (no content / bomb rail) reproduces its skip/error.
         _ if is_zip => process_zip_asset(asset, &name, dest, dry, force, skip),
         // An uncollected folder holds no Daz content level.
         _ => (step_skip(&name, "no Daz content".into()), None),
@@ -280,8 +350,10 @@ pub(crate) struct DazAssetsRequest {
     force: bool,
     dry_run: bool,
     /// When non-empty, install only the assets whose name is listed — the set a
-    /// prior dry-run/scan flagged as changed — so the many already-installed
-    /// assets aren't walked again. Empty installs every asset (a full pass).
+    /// prior dry-run/scan flagged as changed. (Winner resolution still
+    /// inventories EVERY asset in every source; `only` limits which assets are
+    /// diffed and written, not which are walked.) Empty installs every asset
+    /// (a full pass).
     #[serde(default)]
     only: Vec<String>,
     /// Dest-relative paths the user accepted as legitimately shared — never
@@ -311,7 +383,11 @@ struct CollectedSources {
     files: HashMap<PathBuf, (u32, AssetFiles)>,
 }
 
-fn collect_sources(sources: &[String]) -> CollectedSources {
+/// `keep_zip_handles`: pass true when a REAL install follows, so each zip
+/// asset's archive handles + nested temp inflations are kept for extraction
+/// (see `collect_asset_files`) instead of re-walking/re-inflating; scans and
+/// dry runs pass false so temps don't pile up on disk.
+fn collect_sources(sources: &[String], keep_zip_handles: bool) -> CollectedSources {
     let mut listings = Vec::new();
     let mut files = HashMap::new();
     for source in sources {
@@ -321,7 +397,7 @@ fn collect_sources(sources: &[String]) -> CollectedSources {
             // Independent reads → parallel, like the per-asset processing.
             let collected: Vec<(PathBuf, AssetFiles)> = assets
                 .par_iter()
-                .filter_map(|a| collect_asset_files(a).map(|af| (a.clone(), af)))
+                .filter_map(|a| collect_asset_files(a, keep_zip_handles).map(|af| (a.clone(), af)))
                 .collect();
             for (path, af) in collected {
                 files.insert(path, (genesis, af));
@@ -383,7 +459,7 @@ pub fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let only = request.only;
     // Case-folded for lookups (NTFS); reports keep original casing.
     let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
-    let CollectedSources { listings, files } = collect_sources(&request.sources);
+    let CollectedSources { listings, files } = collect_sources(&request.sources, !dry);
     let skip_map = winner_skip_map(&files, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
     for (source, listing) in listings {
@@ -459,7 +535,7 @@ fn process_assets(
 pub fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
-    let CollectedSources { listings, files } = collect_sources(&request.sources);
+    let CollectedSources { listings, files } = collect_sources(&request.sources, false);
     let skip_map = winner_skip_map(&files, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
     for (source, listing) in listings {
@@ -513,6 +589,67 @@ mod tests {
         assert_eq!(step.status, "skipped");
         assert!(step.detail.contains("already installed"), "detail: {}", step.detail);
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn zip_install_hard_errors_on_unreadable_entries_instead_of_partial_ok() {
+        // One readable content entry + one the reader can't open (legacy
+        // ZipCrypto encryption): the inventory is incomplete, so a plain install
+        // must ERROR — it used to install the readable subset and report ok.
+        use zip::unstable::write::FileOptionsExt;
+        let base = unique_temp_dir("zip_unreadable");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("asset.zip");
+        let mut w = zip::ZipWriter::new(fs::File::create(&path).unwrap());
+        w.start_file("data/ok.dsf", zip::write::SimpleFileOptions::default()).unwrap();
+        std::io::Write::write_all(&mut w, b"ok").unwrap();
+        w.start_file(
+            "data/locked.dsf",
+            zip::write::SimpleFileOptions::default().with_deprecated_encryption(b"pw"),
+        )
+        .unwrap();
+        std::io::Write::write_all(&mut w, b"secret").unwrap();
+        w.finish().unwrap();
+
+        let dest = base.join("lib");
+        let (step, fp) =
+            process_zip_asset(&path, "asset.zip", &dest, false, false, &HashSet::new());
+        assert_eq!(step.status, "error", "detail: {}", step.detail);
+        assert!(step.detail.contains("unreadable"), "detail: {}", step.detail);
+        assert!(fp.is_none());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn wrapper_zip_installs_from_its_collected_inventory() {
+        // End-to-end through install_daz_assets: the collected inventory (with
+        // its KEPT nested-zip inflation) drives the real install — the nested
+        // package zip is not inflated a second time, and the files land right.
+        let base = unique_temp_dir("collected_zip_install");
+        let source = base.join("src");
+        fs::create_dir_all(&source).unwrap();
+        write_wrapper_zip(&source.join("67582_Meipe.zip"));
+        let dest = base.join("lib");
+        let request = |dry: bool| DazAssetsRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dest: dest.to_string_lossy().to_string(),
+            force: false,
+            dry_run: dry,
+            only: vec![],
+            accepted: vec![],
+        };
+        let report = install_daz_assets(request(false));
+        let step = report.steps.iter().find(|s| s.label == "67582_Meipe.zip").unwrap();
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert_eq!(fs::read(join_rel(&dest, "data/Meipe/morph.dsf")).unwrap(), b"morph-data");
+        assert!(join_rel(&dest, "Runtime/Textures/t.png").is_file());
+        // A re-run reports it already installed (or its whole source contributed
+        // nothing and the header row was filtered with it).
+        let report = install_daz_assets(request(true));
+        if let Some(step) = report.steps.iter().find(|s| s.label == "67582_Meipe.zip") {
+            assert_eq!(step.status, "skipped", "detail: {}", step.detail);
+        }
         let _ = fs::remove_dir_all(&base);
     }
 

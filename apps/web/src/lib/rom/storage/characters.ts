@@ -779,13 +779,32 @@ export async function moveCharacter(
   const oldDefName = basename(entry.definitionAbs)
 
   if (newDefAbs !== entry.definitionAbs) {
-    if (newFolderAbs === entry.folderAbs) {
-      // Same folder — just renaming the definition file (+ its notes, which are
-      // named after it).
-      if (await exists(newDefAbs)) throw new Error(`A file already exists at "${clean}".`)
-      await rename(entry.definitionAbs, newDefAbs)
-      const oldNotes = notesPathFor(entry.definitionAbs)
-      if (await exists(oldNotes)) await rename(oldNotes, notesPathFor(newDefAbs))
+    // A case-only folder rename (kira → Kira) targets the SAME physical folder
+    // on Windows, so the case-insensitive `exists` probes below would see the
+    // destination as taken and refuse a rename that is perfectly fine. Mirror
+    // saveCharacter's caseOnlyRename: rename in place, skip the probe. (Both
+    // paths come '/'-joined out of `join`, so a plain lower-case compare is
+    // exact.)
+    const caseOnlyFolder =
+      newFolderAbs !== entry.folderAbs &&
+      newFolderAbs.toLowerCase() === entry.folderAbs.toLowerCase()
+    if (newFolderAbs === entry.folderAbs || caseOnlyFolder) {
+      // Same folder (possibly re-cased) — re-case it first when needed, then
+      // rename the definition file (+ its notes, which are named after it).
+      if (caseOnlyFolder) await rename(entry.folderAbs, newFolderAbs)
+      const movedDef = join(newFolderAbs, oldDefName)
+      if (newDefAbs !== movedDef) {
+        // A case-only FILE rename also targets itself — probe only for a
+        // genuinely different name.
+        const caseOnlyFile = newDefAbs.toLowerCase() === movedDef.toLowerCase()
+        if (!caseOnlyFile && (await exists(newDefAbs))) {
+          throw new Error(`A file already exists at "${clean}".`)
+        }
+        await rename(movedDef, newDefAbs)
+        const oldNotes = notesPathFor(movedDef)
+        const newNotes = notesPathFor(newDefAbs)
+        if (oldNotes !== newNotes && (await exists(oldNotes))) await rename(oldNotes, newNotes)
+      }
     } else {
       // Moving the whole folder to a new location.
       if (await exists(newFolderAbs)) throw new Error(`A folder already exists at "${newFolderRel}".`)

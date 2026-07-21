@@ -5,7 +5,7 @@ import {
   presetSelections,
   walkCustomPoses,
 } from './frames'
-import { characterSkinning, characterSlug, GENERATIONS } from './types'
+import { characterSkinning, characterSlug, GENERATIONS, GROUP_SUFFIX_TOKENS } from './types'
 
 import type { PresetFrames } from './frames'
 import type {
@@ -65,6 +65,15 @@ export interface GeneratedFile {
 
 // Menu indices of the PoseAsset node parameters (docs/poseasset-csv-spec.md).
 const SUFFIX_INDEX: Record<GroupSuffix, number> = { left: 0, centre: 1, right: 2 }
+// Menu index → the Unreal suffix token that menu entry appends, DERIVED from
+// the one token map (GROUP_SUFFIX_TOKENS, types.ts) through the index table
+// above — so the positional encoding can't drift from either source.
+const SUFFIX_TOKEN_BY_INDEX: ReadonlyArray<string> = (
+  Object.keys(SUFFIX_INDEX) as Array<GroupSuffix>
+).reduce<Array<string>>((tokens, suffix) => {
+  tokens[SUFFIX_INDEX[suffix]] = GROUP_SUFFIX_TOKENS[suffix]
+  return tokens
+}, [])
 const METHOD_INDEX: Record<GenerationMethod, number> = {
   default: 0,
   individual: 1,
@@ -209,30 +218,36 @@ function physicsPoseAssetRows(startFrame: number): Array<string> {
  * only when GP is included (its baked rows are stripped otherwise) — and with
  * the SAME polarity as `baseFrames`: unmeasured counts as not validated, so a
  * non-standard GP (≠ the baked 104) can't silently desync the splice.
+ * `physFrames` is the measured physics-ROM length, checked only when the PHY
+ * preset is on (nothing is spliced otherwise) with the same polarity again: the
+ * fixed 43-row PHY block is renumbered from `presetEndFrame`, so a physics
+ * asset that measures ≠ the baked 43 would shift every custom frame after it.
  */
 export function poseAssetCsvValidated(
   character: Character,
   era: PoseAssetCsvEra,
   baseFrames?: number,
   gpFrames?: number,
+  physFrames?: number,
 ): boolean {
   if (!poseAssetTemplateApplies(character)) return false
-  const { includeGp } = presetSelections(character.sections, character.gender)
+  const { includeGp, physPreset } = presetSelections(character.sections, character.gender)
   const tpl = GENERATIONS[character.genesis].template
   if (!tpl) return false
   // Era: an era-locked template (G9 → 2.0, the CURVE rows) only validates under
   // its era; an era-independent one (G8.1 → the pre-2.0 CTL-tail HDA, byte-identical
   // across releases) validates whatever release is active.
   if (tpl.era !== null && era !== tpl.era) return false
-  // Baked-length guard (symmetric across generations AND across the two
+  // Baked-length guard (symmetric across generations AND across the three
   // measured lengths): the splice places PHY/custom rows at offsets measured
-  // against fixed baked rows, so a base/GP that measures differently — or is
-  // not measured at all — must fall to the experimental path rather than
-  // silently desync. (A `!== undefined` escape once let an unmeasured GP pass
-  // as validated, the opposite polarity of the base check; every caller
-  // passes the measurement, so the escape was dead — and wrong.)
+  // against fixed baked rows, so a base/GP/phys block that measures
+  // differently — or is not measured at all — must fall to the experimental
+  // path rather than silently desync. (A `!== undefined` escape once let an
+  // unmeasured GP pass as validated, the opposite polarity of the base check;
+  // every caller passes the measurement, so the escape was dead — and wrong.)
   if (baseFrames !== tpl.baseFrames) return false
   if (includeGp && gpFrames !== tpl.gpFrames) return false
+  if (physPreset && physFrames !== tpl.physFrames) return false
   return true
 }
 
@@ -277,18 +292,17 @@ export function templateBakedPoseNames(character: Character): Array<string> {
   const { includeGp, physPreset } = presetSelections(character.sections, character.gender)
   const names: Array<string> = []
   const collect = (csv: string) => {
-    // Suffix menu indices, as in the emitters: 0=left, 1=centre, 2=right.
-    const suffixTokens = ['_l', '', '_r']
     let token = ''
     for (const line of csv.replace(/\r\n/g, '\n').split('\n')) {
       const cols = line.split(',')
       const type = cols[0]
       // Track the ACTIVE group's suffix — the HDA appends _l/_r to the pose
-      // names of left/right groups, forming the final Unreal morph name.
-      if (type === 'JCMGROUP') token = suffixTokens[Number(cols[2])] ?? ''
+      // names of left/right groups, forming the final Unreal morph name
+      // (SUFFIX_TOKEN_BY_INDEX resolves the menu index the emitters wrote).
+      if (type === 'JCMGROUP') token = SUFFIX_TOKEN_BY_INDEX[Number(cols[2])] ?? ''
       else if (type === 'FACGROUP' || type === 'EXPGROUP' || type === 'GENGROUP')
-        token = suffixTokens[Number(cols[3])] ?? ''
-      else if (type === 'PHYGROUP') token = suffixTokens[Number(cols[2])] ?? ''
+        token = SUFFIX_TOKEN_BY_INDEX[Number(cols[3])] ?? ''
+      else if (type === 'PHYGROUP') token = SUFFIX_TOKEN_BY_INDEX[Number(cols[2])] ?? ''
       else if (type === 'RET' || type === 'JCM' || type === 'FAC' || type === 'PHY')
         names.push(`${cols[2]}${token}`)
       else if (type === 'GEN' && includeGp) names.push(`${cols[2]}${token}`)
@@ -378,7 +392,7 @@ export function toPoseAssetCsv(
   sceneSlug?: string,
 ): GeneratedFile {
   const templateCsv = GENERATION_TEMPLATE_CSV[character.genesis]
-  if (templateCsv && poseAssetCsvValidated(character, era, frames.base, frames.gp)) {
+  if (templateCsv && poseAssetCsvValidated(character, era, frames.base, frames.gp, frames.phys)) {
     // Custom PHY is only half-modeled: the schema can't carry the physics
     // payload the HDA defines for PHY rows (offset_distance / radius / per-pose
     // push XYZ), so its rows import without a push direction. Until that's

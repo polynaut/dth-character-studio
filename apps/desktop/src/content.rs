@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -18,28 +18,37 @@ pub(crate) const META_FOLDERS: [&str; 1] = ["Documentation"];
 /// while skipping the wrapper would leave the morphs uninstalled. Only when there is
 /// no real content anywhere within `depth` does a Documentation-only level win, so a
 /// docs-only asset still reports as installed rather than "no content".
+///
+/// ONE content root is resolved: the search is breadth-first, so the SHALLOWEST
+/// directory that directly contains content folders wins (ties broken by listing
+/// order). An asset that ships content under MULTIPLE separate roots resolves
+/// only to that first root — the whole install/dedup pipeline assumes a single
+/// content root per asset (a union across roots is not supported).
 pub(crate) fn find_content_level(root: &Path, depth: u32) -> Option<(PathBuf, Vec<String>)> {
     find_dir_level(root, depth, &CONTENT_FOLDERS)
         .or_else(|| find_dir_level(root, depth, &META_FOLDERS))
 }
 
-/// The shallowest directory under `root` (within `depth` levels) that *directly*
-/// contains one of `wanted`, plus the matching names in `wanted` order. Depth-first;
-/// the first match wins.
+/// The SHALLOWEST directory under `root` (within `depth` levels) that *directly*
+/// contains one of `wanted`, plus the matching names in `wanted` order.
+/// Breadth-first — the old depth-first search let an earlier sibling's DEEPER
+/// match beat a later sibling's shallower one; ties at the same depth go to
+/// listing order.
 fn find_dir_level(root: &Path, depth: u32, wanted: &[&str]) -> Option<(PathBuf, Vec<String>)> {
-    let here: Vec<String> =
-        wanted.iter().filter(|n| root.join(n).is_dir()).map(|n| (*n).to_string()).collect();
-    if !here.is_empty() {
-        return Some((root.to_path_buf(), here));
-    }
-    if depth == 0 {
-        return None;
-    }
-    for entry in fs::read_dir(root).into_iter().flatten().flatten() {
-        let p = entry.path();
-        if p.is_dir() {
-            if let Some(found) = find_dir_level(&p, depth - 1, wanted) {
-                return Some(found);
+    let mut queue: VecDeque<(PathBuf, u32)> = VecDeque::from([(root.to_path_buf(), depth)]);
+    while let Some((dir, depth)) = queue.pop_front() {
+        let here: Vec<String> =
+            wanted.iter().filter(|n| dir.join(n).is_dir()).map(|n| (*n).to_string()).collect();
+        if !here.is_empty() {
+            return Some((dir, here));
+        }
+        if depth == 0 {
+            continue;
+        }
+        for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                queue.push_back((p, depth - 1));
             }
         }
     }
@@ -79,30 +88,27 @@ pub(crate) fn zip_dir_level(paths: &[&str], wanted: &[&str]) -> Option<(String, 
             None => Vec::new(),
         }
     }
-    fn rec(
-        dir: String,
-        depth: u32,
-        children: &HashMap<String, BTreeSet<String>>,
-        wanted: &[&str],
-    ) -> Option<(String, Vec<String>)> {
-        let here = folders_in(&dir, children, wanted);
+    // Breadth-first, like `find_dir_level`: the SHALLOWEST matching directory
+    // wins (ties at the same depth go to BTreeSet — lexicographic — order); the
+    // old depth-first search let an earlier sibling's deeper match beat a later
+    // sibling's shallower one.
+    let mut queue: VecDeque<(String, u32)> = VecDeque::from([(String::new(), 5u32)]);
+    while let Some((dir, depth)) = queue.pop_front() {
+        let here = folders_in(&dir, &children, wanted);
         if !here.is_empty() {
             return Some((dir, here));
         }
         if depth == 0 {
-            return None;
+            continue;
         }
         if let Some(kids) = children.get(&dir) {
             for k in kids {
                 let sub = if dir.is_empty() { k.clone() } else { format!("{dir}/{k}") };
-                if let Some(found) = rec(sub, depth - 1, children, wanted) {
-                    return Some(found);
-                }
+                queue.push_back((sub, depth - 1));
             }
         }
-        None
     }
-    rec(String::new(), 5, &children, wanted)
+    None
 }
 
 /// Find the directory *inside a zip* that holds Daz content folders. Real content
@@ -168,6 +174,33 @@ mod tests {
         folders.sort();
         assert_eq!(root, "Pkg");
         assert_eq!(folders, vec!["DATA".to_string(), "runtime".to_string()]);
+    }
+
+    #[test]
+    fn zip_content_level_prefers_the_shallowest_match_over_sibling_order() {
+        // "A" sorts before "zz", but its data folder sits a level DEEPER — the
+        // old depth-first search returned Pkg/A/deep; breadth-first, the
+        // shallowest content level wins regardless of sibling order.
+        let paths = vec!["Pkg/A/deep/data/x.dsf", "Pkg/zz/data/y.dsf"];
+        let (root, folders) = find_zip_content_level(&paths).unwrap();
+        assert_eq!(root, "Pkg/zz");
+        assert_eq!(folders, vec!["data".to_string()]);
+    }
+
+    #[test]
+    fn content_level_prefers_the_shallowest_match_over_sibling_order() {
+        // Folder equivalent of the zip case above: an earlier sibling's deeper
+        // match must not beat a later sibling's shallower one.
+        let base = unique_temp_dir("content_bfs");
+        let asset = base.join("Pack");
+        fs::create_dir_all(asset.join("A wrapper").join("inner").join("data")).unwrap();
+        fs::create_dir_all(asset.join("z direct").join("Runtime")).unwrap();
+
+        let (root, folders) = find_content_level(&asset, 5).unwrap();
+        assert_eq!(root, asset.join("z direct"));
+        assert_eq!(folders, vec!["Runtime".to_string()]);
+
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

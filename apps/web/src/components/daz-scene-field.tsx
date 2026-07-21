@@ -20,7 +20,7 @@ import {
   relinkScene,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
-import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePath, parentDir, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -63,7 +63,7 @@ function SceneCard({
   // The scene's folder relative to the character folder — e.g. "daz3d" for a
   // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
   // nested. Empty for a scene linked outside the character folder.
-  const sceneDir = normalizePath(scenePath).replace(/\/[^/]*$/, '')
+  const sceneDir = parentDir(scenePath)
   const base = normalizePath(charFolderAbs)
   const relSub =
     base && sceneDir.toLowerCase().startsWith(base.toLowerCase() + '/')
@@ -196,7 +196,7 @@ export function DazSceneField({
   }
   // The character's own folder, and the primary scene's folder relative to it
   // (e.g. "daz3d") — added scenes are copied there; the modal subdir nests inside.
-  const charFolder = normalizePath(location.definitionAbs).replace(/\/[^/]*$/, '')
+  const charFolder = parentDir(location.definitionAbs)
   function insideCharFolder(p: string): boolean {
     return normalizePath(p).toLowerCase().startsWith(charFolder.toLowerCase() + '/')
   }
@@ -207,7 +207,7 @@ export function DazSceneField({
     const target = normalizePath(p).toLowerCase()
     return linkedScenes.some((s) => normalizePath(s).toLowerCase() === target)
   }
-  const primaryDir = character.scenePath ? normalizePath(character.scenePath).replace(/\/[^/]*$/, '') : ''
+  const primaryDir = character.scenePath ? parentDir(character.scenePath) : ''
   const baseDazRel =
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
       ? primaryDir.slice(charFolder.length + 1)
@@ -281,7 +281,7 @@ export function DazSceneField({
     if (!picked) return
     setBusy(true)
     setError('')
-    const oldBase = normalizePath(character.scenePath).replace(/\/[^/]*$/, '')
+    const oldBase = parentDir(character.scenePath)
     const newBase = normalizePath(picked)
     const repoint = (p: string) => {
       const rel = normalizePath(p)
@@ -462,7 +462,7 @@ export function DazSceneField({
   const sceneDir = displayDirOf(character.scenePath)
   // The scenes subfolder relative to the character folder ('' when the scene is
   // linked from outside it) — that's the editable part of the chip.
-  const sceneDirAbs = normalizePath(character.scenePath).replace(/\/[^/]*$/, '')
+  const sceneDirAbs = parentDir(character.scenePath)
   const sceneDirRel = insideCharFolder(character.scenePath)
     ? sceneDirAbs.slice(charFolder.length + 1)
     : ''

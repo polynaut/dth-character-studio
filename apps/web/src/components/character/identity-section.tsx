@@ -69,7 +69,8 @@ export function IdentitySection({
         </legend>
         <div className={`space-y-4${character.genesis === 'G9' ? '' : ' text-muted-foreground'}`}>
           {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
-              percentages, same as every morph value field. */}
+              percentages, same as every morph value field — NumberField's
+              `percent` mode owns that conversion (and the "%" suffix). */}
           <div className="flex flex-wrap gap-4">
             <div>
               <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
@@ -77,9 +78,9 @@ export function IdentitySection({
               </Label>
               <NumberField
                 className="w-28 pr-6 text-right tabular-nums"
-                suffix="%"
-                value={+(character.facsDetailStrength * 100).toFixed(4)}
-                onCommit={(pct) => patch({ facsDetailStrength: +(pct / 100).toFixed(6) })}
+                percent
+                value={character.facsDetailStrength}
+                onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
               />
             </div>
             <div>
@@ -88,9 +89,9 @@ export function IdentitySection({
               </Label>
               <NumberField
                 className="w-28 pr-6 text-right tabular-nums"
-                suffix="%"
-                value={+(character.flexionStrength * 100).toFixed(4)}
-                onCommit={(pct) => patch({ flexionStrength: +(pct / 100).toFixed(6) })}
+                percent
+                value={character.flexionStrength}
+                onCommit={(flexionStrength) => patch({ flexionStrength })}
               />
             </div>
           </div>

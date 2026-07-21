@@ -7,14 +7,14 @@ import {
   remove,
   stat,
   writeFile,
-  writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { z } from 'zod'
 
 import * as storage from '../storage'
 import { notesPathFor } from '../library'
-import { basename, charactersRoot, joinPath, projectPath } from './core'
+import { basename, charactersRoot, joinPath, locateCharacter, projectPath } from './core'
+import { bytesToDataUrl, fileExt, IMAGE_EXT_MIME } from './data-url'
 
 // Project / character notes: freeform markdown the user writes about a project
 // or a character (background, art direction, todos …). Stored as PLAIN `.md`
@@ -32,10 +32,12 @@ const notesScopeInput = z.object({
   characterId: z.string().optional(),
 })
 
-/** Absolute path of the notes file for a project or character. */
+/** Absolute path of the notes file for a project or character. Resolves the
+ *  character through the session location cache ({@link locateCharacter}) —
+ *  a full library walk on every debounced autosave was pure waste. */
 async function notesPath(projectId: string, characterId?: string): Promise<string> {
   if (!characterId) return joinPath(await projectPath(projectId), 'notes.md')
-  const loc = await storage.getCharacterPath(await charactersRoot(projectId), characterId)
+  const loc = await locateCharacter(await charactersRoot(projectId), characterId)
   if (!loc) throw new Error('Character not found.')
   return notesPathFor(loc.definitionAbs)
 }
@@ -102,15 +104,27 @@ export async function saveNotes({ data }: { data: unknown }): Promise<number | n
   if (!text.trim()) {
     if (await exists(path)) await remove(path)
   } else {
-    await writeTextFile(path, text)
+    // Atomic like every other user-data write: notes are user prose — a crash
+    // or dropped share mid-write must not leave a torn file where good notes stood.
+    await storage.writeTextFileAtomic(path, text)
     mtime = await fileMtime(path)
   }
   // A successful save is the natural moment to drop media nothing references
-  // anymore. Best-effort: GC trouble must never fail the save that ran it.
-  try {
-    await gcNoteMedia(await projectPath(projectId), MEDIA_GC_GRACE_MS)
-  } catch {
-    // e.g. an unreadable folder mid-scan — the next save or sweep gets it
+  // anymore — but THROTTLED: the notes autosave fires on every ~800ms typing
+  // pause, and the GC's reference collection walks the whole characters root,
+  // for files that only become deletable after the one-hour grace anyway. At
+  // most once per interval per project; the housekeeping sweep backstops
+  // projects that stop saving. Best-effort: GC trouble must never fail the save.
+  const projectDir = await projectPath(projectId)
+  const lastGc = lastMediaGcAt.get(projectDir) ?? 0
+  if (Date.now() - lastGc >= MEDIA_GC_MIN_INTERVAL_MS) {
+    // Stamped up front so overlapping saves can't double-run the walk.
+    lastMediaGcAt.set(projectDir, Date.now())
+    try {
+      await gcNoteMedia(projectDir, MEDIA_GC_GRACE_MS)
+    } catch {
+      // e.g. an unreadable folder mid-scan — a later save or the sweep gets it
+    }
   }
   return mtime
 }
@@ -120,13 +134,25 @@ export async function saveNotes({ data }: { data: unknown }): Promise<number | n
 // ANY of the project's notes files (another character's notes may reference a
 // file this one dropped). Deleting a reference — or a whole notes file — would
 // otherwise strand the bytes forever, and app-generated data must never
-// accumulate unbounded. Two layers share the same core: every successful save
-// GCs unreferenced files older than an hour (the grace protects cut/paste
-// during an editing session), and the housekeeping sweep backstops with a
-// 7-day bound for projects that are never saved again.
+// accumulate unbounded. Two layers share the same core: successful saves GC
+// unreferenced files older than an hour (the grace protects cut/paste during
+// an editing session; throttled per project — see saveNotes), and the
+// housekeeping sweep backstops with a 7-day bound for projects that are never
+// saved again.
 
 /** Grace before the save-time GC may delete an unreferenced media file. */
 export const MEDIA_GC_GRACE_MS = 60 * 60 * 1000
+
+/** How often (at most) the save-time GC runs per project — see {@link saveNotes}. */
+export const MEDIA_GC_MIN_INTERVAL_MS = 10 * 60 * 1000
+
+/** When each project's save-time GC last ran (epoch ms), keyed by project dir. */
+const lastMediaGcAt = new Map<string, number>()
+
+/** Test seam: forget when each project's save-time GC last ran. */
+export function resetMediaGcThrottle(): void {
+  lastMediaGcAt.clear()
+}
 
 /** A `media://<file>` reference in markdown; group 1 is the bare filename. */
 const MEDIA_REF_RE = /media:\/\/([^\s)"'<>]+)/g
@@ -208,8 +234,9 @@ export async function gcNoteMedia(
   return result
 }
 
-/** Extensions the preview can inline as an <img> (everything else links). */
-const NOTE_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'avif'])
+/** Extensions the preview can inline as an <img> (everything else links) —
+ *  exactly the formats the shared data-url module can name a MIME for. */
+const NOTE_IMAGE_EXTS = new Set(Object.keys(IMAGE_EXT_MIME))
 
 /**
  * Extensions `openNoteMedia` will hand to the OS default app. A strict ALLOWLIST
@@ -229,16 +256,6 @@ const OPENABLE_MEDIA_EXTS = new Set([
   // documents / text
   'pdf', 'txt', 'md', 'csv', 'json',
 ])
-const NOTE_IMAGE_MIME: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  gif: 'image/gif',
-  svg: 'image/svg+xml',
-  bmp: 'image/bmp',
-  avif: 'image/avif',
-}
 
 const addMediaInput = z.object({
   projectId: z.string().min(1),
@@ -265,7 +282,7 @@ export async function addNoteMedia({
   const dir = storage.metaMediaDir(await projectPath(projectId))
   await mkdir(dir, { recursive: true })
   await writeFile(joinPath(dir, fileName), bytes)
-  const ext = (safe.split('.').pop() ?? '').toLowerCase()
+  const ext = fileExt(safe)
   const label = source.replace(/\.[^.]+$/, '')
   const markdown = NOTE_IMAGE_EXTS.has(ext)
     ? `![${label}](media://${fileName})`
@@ -290,16 +307,10 @@ async function mediaPath(projectId: string, fileName: string): Promise<string> {
 /** Resolve a `media://` image reference to a data URL for the notes preview. */
 export async function resolveNoteMedia({ data }: { data: unknown }): Promise<string> {
   const { projectId, fileName } = mediaRefInput.parse(data)
-  const ext = (fileName.split('.').pop() ?? '').toLowerCase()
-  const mime = NOTE_IMAGE_MIME[ext]
+  const mime = IMAGE_EXT_MIME[fileExt(fileName)]
   if (!mime) return '' // not an image — the preview links it instead
   const bytes = await readFile(await mediaPath(projectId, fileName))
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  }
-  return `data:${mime};base64,${btoa(binary)}`
+  return bytesToDataUrl(bytes, mime)
 }
 
 /** Open a stored media file with its default app (non-image media links). */
@@ -308,8 +319,7 @@ export async function openNoteMedia({ data }: { data: unknown }): Promise<void> 
   // Refuse anything outside the passive-media allowlist — notably `.dsa`, which
   // the global shell scope permits but which EXECUTES in Daz Studio (a hostile
   // shared project's note attachment must not be one click from running).
-  const ext = (fileName.split('.').pop() ?? '').toLowerCase()
-  if (!OPENABLE_MEDIA_EXTS.has(ext)) {
+  if (!OPENABLE_MEDIA_EXTS.has(fileExt(fileName))) {
     throw new Error(
       `Can't open “${fileName}” from the app for safety — reveal it in your file manager to open it yourself.`,
     )
