@@ -338,12 +338,7 @@ export function EditorHeader({
                 the current view), where the selection can be switched. The label
                 drops the character's name from the scene name. */}
             {sceneTag && !editingTitle && (
-              <button
-                type="button"
-                className="cursor-pointer"
-                title="The Daz scene selected in the scene cards — hair items and the ROM override follow it. Click to jump to the scene cards and switch."
-                onClick={scrollDazScenesIntoView}
-              >
+              <button type="button" className="cursor-pointer" onClick={scrollDazScenesIntoView}>
                 <Tag
                   tone="orange"
                   // Optical nudge: the bold 3xl title's visual weight sits below
