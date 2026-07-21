@@ -414,7 +414,7 @@ export interface RefreshSummary {
     scripts: number
     /** Characters whose PoseAsset CSV was regenerated. */
     csv: number
-    /** Stored avatars xBRZ-upscaled to 512² (were smaller — from before the
+    /** Stored avatars xBRZ-upscaled to 768² (were smaller — from before the
      *  upscale-on-write feature). Independent of the three regen axes above. */
     avatars: number
   }
@@ -639,7 +639,7 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   // Upgrade low-res avatars across every gathered character — independent of the
   // regen skip above, since avatar format is its own axis (a character with
   // nothing else stale still carries a 256² avatar from before this feature). xBRZ
-  // upscales anything under 512² to 512² IN PLACE; idempotent, native-only,
+  // upscales anything under 768² to 768² IN PLACE; idempotent, native-only,
   // best-effort. Clearing the data-URL cache after makes the UI pick up the new
   // bytes — the filename is unchanged, so nothing re-resolves on its own.
   if (isTauri() && gathered.length > 0) {

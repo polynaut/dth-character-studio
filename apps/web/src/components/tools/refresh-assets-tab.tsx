@@ -64,7 +64,7 @@ export function RefreshAssetsTab() {
         if (result.counts.csv > 0)
           lines.push(`Re-generated ${n(result.counts.csv, 'PoseAsset CSV')}`)
         if (result.counts.avatars > 0)
-          lines.push(`Upscaled ${n(result.counts.avatars, 'avatar')} to 512px`)
+          lines.push(`Upscaled ${n(result.counts.avatars, 'avatar')} to 768px`)
         if (result.runtime?.ok) lines.push('Re-installed the DTH runtime files')
         toast.success(`Refreshed ${n(result.regenerated, 'character')}`, {
           description: lines.length ? (

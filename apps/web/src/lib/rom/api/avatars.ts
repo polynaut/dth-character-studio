@@ -64,8 +64,8 @@ export async function writeAvatarBytes(
   const filePath = joinPath(dir, fileName)
   await writeFile(filePath, bytes)
   // Upscale a small avatar — a 256px Daz scene `.tip.png` or a 256px cropped
-  // upload — to 512² with xBRZ (in Rust, edge-directed), so the header portrait
-  // isn't blowing up a tiny source. IN PLACE + idempotent: an image already ≥512²
+  // upload — to 768² with xBRZ (in Rust, edge-directed), so the header portrait
+  // isn't blowing up a tiny source. IN PLACE + idempotent: an image already ≥768²
   // is left untouched, so re-writes are safe. Best-effort — a failed upscale keeps
   // the just-written original rather than blocking the avatar set. Native-only,
   // like the fs writes above.
@@ -284,11 +284,11 @@ export async function resolveImageSrc(image: string): Promise<string> {
 }
 
 /**
- * Upscale a character's STORED avatar to 512² IN PLACE if it's a local image
+ * Upscale a character's STORED avatar to 768² IN PLACE if it's a local image
  * still below that — the migration path for avatars written before the
  * upscale-on-write feature (Refresh assets runs it over the whole library, then
  * clears the data-URL cache). Skips external URLs / empty refs / the browser
- * (native-only); the Rust command no-ops on an image already ≥512², so it's safe
+ * (native-only); the Rust command no-ops on an image already ≥768², so it's safe
  * to call on every avatar. Returns whether it actually upscaled — best-effort, any
  * failure swallowed so a refresh never breaks over one avatar.
  */
