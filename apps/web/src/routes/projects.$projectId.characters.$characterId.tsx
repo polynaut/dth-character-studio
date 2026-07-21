@@ -401,7 +401,7 @@ function CharacterPage() {
               </>
             )}
           </div>
-          <div className="shrink-0 lg:w-96">
+          <div className="shrink-0 lg:w-[27rem] xl:w-[32rem]">
             <IdentitySection
               character={character}
               patch={patch}
@@ -412,26 +412,22 @@ function CharacterPage() {
               scenePath={sceneSel.effectiveScene}
               sceneOverride={sceneSel.sceneOverride}
               patchOverride={sceneSel.patchOverride}
+              hairSlot={
+                <GroomFields
+                  character={character}
+                  patch={patch}
+                  selectedScene={sceneSel.effectiveScene}
+                  dazInstallFolder={settings.dazInstallFolder}
+                  overrideEligible={sceneSel.overrideEligible}
+                  groomOverrideActive={sceneSel.groomOverrideActive}
+                  setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+                  selectedSceneName={sceneSel.selectedSceneName}
+                />
+              }
             />
           </div>
         </div>
       </section>
-
-      {/* Hair items — its own panel, right before the generated-scripts panel. */}
-      {location && (
-        <section className="mb-8 rounded-lg border bg-card p-5">
-          <GroomFields
-            character={character}
-            patch={patch}
-            selectedScene={sceneSel.effectiveScene}
-            dazInstallFolder={settings.dazInstallFolder}
-            overrideEligible={sceneSel.overrideEligible}
-            groomOverrideActive={sceneSel.groomOverrideActive}
-            setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
-            selectedSceneName={sceneSel.selectedSceneName}
-          />
-        </section>
-      )}
       </div>
 
       {project?.dazProductsEnabled && (

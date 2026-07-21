@@ -137,7 +137,7 @@ export function GroomFields({
   return (
     <div className="max-w-xl">
       <div className="mb-3 flex items-center gap-3">
-        <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
+        <span className="flex items-center gap-1 text-sm font-medium">
           Hair items
           <InfoPopup label="Hair items — more information">
             Each scene carries its own hair — the items you list here are hidden around the DTH
@@ -145,7 +145,7 @@ export function GroomFields({
             hair to exclude. For a hair-only variant, link it as its own scene (or use
             Attachments).
           </InfoPopup>
-        </h2>
+        </span>
         <span className="ml-auto">
           <PanelOverrideToggle
             eligible={overrideEligible}

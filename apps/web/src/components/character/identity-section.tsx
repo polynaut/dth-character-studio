@@ -2,6 +2,7 @@ import { InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, Selec
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
 import type { Character, GenesisVersion, SceneOverride } from '@dth/rom'
+import type { ReactNode } from 'react'
 
 /**
  * The character's identity block: Genesis generation + gender, and the
@@ -21,6 +22,7 @@ export function IdentitySection({
   scenePath,
   sceneOverride,
   patchOverride,
+  hairSlot,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -33,6 +35,9 @@ export function IdentitySection({
   scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
+  /** The Hair-items field, rendered as the middle sidebar row (between Genesis/
+   *  Gender and the Genesis-9 fieldset). It carries its OWN override toggle. */
+  hairSlot: ReactNode
 }) {
   // While armed on a non-primary scene the three dials read/write the scene's
   // identity override; otherwise the base character.
@@ -103,6 +108,9 @@ export function IdentitySection({
           </div>
         </div>
       </div>
+
+      {/* Hair items — the middle sidebar row (carries its own override toggle). */}
+      {hairSlot}
 
       {/* The legend is positioned absolutely (a notch on the border) so it
           doesn't consume a row of flow. The override toggle sits in its own row
