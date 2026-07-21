@@ -289,7 +289,9 @@
    top right, shown on hover. Clicking it puts the accordion's #anchor in the
    URL and copies the full link to the clipboard (guide.js) — clicking
    anywhere else on the title still toggles the box. */
-.details-anchor {
+/* Scoped under .guide-content so this outranks the `.guide-content a` link
+   color — otherwise the glyph renders orange instead of the muted gray. */
+.guide-content .details-anchor {
   position: absolute;
   top: 50%;
   right: 14px;
@@ -311,7 +313,7 @@
 
 /* Brief "copied" confirmation after a click (guide.js toggles the class) —
    heading anchors and accordion anchors alike. */
-.details-anchor.copied,
+.guide-content .details-anchor.copied,
 .guide-content .anchor.copied {
   color: var(--primary);
   opacity: 1;
