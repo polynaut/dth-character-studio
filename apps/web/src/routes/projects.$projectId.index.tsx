@@ -154,9 +154,8 @@ function ProjectCharactersPage() {
 
   /**
    * Guess the generation from a scene filename ("LaraCroft_G8_1_GP" → G8.1,
-   * "KiraG9" → G9, "Vicky Genesis 8" → G8). Longest match first so 8.1 isn't
-   * swallowed by 8; null when the name gives no (supported) hint — G3 is not
-   * selectable yet, so it is deliberately not guessed.
+   * "KiraG9" → G9, "Vicky Genesis 3" → G3). Longest match first so 8.1 isn't
+   * swallowed by 8; null when the name gives no (supported) hint.
    */
   function genesisFromFileName(base: string): GenesisVersion | null {
     // Split CamelCase / digit→Upper seams into word boundaries first, so
@@ -169,6 +168,7 @@ function ProjectCharactersPage() {
     if (/(^|_)(g8_?1|genesis_?8_?1)(_|$)/.test(s)) return 'G8.1'
     if (/(^|_)(g8|genesis_?8)(_|$)/.test(s)) return 'G8'
     if (/(^|_)(g9|genesis_?9)(_|$)/.test(s)) return 'G9'
+    if (/(^|_)(g3|genesis_?3)(_|$)/.test(s)) return 'G3'
     return null
   }
 
@@ -319,6 +319,10 @@ function ProjectCharactersPage() {
     } catch (e) {
       setCopyPrompt(false)
       setError(e instanceof Error ? e.message : String(e))
+      // A copy/save failure lands AFTER createCharacter succeeded — the character
+      // already exists on disk. Refresh the list so it isn't invisible (and a
+      // retry doesn't re-run createCharacter against the leftover folder).
+      void router.invalidate()
     } finally {
       setBusy(false)
     }
@@ -772,7 +776,9 @@ function ProjectCharactersPage() {
         // above it instead of on top of it.
         className="bottom-20"
         open={sel.selecting}
-        count={sel.count}
+        // Visible∩selected — delete acts on `selectedChars`, so the pill must
+        // not count selections hidden by the Genesis/gender filters.
+        count={selectedChars.length}
         total={visible.length}
         noun="character"
         onSelectAll={() => sel.selectAll(visible.map((c) => c.id))}

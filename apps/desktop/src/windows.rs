@@ -23,6 +23,15 @@ pub(crate) fn dcsp_from_args(args: &[String]) -> Option<String> {
         .map(|a| a.replace('\\', "/"))
 }
 
+/// Whether two `.dcsp` spellings identify the same project file. NTFS resolves
+/// paths case-insensitively, and the fold must be Unicode-aware like
+/// `fsutil::rel_key` — `eq_ignore_ascii_case` missed non-ASCII variants
+/// (Ärger.dcsp vs ärger.dcsp), letting two windows open on ONE project: the
+/// exact hazard `PROJECT_WINDOW_LOCK` exists to prevent.
+pub(crate) fn same_project_path(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
+}
+
 /// Lock the window→project map, recovering from a poisoned mutex (the guarded map
 /// is plain data — a peer thread panicking must not wedge every later window op).
 pub(crate) fn lock_windows(
@@ -96,7 +105,7 @@ pub(crate) fn open_project_window_impl(app: &tauri::AppHandle, path: &str) -> ta
     let label = {
         let mut map = lock_windows(&projects);
         if let Some(label) =
-            map.iter().find(|(_, p)| p.eq_ignore_ascii_case(&norm)).map(|(l, _)| l.clone())
+            map.iter().find(|(_, p)| same_project_path(p, &norm)).map(|(l, _)| l.clone())
         {
             if app.get_webview_window(&label).is_some() {
                 let _ = app.get_webview_window(&label).map(|w| w.set_focus());
@@ -218,15 +227,16 @@ pub fn open_project_window(app: tauri::AppHandle, path: String) -> Result<(), St
     }
 }
 
-#[tauri::command(async)]
-pub fn open_home_window(app: tauri::AppHandle) -> Result<(), String> {
-    #[cfg(desktop)]
-    {
-        open_home_window_impl(&app, false).map_err(|e| e.to_string())
-    }
-    #[cfg(not(desktop))]
-    {
-        let _ = app;
-        Ok(())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_project_path_folds_unicode_case() {
+        // Non-ASCII case variants of one NTFS path are the SAME file — the old
+        // eq_ignore_ascii_case compare let them open two windows on one project.
+        assert!(same_project_path("D:/P/Ärger.dcsp", "D:/P/ärger.dcsp"));
+        assert!(same_project_path("D:/P/proj.dcsp", "D:/P/PROJ.DCSP"));
+        assert!(!same_project_path("D:/P/a.dcsp", "D:/P/b.dcsp"));
     }
 }

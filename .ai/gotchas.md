@@ -8,8 +8,10 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Frame math returns -1, not 0, for "no preset block"** — `presetEndFrame` is
   designed so the first custom pose lands at frame 0. Clamping to 0 introduces an
   off-by-one that `generate.test.ts` guards explicitly.
-- **`mirrorGroup` only flips word-initial Left/Right** tokens — `CleftChin` must
-  survive mirroring (test-pinned).
+- **`mirrorGroup` flips word-initial Left/Right tokens plus the four side-marker
+  case twins** (`_l`/`_L` suffix, `l_`/`L_` prefix — stock Daz JCMs use `_L`, G9
+  bones use `l_`). Mid-word letters must survive: `CleftChin`, `Ball_Large`,
+  `Curl_lower` are all test-pinned. A new marker pattern needs BOTH cases.
 - **U+2028/U+2029 are line terminators to Daz's JS engine** — every string
   embedded in a generated `.dsa` goes through `dazJson`/`commentSafe` escaping. A
   shared character definition carrying one used to break the whole script.
@@ -63,12 +65,24 @@ current code before relying on details, but assume the *lesson* still holds.
   grouping, winner maps) must key on a Unicode-folded `rel_key()` — Windows
   preserves the DESTINATION's casing on overwrite, so a byte-exact lookup misses
   a case-variant installed file and re-copies it forever. Keep original casing in
-  everything user-visible or written to disk (`fsutil.rs`).
+  everything user-visible or written to disk (`fsutil.rs`). The rule covers more
+  than map keys: destination lock striping (`lock_stripe`) and path-identity
+  compares (`same_project_path`, the dedup source rails) must fold the same way —
+  and with Unicode `to_lowercase()`, not `eq_ignore_ascii_case` (Ärger/ärger).
 - **Rust std reports NTFS junctions as symlinks** (`file_type().is_symlink()`
   true, `is_dir()` false). All fs walkers share `fsutil::walk_dir` with one
   explicit dir-link policy (link = leaf, counted) — a hand-rolled walker that
   forgets this either escapes into the junction target or `fs::copy`s a reparse
-  point and fails the whole step.
+  point and fails the whole step. The policy also applies to a link AS the
+  operation's root: `is_dir()` FOLLOWS links, so a mover must check
+  `symlink_metadata` first and move the reparse point itself (cross-volume:
+  refuse) — or it deep-copies the target's gigabytes and deletes the link.
+- **Dedup's containment rails must cover source ↔ source, not just
+  quarantine ↔ source** — the same folder listed twice (case variant) makes
+  every asset an exact dup of ITSELF, and a source nested in another source is
+  scanned once as a source and once as its parent's "asset"; either way apply
+  would quarantine the only real copy. Sources are canonical-folded + deduped
+  and nesting is a hard pre-scan error (test-pinned in `dedup.rs`).
 - **A window-label reservation races the async `build()`** — webview registration
   lags by hundreds of ms, so "reservation present, window absent" is only provably
   stale while holding a creation lock across find→build (`PROJECT_WINDOW_LOCK`,
@@ -127,7 +141,14 @@ current code before relying on details, but assume the *lesson* still holds.
   `save()` snapshots the draft and only replaces it on settle if unchanged
   (`settleAfterSave`) — otherwise interim keystrokes are reverted. The hook has
   its own test suite (`use-character-draft.test.tsx`) — extend it with any new
-  settle semantics.
+  settle semantics. Round-two refinements: the baseline settles the moment the
+  PERSIST lands (a generate failure warns and never rolls back a landed save),
+  the pre-patch snapshot is taken AFTER the async producer resolves (edits typed
+  during a slow producer survive), and even the inline rename rides persistPatch
+  (`previousName`/`rethrow` options) — no flow holds save state by hand.
+- **`Number('') === 0`, not `NaN`** — a numeric input that commits on blur via
+  `Number(draft)` silently commits 0 when the user clears the field; an
+  empty/whitespace draft must revert instead (NumberField, test-pinned).
 - **`readManifest` throws on a CORRUPT `.dcsp`** (an existing file that won't
   parse) rather than returning defaults — else the next save writes defaults over
   the real settings, and `fetchProject` can never 404. It also throws a typed

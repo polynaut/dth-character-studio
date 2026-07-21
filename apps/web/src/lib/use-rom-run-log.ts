@@ -16,12 +16,30 @@ export type RomRunLog = Awaited<ReturnType<typeof fetchRomRunLog>>
 export function useRomRunLog(projectId: string, characterId: string, initial: RomRunLog) {
   const [romRunLog, setRomRunLog] = useState(initial)
   useRefetchOnFocus(() => {
-    void fetchRomRunLog({ data: { projectId, id: characterId } }).then(setRomRunLog)
+    fetchRomRunLog({ data: { projectId, id: characterId } })
+      .then((fresh) => {
+        // Content-compare before storing: the refocus fetch re-reads the log on
+        // EVERY focus, and a fresh-but-identical object identity would ripple
+        // through `failedFrames` into the memoized ROM subtree for nothing.
+        setRomRunLog((prev) =>
+          JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh,
+        )
+      })
+      .catch(() => {
+        // A briefly unreachable project share (fetch throws
+        // ProjectUnreachableError) must not surface as an unhandled rejection
+        // on every refocus — keep the last log; the next focus retries.
+      })
   }, [projectId, characterId])
 
   const dismiss = useCallback(async () => {
     setRomRunLog(null)
-    await dismissRomRunLog({ data: { projectId, id: characterId } })
+    try {
+      await dismissRomRunLog({ data: { projectId, id: characterId } })
+    } catch {
+      // Unreachable share — the banner is already gone locally; the stored
+      // log just survives until the next successful dismiss or run.
+    }
   }, [projectId, characterId])
 
   const hasRunProblems = !!romRunLog && !romRunLog.ok

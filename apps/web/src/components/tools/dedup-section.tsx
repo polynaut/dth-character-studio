@@ -26,7 +26,9 @@ export function DedupSection({
   busy: boolean
   report: DedupReport | null
   keeperOverrides: Set<string>
-  onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
+  /** Pick which copy of a duplicate group to keep — keyed by each member's full
+   *  asset PATH (labels collide inside an exact-dup group; see DedupReportList). */
+  onChooseKeeper: (groupPaths: Array<string>, keepPath: string) => void
   /** Accept a group of shared files as legitimately shared (drops them from the
    *  conflict list on the next scan). */
   onAcceptShared: (rels: Array<string>) => void

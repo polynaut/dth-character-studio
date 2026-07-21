@@ -29,6 +29,18 @@ export function normalizePathLower(path: string): string {
   return normalizePath(path).toLowerCase()
 }
 
+/**
+ * The parent directory of a path, {@link normalizePath}-normalized ('/'-joined,
+ * runs collapsed, no trailing separator) — THE one copy of the
+ * `normalizePath(p).replace(/\/[^/]*$/, '')` idiom that used to be inlined
+ * across the scene/Houdini/export fields. Distinct from {@link dirOf}
+ * (storage's dirname), which does not collapse separator runs — use `parentDir`
+ * whenever the result is compared against other normalized paths.
+ */
+export function parentDir(path: string): string {
+  return normalizePath(path).replace(/\/[^/]*$/, '')
+}
+
 /** Everything but the last path segment ('/'-joined) — e.g. the folder of a
  *  `.dcsp` file. A re-export of the single dirname implementation in
  *  storage/fs.ts (this, api/core's dirname and storage's dirname used to be

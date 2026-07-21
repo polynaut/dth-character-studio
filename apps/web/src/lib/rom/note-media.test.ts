@@ -137,7 +137,14 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 
 import * as storage from './storage'
 import { setActiveProjectDir } from './api/core'
-import { fetchNotes, gcNoteMedia, MEDIA_GC_GRACE_MS, NotesConflictError, saveNotes } from './api/notes'
+import {
+  fetchNotes,
+  gcNoteMedia,
+  MEDIA_GC_GRACE_MS,
+  NotesConflictError,
+  resetMediaGcThrottle,
+  saveNotes,
+} from './api/notes'
 import { sweepNoteMedia } from './api/maintenance'
 
 const HOUR = 60 * 60 * 1000
@@ -150,6 +157,9 @@ beforeEach(async () => {
   dirs.clear()
   unreadableDirs.clear()
   setActiveProjectDir('')
+  // The save-time GC is throttled per project across saves — each test starts
+  // with the throttle window elapsed so its first save GCs deterministically.
+  resetMediaGcThrottle()
   await storage.createProjectManifest(PROJECT, 'Nova')
   addDir(MEDIA)
 })
@@ -254,6 +264,23 @@ describe('save-time media GC (1-hour grace)', () => {
     setFile(`${MEDIA}/${old}-b.png`, '123')
     const result = await gcNoteMedia(PROJECT, MEDIA_GC_GRACE_MS)
     expect(result).toEqual({ filesDeleted: 2, bytesFreed: 8 })
+  })
+
+  it('throttles the save-time GC: rapid autosaves within the interval skip the walk', async () => {
+    const old = Date.now() - 2 * HOUR
+    const first = await save('first save') // GCs (nothing stale yet), stamps the throttle
+    setFile(`${MEDIA}/${old}-stale.png`, 'png')
+
+    // The debounced autosave fires again seconds later — within the throttle
+    // interval, so no GC walk runs and the stale file survives for now.
+    const second = await save('second save', first)
+    expect(files.has(`${MEDIA}/${old}-stale.png`)).toBe(true)
+
+    // Once the interval has elapsed (reset = the window passed), the next
+    // save's GC collects it.
+    resetMediaGcThrottle()
+    await save('third save', second)
+    expect(files.has(`${MEDIA}/${old}-stale.png`)).toBe(false)
   })
 })
 

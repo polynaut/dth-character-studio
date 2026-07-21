@@ -208,8 +208,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'active_project_file':
         return seed.activeProjectFile
       case 'open_project_window': // opens a separate OS window on the desktop —
-      case 'open_home_window': //    recorded (see `calls`), nothing to do here
-        return null
+        return null //              recorded (see `calls`), nothing to do here
       case 'scan_duf_files': {
         const folder = norm(args.folder)
         const prefix = `${folder}/`

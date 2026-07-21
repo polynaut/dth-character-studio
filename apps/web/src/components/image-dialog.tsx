@@ -28,10 +28,20 @@ export function ImageDialog({
   characterId: string
   /** Linked Daz scene paths — each offers its `.tip.png` as a pickable avatar. */
   scenes: Array<string>
-  /** Applies the new stored image reference. `imageScene` is the linked scene
-   *  whose preview the image mirrors — '' for uploads and external URLs — so
-   *  the caller can persist the provenance the avatar auto-sync keys off. */
-  onApply: (image: string, imageScene: string) => void | Promise<void>
+  /** Persists a new stored image reference. Receives an async PRODUCER of
+   *  `{ image, imageScene }` (`imageScene` is the linked scene whose preview
+   *  the image mirrors — '' for uploads and external URLs — the provenance the
+   *  avatar auto-sync keys off). The caller must run the producer through the
+   *  page's persist primitive, e.g.
+   *  `onApply={(produce) => draft.persistPatch(produce, { toast: '…' })}`,
+   *  so the upload side effect only runs AFTER its single-flight/validate
+   *  guards (the daz-scene-field applyAdd pattern — a refused persist must not
+   *  leave an uploaded file behind). Resolves to the persisted result, or
+   *  `null` when the persist was refused or failed — the dialog then resets
+   *  its preview to the last persisted image. */
+  onApply: (
+    produce: () => Promise<{ image: string; imageScene: string }>,
+  ) => Promise<object | null>
   onClose: () => void
 }) {
   const [url, setUrl] = useState(image)
@@ -39,14 +49,21 @@ export function ImageDialog({
   const [error, setError] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
 
-  // Native OS drag-drop gives a path — read + upload it server-side.
+  // Native OS drag-drop gives a path — read + upload it server-side. The upload
+  // runs INSIDE the persist producer — after persistPatch's single-flight and
+  // validation guards — so a refused persist can never have already written the
+  // file and left the preview showing an avatar that never persisted.
   async function uploadPath(path: string) {
     setBusy(true)
     setError('')
     try {
-      const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
-      setUrl(served)
-      void onApply(served, '')
+      const saved = await onApply(async () => {
+        const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
+        setUrl(served)
+        return { image: served, imageScene: '' }
+      })
+      // Refused or failed → reset the preview to the last persisted image.
+      if (saved === null) setUrl(image)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -66,21 +83,26 @@ export function ImageDialog({
     setBusy(true)
     setError('')
     try {
+      // Reading the picked file is side-effect free, so it may run up front;
+      // the actual upload waits inside the producer (see uploadPath).
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
         reader.onerror = () => reject(new Error('Could not read the file'))
         reader.readAsDataURL(file)
       })
-      const served = await uploadCharacterImage({
-        data: {
-          characterId,
-          mimeType: file.type,
-          dataBase64: dataUrl.split(',')[1] ?? '',
-        },
+      const saved = await onApply(async () => {
+        const served = await uploadCharacterImage({
+          data: {
+            characterId,
+            mimeType: file.type,
+            dataBase64: dataUrl.split(',')[1] ?? '',
+          },
+        })
+        setUrl(served)
+        return { image: served, imageScene: '' }
       })
-      setUrl(served)
-      void onApply(served, '')
+      if (saved === null) setUrl(image)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -89,14 +111,18 @@ export function ImageDialog({
   }
 
   // Switch the avatar to a linked scene's tip thumbnail (copied into the app's
-  // images folder). Mirrors the upload handlers — updates the preview + persists.
+  // images folder). Mirrors the upload handlers — the copy runs inside the
+  // persist producer, and the preview resets when the persist is refused.
   async function applyScene(scenePath: string) {
     setBusy(true)
     setError('')
     try {
-      const served = await setAvatarFromScene({ data: { characterId, scenePath } })
-      setUrl(served)
-      await onApply(served, scenePath)
+      const saved = await onApply(async () => {
+        const served = await setAvatarFromScene({ data: { characterId, scenePath } })
+        setUrl(served)
+        return { image: served, imageScene: scenePath }
+      })
+      if (saved === null) setUrl(image)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -172,7 +198,10 @@ export function ImageDialog({
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                void onApply(url, '')
+                // No upload side effect for a URL — the producer just hands the
+                // patch over. The dialog closes right away; a refused persist
+                // surfaces via persistPatch's own toast.
+                void onApply(async () => ({ image: url, imageScene: '' }))
                 onClose()
               }
             }}
@@ -180,7 +209,7 @@ export function ImageDialog({
           <Button
             variant="outline"
             onClick={() => {
-              void onApply(url, '')
+              void onApply(async () => ({ image: url, imageScene: '' }))
               onClose()
             }}
           >

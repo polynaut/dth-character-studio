@@ -160,6 +160,10 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
       : defaultSections()
     if (Array.isArray(data.groups)) {
       for (const group of data.groups) {
+        // A hand-edited legacy JSON can carry null/non-object entries — skip
+        // them so the definition flows to migrateCharacterData's promised clean
+        // zod "unreadable definition" failure, never a raw TypeError in here.
+        if (!group || typeof group !== 'object') continue
         const section: RomSection = (ROM_SECTIONS as ReadonlyArray<string>).includes(group.section)
           ? group.section
           : 'MISC'
@@ -202,6 +206,9 @@ export function normalizeLegacyCharacter(data: Record<string, any>): Record<stri
   // The PoseAsset node knows no "none" suffix — older data migrates to centre.
   for (const config of Object.values((data.sections ?? {}) as Record<string, any>)) {
     for (const group of config?.groups ?? []) {
+      // Same guard as the fold above: a null/non-object entry stays for zod to
+      // reject cleanly instead of throwing a TypeError here.
+      if (!group || typeof group !== 'object') continue
       if (group.suffix === 'none') group.suffix = 'centre'
     }
   }

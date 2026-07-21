@@ -50,6 +50,7 @@ export {
   moveCharactersRoot,
   moveFolder,
   readCharacterAt,
+  repointCharacterPaths,
   saveCharacter,
   scanCharacterLibrary,
   setGeneratedDthVersion,

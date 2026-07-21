@@ -40,6 +40,10 @@ export function NetworkDrivesSection() {
       if (failed.length > 0) toast.error(`${failed.length} drive(s) failed to map`)
       else toast.success(remapped > 0 ? `Re-mapped ${remapped} drive(s)` : 'All drives already mapped')
       await load()
+    } catch (e) {
+      // Same as forget(): without this a rejected ensureNetworkDrives was an
+      // unhandled rejection with zero feedback.
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }

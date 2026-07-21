@@ -202,9 +202,3 @@ export async function openProjectWindow(dcspPath: string): Promise<void> {
   if (!isTauri()) return
   await invoke('open_project_window', { path: dcspPath })
 }
-
-/** Open (or focus) the Home window — the projects launcher. */
-export async function openHomeWindow(): Promise<void> {
-  if (!isTauri()) return
-  await invoke('open_home_window')
-}

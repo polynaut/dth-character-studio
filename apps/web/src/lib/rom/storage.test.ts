@@ -30,8 +30,13 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   async exists(p: string) {
-    p = norm(p)
-    return files.has(p) || dirs.has(p)
+    // Case-INSENSITIVE like Windows/NTFS (what the storage code targets): a
+    // case-only rename's destination "exists" — it IS the source. The other
+    // ops stay exact-case; tests seed consistent casing.
+    const t = norm(p).toLowerCase()
+    for (const k of files.keys()) if (k.toLowerCase() === t) return true
+    for (const k of dirs) if (k.toLowerCase() === t) return true
+    return false
   },
   async mkdir(p: string) {
     addDir(p)
@@ -352,6 +357,59 @@ describe('saveCharacter with a corrupt existing definition', () => {
     })
     await storage.saveCharacter(project, hero)
     expect(files.has('/games/Nova/Hero/Hero.json')).toBe(true)
+  })
+})
+
+describe('moveCharacter', () => {
+  function seedMovable(name: string, folder: string): Character {
+    const c = characterSchema.parse({
+      id: newId(),
+      name,
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      scenePath: `/games/Nova/${folder}/daz3d/${name}.duf`,
+    })
+    addDir(`/games/Nova/${folder}/daz3d`)
+    files.set(`/games/Nova/${folder}/${name}.json`, JSON.stringify(c))
+    files.set(`/games/Nova/${folder}/daz3d/${name}.duf`, 'duf')
+    return c
+  }
+
+  it('a case-only rename (kira → Kira) renames in place instead of throwing "already exists"', async () => {
+    const c = seedMovable('kira', 'kira')
+
+    const moved = await storage.moveCharacter('/games/Nova', c.id, 'Kira/Kira.json')
+
+    // The folder + definition carry the new casing; nothing forked to "Kira (2)".
+    expect(moved.location.definitionAbs).toBe('/games/Nova/Kira/Kira.json')
+    expect(moved.location.folderAbs).toBe('/games/Nova/Kira')
+    expect(files.has('/games/Nova/Kira/Kira.json')).toBe(true)
+    expect(files.has('/games/Nova/kira/kira.json')).toBe(false)
+    expect([...dirs].some((d) => d.includes('(2)'))).toBe(false)
+    // In-folder paths travelled with the re-cased folder.
+    expect(moved.character.scenePath).toBe('/games/Nova/Kira/daz3d/kira.duf')
+  })
+
+  it('a genuine collision with an existing folder still throws', async () => {
+    const c = seedMovable('kira', 'kira')
+    addDir('/games/Nova/Hero')
+    await expect(
+      storage.moveCharacter('/games/Nova', c.id, 'Hero/kira.json'),
+    ).rejects.toThrow(/already exists/i)
+    // Nothing moved.
+    expect(files.has('/games/Nova/kira/kira.json')).toBe(true)
+  })
+
+  it('a plain folder move still repoints the in-folder paths', async () => {
+    const c = seedMovable('kira', 'kira')
+
+    const moved = await storage.moveCharacter('/games/Nova', c.id, 'Outfits/kira/kira.json')
+
+    expect(moved.location.folderAbs).toBe('/games/Nova/Outfits/kira')
+    expect(files.has('/games/Nova/Outfits/kira/kira.json')).toBe(true)
+    expect(moved.character.scenePath).toBe('/games/Nova/Outfits/kira/daz3d/kira.duf')
   })
 })
 

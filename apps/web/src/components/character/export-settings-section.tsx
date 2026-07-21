@@ -4,7 +4,7 @@ import { PathCode } from '#/components/path-code.tsx'
 import { Button, InfoPopup, Switch } from '@dth/ui'
 import { isDirectory } from '#/lib/rom/api.ts'
 import { pickFolder } from '#/lib/desktop.ts'
-import { displayPath, normalizePath } from '#/lib/path.ts'
+import { displayPath, parentDir } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -39,7 +39,7 @@ export function ExportSettingsSection({
     if (character.exportPath.trim()) return character.exportPath
     const definitionAbs = location?.definitionAbs
     if (!definitionAbs) return undefined
-    const charDir = normalizePath(definitionAbs).replace(/\/[^/]*$/, '')
+    const charDir = parentDir(definitionAbs)
     const houSub = houdiniSubdir?.trim()
     if (houSub) {
       const houDir = `${charDir}/${houSub}`

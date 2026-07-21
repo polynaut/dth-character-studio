@@ -3,7 +3,7 @@ import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import { characterSchema, newId } from '@dth/rom'
+import { characterSchema, dazJson, newId } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import { basename, charactersRoot, charsRoot, joinPath, projectPath, resolveProject } from './core'
@@ -213,10 +213,8 @@ async function openSceneInRunningDaz(scenePath: string): Promise<void> {
     '(function () {',
     // U+2028/U+2029 are LINE TERMINATORS to Daz's JS engine (see .ai/gotchas.md),
     // so a scene path carrying one would end this string literal mid-line and the
-    // bridge would fail to parse. Escape them as data, like the core's dazJson.
-    `  var path = ${JSON.stringify(scenePath.replace(/\\/g, '/'))
-      .replace(/\u2028/g, '\\u2028')
-      .replace(/\u2029/g, '\\u2029')};`,
+    // bridge would fail to parse. The core's dazJson escapes them as data.
+    `  var path = ${dazJson(scenePath.replace(/\\/g, '/'))};`,
     '  try {',
     '    if (!App.getContentMgr().openFile(path, false)) {',
     '      MessageBox.warning("DTH: could not open the scene:\\n" + path, "DTH Character Studio", "&OK");',
