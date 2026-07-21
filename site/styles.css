@@ -251,10 +251,20 @@ a:hover {
 }
 
 .topbar-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+/* The GitHub mark is a FILL glyph — the stroke-based .icon class would blank it. */
+.gh-mark {
+  width: 1.05em;
+  height: 1.05em;
+  fill: currentColor;
 }
 
 .topbar-nav a:hover {
