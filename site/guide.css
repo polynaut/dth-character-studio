@@ -195,10 +195,11 @@
   margin-top: 0;
 }
 
-/* Hash navigation lands headings below the topbar (and the stuck title). */
+/* Hash navigation lands the title below the topbar. h1/h2 clear only the
+   topbar: an h1 has no chapter title above it, and a targeted h2 IS the one
+   that docks (landing it lower would leave a gap, then it'd stick up anyway). */
 .guide-content h1,
-.guide-content h2,
-.guide-content h3 {
+.guide-content h2 {
   scroll-margin-top: calc(var(--topbar-h) + 16px);
 }
 
@@ -206,6 +207,10 @@
   margin: 28px 0 8px;
   font-size: 1.12rem;
   color: var(--fg-bright);
+  /* An h3 lives INSIDE a section, so its h2 is docked under the topbar (≈84px)
+     when you jump to it — clear that too (same offset as accordions), else the
+     stuck h2 covers the h3 the hash meant to reveal. */
+  scroll-margin-top: calc(var(--topbar-h) + 88px);
 }
 
 .guide-content .anchor {
