@@ -465,9 +465,17 @@ a {
    must be positioned (the sticky header already is); the `::before` sits at
    z-index -1, behind the header's own content. Falls back to an opaque fill
    where backdrop-filter is unsupported. */
+/* Plain, opaque header background by default (Windows / WebView2 and anything
+   else). The vibrancy glass below is macOS-only. */
 @utility liquid-glass-header {
   background-color: var(--background);
+}
 
+/* macOS: a saturated backdrop blur that FEATHERS at its lower edge (no hard
+   seam), echoing the native title bar. Scoped to `.os-macos` (set in main.tsx) —
+   the same blur on Windows/WebView2 reads muddy rather than glassy, so those
+   keep the plain bg above. */
+.os-macos .liquid-glass-header {
   @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     background-color: transparent;
 
