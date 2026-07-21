@@ -243,6 +243,13 @@ function imageDataUrl(bytes: Uint8Array, fileName: string): string {
 // avatar replacement accreted another one for the whole session.
 const imageSrcCache = new Map<string, string>()
 
+/** Drop every cached avatar data URL. Used after Refresh assets upscales avatars
+ *  IN PLACE (same filename, new bytes): the cache is keyed by filename, so without
+ *  this it would keep serving the pre-upscale 256² URL until the next reload. */
+export function clearImageSrcCache(): void {
+  imageSrcCache.clear()
+}
+
 /** Drop the cached data URLs of a character's SUPERSEDED avatars: every entry
  *  under `projectDir` whose stored filename shares the id of `image`
  *  (`<id>-<ts>.<ext>`, or the legacy fixed `<id>.<ext>`), except `keepKey`. */
@@ -273,6 +280,25 @@ export async function resolveImageSrc(image: string): Promise<string> {
     return url
   } catch {
     return ''
+  }
+}
+
+/**
+ * Upscale a character's STORED avatar to 512² IN PLACE if it's a local image
+ * still below that — the migration path for avatars written before the
+ * upscale-on-write feature (Refresh assets runs it over the whole library, then
+ * clears the data-URL cache). Skips external URLs / empty refs / the browser
+ * (native-only); the Rust command no-ops on an image already ≥512², so it's safe
+ * to call on every avatar. Returns whether it actually upscaled — best-effort, any
+ * failure swallowed so a refresh never breaks over one avatar.
+ */
+export async function upscaleStoredAvatar(projectDir: string, image: string): Promise<boolean> {
+  if (!image || isExternalImage(image) || !isTauri()) return false
+  try {
+    const path = joinPath(storage.metaImagesDir(projectDir), image)
+    return (await invoke<boolean>('upscale_avatar_file', { path })) === true
+  } catch {
+    return false
   }
 }
 

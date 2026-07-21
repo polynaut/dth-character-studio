@@ -16,6 +16,7 @@ import {
   sceneOverrideSlug,
 } from '@dth/rom'
 import * as storage from '../storage'
+import { clearImageSrcCache, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
@@ -413,6 +414,9 @@ export interface RefreshSummary {
     scripts: number
     /** Characters whose PoseAsset CSV was regenerated. */
     csv: number
+    /** Stored avatars xBRZ-upscaled to 512² (were smaller — from before the
+     *  upscale-on-write feature). Independent of the three regen axes above. */
+    avatars: number
   }
   results: Array<RefreshResult>
   /** Outcome of force-reinstalling the bundled DTH runtime files (a refresh
@@ -463,6 +467,9 @@ async function mapWithConcurrency<T, R>(
 
 /** Bounded fan-out for the per-character script-runtime reads. */
 const RUNTIME_READ_CONCURRENCY = 8
+
+/** Bounded fan-out for the per-character avatar upscales (Rust image work). */
+const AVATAR_UPSCALE_CONCURRENCY = 8
 
 async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   const settings = await storage.getSettings()
@@ -563,7 +570,7 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   // Pass 2 — regenerate per character. A schema change regenerates both artifacts
   // (the migration can alter generated output); runtime → Daz scripts; csv → CSV.
   let skipped = 0
-  const counts = { migrated: 0, scripts: 0, csv: 0 }
+  const counts = { migrated: 0, scripts: 0, csv: 0, avatars: 0 }
   for (const item of items) {
     const { project, lib, character, targets } = item
     const regenSchema = force || targets.schema
@@ -627,6 +634,20 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
         detail: e instanceof Error ? e.message : String(e),
       })
     }
+  }
+
+  // Upgrade low-res avatars across every gathered character — independent of the
+  // regen skip above, since avatar format is its own axis (a character with
+  // nothing else stale still carries a 256² avatar from before this feature). xBRZ
+  // upscales anything under 512² to 512² IN PLACE; idempotent, native-only,
+  // best-effort. Clearing the data-URL cache after makes the UI pick up the new
+  // bytes — the filename is unchanged, so nothing re-resolves on its own.
+  if (isTauri() && gathered.length > 0) {
+    const upscaled = await mapWithConcurrency(gathered, AVATAR_UPSCALE_CONCURRENCY, (g) =>
+      upscaleStoredAvatar(g.project.path, g.character.image),
+    )
+    counts.avatars = upscaled.filter(Boolean).length
+    if (counts.avatars > 0) clearImageSrcCache()
   }
 
   const failed = results.filter((r) => !r.ok).length
