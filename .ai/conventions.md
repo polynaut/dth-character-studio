@@ -11,8 +11,11 @@ the reference.
 - **Import alias:** `#/*` → `apps/web/src/*` (declared in `apps/web/package.json`
   `imports`).
 - **`main` is PR-only** (active ruleset: PR required + no force-push/deletion;
-  required checks: `validate` + `rust`). Branch `feature/…` / `fix/…` / `docs/…`.
-  Squash merges.
+  required checks: `validate` + `rust` + `smoke` + `changeset`). Branch
+  `feature/…` / `fix/…` / `docs/…`. Squash merges. The `changeset` job runs on
+  EVERY PR and exempts Dependabot/the version PR INSIDE the job (reporting
+  success, not skipped) — a required check that never reports would block the
+  merge as "Expected" forever.
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.
