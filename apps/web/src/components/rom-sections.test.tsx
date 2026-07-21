@@ -57,7 +57,11 @@ describe('RomSections multi-morph editor', () => {
     const expansion = screen
       .getByTitle('The internal property name of the Daz morph')
       .closest('td') as HTMLElement
-    const inputs = within(expansion).getAllByRole('textbox')
+    // Morph-name cells are comboboxes (autocomplete); plain cells are textboxes.
+    const inputs = [
+      ...within(expansion).queryAllByRole('textbox'),
+      ...within(expansion).queryAllByRole('combobox'),
+    ]
     const values = inputs.map((input) => (input as HTMLInputElement).value)
     expect(values).toContain('SL_Glutes SS Left')
     expect(values).toContain('SL_Glutes SS Right')
@@ -191,8 +195,9 @@ describe('Morph name autocomplete (scanned index)', () => {
     // before the input's blur) sets the morph's prop AND its node.
     fireEvent.change(input, { target: { value: 'spread' } })
     // The mark splits the name across text nodes — match on full textContent.
+    // Suggestions are listbox options (the cell is a proper combobox now).
     const graft = screen
-      .getAllByRole('button')
+      .getAllByRole('option')
       .find((b) => b.textContent?.includes('GP_Spread_All'))!
     expect(graft.textContent).toContain('internal')
     // "spread" hits the internal name AND the UI label — both get a highlight.
