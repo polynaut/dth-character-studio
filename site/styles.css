@@ -139,7 +139,10 @@ a:hover {
 }
 
 .btn-hero {
-  padding: 16px 30px;
+  /* Left padding = icon-text gap, so the icon sits centered between the
+     button's left edge and the text (text stays put: 20+30+20 = 30+30+10). */
+  padding: 16px 30px 16px 20px;
+  gap: 20px;
   text-align: left;
 }
 
