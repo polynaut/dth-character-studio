@@ -28,7 +28,7 @@
 </p>
 
 The **Genesis** and **Gender** selects can be changed after creation — gender is
-what decides the [GEN section](#the-rom-definition)'s product (**Golden Palace**
+what decides the [GEN section's](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace---dicktator--the-genitalia-gen-section) product (**Golden Palace**
 for a female character, **Dicktator** for a male). All four generations are
 selectable; the deeply validated path is **G9** (and G8.1 on the old pipeline) —
 for the others, DTH ships a subset of pose assets and the studio offers whatever
@@ -73,8 +73,8 @@ fields:
 > [!TIP]
 > **Hair items** (per-scene hair kept out of the export) and everything else
 > around **multiple Daz scenes on one character** — outfit variants, the
-> selected scene, per-scene ROM overrides — moved to
-> [Advanced: Multiple Daz scenes](./advanced.md#multiple-daz-scenes--outfits--hair-variants).
+> selected scene, per-scene ROM overrides — read
+> [Advanced: Multiple Daz scenes](https://polynaut.github.io/dth-character-studio/guide/advanced.html#multiple-daz-scenes--outfits-amp-hair-variants).
 
 ## Script install location & export directory
 
@@ -84,7 +84,7 @@ split export, `Export_…`) scripts install on Save:
 "My DAZ 3D Library" set in [Settings](./02-setup.md); the folder is created the
 first time a script is generated.
 
-The **Export directory** section drives [direct export](./05-rom-in-daz.md):
+The **Export directory** section drives [direct export](./05-rom-in-daz.md#direct-export-optional-recommended):
 **Choose folder…** opens the picker (starting at the character's Houdini folder
 as guidance), and **Clear** turns direct export off again. With no export
 directory set the studio generates the ROM only — **Bone scale** flags then just

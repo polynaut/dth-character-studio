@@ -40,6 +40,9 @@ export {
   setUnrealProjects,
 } from './api/projects'
 
+// --- folder moves: the shared lock gate (Daz/Houdini file locks) -------------
+export { LockedFilesError, assertMovable, probeLockedFiles } from './api/move'
+
 // --- characters: CRUD, imports, run log, paths ------------------------------
 export {
   characterKeepFolders,

@@ -442,9 +442,8 @@ function ProjectCharactersPage() {
             <FolderOpen /> {scenePath.trim() ? 'Choose another…' : 'Choose Daz scene…'}
           </Button>
           {scenePath.trim() && (
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {sceneBaseName(scenePath)}.duf
-            </span>
+            // Path chip (taller, to match the button height) for the picked scene.
+            <PathCode path={displayPath(scenePath)} className="flex h-9 items-center" />
           )}
         </div>
 

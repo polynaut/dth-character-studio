@@ -18,6 +18,10 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        // A ghost that reads as an abort/undo action — muted red text, light
+        // red hover. For Cancel / Clear next to a primary action.
+        "ghost-destructive":
+          "text-destructive/90 hover:bg-destructive/10 hover:text-destructive",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
