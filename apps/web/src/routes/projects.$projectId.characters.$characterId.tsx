@@ -469,32 +469,27 @@ function CharacterPage() {
         setOverrideEnabled={sceneSel.setOverrideEnabled}
       />
 
-      <details className="mb-8 rounded-lg border bg-card">
-        <summary className="flex cursor-pointer items-center gap-1 px-5 py-3 font-medium select-none">
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
           Advanced options
-          {/* preventDefault stops the info click from also toggling the <details>. */}
-          <span onClick={(e) => e.preventDefault()} className="inline-flex">
-            <InfoPopup label="Advanced options — more information">
-              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
-                Preserve morphs &amp; node transforms — open the guide
-              </GuideLink>
-            </InfoPopup>
-          </span>
-        </summary>
-        <div className="space-y-6 border-t p-5">
-          <PreserveFields
-            character={character}
-            patch={patch}
-            overrideEligible={sceneSel.overrideEligible}
-            preserveOverrideActive={sceneSel.preserveOverrideActive}
-            setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
-            selectedSceneName={sceneSel.selectedSceneName}
-            scenePath={sceneSel.effectiveScene}
-            sceneOverride={sceneSel.sceneOverride}
-            patchOverride={sceneSel.patchOverride}
-          />
-        </div>
-      </details>
+          <InfoPopup label="Advanced options — more information">
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+              Preserve morphs &amp; node transforms — open the guide
+            </GuideLink>
+          </InfoPopup>
+        </h2>
+        <PreserveFields
+          character={character}
+          patch={patch}
+          overrideEligible={sceneSel.overrideEligible}
+          preserveOverrideActive={sceneSel.preserveOverrideActive}
+          setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
+          selectedSceneName={sceneSel.selectedSceneName}
+          scenePath={sceneSel.effectiveScene}
+          sceneOverride={sceneSel.sceneOverride}
+          patchOverride={sceneSel.patchOverride}
+        />
+      </section>
 
       <ScriptsSection character={character} scriptsPath={scriptsPath} />
 

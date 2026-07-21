@@ -50,14 +50,18 @@ export function PanelOverrideToggle({
       className={`flex items-center gap-2${eligible ? '' : ' invisible'}`}
       aria-hidden={!eligible || undefined}
     >
-      {/* Full pill: mini render + "OVERRIDE" eyebrow over the scene name. Compact:
-          just the scene name (no render, no eyebrow). Info "i" inline after the name. */}
+      {/* Full pill: mini render + "OVERRIDE" eyebrow over the scene name, with the
+          info "i" inline after it. Compact: a bare green "OVERRIDE" pill — no render,
+          no scene name, no info (the full pill right above it already names the
+          scene). */}
       <SceneLabel
         scenePath={scenePath}
-        name={sceneName}
+        name={compact ? 'OVERRIDE' : sceneName}
         showAvatar={!compact}
         eyebrow={compact ? undefined : 'Override'}
-        trailing={<InfoPopup label="Scene override — more information">{info}</InfoPopup>}
+        trailing={
+          compact ? undefined : <InfoPopup label="Scene override — more information">{info}</InfoPopup>
+        }
       />
       <Switch
         checked={active}

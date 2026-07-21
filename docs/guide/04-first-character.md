@@ -100,8 +100,8 @@ ride along as no-ops until you set one.
   <sub><em>The Advanced options panel expanded on the character page.</em></sub>
 </p>
 
-Expand **Advanced options** near the top of the character page — none of it is
-needed for a working ROM:
+The **Advanced options** panel near the bottom of the character page — none of it
+is needed for a working ROM:
 
 - **Preserve morphs after ROM loading** — the DTH ROM zeroes morphs as it loads.
   Any morph you list here is **restored to the value you set afterwards** — use it
