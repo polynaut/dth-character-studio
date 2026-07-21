@@ -8,10 +8,10 @@ to Houdini.
 ## What you need
 
 - **Windows 10/11** and [DTH Character Studio](https://github.com/polynaut/dth-character-studio/releases/latest) — a Mac version of DTH Character Studio is available too, but the Daz **DTH Exporter Plugin** is Windows-only
-- **Daz Studio** with a **Genesis 9** character (G9 is fully supported, G8 only partially)
+- **[Daz Studio](https://www.daz3d.com/daz-studio)** with a **Genesis 9** character (G9 is fully supported, G8 only partially)
 - The **[DazToHue](https://www.artstation.com/marketplace/p/BLM5K/daztohue)** package by mrpdean —
   it contains the **DTH release** (Daz + Houdini content) and the **DTH Exporter Plugin**
-- **SideFX Houdini** — needed for the far side of the pipeline (step 6)
+- **[SideFX Houdini](https://www.sidefx.com/products/houdini/)** — needed for the far side of the pipeline (step 6)
 
 ## The steps
 

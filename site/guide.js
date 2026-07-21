@@ -51,6 +51,32 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && overlay.classList.contains('open')) close()
 })
 
+// ── Anchorable accordions ────────────────────────────────────────────────────
+// The build gives each <details> an id and a hover link icon in its summary
+// (build-guide-site.mjs). Clicking the icon only puts the anchor in the URL —
+// no toggle, no jump; clicking elsewhere on the title toggles as usual. And
+// visiting a link whose hash targets an accordion opens it and smooth-scrolls
+// its title into view once the page has loaded.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.details-anchor')
+  if (!a) return
+  e.preventDefault() // cancels the summary toggle along with the navigation
+  history.replaceState(null, '', a.getAttribute('href'))
+})
+
+function revealHashAccordion() {
+  const id = decodeURIComponent(location.hash.slice(1))
+  const details = id ? document.getElementById(id)?.closest('details') : null
+  if (!details) return
+  details.open = true
+  details.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+window.addEventListener('hashchange', revealHashAccordion)
+// After load, not DOMContentLoaded — images have sized by then, so the
+// scroll target doesn't drift while screenshots stream in.
+if (document.readyState === 'complete') revealHashAccordion()
+else window.addEventListener('load', revealHashAccordion)
+
 // ── Direct download ──────────────────────────────────────────────────────────
 // The topbar Download button starts the right installer immediately — same
 // mechanism as the landing page (see main.js), sharing its sessionStorage

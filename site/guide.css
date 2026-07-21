@@ -273,9 +273,54 @@
   background: color-mix(in oklab, var(--bg-raised) 60%, transparent);
 }
 
+.guide-content details {
+  /* Hash navigation / the reveal scroll land below the sticky topbar. */
+  scroll-margin-top: calc(var(--topbar-h) + 24px);
+}
+
 .guide-content details summary {
-  padding: 12px 16px;
+  position: relative;
+  padding: 12px 44px 12px 16px;
   cursor: pointer;
+  color: var(--fg-bright);
+}
+
+/* Accordion anchor: a link icon in the summary's top right, shown on hover.
+   Clicking it puts the accordion's #anchor in the URL (guide.js) — clicking
+   anywhere else on the title still toggles the box. */
+.details-anchor {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  display: inline-flex;
+  transform: translateY(-50%);
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.details-anchor svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.guide-content summary:hover .details-anchor {
+  opacity: 1;
+}
+
+.details-anchor:hover {
+  color: var(--primary-soft);
+}
+
+/* The GitHub button the build injects after the intro on the guide's landing
+   page (build-guide-site.mjs, GH_BUTTON). */
+.guide-content .btn-gh {
+  margin-top: 18px;
   color: var(--fg-bright);
 }
 
