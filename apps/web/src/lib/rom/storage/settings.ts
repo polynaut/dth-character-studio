@@ -1,6 +1,7 @@
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { readTextFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
+import { writeTextFileAtomic } from './fs'
 import { dataPath, ensureAppDir } from './app-data'
 
 // App-global settings (`settings.json` in app-data): machine/tool paths only —
@@ -171,6 +172,6 @@ export async function saveSettings(
       }
     }
   }
-  await writeTextFile(await dataPath('settings.json'), JSON.stringify(merged, null, 2) + '\n')
+  await writeTextFileAtomic(await dataPath('settings.json'), JSON.stringify(merged, null, 2) + '\n')
   return merged
 }

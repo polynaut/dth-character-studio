@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readFile, readTextFile, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
@@ -16,7 +16,9 @@ import {
   posesFromDazCsv,
   sectionsFromFlatFrames,
 } from '@dth/rom'
+import { normalizePathLower } from '#/lib/path.ts'
 import {
+  cacheCharacterLocation,
   characterLocationCache,
   charactersRoot,
   charScopeInput,
@@ -26,6 +28,7 @@ import {
   getActiveProjectDir,
   invalidateCharacterLocations,
   joinPath,
+  locateCharacter,
   morphIndexCache,
   projectIdInput,
   resolveProject,
@@ -68,29 +71,26 @@ export async function fetchAllCharacters(): Promise<Array<CharacterWithProject>>
 }
 
 /**
- * Where a character lives, through the session location cache: a cache hit is
- * verified with a single `exists()` (so external deletes/renames are noticed);
- * a miss or stale entry falls back to the full library scan and repopulates.
- * Mutations (save/move/delete) also clear the cache outright — navigating right
- * after a rename re-scans instead of 404ing.
+ * The problems the character scan found in a project's library: definition-
+ * shaped `.json` files that could not be read or parsed (a torn write, a failed
+ * migration). `fetchCharacters` keeps returning the plain character list the
+ * routes render; this parallel accessor is the surfaced channel — a project
+ * page can call it alongside and warn instead of silently showing the character
+ * as missing.
  */
-async function locateCharacter(
-  root: string,
-  id: string,
-): Promise<storage.CharacterLocation | null> {
-  const key = `${root}|${id}`
-  const cached = characterLocationCache.get(key)
-  if (cached) {
-    try {
-      if (await exists(cached.definitionAbs)) return cached
-    } catch {
-      // unverifiable (e.g. an unreachable share) — treat as stale
-    }
-    characterLocationCache.delete(key)
+export async function fetchCharacterScanProblems({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<storage.CharacterScanProblem>> {
+  const { projectId } = projectIdInput.parse(data)
+  const root = await charactersRoot(projectId)
+  const scan = await storage.scanCharacterLibrary(root)
+  // The scan just resolved every character's location — prime the cache.
+  for (const { character, location } of scan.entries) {
+    cacheCharacterLocation(root, character.id, location)
   }
-  const location = await storage.getCharacterPath(root, id)
-  if (location) characterLocationCache.set(key, location)
-  return location
+  return scan.problems
 }
 
 export async function fetchCharacter({ data }: { data: unknown }): Promise<Character | null> {
@@ -198,15 +198,25 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     }
   }
   const character: Character = characterSchema.parse(base)
-  const created = await storage.createCharacterAt(project, character, input.relFolder ?? '', lib)
+  const { character: created, location } = await storage.createCharacterAt(
+    project,
+    character,
+    input.relFolder ?? '',
+    lib,
+  )
+  // The create just resolved where the character lives — prime the cache so the
+  // route's first read doesn't immediately re-walk the library it came from.
+  cacheCharacterLocation(lib, created.id, location)
   // Seed an empty Houdini folder (named from the project manifest) so the user is
   // nudged to create the character's Houdini project there. Best-effort and only
   // for characters that own a folder — never scatter it into the project root.
-  const houSub = normalizeRelFolder(project.houdiniSubdir)
-  if (project.createHoudiniSubdir && houSub) {
+  // The subdir normalization lives INSIDE the try: readManifest already
+  // sanitizes it, but even a hostile value must never throw AFTER the character
+  // was created on disk.
+  if (project.createHoudiniSubdir && location.relFolder) {
     try {
-      const loc = await storage.getCharacterPath(lib, created.id)
-      if (loc?.relFolder) await mkdir(joinPath(loc.folderAbs, houSub), { recursive: true })
+      const houSub = normalizeRelFolder(project.houdiniSubdir)
+      if (houSub) await mkdir(joinPath(location.folderAbs, houSub), { recursive: true })
     } catch {
       // a missing seed folder shouldn't fail character creation
     }
@@ -318,7 +328,9 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
         if (!stable) throw new Error('run log still being written')
         log = unreadableRomRunLog()
       }
-      await writeTextFile(storePath, JSON.stringify(log, null, 2))
+      // Atomic: a crash mid-write must not leave a torn store copy (which would
+      // read back as "unreadable" forever after the transport file is deleted).
+      await storage.writeTextFileAtomic(storePath, JSON.stringify(log, null, 2))
       await remove(dazPath)
       return log
     }
@@ -375,8 +387,11 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
   invalidateCharacterLocations()
-  // Capture the name before deleting — it keys the generated script subfolder.
-  const character = await storage.getCharacter(lib, id)
+  // Resolve the location ONCE and thread it through — the read (for the name,
+  // which keys the generated script subfolder) and the delete used to each run
+  // their own full library scan.
+  const location = await storage.getCharacterPath(lib, id)
+  const character = location ? await storage.readCharacterAt(location.definitionAbs) : null
   const settings = await storage.getSettings()
   // Resolve the keep flags to the configured subfolder names so the recursive
   // delete can spare them. The Houdini subfolder (seeded into new characters) can
@@ -384,7 +399,7 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   const keepFolders: Array<string> = []
   if (keepDaz && project.dazSubdir) keepFolders.push(project.dazSubdir)
   if (keepHoudini && project.houdiniSubdir) keepFolders.push(project.houdiniSubdir)
-  await storage.deleteCharacter(lib, id, { keepFolders })
+  await storage.deleteCharacter(lib, id, { keepFolders, location: location ?? undefined })
   // Remove the character's generated Daz script subfolder (derived artifact,
   // orphaned once the character is gone). Best-effort.
   if (character && settings.dazLibraryFolder) {
@@ -422,11 +437,18 @@ export async function characterKeepFolders({
 }): Promise<{ daz: boolean; houdini: boolean }> {
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
-  const existing = await storage.existingCharacterSubfolders(
-    charsRoot(project),
-    id,
-    [project.dazSubdir, project.houdiniSubdir].filter(Boolean),
-  )
+  const root = charsRoot(project)
+  // Through the location cache — this runs on opening the delete dialog and
+  // used to trigger its own full library scan.
+  const location = await locateCharacter(root, id)
+  const existing = location
+    ? await storage.existingCharacterSubfolders(
+        root,
+        id,
+        [project.dazSubdir, project.houdiniSubdir].filter(Boolean),
+        location.folderAbs,
+      )
+    : []
   return {
     daz: !!project.dazSubdir && existing.includes(project.dazSubdir),
     houdini: !!project.houdiniSubdir && existing.includes(project.houdiniSubdir),
@@ -646,8 +668,19 @@ async function doSyncAvatarWithScene(
 ): Promise<Partial<Character> | null> {
   const character = await fetchCharacter({ data: { projectId, id } })
   if (!character) return null
-  const projectDir = await getActiveProjectDir()
-  if (!projectDir) return null
+  // The avatar bytes live under the ACTIVE project's `.dcsmeta` (one project
+  // per window), while the character save targets the project the caller
+  // NAMED. Assert loudly that the two agree instead of silently mixing them —
+  // a mismatch would read window A's avatar store for window B's character.
+  const activeDir = await getActiveProjectDir()
+  if (!activeDir) return null
+  const projectDir = joinPath(projectId)
+  if (normalizePathLower(activeDir) !== normalizePathLower(projectDir)) {
+    console.warn(
+      `[avatar-sync] skipped: project ${projectDir} is not this window's active project (${activeDir})`,
+    )
+    return null
+  }
   const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
   const readAvatar = async (): Promise<Uint8Array | null> => {
     if (!character.image || isExternalImage(character.image)) return null
@@ -656,6 +689,19 @@ async function doSyncAvatarWithScene(
     } catch {
       return null
     }
+  }
+  // This function reaches its save after several awaits (tip reads, avatar
+  // writes) — a whole-object save of the by-then-stale fetch above would
+  // silently revert a concurrent editor save. Re-fetch immediately before
+  // saving and apply ONLY the avatar fields onto the fresh object.
+  const saveAvatarFields = async (
+    fields: Partial<Pick<Character, 'image' | 'imageScene'>>,
+  ): Promise<Partial<Character> | null> => {
+    const project = await resolveProject(projectId)
+    const fresh = await fetchCharacter({ data: { projectId, id } })
+    if (!fresh) return null
+    await storage.saveCharacter(project, { ...fresh, ...fields }, charsRoot(project))
+    return fields
   }
   let source = character.imageScene
   if (source && !linked.includes(source)) return null
@@ -670,9 +716,7 @@ async function doSyncAvatarWithScene(
       }
     }
     if (!source) return null
-    const project = await resolveProject(projectId)
-    await storage.saveCharacter(project, { ...character, imageScene: source }, charsRoot(project))
-    return { imageScene: source }
+    return saveAvatarFields({ imageScene: source })
   }
   const tipPath = await findTipImage(source)
   if (!tipPath) return null
@@ -680,9 +724,7 @@ async function doSyncAvatarWithScene(
   const avatar = await readAvatar()
   if (avatar && bytesEqual(tip, avatar)) return null
   const image = await writeAvatarBytes(character.id, tip, 'png')
-  const project = await resolveProject(projectId)
-  await storage.saveCharacter(project, { ...character, image, imageScene: source }, charsRoot(project))
-  return { image, imageScene: source }
+  return saveAvatarFields({ image, imageScene: source })
 }
 
 // --- Morph index (Scan_Morphs_<Genesis>.dsa output) -------------------------

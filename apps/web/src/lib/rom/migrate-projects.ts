@@ -1,4 +1,4 @@
-import { exists, mkdir, readFile, readTextFile, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readTextFile, remove } from '@tauri-apps/plugin-fs'
 import { toast } from 'sonner'
 
 import {
@@ -32,7 +32,8 @@ async function moveProjectAvatars(dir: string, imagesDir: string): Promise<void>
     const src = `${imagesDir}/${image}`
     try {
       if (await exists(src)) {
-        await writeFile(`${dest}/${image}`, await readFile(src))
+        // Native whole-file copy — avatars can be MBs; no webview byte round-trip.
+        await copyFile(src, `${dest}/${image}`)
         await remove(src)
       }
     } catch {

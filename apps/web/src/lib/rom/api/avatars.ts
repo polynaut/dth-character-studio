@@ -151,7 +151,9 @@ const IMAGE_MIME: Record<string, string> = {
 /**
  * Store an avatar image from an absolute file path — native OS drag-drop hands us
  * a path, not file bytes. Reads it, infers the MIME from the extension, and
- * delegates to {@link uploadCharacterImage}.
+ * writes the bytes DIRECTLY via {@link writeAvatarBytes} — the old route
+ * detoured through base64 (readFile → chunked btoa → atob → bytes), tripling
+ * the memory of a multi-MB image for nothing.
  */
 export async function uploadCharacterImageFromPath({ data }: { data: unknown }): Promise<string> {
   const { characterId, path } = z
@@ -162,12 +164,8 @@ export async function uploadCharacterImageFromPath({ data }: { data: unknown }):
   if (!mimeType) throw new Error(`Unsupported image type${ext ? `: .${ext}` : ''}`)
   const bytes = await readFile(path)
   if (bytes.length > 10 * 1024 * 1024) throw new Error('Image is larger than 10 MB.')
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  }
-  return uploadCharacterImage({ data: { characterId, mimeType, dataBase64: btoa(binary) } })
+  // Same canonical extension the base64 upload derives (jpeg → jpg).
+  return writeAvatarBytes(characterId, bytes, IMAGE_EXTENSIONS[mimeType].slice(1))
 }
 
 /** Inline raw image bytes as a `data:` URL, MIME inferred from the file name. */
