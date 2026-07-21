@@ -152,7 +152,10 @@
 }
 
 .guide-content h1 {
-  margin: 0 0 18px;
+  /* Drop the chapter title to the sidebar's start (same 128px the sidebar nav
+     uses) so at the very top its baseline lines up with the "GUIDES" label
+     across the gutter, instead of hugging the topbar. */
+  margin: 128px 0 18px;
   font-size: clamp(1.7rem, 4vw, 2.3rem);
   font-weight: 800;
   letter-spacing: -0.015em;

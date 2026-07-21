@@ -1,4 +1,4 @@
-# Deep dive: Daz product scanning (optional)
+# Daz product scanning
 
 Product scanning answers "**which Daz products does this character actually use?**"
 — it generates a small Daz script that analyses the open scene, matches the used
