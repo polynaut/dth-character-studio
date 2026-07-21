@@ -34,14 +34,15 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   // With several scenes linked the title row tags the SELECTED scene (primary
   // by default) — the tag follows the card selection. The tag STRIPS the
   // character name and spaces the separators, so "KiraDefault_G9_GP" reads
-  // "Default G9 GP" (see sceneTagText in editor-header.tsx).
+  // "Default G9 GP" (see prettySceneName in lib/scene-name.ts).
   const titleRow = page.locator('.title-scroll')
   await expect(titleRow.getByText('Default G9 GP')).toBeVisible()
 
   // The toggle arms only once a non-primary scene is selected (its title —
-  // and so its accessible name — flips with that state).
+  // and so its accessible name — flips with that state). Each overridable panel
+  // now has its own override switch, so target the ROM one by its noun.
   await expect(
-    page.getByRole('switch', { name: /Select one of the extra Daz scenes/ }),
+    page.getByRole('switch', { name: /Override ROM frames/ }),
   ).toBeDisabled()
   await page.getByText('KiraBeach', { exact: true }).first().click()
   // Same name-stripping: "KiraBeach" rides the title as just "Beach".

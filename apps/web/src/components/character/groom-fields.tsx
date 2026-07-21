@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { InfoPopup, MultiSelect, Switch } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
+import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -39,6 +40,10 @@ export function GroomFields({
   patch,
   selectedScene,
   dazInstallFolder,
+  overrideEligible,
+  groomOverrideActive,
+  setGroomOverrideEnabled,
+  selectedSceneName,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -47,6 +52,13 @@ export function GroomFields({
   /** The Daz install folder (from settings) — used to read the installed
    *  Exporter Plugin's DLL version and warn when it's too old for hide-only groom. */
   dazInstallFolder: string
+  /** Per-scene override arming, from useSceneSelection. On a non-primary scene the
+   *  hair list is locked until the override is armed (the list is per scene, but
+   *  editing an outfit scene's hair is an explicit opt-in like the other panels). */
+  overrideEligible: boolean
+  groomOverrideActive: boolean
+  setGroomOverrideEnabled: (enabled: boolean) => void
+  selectedSceneName: string
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
@@ -112,6 +124,9 @@ export function GroomFields({
   const knownLabels = new Set(wearables.map((wearable) => wearable.label))
   const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
+  // On a non-primary scene the per-scene hair list is locked until its override
+  // is armed — the same opt-in gate the ROM / Genesis-9 panels use.
+  const groomLocked = overrideEligible && !groomOverrideActive
 
   // Groom exclusion is hide-only: an Exporter Plugin below MIN_GROOM_EXPORTER_VERSION
   // doesn't unparent the hidden items, so the hair would leak into the FBX. Warn
@@ -136,6 +151,26 @@ export function GroomFields({
             <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
           </InfoPopup>
         </span>
+        {character.groomMode === 'scene' && (
+          <span className="ml-auto">
+            <PanelOverrideToggle
+              eligible={overrideEligible}
+              active={groomOverrideActive}
+              sceneName={selectedSceneName}
+              noun="hair"
+              showScene={false}
+              onToggle={setGroomOverrideEnabled}
+              info={
+                <>
+                  Edit <strong>this Daz scene's own hair list</strong>: select one of the extra
+                  scenes in the Daz scenes cards and enable the override to pick that outfit's
+                  hair. The generated Daz script bakes every scene's list and hides the right
+                  one when that scene is open — so one script covers them all.
+                </>
+              }
+            />
+          </span>
+        )}
       </div>
       {exporterTooOld && (
         <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -157,10 +192,16 @@ export function GroomFields({
             onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}
             placeholder="Pick the hair items of this scene…"
             allowCustom
+            disabled={groomLocked}
             pillWarning={(label) =>
               scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
             }
           />
+          {groomLocked && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Enable the hair override for “{selectedSceneName}” to edit this scene's list.
+            </p>
+          )}
           {missing.length > 0 && (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
               Not found in “{sceneName}”: <strong>{missing.join(', ')}</strong> — the export

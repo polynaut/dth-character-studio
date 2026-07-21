@@ -1,19 +1,54 @@
 import { InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
-import type { Character, GenesisVersion } from '@dth/rom'
+import type { Character, GenesisVersion, SceneOverride } from '@dth/rom'
 
 /**
  * The character's identity block: Genesis generation + gender, and the
- * Genesis-9-specific fieldset (FACS/Flexion strengths, UE5 tear UV) that
- * natively disables on other generations.
+ * Genesis-9-specific fieldset (FACS/Flexion strengths, UE5 tear UV) that natively
+ * disables on other generations. The G9 fieldset is also per-scene overridable:
+ * with a non-primary Daz scene selected it disables until the top-right override
+ * toggle arms it, then its three dials edit the scene's `identity` override
+ * instead of the base character. Genesis/Gender are never per-scene.
  */
 export function IdentitySection({
   character,
   patch,
+  overrideEligible,
+  identityOverrideActive,
+  setIdentityOverrideEnabled,
+  selectedSceneName,
+  sceneOverride,
+  patchOverride,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
+  /** Scene-override arming, from useSceneSelection. */
+  overrideEligible: boolean
+  identityOverrideActive: boolean
+  setIdentityOverrideEnabled: (enabled: boolean) => void
+  selectedSceneName: string
+  sceneOverride: SceneOverride | undefined
+  patchOverride: (partial: Partial<SceneOverride>) => void
 }) {
+  // While armed on a non-primary scene the three dials read/write the scene's
+  // identity override; otherwise the base character.
+  const activeIdentity = identityOverrideActive ? sceneOverride?.identity : undefined
+  const overriding = activeIdentity != null
+  const facsDetailStrength = overriding ? activeIdentity.facsDetailStrength : character.facsDetailStrength
+  const flexionStrength = overriding ? activeIdentity.flexionStrength : character.flexionStrength
+  const applyUE5TearUV = overriding ? activeIdentity.applyUE5TearUV : character.applyUE5TearUV
+  const setIdentity = (
+    partial: Partial<Pick<Character, 'facsDetailStrength' | 'flexionStrength' | 'applyUE5TearUV'>>,
+  ) => {
+    if (overriding) patchOverride({ identity: { ...activeIdentity, ...partial } })
+    else patch(partial)
+  }
+  // Disabled off Genesis 9 (the dials don't exist there) OR on a non-primary
+  // scene that hasn't armed the identity override yet (shows the base values,
+  // dimmed, until the user opts in).
+  const fieldsetDisabled = character.genesis !== 'G9' || (overrideEligible && !overriding)
+
   return (
     <div className="flex flex-wrap gap-x-12 gap-y-5">
       <div className="flex flex-col gap-5 pt-2">
@@ -56,61 +91,86 @@ export function IdentitySection({
       {/* The legend is positioned absolutely (a notch on the border) so it
           doesn't consume a row of flow — that keeps the FACS / Flexion fields
           on the same baseline as the Genesis row on the left (-mt-2 lifts the
-          box, pt-2 on the left column matches). The box always shows; on
-          non-G9 characters the native fieldset `disabled` turns off every
-          control inside (the strengths and tear UV only exist on Genesis 9
-          figures) and the text goes muted. */}
-      <fieldset
-        disabled={character.genesis !== 'G9'}
-        className="relative -mt-2 self-start rounded-md border px-4 pt-4 pb-4"
-      >
-        <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
-          Genesis 9 Specific
-        </legend>
-        <div className={`space-y-4${character.genesis === 'G9' ? '' : ' text-muted-foreground'}`}>
-          {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
-              percentages, same as every morph value field — NumberField's
-              `percent` mode owns that conversion (and the "%" suffix). */}
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                FACS detail strength
-              </Label>
-              <NumberField
-                className="w-28 pr-6 text-right tabular-nums"
-                percent
-                value={character.facsDetailStrength}
-                onCommit={(facsDetailStrength) => patch({ facsDetailStrength })}
-              />
-            </div>
-            <div>
-              <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                Flexion strength
-              </Label>
-              <NumberField
-                className="w-28 pr-6 text-right tabular-nums"
-                percent
-                value={character.flexionStrength}
-                onCommit={(flexionStrength) => patch({ flexionStrength })}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Switch
-              checked={character.applyUE5TearUV}
-              onCheckedChange={(applyUE5TearUV) => patch({ applyUE5TearUV })}
+          box, pt-2 on the left column matches). The box always shows; the
+          fieldset `disabled` turns off every control inside (the strengths and
+          tear UV only exist on Genesis 9, and are locked on a non-primary scene
+          until the override is armed) and the text goes muted. The override
+          toggle sits on the border OUTSIDE the fieldset, so it stays clickable
+          while the fields are disabled — mirroring the legend on the left. */}
+      <div className="relative -mt-2 self-start">
+        {character.genesis === 'G9' && (
+          <span className="absolute top-0 right-3 z-10 flex -translate-y-1/2 items-center rounded bg-card px-1">
+            <PanelOverrideToggle
+              eligible={overrideEligible}
+              active={identityOverrideActive}
+              sceneName={selectedSceneName}
+              noun="Genesis 9 settings"
+              showScene={false}
+              onToggle={setIdentityOverrideEnabled}
+              info={
+                <>
+                  Give this Daz scene its own <strong>Genesis-9 FACS detail / flexion
+                  strengths and tear UV</strong>: select one of the extra scenes in the Daz
+                  scenes cards, enable the override, then set the dials for that scene. On Save
+                  they ride the character's one Daz script and apply when this scene is open;
+                  the base scene keeps its own.
+                </>
+              }
             />
-            <span className="flex items-center gap-1 text-sm">
-              Set UE5 tear UV
-              <InfoPopup label="Set UE5 tear UV — more information">
-                Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
-                ROM build, so DTH's Lacrimal Fluid material lines up without the manual
-                Surfaces-tab step.
-              </InfoPopup>
-            </span>
+          </span>
+        )}
+        <fieldset
+          disabled={fieldsetDisabled}
+          className="rounded-md border px-4 pt-4 pb-4"
+        >
+          <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
+            Genesis 9 Specific
+          </legend>
+          <div className={`space-y-4${fieldsetDisabled ? ' text-muted-foreground' : ''}`}>
+            {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
+                percentages, same as every morph value field — NumberField's
+                `percent` mode owns that conversion (and the "%" suffix). */}
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+                  FACS detail strength
+                </Label>
+                <NumberField
+                  className="w-28 pr-6 text-right tabular-nums"
+                  percent
+                  value={facsDetailStrength}
+                  onCommit={(v) => setIdentity({ facsDetailStrength: v })}
+                />
+              </div>
+              <div>
+                <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+                  Flexion strength
+                </Label>
+                <NumberField
+                  className="w-28 pr-6 text-right tabular-nums"
+                  percent
+                  value={flexionStrength}
+                  onCommit={(v) => setIdentity({ flexionStrength: v })}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={applyUE5TearUV}
+                onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
+              />
+              <span className="flex items-center gap-1 text-sm">
+                Set UE5 tear UV
+                <InfoPopup label="Set UE5 tear UV — more information">
+                  Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
+                  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
+                  Surfaces-tab step.
+                </InfoPopup>
+              </span>
+            </div>
           </div>
-        </div>
-      </fieldset>
+        </fieldset>
+      </div>
     </div>
   )
 }
