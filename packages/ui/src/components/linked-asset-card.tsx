@@ -63,14 +63,17 @@ export function LinkedAssetCard({
 }) {
   const CornerIcon = altHeld ? FolderOpen : ExternalLink
   return (
-    <div className={cn('group/card relative', width)}>
+    // Both the named group (the overlay buttons' hover-reveal) and the plain
+    // `group` (the caller's `group-hover:` accentClass) live on the wrapper, so
+    // the corner overlay button below accents on card hover too.
+    <div className={cn('group group/card relative', width)}>
       <button
         type="button"
         onClick={onSelect ?? onOpen}
         data-alt-reveal=""
         title={onSelect ? title : openTitle}
         className={cn(
-          'group relative flex h-full w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+          'relative flex h-full w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
           cardClass,
           selected && 'ring-2 ring-primary',
         )}
@@ -84,34 +87,7 @@ export function LinkedAssetCard({
           {chip && <div className="mt-1">{chip}</div>}
           {extra && <div className="mt-1">{extra}</div>}
         </div>
-        {onSelect ? (
-          // Selectable mode: the corner icon is the ONLY open target (a span,
-          // not a nested button - invalid HTML; see the JCM-header fix).
-          <span
-            role="button"
-            tabIndex={0}
-            title={openTitle}
-            aria-label={openTitle}
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpen(e)
-            }}
-            onKeyDown={(e) => {
-              // role="button" gives no native key handling — without this the
-              // span was focusable but Enter/Space did nothing.
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                e.stopPropagation()
-                onOpen(e as unknown as MouseEvent)
-              }
-            }}
-            className="absolute right-2 bottom-2 rounded p-1 hover:bg-accent"
-          >
-            <CornerIcon
-              className={cn('size-4 text-muted-foreground transition-colors', accentClass)}
-            />
-          </span>
-        ) : (
+        {!onSelect && (
           <CornerIcon
             className={cn(
               'absolute right-3 bottom-3 size-4 text-muted-foreground transition-colors',
@@ -120,11 +96,30 @@ export function LinkedAssetCard({
           />
         )}
       </button>
+      {onSelect && (
+        // Selectable mode: the corner icon is the ONLY open target. A real
+        // sibling <button> positioned over the card — never nested inside the
+        // main button (a focusable interactive descendant is invalid HTML and
+        // the outer accessible name swallows the inner label). Same overlay
+        // pattern as the remove button below.
+        <button
+          type="button"
+          data-alt-reveal=""
+          title={openTitle}
+          aria-label={openTitle}
+          onClick={onOpen}
+          className="absolute right-2 bottom-2 rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <CornerIcon
+            className={cn('size-4 text-muted-foreground transition-colors', accentClass)}
+          />
+        </button>
+      )}
       {onRemove && (
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-1.5 right-1.5 size-7 opacity-0 transition-opacity group-hover/card:opacity-100"
+          className="absolute top-1.5 right-1.5 size-7 opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100"
           title={removeTitle}
           aria-label={removeTitle}
           onClick={onRemove}
