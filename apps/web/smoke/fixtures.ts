@@ -49,10 +49,17 @@ export async function settle(page: Page) {
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-/** Kira's avatar — the Daz scene's `.tip.png`, inlined as a data URL
- *  (`canonicalImage` keeps `data:` URLs verbatim, so no fake-fs image file is
- *  needed to render it). */
+/** Kira's avatar image bytes — the Daz scene's `.tip.png`, inlined as a data
+ *  URL. Serves double duty: the primary scene's tip thumbnail AND the bytes
+ *  behind the stored avatar snapshot ({@link AVATAR_FILE}). */
 const AVATAR = `data:image/png;base64,${readFileSync(joinNodePath(HERE, 'kira-avatar.png')).toString('base64')}`
+/** The character's STORED avatar reference: a snapshot of the primary scene's
+ *  tip (`<id>--sc-<ts>`), the realistic state once a primary scene is linked —
+ *  the app derives the avatar from that scene. Being an `sc` name makes
+ *  `avatarShowsPrimaryScene` true, so the header shows NO counterpart badge on
+ *  the primary scene and a ZOOMED badge when a non-primary scene is previewed
+ *  (editor-header). Served from the project's `.dcsmeta/images` below. */
+const AVATAR_FILE = 'char-kira--sc-1767225600000.png'
 /** The Summertide outfit scene's own `.tip.png` — the extra scene card (and
  *  the header when that scene is selected) must show a different look. */
 const AVATAR_SUMMERTIDE = `data:image/png;base64,${readFileSync(joinNodePath(HERE, 'kira-avatar-summertide.png')).toString('base64')}`
@@ -220,7 +227,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     ...(opts.demo
       ? {
           scenePath: P.scene,
-          image: AVATAR,
+          image: AVATAR_FILE,
           sections: { FBM: FBM_SECTION, GEN: GEN_SECTION },
           jcmMorphMods: JCM_MODS,
           preserveMorphs: PRESERVE_MORPHS,
@@ -286,6 +293,10 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     // (the mock decodes the data URL to real bytes for readFile).
     [P.scene]: 'duf-fixture',
     [`${P.scene}.tip.png`]: AVATAR,
+    // The stored avatar snapshot the character references — the app resolves it
+    // from the project's hidden meta images (resolveImageSrc). Same bytes as the
+    // primary scene's tip, since in the real app the snapshot IS that render.
+    [`${P.project}/.dcsmeta/images/${AVATAR_FILE}`]: AVATAR,
     ...(opts.extraScene ? { [P.scene2]: 'duf-fixture', [`${P.scene2}.tip.png`]: AVATAR_SUMMERTIDE } : {}),
     [P.houdini]: 'hip-fixture',
     // A release root is marked by copyright.txt; the version parses from the
