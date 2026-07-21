@@ -285,28 +285,23 @@
   color: var(--fg-bright);
 }
 
-/* Accordion anchor: a link icon in the summary's top right, shown on hover.
-   Clicking it puts the accordion's #anchor in the URL (guide.js) — clicking
+/* Accordion anchor: the same "#" glyph the headings carry, in the summary's
+   top right, shown on hover. Clicking it puts the accordion's #anchor in the
+   URL and copies the full link to the clipboard (guide.js) — clicking
    anywhere else on the title still toggles the box. */
 .details-anchor {
   position: absolute;
   top: 50%;
   right: 14px;
-  display: inline-flex;
   transform: translateY(-50%);
   color: var(--muted);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
   opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.details-anchor svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
 }
 
 .guide-content summary:hover .details-anchor {
@@ -315,6 +310,12 @@
 
 .details-anchor:hover {
   color: var(--primary-soft);
+}
+
+/* Brief "copied" confirmation after a click (guide.js toggles the class). */
+.details-anchor.copied {
+  color: #6cc794;
+  opacity: 1;
 }
 
 /* The GitHub button the build injects after the intro on the guide's landing

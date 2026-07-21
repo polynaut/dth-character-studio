@@ -62,6 +62,16 @@ document.addEventListener('click', (e) => {
   if (!a) return
   e.preventDefault() // cancels the summary toggle along with the navigation
   history.replaceState(null, '', a.getAttribute('href'))
+  // Copy the full link too; the glyph flashes green as confirmation. Clipboard
+  // access can be denied (permissions, insecure context) — then the URL bar
+  // still carries the anchor, so failing silently is fine.
+  navigator.clipboard?.writeText(location.href).then(
+    () => {
+      a.classList.add('copied')
+      setTimeout(() => a.classList.remove('copied'), 1200)
+    },
+    () => {},
+  )
 })
 
 function revealHashAccordion() {

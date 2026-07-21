@@ -100,6 +100,7 @@ export function EditorHeader({
   folderChip,
   hasRunProblems,
   sceneTag,
+  sceneAvatarPath,
 }: {
   projectId: string
   draft: CharacterDraft
@@ -111,6 +112,9 @@ export function EditorHeader({
   /** The selected scene's tag next to the title (null hides it — single scene
    *  or while renaming). */
   sceneTag: string | null
+  /** With a non-primary scene selected, the portrait previews that scene's
+   *  `.tip.png` instead of the stored avatar (null → stored avatar). */
+  sceneAvatarPath: string | null
 }) {
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
@@ -202,6 +206,7 @@ export function EditorHeader({
           <div className="avatar-scroll-shrink h-[227px] w-[130px] overflow-hidden rounded-lg bg-neutral-500">
             <Avatar
               image={character.image}
+              scenePath={sceneAvatarPath ?? undefined}
               name={character.name}
               className="avatar-scroll-pan h-[227px] w-[130px] object-top"
               fallbackClassName="text-6xl"
