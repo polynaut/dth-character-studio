@@ -48,9 +48,9 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   // Same name-stripping: "KiraBeach" rides the title as just "Beach".
   await expect(titleRow.getByText('Beach', { exact: true })).toBeVisible()
   await page.getByRole('switch', { name: /Override ROM frames/ }).click()
-  await expect(page.getByText(/Scene override active/)).toBeVisible()
 
-  // Check the first FBM row's Override box — the row joins the override.
+  // Arming unlocks the ROM: the FBM rows' Override checkboxes appear. Check the
+  // first one — the row joins the override.
   await page.getByRole('button', { name: /FBM Full Body/ }).click()
   const checkbox = page.getByRole('checkbox', { name: /Override this frame/ }).first()
   await checkbox.click()

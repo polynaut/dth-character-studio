@@ -89,23 +89,21 @@ export function IdentitySection({
       </div>
 
       {/* The legend is positioned absolutely (a notch on the border) so it
-          doesn't consume a row of flow — that keeps the FACS / Flexion fields
-          on the same baseline as the Genesis row on the left (-mt-2 lifts the
-          box, pt-2 on the left column matches). The box always shows; the
-          fieldset `disabled` turns off every control inside (the strengths and
-          tear UV only exist on Genesis 9, and are locked on a non-primary scene
-          until the override is armed) and the text goes muted. The override
-          toggle sits on the border OUTSIDE the fieldset, so it stays clickable
-          while the fields are disabled — mirroring the legend on the left. */}
-      <div className="relative -mt-2 self-start">
+          doesn't consume a row of flow. The override toggle sits in its own row
+          ABOVE the fieldset (right-aligned to the box) — OUTSIDE it, so it stays
+          clickable while the fields are disabled, and with room for the scene
+          name the border couldn't hold. The fieldset `disabled` turns off every
+          control inside (the strengths and tear UV only exist on Genesis 9, and
+          are locked on a non-primary scene until the override is armed) and the
+          text goes muted. */}
+      <div className="w-fit self-start">
         {character.genesis === 'G9' && (
-          <span className="absolute top-0 right-3 z-10 flex -translate-y-1/2 items-center rounded bg-card px-1">
+          <div className="mb-2.5 flex w-full justify-end">
             <PanelOverrideToggle
               eligible={overrideEligible}
               active={identityOverrideActive}
               sceneName={selectedSceneName}
               noun="Genesis 9 settings"
-              showScene={false}
               onToggle={setIdentityOverrideEnabled}
               info={
                 <>
@@ -117,11 +115,11 @@ export function IdentitySection({
                 </>
               }
             />
-          </span>
+          </div>
         )}
         <fieldset
           disabled={fieldsetDisabled}
-          className="rounded-md border px-4 pt-4 pb-4"
+          className="relative rounded-md border px-4 pt-4 pb-4"
         >
           <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
             Genesis 9 Specific

@@ -1605,11 +1605,6 @@ describe('groom items (hair kept out of the export)', () => {
     expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
   })
 
-  it("separate-scenes groom mode disables the bracket even with items listed", () => {
-    const content = toCharacterScriptDsa(groomChar({ groomMode: 'separate' }), {}, FRAMES).content
-    expect(content).not.toContain('dthGroom')
-  })
-
   it('generateAll emits the groom script only with an export path AND groom lists', () => {
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',

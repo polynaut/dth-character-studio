@@ -476,7 +476,16 @@ function CharacterPage() {
             location={location}
             onMoved={onCharacterMoved}
           />
-          <PreserveFields character={character} patch={patch} />
+          <PreserveFields
+            character={character}
+            patch={patch}
+            overrideEligible={sceneSel.overrideEligible}
+            preserveOverrideActive={sceneSel.preserveOverrideActive}
+            setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
+            selectedSceneName={sceneSel.selectedSceneName}
+            sceneOverride={sceneSel.sceneOverride}
+            patchOverride={sceneSel.patchOverride}
+          />
         </div>
       </details>
 

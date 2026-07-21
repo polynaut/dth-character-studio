@@ -160,6 +160,11 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
       applyUE5TearUV: false,
     })
     expect(parsed.sceneOverrides[0].groom).toEqual({ enabled: false })
+    expect(parsed.sceneOverrides[0].preserve).toEqual({
+      enabled: false,
+      morphs: [],
+      nodeTransforms: [],
+    })
   })
   it('round-trips explicit identity + groom override values', () => {
     const parsed = characterSchema.parse(
@@ -325,17 +330,14 @@ describe('characterSchema — v15 groomScenes (additive)', () => {
   })
 })
 
-// v14 added `groomMode` — additive with a 'scene' default, so there is no
-// migrate step; zod fills it when reading an older definition.
-describe('characterSchema — v14 groomMode (additive)', () => {
+// v20 REMOVED `groomMode`: hair is per-scene by presence now. A removed field
+// needs no migrate step — zod strips the old value on read.
+describe('characterSchema — v20 groomMode removal', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it("fills groomMode with 'scene' for a v13-shaped definition", () => {
-    expect(characterSchema.parse({ ...base, schemaVersion: 13 }).groomMode).toBe('scene')
-  })
-
-  it('round-trips the separate-scenes mode', () => {
-    expect(characterSchema.parse({ ...base, groomMode: 'separate' }).groomMode).toBe('separate')
+  it('strips a stored groomMode instead of carrying it', () => {
+    const parsed = characterSchema.parse({ ...base, groomMode: 'separate' }) as Record<string, unknown>
+    expect(parsed.groomMode).toBeUndefined()
   })
 })
 

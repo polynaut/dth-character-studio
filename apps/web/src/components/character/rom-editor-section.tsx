@@ -143,6 +143,7 @@ export const RomEditorSection = memo(function RomEditorSection({
         jcmMorphMods={character.jcmMorphMods}
         onJcmMorphModsChange={onJcmMorphModsChange}
         override={overrideProp}
+        locked={overrideEligible && !overrideActive}
         onChange={onSectionsChange}
       />
     </section>

@@ -80,7 +80,10 @@ export function activeSceneOverrides(
 ): Array<SceneOverride> {
   return character.sceneOverrides.filter(
     (override) =>
-      (override.enabled || override.identity.enabled || override.groom.enabled) &&
+      (override.enabled ||
+        override.identity.enabled ||
+        override.groom.enabled ||
+        override.preserve.enabled) &&
       character.extraScenes.includes(override.scenePath),
   )
 }

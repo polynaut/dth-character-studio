@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { InfoPopup, MultiSelect, Switch } from '@dth/ui'
+import { InfoPopup, MultiSelect } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
@@ -26,14 +26,15 @@ function refKey(ref: string): string {
 }
 
 /**
- * The groom (hair) block of the character editor's Export section. The lists
- * are PER SCENE (`groomScenes`) — outfit scenes carry different hair styles —
- * and this component edits the list of the SELECTED scene card (`selectedScene`,
- * the primary scene by default). The generated script bakes the whole map and
- * resolves the open scene's list at run time, so one script serves every scene.
- * Suggestions come from the selected scene's `.duf` (read natively, no Daz
- * needed); a listed label the scene doesn't contain gets a warning. `patch` is
- * the route's partial-Character updater — saved with the ordinary Save.
+ * The hair (groom) block of the character editor's identity card. Hair is always
+ * PER SCENE (`groomScenes`) — a scene's listed items ARE its hair, none listed
+ * means none — and this component edits the list of the SELECTED scene card
+ * (`selectedScene`, the primary scene by default). The generated script bakes the
+ * whole map and hides the open scene's list around the export at run time, so one
+ * script serves every scene. Suggestions come from the selected scene's `.duf`
+ * (read natively, no Daz needed); a listed label the scene doesn't contain gets a
+ * warning. On a non-primary scene the list locks until its override is armed.
+ * `patch` is the route's partial-Character updater — saved with the ordinary Save.
  */
 export function GroomFields({
   character,
@@ -66,9 +67,13 @@ export function GroomFields({
   // / unknown — we don't warn then (see exporterSupportsGroomHide).
   const [exporterVersion, setExporterVersion] = useState('')
 
-  // Read the installed plugin version only while groom is actually in use.
+  // Groom exclusion is hide-only: an Exporter Plugin below MIN_GROOM_EXPORTER_VERSION
+  // doesn't unparent the hidden items, so the hair would leak into the FBX.
+  const hasGroom = character.groomScenes.some((g) => g.nodes.length > 0)
+
+  // Read the installed plugin version only when this character actually lists hair.
   useEffect(() => {
-    if (character.groomMode !== 'scene') return
+    if (!hasGroom) return
     let cancelled = false
     void api.installedExporterVersion(dazInstallFolder).then((v) => {
       if (!cancelled) setExporterVersion(v)
@@ -76,7 +81,7 @@ export function GroomFields({
     return () => {
       cancelled = true
     }
-  }, [character.groomMode, dazInstallFolder])
+  }, [hasGroom, dazInstallFolder])
 
   useEffect(() => {
     // Drop the previous scene's scan immediately — judging this scene's list
@@ -127,50 +132,38 @@ export function GroomFields({
   // On a non-primary scene the per-scene hair list is locked until its override
   // is armed — the same opt-in gate the ROM / Genesis-9 panels use.
   const groomLocked = overrideEligible && !groomOverrideActive
-
-  // Groom exclusion is hide-only: an Exporter Plugin below MIN_GROOM_EXPORTER_VERSION
-  // doesn't unparent the hidden items, so the hair would leak into the FBX. Warn
-  // when the character actually lists groom AND the installed DLL is too old.
-  const hasGroom = character.groomScenes.some((g) => g.nodes.length > 0)
-  const exporterTooOld =
-    character.groomMode === 'scene' && hasGroom && !exporterSupportsGroomHide(exporterVersion)
+  const exporterTooOld = hasGroom && !exporterSupportsGroomHide(exporterVersion)
 
   return (
     <div className="max-w-xl">
       <div className="mb-3 flex items-center gap-3">
-        <Switch
-          checked={character.groomMode === 'scene'}
-          onCheckedChange={(inScene) => patch({ groomMode: inScene ? 'scene' : 'separate' })}
-        />
-        <span className="flex items-center gap-1 text-sm">
-          Hair items live in the Daz scenes
-          <InfoPopup label="Hair items live in the Daz scenes — more information">
-            <strong>On</strong>: each scene carries its full look; the listed hair is hidden around
-            the DTH export so it never rides into the ROM artifacts. <strong>Off</strong>: keep hair
-            in separate Daz scene files, nothing excluded.{' '}
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
+        <span className="flex items-center gap-1 text-sm font-medium">
+          Hair items
+          <InfoPopup label="Hair items — more information">
+            Each scene carries its own hair — the items you list here are hidden around the DTH
+            export so they never ride into the ROM artifacts. None listed means the scene has no
+            hair to exclude. For a hair-only variant, link it as its own scene (or use
+            Attachments).
           </InfoPopup>
         </span>
-        {character.groomMode === 'scene' && (
-          <span className="ml-auto">
-            <PanelOverrideToggle
-              eligible={overrideEligible}
-              active={groomOverrideActive}
-              sceneName={selectedSceneName}
-              noun="hair"
-              showScene={false}
-              onToggle={setGroomOverrideEnabled}
-              info={
-                <>
-                  Edit <strong>this Daz scene's own hair list</strong>: select one of the extra
-                  scenes in the Daz scenes cards and enable the override to pick that outfit's
-                  hair. The generated Daz script bakes every scene's list and hides the right
-                  one when that scene is open — so one script covers them all.
-                </>
-              }
-            />
-          </span>
-        )}
+        <span className="ml-auto">
+          <PanelOverrideToggle
+            eligible={overrideEligible}
+            active={groomOverrideActive}
+            sceneName={selectedSceneName}
+            noun="hair"
+            onToggle={setGroomOverrideEnabled}
+            info={
+              <>
+                Edit <strong>this Daz scene's own hair list</strong>: select one of the extra
+                scenes in the Daz scenes cards and enable the override to pick that outfit's hair.
+                The generated Daz script bakes every scene's list and hides the right one when that
+                scene is open — so one script covers them all.{' '}
+                <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
+              </>
+            }
+          />
+        </span>
       </div>
       {exporterTooOld && (
         <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -180,10 +173,8 @@ export function GroomFields({
           export will bake the hair into the FBX.
         </p>
       )}
-      {character.groomMode !== 'scene' ? null : !selectedScene ? (
-        <p className="text-sm text-muted-foreground">
-          Link a Daz scene to define its hair items.
-        </p>
+      {!selectedScene ? (
+        <p className="text-sm text-muted-foreground">Link a Daz scene to define its hair items.</p>
       ) : (
         <>
           <MultiSelect

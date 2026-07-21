@@ -280,11 +280,11 @@ ${sceneSubfolderBlock}${exportBody}} else {
  * The character's per-SCENE groom lists as a lookup the generated script embeds:
  * normalized scene path (forward slashes, lowercased) → trimmed non-empty item
  * labels. Scenes without items are dropped — absence MEANS "this scene has no
- * groom to exclude". Empty in 'separate' groom mode (the classic separate-scene
- * workflow: the lists are inert). THE single gate for the export bracket.
+ * groom to exclude". Hair is per-scene by presence: a scene's `groomScenes`
+ * items ARE its hair (none listed → nothing excluded). THE single gate for the
+ * export bracket.
  */
 function groomSceneMap(character: Character): Record<string, Array<string>> {
-  if (character.groomMode !== 'scene') return {}
   const map: Record<string, Array<string>> = {}
   for (const entry of character.groomScenes) {
     const key = entry.scenePath.trim().replace(/\\/g, '/').toLowerCase()
@@ -314,6 +314,13 @@ function buildSceneConfigMap(character: Character): Record<string, Record<string
       delta.FACsDetailStrength = g9Dials ? override.identity.facsDetailStrength : 0
       delta.FlexionStrength = g9Dials ? override.identity.flexionStrength : 0
       delta.bApplyUE5TearUV = character.genesis === 'G9' && override.identity.applyUE5TearUV
+    }
+    if (override.preserve.enabled) {
+      // Full replacement of the base lists — always set BOTH keys, even empty, so
+      // an armed scene that cleared a list overrides the base's (empty ⇒ preserve
+      // nothing for this scene) instead of the base value riding through the merge.
+      delta.preserveMorphs = override.preserve.morphs
+      delta.preserveNodeTransforms = override.preserve.nodeTransforms
     }
     if (Object.keys(delta).length > 0) map[key] = delta
   }

@@ -413,6 +413,17 @@ export function flatSectionGroupId(section: RomSection): string {
   return `flat-${section}`
 }
 
+/** A morph value held (restored) after the ROM load — name + the value to keep. */
+export const preserveMorphSchema = z.object({
+  name: z.string().max(MAX_NAME_LENGTH),
+  keepValue: z.number(),
+})
+export type PreserveMorph = z.infer<typeof preserveMorphSchema>
+
+/** A node whose transform is memorized before and restored after the ROM load. */
+export const preserveNodeTransformSchema = z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })
+export type PreserveNodeTransform = z.infer<typeof preserveNodeTransformSchema>
+
 /**
  * A per-Daz-scene ROM override — "the same character in another scene/outfit":
  * most frames stay exactly as the base ROM defines them, a few rows are
@@ -477,6 +488,20 @@ export const sceneOverrideSchema = z.object({
    * non-primary scene so it reads like the other overrides.
    */
   groom: z.object({ enabled: z.boolean().default(false) }).default({ enabled: false }),
+  /**
+   * Per-scene "preserve after ROM loading" lists (Advanced options) — the scene's
+   * OWN morph-hold + node-transform lists, a full replacement of the base ones
+   * when `enabled` (so an outfit scene can add, edit AND remove entries). Armed,
+   * both lists override the base even when empty (an empty list means "preserve
+   * nothing for this scene").
+   */
+  preserve: z
+    .object({
+      enabled: z.boolean().default(false),
+      morphs: z.array(preserveMorphSchema).default([]),
+      nodeTransforms: z.array(preserveNodeTransformSchema).default([]),
+    })
+    .default({ enabled: false, morphs: [], nodeTransforms: [] }),
 })
 export type SceneOverride = z.infer<typeof sceneOverrideSchema>
 
@@ -616,12 +641,6 @@ export function genRomIncludes(
     dk: presetAssets.some((a) => /dicktator|dk9/i.test(a)),
   }
 }
-
-export const preserveMorphSchema = z.object({
-  name: z.string().max(MAX_NAME_LENGTH),
-  keepValue: z.number(),
-})
-export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 
 const rangeSchema = z.object({ start: z.number(), end: z.number() })
 
@@ -763,14 +782,18 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       node/prop/value/base/autoBase only on every path (extraFrames,
  *       gp/dkArtDirection), so the .dsa config contract stays byte-for-byte
  *       unchanged.
- *  20 — added per-scene `identity` (G9 FACS/flexion/tear-UV) and `groom` (hair
- *       gate) blocks to `sceneOverrideSchema`, generalizing per-scene overrides
- *       beyond ROM. Additive nested objects with zod defaults — no migration
- *       step (hair lists stay in `groomScenes`; `groom.enabled` is just the
- *       panel opt-in). The ROM `enabled` gate's default flipped true → false so
- *       a fresh override starts fully disabled; this needs no step either —
- *       every stored override already carries an explicit `enabled`, so nothing
- *       relies on the default on read.
+ *  20 — added per-scene `identity` (G9 FACS/flexion/tear-UV), `groom` (hair
+ *       gate) and `preserve` (own preserve-morph / node-transform lists) blocks
+ *       to `sceneOverrideSchema`, generalizing per-scene overrides beyond ROM.
+ *       Additive nested objects with zod defaults — no migration step (hair
+ *       lists stay in `groomScenes`; `groom.enabled` is just the panel opt-in).
+ *       The ROM `enabled` gate's default flipped true → false so a fresh override
+ *       starts fully disabled; this needs no step either — every stored override
+ *       already carries an explicit `enabled`, so nothing relies on the default
+ *       on read. Also REMOVED `groomMode` (the "hair lives in scenes" toggle):
+ *       hair is now always per-scene by presence — a scene's `groomScenes` items
+ *       ARE its hair, none means none. A removed field needs no step (zod strips
+ *       the old value on read); the old 'separate' choice just stops excluding.
  */
 export const CHARACTER_SCHEMA_VERSION = 20
 
@@ -1167,9 +1190,7 @@ export const characterSchema = z.object({
   /** Morph values restored after ROM loading (e.g. breast position). */
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
-  preserveNodeTransforms: z
-    .array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) }))
-    .default([]),
+  preserveNodeTransforms: z.array(preserveNodeTransformSchema).default([]),
   /**
    * Groom items (hair — usually the fitted cap; its children ride along) kept OUT
    * of the DTH export, so one scene can carry full hair while the ROM export stays
@@ -1194,16 +1215,6 @@ export const characterSchema = z.object({
       }),
     )
     .default([]),
-  /**
-   * How this character's groom (hair) is handled at export time:
-   *  - 'scene': the groom lives IN the ROM scene(s) — the open scene's
-   *    `groomScenes` items are unfitted/unparented around `doExport` and
-   *    restored (one scene per outfit carries everything, hair included).
-   *  - 'separate': the classic workflow — groom kept in separate Daz scene
-   *    files (linkable via `extraScenes`); nothing is excluded at export and
-   *    `groomScenes` is ignored.
-   */
-  groomMode: z.enum(['scene', 'separate']).default('scene'),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   // Function form: a value default would hand every parsed character THE SAME
   // mutable sections object.

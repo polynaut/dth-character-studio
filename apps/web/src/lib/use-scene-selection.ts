@@ -5,7 +5,7 @@ import { prettySceneName } from '#/lib/scene-name.ts'
 import type { Character, SceneOverride } from '@dth/rom'
 
 /** The overridable editor panels — each arms independently on a non-primary scene. */
-export type OverridePanel = 'rom' | 'identity' | 'groom'
+export type OverridePanel = 'rom' | 'identity' | 'groom' | 'preserve'
 
 /**
  * The character editor's page-local Daz-scene selection (the scene cards) and
@@ -37,14 +37,13 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     effectiveScene.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
   const selectedSceneName = prettySceneName(rawSceneStem, character.name)
 
-  const panelGate = (o: SceneOverride | undefined, panel: OverridePanel): boolean =>
-    o
-      ? panel === 'rom'
-        ? o.enabled
-        : panel === 'identity'
-          ? o.identity.enabled
-          : o.groom.enabled
-      : false
+  const panelGate = (o: SceneOverride | undefined, panel: OverridePanel): boolean => {
+    if (!o) return false
+    if (panel === 'rom') return o.enabled
+    if (panel === 'identity') return o.identity.enabled
+    if (panel === 'groom') return o.groom.enabled
+    return o.preserve.enabled
+  }
   const panelActive = (panel: OverridePanel) => overrideEligible && panelGate(sceneOverride, panel)
 
   // Arm/disarm one panel's gate for the selected scene. Minting a fresh override
@@ -55,31 +54,53 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     (panel: OverridePanel, enabled: boolean) => {
       const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
       if (!existing && !enabled) return
-      const withGate = (o: SceneOverride): SceneOverride =>
-        panel === 'rom'
-          ? { ...o, enabled }
-          : panel === 'identity'
-            ? { ...o, identity: { ...o.identity, enabled } }
-            : { ...o, groom: { ...o.groom, enabled } }
-      const minted = (): SceneOverride => {
-        const base = sceneOverrideSchema.parse({ scenePath: effectiveScene })
-        if (panel === 'identity' && enabled) {
+      // Flip one panel's gate. Arming identity/preserve for the FIRST time (their
+      // values still at the schema defaults / empty) seeds from the base — so the
+      // override starts as a copy the user can tweak or delete from — whatever the
+      // arm order. A re-arm keeps whatever was already stored.
+      const withGate = (o: SceneOverride): SceneOverride => {
+        if (panel === 'rom') return { ...o, enabled }
+        if (panel === 'groom') return { ...o, groom: { ...o.groom, enabled } }
+        if (panel === 'identity') {
+          const fresh =
+            !o.identity.enabled &&
+            o.identity.facsDetailStrength === 1 &&
+            o.identity.flexionStrength === 1 &&
+            !o.identity.applyUE5TearUV
           return {
-            ...base,
-            identity: {
-              enabled: true,
-              facsDetailStrength: character.facsDetailStrength,
-              flexionStrength: character.flexionStrength,
-              applyUE5TearUV: character.applyUE5TearUV,
-            },
+            ...o,
+            identity:
+              enabled && fresh
+                ? {
+                    enabled: true,
+                    facsDetailStrength: character.facsDetailStrength,
+                    flexionStrength: character.flexionStrength,
+                    applyUE5TearUV: character.applyUE5TearUV,
+                  }
+                : { ...o.identity, enabled },
           }
         }
-        return withGate(base)
+        const preserveFresh =
+          o.preserve.morphs.length === 0 && o.preserve.nodeTransforms.length === 0
+        return {
+          ...o,
+          preserve:
+            enabled && preserveFresh
+              ? {
+                  enabled: true,
+                  morphs: character.preserveMorphs,
+                  nodeTransforms: character.preserveNodeTransforms,
+                }
+              : { ...o.preserve, enabled },
+        }
       }
       patch({
         sceneOverrides: existing
           ? character.sceneOverrides.map((o) => (o.scenePath === effectiveScene ? withGate(o) : o))
-          : [...character.sceneOverrides, minted()],
+          : [
+              ...character.sceneOverrides,
+              withGate(sceneOverrideSchema.parse({ scenePath: effectiveScene })),
+            ],
       })
     },
     [
@@ -87,6 +108,8 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
       character.facsDetailStrength,
       character.flexionStrength,
       character.applyUE5TearUV,
+      character.preserveMorphs,
+      character.preserveNodeTransforms,
       effectiveScene,
       patch,
     ],
@@ -117,6 +140,10 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     (enabled: boolean) => setPanelEnabled('groom', enabled),
     [setPanelEnabled],
   )
+  const setPreserveOverrideEnabled = useCallback(
+    (enabled: boolean) => setPanelEnabled('preserve', enabled),
+    [setPanelEnabled],
+  )
 
   return {
     /** The effective selection (falls back to the primary scene). */
@@ -137,5 +164,8 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     // Hair panel.
     groomOverrideActive: panelActive('groom'),
     setGroomOverrideEnabled,
+    // Preserve (Advanced options) panel.
+    preserveOverrideActive: panelActive('preserve'),
+    setPreserveOverrideEnabled,
   }
 }
