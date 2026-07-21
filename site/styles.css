@@ -231,7 +231,7 @@ a:hover {
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 40px;
 }
 
 .topbar-brand {
@@ -251,7 +251,7 @@ a:hover {
 
 .topbar-nav {
   display: flex;
-  gap: 22px;
+  gap: 40px;
   margin-left: auto;
 }
 
@@ -595,12 +595,12 @@ a:hover {
 /* Features — the compact "why you'll want it" checklist. */
 
 .features {
-  margin: 36px 0 0;
+  margin: 64px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px 48px;
+  gap: 32px 64px;
 }
 
 .features li {
@@ -649,7 +649,7 @@ a:hover {
 }
 
 .cta-strip {
-  margin-top: 40px;
+  margin-top: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -682,7 +682,7 @@ a:hover {
 /* Resources */
 
 .resources {
-  margin-top: 36px;
+  margin-top: 64px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
@@ -709,12 +709,20 @@ a:hover {
   font-size: 0.99rem;
   font-weight: 800;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
+/* The symbol in front of each card title; the octocat variant carries
+   .gh-mark for its fill, this class sizes and colors them all alike. */
+.resource-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--primary);
+}
+
 .resource .ext {
+  margin-left: auto;
   color: var(--muted);
   font-weight: 600;
   transition: color 160ms ease, transform 160ms ease;
