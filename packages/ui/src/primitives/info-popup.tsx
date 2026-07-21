@@ -119,6 +119,11 @@ export function InfoPopup({
     } else if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) {
       event.preventDefault()
       onOpenExternal(href)
+    } else {
+      // A relative href (no leading "/", no scheme) matches neither branch —
+      // without this it falls through to a default anchor navigation that
+      // replaces the whole webview. There's no sensible target for one; eat it.
+      event.preventDefault()
     }
   }
 

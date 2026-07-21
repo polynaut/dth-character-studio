@@ -25,6 +25,16 @@ export interface PersistPatchOptions {
    *  (e.g. `relinkScene`, which also derives the avatar). Receives the merged
    *  draft; must return the persisted character. Defaults to `saveCharacter`. */
   persist?: (updated: Character) => Promise<Character>
+  /** The character's name BEFORE this patch — plumbed into generation so the
+   *  artifacts named after the old name are cleaned up (the inline rename). */
+  previousName?: string
+  /** Rethrow a FAILED persist step instead of toasting it (the rollback still
+   *  happens) — for callers that own the error surface, like the inline
+   *  rename's EditableTitle, which resets its text and toasts on a rejection.
+   *  Guard refusals (validation / a save in flight) still toast here and
+   *  resolve `null`; a generate failure after a successful persist still only
+   *  warns here — the change DID land. */
+  rethrow?: boolean
 }
 
 /**
@@ -35,7 +45,9 @@ export interface PersistPatchOptions {
  * clobbering interim edits. The patch may be an async producer — it runs only
  * AFTER the guards, so a flow with a side effect (copying a scene file into the
  * project) can't perform it and then be refused; returning `null` aborts.
- * Resolves to the persisted character, or `null` when refused or failed.
+ * Resolves to the persisted character, or `null` when refused or the persist
+ * failed. A generate failure AFTER a successful persist still resolves to the
+ * persisted character (it warns; the change is on disk).
  */
 export type PersistCharacterPatch = (
   patch: Partial<Character> | (() => Promise<Partial<Character> | null>),
@@ -58,11 +70,11 @@ export type PersistCharacterPatch = (
  *
  * Immediate-persist flows (anything that saves without the Save button) go
  * through {@link PersistCharacterPatch persistPatch} — never a bare
- * `saveCharacter` + `settle`, which would skip validation, race an in-flight
- * save, and leave the generated artifacts stale behind a green "Saved".
- * The one exception is the inline rename, which needs `previousName` plumbed
- * into generation and re-throws for EditableTitle — it runs the same guards
- * by hand (validate + single-flight + settle + regenerate).
+ * `saveCharacter` + hand-settled baseline, which would skip validation, race an
+ * in-flight save, and leave the generated artifacts stale behind a green "Saved".
+ * Even the inline rename routes through it (its `previousName` cleanup and
+ * EditableTitle's reset-on-rejection ride the `previousName` / `rethrow`
+ * options), so the single-flight flag is held for every persisting flow.
  */
 export function useCharacterDraft(options: {
   projectId: string
@@ -95,14 +107,6 @@ export function useCharacterDraft(options: {
 
   const patch = useCallback((p: Partial<Character>) => {
     setCharacter((c) => ({ ...c, ...p }))
-  }, [])
-
-  /** Reconcile draft + baseline on a persisted result — for the inline rename,
-   *  which saves immediately outside the Save button, so the editor doesn't
-   *  turn dirty over an already-saved value. */
-  const settle = useCallback((saved: Character) => {
-    setCharacter(saved)
-    setBaseline(saved)
   }, [])
 
   /**
@@ -210,12 +214,17 @@ export function useCharacterDraft(options: {
     // Snapshot what we're persisting — the form stays editable during the
     // save+generate, so settle must not revert edits typed in the meantime.
     const snapshot = stateRef.current.character
+    // Set once saveCharacter succeeded: from then on the definition IS on disk,
+    // so a later failure (generation) must not read as "the save failed".
+    let persisted: Character | null = null
     try {
       const saved = await saveCharacter({ data: { projectId, character: snapshot } })
-      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
-      // Settle in one batched render: reconcile baseline (so it's no longer
-      // "dirty") without clobbering any interim edits, and drop the saving flag.
+      // The persist landed — settle the baseline BEFORE generating (reconciled
+      // without clobbering interim edits), so a generate failure can't leave
+      // the editor claiming unsaved changes for a definition already on disk.
+      persisted = saved
       settleAfterSave(snapshot, saved)
+      const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
       setSaving(false)
       // Refresh the loader for re-entry/navigation, but don't await it — the
       // buttons no longer depend on it, so it stays off the visible path.
@@ -223,7 +232,17 @@ export function useCharacterDraft(options: {
       notifyGenerated(`Saved “${saved.name}” — ${result.files.length} files`, result)
     } catch (e) {
       setSaving(false)
-      toast.error(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      if (persisted) {
+        // Only generation failed; the save itself is on disk — same warning
+        // family as `scriptsError`, and the loader still refreshes.
+        void router.invalidate()
+        toast.warning(
+          `Saved “${persisted.name}”, but couldn't regenerate the DTH files: ${message}`,
+        )
+      } else {
+        toast.error(message)
+      }
     }
   }, [projectId, router, validate, settleAfterSave, notifyGenerated])
 
@@ -231,12 +250,18 @@ export function useCharacterDraft(options: {
    * See {@link PersistCharacterPatch}. Order of operations:
    * 1. single-flight guard (an in-flight save+generate must not interleave)
    * 2. `validate()` — the same checks that gate the Save button
-   * 3. resolve the patch (an async producer runs only past the guards)
-   * 4. apply it to the draft optimistically + persist + regenerate
-   * 5. `settleAfterSave` — baseline := saved; interim edits are preserved
-   * On failure the PATCHED fields roll back to their pre-patch values while
-   * interim edits on other fields survive — the form then shows what's actually
-   * persisted instead of keeping a change that never landed.
+   * 3. resolve the patch (an async producer runs only past the guards), THEN
+   *    snapshot the draft — a producer can take seconds (it may copy scene
+   *    files) while the form stays editable, so a pre-producer snapshot would
+   *    silently discard everything typed during it
+   * 4. apply it to the draft optimistically + persist
+   * 5. `settleAfterSave` — baseline := saved; interim edits are preserved —
+   *    BEFORE regenerating, so a generate failure can't leave the editor
+   *    claiming unsaved changes for a definition already on disk
+   * 6. regenerate the DTH files; a failure here only warns (no rollback)
+   * On a PERSIST failure the PATCHED fields roll back to their pre-patch values
+   * while interim edits on other fields survive — the form then shows what's
+   * actually persisted instead of keeping a change that never landed.
    */
   const persistPatch = useCallback<PersistCharacterPatch>(
     async (patchOrProduce, opts) => {
@@ -245,10 +270,15 @@ export function useCharacterDraft(options: {
         return null
       }
       if (!validate()) return null
-      const before = stateRef.current.character
+      // Snapshotted AFTER the producer resolves (step 3) — this pre-producer
+      // value is only a placeholder for the type.
+      let before = stateRef.current.character
       // Set once the patch is applied to the draft — the catch rolls exactly
       // these fields back (an abort before application has nothing to undo).
       let appliedPatch: Partial<Character> | null = null
+      // Set once the persist step succeeded — from then on a failure is a
+      // generation problem on top of a LANDED save: warn, never roll back.
+      let persisted: Character | null = null
       setSaving(true)
       try {
         const p =
@@ -257,20 +287,42 @@ export function useCharacterDraft(options: {
           setSaving(false)
           return null
         }
+        // Re-snapshot now: edits typed while the producer ran belong to `before`
+        // (they must survive the patch application AND key the rollback).
+        before = stateRef.current.character
         const updated = { ...before, ...p }
         setCharacter(updated)
         appliedPatch = p
         const saved = opts?.persist
           ? await opts.persist(updated)
           : await saveCharacter({ data: { projectId, character: updated } })
-        const result = await generateCharacterFiles({ data: { projectId, id: saved.id } })
-        // Preserve edits made during the in-flight save (see settleAfterSave).
+        // The persist landed — settle BEFORE generating, preserving edits made
+        // during the in-flight save (see settleAfterSave).
+        persisted = saved
         settleAfterSave(updated, saved)
+        const result = await generateCharacterFiles({
+          data: {
+            projectId,
+            id: saved.id,
+            ...(opts?.previousName !== undefined ? { previousName: opts.previousName } : {}),
+          },
+        })
         setSaving(false)
         void router.invalidate()
         notifyGenerated(opts?.toast ?? `Saved “${saved.name}”`, result)
         return saved
       } catch (e) {
+        setSaving(false)
+        const message = e instanceof Error ? e.message : String(e)
+        if (persisted) {
+          // Only generation failed; the patch itself is on disk — same warning
+          // family as `scriptsError`, and the loader still refreshes.
+          void router.invalidate()
+          toast.warning(
+            `Saved “${persisted.name}”, but couldn't regenerate the DTH files: ${message}`,
+          )
+          return persisted
+        }
         if (appliedPatch !== null) {
           // Roll back JUST the patched fields to their pre-patch values; interim
           // edits the user typed on OTHER fields during the flight are kept.
@@ -283,8 +335,8 @@ export function useCharacterDraft(options: {
             return rolledBack
           })
         }
-        setSaving(false)
-        toast.error(e instanceof Error ? e.message : String(e))
+        if (opts?.rethrow) throw e
+        toast.error(message)
         return null
       }
     },
@@ -297,7 +349,6 @@ export function useCharacterDraft(options: {
     saving,
     unsavedGuard,
     patch,
-    settle,
     syncPersisted,
     discard,
     save,

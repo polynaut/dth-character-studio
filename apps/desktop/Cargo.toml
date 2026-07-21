@@ -65,8 +65,12 @@ reqwest = { version = "0.13", default-features = false }
 # so this adds no crates (and avoids pulling aws-lc-rs).
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
-# Windows-only: resolving / re-mapping network drives via the WNet API. 0.59 is
-# already in the tree (via tauri), so this pulls in no new windows-sys version.
+# Windows-only: resolving / re-mapping network drives via the WNet API. 0.61 is
+# already in the tree (many crates in tauri's graph depend on 0.61.2), so this
+# adds no NEW windows-sys version — but the lock does carry FIVE windows-sys
+# versions in total (0.45/0.52/0.59/0.60/0.61 at the time of writing), all pulled
+# transitively. That duplication is theirs to converge; don't churn this pin (or
+# the lock) trying to collapse them.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",

@@ -114,7 +114,8 @@ blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
-(`open_project_window`/`open_home_window`/`active_project_file`), Daz bridge
+(`open_project_window`/`active_project_file`; the home window opens via the
+native menu's Rust-side `open_home_window_impl`, no command), Daz bridge
 (`daz_studio_running`/`run_daz_script`/`focus_app_window`), drives
 (`unc_for_path`/`ensure_network_drives`), `housekeeping_sweep`,
 `app_release_tags`, `unreal_dth_present`. Nearly all are

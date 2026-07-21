@@ -10,6 +10,8 @@ import { z } from 'zod'
  *     `DupMember` / `AssetDup` / `DedupReport` → `apps/desktop/src/dedup.rs`
  *   - `HousekeepingResult` (Rust `SweepReport`) → `apps/desktop/src/housekeeping.rs`
  *   - `RemapResult`                         → `apps/desktop/src/drives.rs`
+ *   - `PoseAssetFrames`                     → `apps/desktop/src/poses.rs`
+ *   - `SceneWearable` / `SceneWearables`    → `apps/desktop/src/poses.rs`
  *
  * The api layer parses each command result through these schemas (`Schema.parse(
  * await invoke(...))`) instead of a bare `invoke<T>()` cast, so a shape mismatch

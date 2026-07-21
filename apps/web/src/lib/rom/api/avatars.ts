@@ -4,6 +4,7 @@ import { z } from 'zod'
 import * as storage from '../storage'
 import { isExternalImage } from '../image'
 import { basename, getActiveProjectDir, joinPath } from './core'
+import { bytesToDataUrl, fileExt, IMAGE_EXT_MIME } from './data-url'
 
 // Avatar images + Daz scene thumbnails: storing avatar bytes in the active
 // project's `.dcsmeta/images`, deriving avatars from a scene's `.tip.png`, and
@@ -139,7 +140,10 @@ export async function uploadCharacterImage({ data }: { data: unknown }): Promise
   return writeAvatarBytes(input.characterId, bytes, extension.slice(1))
 }
 
-/** Extension → MIME for avatar images dropped as a file path (native drag-drop). */
+/** Extension → MIME for avatar images dropped as a file path (native drag-drop).
+ *  An UPLOAD allowlist — deliberately narrower than the shared display table in
+ *  data-url.ts (no svg/bmp/avif): every entry must map back through
+ *  `IMAGE_EXTENSIONS` to a canonical stored extension. */
 const IMAGE_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -159,7 +163,7 @@ export async function uploadCharacterImageFromPath({ data }: { data: unknown }):
   const { characterId, path } = z
     .object({ characterId: z.string().min(1), path: z.string().min(1) })
     .parse(data)
-  const ext = (path.split('.').pop() ?? '').toLowerCase()
+  const ext = fileExt(path)
   const mimeType = IMAGE_MIME[ext]
   if (!mimeType) throw new Error(`Unsupported image type${ext ? `: .${ext}` : ''}`)
   const bytes = await readFile(path)
@@ -168,16 +172,10 @@ export async function uploadCharacterImageFromPath({ data }: { data: unknown }):
   return writeAvatarBytes(characterId, bytes, IMAGE_EXTENSIONS[mimeType].slice(1))
 }
 
-/** Inline raw image bytes as a `data:` URL, MIME inferred from the file name. */
-function bytesToDataUrl(bytes: Uint8Array, fileName: string): string {
-  const ext = (fileName.split('.').pop() ?? '').toLowerCase()
-  const mime = IMAGE_MIME[ext] ?? 'image/png'
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  }
-  return `data:${mime};base64,${btoa(binary)}`
+/** Inline raw image bytes as a `data:` URL, MIME inferred from the file name
+ *  (via the shared data-url helpers; png when the extension is unknown). */
+function imageDataUrl(bytes: Uint8Array, fileName: string): string {
+  return bytesToDataUrl(bytes, IMAGE_EXT_MIME[fileExt(fileName)] ?? 'image/png')
 }
 
 /**
@@ -191,7 +189,25 @@ function bytesToDataUrl(bytes: Uint8Array, fileName: string): string {
 // filename is content-versioned (`<id>-<ts>.<ext>`), so a changed avatar gets a
 // NEW key — the cache is self-invalidating and spares a file read + base64 encode
 // on every remount of a character grid (dozens of cards, re-run on each nav back).
+// Caching a character's fresh avatar EVICTS its superseded entries (below):
+// each holds a full multi-hundred-KB data URL, and without eviction every
+// avatar replacement accreted another one for the whole session.
 const imageSrcCache = new Map<string, string>()
+
+/** Drop the cached data URLs of a character's SUPERSEDED avatars: every entry
+ *  under `projectDir` whose stored filename shares the id of `image`
+ *  (`<id>-<ts>.<ext>`, or the legacy fixed `<id>.<ext>`), except `keepKey`. */
+function evictStaleAvatarUrls(projectDir: string, image: string, keepKey: string): void {
+  // The id is everything before the `-<timestamp>.<ext>` version suffix.
+  const id = image.replace(/-\d+\.[^.]+$/, '')
+  if (id === image) return // not a versioned avatar name — nothing to relate
+  const prefixes = [`${projectDir}|${id}-`, `${projectDir}|${id}.`]
+  for (const key of [...imageSrcCache.keys()]) {
+    if (key !== keepKey && prefixes.some((p) => key.startsWith(p))) {
+      imageSrcCache.delete(key)
+    }
+  }
+}
 
 export async function resolveImageSrc(image: string): Promise<string> {
   if (!image) return ''
@@ -203,7 +219,8 @@ export async function resolveImageSrc(image: string): Promise<string> {
   if (cached) return cached
   try {
     const bytes = await readFile(joinPath(storage.metaImagesDir(projectDir), image))
-    const url = bytesToDataUrl(bytes, image)
+    const url = imageDataUrl(bytes, image)
+    evictStaleAvatarUrls(projectDir, image, key)
     imageSrcCache.set(key, url)
     return url
   } catch {
@@ -222,7 +239,7 @@ export async function resolveScenePreview(scenePath: string): Promise<string> {
   try {
     const tipPath = await findTipImage(scenePath)
     if (!tipPath) return ''
-    return bytesToDataUrl(await readFile(tipPath), tipPath)
+    return imageDataUrl(await readFile(tipPath), tipPath)
   } catch {
     return ''
   }

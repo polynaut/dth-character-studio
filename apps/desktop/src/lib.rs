@@ -133,8 +133,7 @@ pub fn run() {
             housekeeping::housekeeping_sweep,
             poses::scan_duf_files,
             windows::active_project_file,
-            windows::open_project_window,
-            windows::open_home_window
+            windows::open_project_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

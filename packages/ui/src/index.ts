@@ -5,9 +5,9 @@
 export { cn } from './cn.ts'
 
 // Host-behaviour injection seam. useUiConfig stays internal (kit components
-// import it via './config.tsx') — the app only ever provides the config.
+// import it via './config.tsx') — the app only ever provides the config, and
+// the provider's props are inferred, so the UiConfig type itself stays internal.
 export { UiConfigProvider } from './config.tsx'
-export type { UiConfig } from './config.tsx'
 
 // Primitives
 // The public surface is only what the app consumes. Internal-only helpers

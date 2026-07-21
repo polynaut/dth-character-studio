@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -30,6 +30,7 @@ function UnrealCard({
   dthPresent,
   ctrlHeld,
   installing,
+  disabled,
   onOpen,
   onInstall,
   onRemove,
@@ -41,6 +42,9 @@ function UnrealCard({
    *  to hint that a click now re-installs (overwrite). */
   ctrlHeld: boolean
   installing: boolean
+  /** A list write is in flight — the whole bar is single-flight, so the card's
+   *  mutating actions (install / unlink) disable alongside the Add button. */
+  disabled: boolean
   onOpen: (e: React.MouseEvent) => void
   onInstall: (e: React.MouseEvent) => void
   onRemove: () => void
@@ -74,7 +78,7 @@ function UnrealCard({
         <button
           type="button"
           onClick={onInstall}
-          disabled={installing || dthPresent === undefined}
+          disabled={disabled || installing || dthPresent === undefined}
           aria-label={`Install DTH content into ${displayName}`}
           title="Install DTH Content"
           className={cn(
@@ -97,7 +101,8 @@ function UnrealCard({
         type="button"
         title="Unlink from project (the file is kept)"
         aria-label={`Unlink ${displayName}`}
-        className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 transition-[opacity,color] group-hover/card:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+        disabled={disabled}
+        className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 transition-[opacity,color] group-hover/card:opacity-100 focus-visible:opacity-100 hover:text-destructive disabled:hover:text-muted-foreground"
         onClick={onRemove}
       >
         <X className="size-3" />
@@ -116,6 +121,18 @@ function UnrealCard({
 export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  // Ref twin of `busy` for the single-flight guard in `save` — a state read in a
+  // just-created closure can be one render stale (e.g. two drops in one tick).
+  const busyRef = useRef(false)
+  // The freshest known list. The loader prop only refreshes once
+  // `router.invalidate()` completes, so right after a save it is STALE — a
+  // second mutation in that window (unlink A, then quickly unlink B) computed
+  // from the prop would resurrect the first change. `save` updates this ref
+  // with the just-written list; the effect re-syncs it when the loader lands.
+  const latestPaths = useRef(project.unrealProjects)
+  useEffect(() => {
+    latestPaths.current = project.unrealProjects
+  }, [project.unrealProjects])
   // Per-project `Content/DazToHue` presence (undefined = probe in flight) and
   // which card's install is currently running.
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
@@ -160,30 +177,40 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   }
 
   async function save(paths: Array<string>, okMessage: string) {
+    // Single-flight for the whole bar: `busy` disables the buttons, but the
+    // drop zone can still fire — two interleaved writes would race on disk.
+    if (busyRef.current) {
+      toast.info('Still saving the previous change — try again in a moment.')
+      return
+    }
+    busyRef.current = true
     setBusy(true)
     try {
       // The loader is the single source (`router.invalidate()` refreshes the
       // `project` prop) — no saved-project callback needed.
       await setUnrealProjects({ data: { projectId: project.path, paths } })
+      latestPaths.current = paths
       void router.invalidate()
       toast.success(okMessage)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
   function add(paths: Array<string>) {
+    const current = latestPaths.current
     // Case-insensitive de-dupe on the normalised path (Windows) — `d:/x.uproject`
     // and `D:\x.uproject` are the same project, not two.
-    const linked = new Set(project.unrealProjects.map((p) => normalizePath(p).toLowerCase()))
+    const linked = new Set(current.map((p) => normalizePath(p).toLowerCase()))
     const fresh = paths.filter((p) => !linked.has(normalizePath(p).toLowerCase()))
     if (!fresh.length) {
       toast.info('That Unreal project is already linked.')
       return
     }
-    void save([...project.unrealProjects, ...fresh], 'Linked Unreal project')
+    void save([...current, ...fresh], 'Linked Unreal project')
   }
 
   async function onPick() {
@@ -209,6 +236,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             dthPresent={dthStatus[path]}
             ctrlHeld={ctrlHeld || metaHeld}
             installing={installingPath === path}
+            disabled={busy}
             onOpen={(e) => {
               // Alt+click = the app-wide "show in Explorer" hotkey (same as
               // path chips); plain click opens the project in Unreal. Failures
@@ -224,7 +252,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             onInstall={(e) => void installDth(path, e)}
             onRemove={() =>
               void save(
-                project.unrealProjects.filter((p) => p !== path),
+                latestPaths.current.filter((p) => p !== path),
                 'Unlinked Unreal project',
               )
             }

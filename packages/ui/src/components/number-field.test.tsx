@@ -37,6 +37,29 @@ describe('NumberField', () => {
     expect(input.value).toBe('5')
   })
 
+  it('reverts an emptied field on blur instead of committing 0', () => {
+    // Number('') is 0, not NaN — clearing the field must revert like 'abc' does.
+    const onCommit = vi.fn()
+    const { getByRole } = render(<NumberField value={5} onCommit={onCommit} />)
+    const input = getByRole('textbox') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.blur(input)
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(input.value).toBe('5')
+  })
+
+  it('reverts a whitespace-only draft on blur (Number("  ") is 0 too)', () => {
+    const onCommit = vi.fn()
+    const { getByRole } = render(<NumberField value={0.5} onCommit={onCommit} percent />)
+    const input = getByRole('textbox') as HTMLInputElement
+    expect(input.value).toBe('50')
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.blur(input)
+    // In percent mode this would have silently committed 0 (0%).
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(input.value).toBe('50')
+  })
+
   it('renders the unit suffix inside the field when given', () => {
     const { getByText, getByRole } = render(
       <NumberField value={100} onCommit={vi.fn()} suffix="%" />,

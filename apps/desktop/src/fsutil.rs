@@ -241,15 +241,23 @@ pub(crate) fn folder_name(p: &Path) -> String {
 /// it at once. Same path → same stripe → serialized; different paths almost always
 /// take different stripes → still parallel. 64 stripes comfortably covers the pool.
 const DEST_LOCK_STRIPES: usize = 64;
+
+/// The stripe a destination path hashes to — folded like `rel_key` (lowercased,
+/// separators normalized) because NTFS resolves case-variant spellings of one
+/// destination to the SAME file: hashing the raw `Path` put the exact writers
+/// the lock must serialize on different stripes.
+fn lock_stripe(path: &Path) -> usize {
+    let mut h = DefaultHasher::new();
+    rel_key(&path.to_string_lossy().replace('\\', "/")).hash(&mut h);
+    (h.finish() as usize) % DEST_LOCK_STRIPES
+}
+
 pub(crate) fn lock_dest(path: &Path) -> MutexGuard<'static, ()> {
     static LOCKS: OnceLock<Vec<Mutex<()>>> = OnceLock::new();
     let locks = LOCKS.get_or_init(|| (0..DEST_LOCK_STRIPES).map(|_| Mutex::new(())).collect());
-    let mut h = DefaultHasher::new();
-    path.hash(&mut h);
-    let idx = (h.finish() as usize) % DEST_LOCK_STRIPES;
     // Recover from a poisoned lock — the guarded data is `()`, so there's nothing
     // to corrupt; a peer thread panicking shouldn't wedge the rest of the install.
-    locks[idx].lock().unwrap_or_else(|e| e.into_inner())
+    locks[lock_stripe(path)].lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Join a `/`-separated relative path onto `base`, component by component (so the
@@ -320,6 +328,16 @@ mod tests {
         // A sibling with the same PREFIX string is not contained.
         assert!(!path_contains(Path::new("C:\\Assets"), Path::new("C:\\Assets2\\x")));
         assert!(!path_contains(Path::new("C:\\Assets\\G9"), Path::new("C:\\Assets")));
+    }
+
+    #[test]
+    fn lock_dest_stripes_fold_case_and_separators() {
+        // Case-variant spellings of one NTFS destination are the SAME file — they
+        // must serialize on the same stripe (the raw-Path hash split them).
+        assert_eq!(
+            lock_stripe(Path::new("C:\\Lib\\data\\Morph.dsf")),
+            lock_stripe(Path::new("c:/lib/DATA/morph.DSF")),
+        );
     }
 
     #[test]

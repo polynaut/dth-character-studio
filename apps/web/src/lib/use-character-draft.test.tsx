@@ -211,6 +211,27 @@ describe('useCharacterDraft save()', () => {
     expect(result.current.dirty).toBe(true)
     expect(result.current.saving).toBe(false)
   })
+
+  it('a generate failure AFTER a successful save settles the baseline and only warns', async () => {
+    const { result } = setup()
+    act(() => result.current.patch({ name: 'Nova' }))
+    const saved = stamped({ ...result.current.character })
+    saveMock.mockResolvedValueOnce(saved)
+    generateMock.mockRejectedValueOnce(new Error('release folder offline'))
+
+    await act(() => result.current.save())
+
+    // The definition IS on disk — the editor must not claim unsaved changes
+    // (the old behavior skipped the settle, and the next Save re-ran for nothing).
+    expect(result.current.character).toEqual(saved)
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.saving).toBe(false)
+    // Warned (scriptsError family), never surfaced as a failed save.
+    expect(toast.warning).toHaveBeenCalledWith(
+      expect.stringContaining('release folder offline'),
+    )
+    expect(toast.error).not.toHaveBeenCalled()
+  })
 })
 
 describe('useCharacterDraft persistPatch()', () => {
@@ -366,5 +387,91 @@ describe('useCharacterDraft persistPatch()', () => {
     expect(result.current.character.name).toBe('Interim')
     expect(toast.error).toHaveBeenCalledWith('save failed')
     expect(result.current.saving).toBe(false)
+  })
+
+  it('preserves edits typed while a SLOW async producer runs (post-producer snapshot)', async () => {
+    const { result } = setup()
+    // The producer copies files for seconds while the form stays editable —
+    // daz-scene-field's applyAdd. The old pre-producer snapshot clobbered
+    // anything typed in the meantime when the patch was applied.
+    const producing = deferred<Partial<Character> | null>()
+    saveMock.mockImplementationOnce(async ({ data }) => stamped((data as { character: Character }).character))
+    generateMock.mockResolvedValueOnce(generated)
+
+    let done!: Promise<Character | null>
+    act(() => {
+      done = result.current.persistPatch(() => producing.promise)
+    })
+    await waitFor(() => expect(result.current.saving).toBe(true))
+    // Typed while the producer is still copying.
+    act(() => result.current.patch({ name: 'TypedDuringProducer' }))
+
+    await act(async () => {
+      producing.resolve({ exportPath: 'D:/export' })
+      await done
+    })
+    expect(result.current.character.name).toBe('TypedDuringProducer')
+    expect(result.current.character.exportPath).toBe('D:/export')
+    // The typed edit was part of the persisted snapshot — nothing left dirty.
+    expect(saveMock).toHaveBeenCalledWith({
+      data: {
+        projectId: 'X:/proj',
+        character: expect.objectContaining({ name: 'TypedDuringProducer', exportPath: 'D:/export' }),
+      },
+    })
+    expect(result.current.dirty).toBe(false)
+  })
+
+  it('a generate failure AFTER a successful persist keeps the patch, warns, resolves saved', async () => {
+    const { result } = setup()
+    saveMock.mockImplementationOnce(async ({ data }) => stamped((data as { character: Character }).character))
+    generateMock.mockRejectedValueOnce(new Error('generation blew up'))
+
+    let saved: Character | null = null
+    await act(async () => {
+      saved = await result.current.persistPatch({ exportPath: 'D:/export' })
+    })
+
+    // The persist landed: no rollback, baseline settled, saved handed back.
+    expect(saved).not.toBeNull()
+    expect(result.current.character.exportPath).toBe('D:/export')
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.saving).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('generation blew up'))
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('plumbs previousName into generation (the inline rename)', async () => {
+    const { result } = setup()
+    saveMock.mockImplementationOnce(async ({ data }) => stamped((data as { character: Character }).character))
+    generateMock.mockResolvedValueOnce(generated)
+
+    await act(async () => {
+      await result.current.persistPatch(
+        { name: 'Nova' },
+        { toast: 'Renamed to “Nova”', previousName: 'Electra G9' },
+      )
+    })
+    expect(generateMock).toHaveBeenCalledWith({
+      data: { projectId: 'X:/proj', id: 'test', previousName: 'Electra G9' },
+    })
+    expect(toast.success).toHaveBeenCalledWith('Renamed to “Nova”')
+  })
+
+  it('rethrow: a persist failure still rolls back but rethrows instead of toasting', async () => {
+    const { result } = setup()
+    saveMock.mockRejectedValueOnce(new Error('folder locked'))
+
+    await act(async () => {
+      await expect(
+        result.current.persistPatch({ name: 'Nova' }, { rethrow: true }),
+      ).rejects.toThrow('folder locked')
+    })
+    // Rolled back — the draft doesn't keep the failed name as a dirty edit …
+    expect(result.current.character.name).toBe('Electra G9')
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.saving).toBe(false)
+    // … and the caller owns the error surface (EditableTitle): no hook toast.
+    expect(toast.error).not.toHaveBeenCalled()
   })
 })

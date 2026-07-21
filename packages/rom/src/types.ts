@@ -153,6 +153,19 @@ export const groupSuffixSchema = z.enum(['left', 'centre', 'right'])
 export type GroupSuffix = z.infer<typeof groupSuffixSchema>
 
 /**
+ * The token a group's suffix appends to its pose names to form the final
+ * Unreal morph name (the HDA appends `_l`/`_r`; centre appends nothing). The
+ * ONE encoding of that mapping — validation's collision keys and the CSV
+ * side's baked-name resolution (csv.ts) both consume it, so the sites can't
+ * drift apart.
+ */
+export const GROUP_SUFFIX_TOKENS: Record<GroupSuffix, string> = {
+  left: '_l',
+  centre: '',
+  right: '_r',
+}
+
+/**
  * default: inherit the node's Global Generation Method.
  * individual: each pose calculated in isolation.
  * additive: first pose is the base, the rest are additives to it (EyelidsClosed pattern).
@@ -475,6 +488,8 @@ export interface GenerationTemplate {
   baseFrames: number
   /** Baked GP (Golden Palace) block length, when the template bakes one. */
   gpFrames?: number
+  /** Fixed PHY preset block length, when the template can splice one (`allowPhys`). */
+  physFrames?: number
   /**
    * CSV era the template's control rows target, or `null` when era-independent
    * (G8.1 targets the pre-2.0 HDA and is byte-identical across releases).
@@ -515,7 +530,14 @@ export const GENERATIONS: Record<GenesisVersion, GenerationDescriptor> = {
     skinningDefault: 'dqs',
     hasStrengthDials: true,
     assetFiles: ['genesis9.dsf'],
-    template: { baseFrames: 328, gpFrames: 104, era: '2.0', allowGen: true, allowPhys: true },
+    template: {
+      baseFrames: 328,
+      gpFrames: 104,
+      physFrames: 43,
+      era: '2.0',
+      allowGen: true,
+      allowPhys: true,
+    },
   },
   'G8.1': {
     figureBase: 'Genesis8_1',
@@ -1228,9 +1250,13 @@ export function newId(): string {
 }
 
 /**
- * Filesystem-safe base name used for generated files, e.g. "ElectraG9".
- * Keeps underscores — the DTH Exporter allows letters, numbers and
- * underscores in character names (no spaces or symbols).
+ * Filesystem/script-safe base name for generated files, e.g. "ElectraG9":
+ * letters, numbers and underscores only, everything else (spaces included)
+ * stripped. This strictness is the STUDIO's own guarantee for file and script
+ * identifiers — it is NOT what the DTH Exporter requires: the figure name
+ * handed to `doExport` may keep spaces and only sheds CSV/filename-breaking
+ * characters (see `exporterFigureName` in csv.ts, pinned by test: "A,B"
+ * exports as "A B").
  */
 export function characterSlug(character: Pick<Character, 'name'>): string {
   return character.name.replace(/[^A-Za-z0-9_]+/g, '') || 'Character'

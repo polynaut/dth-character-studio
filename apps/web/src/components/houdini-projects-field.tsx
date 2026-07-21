@@ -10,7 +10,7 @@ import { Button, InfoPopup, Label, LinkedAssetCard, RemoveAssetDialog, useModifi
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { openScene, revealPath } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
-import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePath, parentDir, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -43,7 +43,7 @@ function HoudiniCard({
   const altHeld = useModifierHeld('Alt')
   // The chip shows the project's folder; when it sits inside the character's own
   // folder, collapse that prefix to "%CHAR%" (like the Daz scene cards).
-  const hipDir = normalizePath(hipPath).replace(/\/[^/]*$/, '')
+  const hipDir = parentDir(hipPath)
   const base = normalizePath(charFolderAbs)
   const inChar =
     !!base &&
@@ -119,10 +119,7 @@ export function HoudiniProjectsField({
   const projects = character.houdiniProjects
   const hasProjects = projects.length > 0
   // The character's own folder — projects linked inside it show a "%CHAR%" prefix.
-  const charFolder = location.definitionAbs
-    .replace(/[\\/]+/g, '/')
-    .replace(/\/+$/, '')
-    .replace(/\/[^/]*$/, '')
+  const charFolder = parentDir(location.definitionAbs)
   // A Houdini project has no thumbnail — use a gender-based placeholder avatar.
   const placeholderSrc =
     character.gender === 'male' ? '/charPlaceholderMale.png' : '/charPlaceholderFemale.png'

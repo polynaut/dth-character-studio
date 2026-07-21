@@ -100,6 +100,26 @@ describe('migrateCharacterData — pre-versioning normalization', () => {
     expect(data.sections.MISC.groups[0].label).toBe('x')
     expect(typeof data.sections.MISC.groups[0].id).toBe('string')
   })
+
+  it('skips null/non-object group entries instead of throwing (hand-edited JSON)', () => {
+    // migrateCharacterData promises malformed data flows into the clean zod
+    // "unreadable definition" failure — a null entry in a section's groups (or
+    // in the legacy flat `groups` list) must not become a raw TypeError inside
+    // the normalizer. The junk entry is left in place for zod to reject.
+    const data = migrateCharacterData({
+      sections: {
+        MISC: { enabled: true, mode: 'custom', groups: [null, { suffix: 'none' }, 'junk'] },
+      },
+    })
+    // The valid sibling still migrates; the junk stays for zod.
+    expect(data.sections.MISC.groups[1].suffix).toBe('centre')
+    expect(data.sections.MISC.groups[0]).toBeNull()
+
+    // Legacy flat-groups fold: the null entry is dropped, the valid one folds.
+    const folded = migrateCharacterData({ groups: [null, { section: 'JCM', label: 'mine' }] })
+    expect(folded.sections.JCM.groups).toHaveLength(1)
+    expect(folded.sections.JCM.groups[0].label).toBe('mine')
+  })
 })
 
 describe('schema v17 — sceneOverrides (additive, zod default)', () => {

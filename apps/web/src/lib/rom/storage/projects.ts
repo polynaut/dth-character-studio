@@ -269,16 +269,38 @@ export async function listRecents(): Promise<Array<RecentProject>> {
   return readRecents()
 }
 
+// Recents mutations are an unlocked read-modify-write on a file shared across
+// windows — and recents IS the app's only project registry, so a dropped entry
+// is a "lost" project on the Home screen. Serialize the mutations within this
+// window and RE-READ fresh inside each queued step, so two overlapping calls
+// (opening a project while another window forgets one) merge against the
+// latest disk state instead of clobbering each other with stale snapshots.
+let recentsMutationQueue: Promise<void> = Promise.resolve()
+
+function mutateRecents(
+  mutate: (recents: Array<RecentProject>) => Array<RecentProject>,
+): Promise<void> {
+  const run = recentsMutationQueue.then(async () => {
+    await writeRecents(mutate(await readRecents()))
+  })
+  // The queue survives a failed write — the next mutation still runs.
+  recentsMutationQueue = run.catch(() => {})
+  return run
+}
+
 /** Record (or bump to the top) a project in the recents list. */
 export async function rememberRecent(path: string, name: string): Promise<void> {
   const key = path.toLowerCase()
-  const rest = (await readRecents()).filter((r) => r.path.toLowerCase() !== key)
-  rest.unshift({ path, name, lastOpenedAt: new Date().toISOString() })
-  await writeRecents(rest.slice(0, RECENTS_CAP))
+  return mutateRecents((recents) =>
+    [
+      { path, name, lastOpenedAt: new Date().toISOString() },
+      ...recents.filter((r) => r.path.toLowerCase() !== key),
+    ].slice(0, RECENTS_CAP),
+  )
 }
 
 /** Drop a project from the recents list (never touches files on disk). */
 export async function forgetRecent(path: string): Promise<void> {
   const key = path.toLowerCase()
-  await writeRecents((await readRecents()).filter((r) => r.path.toLowerCase() !== key))
+  return mutateRecents((recents) => recents.filter((r) => r.path.toLowerCase() !== key))
 }

@@ -6,7 +6,9 @@ import type { GenesisVersion } from './types'
  * Embedded DzScript text shared by the `.dsa` generators (dsa.ts): the reusable
  * snippet bodies plus the two encoders that make ARBITRARY user data safe to
  * embed in generated Daz Script source ({@link commentSafe}, {@link dazJson}).
- * Package-internal — nothing here is re-exported from the package index.
+ * Package-internal except {@link dazJson}, which the package index re-exports so
+ * app code that embeds values into Daz Script (e.g. the open-scene bridge) uses
+ * the ONE escaping rule instead of copying it.
  */
 
 /** Indent every non-empty line of a generated-script block by one 4-space level. */
