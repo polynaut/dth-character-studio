@@ -4,12 +4,15 @@ import { Check, ChevronDown, ChevronRight, ExternalLink, RefreshCw, Save } from 
 import { toast } from 'sonner'
 
 import { PathCode } from '#/components/path-code.tsx'
+import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { Button, InfoPopup } from '@dth/ui'
-import { clearProductScan, fetchProductScan, saveCharacter } from '#/lib/rom/api.ts'
+import { clearProductScan, fetchProductScan } from '#/lib/rom/api.ts'
 import { openExternal } from '#/lib/desktop.ts'
 import { displayPath } from '#/lib/path.ts'
 import { characterSlug } from '@dth/rom'
 
+import type { RootedDir } from '#/lib/character-paths.ts'
+import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -34,10 +37,8 @@ export function CharacterProductsTab({
   character,
   productScan,
   dimManifestsFolder,
-  scriptsAbs,
-  scriptsLib,
-  scriptsSuffix,
-  onStored,
+  scriptsPath,
+  persistPatch,
 }: {
   projectId: string
   character: Character
@@ -45,13 +46,12 @@ export function CharacterProductsTab({
   productScan: Awaited<ReturnType<typeof fetchProductScan>> | null
   /** settings.dimManifestsFolder — empty shows the "set it in Settings" notice. */
   dimManifestsFolder: string
-  /** Where the generated scripts land in the Daz library ('' until it's set),
-   *  split into the dimmed library root + the emphasized remainder. */
-  scriptsAbs: string
-  scriptsLib: string
-  scriptsSuffix: string
-  /** Receives the saved character after the scan is stored on it. */
-  onStored: (saved: Character) => void
+  /** Where the generated scripts land in the Daz library (null until "My DAZ 3D
+   *  Library" is set) — rendered as the dim-root/bright-remainder chip. */
+  scriptsPath: RootedDir | null
+  /** The draft hook's immediate-persist primitive — storing the scan goes
+   *  through it so validation, single-flight and regeneration are never skipped. */
+  persistPatch: PersistCharacterPatch
 }) {
   const router = useRouter()
   const [storingProducts, setStoringProducts] = useState(false)
@@ -62,30 +62,23 @@ export function CharacterProductsTab({
   // The Products view can be scoped to one scene; null = all scenes (merged).
   const [sceneFilter, setSceneFilter] = useState<string | null>(null)
 
-  // Store the most recent product scan onto the character. Products don't affect
-  // generated scripts, so this just persists the draft + the scan fields — no
-  // regeneration. Merges into the current draft so any in-progress edits are kept.
+  // Store the most recent product scan onto the character, via the draft hook's
+  // persist primitive: it persists the WHOLE draft (any pending edits included),
+  // so it must run the same validation/single-flight as Save — and regenerate,
+  // keeping the on-disk artifacts in sync with the just-persisted definition.
   async function storeProducts() {
     if (!productScan?.scan) return
+    const count = productScan.scan.products.length
     setStoringProducts(true)
-    try {
-      const next: Character = {
-        ...character,
+    await persistPatch(
+      {
         products: productScan.scan.products,
         productsUnmatched: productScan.scan.unmatched,
         productsScannedAt: new Date().toISOString(),
-      }
-      const saved = await saveCharacter({ data: { projectId, character: next } })
-      onStored(saved)
-      void router.invalidate()
-      toast.success(
-        `Stored ${saved.products.length} product${saved.products.length === 1 ? '' : 's'} on “${saved.name}”`,
-      )
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setStoringProducts(false)
-    }
+      },
+      { toast: `Stored ${count} product${count === 1 ? '' : 's'} on “${character.name}”` },
+    )
+    setStoringProducts(false)
   }
 
   // Discard the unstored scan results (the per-scene CSVs) so the review panel
@@ -171,12 +164,7 @@ export function CharacterProductsTab({
           open in Daz, then check for results. Results are kept per scene — open each outfit/look
           variant and run it again to map products to every scene.
         </p>
-        {scriptsAbs && (
-          <PathCode path={scriptsAbs}>
-            <span className="text-muted-foreground/60">{scriptsLib}</span>
-            <span className="text-foreground/80">{scriptsSuffix}</span>
-          </PathCode>
-        )}
+        {scriptsPath && <DirPathChip dir={scriptsPath.dir} roots={[scriptsPath.root]} />}
 
         <div className="mt-3 flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void router.invalidate()}>

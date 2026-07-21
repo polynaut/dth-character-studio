@@ -38,10 +38,14 @@ export function Field({
   if (isValidElement(children)) {
     const props = children.props as { id?: string; 'aria-describedby'?: string }
     controlId = props.id ?? generatedId
+    // MERGE the error id with a child-supplied aria-describedby (the attribute
+    // takes a space-separated id list) — preferring the child's would silence
+    // the error for assistive tech.
+    const describedBy = props['aria-describedby']
     control = cloneElement(children as ReactElement<Record<string, unknown>>, {
       id: controlId,
       'aria-describedby':
-        error !== undefined ? (props['aria-describedby'] ?? errorId) : props['aria-describedby'],
+        error !== undefined ? (describedBy ? `${describedBy} ${errorId}` : errorId) : describedBy,
     })
   }
   return (

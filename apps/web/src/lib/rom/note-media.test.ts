@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const files = new Map<string, { data: string | Uint8Array; mtime: number }>()
 const dirs = new Set<string>()
+// Directories whose readDir fails — simulates an unreadable subtree on a share.
+const unreadableDirs = new Set<string>()
 // Monotonic write clock: every write gets a fresh, strictly increasing mtime.
 let writeClock = 0
 function nextMtime(): number {
@@ -87,8 +89,33 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
       size: file ? (typeof file.data === 'string' ? file.data.length : file.data.length) : 0,
     }
   },
+  async rename(a: string, b: string) {
+    a = norm(a)
+    b = norm(b)
+    const remap = (k: string) => b + k.slice(a.length)
+    for (const k of [...files.keys()]) {
+      if (k === a || k.startsWith(`${a}/`)) {
+        files.set(remap(k), files.get(k)!)
+        files.delete(k)
+      }
+    }
+    for (const k of [...dirs]) {
+      if (k === a || k.startsWith(`${a}/`)) {
+        dirs.delete(k)
+        dirs.add(remap(k))
+      }
+    }
+  },
+  async copyFile(a: string, b: string) {
+    a = norm(a)
+    b = norm(b)
+    const v = files.get(a)
+    if (v == null) throw new Error(`ENOENT ${a}`)
+    setFile(b, v.data)
+  },
   async readDir(p: string) {
     p = norm(p)
+    if (unreadableDirs.has(p)) throw new Error(`EACCES: unreadable ${p}`)
     if (!dirs.has(p)) throw new Error(`ENOTDIR ${p}`)
     const prefix = `${p}/`
     const out = new Map<string, { name: string; isFile: boolean; isDirectory: boolean }>()
@@ -121,6 +148,7 @@ const MEDIA = `${PROJECT}/.dcsmeta/media`
 beforeEach(async () => {
   files.clear()
   dirs.clear()
+  unreadableDirs.clear()
   setActiveProjectDir('')
   await storage.createProjectManifest(PROJECT, 'Nova')
   addDir(MEDIA)
@@ -226,6 +254,50 @@ describe('save-time media GC (1-hour grace)', () => {
     setFile(`${MEDIA}/${old}-b.png`, '123')
     const result = await gcNoteMedia(PROJECT, MEDIA_GC_GRACE_MS)
     expect(result).toEqual({ filesDeleted: 2, bytesFreed: 8 })
+  })
+})
+
+describe('GC aborts when the media reference set cannot be built in full', () => {
+  it('an unreadable subtree under the characters root → GC deletes NOTHING', async () => {
+    // A character folder that exists but cannot be listed (flaky network share).
+    // Its notes file — with its media references — is invisible to the walk, so
+    // a tolerant walk would have made referenced media look orphaned.
+    const old = Date.now() - 30 * DAY
+    setFile(`${MEDIA}/${old}-maybe-referenced.png`, 'png')
+    addDir(`${PROJECT}/Kira`)
+    unreadableDirs.add(`${PROJECT}/Kira`)
+
+    const result = await gcNoteMedia(PROJECT, MEDIA_GC_GRACE_MS)
+
+    expect(result).toEqual({ filesDeleted: 0, bytesFreed: 0 })
+    expect(files.has(`${MEDIA}/${old}-maybe-referenced.png`)).toBe(true)
+  })
+
+  it('the save that triggers the GC still succeeds (skip is silent, save is not lost)', async () => {
+    const old = Date.now() - 2 * HOUR
+    setFile(`${MEDIA}/${old}-stale.png`, 'png')
+    addDir(`${PROJECT}/Kira`)
+    unreadableDirs.add(`${PROJECT}/Kira`)
+
+    const mtime = await save('notes text, no references')
+
+    expect(mtime).not.toBeNull()
+    expect((await fetchNotes({ data: { projectId: PROJECT } })).text).toBe('notes text, no references')
+    // The GC was skipped for this scope — the media survived.
+    expect(files.has(`${MEDIA}/${old}-stale.png`)).toBe(true)
+  })
+
+  it('the housekeeping sweep also deletes nothing for the affected project', async () => {
+    await storage.rememberRecent(`${PROJECT}/Nova.dcsp`, 'Nova')
+    const eightDays = Date.now() - 8 * DAY
+    setFile(`${MEDIA}/${eightDays}-old.png`, 'png')
+    addDir(`${PROJECT}/Kira`)
+    unreadableDirs.add(`${PROJECT}/Kira`)
+
+    const result = await sweepNoteMedia()
+
+    expect(result).toEqual({ filesDeleted: 0, bytesFreed: 0 })
+    expect(files.has(`${MEDIA}/${eightDays}-old.png`)).toBe(true)
   })
 })
 

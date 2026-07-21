@@ -1,9 +1,9 @@
-import { mkdir, readDir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { mkdir, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 
 import { newId } from '@dth/rom'
 
 import { characterFolderName, normalizeRelFolder } from '../library'
-import { basename, join } from './fs'
+import { basename, isDir, join, writeTextFileAtomic } from './fs'
 import { dataPath, ensureAppDir } from './app-data'
 
 // --- Projects -------------------------------------------------------------
@@ -81,18 +81,31 @@ function dcspFileName(name: string): string {
 }
 
 /**
- * Sanitize a manifest's `charactersSubdir`: it is later joined onto the project
- * dir, and projects are shared between users — a hostile manifest carrying
- * `"../../.."` must not traverse outside the project. Anything
+ * Sanitize a manifest's relative-subdir field (`charactersSubdir`, `dazSubdir`,
+ * `houdiniSubdir`): each is later joined onto the project dir (or a character
+ * folder), and projects are shared between users — a hostile manifest carrying
+ * `"../../.."` or an absolute path must not traverse outside its scope. Anything
  * `normalizeRelFolder` rejects (absolute, drive letter, `..`, illegal chars)
- * falls back to `''` (the project root) rather than propagating the error.
+ * falls back to `fallback` rather than propagating the error; so does an
+ * empty/missing value. Nested relative paths (`scenes/daz`) pass through.
  */
-function safeCharactersSubdir(raw: unknown): string {
-  if (typeof raw !== 'string') return ''
+function safeRelSubdir(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string' || !raw) return fallback
   try {
-    return normalizeRelFolder(raw)
+    return normalizeRelFolder(raw) || fallback
   } catch {
-    return ''
+    return fallback
+  }
+}
+
+/** A project folder that doesn't exist or can't be reached (offline share,
+ *  unplugged drive). Distinct from "exists but has no `.dcsp`" — THAT is a
+ *  legit defaults case; this must surface instead of yielding a phantom
+ *  default project. */
+export class ProjectUnreachableError extends Error {
+  constructor(dir: string) {
+    super(`Project folder is unreachable or does not exist:\n${dir}`)
+    this.name = 'ProjectUnreachableError'
   }
 }
 
@@ -111,8 +124,14 @@ export async function findManifestPath(dir: string): Promise<string | null> {
   return null
 }
 
-/** Read a project's `.dcsp` manifest (filling defaults for missing/old fields). */
+/** Read a project's `.dcsp` manifest (filling defaults for missing/old fields).
+ *  Throws {@link ProjectUnreachableError} when the folder itself is missing or
+ *  unreachable — only an EXISTING folder without a `.dcsp` reads as defaults
+ *  (otherwise a stale recents path renders a phantom empty project, and cross-
+ *  project sweeps count an offline project as "0 characters" instead of
+ *  surfacing it). */
 export async function readManifest(dir: string): Promise<DcspManifest> {
+  if (!dir || !(await isDir(dir))) throw new ProjectUnreachableError(dir)
   const defaults = manifestDefaults(dir)
   const path = await findManifestPath(dir)
   if (!path) return defaults
@@ -125,12 +144,11 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
       id: hadId ? raw.id : newId(),
       name: typeof raw.name === 'string' && raw.name ? raw.name : defaults.name,
       createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : '',
-      dazSubdir:
-        typeof raw.dazSubdir === 'string' && raw.dazSubdir ? raw.dazSubdir : defaults.dazSubdir,
-      houdiniSubdir:
-        typeof raw.houdiniSubdir === 'string' && raw.houdiniSubdir
-          ? raw.houdiniSubdir
-          : defaults.houdiniSubdir,
+      // The subdir fields are joined onto folders later — sanitize them all
+      // through the same normalizeRelFolder gate (nested `scenes/daz` is fine;
+      // absolute / `..` / illegal falls back to the default).
+      dazSubdir: safeRelSubdir(raw.dazSubdir, defaults.dazSubdir),
+      houdiniSubdir: safeRelSubdir(raw.houdiniSubdir, defaults.houdiniSubdir),
       createHoudiniSubdir:
         typeof raw.createHoudiniSubdir === 'boolean'
           ? raw.createHoudiniSubdir
@@ -141,7 +159,7 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
         typeof raw.dazProductsEnabled === 'boolean'
           ? raw.dazProductsEnabled
           : defaults.dazProductsEnabled,
-      charactersSubdir: safeCharactersSubdir(raw.charactersSubdir),
+      charactersSubdir: safeRelSubdir(raw.charactersSubdir, ''),
       unrealProjects: Array.isArray(raw.unrealProjects)
         ? raw.unrealProjects.filter((p: unknown): p is string => typeof p === 'string' && p !== '')
         : [],
@@ -175,7 +193,7 @@ export async function writeManifest(dir: string, manifest: DcspManifest): Promis
   await mkdir(dir, { recursive: true })
   const existing = await findManifestPath(dir)
   const path = existing ?? join(dir, dcspFileName(manifest.name))
-  await writeTextFile(path, JSON.stringify(manifest, null, 2) + '\n')
+  await writeTextFileAtomic(path, JSON.stringify(manifest, null, 2) + '\n')
   return manifest
 }
 
@@ -195,7 +213,7 @@ export async function createProjectManifest(dir: string, name: string): Promise<
     createdAt: new Date().toISOString(),
   }
   const path = join(dir, dcspFileName(name))
-  await writeTextFile(path, JSON.stringify(manifest, null, 2) + '\n')
+  await writeTextFileAtomic(path, JSON.stringify(manifest, null, 2) + '\n')
   await mkdir(metaImagesDir(dir), { recursive: true })
   return path
 }
@@ -243,7 +261,7 @@ async function readRecents(): Promise<Array<RecentProject>> {
 
 async function writeRecents(recents: Array<RecentProject>): Promise<void> {
   await ensureAppDir()
-  await writeTextFile(await dataPath('recents.json'), JSON.stringify(recents, null, 2) + '\n')
+  await writeTextFileAtomic(await dataPath('recents.json'), JSON.stringify(recents, null, 2) + '\n')
 }
 
 /** Recently opened projects, newest-first. */

@@ -18,8 +18,14 @@ lint → typecheck → per-package tests → web build, plus `smoke` and `rust`
 - **`apps/web`** — storage/CRUD over an in-memory fs mock, pure helpers,
   `runtime.test.ts` (hash-pins the bundled `.dsa` runtime — intentional runtime
   edits must update it), `preset-frames.test.ts` (frame-alignment invariant),
-  staleness sweep, a few component tests (jsdom + Testing Library), and FFI
-  integration tests (`install.integration.test.ts`, `mockIPC`-based).
+  staleness sweep, the character-draft save/settle machinery
+  (`use-character-draft.test.tsx` — extend it for any new settle semantics), a
+  few component tests (jsdom + Testing Library), and FFI integration tests
+  (`install.integration.test.ts`, `mockIPC`-based). The in-memory plugin-fs
+  mocks require `rename` (+ `copyFile` where copies run) since the atomic-write
+  helper landed; **poison sets** (`failRenameSrcs`, `unreadableDirs`) are the
+  established pattern for exercising partial-failure paths (move rollback, GC
+  abort).
 - **`packages/ui`** — TooltipHost, MultiSelect (full keyboard model),
   NumberField.
 

@@ -35,7 +35,13 @@ describe('posesFromDazCsv', () => {
   it('reads quoted fields containing commas without shifting the triplets', () => {
     const poses = posesFromDazCsv('5,,,"Hip, twist",prop_X,0.5\n')
     expect(poses).toHaveLength(1)
-    expect(poses[0].morphs[0]).toEqual({ node: 'Hip, twist', prop: 'prop_X', value: 0.5 })
+    // Imported morphs are new grid rows — they carry a freshly minted id (v19).
+    expect(poses[0].morphs[0]).toEqual({
+      id: expect.any(String),
+      node: 'Hip, twist',
+      prop: 'prop_X',
+      value: 0.5,
+    })
   })
 
   it('parses single- and multi-morph rows into named poses', () => {
@@ -49,14 +55,16 @@ describe('posesFromDazCsv', () => {
         frame: 382,
         name: 'Head',
         morphs: [
-          { node: 'Genesis9', prop: 'Lycan9_head_bs_Head_HD4', value: -1 },
-          { node: 'Genesis9', prop: 'Lycan9_body_bs_Body', value: 1 },
+          { id: expect.any(String), node: 'Genesis9', prop: 'Lycan9_head_bs_Head_HD4', value: -1 },
+          { id: expect.any(String), node: 'Genesis9', prop: 'Lycan9_body_bs_Body', value: 1 },
         ],
       },
       {
         frame: 384,
         name: 'AnconeusL',
-        morphs: [{ node: 'Genesis9', prop: 'xMusc_body_bs_AnconeusL_B_HD2', value: 1 }],
+        morphs: [
+          { id: expect.any(String), node: 'Genesis9', prop: 'xMusc_body_bs_AnconeusL_B_HD2', value: 1 },
+        ],
       },
     ])
   })

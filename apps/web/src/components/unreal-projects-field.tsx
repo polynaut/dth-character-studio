@@ -90,11 +90,14 @@ function UnrealCard({
           <HardDriveDownload className="size-4" />
         </button>
       </div>
+      {/* Always rendered (hover only fades it in) so it stays in the tab order —
+          `hidden` removed keyboard users from unlinking entirely. Same recipe as
+          the Home screen's remove-from-recents button. */}
       <button
         type="button"
         title="Unlink from project (the file is kept)"
         aria-label={`Unlink ${displayName}`}
-        className="absolute -top-1.5 -right-1.5 hidden size-4 items-center justify-center rounded-full border bg-card text-muted-foreground group-hover/card:flex hover:text-destructive"
+        className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 transition-[opacity,color] group-hover/card:opacity-100 focus-visible:opacity-100 hover:text-destructive"
         onClick={onRemove}
       >
         <X className="size-3" />
@@ -110,13 +113,7 @@ function UnrealCard({
  * or by dropping a `.uproject` onto the bar. Pages rendering it need bottom
  * padding so content can scroll clear of the bar.
  */
-export function UnrealProjectsBar({
-  project,
-  onChanged,
-}: {
-  project: ProjectInfo
-  onChanged: (project: ProjectInfo) => void
-}) {
+export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   // Per-project `Content/DazToHue` presence (undefined = probe in flight) and
@@ -165,8 +162,9 @@ export function UnrealProjectsBar({
   async function save(paths: Array<string>, okMessage: string) {
     setBusy(true)
     try {
-      const saved = await setUnrealProjects({ data: { projectId: project.path, paths } })
-      onChanged(saved)
+      // The loader is the single source (`router.invalidate()` refreshes the
+      // `project` prop) — no saved-project callback needed.
+      await setUnrealProjects({ data: { projectId: project.path, paths } })
       void router.invalidate()
       toast.success(okMessage)
     } catch (e) {

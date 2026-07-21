@@ -1,18 +1,19 @@
 import { useState } from 'react'
-import { useRouter } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { PathCode, pathChipClass } from '#/components/path-code.tsx'
+import { pathChipClass } from '#/components/path-code.tsx'
+import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { Button, InfoPopup, Label, LinkedAssetCard, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
-import { openScene, revealPath, saveCharacter } from '#/lib/rom/api.ts'
+import { openScene, revealPath } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, pathSeparator } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
+import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
 /** A linked Houdini project: the Houdini logo (no preview image), the filename,
@@ -98,17 +99,16 @@ function HoudiniCard({
  * would break those references. "Add project" picks a `.hip` and links it as-is.
  */
 export function HoudiniProjectsField({
-  projectId,
   character,
   location,
-  onChanged,
+  persistPatch,
 }: {
-  projectId: string
   character: Character
   location: CharacterLocation
-  onChanged: (character: Character) => void
+  /** The draft hook's immediate-persist primitive — link/unlink go through it
+   *  so validation, single-flight and regeneration are never skipped. */
+  persistPatch: PersistCharacterPatch
 }) {
-  const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // A project pending the unlink confirm. Houdini projects are only ever linked
@@ -131,23 +131,11 @@ export function HoudiniProjectsField({
   // everything through the CHARACTER folder is dimmed — only the actual
   // subfolder ("\houdini") reads bright, matching the Daz scenes chip. A
   // project outside the character folder falls back to the project root.
-  const projectRoot = displayPath(location.libraryFolder)
-  const charFolderDisplay = displayPath(charFolder)
-  const firstHipAbs = displayPath(projects[0] ?? '')
-  const hipLastSep = Math.max(firstHipAbs.lastIndexOf('\\'), firstHipAbs.lastIndexOf('/'))
-  const projectDir = hipLastSep >= 0 ? firstHipAbs.slice(0, hipLastSep) : ''
-  const projectRootLen = projectDir.toLowerCase().startsWith(charFolderDisplay.toLowerCase())
-    ? charFolderDisplay.length
-    : projectDir.toLowerCase().startsWith(projectRoot.toLowerCase())
-      ? projectRoot.length
-      : 0
   const projectDirChip = (
-    <PathCode path={projectDir}>
-      {projectRootLen > 0 && (
-        <span className="text-muted-foreground/60">{projectDir.slice(0, projectRootLen)}</span>
-      )}
-      <span className="text-foreground/80">{projectDir.slice(projectRootLen)}</span>
-    </PathCode>
+    <DirPathChip
+      dir={displayDirOf(projects[0] ?? '')}
+      roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
+    />
   )
 
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
@@ -174,22 +162,14 @@ export function HoudiniProjectsField({
     if (fresh.length === 0) return
     setBusy(true)
     setError('')
-    try {
-      const next: Character = {
-        ...character,
-        houdiniProjects: [...character.houdiniProjects, ...fresh],
-      }
-      const saved = await saveCharacter({ data: { projectId, character: next } })
-      onChanged(saved)
-      void router.invalidate()
-      toast.success(
-        fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`,
-      )
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
+    await persistPatch(
+      { houdiniProjects: [...character.houdiniProjects, ...fresh] },
+      {
+        toast:
+          fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`,
+      },
+    )
+    setBusy(false)
   }
 
   async function onAddPick() {
@@ -206,21 +186,12 @@ export function HoudiniProjectsField({
     const hip = pendingRemove
     setBusy(true)
     setError('')
-    try {
-      const next: Character = {
-        ...character,
-        houdiniProjects: character.houdiniProjects.filter((p) => p !== hip),
-      }
-      const saved = await saveCharacter({ data: { projectId, character: next } })
-      onChanged(saved)
-      setPendingRemove('')
-      void router.invalidate()
-      toast.success('Unlinked Houdini project')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
+    const saved = await persistPatch(
+      { houdiniProjects: character.houdiniProjects.filter((p) => p !== hip) },
+      { toast: 'Unlinked Houdini project' },
+    )
+    if (saved) setPendingRemove('')
+    setBusy(false)
   }
 
   return (

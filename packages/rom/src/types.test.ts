@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
+import { buildFbmData } from './generate'
 import {
   CHARACTER_SCHEMA_VERSION,
   MIN_GROOM_EXPORTER_VERSION,
+  ROM_SECTIONS,
   artDirectionFrameSchema,
   characterSchema,
   characterSkinning,
   compareDthVersions,
+  defaultSectionMode,
+  defaultSections,
   exporterSupportsGroomHide,
   genesisFigureNode,
   poseAssetCsvEra,
@@ -141,12 +145,157 @@ describe('sections schema (SECTION_MODES enforcement + healing)', () => {
     expect(character.sections.FBM.enabled).toBe(true)
   })
 
+  it('heals a PARTIAL section object (missing mode) to that SECTION’s default mode', () => {
+    // Sub-key granularity: `{ RET: { enabled: true } }` used to heal mode to the
+    // global 'custom' default — which the SECTION_MODES superRefine then
+    // rejected, hard-failing the whole character over a healable omission.
+    const character = characterSchema.parse({
+      ...base,
+      sections: { RET: { enabled: true }, GEN: { enabled: true } },
+    })
+    expect(character.sections.RET.mode).toBe('preset')
+    // Partial GEN heals to its preset-first default, not a silently different
+    // (empty custom) ROM.
+    expect(character.sections.GEN.mode).toBe('preset')
+    // Custom-only sections keep healing to custom.
+    const fbm = characterSchema.parse({ ...base, sections: { FBM: { enabled: true } } })
+    expect(fbm.sections.FBM.mode).toBe('custom')
+  })
+
+  it('the schema’s per-section mode default mirrors defaultSections() for every section', () => {
+    const defaults = defaultSections()
+    for (const section of ROM_SECTIONS) {
+      const parsed = characterSchema.parse({ ...base, sections: { [section]: {} } })
+      expect(parsed.sections[section].mode, `${section} healed mode`).toBe(defaults[section].mode)
+      expect(defaultSectionMode(section), `${section} defaultSectionMode`).toBe(
+        defaults[section].mode,
+      )
+    }
+  })
+
   it('hands every parse a FRESH default sections object (no shared mutable state)', () => {
     const a = characterSchema.parse(base)
     const b = characterSchema.parse(base)
     a.sections.FBM.enabled = true
     expect(b.sections.FBM.enabled).toBe(false)
   })
+})
+
+describe('sections schema — duplicate group/pose id healing', () => {
+  const dupPose = (id: string, name: string) => ({
+    id,
+    name,
+    morphs: [{ node: 'Genesis9', prop: `body_bs_${name}`, value: 1 }],
+  })
+  const group = (id: string, poses: Array<ReturnType<typeof dupPose>>) => ({
+    id,
+    suffix: 'centre',
+    method: 'cumulative',
+    poses,
+  })
+
+  it('re-mints the LATER duplicate ids (groups and poses), keeping the first', () => {
+    const character = characterSchema.parse({
+      ...base,
+      sections: {
+        EXP: { enabled: true, mode: 'custom', groups: [group('dup-g', [dupPose('dup-p', 'A')])] },
+        FBM: { enabled: true, mode: 'custom', groups: [group('dup-g', [dupPose('dup-p', 'B')])] },
+      },
+    })
+    const expGroup = character.sections.EXP.groups[0]
+    const fbmGroup = character.sections.FBM.groups[0]
+    // The first occurrence (canonical ROM order) keeps its stored id.
+    expect(expGroup.id).toBe('dup-g')
+    expect(expGroup.poses[0].id).toBe('dup-p')
+    // The later one is re-minted — unique, non-empty.
+    expect(fbmGroup.id).not.toBe('dup-g')
+    expect(fbmGroup.id).not.toBe('')
+    expect(fbmGroup.poses[0].id).not.toBe('dup-p')
+    expect(fbmGroup.poses[0].id).not.toBe('')
+  })
+
+  it('leaves already-unique ids untouched', () => {
+    const character = characterSchema.parse({
+      ...base,
+      sections: {
+        EXP: { enabled: true, mode: 'custom', groups: [group('g1', [dupPose('p1', 'A')])] },
+        FBM: { enabled: true, mode: 'custom', groups: [group('g2', [dupPose('p2', 'B')])] },
+      },
+    })
+    expect(character.sections.EXP.groups[0].id).toBe('g1')
+    expect(character.sections.FBM.groups[0].id).toBe('g2')
+    expect(character.sections.EXP.groups[0].poses[0].id).toBe('p1')
+    expect(character.sections.FBM.groups[0].poses[0].id).toBe('p2')
+  })
+
+  it('generation of a healed character keeps both groups separate (no merged frame ranges)', () => {
+    // Before healing, two groups sharing an id merged into ONE groupRanges entry
+    // in the generated FBM meta: one bogus start..end span covering both — a
+    // non-individual method then shaped the timeline of BOTH groups as one.
+    const character = characterSchema.parse({
+      ...base,
+      sections: {
+        EXP: {
+          enabled: true,
+          mode: 'custom',
+          groups: [group('dup-g', [dupPose('dup-p', 'A'), dupPose('p2', 'B')])],
+        },
+        FBM: { enabled: true, mode: 'custom', groups: [group('dup-g', [dupPose('p3', 'C')])] },
+      },
+    })
+    const data = buildFbmData(character) as {
+      groups?: Array<{ section: string; startFrame: number; endFrame: number }>
+    }
+    // Two cumulative groups → two group entries with disjoint, correct ranges
+    // (EXP frames 0-1, FBM frame 2) — not one merged 0-2 span.
+    expect(data.groups).toEqual([
+      expect.objectContaining({ section: 'EXP', startFrame: 0, endFrame: 1 }),
+      expect.objectContaining({ section: 'FBM', startFrame: 2, endFrame: 2 }),
+    ])
+  })
+})
+
+describe('numeric fields reject non-finite values (they would serialize as null in the .dsa)', () => {
+  // JSON.stringify(Infinity) is `null` — a morph value/strength that reaches the
+  // generated script as null is a guaranteed runtime morph failure in Daz. zod 4
+  // z.number() already rejects Infinity/-Infinity/NaN; these cases PIN that
+  // posture so a future schema/zod change can't quietly re-admit them.
+  const withMorphValue = (value: number) => ({
+    ...base,
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [
+          { id: 'g', poses: [{ id: 'p', name: 'X', morphs: [{ node: 'Genesis9', prop: 'a', value }] }] },
+        ],
+      },
+    },
+  })
+
+  for (const bad of [Infinity, -Infinity, NaN]) {
+    it(`rejects ${bad} across morph values, strengths, keepValue and JCM ranges`, () => {
+      expect(characterSchema.safeParse(withMorphValue(bad)).success).toBe(false)
+      expect(characterSchema.safeParse({ ...base, facsDetailStrength: bad }).success).toBe(false)
+      expect(characterSchema.safeParse({ ...base, flexionStrength: bad }).success).toBe(false)
+      expect(
+        characterSchema.safeParse({ ...base, preserveMorphs: [{ name: 'm', keepValue: bad }] })
+          .success,
+      ).toBe(false)
+      expect(
+        characterSchema.safeParse({
+          ...base,
+          jcmMorphMods: [
+            {
+              boneLabel: 'b',
+              axis: 'XRotate',
+              drives: [{ morphName: 'm', range: { angle: { start: 0, end: bad }, value: { start: 0, end: 1 } } }],
+            },
+          ],
+        }).success,
+      ).toBe(false)
+    })
+  }
 })
 
 describe('compareDthVersions', () => {
@@ -215,5 +364,20 @@ describe('characterSkinning genesis default', () => {
     const sections = structuredClone(character.sections)
     sections.JCM.presetAssets = ['G8 Custom DQS JCM - Base.duf']
     expect(characterSkinning({ ...character, genesis: 'G8', sections })).toBe('dqs')
+  })
+
+  it('matches DQS against the asset BASENAME only, never the folder path', () => {
+    const character = characterSchema.parse(base)
+    // A custom base living in a "DQS Library" folder must not force DQS when the
+    // file itself is a Linear base (wrong skinning = wrong frame counts).
+    const inDqsFolder = structuredClone(character.sections)
+    inDqsFolder.JCM.mode = 'custom'
+    inDqsFolder.JCM.customAssetPath = 'D:\\DQS Library\\My Linear Base.duf'
+    expect(characterSkinning({ ...character, sections: inDqsFolder })).toBe('linear')
+    // A DQS file name still reads as DQS wherever it lives.
+    const dqsFile = structuredClone(character.sections)
+    dqsFile.JCM.mode = 'custom'
+    dqsFile.JCM.customAssetPath = 'D:/Linear Stuff/My DQS Base.duf'
+    expect(characterSkinning({ ...character, sections: dqsFile })).toBe('dqs')
   })
 })

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const files = new Map<string, string | Uint8Array>()
 const dirs = new Set<string>()
+// Paths whose rename (as SOURCE) fails — simulates a locked folder on a share.
+const failRenameSrcs = new Set<string>()
 
 function norm(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/g, '')
@@ -67,6 +69,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   async rename(a: string, b: string) {
     a = norm(a)
     b = norm(b)
+    if (failRenameSrcs.has(a)) throw new Error(`EBUSY: locked ${a}`)
     const remap = (k: string) => b + k.slice(a.length)
     // Move the entry itself or any descendant — handles both a file and a whole
     // directory subtree (what moveCharactersRoot relies on).
@@ -82,6 +85,13 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
         dirs.add(remap(k))
       }
     }
+  },
+  async copyFile(a: string, b: string) {
+    a = norm(a)
+    b = norm(b)
+    const v = files.get(a)
+    if (v == null) throw new Error(`ENOENT ${a}`)
+    files.set(b, v)
   },
   async stat(p: string) {
     p = norm(p)
@@ -116,6 +126,7 @@ import { migrateProjects } from './migrate-projects'
 beforeEach(() => {
   files.clear()
   dirs.clear()
+  failRenameSrcs.clear()
 })
 
 describe('project manifest (.dcsp)', () => {
@@ -192,6 +203,32 @@ describe('project manifest (.dcsp)', () => {
     expect(m.name).toBe('Empty')
     expect(m.dazSubdir).toBe('daz3d')
   })
+
+  it('throws a typed error for an unreachable/nonexistent project folder (no phantom project)', async () => {
+    // A stale recents path or offline share must NOT read back as a fresh
+    // default project (id '') — fetchProject would render a fake empty project
+    // and the sweeps would count it as "0 characters" instead of surfacing it.
+    await expect(storage.readManifest('/nowhere')).rejects.toBeInstanceOf(
+      storage.ProjectUnreachableError,
+    )
+    await expect(storage.readManifest('')).rejects.toThrow(/unreachable|does not exist/i)
+  })
+
+  it('sanitizes hostile dazSubdir / houdiniSubdir like charactersSubdir (nested stays legit)', async () => {
+    await storage.createProjectManifest('/games/Evil', 'Evil')
+    const m = await storage.readManifest('/games/Evil')
+    await storage.writeManifest('/games/Evil', {
+      ...m,
+      dazSubdir: '../../outside',
+      houdiniSubdir: 'C:\\Windows',
+    })
+    const hostile = await storage.readManifest('/games/Evil')
+    expect(hostile.dazSubdir).toBe('daz3d') // fell back to the default
+    expect(hostile.houdiniSubdir).toBe('houdini')
+
+    await storage.writeManifest('/games/Evil', { ...m, dazSubdir: 'scenes/daz' })
+    expect((await storage.readManifest('/games/Evil')).dazSubdir).toBe('scenes/daz')
+  })
 })
 
 describe('recent projects', () => {
@@ -258,6 +295,84 @@ describe('moveCharactersRoot', () => {
     expect(files.has('/games/Nova/chars/Kira/daz3d/Kira.duf')).toBe(true)
     const moved = JSON.parse(files.get('/games/Nova/chars/Kira/Kira.json') as string)
     expect(moved.scenePath).toBe('/games/Nova/chars/Kira/daz3d/Kira.duf')
+  })
+
+  it('a mid-move failure rolls the already-moved characters BACK (nothing stranded)', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    seedChar('/games/Nova', 'Hero')
+    seedChar('/games/Nova', 'Kira')
+    // Kira's folder is locked — its rename fails while Hero's succeeds.
+    failRenameSrcs.add('/games/Nova/Kira')
+
+    const result = await storage.moveCharactersRoot('/games/Nova', '/games/Nova/chars')
+
+    expect(result.moveFailures).toHaveLength(1)
+    expect(result.moveFailures[0].src).toBe('/games/Nova/Kira')
+    expect(result.rolledBack).toBe(true)
+    expect(result.moved).toBe(0)
+    expect(result.atNewRoot).toBe(0)
+    expect(result.atOldRoot).toBe(2)
+    // Both characters are whole at the OLD root; the new root holds neither.
+    expect(files.has('/games/Nova/Hero/Hero.json')).toBe(true)
+    expect(files.has('/games/Nova/Kira/Kira.json')).toBe(true)
+    expect(files.has('/games/Nova/chars/Hero/Hero.json')).toBe(false)
+    expect(files.has('/games/Nova/chars/Kira/Kira.json')).toBe(false)
+  })
+
+  it('a failed rollback reports exactly who is stranded where (and repoints them)', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    seedChar('/games/Nova', 'Hero', '/games/Nova/Hero/daz3d/Hero.duf')
+    addDir('/games/Nova/Hero/daz3d')
+    files.set('/games/Nova/Hero/daz3d/Hero.duf', 'duf')
+    seedChar('/games/Nova', 'Kira')
+    // Kira's move fails; then Hero's ROLLBACK fails too (locked at the new root).
+    failRenameSrcs.add('/games/Nova/Kira')
+    failRenameSrcs.add('/games/Nova/chars/Hero')
+
+    const result = await storage.moveCharactersRoot('/games/Nova', '/games/Nova/chars')
+
+    expect(result.moveFailures).toHaveLength(1)
+    expect(result.rolledBack).toBe(false)
+    expect(result.atNewRoot).toBe(1) // Hero stuck at the new root
+    expect(result.atOldRoot).toBe(1) // Kira never left the old one
+    expect(files.has('/games/Nova/chars/Hero/Hero.json')).toBe(true)
+    expect(files.has('/games/Nova/Kira/Kira.json')).toBe(true)
+    // The stranded character's in-file paths follow it — it LIVES there now.
+    const hero = JSON.parse(files.get('/games/Nova/chars/Hero/Hero.json') as string)
+    expect(hero.scenePath).toBe('/games/Nova/chars/Hero/daz3d/Hero.duf')
+  })
+})
+
+describe('saveProjectSettings on a partially-failed characters-root move', () => {
+  it('keeps the OLD charactersSubdir when the move was rolled back, and surfaces the blocker', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    const seed = (name: string) => {
+      const c = characterSchema.parse({
+        id: newId(),
+        name,
+        genesis: 'G9',
+        gender: 'female',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+      addDir(`/games/Nova/${name}`)
+      files.set(`/games/Nova/${name}/${name}.json`, JSON.stringify(c))
+    }
+    seed('Hero')
+    seed('Kira')
+    failRenameSrcs.add('/games/Nova/Kira')
+
+    await expect(
+      api.saveProjectSettings({
+        data: { projectId: '/games/Nova', charactersSubdir: 'chars' },
+      }),
+    ).rejects.toThrow(/rolled back/i)
+
+    // The manifest still points at where the characters actually are (the root).
+    const manifest = await storage.readManifest('/games/Nova')
+    expect(manifest.charactersSubdir).toBe('')
+    expect(files.has('/games/Nova/Hero/Hero.json')).toBe(true)
+    expect(files.has('/games/Nova/Kira/Kira.json')).toBe(true)
   })
 })
 

@@ -133,6 +133,18 @@ describe('MultiSelect', () => {
     expect(onChange).toHaveBeenCalledWith(['Dragonfruit'])
   })
 
+  it('allowCustom does not offer a case-variant of an already-selected value', () => {
+    const onChange = vi.fn()
+    const { getByRole, queryAllByRole } = render(
+      <MultiSelect values={['Foo']} options={[]} onChange={onChange} allowCustom />,
+    )
+    const input = getByRole('combobox')
+    fireEvent.change(input, { target: { value: 'foo' } })
+    expect(queryAllByRole('option')).toHaveLength(0) // no "Add" row offered
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('without allowCustom an unknown query offers nothing', () => {
     const { getByRole, queryAllByRole, getByText } = render(
       <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,

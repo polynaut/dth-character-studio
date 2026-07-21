@@ -79,6 +79,22 @@ function projectSettingsFrom(project: Partial<ProjectSettings> | null | undefine
   }
 }
 
+/**
+ * What Save actually writes to the manifest (trims + subdir fallbacks). Shared
+ * by the save payload AND the dirty comparison — comparing the raw form state
+ * against the normalized on-disk baseline left the tab dirty FOREVER after
+ * clearing a field (state '', manifest 'daz3d'), which also armed the
+ * unsaved-changes guard on every navigation.
+ */
+function normalizeProjectSettings(s: ProjectSettings): ProjectSettings {
+  return {
+    ...s,
+    dazSubdir: s.dazSubdir.trim() || 'daz3d',
+    houdiniSubdir: s.houdiniSubdir.trim() || 'houdini',
+    charactersSubdir: s.charactersSubdir.trim(),
+  }
+}
+
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
   const router = useRouter()
@@ -159,6 +175,28 @@ function SettingsPage() {
   // dirty is `projectSettings` measured against this (matching the old per-field
   // comparison against the live `project`).
   const projectBaseline = projectSettingsFrom(project)
+  // Loader-reconcile, symmetrical to the machine-settings effect above: when the
+  // loader's project record changes underneath the form (a save in THIS window
+  // invalidated the route, or another window edited the manifest), untouched
+  // fields adopt the new values; fields the user actually edited stay put.
+  const prevProjectRef = useRef(project)
+  useEffect(() => {
+    const prev = prevProjectRef.current
+    if (project === prev) return
+    prevProjectRef.current = project
+    if (!project) return
+    const prevValues = projectSettingsFrom(prev)
+    const nextValues = projectSettingsFrom(project)
+    setProjectSettings((current) => {
+      const next = { ...current }
+      for (const key of Object.keys(nextValues) as Array<keyof ProjectSettings>) {
+        if (JSON.stringify(current[key]) === JSON.stringify(prevValues[key])) {
+          Object.assign(next, { [key]: nextValues[key] })
+        }
+      }
+      return next
+    })
+  }, [project])
   const [savingProject, setSavingProject] = useState(false)
   const [detectingDim, setDetectingDim] = useState(false)
 
@@ -179,18 +217,24 @@ function SettingsPage() {
       setDetectingDim(false)
     }
   }
+  // Normalized-vs-normalized (the exact values Save writes) — a cleared field
+  // that normalizes back to its stored value is NOT a pending change.
   const projectDirty =
     !!project &&
-    (JSON.stringify(projectSettings) !== JSON.stringify(projectBaseline) ||
+    (JSON.stringify(normalizeProjectSettings(projectSettings)) !==
+      JSON.stringify(normalizeProjectSettings(projectBaseline)) ||
       // Edited on the Project tab (under the Daz Products toggle) but stored in
       // the machine settings — saved by onSaveProjectSettings alongside the manifest.
       settings.dimManifestsFolder !== initial.dimManifestsFolder)
 
   async function onSaveProjectSettings() {
     if (!project) return
+    // The manifest-normalized values — the ONE shape both the payload below and
+    // the dirty comparison use (see normalizeProjectSettings).
+    const normalized = normalizeProjectSettings(projectSettings)
     // Changing the characters subfolder physically MOVES every existing character
     // folder to the new root — confirm before that destructive, non-trivial move.
-    const subdirChanged = projectSettings.charactersSubdir.trim() !== (project.charactersSubdir ?? '')
+    const subdirChanged = normalized.charactersSubdir !== (project.charactersSubdir ?? '')
     if (subdirChanged) {
       const ok = await confirm(
         'Change the characters subfolder?\n\nThis moves all existing character folders to the new location and repoints their scene/Houdini paths. Make sure no character files are open elsewhere.',
@@ -208,12 +252,12 @@ function SettingsPage() {
       await saveProjectSettings({
         data: {
           projectId: project.path,
-          dazSubdir: projectSettings.dazSubdir.trim() || 'daz3d',
-          houdiniSubdir: projectSettings.houdiniSubdir.trim() || 'houdini',
-          createHoudiniSubdir: projectSettings.createHoudiniSubdir,
-          assetsEnabled: projectSettings.assetsEnabled,
-          dazProductsEnabled: projectSettings.dazProductsEnabled,
-          charactersSubdir: projectSettings.charactersSubdir.trim(),
+          dazSubdir: normalized.dazSubdir,
+          houdiniSubdir: normalized.houdiniSubdir,
+          createHoudiniSubdir: normalized.createHoudiniSubdir,
+          assetsEnabled: normalized.assetsEnabled,
+          dazProductsEnabled: normalized.dazProductsEnabled,
+          charactersSubdir: normalized.charactersSubdir,
         },
       })
       await router.invalidate()

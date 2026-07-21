@@ -16,6 +16,10 @@ the reference.
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.
+  Promotion pattern: whole categories (`perf`, `suspicious`) sit at **error**
+  with the named intentionally-tolerated rules pinned back to `warn` (each with
+  an explanatory comment) — documented patterns stay advisory while everything
+  else in the category gates. Don't weaken a category to warn to admit one rule.
 - **Routing is file-based** (TanStack Router). `routeTree.gen.ts` is generated —
   run `pnpm generate-routes` after adding/removing a route FILE (not needed for
   tabs inside an existing route).
@@ -50,6 +54,12 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 **The full decision tree + copy-paste templates live at the top of `migrate.ts`
 — read them before touching the schema.** Summary:
 
+0. A stored `schemaVersion` **above** the app's is a forward-version file (saved
+   by a newer build): `migrateCharacterData` throws **`CharacterSchemaTooNewError`**
+   before any normalization can strip its fields (the old clamp silently
+   downgraded and a save then destroyed the newer data). Hosts catch it and say
+   "update the app" — the web scan surfaces it via the character-scan problems
+   channel and never re-saves the file.
 1. Always: edit `characterSchema` → bump the constant + add a History line → add a
    `migrate.test.ts` case.
 2. Add a `characterMigrations[N]` **step** only for a rename/restructure or a
@@ -88,6 +98,29 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
   stays in the `lib/` layer (`apps/web/src/lib/**`), `isTauri()`-guarded so the
   SPA still runs in a plain browser. UI opens external links via
   `desktop.openExternal`, never `@tauri-apps/plugin-shell` directly.
+
+## Storage-layer rituals (apps/web/src/lib)
+
+- **Every persistent JSON write goes through `writeTextFileAtomic`**
+  (`storage/fs.ts`): temp file in the same dir + rename-over, with the
+  Windows locked-target fallback chain owned by the helper. plugin-fs `rename`
+  is `std::fs::rename` (replaces existing on Windows, can fail on locked
+  targets). The temp suffix must never be `.json` — the library scan would pick
+  it up. A torn definition is surfaced by the scan (`CharacterScanProblem`), and
+  `saveCharacter` treats a corrupt existing folder as OCCUPIED (never forks a
+  "Name (2)" beside it).
+- **Location-threading ritual:** a scan that already resolved character
+  locations primes the session cache (`cacheCharacterLocation`, `api/core`), and
+  mutations accept a pre-resolved location instead of re-scanning
+  (`saveCharacter(preResolved?)`, delete, generate). `locateCharacter` lives in
+  `api/core`. Adding a new character operation that re-walks the library is the
+  bug class the Refresh-sweep O(N²) fix removed — thread the location instead.
+- **Destructive operations use STRICT primitives.** The tolerant walk
+  (`walkFiles`: swallow, warn, continue) is for the library VIEW; anything that
+  deletes based on what it saw (`gcNoteMedia`'s reference set) uses
+  `walkFilesStrict` and aborts on any read failure. `moveCharactersRoot`
+  collects per-item failures and rolls back on partial failure — the manifest
+  must always match where folders actually are.
 
 ## UI kit boundary
 

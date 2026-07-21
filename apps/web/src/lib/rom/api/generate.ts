@@ -21,11 +21,17 @@ import * as storage from '../storage'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
+  basename,
+  cacheCharacterLocation,
+  characterLocationCache,
   charScopeInput,
   charsRoot,
   fetchPoseAssets,
+  fetchPoseAssetsCurrent,
+  locateCharacter,
   projectsForSweep,
   resolveProject,
+  sweepTargets,
 } from './core'
 
 import type { Character, PresetFrames } from '@dth/rom'
@@ -194,17 +200,27 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const writeHoudini = targets?.houdini ?? true
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
-  // Resolve the character's location ONCE (one library scan) and reuse it for the
-  // read, the output folder, and the generated-version write below — those three
-  // storage calls used to each run their own full scan (O(N) per save; O(N²) over
-  // a Refresh-assets sweep).
-  const location = await storage.getCharacterPath(lib, id)
-  if (!location) throw new Error(`Character ${id} not found`)
-  const character = await storage.getCharacter(lib, id, location.definitionAbs)
-  if (!character) throw new Error(`Character ${id} not found`)
+  // Resolve the character's location ONCE — through the session cache (a hit
+  // costs one exists()), falling back to the full scan — and reuse it for the
+  // read, the output folder, and the generated-version write below. Those
+  // storage calls used to each run their own full scan (O(N) per save; O(N²)
+  // over a Refresh-assets sweep).
+  let location = await locateCharacter(lib, id)
+  let character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
+  if (!character) {
+    // The cached file no longer holds this character (replaced/moved under us) —
+    // drop the entry and let one full scan decide.
+    characterLocationCache.delete(`${lib}|${id}`)
+    location = await storage.getCharacterPath(lib, id)
+    character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
+    if (location) cacheCharacterLocation(lib, id, location)
+  }
+  if (!location || !character) throw new Error(`Character ${id} not found`)
   // Exact ROM paths from the active release's pose scan; {} when the folder is
-  // unavailable — the script then falls back to DthOptions resolution.
-  const catalog = await fetchPoseAssets()
+  // unavailable — the script then falls back to DthOptions resolution. The
+  // CURRENT-settings variant: another window may have switched the active DTH
+  // release since this window's catalog was scanned.
+  const catalog = await fetchPoseAssetsCurrent()
   const romPaths = catalog.error ? {} : resolveRomPaths(character, catalog)
   // Frame lengths measured live from the actual .duf assets (hard-errors if an
   // included block can't be read — never a wrong-length ROM).
@@ -408,10 +424,33 @@ export function refreshAllAssets(): Promise<RefreshSummary> {
   return withBusyCursor(refreshAllAssetsInner())
 }
 
+/** Map `items` through an async `fn` with at most `limit` in flight — for
+ *  batches of independent small file reads (per-character runtime probes) that
+ *  used to be awaited strictly sequentially. */
+async function mapWithConcurrency<T, R>(
+  items: Array<T>,
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<Array<R>> {
+  const out = new Array<R>(items.length)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      for (let i = next++; i < items.length; i = next++) {
+        out[i] = await fn(items[i])
+      }
+    }),
+  )
+  return out
+}
+
+/** Bounded fan-out for the per-character script-runtime reads. */
+const RUNTIME_READ_CONCURRENCY = 8
+
 async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   const settings = await storage.getSettings()
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
-  const catalog = await fetchPoseAssets()
+  const catalog = await fetchPoseAssetsCurrent()
   const activeRelease = catalog.error ? '' : catalog.version
   const opts = { hasDazLibrary, hasDthRelease: activeRelease !== '' }
   const app = { schema: CHARACTER_SCHEMA_VERSION, runtime: RUNTIME_VERSION, dthRelease: activeRelease }
@@ -420,14 +459,26 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   // refresh (some mismatch → regenerate only what's affected) from a forced full
   // refresh (nothing stale, the user clicked anyway → regenerate everything).
   // Scope follows the window: the active project in a project window, every known
-  // project (recents) from the Home window — see projectsForSweep.
-  const projects = await projectsForSweep()
+  // project (recents) from the Home window — see sweepTargets. The scan resolves
+  // every character's LOCATION once; it's threaded through pass 2 and primed
+  // into the session cache so the per-character generate doesn't re-walk the
+  // library (the old sweep was O(N²) in library size).
+  const { projects, unreachable } = await sweepTargets()
   const results: Array<RefreshResult> = []
-  const items: Array<{ project: ProjectInfo; character: Character; targets: StaleTargets }> = []
+  for (const u of unreachable) {
+    results.push({ project: u.dir, character: '(project unreachable)', ok: false, detail: u.error })
+  }
+  const gathered: Array<{
+    project: ProjectInfo
+    lib: string
+    character: Character
+    location: storage.CharacterLocation
+  }> = []
   for (const project of projects) {
-    let characters: Array<Character>
+    const lib = charsRoot(project)
+    let scan: Awaited<ReturnType<typeof storage.scanCharacterLibrary>>
     try {
-      characters = await storage.listCharacters(charsRoot(project))
+      scan = await storage.scanCharacterLibrary(lib)
     } catch (e) {
       results.push({
         project: project.name,
@@ -437,21 +488,39 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
       })
       continue
     }
-    for (const character of characters) {
-      const runtimeVersion = hasDazLibrary
-        ? await storage.readScriptRuntimeVersion(settings.dazLibraryFolder, project.name, character)
-        : null
-      const status: CharacterAssetStatus = {
-        projectId: project.path,
+    // An unreadable definition is a character the sweep CANNOT refresh —
+    // surface it as a failure instead of silently reporting "all good".
+    for (const problem of scan.problems) {
+      results.push({
         project: project.name,
-        character: character.name,
-        schemaVersion: character.schemaVersion,
-        runtimeVersion,
-        generatedDthVersion: character.generatedDthVersion,
-      }
-      items.push({ project, character, targets: characterStaleTargets(status, app, opts) })
+        character: `(unreadable) ${basename(problem.path)}`,
+        ok: false,
+        detail: `${problem.path} — ${problem.reason}`,
+      })
+    }
+    for (const { character, location } of scan.entries) {
+      cacheCharacterLocation(lib, character.id, location)
+      gathered.push({ project, lib, character, location })
     }
   }
+
+  // The per-character runtime probes are independent small reads — batch them.
+  const runtimeVersions = await mapWithConcurrency(gathered, RUNTIME_READ_CONCURRENCY, (g) =>
+    hasDazLibrary
+      ? storage.readScriptRuntimeVersion(settings.dazLibraryFolder, g.project.name, g.character)
+      : Promise.resolve(null),
+  )
+  const items = gathered.map((g, i) => {
+    const status: CharacterAssetStatus = {
+      projectId: g.project.path,
+      project: g.project.name,
+      character: g.character.name,
+      schemaVersion: g.character.schemaVersion,
+      runtimeVersion: runtimeVersions[i],
+      generatedDthVersion: g.character.generatedDthVersion,
+    }
+    return { ...g, targets: characterStaleTargets(status, app, opts) }
+  })
 
   const force = !items.some((i) => i.targets.schema || i.targets.runtime || i.targets.csv)
 
@@ -471,7 +540,8 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   // (the migration can alter generated output); runtime → Daz scripts; csv → CSV.
   let skipped = 0
   const counts = { migrated: 0, scripts: 0, csv: 0 }
-  for (const { project, character, targets } of items) {
+  for (const item of items) {
+    const { project, lib, character, targets } = item
     const regenSchema = force || targets.schema
     const regenDaz = force || targets.runtime || targets.schema
     const regenHoudini = force || targets.csv || targets.schema
@@ -480,11 +550,32 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
       continue
     }
     try {
+      // Re-read the definition FRESH immediately before deciding to write: on a
+      // big library pass 1's snapshot is minutes old by now, and re-saving it
+      // would silently revert any save made in a project window mid-sweep. This
+      // narrows the race to the same ms-wide window every other save has.
+      let location = item.location
+      let fresh = await storage.readCharacterAt(location.definitionAbs)
+      if (!fresh || fresh.id !== character.id) {
+        // Moved/renamed since pass 1 — re-locate once, then re-read.
+        characterLocationCache.delete(`${lib}|${character.id}`)
+        const relocated = await storage.getCharacterPath(lib, character.id)
+        if (!relocated) {
+          throw new Error('The character definition was moved or deleted during the refresh.')
+        }
+        location = relocated
+        cacheCharacterLocation(lib, character.id, relocated)
+        fresh = await storage.readCharacterAt(location.definitionAbs)
+        if (!fresh || fresh.id !== character.id) {
+          throw new Error('The character definition could not be re-read.')
+        }
+      }
       // A character read at an older schema is already migrated in-memory
       // (parseCharacter); re-saving stamps the current version, clearing the stale
-      // state. Independent of the DAZ library.
-      if (regenSchema && character.schemaVersion < CHARACTER_SCHEMA_VERSION) {
-        await storage.saveCharacter(project, character, charsRoot(project))
+      // state. Independent of the DAZ library. Only save if the FRESH read is
+      // still stale — a mid-sweep editor save may have migrated it already.
+      if (regenSchema && fresh.schemaVersion < CHARACTER_SCHEMA_VERSION) {
+        await storage.saveCharacter(project, fresh, lib, { location, character: fresh })
         counts.migrated += 1
       }
       const res = await generateCharacterFiles({
@@ -620,15 +711,15 @@ export function isCharacterStale(
 export async function detectAssetVersions(): Promise<AssetVersionReport> {
   const settings = await storage.getSettings()
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
-  const catalog = await fetchPoseAssets()
+  const catalog = await fetchPoseAssetsCurrent()
   const activeRelease = catalog.error ? '' : catalog.version
   const hasDthRelease = activeRelease !== ''
   const app = { schema: CHARACTER_SCHEMA_VERSION, runtime: RUNTIME_VERSION, dthRelease: activeRelease }
 
-  const characters: Array<CharacterAssetStatus> = []
   // Scope follows the window: the active project in a project window, every known
   // project (recents) from the Home window — see projectsForSweep.
   const projects = await projectsForSweep()
+  const gathered: Array<{ project: ProjectInfo; character: Character }> = []
   for (const project of projects) {
     let chars: Array<Character>
     try {
@@ -636,20 +727,22 @@ export async function detectAssetVersions(): Promise<AssetVersionReport> {
     } catch {
       continue // unreachable project — an actual refresh run surfaces the error
     }
-    for (const character of chars) {
-      const runtimeVersion = hasDazLibrary
-        ? await storage.readScriptRuntimeVersion(settings.dazLibraryFolder, project.name, character)
-        : null
-      characters.push({
-        projectId: project.path,
-        project: project.name,
-        character: character.name,
-        schemaVersion: character.schemaVersion,
-        runtimeVersion,
-        generatedDthVersion: character.generatedDthVersion,
-      })
-    }
+    for (const character of chars) gathered.push({ project, character })
   }
+  // Independent small reads — batched (the sequential awaits dominated big libraries).
+  const runtimeVersions = await mapWithConcurrency(gathered, RUNTIME_READ_CONCURRENCY, (g) =>
+    hasDazLibrary
+      ? storage.readScriptRuntimeVersion(settings.dazLibraryFolder, g.project.name, g.character)
+      : Promise.resolve(null),
+  )
+  const characters: Array<CharacterAssetStatus> = gathered.map((g, i) => ({
+    projectId: g.project.path,
+    project: g.project.name,
+    character: g.character.name,
+    schemaVersion: g.character.schemaVersion,
+    runtimeVersion: runtimeVersions[i],
+    generatedDthVersion: g.character.generatedDthVersion,
+  }))
 
   const staleCount = characters.filter((c) =>
     isCharacterStale(c, app, { hasDazLibrary, hasDthRelease }),

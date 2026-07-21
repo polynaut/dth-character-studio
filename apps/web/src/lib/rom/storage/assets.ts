@@ -1,6 +1,6 @@
-import { exists, mkdir, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readTextFile, remove } from '@tauri-apps/plugin-fs'
 
-import { basename, join } from './fs'
+import { basename, join, writeTextFileAtomic } from './fs'
 
 // --- Assets ---------------------------------------------------------------
 // A library of reusable Daz scenes ("assets") — starting points to build
@@ -57,7 +57,10 @@ async function readAssetRegistry(base: string): Promise<Array<DazAsset>> {
 
 async function writeAssetRegistry(base: string, assets: Array<DazAsset>): Promise<void> {
   await mkdir(assetsDir(base), { recursive: true })
-  await writeTextFile(join(assetsDir(base), 'assets.json'), JSON.stringify(assets, null, 2) + '\n')
+  await writeTextFileAtomic(
+    join(assetsDir(base), 'assets.json'),
+    JSON.stringify(assets, null, 2) + '\n',
+  )
 }
 
 export async function listAssets(base: string): Promise<Array<DazAsset>> {

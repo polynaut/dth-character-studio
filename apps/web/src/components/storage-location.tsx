@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { FolderInput } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,6 +26,19 @@ export function StorageLocation({
   const [subdir, setSubdir] = useState(() => displayPath(location?.relFolder ?? ''))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Reconcile when the folder changes underneath the field (an inline character
+  // rename moves the folder and the loader repoints relFolder) — otherwise Move
+  // stays armed with the STALE path and clicking it moves the folder BACK. The
+  // settings route's loader-reconcile pattern: an untouched field (still showing
+  // the previous on-disk value) adopts the new one; a user edit stays put.
+  const relFolder = location?.relFolder ?? ''
+  const prevRelRef = useRef(relFolder)
+  useEffect(() => {
+    const prevRel = prevRelRef.current
+    if (relFolder === prevRel) return
+    prevRelRef.current = relFolder
+    setSubdir((current) => (current === displayPath(prevRel) ? displayPath(relFolder) : current))
+  }, [relFolder])
   if (!location) return null
 
   // Only the subdirectory is editable — the definition keeps its current filename,

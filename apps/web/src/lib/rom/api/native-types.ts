@@ -65,17 +65,27 @@ export const dupMemberSchema = z.object({
   label: z.string(),
   /** Source folder the copy lives in (e.g. "_genesis 9"). */
   source: z.string(),
+  /** Full path of this copy — unique by construction (labels collide inside an
+   *  exact-dup group), so keeper choices, comparisons and React keys use it. */
+  path: z.string(),
   fileCount: z.number(),
   isZip: z.boolean(),
-  /** The copy kept (others are quarantined) — auto-picked, user-overridable. */
+  /** The copy kept (others are quarantined) — auto-picked, user-overridable
+   *  via the request's `keepers` (paths). */
   isKeeper: z.boolean(),
+  /** Set on apply when this redundant copy was fully moved to quarantine. */
+  moved: z.boolean(),
+  /** Empty, or why this copy couldn't be (fully) quarantined. */
+  error: z.string(),
 })
 
-/** A set of assets that are the same content — identical ('exact') or the same
- *  product at a different version ('version', e.g. a …UD vs …UPDATE). */
+/** A set of assets that are the same content — identical paths AND sizes
+ *  ('exact') or the same product at a different version ('version', e.g. a …UD
+ *  vs …UPDATE). */
 export const assetDupSchema = z.object({
   members: z.array(dupMemberSchema),
   kind: z.enum(['exact', 'version']),
+  /** Set after apply: EVERY redundant copy of the group was quarantined. */
   fixed: z.boolean(),
 })
 
@@ -86,6 +96,9 @@ export const dedupReportSchema = z.object({
   duplicates: z.array(assetDupSchema),
   assetsQuarantined: z.number(),
   backupDir: z.string(),
+  /** Report-level failures: a quarantine folder inside a source, keeper choices
+   *  that no longer resolve, groups skipped over an incomplete scan inventory. */
+  errors: z.array(z.string()),
 })
 
 // --- pose-asset frame measurement (poses.rs) ---------------------------------

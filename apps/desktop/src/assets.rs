@@ -2,17 +2,13 @@ use rayon::prelude::*;
 use serde::Deserialize;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::ffi::OsString;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::archive::{
-    extract_nested_zip, extract_zip_entry, zip_file_entries, InflateBudget, NESTED_ZIP_DEPTH,
-};
-use crate::content::{find_content_level, zip_dir_level, CONTENT_FOLDERS, META_FOLDERS};
+use crate::archive::{extract_zip_entry, walk_zip_content, InflateBudget, NESTED_ZIP_DEPTH};
 use crate::dedup::{collect_asset_files, genesis_rank, AssetFiles};
-use crate::fsutil::{entry_is_real_dir, folder_name, join_rel, lock_dest};
+use crate::fsutil::{folder_name, join_rel, lock_dest, rel_key};
 use crate::report::{
     io_detail, step_err, step_header, step_ok, step_skip, InstallReport, InstallStep,
 };
@@ -20,90 +16,28 @@ use crate::report::{
 // --- "Optional" installs: your own Daz/Houdini content (not DTH release) ----
 
 /// Fold one destination-relative path into an order-independent fingerprint of an
-/// asset's destination file set (XOR of per-path hashes). Two assets that install
-/// the same set of files share a fingerprint even if a few files' contents differ.
+/// asset's destination file set (XOR of per-path hashes), case-folded — NTFS
+/// resolves two casings of a path to the SAME library file. Two assets that
+/// install the same set of files share a fingerprint even if a few files'
+/// contents differ.
 pub(crate) fn fp_add(fp: &mut u64, rel: &str) {
     let mut h = DefaultHasher::new();
-    rel.hash(&mut h);
+    rel_key(rel).hash(&mut h);
     *fp ^= h.finish();
 }
 
-/// Copy `src` → `dst` file-by-file, copying each only when the destination is
-/// missing or a *different size* (or always, with `force`). `dry` counts what
-/// would copy without writing. Pushes each changed file's path (relative to
-/// `rel`) into `out`, and returns the total file count — so "already installed"
-/// is simply "`out` empty", read from the real filesystem rather than a fragile
-/// single-file marker, and `out` powers the expandable per-asset list.
-// 8 args: one cohesive recursive dir-sync (source/rel/out + counters/flags); a
-// params struct would add indirection without making it clearer.
-#[allow(clippy::too_many_arguments)]
-fn sync_dir(
-    src: &Path,
-    dst: &Path,
-    dry: bool,
-    force: bool,
-    rel: &Path,
-    out: &mut Vec<String>,
-    fp: &mut u64,
-    accepted: &HashSet<String>,
-) -> std::io::Result<u64> {
-    if !dry {
-        fs::create_dir_all(dst)?;
-    }
-    // Enumerate the destination directory ONCE into a name→size map rather than
-    // an individual `fs::metadata` syscall per source file — the slow part on
-    // large/networked libraries. A missing dest dir yields an empty map, so every
-    // source file is (correctly) seen as needing a copy.
-    let dst_sizes = dir_file_sizes(dst);
-    let mut total = 0u64;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let from = entry.path();
-        let to = dst.join(&name);
-        let rel_child = rel.join(&name);
-        if entry_is_real_dir(&entry) {
-            total += sync_dir(&from, &to, dry, force, &rel_child, out, fp, accepted)?;
-        } else if from.is_dir() {
-            // A directory symlink/junction (real dir above is symlink-free — the
-            // fsutil walker rule): following it can loop forever on a cycle while
-            // COPYING — filling the destination disk — or escape the asset tree.
-            // Not the asset's own content; treat it as a leaf and skip it.
-            continue;
-        } else {
-            total += 1;
-            let rel_str = rel_child.to_string_lossy().replace('\\', "/");
-            fp_add(fp, &rel_str);
-            let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            // An accepted (legitimately-shared) file is treated as already in sync.
-            let needs = !accepted.contains(&rel_str)
-                && (force
-                    || match dst_sizes.get(&name) {
-                        Some(&len) => len != src_len,
-                        None => true,
-                    });
-            if needs {
-                out.push(rel_str);
-                if !dry {
-                    // Serialize writes to the same library file across assets.
-                    let _guard = lock_dest(&to);
-                    fs::copy(&from, &to)?;
-                }
-            }
-        }
-    }
-    Ok(total)
-}
-
-/// Enumerate a directory once into a map of file name → byte size (files only).
-/// Empty when the directory is missing or unreadable.
-fn dir_file_sizes(dir: &Path) -> HashMap<OsString, u64> {
+/// Enumerate a directory once into a map of case-folded file name → byte size
+/// (files only). Case-folded because NTFS resolves names case-insensitively — a
+/// byte-exact lookup misses a case-variant installed file, which is then
+/// re-copied forever (Windows preserves the destination's casing, so it never
+/// converges). Empty when the directory is missing or unreadable.
+fn dir_file_sizes(dir: &Path) -> HashMap<String, u64> {
     let mut map = HashMap::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             if let Ok(md) = entry.metadata() {
                 if md.is_file() {
-                    map.insert(entry.file_name(), md.len());
+                    map.insert(rel_key(&entry.file_name().to_string_lossy()), md.len());
                 }
             }
         }
@@ -111,10 +45,10 @@ fn dir_file_sizes(dir: &Path) -> HashMap<OsString, u64> {
     map
 }
 
-/// A small cache of destination directory listings (file name → size), so many
-/// scattered lookups (e.g. zip entries) read each dest directory only once.
+/// A small cache of destination directory listings (case-folded file name →
+/// size), so many scattered lookups read each dest directory only once.
 struct DestSizes {
-    cache: HashMap<PathBuf, HashMap<OsString, u64>>,
+    cache: HashMap<PathBuf, HashMap<String, u64>>,
 }
 impl DestSizes {
     fn new() -> Self {
@@ -123,9 +57,9 @@ impl DestSizes {
     /// The installed size of `file` at the destination, or None if it isn't there.
     fn len_of(&mut self, file: &Path) -> Option<u64> {
         let dir = file.parent()?;
-        let name = file.file_name()?;
+        let name = rel_key(&file.file_name()?.to_string_lossy());
         let map = self.cache.entry(dir.to_path_buf()).or_insert_with(|| dir_file_sizes(dir));
-        map.get(name).copied()
+        map.get(&name).copied()
     }
 }
 
@@ -146,129 +80,83 @@ fn finish_step(name: &str, diff_files: Vec<String>, total: u64, dry: bool) -> In
 /// "same files as …" duplicate hint.
 type AssetStep = (InstallStep, Option<u64>);
 
-/// Diff (and, unless `dry`, install) one asset *folder* against the library.
-fn process_folder_asset(
-    asset: &Path,
+/// Diff (and, unless `dry`, install) one asset from its COLLECTED inventory —
+/// the walk `collect_sources` already did, instead of re-walking the folder /
+/// re-reading the zip. Folder assets run both modes here (a real install copies
+/// each differing file from `af.content_root`); zip assets only DIFF here (dry
+/// runs) — extraction needs the archive, so real zip installs go through
+/// `process_zip_asset`.
+fn process_collected_asset(
+    af: &AssetFiles,
     name: &str,
     dest: &Path,
     dry: bool,
     force: bool,
-    accepted: &HashSet<String>,
+    skip: &HashSet<String>,
 ) -> AssetStep {
-    let (content_root, folders) = match find_content_level(asset, 5) {
-        Some(found) => found,
-        None => return (step_skip(name, "no Daz content".into()), None),
-    };
+    debug_assert!(!af.is_zip || dry, "real zip installs re-open the archive");
+    if af.read_errors > 0 {
+        // The install pipeline hard-errors rather than acting on a partial
+        // inventory (a lenient walker silently omitting entries would report
+        // "already installed" for files it never saw).
+        let plural = if af.read_errors == 1 { "y" } else { "ies" };
+        return (
+            step_err(
+                name,
+                format!(
+                    "{} unreadable entr{plural} while scanning the source — fix access and retry",
+                    af.read_errors
+                ),
+            ),
+            None,
+        );
+    }
+    let mut dest_sizes = DestSizes::new();
     let mut diff_files: Vec<String> = Vec::new();
-    let mut total = 0u64;
     let mut fp = 0u64;
-    for f in &folders {
-        match sync_dir(&content_root.join(f), &dest.join(f), dry, force, Path::new(f), &mut diff_files, &mut fp, accepted) {
-            Ok(t) => total += t,
-            Err(e) => return (step_err(name, io_detail(&format!("{} → {}", f, dest.join(f).display()), &e)), None),
-        }
-    }
-    (finish_step(name, diff_files, total, dry), Some(fp))
-}
-
-/// Diff (and, unless `dry`, install) the content of one opened zip archive into
-/// `dest`, accumulating the changed files / total / destination fingerprint so
-/// nested package zips merge into their outer asset's step. Returns whether a Daz
-/// content level was found in this archive or a nested one; `Err` carries a
-/// step_err detail. `budget` is the top-level archive's inflate budget; nested
-/// archives SHARE it, so one budget bounds the whole tree's inflation (a crafted
-/// wrapper can't mint a fresh allowance per inner zip).
-// 11 args: a recursive zip-diff threading scan state through each nested archive;
-// splitting it would just scatter that state across a struct.
-#[allow(clippy::too_many_arguments)]
-fn diff_zip_archive(
-    archive: &mut zip::ZipArchive<fs::File>,
-    dest: &Path,
-    dry: bool,
-    force: bool,
-    accepted: &HashSet<String>,
-    depth: u32,
-    dest_sizes: &mut DestSizes,
-    diff_files: &mut Vec<String>,
-    total: &mut u64,
-    fp: &mut u64,
-    budget: &mut InflateBudget,
-) -> Result<bool, String> {
-    let entries = zip_file_entries(archive);
-    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
-    // Same precedence as find_zip_content_level, with nested packages between the
-    // two passes: content in this archive → content in nested zips → Documentation.
-    let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
-    if content.is_none() && depth > 0 {
-        let mut found = false;
-        for (idx, path, _) in &entries {
-            if !path.to_ascii_lowercase().ends_with(".zip") {
-                continue;
-            }
-            let tmp = extract_nested_zip(archive, *idx, budget)
-                .map_err(|e| io_detail(&format!("unpack {path}"), &e))?;
-            let file =
-                fs::File::open(&tmp.0).map_err(|e| io_detail(&format!("open {path}"), &e))?;
-            let mut inner =
-                zip::ZipArchive::new(file).map_err(|e| format!("unzip {path} failed: {e}"))?;
-            // The inner archive shares the OUTER budget (see the fn doc).
-            budget.check_entry_count(inner.len()).map_err(|e| e.to_string())?;
-            found |= diff_zip_archive(
-                &mut inner, dest, dry, force, accepted, depth - 1, dest_sizes, diff_files, total,
-                fp, budget,
-            )?;
-        }
-        if found {
-            return Ok(true);
-        }
-    }
-    let (root, folders) = match content.or_else(|| zip_dir_level(&paths, &META_FOLDERS)) {
-        Some(level) => level,
-        None => return Ok(false),
-    };
-    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
-    let mut needed: Vec<(usize, String)> = Vec::new();
-    for (idx, path, size) in &entries {
-        // Keep only entries under <content-root>/<one of the chosen folders>.
-        let sub = match path.strip_prefix(&prefix) {
-            Some(s) => s,
-            None => continue,
-        };
-        let first = sub.split('/').next().unwrap_or("");
-        if !folders.iter().any(|f| f == first) {
+    for (rel, size) in &af.files {
+        fp_add(&mut fp, rel);
+        // An accepted (legitimately-shared) or winner-lost file is already in sync.
+        let needs = !skip.contains(&rel_key(rel))
+            && (force || dest_sizes.len_of(&join_rel(dest, rel)) != Some(*size));
+        if !needs {
             continue;
         }
-        *total += 1;
-        fp_add(fp, sub);
-        let needs = !accepted.contains(sub)
-            && (force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(*size));
-        if needs {
-            diff_files.push(sub.to_string());
-            needed.push((*idx, sub.to_string()));
-        }
-    }
-    // Inflate only the differing entries on a real install.
-    if !dry {
-        for (idx, sub) in &needed {
-            if let Err(e) = extract_zip_entry(archive, *idx, &join_rel(dest, sub), budget) {
-                return Err(io_detail(&format!("extract {sub}"), &e));
+        diff_files.push(rel.clone());
+        if !dry {
+            let from = join_rel(&af.content_root, rel);
+            let to = join_rel(dest, rel);
+            if let Some(parent) = to.parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    return (
+                        step_err(name, io_detail(&format!("create {}", parent.display()), &e)),
+                        None,
+                    );
+                }
+            }
+            // Serialize writes to the same library file across assets.
+            let _guard = lock_dest(&to);
+            if let Err(e) = fs::copy(&from, &to) {
+                return (step_err(name, io_detail(&format!("{rel} → {}", to.display()), &e)), None);
             }
         }
     }
-    Ok(true)
+    (finish_step(name, diff_files, af.files.len() as u64, dry), Some(fp))
 }
 
 /// Diff (and, unless `dry`, install) one `.zip` asset — read straight from the
 /// archive's central directory (uncompressed sizes), never extracting the whole
 /// thing. For a real install only the entries that differ are inflated. Wrapper
-/// downloads (no content folders, a package zip inside) are descended into.
+/// downloads (no content folders, a package zip inside) are descended into via
+/// the shared `walk_zip_content` — STRICT posture: an unreadable nested zip is a
+/// hard error here (dedup's collect is the lenient counterpart).
 fn process_zip_asset(
     asset: &Path,
     name: &str,
     dest: &Path,
     dry: bool,
     force: bool,
-    accepted: &HashSet<String>,
+    skip: &HashSet<String>,
 ) -> AssetStep {
     let file = match fs::File::open(asset) {
         Ok(f) => f,
@@ -287,19 +175,30 @@ fn process_zip_asset(
     let mut dest_sizes = DestSizes::new();
     let mut diff_files: Vec<String> = Vec::new();
     let (mut total, mut fp) = (0u64, 0u64);
-    match diff_zip_archive(
+    let mut read_errors = 0u64;
+    let walked = walk_zip_content(
         &mut archive,
-        dest,
-        dry,
-        force,
-        accepted,
         NESTED_ZIP_DEPTH,
-        &mut dest_sizes,
-        &mut diff_files,
-        &mut total,
-        &mut fp,
         &mut budget,
-    ) {
+        true,
+        &mut read_errors,
+        &mut |archive, budget, idx, sub, size| {
+            total += 1;
+            fp_add(&mut fp, sub);
+            let needs = !skip.contains(&rel_key(sub))
+                && (force || dest_sizes.len_of(&join_rel(dest, sub)) != Some(size));
+            if needs {
+                diff_files.push(sub.to_string());
+                // Inflate only the differing entries on a real install.
+                if !dry {
+                    extract_zip_entry(archive, idx, &join_rel(dest, sub), budget)
+                        .map_err(|e| io_detail(&format!("extract {sub}"), &e))?;
+                }
+            }
+            Ok(())
+        },
+    );
+    match walked {
         Err(detail) => (step_err(name, detail), None),
         Ok(false) => (step_skip(name, "no Daz content".into()), None),
         Ok(true) => (finish_step(name, diff_files, total, dry), Some(fp)),
@@ -308,8 +207,12 @@ fn process_zip_asset(
 
 /// Diff/install one asset (folder or `.zip`). Loose files at the source root
 /// (`.DS_Store`, readmes) aren't assets — they return None and are skipped.
+/// `af` is the asset's inventory from the ONE walk `collect_sources` did; when
+/// usable it powers the diff directly, so scans/dry runs never walk an asset a
+/// second time.
 fn process_asset(
     asset: &Path,
+    af: Option<&AssetFiles>,
     dest: &Path,
     dry: bool,
     force: bool,
@@ -324,10 +227,15 @@ fn process_asset(
     // / bigger copy (per winner_skip_map). Empty if this asset wasn't resolved.
     let empty = HashSet::new();
     let skip = skip_map.get(asset).unwrap_or(&empty);
-    Some(if is_zip {
-        process_zip_asset(asset, &name, dest, dry, force, skip)
-    } else {
-        process_folder_asset(asset, &name, dest, dry, force, skip)
+    Some(match af {
+        // Folder assets (both modes) + zip dry runs: the collected inventory IS
+        // the diff input — no second walk of the source.
+        Some(af) if !af.is_zip || dry => process_collected_asset(af, &name, dest, dry, force, skip),
+        // Real zip installs re-open the archive (extraction needs the entries);
+        // an uncollected zip (no content / bomb rail) reproduces its skip/error.
+        _ if is_zip => process_zip_asset(asset, &name, dest, dry, force, skip),
+        // An uncollected folder holds no Daz content level.
+        _ => (step_skip(&name, "no Daz content".into()), None),
     })
 }
 
@@ -391,52 +299,70 @@ pub(crate) struct AssetScanRequest {
     accepted: Vec<String>,
 }
 
-/// Resolve, across ALL source folders, the winner of every shared library file by
-/// (newer Genesis, then bigger size), and return per-asset the set of dest-relative
-/// paths to treat as already in-sync — `accepted` plus every file where this asset
-/// is NOT the winner. The install then writes only the winning copy of a shared
-/// file and never flags the losing copies, so the result is deterministic and
-/// independent of folder order ("newer genesis wins, then bigger wins").
+/// Every source's asset listing plus every content-bearing asset's inventory,
+/// collected ONCE per command. Winner resolution and the per-asset diffs both
+/// read this — they used to walk the whole library independently (a scan walked
+/// everything twice, and an `only` install re-walked every asset just to resolve
+/// winners).
+struct CollectedSources {
+    /// (source path, its sorted asset entries — or the step to surface).
+    listings: Vec<(String, Result<Vec<PathBuf>, InstallStep>)>,
+    /// Asset path → (source folder's Genesis rank, collected inventory).
+    files: HashMap<PathBuf, (u32, AssetFiles)>,
+}
+
+fn collect_sources(sources: &[String]) -> CollectedSources {
+    let mut listings = Vec::new();
+    let mut files = HashMap::new();
+    for source in sources {
+        let listing = collect_assets(source);
+        if let Ok(assets) = &listing {
+            let genesis = genesis_rank(&folder_name(Path::new(source)));
+            // Independent reads → parallel, like the per-asset processing.
+            let collected: Vec<(PathBuf, AssetFiles)> = assets
+                .par_iter()
+                .filter_map(|a| collect_asset_files(a).map(|af| (a.clone(), af)))
+                .collect();
+            for (path, af) in collected {
+                files.insert(path, (genesis, af));
+            }
+        }
+        listings.push((source.clone(), listing));
+    }
+    CollectedSources { listings, files }
+}
+
+/// Resolve, across ALL collected assets, the winner of every shared library file
+/// by (newer Genesis, then bigger size), and return per-asset the set of
+/// case-folded dest-relative paths to treat as already in-sync — `accepted` plus
+/// every file where this asset is NOT the winner. The install then writes only
+/// the winning copy of a shared file and never flags the losing copies, so the
+/// result is deterministic and independent of folder order ("newer genesis wins,
+/// then bigger wins"). Keys fold case, so case-variant copies of a shared file
+/// meet in ONE bucket instead of racing last-write-wins under rayon.
 fn winner_skip_map(
-    sources: &[String],
+    collected: &HashMap<PathBuf, (u32, AssetFiles)>,
     accepted: &HashSet<String>,
 ) -> HashMap<PathBuf, HashSet<String>> {
-    // Collect every asset's files, tagged with its source folder's Genesis rank.
-    let mut all: Vec<(u32, AssetFiles)> = Vec::new();
-    for source in sources {
-        let src = Path::new(source);
-        if !src.is_dir() {
-            continue;
-        }
-        let genesis = genesis_rank(&folder_name(src));
-        let entries: Vec<PathBuf> = match fs::read_dir(src) {
-            Ok(e) => e.flatten().map(|x| x.path()).collect(),
-            Err(_) => continue,
-        };
-        let collected: Vec<AssetFiles> =
-            entries.par_iter().filter_map(|a| collect_asset_files(a)).collect();
-        for af in collected {
-            all.push((genesis, af));
-        }
-    }
     // Winner per dest path = the max (genesis, size) tuple across all copies.
     let mut winners: HashMap<String, (u32, u64)> = HashMap::new();
-    for (g, af) in &all {
+    for (genesis, af) in collected.values() {
         for (rel, size) in &af.files {
-            let cand = (*g, *size);
-            winners.entry(rel.clone()).and_modify(|w| *w = (*w).max(cand)).or_insert(cand);
+            let cand = (*genesis, *size);
+            winners.entry(rel_key(rel)).and_modify(|w| *w = (*w).max(cand)).or_insert(cand);
         }
     }
     // Per-asset skip set: accepted ∪ files where this asset isn't the winner.
     let mut skip_map: HashMap<PathBuf, HashSet<String>> = HashMap::new();
-    for (g, af) in &all {
+    for (path, (genesis, af)) in collected {
         let mut skip = accepted.clone();
         for (rel, size) in &af.files {
-            if winners.get(rel).is_some_and(|&w| (*g, *size) != w) {
-                skip.insert(rel.clone());
+            let key = rel_key(rel);
+            if winners.get(&key).is_some_and(|&w| (*genesis, *size) != w) {
+                skip.insert(key);
             }
         }
-        skip_map.insert(af.asset_path.clone(), skip);
+        skip_map.insert(path.clone(), skip);
     }
     skip_map
 }
@@ -455,21 +381,24 @@ pub fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let force = request.force;
     let dest = Path::new(&request.dest);
     let only = request.only;
-    let accepted: HashSet<String> = request.accepted.into_iter().collect();
-    let skip_map = winner_skip_map(&request.sources, &accepted);
+    // Case-folded for lookups (NTFS); reports keep original casing.
+    let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
+    let CollectedSources { listings, files } = collect_sources(&request.sources);
+    let skip_map = winner_skip_map(&files, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
-    for source in &request.sources {
-        match collect_assets(source) {
+    for (source, listing) in listings {
+        match listing {
             Err(step) => {
-                items.push((step_header(source), None));
+                items.push((step_header(&source), None));
                 items.push((step, None));
             }
             Ok(assets) => {
-                let asset_items = process_assets(&assets, dest, dry, force, &only, &skip_map);
+                let asset_items =
+                    process_assets(&assets, &files, dest, dry, force, &only, &skip_map);
                 // When filtering to a changed-asset set, skip a header whose whole
                 // source contributed nothing (every asset already installed).
                 if !asset_items.is_empty() {
-                    items.push((step_header(source), None));
+                    items.push((step_header(&source), None));
                     items.extend(asset_items);
                 }
             }
@@ -508,6 +437,7 @@ fn collect_assets(source: &str) -> Result<Vec<PathBuf>, InstallStep> {
 /// two sources installs in both, which is harmless: the other is already in sync).
 fn process_assets(
     assets: &[PathBuf],
+    files: &HashMap<PathBuf, (u32, AssetFiles)>,
     dest: &Path,
     dry: bool,
     force: bool,
@@ -517,7 +447,10 @@ fn process_assets(
     assets
         .par_iter()
         .filter(|asset| only.is_empty() || only.iter().any(|n| *n == folder_name(asset)))
-        .filter_map(|asset| process_asset(asset, dest, dry, force, skip_map))
+        .filter_map(|asset| {
+            let af = files.get(asset.as_path()).map(|(_, af)| af);
+            process_asset(asset, af, dest, dry, force, skip_map)
+        })
         .collect()
 }
 
@@ -525,14 +458,17 @@ fn process_assets(
 #[tauri::command(async)]
 pub fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
-    let accepted: HashSet<String> = request.accepted.into_iter().collect();
-    let skip_map = winner_skip_map(&request.sources, &accepted);
+    let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
+    let CollectedSources { listings, files } = collect_sources(&request.sources);
+    let skip_map = winner_skip_map(&files, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
-    for source in &request.sources {
-        items.push((step_header(source), None));
-        match collect_assets(source) {
+    for (source, listing) in listings {
+        items.push((step_header(&source), None));
+        match listing {
             Err(step) => items.push((step, None)),
-            Ok(assets) => items.extend(process_assets(&assets, dest, true, false, &[], &skip_map)),
+            Ok(assets) => {
+                items.extend(process_assets(&assets, &files, dest, true, false, &[], &skip_map));
+            }
         }
     }
     let steps = annotate_duplicates(items);
@@ -686,6 +622,11 @@ mod tests {
         let mut c = 0u64;
         fp_add(&mut c, "data/x");
         assert_ne!(a, c, "a different file set must differ");
+        // NTFS: a case-variant of the same path is the SAME library file.
+        let mut d = 0u64;
+        fp_add(&mut d, "DATA/X");
+        fp_add(&mut d, "people/Y");
+        assert_eq!(a, d, "case variants share a fingerprint");
     }
 
     #[test]
@@ -703,5 +644,74 @@ mod tests {
         assert!(note("foo.zip").contains("foo"), "zip points at the folder");
         assert!(note("foo").contains("foo.zip"), "folder points at the zip");
         assert_eq!(note("bar"), "", "a unique asset gets no hint");
+    }
+
+    #[test]
+    fn install_finds_case_variant_installed_files_in_sync() {
+        // A `DATA/`-cased source against a `data/`-cased library: NTFS resolves
+        // them to the same file, so a size-equal copy must read as installed —
+        // the old byte-exact name lookup re-copied it forever (Windows preserves
+        // the destination's casing, so it never converged).
+        let base = unique_temp_dir("case_insync");
+        let source = base.join("src");
+        let asset = source.join("CasedAsset");
+        fs::create_dir_all(asset.join("DATA")).unwrap();
+        fs::write(asset.join("DATA").join("Morph.dsf"), b"same-bytes").unwrap();
+        let dest = base.join("lib");
+        fs::create_dir_all(dest.join("data")).unwrap();
+        fs::write(dest.join("data").join("morph.dsf"), b"same-bytes").unwrap();
+
+        let report = list_daz_assets(AssetScanRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dest: dest.to_string_lossy().to_string(),
+            accepted: vec![],
+        });
+        let step = report.steps.iter().find(|s| s.label == "CasedAsset").unwrap();
+        assert_eq!(step.status, "skipped", "detail: {}", step.detail);
+        assert!(step.detail.contains("already installed"), "detail: {}", step.detail);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn folder_asset_installs_from_its_collected_inventory() {
+        // End-to-end through install_daz_assets: the collected inventory drives
+        // both the dry diff and the real copy (no second source walk).
+        let base = unique_temp_dir("collected_install");
+        let source = base.join("src");
+        let asset = source.join("MyAsset");
+        fs::create_dir_all(asset.join("data").join("sub")).unwrap();
+        fs::write(asset.join("data").join("sub").join("m.dsf"), b"morph").unwrap();
+        fs::create_dir_all(asset.join("Runtime")).unwrap();
+        fs::write(asset.join("Runtime").join("t.png"), b"tex").unwrap();
+        let dest = base.join("lib");
+
+        let request = |dry: bool| DazAssetsRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dest: dest.to_string_lossy().to_string(),
+            force: false,
+            dry_run: dry,
+            only: vec![],
+            accepted: vec![],
+        };
+        let report = install_daz_assets(request(true));
+        let step = report.steps.iter().find(|s| s.label == "MyAsset").unwrap();
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert_eq!(step.files, 2);
+
+        let report = install_daz_assets(request(false));
+        let step = report.steps.iter().find(|s| s.label == "MyAsset").unwrap();
+        assert_eq!(step.status, "ok", "detail: {}", step.detail);
+        assert_eq!(fs::read(dest.join("data").join("sub").join("m.dsf")).unwrap(), b"morph");
+        assert_eq!(fs::read(dest.join("Runtime").join("t.png")).unwrap(), b"tex");
+
+        // A re-scan reports it installed (or its whole source contributed
+        // nothing and the header row was filtered with it).
+        let report = install_daz_assets(request(true));
+        if let Some(step) = report.steps.iter().find(|s| s.label == "MyAsset") {
+            assert_eq!(step.status, "skipped", "detail: {}", step.detail);
+        }
+
+        let _ = fs::remove_dir_all(&base);
     }
 }

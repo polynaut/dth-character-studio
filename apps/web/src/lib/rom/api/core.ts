@@ -1,7 +1,10 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { exists } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
+import { normalizePathLower } from '#/lib/path.ts'
 import * as storage from '../storage'
+import { basename, dirname, join } from '../storage/fs'
 
 // Type-only imports from the sibling modules that consume the session caches
 // below — erased at compile time, so they can't create a runtime import cycle
@@ -14,23 +17,10 @@ import type { ProductScanResult } from './products'
 // the session-lived pose-asset catalog + caches. All module-level mutable state
 // lives HERE (and only here) so the split modules stay stateless.
 
-export function joinPath(...parts: Array<string>): string {
-  return parts
-    .map((p) => p.replace(/\\/g, '/').replace(/\/+$/g, ''))
-    .filter(Boolean)
-    .join('/')
-}
-
-export function basename(p: string): string {
-  return p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? p
-}
-
-/** Everything but the last path segment ('/'-joined). */
-export function dirname(p: string): string {
-  const norm = p.replace(/[\\/]+$/g, '')
-  const idx = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'))
-  return idx >= 0 ? norm.slice(0, idx).replace(/\\/g, '/') : norm
-}
+// The path helpers are re-exports of the single implementation in storage/fs.ts
+// (this module, storage, and lib/path.ts used to carry three drifting copies).
+export { basename, dirname }
+export const joinPath = join
 
 // --- Active project (per window) ------------------------------------------
 // A project is now identified by its FOLDER path (the dir holding the `.dcsp`),
@@ -108,6 +98,14 @@ export async function getActiveProjectDir(): Promise<string> {
   return activeProjectDirValue
 }
 
+export interface SweepTargets {
+  projects: Array<ProjectInfo>
+  /** Known projects that could not be resolved this run — a moved/offline
+   *  folder or an unreadable `.dcsp`. The Refresh sweep surfaces these; other
+   *  consumers ({@link projectsForSweep}) skip them. */
+  unreachable: Array<{ dir: string; error: string }>
+}
+
 /**
  * The projects a cross-project sweep — Refresh assets and version detection —
  * acts on: **every known project, in every window**. Known = the recents list
@@ -116,23 +114,36 @@ export async function getActiveProjectDir(): Promise<string> {
  * recents yet. A refresh from a project window used to scope to that project
  * only, which made the same button mean different things in different windows —
  * now it always brings the whole library up to date. Entries dedupe by
- * normalised folder path; unreachable folders (a moved/deleted project, an
- * unreadable `.dcsp`) are skipped — they simply contribute nothing to the sweep.
+ * normalised folder path, CASE-INSENSITIVELY (Windows: the drive-letter-cased
+ * path from the OS file association vs the picker path used to double-sweep a
+ * project). Unresolvable folders are returned separately so the Refresh sweep
+ * can report them instead of silently contributing nothing.
  */
-export async function projectsForSweep(): Promise<Array<ProjectInfo>> {
-  const recents = await storage.listRecents()
-  const dirs = new Set(recents.map((r) => joinPath(dirname(r.path))))
+export async function sweepTargets(): Promise<SweepTargets> {
+  const dirs = new Map<string, string>() // normalized-lower key → first-seen original
+  const add = (dir: string) => {
+    const key = normalizePathLower(dir)
+    if (key && !dirs.has(key)) dirs.set(key, dir)
+  }
+  for (const recent of await storage.listRecents()) add(joinPath(dirname(recent.path)))
   const activeDir = await getActiveProjectDir()
-  if (activeDir) dirs.add(joinPath(activeDir))
+  if (activeDir) add(joinPath(activeDir))
   const projects: Array<ProjectInfo> = []
-  for (const dir of dirs) {
+  const unreachable: Array<{ dir: string; error: string }> = []
+  for (const dir of dirs.values()) {
     try {
       projects.push(await resolveProject(dir))
-    } catch {
-      // a moved/deleted recent — skip it
+    } catch (e) {
+      unreachable.push({ dir, error: e instanceof Error ? e.message : String(e) })
     }
   }
-  return projects
+  return { projects, unreachable }
+}
+
+/** {@link sweepTargets} minus the unreachable report — for consumers where an
+ *  unreachable project simply contributes nothing (detection, media GC, …). */
+export async function projectsForSweep(): Promise<Array<ProjectInfo>> {
+  return (await sweepTargets()).projects
 }
 
 // --- Shared input schemas ---------------------------------------------------
@@ -151,21 +162,45 @@ export const charScopeInput = z.object({ projectId: z.string().min(1), id: z.str
 // recovers on the next read without an explicit rescan.
 export type PoseAssets = Awaited<ReturnType<typeof storage.scanPoseAssets>>
 let poseAssets: PoseAssets | null = null
+// The release-selection settings the cached catalog was scanned from — the
+// cheap cross-window validity check for fetchPoseAssetsCurrent.
+let poseAssetsFingerprint = ''
+
+/** The release-selection fingerprint of the CURRENT settings on disk. */
+async function activeReleaseFingerprint(): Promise<string> {
+  const s = await storage.getSettings()
+  return `${s.dthPosesFolder}|${s.currentDthVersion}`
+}
 
 /** The DTH pose presets for the active release — scanned once, then kept in
  *  memory for the session. */
 export async function fetchPoseAssets(): Promise<PoseAssets> {
   if (poseAssets) return poseAssets
-  const result = await storage.scanPoseAssets()
-  if (!result.error) poseAssets = result
-  return result
+  return rescanPoseAssets()
+}
+
+/**
+ * {@link fetchPoseAssets}, revalidated against the CURRENT settings on disk:
+ * the catalog is per-window state, but settings.json is shared between windows —
+ * window B changing the active DTH release must not leave window A generating
+ * against the superseded catalog. One settings read (cheap) decides; only a
+ * changed release-selection fingerprint triggers the re-scan. Use this at every
+ * GENERATION entry point; the plain fetch stays fine for UI listing.
+ */
+export async function fetchPoseAssetsCurrent(): Promise<PoseAssets> {
+  if (poseAssets && (await activeReleaseFingerprint()) === poseAssetsFingerprint) {
+    return poseAssets
+  }
+  return rescanPoseAssets()
 }
 
 /** Re-scan the active release now and refresh the in-memory catalog — call after
  *  the release selection changes or its content is installed/updated. */
 export async function rescanPoseAssets(): Promise<PoseAssets> {
+  const fingerprint = await activeReleaseFingerprint()
   const result = await storage.scanPoseAssets()
   poseAssets = result.error ? null : result
+  poseAssetsFingerprint = fingerprint
   return result
 }
 
@@ -194,6 +229,43 @@ export const characterLocationCache = new Map<string, storage.CharacterLocation>
 
 export function invalidateCharacterLocations(): void {
   characterLocationCache.clear()
+}
+
+/** Record a character's known location (same key format {@link locateCharacter}
+ *  uses) — callers that just scanned/created can prime the cache so the next
+ *  read skips the full library walk. */
+export function cacheCharacterLocation(
+  root: string,
+  id: string,
+  location: storage.CharacterLocation,
+): void {
+  characterLocationCache.set(`${root}|${id}`, location)
+}
+
+/**
+ * Where a character lives, through the session location cache: a cache hit is
+ * verified with a single `exists()` (so external deletes/renames are noticed);
+ * a miss or stale entry falls back to the full library scan and repopulates.
+ * Mutations (save/move/delete) also clear the cache outright — navigating right
+ * after a rename re-scans instead of 404ing.
+ */
+export async function locateCharacter(
+  root: string,
+  id: string,
+): Promise<storage.CharacterLocation | null> {
+  const key = `${root}|${id}`
+  const cached = characterLocationCache.get(key)
+  if (cached) {
+    try {
+      if (await exists(cached.definitionAbs)) return cached
+    } catch {
+      // unverifiable (e.g. an unreachable share) — treat as stale
+    }
+    characterLocationCache.delete(key)
+  }
+  const location = await storage.getCharacterPath(root, id)
+  if (location) characterLocationCache.set(key, location)
+  return location
 }
 
 /** Merged product-scan result per scan dir, keyed on the dir's CSV listing

@@ -55,7 +55,8 @@ function ToolsPage() {
   const [assetsReport, setAssetsReport] = useState<InstallReport | null>(null)
   const [dedupBusy, setDedupBusy] = useState(false)
   const [dedupReport, setDedupReport] = useState<DedupReport | null>(null)
-  // Asset labels the user picked to keep, overriding the auto-pick per dup group.
+  // Full asset PATHS the user picked to keep, overriding the auto-pick per dup
+  // group (paths, not labels — exact-dup groups share labels by construction).
   const [keeperOverrides, setKeeperOverrides] = useState<Set<string>>(new Set())
   const [morphsBusy, setMorphsBusy] = useState(false)
   const [morphsReport, setMorphsReport] = useState<InstallReport | null>(null)
@@ -175,12 +176,26 @@ function ToolsPage() {
             : `Found ${report.duplicates.length} duplicate asset(s) and ${report.conflicts.length} shared file(s)`,
         )
       } else {
-        toast.success(`Quarantined ${report.assetsQuarantined} duplicate asset(s)`)
-        // The listing changed on disk — drop the stale asset scan, clear keeper
-        // picks, and re-scan so the panel reflects what's now there.
+        // Quarantine failures come back on the report — report-level errors plus
+        // per-member ones. They must be SHOWN, not clobbered by the follow-up scan.
+        const failures =
+          report.errors.length +
+          report.duplicates.reduce((n, d) => n + d.members.filter((m) => m.error).length, 0)
+        // The listing changed on disk — drop the stale asset scan and keeper picks.
         setAssetsReport(null)
         setKeeperOverrides(new Set())
-        setDedupReport(await dedupDazAssets({ data: { dryRun: true } }))
+        if (failures) {
+          toast.warning(
+            `Quarantined ${report.assetsQuarantined} duplicate asset(s) — ${failures} problem(s), see the report`,
+          )
+          // Keep the apply report visible so the errors can be read; the user
+          // re-scans manually once they're resolved.
+          setDedupReport(report)
+        } else {
+          toast.success(`Quarantined ${report.assetsQuarantined} duplicate asset(s)`)
+          // Re-scan so the panel reflects what's now there.
+          setDedupReport(await dedupDazAssets({ data: { dryRun: true } }))
+        }
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -209,12 +224,13 @@ function ToolsPage() {
   }
 
   // Override which copy of a duplicate group to keep — local only (no re-scan);
-  // passed to Apply. Clears the group's other members so exactly one is chosen.
-  function chooseKeeper(groupLabels: Array<string>, keep: string) {
+  // passed to Apply as full asset paths. Clears the group's other members so
+  // exactly one is chosen.
+  function chooseKeeper(groupPaths: Array<string>, keepPath: string) {
     setKeeperOverrides((prev) => {
       const next = new Set(prev)
-      groupLabels.forEach((l) => next.delete(l))
-      next.add(keep)
+      groupPaths.forEach((p) => next.delete(p))
+      next.add(keepPath)
       return next
     })
   }

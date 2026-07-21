@@ -24,7 +24,7 @@
 export { dataPath, productScanDir, scanFramesDir, studioVersion } from './storage/app-data'
 
 // --- Generic folder file ops (Generate writes through these) ----------------
-export { removeFilesFromFolder, writeFilesToFolder } from './storage/fs'
+export { removeFilesFromFolder, writeFilesToFolder, writeTextFileAtomic } from './storage/fs'
 
 // --- App-global settings (settings.json) ------------------------------------
 export {
@@ -51,9 +51,14 @@ export {
   moveFolder,
   readCharacterAt,
   saveCharacter,
+  scanCharacterLibrary,
   setGeneratedDthVersion,
 } from './storage/characters'
-export type { CharacterLocation } from './storage/characters'
+export type {
+  CharacterLocation,
+  CharacterScanProblem,
+  MoveCharactersRootResult,
+} from './storage/characters'
 
 // --- Project manifest (.dcsp) + meta dirs + recents --------------------------
 export {
@@ -67,6 +72,7 @@ export {
   metaImagesDir,
   metaMediaDir,
   PROJECT_BEHAVIOR_DEFAULTS,
+  ProjectUnreachableError,
   readManifest,
   rememberRecent,
   writeManifest,

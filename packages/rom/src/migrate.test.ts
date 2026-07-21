@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { migrateCharacterData, normalizeLegacyCharacter } from './migrate'
+import {
+  CharacterSchemaTooNewError,
+  migrateCharacterData,
+  normalizeLegacyCharacter,
+} from './migrate'
+import { toCharacterScriptDsa } from './generate'
 import {
   CHARACTER_SCHEMA_VERSION,
   characterSchema,
@@ -36,6 +41,17 @@ describe('migrateCharacterData — pre-versioning normalization', () => {
   it('does not clobber preset assets the user already chose', () => {
     const data = migrateCharacterData({
       sections: { GEN: { presetVariant: 'both', presetAssets: ['DK9 - Dicktator.duf'] } },
+    })
+    expect(data.sections.GEN.presetAssets).toEqual(['DK9 - Dicktator.duf'])
+  })
+
+  it('expands presetVariant when presetAssets exists but is EMPTY (transitional file)', () => {
+    // A build that added the presetAssets field before the fold ran wrote
+    // `presetAssets: []` next to the legacy presetVariant. The old presence-only
+    // guard (`!gen.presetAssets`) saw the empty array as "already chosen" and
+    // silently discarded the user's GEN selection.
+    const data = migrateCharacterData({
+      sections: { GEN: { presetVariant: 'dk', presetAssets: [] } },
     })
     expect(data.sections.GEN.presetAssets).toEqual(['DK9 - Dicktator.duf'])
   })
@@ -133,14 +149,42 @@ describe('migrateCharacterData — version handling', () => {
     expect(typeof data).toBe('object')
   })
 
-  it('treats a fractional or above-current schemaVersion as "no steps to run"', () => {
+  it('treats a fractional schemaVersion as corrupt (clamped, never a throw)', () => {
     // A fractional version must not silently skip integer steps between floor+1
-    // and CURRENT; both fractional and above-current collapse to running nothing
-    // rather than mis-stepping.
+    // and CURRENT — it collapses to 1 and re-runs every (idempotent) step. Even
+    // a fractional value ABOVE current is corruption, not provenance, so it
+    // clamps instead of throwing the too-new error.
     expect(() => migrateCharacterData({ sections: {}, schemaVersion: 9.5 })).not.toThrow()
     expect(() =>
-      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 5 }),
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 0.5 }),
     ).not.toThrow()
+  })
+
+  it('throws CharacterSchemaTooNewError for a file saved by a newer build', () => {
+    // The old Math.min clamp was a SILENT DOWNGRADE: zod stripped the newer
+    // build's fields and the next save destroyed them. Fail loud instead.
+    const newer = CHARACTER_SCHEMA_VERSION + 5
+    let thrown: unknown
+    try {
+      migrateCharacterData({ sections: {}, schemaVersion: newer })
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(CharacterSchemaTooNewError)
+    const error = thrown as CharacterSchemaTooNewError
+    expect(error.name).toBe('CharacterSchemaTooNewError')
+    expect(error.storedVersion).toBe(newer)
+    expect(error.supportedVersion).toBe(CHARACTER_SCHEMA_VERSION)
+    expect(error.message).toContain(`schema v${newer}`)
+    expect(error.message).toContain(`up to v${CHARACTER_SCHEMA_VERSION}`)
+    expect(error.message).toMatch(/newer version/i)
+    // The boundary itself is fine: exactly-current runs (and is a no-op).
+    expect(() =>
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION }),
+    ).not.toThrow()
+    expect(() =>
+      migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 1 }),
+    ).toThrow(CharacterSchemaTooNewError)
   })
 })
 
@@ -385,6 +429,84 @@ describe('schema v18 — stable ids on JCM rules + drives (additive, zod default
     expect(JSON.stringify(runtime)).not.toContain('rule-1')
     expect(JSON.stringify(runtime)).not.toContain('drive-1')
     expect('id' in runtime.positive[0]).toBe(false)
+  })
+})
+
+describe('schema v19 — stable ids on pose + art-direction morph rows (additive, zod default)', () => {
+  const now = '2026-07-21T00:00:00.000Z'
+  const v18Character = (): Record<string, any> => ({
+    id: 'c',
+    name: 'X',
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 18,
+    sections: {
+      FBM: {
+        enabled: true,
+        mode: 'custom',
+        groups: [
+          {
+            id: 'g1',
+            poses: [
+              {
+                id: 'p1',
+                name: 'BodyTone',
+                morphs: [{ node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }],
+              },
+            ],
+          },
+        ],
+      },
+      GEN: {
+        enabled: true,
+        mode: 'preset',
+        artDirection: [
+          {
+            id: 'a1',
+            rom: 'gp',
+            frame: 100,
+            name: 'AnusOpen',
+            morphs: [{ node: 'GoldenPalace_G9', prop: 'GP9_Anus_Open', value: 0.9 }],
+          },
+        ],
+      },
+    },
+  })
+
+  it('mints morph ids on pose AND art-direction rows when a pre-v19 definition lacks them', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(v18Character()))
+    const poseMorph = parsed.sections.FBM.groups[0].poses[0].morphs[0]
+    const artMorph = parsed.sections.GEN.artDirection[0].morphs[0]
+    expect(typeof poseMorph.id).toBe('string')
+    expect(poseMorph.id).not.toBe('')
+    expect(typeof artMorph.id).toBe('string')
+    expect(artMorph.id).not.toBe('')
+  })
+
+  it('keeps a stored morph id (parse → parse is stable once saved)', () => {
+    const raw = v18Character()
+    raw.sections.FBM.groups[0].poses[0].morphs[0] = {
+      ...raw.sections.FBM.groups[0].poses[0].morphs[0],
+      id: 'kept-morph-id',
+    }
+    const parsed = characterSchema.parse(migrateCharacterData(raw))
+    expect(parsed.sections.FBM.groups[0].poses[0].morphs[0].id).toBe('kept-morph-id')
+    // Idempotence in the saved state: re-parsing the parsed result changes nothing.
+    const again = characterSchema.parse(migrateCharacterData(structuredClone(parsed)))
+    expect(again).toEqual(parsed)
+  })
+
+  it('the minted ids never reach the generated output (extraFrames + art direction)', () => {
+    const character = characterSchema.parse(migrateCharacterData(v18Character()))
+    const script = toCharacterScriptDsa(character).content
+    const mintedIds = [
+      character.sections.FBM.groups[0].poses[0].morphs[0].id,
+      character.sections.GEN.artDirection[0].morphs[0].id,
+    ]
+    for (const id of mintedIds) expect(script).not.toContain(id)
+    // The emitted morph objects carry exactly the runtime fields — no `id` key
+    // anywhere in the config JSON's morph rows.
+    expect(script).not.toMatch(/"id":/)
   })
 })
 

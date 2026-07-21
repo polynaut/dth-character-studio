@@ -19,8 +19,12 @@ no build step and no stale dist.
 `Character` definition (zod-validated, `types.ts`) → `generateAll()`
 (`generate.ts`) → the Daz `.dsa` ROM script + the Houdini PoseAsset CSV (+
 optional Export/Hair/Scan scripts, + a scene-suffixed pair per active scene
-override via `generateSceneOverride()`). Frame math and ROM walks live in
-`frames.ts`; per-scene override merge/slug/gate in `scene-override.ts`;
+override via `generateSceneOverride()`). `generate.ts` is a **barrel** over the
+split generation modules: `resolve.ts` (catalog/path resolution, FAC support via
+`facPresetSupport`, `presetFramesSignature`), `csv.ts` (the CSV pipeline +
+template splice + `templateBakedPoseNames`), `dsa.ts` (the `.dsa` generators),
+`dz-snippets.ts` (embedded DzScript text, package-internal). Frame math and ROM
+walks live in `frames.ts`; per-scene override merge/slug/gate in `scene-override.ts`;
 ground-truth CSV templates in `src/templates/`; character-JSON migrations in
 `migrate.ts`; Daz morph-CSV import in `daz-csv.ts`; product-scan CSV parsing in
 `product-scan.ts`; timeline blocks in `timeline.ts`; custom-section validation in
@@ -48,7 +52,7 @@ supplies it in `apps/web/src/routes/__root.tsx`. Single public entry
 | `__root.tsx` | App shell: UiConfigProvider, ConfirmProvider, Toaster, TooltipHost, update-prompt host, native menu wiring, startup effects. |
 | `index.tsx` | Home/launcher: recent `.dcsp` projects, create/open project (each opens its own native window). |
 | `projects.$projectId.index.tsx` | Project overview: character grid/list, create character, attachments + notes tabs, Unreal footer. |
-| `projects.$projectId.characters.$characterId.tsx` | **The character editor** (largest route) — draft/save/generate. |
+| `projects.$projectId.characters.$characterId.tsx` | **The character editor** — draft/save/generate. Decomposed: the route (~400 lines) composes `components/character/*` sections (editor-header, identity, scripts, export-settings, rom-editor, delete) + `lib/use-scene-selection` / `use-rom-run-log` / `character-paths`. The ROM subtree (`RomSections`/`PoseGroupsEditor`/`GroupCard`) is `React.memo`d with latest-ref, id-routed callbacks — new props into it must keep stable identities or the memo chain silently dies. |
 | `settings.tsx` | Project tab (`.dcsp` manifest) + General (machine tool paths) + App Data. |
 | `tools.tsx` | Daz/Houdini content install sections, dedup, danger zone, Refresh assets. |
 | `about.tsx` | Version, asset staleness summary, links. |

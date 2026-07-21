@@ -23,7 +23,9 @@ function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
 
 /** Result of the dedup scan/apply: shared files + duplicate assets. Shared files
  *  are read-only here — the install auto-resolves them (newer genesis, then bigger);
- *  duplicate/version groups are the only thing Apply acts on (quarantine). */
+ *  duplicate/version groups are the only thing Apply acts on (quarantine).
+ *  Keeper selection is keyed by each member's full PATH (labels collide inside
+ *  an exact-dup group — the same product as a folder and a zip share one). */
 export function DedupReportList({
   report,
   busy,
@@ -34,8 +36,9 @@ export function DedupReportList({
 }: {
   report: DedupReport
   busy?: boolean
+  /** Full asset paths the user picked to keep (one per overridden group). */
   keeperOverrides: Set<string>
-  onChooseKeeper: (groupLabels: Array<string>, keep: string) => void
+  onChooseKeeper: (groupPaths: Array<string>, keepPath: string) => void
   /** Accept every shared file in a product group as legitimately shared. */
   onAcceptShared?: (rels: Array<string>) => void
   onClose?: () => void
@@ -57,7 +60,25 @@ export function DedupReportList({
   return (
     <div className="space-y-4 border-t pt-2 text-sm">
       <ReportClose onClose={onClose} />
-      {clean && <p className="text-muted-foreground">No duplicate assets or shared files found.</p>}
+      {clean && report.errors.length === 0 && (
+        <p className="text-muted-foreground">No duplicate assets or shared files found.</p>
+      )}
+
+      {report.errors.length > 0 && (
+        <div className="rounded-md border border-red-500/40 bg-red-500/10 p-2">
+          <p className="mb-1 text-xs font-medium text-red-600 dark:text-red-400">
+            {report.errors.length} problem{report.errors.length === 1 ? '' : 's'} during the{' '}
+            {report.dryRun ? 'scan' : 'apply'}
+          </p>
+          <ul className="space-y-0.5">
+            {report.errors.map((e) => (
+              <li key={e} className="text-xs break-all text-red-600 dark:text-red-400">
+                {e}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {report.duplicates.length > 0 && (
         <div>
@@ -75,13 +96,16 @@ export function DedupReportList({
           </p>
           <ul className="space-y-2">
             {report.duplicates.map((d) => {
-              const labels = d.members.map((m) => m.label)
+              // Paths, not labels: exact-dup groups share labels by construction
+              // (the same product as a folder and a zip), so only the path can
+              // key the rows and identify the chosen keeper.
+              const paths = d.members.map((m) => m.path)
               const sources = [...new Set(d.members.map((m) => m.source))].join(', ')
-              const keeperLabel =
-                d.members.find((m) => keeperOverrides.has(m.label))?.label ??
-                d.members.find((m) => m.isKeeper)?.label
+              const keeperPath =
+                d.members.find((m) => keeperOverrides.has(m.path))?.path ??
+                d.members.find((m) => m.isKeeper)?.path
               return (
-                <li key={labels.join('|')} className="rounded-md border bg-background/40 p-2">
+                <li key={paths.join('|')} className="rounded-md border bg-background/40 p-2">
                   <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="rounded bg-muted px-1 py-0.5 text-[10px]">{sources}</span>
                     {d.kind === 'version' && (
@@ -92,13 +116,13 @@ export function DedupReportList({
                   </div>
                   <ul>
                     {d.members.map((m) => {
-                      const isKeep = m.label === keeperLabel
+                      const isKeep = m.path === keeperPath
                       return (
-                        <li key={m.label}>
+                        <li key={m.path}>
                           <button
                             type="button"
                             disabled={!report.dryRun || isKeep}
-                            onClick={() => onChooseKeeper(labels, m.label)}
+                            onClick={() => onChooseKeeper(paths, m.path)}
                             className={`flex w-full items-center gap-2 rounded px-1 py-0.5 text-left ${isKeep ? '' : 'hover:bg-muted/60'} disabled:cursor-default`}
                           >
                             <span
@@ -115,11 +139,18 @@ export function DedupReportList({
                                 ? ' · keep'
                                 : report.dryRun
                                   ? ' · quarantine'
-                                  : d.fixed
+                                  : m.moved
                                     ? ' · quarantined'
-                                    : ''}
+                                    : m.error
+                                      ? ' · failed'
+                                      : ''}
                             </span>
                           </button>
+                          {m.error && (
+                            <p className="ml-6 text-xs break-all text-red-600 dark:text-red-400">
+                              {m.error}
+                            </p>
+                          )}
                         </li>
                       )
                     })}
@@ -193,7 +224,9 @@ export function DedupReportList({
                             <span className="font-sans text-muted-foreground">
                               {' '}—{' '}
                               {c.copies.map((cp, k) => (
-                                <span key={cp.label}>
+                                // Label+source can collide across copies; the list
+                                // is static, so the index disambiguates the key.
+                                <span key={`${cp.label}|${k}`}>
                                   {k > 0 && ' vs '}
                                   {cp.size}B{cp.inZip ? ' (zip)' : ''}
                                   {cp === winner && (

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { memo, useContext, useEffect, useMemo, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -33,21 +33,29 @@ import { SortablePoseRow, poseColumns } from './pose-table.tsx'
 import type { PoseTableMeta } from './pose-table.tsx'
 
 /**
- * Scene-override mode for one group (see RomSections): the BASE group stays
- * untouched — checked rows read/write `overriddenById` (keyed by the base
- * pose's id), added rows live in `additions` and only ever append after the
- * base rows. All group chrome (label, method, suffix, mirror, remove) locks:
- * the structure is the base ROM's.
+ * Scene-override mode for a whole SECTION's groups (built once in RomSections,
+ * shared by every group card): the BASE groups stay untouched — checked rows
+ * read/write `overriddenById` (keyed by the base pose's id), added rows live in
+ * per-group `additions` and only ever append after the base rows. All group
+ * chrome (label, method, suffix, mirror, remove) locks: the structure is the
+ * base ROM's. Each card slices its own view out of this via its group id — the
+ * object itself is memoized in RomSections, so it stays a stable memo prop.
  */
-export interface GroupOverride {
+export interface SectionOverrideCtl {
   overriddenById: ReadonlyMap<string, RomPose>
-  additions: Array<RomPose>
+  additionsFor: (groupId: string) => Array<RomPose>
   onToggleRow: (pose: RomPose, on: boolean) => void
   onReplacePose: (pose: RomPose) => void
-  onAdditionsChange: (poses: Array<RomPose>) => void
+  onAdditionsChange: (groupId: string, poses: Array<RomPose>) => void
 }
 
-export function GroupCard({
+/**
+ * One pose group's table. Memoized — a page-level render (modifier keys,
+ * polling, unrelated form edits) must not re-render every open pose table; the
+ * parent passes identity-stable, id-based callbacks so only the group whose
+ * data actually changed re-renders.
+ */
+export const GroupCard = memo(function GroupCard({
   section,
   group,
   gender,
@@ -69,10 +77,10 @@ export function GroupCard({
   removable?: boolean
   expandedIds: Set<string>
   onToggleExpanded: (poseId: string) => void
-  onChange: (group: RomGroup) => void
-  onRemove: () => void
-  onMirror: () => void
-  override?: GroupOverride
+  onChange: (groupId: string, group: RomGroup) => void
+  onRemove: (groupId: string) => void
+  onMirror: (groupId: string) => void
+  override?: SectionOverrideCtl
 }) {
   const showBoneScale = REFERENCE_FBX_SECTIONS.includes(section)
   const showBoneLabel = BONE_LABEL_SECTIONS.includes(section)
@@ -80,6 +88,8 @@ export function GroupCard({
   const showMethod = METHOD_SECTIONS.includes(section)
   const showCalcFrom = CALC_FROM_SECTIONS.includes(section)
   const figureNode = useContext(FigureNodeContext)
+  /** This group updated — the parent routes it back by id (stable callback). */
+  const change = (updated: RomGroup) => onChange(group.id, updated)
   // The group's own id is its container droppable, so a pose can be dropped onto
   // an empty group's body. The DndContext spanning all groups lives in the parent
   // (PoseGroupsEditor), enabling drags between groups, not just within one.
@@ -110,7 +120,9 @@ export function GroupCard({
   // group.poses used to provide that stability for free).
   const baseCount = group.poses.length
   const overriddenById = override?.overriddenById
-  const additions = override?.additions
+  // Stable per overrideCtl identity: additionsFor returns the stored array (or
+  // the shared EMPTY_POSES fallback), so this is a valid memo input.
+  const additions = override ? override.additionsFor(group.id) : undefined
   const displayPoses = useMemo(
     () =>
       overriddenById && additions
@@ -123,8 +135,8 @@ export function GroupCard({
   // replaced-row map (checked base rows only — unchecked ones are read-only in
   // override mode), or the override's additions.
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
-    if (!override) {
-      onChange({
+    if (!override || !additions) {
+      change({
         ...group,
         poses: group.poses.map((pose, i) => (i === rowIndex ? { ...pose, ...patch } : pose)),
       })
@@ -136,7 +148,8 @@ export function GroupCard({
       override.onReplacePose({ ...pose, ...patch })
     } else {
       override.onAdditionsChange(
-        override.additions.map((p, i) => (i === rowIndex - baseCount ? { ...p, ...patch } : p)),
+        group.id,
+        additions.map((p, i) => (i === rowIndex - baseCount ? { ...p, ...patch } : p)),
       )
     }
   }
@@ -153,13 +166,16 @@ export function GroupCard({
       const pose = displayPoses[rowIndex]
       const morphs = pose.morphs.length
         ? pose.morphs.map((m, mi) => (mi === morphIndex ? { ...m, ...patch } : m))
-        : [{ node: '', prop: '', value: 1, ...patch }]
+        : [{ id: newId(), node: '', prop: '', value: 1, ...patch }]
       patchPose(rowIndex, { morphs })
     },
     addMorph: (rowIndex) => {
       const pose = displayPoses[rowIndex]
       patchPose(rowIndex, {
-        morphs: [...pose.morphs, { node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 }],
+        morphs: [
+          ...pose.morphs,
+          { id: newId(), node: pose.morphs[0]?.node ?? figureNode, prop: '', value: 1 },
+        ],
       })
     },
     removeMorphAt: (rowIndex, morphIndex) => {
@@ -168,13 +184,16 @@ export function GroupCard({
       patchPose(rowIndex, { morphs: pose.morphs.filter((_, mi) => mi !== morphIndex) })
     },
     remove: (rowIndex) => {
-      if (!override) {
-        onChange({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) })
+      if (!override || !additions) {
+        change({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) })
         return
       }
       // Base rows never leave in override mode — only the override's own frames.
       if (rowIndex < baseCount) return
-      override.onAdditionsChange(override.additions.filter((_, i) => i !== rowIndex - baseCount))
+      override.onAdditionsChange(
+        group.id,
+        additions.filter((_, i) => i !== rowIndex - baseCount),
+      )
     },
     insertAt: (index) => {
       // Override mode appends at the group end only (the insert menu is hidden
@@ -191,10 +210,10 @@ export function GroupCard({
       poses.splice(index, 0, {
         id,
         name: '',
-        morphs: [{ node, prop: '', value: 1 }],
+        morphs: [{ id: newId(), node, prop: '', value: 1 }],
         boneScaleRef: false,
       })
-      onChange({ ...group, poses })
+      change({ ...group, poses })
       // Focus the new row's name field as soon as it renders.
       setFocusPoseId(id)
     },
@@ -227,14 +246,14 @@ export function GroupCard({
     const pose: RomPose = {
       id: newId(),
       name: '',
-      morphs: [{ node: lastNode, prop: '', value: 1 }],
+      morphs: [{ id: newId(), node: lastNode, prop: '', value: 1 }],
       boneScaleRef: false,
     }
-    if (override) {
+    if (override && additions) {
       // Appended after the base rows — the only place an override adds frames.
-      override.onAdditionsChange([...override.additions, pose])
+      override.onAdditionsChange(group.id, [...additions, pose])
     } else {
-      onChange({ ...group, poses: [...group.poses, pose] })
+      change({ ...group, poses: [...group.poses, pose] })
     }
   }
 
@@ -258,7 +277,7 @@ export function GroupCard({
             placeholder="driver bone(s)"
             title="The bone(s) driving this group's poses (CSV bones column)"
             disabled={!!override}
-            onChange={(e) => onChange({ ...group, label: e.target.value })}
+            onChange={(e) => change({ ...group, label: e.target.value })}
           />
         )}
         {showMethod && (
@@ -269,7 +288,7 @@ export function GroupCard({
             Generation
             <Select
               value={group.method}
-              onValueChange={(value) => onChange({ ...group, method: value as GenerationMethod })}
+              onValueChange={(value) => change({ ...group, method: value as GenerationMethod })}
             >
               <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
                 <SelectValue />
@@ -293,7 +312,7 @@ export function GroupCard({
             <Select
               value={group.calculateFrom}
               onValueChange={(value) =>
-                onChange({ ...group, calculateFrom: value as CalculateFrom })
+                change({ ...group, calculateFrom: value as CalculateFrom })
               }
             >
               <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
@@ -315,7 +334,7 @@ export function GroupCard({
             Suffix
             <Select
               value={group.suffix}
-              onValueChange={(value) => onChange({ ...group, suffix: value as GroupSuffix })}
+              onValueChange={(value) => change({ ...group, suffix: value as GroupSuffix })}
             >
               <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
                 <SelectValue />
@@ -335,13 +354,19 @@ export function GroupCard({
             variant="ghost"
             size="sm"
             title="Append a mirrored right-side copy of this group"
-            onClick={onMirror}
+            onClick={() => onMirror(group.id)}
           >
             <Copy /> Mirror right
           </Button>
         )}
         {removable && !override && (
-          <Button variant="ghost" size="icon" className="size-7" title="Remove group" onClick={onRemove}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="Remove group"
+            onClick={() => onRemove(group.id)}
+          >
             <Trash2 className="size-3.5 text-destructive" />
           </Button>
         )}
@@ -418,4 +443,4 @@ export function GroupCard({
       </div>
     </div>
   )
-}
+})

@@ -1,13 +1,17 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::archive::{extract_nested_zip, zip_file_entries, InflateBudget, NESTED_ZIP_DEPTH};
-use crate::assets::fp_add;
-use crate::content::{find_content_level, zip_dir_level, CONTENT_FOLDERS, META_FOLDERS};
-use crate::fsutil::{copy_dir, entry_is_real_dir, folder_name, rail_target, unsafe_recursive_target};
+use crate::archive::{walk_zip_content, InflateBudget, NESTED_ZIP_DEPTH};
+use crate::content::find_content_level;
+use crate::fsutil::{
+    copy_dir, folder_name, path_contains, rail_target, rel_key, unsafe_recursive_target,
+    walk_dir, DirVisitor,
+};
 
 // --- "Dedup" action: resolve duplicate assets + conflicting shared files ------
 
@@ -20,8 +24,12 @@ pub(crate) struct DedupRequest {
     /// the conflict list (and left untouched on apply).
     #[serde(default)]
     accepted: Vec<String>,
-    /// Asset labels the user explicitly chose to keep in their duplicate group
-    /// (overriding the auto-pick). The rest of that group is quarantined.
+    /// Full asset PATHS the user explicitly chose to keep in their duplicate
+    /// group (overriding the auto-pick). Paths, not labels: an exact-dup group's
+    /// members share a label by construction, so only the path identifies WHICH
+    /// copy to keep. The rest of that group is quarantined. A chosen path that no
+    /// longer resolves is reported and its group is left untouched — never a
+    /// silent fall-back to auto.
     #[serde(default)]
     keepers: Vec<String>,
     /// Folder the redundant duplicate copies are moved into. Required to apply —
@@ -56,11 +64,18 @@ struct DupMember {
     label: String,
     /// The source folder this copy lives in (e.g. "_genesis 9").
     source: String,
+    /// Full path of this copy — unique by construction (labels collide inside an
+    /// exact-dup group), so keeper choices and UI rows key on it.
+    path: String,
     file_count: u64,
     is_zip: bool,
     /// The copy kept (others are quarantined). The default is auto-picked but the
-    /// user can override it via the request's `keepers`.
+    /// user can override it via the request's `keepers` (paths).
     is_keeper: bool,
+    /// Set on apply when this redundant copy was fully moved to quarantine.
+    moved: bool,
+    /// Empty, or why this copy couldn't be (fully) quarantined.
+    error: String,
 }
 
 #[derive(Serialize)]
@@ -68,10 +83,11 @@ struct DupMember {
 #[serde(rename_all = "camelCase")]
 struct AssetDup {
     members: Vec<DupMember>,
-    /// "exact" (identical files) or "version" (same product, different version —
-    /// high file overlap with differing sizes, e.g. a `…UD` vs `…UPDATE`).
+    /// "exact" (identical file paths AND sizes) or "version" (same product,
+    /// different version — high file overlap with differences, e.g. a `…UD` vs
+    /// `…UPDATE`).
     kind: String,
-    /// Set after apply: the redundant copies were quarantined.
+    /// Set after apply: EVERY redundant copy of the group was quarantined.
     fixed: bool,
 }
 
@@ -90,25 +106,44 @@ fn uf_union(parent: &mut [usize], a: usize, b: usize) {
 }
 
 /// Move `src` to `dst`, falling back to copy-then-delete when a plain rename fails
-/// (e.g. the quarantine folder is on a different drive). Returns success.
-fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
+/// (e.g. the quarantine folder is on a different drive). `Ok` means the asset was
+/// FULLY moved; `Err` carries why it wasn't (and what state it was left in) —
+/// silence here used to hide half-done quarantines from the report.
+fn move_to_quarantine(src: &Path, dst: &Path) -> Result<(), String> {
+    let is_dir = src.is_dir();
     // Rail: quarantining a folder can end in a recursive delete (the copy-then-
     // delete fallback). Refuse a root/too-shallow source, judged on the CANONICAL
     // path so a junction or `..`-laden spelling can't dress a dangerous target up
-    // as a safe-looking one.
-    if src.is_dir() && unsafe_recursive_target(&rail_target(src)).is_some() {
-        return false;
+    // as a safe-looking one. (An asset directly in a drive/share root trips this —
+    // the reason is surfaced instead of silently skipping it.)
+    if is_dir {
+        if let Some(reason) = unsafe_recursive_target(&rail_target(src)) {
+            return Err(format!("refused: {reason}"));
+        }
     }
     if let Some(p) = dst.parent() {
-        let _ = fs::create_dir_all(p);
+        fs::create_dir_all(p).map_err(|e| format!("create {}: {e}", p.display()))?;
     }
     if fs::rename(src, dst).is_ok() {
-        return true;
+        return Ok(());
     }
-    let is_dir = src.is_dir();
-    let copied = if is_dir { copy_dir(src, dst).is_ok() } else { fs::copy(src, dst).is_ok() };
-    if !copied {
-        // The COPY itself failed — `dst` is partial/garbage. Roll it back so the
+    // Cross-drive fallback: copy, then delete the source.
+    let copied: Result<(), String> = if is_dir {
+        match copy_dir(src, dst) {
+            // A dir link inside is never followed while copying, so a copy-based
+            // move would silently drop it — refuse rather than lose the link.
+            Ok(stats) if stats.skipped_links > 0 => Err(format!(
+                "{} linked folder(s) inside (links are never followed, so a copy-based move would lose them)",
+                stats.skipped_links
+            )),
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    } else {
+        fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
+    };
+    if let Err(reason) = copied {
+        // The COPY failed — `dst` is partial/garbage. Roll it back so the
         // next run's name-collision loop doesn't mint " (1)" duplicates from it.
         // The source is untouched, so nothing is lost.
         if is_dir {
@@ -116,15 +151,22 @@ fn move_to_quarantine(src: &Path, dst: &Path) -> bool {
         } else {
             let _ = fs::remove_file(dst);
         }
-        return false;
+        return Err(format!("copy to quarantine failed: {reason}"));
     }
     // Copy succeeded — `dst` is now a COMPLETE copy. Delete the source. If that
     // fails (e.g. Daz holds a file open, so `remove_dir_all` deletes some children
     // and then errors), DO NOT roll back `dst`: after a partial source delete it is
     // the only intact copy of the asset, and removing it would lose the user's
-    // downloaded asset entirely. Keep it and report failure — the (now partial)
+    // downloaded asset entirely. Keep it and report the failure — the (now partial)
     // source is left for the user to clean up, never destroyed alongside its backup.
-    if is_dir { fs::remove_dir_all(src).is_ok() } else { fs::remove_file(src).is_ok() }
+    let removed = if is_dir { fs::remove_dir_all(src) } else { fs::remove_file(src) };
+    removed.map_err(|e| {
+        format!(
+            "a complete quarantine copy was made at {}, but deleting the source failed: {e} — \
+             the source may be partially deleted; clean it up manually (the quarantine copy is intact)",
+            dst.display()
+        )
+    })
 }
 
 /// Rank a source folder by its Genesis number so newer wins (e.g. "_genesis 9" →
@@ -154,6 +196,10 @@ pub(crate) struct DedupReport {
     duplicates: Vec<AssetDup>,
     assets_quarantined: u64,
     backup_dir: String,
+    /// Report-level failures: a quarantine folder inside a source, keeper choices
+    /// that no longer resolve, groups skipped because their scan inventory had
+    /// read errors. Empty when everything went cleanly.
+    errors: Vec<String>,
 }
 
 /// One asset's content files, plus what's needed to quarantine it.
@@ -164,73 +210,39 @@ pub(crate) struct AssetFiles {
     pub(crate) is_zip: bool,
     /// The top-level entry (folder or `.zip`) — moved on quarantine.
     pub(crate) asset_path: PathBuf,
+    /// Folder assets: the directory the content folders live in (`files`' rel
+    /// paths join onto it). Empty for zips.
+    pub(crate) content_root: PathBuf,
     pub(crate) files: Vec<(String, u64)>,
+    /// Entries the collection could NOT read (unreadable dirs/metadata, skipped
+    /// zip entries, unreadable nested zips). Non-zero means `files` may be an
+    /// INCOMPLETE inventory — quarantine decisions refuse such groups.
+    pub(crate) read_errors: u64,
 }
 
-fn collect_folder_files(dir: &Path, rel: &Path, out: &mut Vec<(String, u64)>) {
-    if let Ok(entries) = fs::read_dir(dir) {
-        for e in entries.flatten() {
-            let p = e.path();
-            let rc = rel.join(e.file_name());
-            if entry_is_real_dir(&e) {
-                collect_folder_files(&p, &rc, out);
-            } else if let Ok(md) = e.metadata() {
-                out.push((rc.to_string_lossy().replace('\\', "/"), md.len()));
-            }
-        }
-    }
+/// Collects one content folder's files (rel path → size) via the shared walker;
+/// lenient, but unreadable entries are COUNTED so an incomplete inventory is
+/// visible (a silent omission used to let >260-char/locked trees group and
+/// quarantine on partial data). Directory links are skipped (not asset content).
+struct FolderCollect<'a> {
+    prefix: &'a Path,
+    out: &'a mut Vec<(String, u64)>,
+    read_errors: &'a mut u64,
 }
-
-/// Dedup's counterpart of `diff_zip_archive`: collect an opened archive's
-/// content-file list (dest-relative path → size), descending into nested package
-/// zips the same way so a wrapper download dedups like a flat zip of the same
-/// content. Returns whether a content level was found; unreadable nested zips are
-/// skipped (dedup is lenient — the asset resolves to None, not an error).
-/// `budget` is the top-level archive's inflate budget (its nested-zip entries are
-/// the only thing this scan inflates); inner archives SHARE it, so one budget
-/// bounds the whole tree — see `diff_zip_archive`'s counterpart.
-fn collect_zip_files(
-    archive: &mut zip::ZipArchive<fs::File>,
-    depth: u32,
-    out: &mut Vec<(String, u64)>,
-    budget: &mut InflateBudget,
-) -> bool {
-    let entries = zip_file_entries(archive);
-    let paths: Vec<&str> = entries.iter().map(|(_, p, _)| p.as_str()).collect();
-    let content = zip_dir_level(&paths, &CONTENT_FOLDERS);
-    if content.is_none() && depth > 0 {
-        let mut found = false;
-        for (idx, path, _) in &entries {
-            if !path.to_ascii_lowercase().ends_with(".zip") {
-                continue;
-            }
-            if let Ok(tmp) = extract_nested_zip(archive, *idx, budget) {
-                if let Ok(file) = fs::File::open(&tmp.0) {
-                    if let Ok(mut inner) = zip::ZipArchive::new(file) {
-                        if budget.check_entry_count(inner.len()).is_ok() {
-                            found |= collect_zip_files(&mut inner, depth - 1, out, budget);
-                        }
-                    }
-                }
-            }
+impl DirVisitor for FolderCollect<'_> {
+    fn file(&mut self, entry: &fs::DirEntry, rel: &Path) -> std::io::Result<()> {
+        match entry.metadata() {
+            Ok(md) => self
+                .out
+                .push((self.prefix.join(rel).to_string_lossy().replace('\\', "/"), md.len())),
+            Err(_) => *self.read_errors += 1,
         }
-        if found {
-            return true;
-        }
+        Ok(())
     }
-    let (root, folders) = match content.or_else(|| zip_dir_level(&paths, &META_FOLDERS)) {
-        Some(level) => level,
-        None => return false,
-    };
-    let prefix = if root.is_empty() { String::new() } else { format!("{root}/") };
-    for (_, p, sz) in &entries {
-        if let Some(sub) = p.strip_prefix(&prefix) {
-            if folders.iter().any(|f| f == sub.split('/').next().unwrap_or("")) {
-                out.push((sub.to_string(), *sz));
-            }
-        }
+    fn unreadable(&mut self, _path: &Path, _e: std::io::Error) -> std::io::Result<()> {
+        *self.read_errors += 1;
+        Ok(())
     }
-    true
 }
 
 /// Resolve an asset to its full content-file list (rel path → size). None for
@@ -249,7 +261,22 @@ pub(crate) fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
         let mut budget = InflateBudget::new(&label, compressed_len);
         budget.check_entry_count(archive.len()).ok()?;
         let mut files = Vec::new();
-        if !collect_zip_files(&mut archive, NESTED_ZIP_DEPTH, &mut files, &mut budget) {
+        let mut read_errors = 0u64;
+        // Lenient posture: unreadable nested zips are counted, never fatal — the
+        // shared walk descends into nested package zips exactly like the install.
+        let found = walk_zip_content(
+            &mut archive,
+            NESTED_ZIP_DEPTH,
+            &mut budget,
+            false,
+            &mut read_errors,
+            &mut |_archive, _budget, _idx, sub, size| {
+                files.push((sub.to_string(), size));
+                Ok(())
+            },
+        )
+        .unwrap_or(false);
+        if !found {
             return None;
         }
         Some(AssetFiles {
@@ -257,38 +284,103 @@ pub(crate) fn collect_asset_files(asset: &Path) -> Option<AssetFiles> {
             source_root: String::new(),
             is_zip: true,
             asset_path: asset.to_path_buf(),
+            content_root: PathBuf::new(),
             files,
+            read_errors,
         })
     } else {
         let (content_root, folders) = find_content_level(asset, 5)?;
         let mut files = Vec::new();
+        let mut read_errors = 0u64;
         for f in &folders {
-            collect_folder_files(&content_root.join(f), Path::new(f), &mut files);
+            let mut v = FolderCollect {
+                prefix: Path::new(f),
+                out: &mut files,
+                read_errors: &mut read_errors,
+            };
+            let _ = walk_dir(&content_root.join(f), &mut v); // visitor never errors
         }
         Some(AssetFiles {
             label,
             source_root: String::new(),
             is_zip: false,
             asset_path: asset.to_path_buf(),
+            content_root,
             files,
+            read_errors,
         })
+    }
+}
+
+/// Order-independent fingerprint of an asset's (path, size) inventory: the
+/// sorted (case-folded rel, size) list hashed as ONE sequence. Unlike the old
+/// per-path XOR it is not malleable — duplicate entries can't cancel out — and
+/// it folds SIZES in, so equal fingerprints mean same paths AND same sizes
+/// ("exact" actually means exact; a same-paths-different-sizes pair reports as
+/// "version" via the overlap heuristic instead).
+fn content_fingerprint(files: &[(String, u64)]) -> u64 {
+    let mut items: Vec<(String, u64)> = files.iter().map(|(r, s)| (rel_key(r), *s)).collect();
+    items.sort();
+    let mut h = DefaultHasher::new();
+    for (r, s) in &items {
+        r.hash(&mut h);
+        s.hash(&mut h);
+    }
+    h.finish()
+}
+
+/// The report a containment error produces: nothing scanned, nothing moved.
+fn containment_error_report(dry: bool, quarantine: String, error: String) -> DedupReport {
+    DedupReport {
+        dry_run: dry,
+        conflicts: Vec::new(),
+        duplicates: Vec::new(),
+        assets_quarantined: 0,
+        backup_dir: quarantine,
+        errors: vec![error],
     }
 }
 
 /// Find duplicate assets + conflicting shared files across the source folders, and
 /// (unless `dry_run`) QUARANTINE the redundant copies of each duplicate/version
-/// group — keeping the chosen/auto keeper, moving the rest under
-/// `<sources' parent>/_dth_dedup_backup/quarantine` (reversible). Shared-file
-/// conflicts are reported only — never rewritten (that would mutate an author's
-/// downloaded asset); they're resolved by Accept.
+/// group — keeping the chosen/auto keeper, moving the rest under the quarantine
+/// folder (reversible). Shared-file conflicts are reported only — never rewritten
+/// (that would mutate an author's downloaded asset); they're resolved by Accept.
 // `(async)`: runs off the main thread — see assets::install_daz_assets.
 #[tauri::command(async)]
 pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let dry = request.dry_run;
-    let accepted: HashSet<String> = request.accepted.into_iter().collect();
+    // Case-folded for lookups (NTFS); the report keeps original casing.
+    let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
     let chosen_keepers: HashSet<String> = request.keepers.into_iter().collect();
     // Where redundant copies are moved. Empty (e.g. on a dry run) → nothing moves.
     let quarantine = request.quarantine.clone();
+    let mut errors: Vec<String> = Vec::new();
+
+    // Containment rail: a quarantine folder inside a source would be scanned as
+    // an asset itself and could be moved into itself; a source inside the
+    // quarantine would re-scan quarantined copies. Hard error BEFORE anything is
+    // scanned or moved, judged on canonical paths.
+    let qcanon = if quarantine.is_empty() { None } else { Some(rail_target(Path::new(&quarantine))) };
+    if let Some(q) = &qcanon {
+        for source in &request.sources {
+            let src = Path::new(source);
+            if !src.is_dir() {
+                continue;
+            }
+            let sc = rail_target(src);
+            if path_contains(&sc, q) || path_contains(q, &sc) {
+                return containment_error_report(
+                    dry,
+                    quarantine,
+                    format!(
+                        "The quarantine folder ({}) must be outside the source folders ({source}) — nothing was scanned or moved.",
+                        request.quarantine
+                    ),
+                );
+            }
+        }
+    }
 
     // Gather every asset's content files (independent reads → parallel).
     let mut assets: Vec<AssetFiles> = Vec::new();
@@ -302,6 +394,11 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
             Err(_) => continue,
         };
         entries.sort();
+        // Belt-and-braces beside the containment rail: never scan the quarantine
+        // folder itself as an asset.
+        if let Some(q) = &qcanon {
+            entries.retain(|p| !path_contains(q, &rail_target(p)));
+        }
         let root_label = folder_name(src);
         let mut found: Vec<AssetFiles> =
             entries.par_iter().filter_map(|a| collect_asset_files(a)).collect();
@@ -315,24 +412,21 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
     let filecount: Vec<usize> = assets.iter().map(|a| a.files.len()).collect();
     let totalbytes: Vec<u64> = assets.iter().map(|a| a.files.iter().map(|(_, s)| *s).sum()).collect();
 
-    // path → which assets ship it.
+    // path (case-folded — NTFS) → which assets ship it. Original casing is kept
+    // aside for the user-facing conflict rows.
     let mut byrel: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut display_rel: HashMap<String, String> = HashMap::new();
     for (i, af) in assets.iter().enumerate() {
         for (rel, _sz) in &af.files {
-            byrel.entry(rel.clone()).or_default().push(i);
+            let key = rel_key(rel);
+            display_rel.entry(key.clone()).or_insert_with(|| rel.clone());
+            byrel.entry(key).or_default().push(i);
         }
     }
-    // Fingerprint each asset by its path set (exact-duplicate detection).
-    let mut fp_of: Vec<u64> = vec![0; n];
-    for (i, af) in assets.iter().enumerate() {
-        let mut fp = 0u64;
-        for (rel, _s) in &af.files {
-            fp_add(&mut fp, rel);
-        }
-        fp_of[i] = fp;
-    }
+    // Fingerprint each asset by its (path, size) inventory (exact-dup detection).
+    let fp_of: Vec<u64> = assets.iter().map(|af| content_fingerprint(&af.files)).collect();
 
-    // Group assets that are the same content: exact (identical path set) OR a
+    // Group assets that are the same content: exact (identical inventory) OR a
     // near-duplicate version pair (they share ≥60% of *each other's* files — same
     // product, different version — e.g. a "…UD" and a "…UPDATE"). This collapses
     // a version pair's 80+ differing files into one asset-level decision instead
@@ -407,7 +501,12 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         let sized: Vec<(usize, u64)> = idxs
             .iter()
             .map(|&i| {
-                let s = assets[i].files.iter().find(|(r, _)| r == rel).map(|(_, s)| *s).unwrap_or(0);
+                let s = assets[i]
+                    .files
+                    .iter()
+                    .find(|(r, _)| rel_key(r) == *rel)
+                    .map(|(_, s)| *s)
+                    .unwrap_or(0);
                 (i, s)
             })
             .collect();
@@ -429,13 +528,32 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                 in_zip: assets[i].is_zip,
             })
             .collect();
-        conflicts.push(FileConflict { rel: rel.clone(), copies });
+        conflicts.push(FileConflict {
+            rel: display_rel.get(rel).cloned().unwrap_or_else(|| rel.clone()),
+            copies,
+        });
     }
     conflicts.sort_by(|a, b| a.rel.cmp(&b.rel));
+
+    // A chosen keeper that resolves to no current asset means the folders changed
+    // between the dry run and this apply (the TOCTOU window): report it, and only
+    // quarantine groups whose keeper choice is CONFIRMED — never fall back to
+    // auto behind the user's back.
+    let asset_path_str = |af: &AssetFiles| af.asset_path.to_string_lossy().to_string();
+    let current_paths: HashSet<String> = assets.iter().map(asset_path_str).collect();
+    let stale_keepers: Vec<&String> =
+        chosen_keepers.iter().filter(|k| !current_paths.contains(*k)).collect();
+    for k in &stale_keepers {
+        errors.push(format!(
+            "Chosen keeper no longer found: {k} — the folders changed since the scan; re-scan and pick again."
+        ));
+    }
+    let have_stale = !stale_keepers.is_empty();
 
     // --- duplicate / version asset groups: keep one, quarantine the rest ---
     let mut duplicates: Vec<AssetDup> = Vec::new();
     let mut assets_quarantined = 0u64;
+    let mut skipped_unconfirmed = 0u64;
     for members in groups.values() {
         if members.len() < 2 {
             continue;
@@ -452,30 +570,55 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                     .then(assets[b].label.len().cmp(&assets[a].label.len()))
             })
             .unwrap();
-        let keeper = members
+        let chosen = members
             .iter()
             .copied()
-            .find(|&i| chosen_keepers.contains(&assets[i].label))
-            .unwrap_or(auto);
+            .find(|&i| chosen_keepers.contains(&asset_path_str(&assets[i])));
+        let keeper = chosen.unwrap_or(auto);
         let redundant: Vec<usize> = members.iter().cloned().filter(|&i| i != keeper).collect();
         let exact = members.iter().all(|&m| fp_of[m] == fp_of[keeper]);
+        // Per-member apply outcome: (moved, error). Only set when a move was attempted.
+        let mut member_state: HashMap<usize, (bool, String)> = HashMap::new();
         let mut fixed = false;
         if !dry && !quarantine.is_empty() {
-            let qdir = Path::new(&quarantine);
-            for &i in &redundant {
-                // Disambiguate on a name collision instead of skipping — otherwise
-                // a same-named redundant copy (another group, or a prior run) is
-                // silently left installed as a live duplicate.
-                let mut target = qdir.join(&assets[i].label);
-                let mut n = 1;
-                while target.exists() {
-                    target = qdir.join(format!("{} ({n})", assets[i].label));
-                    n += 1;
+            let scan_gaps: u64 = members.iter().map(|&m| assets[m].read_errors).sum();
+            if scan_gaps > 0 {
+                // An incomplete inventory must never drive a quarantine: what
+                // looked identical may differ in the unread entries.
+                errors.push(format!(
+                    "Not quarantining the “{}” group — {scan_gaps} entr{} couldn't be read during the scan, so its inventory may be incomplete.",
+                    assets[keeper].label,
+                    if scan_gaps == 1 { "y" } else { "ies" }
+                ));
+            } else if chosen.is_none() && have_stale {
+                // The disk changed since the scan AND this group carries no
+                // confirmed keeper choice — leave it untouched (see above).
+                skipped_unconfirmed += 1;
+            } else {
+                let qdir = Path::new(&quarantine);
+                let mut all_ok = true;
+                for &i in &redundant {
+                    // Disambiguate on a name collision instead of skipping — otherwise
+                    // a same-named redundant copy (another group, or a prior run) is
+                    // silently left installed as a live duplicate.
+                    let mut target = qdir.join(&assets[i].label);
+                    let mut n = 1;
+                    while target.exists() {
+                        target = qdir.join(format!("{} ({n})", assets[i].label));
+                        n += 1;
+                    }
+                    match move_to_quarantine(&assets[i].asset_path, &target) {
+                        Ok(()) => {
+                            assets_quarantined += 1;
+                            member_state.insert(i, (true, String::new()));
+                        }
+                        Err(reason) => {
+                            all_ok = false;
+                            member_state.insert(i, (false, reason));
+                        }
+                    }
                 }
-                if move_to_quarantine(&assets[i].asset_path, &target) {
-                    assets_quarantined += 1;
-                    fixed = true;
-                }
+                fixed = all_ok && !redundant.is_empty();
             }
         }
         let mut sorted = members.clone();
@@ -483,23 +626,37 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         duplicates.push(AssetDup {
             members: sorted
                 .iter()
-                .map(|&i| DupMember {
-                    label: assets[i].label.clone(),
-                    source: assets[i].source_root.clone(),
-                    file_count: filecount[i] as u64,
-                    is_zip: assets[i].is_zip,
-                    is_keeper: i == keeper,
+                .map(|&i| {
+                    let (moved, error) =
+                        member_state.get(&i).cloned().unwrap_or((false, String::new()));
+                    DupMember {
+                        label: assets[i].label.clone(),
+                        source: assets[i].source_root.clone(),
+                        path: asset_path_str(&assets[i]),
+                        file_count: filecount[i] as u64,
+                        is_zip: assets[i].is_zip,
+                        is_keeper: i == keeper,
+                        moved,
+                        error,
+                    }
                 })
                 .collect(),
             kind: if exact { "exact".into() } else { "version".into() },
             fixed,
         });
     }
+    if skipped_unconfirmed > 0 {
+        errors.push(format!(
+            "{skipped_unconfirmed} duplicate group(s) were left untouched: a chosen keeper vanished since the scan, so only groups with a confirmed keeper choice were applied. Re-scan and apply again."
+        ));
+    }
     duplicates.sort_by(|a, b| {
         let ka = a.members.iter().find(|m| m.is_keeper).map(|m| &m.label);
         let kb = b.members.iter().find(|m| m.is_keeper).map(|m| &m.label);
         ka.cmp(&kb)
     });
+    // Group iteration order is a HashMap's — sort so the report is deterministic.
+    errors.sort();
 
     DedupReport {
         dry_run: dry,
@@ -507,6 +664,7 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         duplicates,
         assets_quarantined,
         backup_dir: quarantine,
+        errors,
     }
 }
 
@@ -527,6 +685,7 @@ mod tests {
         let mut rels: Vec<String> = af.files.iter().map(|(p, _)| p.clone()).collect();
         rels.sort();
         assert_eq!(rels, vec!["Runtime/Textures/t.png", "data/Meipe/morph.dsf"]);
+        assert_eq!(af.read_errors, 0);
 
         let _ = fs::remove_dir_all(&base);
     }
@@ -536,12 +695,63 @@ mod tests {
         let base = unique_temp_dir("quarantine_fail");
         fs::create_dir_all(&base).unwrap();
         // A vanished source (e.g. deleted mid-scan): rename and copy both fail —
-        // the quarantine target must not be left behind, or the next run's
-        // name-collision loop would mint " (1)" duplicates.
+        // the failure must carry a reason AND the quarantine target must not be
+        // left behind, or the next run's name-collision loop would mint " (1)"
+        // duplicates.
         let missing = base.join("not-there.zip");
         let dst = base.join("q").join("not-there.zip");
-        assert!(!move_to_quarantine(&missing, &dst));
+        let err = move_to_quarantine(&missing, &dst).unwrap_err();
+        assert!(err.contains("copy to quarantine failed"), "reason surfaces: {err}");
         assert!(!dst.exists(), "a failed move must not leave a quarantine copy");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn move_to_quarantine_refuses_a_shallow_source_with_a_reason() {
+        // An asset directly in a drive/share root used to be silently
+        // unquarantinable — the rail's refusal must surface as a reason now.
+        // C:\Users exists and has fewer than two Normal segments.
+        let err = move_to_quarantine(Path::new("C:\\Users"), Path::new("C:\\q\\Users")).unwrap_err();
+        assert!(err.starts_with("refused:"), "reason surfaces: {err}");
+    }
+
+    #[test]
+    fn content_fingerprint_folds_sizes_and_resists_duplicate_cancellation() {
+        let a = vec![("data/x.dsf".to_string(), 10u64), ("Runtime/t.png".to_string(), 20u64)];
+        let b = vec![("Runtime/t.png".to_string(), 20u64), ("data/x.dsf".to_string(), 10u64)];
+        assert_eq!(content_fingerprint(&a), content_fingerprint(&b), "order-independent");
+        // Same paths, one size differs → NOT exact.
+        let c = vec![("data/x.dsf".to_string(), 11u64), ("Runtime/t.png".to_string(), 20u64)];
+        assert_ne!(content_fingerprint(&a), content_fingerprint(&c), "sizes are part of it");
+        // Case variants are the same library file (NTFS).
+        let d = vec![("DATA/X.dsf".to_string(), 10u64), ("runtime/T.png".to_string(), 20u64)];
+        assert_eq!(content_fingerprint(&a), content_fingerprint(&d), "case-folded");
+        // A duplicated entry must CHANGE the fingerprint (the old XOR cancelled).
+        let e = vec![
+            ("data/x.dsf".to_string(), 10u64),
+            ("data/x.dsf".to_string(), 10u64),
+            ("Runtime/t.png".to_string(), 20u64),
+        ];
+        assert_ne!(content_fingerprint(&a), content_fingerprint(&e), "duplicates can't cancel");
+    }
+
+    #[test]
+    fn dedup_refuses_a_quarantine_inside_a_source() {
+        let base = unique_temp_dir("dedup_containment");
+        let source = base.join("assets");
+        let quarantine = source.join("_quarantine");
+        fs::create_dir_all(&quarantine).unwrap();
+        let report = dedup_daz_assets(DedupRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dry_run: false,
+            accepted: vec![],
+            keepers: vec![],
+            quarantine: quarantine.to_string_lossy().to_string(),
+        });
+        assert_eq!(report.errors.len(), 1, "hard containment error");
+        assert!(report.errors[0].contains("must be outside"), "error: {}", report.errors[0]);
+        assert!(report.duplicates.is_empty() && report.conflicts.is_empty(), "nothing scanned");
+        assert_eq!(report.assets_quarantined, 0);
         let _ = fs::remove_dir_all(&base);
     }
 

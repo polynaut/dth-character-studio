@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
@@ -10,13 +11,18 @@ use std::path::Path;
 
 const DTH_FPS: f64 = 30.0;
 
-// Decompression-bomb bound for gzipped presets — same class of hardening as the
+// Decompression-bomb bound for gzipped `.duf`s — same class of hardening as the
 // zip paths (see archive.rs InflateBudget): inflated output is capped at
-// max(INFLATE_RATIO × the compressed file size, INFLATE_FLOOR). A real pose
-// preset is small JSON that inflates well under 100×; a crafted bomb is not.
+// max(INFLATE_RATIO × the compressed file size, a floor). A real pose preset is
+// small JSON that inflates well under 100×; a crafted bomb is not.
 const INFLATE_RATIO: u64 = 100;
-/// Minimum byte budget, so tiny presets still get a sane allowance: 256 MiB.
-const INFLATE_FLOOR: u64 = 256 * 1024 * 1024;
+/// Minimum inflate budget for POSE-PRESET reads (frame counting): presets are
+/// small JSON, so tiny files get 32 MiB — not a quarter-gigabyte heap allowance
+/// per file (the count runs across MANY presets, now in parallel).
+const PRESET_INFLATE_FLOOR: u64 = 32 * 1024 * 1024;
+/// Minimum inflate budget for SCENE reads: full scene `.duf`s are legitimately
+/// tens of MB of DSON, so the larger 256 MiB floor stays here only.
+const SCENE_INFLATE_FLOOR: u64 = 256 * 1024 * 1024;
 
 /// Gunzip a compressed `.duf`'s bytes, refusing inflated output beyond
 /// `max_bytes`. The error names the offending file.
@@ -52,10 +58,12 @@ pub(crate) struct PoseAssetFrames {
 
 /// Read a `.duf` (DSON) into JSON — plain or gzip-compressed (detected via the
 /// magic bytes), with the decompression-bomb budget applied.
-fn read_duf_json(path: &Path) -> Result<serde_json::Value, String> {
+/// `inflate_floor` is the caller's minimum budget: preset reads use the small
+/// floor, scene reads the large one (see the constants above).
+fn read_duf_json(path: &Path, inflate_floor: u64) -> Result<serde_json::Value, String> {
     let raw = fs::read(path).map_err(|e| format!("{}: {}", path.display(), e))?;
     let bytes = if raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b {
-        let budget = (raw.len() as u64).saturating_mul(INFLATE_RATIO).max(INFLATE_FLOOR);
+        let budget = (raw.len() as u64).saturating_mul(INFLATE_RATIO).max(inflate_floor);
         gunzip_bounded(&raw, path, budget)?
     } else {
         raw
@@ -65,7 +73,7 @@ fn read_duf_json(path: &Path) -> Result<serde_json::Value, String> {
 
 /// Frames a single `.duf` occupies: `round(maxKeyTime × 30) + 1`.
 fn duf_frame_count(path: &Path) -> Result<u32, String> {
-    let json = read_duf_json(path)?;
+    let json = read_duf_json(path, PRESET_INFLATE_FLOOR)?;
     let animations = json
         .get("scene")
         .and_then(|s| s.get("animations"))
@@ -93,15 +101,16 @@ fn duf_frame_count(path: &Path) -> Result<u32, String> {
     Ok(((max_t * DTH_FPS).round() as u32).saturating_add(1))
 }
 
-/// Measure the frame length of each `.duf` (parallel-friendly but cheap enough
-/// serially). Each result carries its own error so the caller can hard-fail on
-/// exactly the asset(s) that couldn't be read.
+/// Measure the frame length of each `.duf` — in parallel (each file is an
+/// independent read/inflate/parse; rayon's pool bounds the fan-out and `collect`
+/// preserves the input order). Each result carries its own error so the caller
+/// can hard-fail on exactly the asset(s) that couldn't be read.
 // `(async)`: reads (possibly many) .duf files, often on a network share — a sync
 // command would do that on the main thread and freeze the UI.
 #[tauri::command(async)]
 pub fn pose_asset_frames(paths: Vec<String>) -> Vec<PoseAssetFrames> {
     paths
-        .into_iter()
+        .into_par_iter()
         .map(|path| match duf_frame_count(Path::new(&path)) {
             Ok(frames) => PoseAssetFrames { path, frames, error: String::new() },
             Err(error) => PoseAssetFrames { path, frames: 0, error },
@@ -138,7 +147,7 @@ pub(crate) struct SceneWearables {
 }
 
 fn duf_conformed_items(path: &Path) -> Result<Vec<SceneWearable>, String> {
-    let json = read_duf_json(path)?;
+    let json = read_duf_json(path, SCENE_INFLATE_FLOOR)?;
     let nodes = json
         .get("scene")
         .and_then(|s| s.get("nodes"))
@@ -266,7 +275,7 @@ mod tests {
     #[test]
     fn duf_frame_count_still_reads_a_gzipped_preset() {
         // End-to-end through the production budget formula: a normal gzipped
-        // preset stays far below max(100 × compressed, 256 MiB).
+        // preset stays far below max(100 × compressed, the 32 MiB preset floor).
         let dir = unique_temp_dir("gz_duf");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("pose.duf");

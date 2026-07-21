@@ -45,11 +45,41 @@ describe('dedupReportSchema', () => {
         {
           kind: 'version',
           fixed: true,
-          members: [{ label: 'A UD', source: '_g9', fileCount: 5, isZip: false, isKeeper: true }],
+          members: [
+            {
+              label: 'A UD',
+              source: '_g9',
+              path: 'X:/assets/_g9/A UD',
+              fileCount: 5,
+              isZip: false,
+              isKeeper: true,
+              moved: false,
+              error: '',
+            },
+          ],
+        },
+      ],
+      errors: ['Chosen keeper no longer found: X:/assets/_g9/Old — re-scan.'],
+    }
+    expect(dedupReportSchema.parse(wire)).toEqual(wire)
+  })
+
+  it('rejects a member without its identifying path (label keys collide in exact groups)', () => {
+    const bad = {
+      dryRun: true,
+      assetsQuarantined: 0,
+      backupDir: '',
+      conflicts: [],
+      errors: [],
+      duplicates: [
+        {
+          kind: 'exact',
+          fixed: false,
+          members: [{ label: 'A', source: '_g9', fileCount: 1, isZip: false, isKeeper: true, moved: false, error: '' }],
         },
       ],
     }
-    expect(dedupReportSchema.parse(wire)).toEqual(wire)
+    expect(() => dedupReportSchema.parse(bad)).toThrow()
   })
 })
 

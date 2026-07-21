@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ChevronRight, FolderOpen, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -101,7 +101,13 @@ function sectionSummary(config: RomSectionConfig): string {
   return `custom · ${config.groups.length} ${config.groups.length === 1 ? 'group' : 'groups'} · ${poses} ${poses === 1 ? 'frame' : 'frames'}`
 }
 
-export function RomSections({
+/**
+ * Memoized: the ROM subtree is the page's heavy part (every open pose table),
+ * so page-level renders that don't change any of its props (modifier keys,
+ * polling, focus refetches) must stop here. The character page passes
+ * identity-stable callbacks/objects to make that hold.
+ */
+export const RomSections = memo(function RomSections({
   sections,
   genesis,
   gender,
@@ -152,58 +158,69 @@ export function RomSections({
   // Checking a row seeds its override with a copy of the base pose. The map and
   // the empty-additions fallback keep STABLE identities across re-renders —
   // they end up in GroupCard's memoized table `data`, which must not churn.
+  // The controller itself is memoized too: it's a prop of the memoized group
+  // editors, so its identity may only change when the override data does.
   const overriddenById = useMemo(
     () => new Map((overrideData?.poses ?? []).map((pose) => [pose.id, pose])),
     [overrideData?.poses],
   )
-  const overrideCtl: SectionOverrideCtl | undefined =
-    override && overrideData
-      ? {
-          overriddenById,
-          additionsFor: (groupId) =>
-            overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
-            EMPTY_POSES,
-          onToggleRow: (pose, on) =>
-            override.onChange({
-              ...overrideData,
-              poses: on
-                ? [...overrideData.poses.filter((p) => p.id !== pose.id), clonePose(pose)]
-                : overrideData.poses.filter((p) => p.id !== pose.id),
-            }),
-          onReplacePose: (pose) =>
-            override.onChange({
-              ...overrideData,
-              poses: overrideData.poses.map((p) => (p.id === pose.id ? pose : p)),
-            }),
-          onAdditionsChange: (groupId, poses) => {
-            const rest = overrideData.additions.filter((entry) => entry.groupId !== groupId)
-            override.onChange({
-              ...overrideData,
-              additions: poses.length > 0 ? [...rest, { groupId, poses }] : rest,
-            })
-          },
-        }
-      : undefined
+  const onOverrideChange = override?.onChange
+  const overrideCtl = useMemo<SectionOverrideCtl | undefined>(
+    () =>
+      onOverrideChange && overrideData
+        ? {
+            overriddenById,
+            additionsFor: (groupId) =>
+              overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
+              EMPTY_POSES,
+            onToggleRow: (pose, on) =>
+              onOverrideChange({
+                ...overrideData,
+                poses: on
+                  ? [...overrideData.poses.filter((p) => p.id !== pose.id), clonePose(pose)]
+                  : overrideData.poses.filter((p) => p.id !== pose.id),
+              }),
+            onReplacePose: (pose) =>
+              onOverrideChange({
+                ...overrideData,
+                poses: overrideData.poses.map((p) => (p.id === pose.id ? pose : p)),
+              }),
+            onAdditionsChange: (groupId, poses) => {
+              const rest = overrideData.additions.filter((entry) => entry.groupId !== groupId)
+              onOverrideChange({
+                ...overrideData,
+                additions: poses.length > 0 ? [...rest, { groupId, poses }] : rest,
+              })
+            },
+          }
+        : undefined,
+    [onOverrideChange, overrideData, overriddenById],
+  )
 
   // Absolute timeline frame of each custom group's first pose: the measured
   // preset ROM blocks (base, GP/DK, Physics) come first, then the custom
   // sequence continues. Left empty when frames couldn't be measured — the
   // editor shows a notice and the group editors fall back to a relative count.
-  const startFrames = new Map<string, number>()
-  // Which section holds each absolute frame, for the "reveal a failed morph" jump.
-  const sectionByFrame = new Map<number, RomSection>()
-  if (presetFrames) {
-    let frame = presetFrameCount(displaySections, gender, presetFrames)
-    for (const section of ROM_SECTIONS) {
-      const config = displaySections[section]
-      if (!config.enabled || config.mode !== 'custom') continue
-      for (const group of config.groups) {
-        startFrames.set(group.id, frame)
-        for (let i = 0; i < group.poses.length; i++) sectionByFrame.set(frame + i, section)
-        frame += group.poses.length
+  // Memoized on the real inputs — these maps were rebuilt on EVERY page render
+  // (and startFrames feeds the memoized group editors, so identity matters).
+  const { startFrames, sectionByFrame } = useMemo(() => {
+    const starts = new Map<string, number>()
+    // Which section holds each absolute frame, for the "reveal a failed morph" jump.
+    const byFrame = new Map<number, RomSection>()
+    if (presetFrames) {
+      let frame = presetFrameCount(displaySections, gender, presetFrames)
+      for (const section of ROM_SECTIONS) {
+        const config = displaySections[section]
+        if (!config.enabled || config.mode !== 'custom') continue
+        for (const group of config.groups) {
+          starts.set(group.id, frame)
+          for (let i = 0; i < group.poses.length; i++) byFrame.set(frame + i, section)
+          frame += group.poses.length
+        }
       }
     }
-  }
+    return { startFrames: starts, sectionByFrame: byFrame }
+  }, [displaySections, gender, presetFrames])
 
   // A failed morph clicked in the run report: open its section and scroll the row
   // (which carries id `dth-rom-frame-<abs>`) into view. Two rAFs so the section
@@ -249,6 +266,20 @@ export function RomSections({
   function patchSection(section: RomSection, patch: Partial<RomSectionConfig>) {
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })
   }
+
+  // ONE identity-stable groups handler shared by every section's (memoized)
+  // group editor — the editor reports its section alongside the new groups, so
+  // no per-section closure (which would defeat the memo) is needed.
+  const sectionsRef = useRef(sections)
+  sectionsRef.current = sections
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  const onSectionGroupsChange = useCallback((section: RomSection, groups: Array<RomGroup>) => {
+    onChangeRef.current({
+      ...sectionsRef.current,
+      [section]: { ...sectionsRef.current[section], groups },
+    })
+  }, [])
 
   // Bulk-import a DAZ morph CSV into a section: the picker dialog lists the
   // Scan_Frames scans (plus Browse for hand-curated files); a full scene scan
@@ -550,7 +581,7 @@ export function RomSections({
                       failedFrames={failedFrames}
                       removable={false}
                       override={overrideCtl}
-                      onGroupsChange={(groups) => patchSection(section, { groups })}
+                      onGroupsChange={onSectionGroupsChange}
                     />
                     {!overrideCtl && <ImportCsvButton onImport={() => setPickerSection(section)} />}
                   </div>
@@ -564,7 +595,7 @@ export function RomSections({
                       failedFrames={failedFrames}
                       removable
                       override={overrideCtl}
-                      onGroupsChange={(groups) => patchSection(section, { groups })}
+                      onGroupsChange={onSectionGroupsChange}
                     />
                     {/* Group management + CSV import change the base structure —
                         hidden while a scene override is active. */}
@@ -634,4 +665,4 @@ export function RomSections({
     </FigureNodeContext.Provider>
     </MorphIndexContext.Provider>
   )
-}
+})

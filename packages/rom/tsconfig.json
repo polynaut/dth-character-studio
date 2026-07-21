@@ -1,17 +1,12 @@
 {
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"],
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2023", "DOM"],
+    // The "no I/O" core: NO DOM lib — an accidental window/fetch/document
+    // reference must fail to typecheck. ES2023 for the newer Array methods.
+    "lib": ["ES2023"],
     "types": ["node"],
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "verbatimModuleSyntax": true
-  },
-  "include": ["src"]
+    "resolveJsonModule": true
+  }
 }

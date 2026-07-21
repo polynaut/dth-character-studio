@@ -24,7 +24,6 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.25.0",
     "radix-ui": "^1.6.4",
-    "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.2"
   },
   "peerDependencies": {

@@ -8,9 +8,7 @@
 
 import { writeFileSync } from 'node:fs'
 import { PNG } from 'pngjs'
-import gifenc from 'gifenc'
-
-const { GIFEncoder, quantize, applyPalette } = gifenc
+import { GIFEncoder, quantize, applyPalette } from 'gifenc'
 
 import type { Page } from '@playwright/test'
 

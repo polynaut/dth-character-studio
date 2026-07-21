@@ -1,0 +1,20 @@
+{
+  // Shared compiler baseline for the three TS packages (rom / ui / web) — the
+  // strictness flags live HERE so they can't silently diverge again. Each
+  // package's own tsconfig extends this and declares only its genuine
+  // differences (jsx, lib/DOM, types, paths).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  }
+}

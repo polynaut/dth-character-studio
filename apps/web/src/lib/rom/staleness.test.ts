@@ -68,8 +68,23 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
       for (const k of [...dirs]) if (k.startsWith(`${p}/`)) dirs.delete(k)
     }
   },
-  async rename() {
-    throw new Error('rename not expected in these tests')
+  // The atomic JSON writes (write temp + rename over target) need a real rename.
+  async rename(a: string, b: string) {
+    a = norm(a)
+    b = norm(b)
+    const remap = (k: string) => b + k.slice(a.length)
+    for (const k of [...files.keys()]) {
+      if (k === a || k.startsWith(`${a}/`)) {
+        files.set(remap(k), files.get(k)!)
+        files.delete(k)
+      }
+    }
+    for (const k of [...dirs]) {
+      if (k === a || k.startsWith(`${a}/`)) {
+        dirs.delete(k)
+        dirs.add(remap(k))
+      }
+    }
   },
   async stat(p: string) {
     p = norm(p)
@@ -256,16 +271,36 @@ describe('refreshAllAssets', () => {
     expect(summary.results.map((r) => r.character).sort()).toEqual(['AChar', 'BChar'])
   })
 
-  it('a vanished project folder is tolerated (empty), not fatal to the sweep', async () => {
+  it('a vanished project SURFACES as "(project unreachable)" and never aborts the sweep', async () => {
     await seedProject('/games/Good', 'Good', { stale: false })
-    // A recents entry whose folder doesn't exist: scanLibrary guards it to [],
-    // so the sweep continues (the deeper unreachable branch is defensive-only).
+    // A recents entry whose folder doesn't exist: readManifest now throws a
+    // typed error for it, so the sweep reports the project instead of silently
+    // counting it as "0 characters" (the old dead branch).
     await storage.rememberRecent('/gone/Ghost/Ghost.dcsp', 'Ghost')
 
     const summary = await api.refreshAllAssets()
 
     // The reachable project still got processed (forced full refresh — nothing stale).
-    expect(summary.results.some((r) => r.character === 'GoodChar')).toBe(true)
-    expect(summary.failed).toBe(0)
+    expect(summary.results.some((r) => r.character === 'GoodChar' && r.ok)).toBe(true)
+    const ghost = summary.results.find((r) => r.character === '(project unreachable)')
+    expect(ghost).toBeDefined()
+    expect(ghost!.ok).toBe(false)
+    expect(ghost!.project).toBe('/gone/Ghost')
+    expect(summary.failed).toBe(1)
+  })
+
+  it('a torn character definition surfaces as an "(unreadable)" failure row', async () => {
+    await seedProject('/games/Good', 'Good', { stale: false })
+    addDir('/games/Good/Torn')
+    files.set('/games/Good/Torn/Torn.json', '{ "id": "torn-mid')
+
+    const summary = await api.refreshAllAssets()
+
+    const torn = summary.results.find((r) => r.character === '(unreadable) Torn.json')
+    expect(torn).toBeDefined()
+    expect(torn!.ok).toBe(false)
+    expect(torn!.detail).toMatch(/JSON/i)
+    // The healthy character still refreshed.
+    expect(summary.results.some((r) => r.character === 'GoodChar' && r.ok)).toBe(true)
   })
 })

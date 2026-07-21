@@ -1,0 +1,31 @@
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <!--
+    Custom Windows application manifest. tauri-build's default manifest is ONLY
+    the Common-Controls dependency below (required for native dialogs) — this
+    file reproduces it verbatim and adds longPathAware, so walks over Daz
+    libraries with >260-char paths stop silently omitting entries (the lenient
+    walkers used to build incomplete inventories from them). NB: longPathAware
+    only takes effect when the machine-wide registry switch
+    HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1 is
+    also set (a Windows constraint); the dedup pipeline additionally refuses to
+    quarantine groups whose scan hit unreadable entries, so long-path libraries
+    are safe either way.
+  -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings xmlns:ws2="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
+      <ws2:longPathAware>true</ws2:longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>

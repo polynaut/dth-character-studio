@@ -78,6 +78,17 @@ fn wire_houdini_env(houdini_docs: &Path, presets_dir: &Path) -> std::io::Result<
     Ok(true)
 }
 
+/// Append the skipped-directory-links note to a step detail when there were any
+/// — a dir symlink/junction is never followed while copying (cycle/escape risk),
+/// and that skip must be visible instead of silent.
+fn with_link_note(detail: String, skipped_links: u64) -> String {
+    if skipped_links == 0 {
+        detail
+    } else {
+        format!("{detail} · {skipped_links} linked folder(s) skipped (links are never followed)")
+    }
+}
+
 /// Copy a whole folder `src` → `dst` (e.g. `Daz Studio Content/data` → `<lib>/data`).
 fn install_folder(label: &str, src: &Path, dst: &Path, dry: bool) -> InstallStep {
     if !src.exists() {
@@ -87,7 +98,11 @@ fn install_folder(label: &str, src: &Path, dst: &Path, dry: bool) -> InstallStep
         return step_ok(label, count_files(src), format!("would copy → {}", dst.display()));
     }
     match copy_dir(src, dst) {
-        Ok(n) => step_ok(label, n, format!("→ {}", dst.display())),
+        Ok(stats) => step_ok(
+            label,
+            stats.files,
+            with_link_note(format!("→ {}", dst.display()), stats.skipped_links),
+        ),
         Err(e) => step_err(label, io_detail(&format!("{} → {}", src.display(), dst.display()), &e)),
     }
 }
@@ -108,6 +123,7 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
         }
     }
     let mut files = 0u64;
+    let mut skipped_links = 0u64;
     for entry in entries.flatten() {
         let from = entry.path();
         let to = dst_dir.join(entry.file_name());
@@ -116,7 +132,10 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
             continue;
         }
         let result = if from.is_dir() {
-            copy_dir(&from, &to)
+            copy_dir(&from, &to).map(|stats| {
+                skipped_links += stats.skipped_links;
+                stats.files
+            })
         } else {
             fs::copy(&from, &to).map(|_| 1)
         };
@@ -128,7 +147,7 @@ fn install_contents(label: &str, src_dir: &Path, dst_dir: &Path, dry: bool) -> I
     let detail = if dry {
         format!("would copy → {}", dst_dir.display())
     } else {
-        format!("→ {}", dst_dir.display())
+        with_link_note(format!("→ {}", dst_dir.display()), skipped_links)
     };
     step_ok(label, files, detail)
 }
@@ -273,7 +292,14 @@ pub fn install_daz_merge(request: MergeInstallRequest) -> InstallReport {
         )
     } else {
         match copy_dir_add_only(src, dst) {
-            Ok(n) => step_ok(&request.label, n, format!("{n} new file(s) → {}", dst.display())),
+            Ok(stats) => step_ok(
+                &request.label,
+                stats.files,
+                with_link_note(
+                    format!("{} new file(s) → {}", stats.files, dst.display()),
+                    stats.skipped_links,
+                ),
+            ),
             Err(e) => step_err(
                 &request.label,
                 io_detail(&format!("{} → {}", src.display(), dst.display()), &e),
@@ -306,7 +332,11 @@ pub fn install_houdini_presets(request: HoudiniPresetsRequest) -> InstallReport 
             // (e.g. "otls") must not wipe an arbitrary Houdini subfolder — and a
             // mid-copy failure must not leave a deleted-then-partial install.
             match copy_dir(src, &dest) {
-                Ok(n) => steps.push(step_ok("Houdini presets", n, format!("→ {}", dest.display()))),
+                Ok(stats) => steps.push(step_ok(
+                    "Houdini presets",
+                    stats.files,
+                    with_link_note(format!("→ {}", dest.display()), stats.skipped_links),
+                )),
                 Err(e) => {
                     steps.push(step_err("Houdini presets", io_detail(&format!("{} → {}", src.display(), dest.display()), &e)));
                     failed = true;
@@ -367,7 +397,9 @@ pub fn install_unreal_dth(request: UnrealInstallRequest) -> Result<u64, String> 
             "Content/DazToHue already exists in this project — Ctrl+click to overwrite.".into(),
         );
     }
-    copy_dir(&src, &dest).map_err(|e| e.to_string())
+    // This command returns a bare file count (no step report to carry a
+    // skipped-links note) — the links policy still applies via copy_dir.
+    copy_dir(&src, &dest).map(|stats| stats.files).map_err(|e| e.to_string())
 }
 
 /// Whether a linked Unreal project already carries `Content/DazToHue`. Rust-side

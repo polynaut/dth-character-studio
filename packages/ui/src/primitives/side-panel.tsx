@@ -1,13 +1,7 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-} from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { DismissableLayer, FocusScope } from 'radix-ui/internal'
 
 import { Button } from './button.tsx'
 import { cn } from '../cn.ts'
@@ -37,6 +31,15 @@ if (typeof window !== 'undefined') {
  * Esc or a backdrop click closes it. Portaled to <body> so a CSS-contained
  * ancestor can't capture its fixed positioning.
  *
+ * Focus containment, Escape and outside-click dismissal, and focus restore on
+ * close all come from Radix's own building blocks (`FocusScope` +
+ * `DismissableLayer` — the same primitives Radix Dialog composes), not a
+ * hand-rolled trap. Deliberately NOT the full modal Dialog: its
+ * `disableOutsidePointerEvents` puts `pointer-events: none` on <body>, which
+ * would break the app's file-drop hit-testing through the backdrop
+ * (`elementsFromPoint` skips pointer-events-disabled elements) — dropping onto
+ * a page zone while the drawer is open must keep working.
+ *
  * Driven by `open`: it mounts, slides in, and on close slides out before
  * unmounting (so the exit animation plays). While open, body scroll is locked.
  */
@@ -61,42 +64,6 @@ export function SidePanel({
   const panelRef = useRef<HTMLElement>(null)
   const titleId = useId()
 
-  // Focus management: the panel declares role="dialog" + aria-modal, and
-  // aria-modal WITHOUT focus containment actively misleads assistive tech —
-  // so move focus in on open, contain Tab (see onTrapTab), restore the opener
-  // on close.
-  useEffect(() => {
-    if (!(open && mounted)) return
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    panelRef.current?.focus()
-    return () => opener?.focus()
-  }, [open, mounted])
-
-  function onTrapTab(e: ReactKeyboardEvent<HTMLElement>) {
-    if (e.key !== 'Tab') return
-    const panel = panelRef.current
-    if (!panel) return
-    const focusable = Array.from(
-      panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ).filter((el) => el.offsetParent !== null)
-    if (focusable.length === 0) {
-      e.preventDefault()
-      return
-    }
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
-    const active = document.activeElement
-    if (e.shiftKey && (active === first || active === panel)) {
-      e.preventDefault()
-      last.focus()
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault()
-      first.focus()
-    }
-  }
-
   useEffect(() => {
     if (open) {
       setMounted(true)
@@ -118,20 +85,15 @@ export function SidePanel({
     return () => window.clearTimeout(timer)
   }, [open])
 
-  // Esc closes; lock body scroll while open.
+  // Lock body scroll while open (the non-modal layer doesn't).
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
-      window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!mounted) return null
 
@@ -142,41 +104,61 @@ export function SidePanel({
           'absolute inset-0 bg-black/50 transition-opacity duration-300',
           shown ? 'opacity-100' : 'opacity-0',
         )}
-        onClick={() => {
-          if (Date.now() - lastWindowFocusAt < FOCUS_CLICK_GRACE_MS) return
-          onClose()
-        }}
       />
-      <aside
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        onKeyDown={onTrapTab}
-        className={cn(
-          'absolute inset-y-0 right-0 flex h-full w-full max-w-[50vw] flex-col border-l bg-background shadow-2xl transition-transform duration-300 ease-out',
-          shown ? 'translate-x-0' : 'translate-x-full',
-          className,
-        )}
+      <FocusScope.Root
+        asChild
+        loop
+        // Stop trapping during the slide-out so the app can take focus back
+        // right away; the unmount still restores focus to the opener.
+        trapped={open}
+        onMountAutoFocus={(e) => {
+          // Radix would focus the first tabbable (the ✕ button); the panel
+          // itself taking focus is calmer and reads the title first.
+          e.preventDefault()
+          panelRef.current?.focus()
+        }}
       >
-        <div className="flex items-center justify-between gap-2 border-b p-4">
-          <h2 id={titleId} className="truncate text-lg font-semibold">
-            {title}
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Close"
-            aria-label="Close"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={onClose}
+        <DismissableLayer.Root
+          asChild
+          onPointerDownOutside={(e) => {
+            if (Date.now() - lastWindowFocusAt < FOCUS_CLICK_GRACE_MS) e.preventDefault()
+          }}
+          // Focus leaving must not dismiss (mirrors Radix Dialog's modal
+          // content) — the trap above snaps focus back anyway.
+          onFocusOutside={(e) => e.preventDefault()}
+          onDismiss={onClose}
+        >
+          <aside
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            className={cn(
+              'absolute inset-y-0 right-0 flex h-full w-full max-w-[50vw] flex-col border-l bg-background shadow-2xl transition-transform duration-300 ease-out outline-none',
+              shown ? 'translate-x-0' : 'translate-x-full',
+              className,
+            )}
           >
-            <X className="size-5" />
-          </Button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      </aside>
+            <div className="flex items-center justify-between gap-2 border-b p-4">
+              <h2 id={titleId} className="truncate text-lg font-semibold">
+                {title}
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Close"
+                aria-label="Close"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={onClose}
+              >
+                <X className="size-5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">{children}</div>
+          </aside>
+        </DismissableLayer.Root>
+      </FocusScope.Root>
     </div>,
     document.body,
   )

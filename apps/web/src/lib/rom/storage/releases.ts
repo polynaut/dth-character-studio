@@ -211,65 +211,19 @@ export async function listDthExporterReleases(folder: string): Promise<{
 export const ZIP_RELEASE_WARNING = 'Extract the release zip first and select folders only.'
 
 /**
- * Resolve the release to scan from the configured folder + the selected version.
- * A single-release folder resolves to itself; a multi-release folder resolves to
- * the chosen version (falling back to the newest extracted folder). A zip
- * release can't be scanned — Daz can't load poses from inside an archive — so it
- * resolves to the extract-first warning.
+ * THE single release-selection cascade behind {@link resolveActiveRelease} and
+ * {@link resolveActiveReleaseRoot} (they used to duplicate it): a single-release
+ * folder resolves to itself; a multi-release folder resolves to the chosen
+ * version, falling back to the newest extracted folder; a zip-only release
+ * resolves to the extract-first warning (Daz can't load from an archive).
  */
-export async function resolveActiveRelease(
-  folder: string,
-  currentVersion: string,
-): Promise<{
-  posesFolder: string
-  version: string
-  releaseName: string
-  error: string | null
-}> {
-  if (await isReleaseFolder(folder)) {
-    return {
-      posesFolder: posesFolderOf(folder),
-      version: versionLabel(parseVersion(basename(folder))),
-      releaseName: basename(folder),
-      error: null,
-    }
-  }
-  const list = await listDthReleases(folder)
-  if (list.mode !== 'multi' || list.releases.length === 0) {
-    return { posesFolder: '', version: '', releaseName: '', error: list.error ?? `No DTH release found in: ${folder}` }
-  }
-  const chosen =
-    list.releases.find((r) => r.version === currentVersion) ??
-    list.releases.find((r) => r.kind === 'folder') ??
-    list.releases[0]
-  if (chosen.kind === 'zip') {
-    return { posesFolder: '', version: chosen.version, releaseName: chosen.name, error: ZIP_RELEASE_WARNING }
-  }
-  return {
-    posesFolder: posesFolderOf(join(folder, chosen.name)),
-    version: chosen.version,
-    releaseName: chosen.name,
-    error: null,
-  }
-}
-
-// --- DTH install plan -----------------------------------------------------
-// The "Install" button copies a DTH release + the Exporter Plugin into the local
-// Daz Studio + Houdini installs (a port of the dth-cli install commands). The
-// heavy recursive copy runs in Rust (see apps/desktop); these helpers only
-// resolve WHICH release/plugin and WHERE — fast, and reusing the pickers' logic.
-
-/**
- * Resolve the active DTH release *root* (the folder holding `Daz Studio Content`
- * and `Houdini Assets`) from the configured folder + selected version — the
- * install counterpart to {@link resolveActiveRelease}, which returns the Poses
- * subfolder instead.
- */
-export async function resolveActiveReleaseRoot(
+async function resolveActiveReleaseEntry(
   folder: string,
   currentVersion: string,
 ): Promise<{ releaseRoot: string; version: string; name: string; error: string | null }> {
-  if (!folder) return { releaseRoot: '', version: '', name: '', error: 'No DTH release folder configured' }
+  if (!folder) {
+    return { releaseRoot: '', version: '', name: '', error: 'No DTH release folder configured' }
+  }
   if (!(await isDir(folder))) {
     return { releaseRoot: '', version: '', name: '', error: `Folder not reachable: ${folder}` }
   }
@@ -283,7 +237,12 @@ export async function resolveActiveReleaseRoot(
   }
   const list = await listDthReleases(folder)
   if (list.mode !== 'multi' || list.releases.length === 0) {
-    return { releaseRoot: '', version: '', name: '', error: list.error ?? `No DTH release found in: ${folder}` }
+    return {
+      releaseRoot: '',
+      version: '',
+      name: '',
+      error: list.error ?? `No DTH release found in: ${folder}`,
+    }
   }
   const chosen =
     list.releases.find((r) => r.version === currentVersion) ??
@@ -293,6 +252,48 @@ export async function resolveActiveReleaseRoot(
     return { releaseRoot: '', version: chosen.version, name: chosen.name, error: ZIP_RELEASE_WARNING }
   }
   return { releaseRoot: join(folder, chosen.name), version: chosen.version, name: chosen.name, error: null }
+}
+
+/**
+ * Resolve the release to scan from the configured folder + the selected
+ * version — the {@link resolveActiveReleaseEntry} cascade, mapped to the Poses
+ * subfolder the pose scan walks.
+ */
+export async function resolveActiveRelease(
+  folder: string,
+  currentVersion: string,
+): Promise<{
+  posesFolder: string
+  version: string
+  releaseName: string
+  error: string | null
+}> {
+  const entry = await resolveActiveReleaseEntry(folder, currentVersion)
+  return {
+    posesFolder: entry.releaseRoot ? posesFolderOf(entry.releaseRoot) : '',
+    version: entry.version,
+    releaseName: entry.name,
+    error: entry.error,
+  }
+}
+
+// --- DTH install plan -----------------------------------------------------
+// The "Install" button copies a DTH release + the Exporter Plugin into the local
+// Daz Studio + Houdini installs (a port of the dth-cli install commands). The
+// heavy recursive copy runs in Rust (see apps/desktop); these helpers only
+// resolve WHICH release/plugin and WHERE — fast, and reusing the pickers' logic.
+
+/**
+ * Resolve the active DTH release *root* (the folder holding `Daz Studio Content`
+ * and `Houdini Assets`) from the configured folder + selected version — the
+ * install counterpart to {@link resolveActiveRelease}; both are thin entry
+ * points over the same {@link resolveActiveReleaseEntry} cascade.
+ */
+export async function resolveActiveReleaseRoot(
+  folder: string,
+  currentVersion: string,
+): Promise<{ releaseRoot: string; version: string; name: string; error: string | null }> {
+  return resolveActiveReleaseEntry(folder, currentVersion)
 }
 
 /**

@@ -1,42 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, type ReactNode } from 'react'
 import { FolderOpen } from 'lucide-react'
 
-import { Button, Input, Label } from '@dth/ui'
+import { Button, Input, Label, Modal } from '@dth/ui'
 import { pickFolder } from '#/lib/desktop.ts'
 import { displayPath, normalizePathLower } from '#/lib/path.ts'
-
-function Backdrop({
-  busy,
-  onClose,
-  children,
-}: {
-  busy: boolean
-  onClose: () => void
-  children: ReactNode
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={() => !busy && onClose()}
-    >
-      <div
-        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>,
-    document.body,
-  )
-}
 
 /** Rename a project — the light operation (just the list entry's name). */
 export function ProjectRenameDialog({
@@ -58,8 +25,7 @@ export function ProjectRenameDialog({
     if (trimmed && !busy) onSave(trimmed)
   }
   return (
-    <Backdrop busy={busy} onClose={onClose}>
-      <h2 className="text-lg font-semibold">Rename project</h2>
+    <Modal open onClose={onClose} title="Rename project" dismissible={!busy}>
       <div>
         <Label className="mb-1 block">Name</Label>
         <Input
@@ -78,7 +44,7 @@ export function ProjectRenameDialog({
           {busy ? 'Saving…' : 'Save'}
         </Button>
       </div>
-    </Backdrop>
+    </Modal>
   )
 }
 
@@ -108,8 +74,7 @@ export function ProjectMoveDialog({
   }
 
   return (
-    <Backdrop busy={busy} onClose={onClose}>
-      <h2 className="text-lg font-semibold">Move project</h2>
+    <Modal open onClose={onClose} title="Move project" dismissible={!busy}>
       <p className="text-sm text-muted-foreground">
         Move <span className="font-medium text-foreground">{project.name}</span> and all of its
         character data to a new folder. Scenes linked in place outside the project are left untouched.
@@ -139,6 +104,6 @@ export function ProjectMoveDialog({
           {busy ? 'Moving…' : 'Move'}
         </Button>
       </div>
-    </Backdrop>
+    </Modal>
   )
 }
