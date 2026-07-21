@@ -144,9 +144,17 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   useEffect(() => {
     let active = true
     for (const path of project.unrealProjects) {
-      void unrealDthContentPresent({ data: { uprojectPath: path } }).then((present) => {
-        if (active) setDthStatus((s) => ({ ...s, [path]: present }))
-      })
+      void unrealDthContentPresent({ data: { uprojectPath: path } })
+        .then((present) => {
+          if (active) setDthStatus((s) => ({ ...s, [path]: present }))
+        })
+        .catch(() => {
+          // A failed probe must not leave the card stuck on `undefined` (the
+          // install button disables forever with no explanation). Treat it as
+          // "not installed": the button enables with the default (non-overwrite)
+          // install, and a genuinely broken path fails THERE with its own toast.
+          if (active) setDthStatus((s) => ({ ...s, [path]: false }))
+        })
     }
     return () => {
       active = false

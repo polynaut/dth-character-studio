@@ -64,6 +64,15 @@ export function repointCharacterPaths(
     imageScene: repoint(character.imageScene),
     groomScenes: character.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
     sceneOverrides: character.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),
+    // A custom base-ROM `.duf` (JCM custom mode) copied into the character
+    // folder travels with it too — omitting it broke the custom ROM on every
+    // rename/move (all other sections carry the field as well, empty or not).
+    sections: Object.fromEntries(
+      Object.entries(character.sections).map(([section, config]) => [
+        section,
+        { ...config, customAssetPath: repoint(config.customAssetPath) },
+      ]),
+    ) as Character['sections'],
   }
 }
 
@@ -302,6 +311,12 @@ export async function findCharacterAcrossProjects(id: string): Promise<Character
   return null
 }
 
+/**
+ * Persist a character (rename-aware). Returns the stamped character AND the
+ * location it ended up at (post-rename), so callers can prime the api layer's
+ * location cache instead of blanket-invalidating it — a save+generate then
+ * costs one `exists()` instead of two full library walks.
+ */
 export async function saveCharacter(
   project: Project,
   character: Character,
@@ -310,7 +325,7 @@ export async function saveCharacter(
    *  the caller must have just re-read `character` from this location, so the
    *  entry is known to be this character's. Used by the Refresh sweep. */
   preResolved?: { location: CharacterLocation; character: Character },
-): Promise<Character> {
+): Promise<{ character: Character; location: CharacterLocation }> {
   // `charactersRoot` is where character folders live (the project's charactersSubdir
   // applied); falls back to the project root. Provenance stamps still use project.path.
   const lib = charactersRoot || project.path
@@ -339,6 +354,9 @@ export async function saveCharacter(
   }
 
   let definitionAbs: string
+  // Where the character's folder ends up (post-rename) — returned so callers can
+  // cache the location instead of re-scanning the library.
+  let finalFolderAbs: string
   // A name change renames the character's folder; asset paths that lived inside
   // it travel with it, so they must be repointed (or they'd break — the classic
   // "scenes unlinked after rename"). Captured here, applied below.
@@ -372,8 +390,10 @@ export async function saveCharacter(
         await rename(movedNotes, newNotes)
       }
       folderMove = { from: existing.folderAbs, to: folderAbs }
+      finalFolderAbs = folderAbs
     } else {
       definitionAbs = existing.definitionAbs
+      finalFolderAbs = existing.folderAbs
     }
   } else {
     // The scan didn't find this character. NEVER treat a folder whose
@@ -399,6 +419,7 @@ export async function saveCharacter(
     const folderAbs = await uniqueFolder(lib, folderName)
     await mkdir(folderAbs, { recursive: true })
     definitionAbs = join(folderAbs, definitionFileName(character.name))
+    finalFolderAbs = folderAbs
   }
 
   // Repoint scenes / Houdini projects that lived inside the renamed folder to its
@@ -408,7 +429,16 @@ export async function saveCharacter(
     : stamped
 
   await writeTextFileAtomic(definitionAbs, JSON.stringify(finalStamped, null, 2) + '\n')
-  return finalStamped
+  return {
+    character: finalStamped,
+    location: {
+      definitionAbs,
+      folderAbs: finalFolderAbs,
+      // A loose root-level definition's "folder" IS the library → relFolder ''.
+      relFolder: relativeInside(lib, finalFolderAbs) ?? '',
+      libraryFolder: lib,
+    },
+  }
 }
 
 /**

@@ -69,6 +69,19 @@ current code before relying on details, but assume the *lesson* still holds.
   than map keys: destination lock striping (`lock_stripe`) and path-identity
   compares (`same_project_path`, the dedup source rails) must fold the same way —
   and with Unicode `to_lowercase()`, not `eq_ignore_ascii_case` (Ärger/ärger).
+  It reaches the WEB layer too: any "delete what wasn't just written" sweep must
+  filter case-insensitively (`removalSweepNames`, api/generate.ts) — `exists`/
+  `remove` resolve case-insensitively on Windows, so a case-sensitive filter on a
+  case-only rename deletes the very file just written.
+- **There is NO `cargo fmt` gate and no rustfmt.toml** — the crate is
+  deliberately written in a wider style than default rustfmt, and
+  `cargo fmt --check` fails on the untouched tree. CI enforces clippy
+  (`-D warnings`) + `cargo test --locked` only. Never run `cargo fmt` (it would
+  reformat the whole crate); match the surrounding hand style.
+- **A JS mirror of a Rust decision must be pinned by the SAME test cases on both
+  sides** — the UI's `genesisRank` (dedup-report-list) silently inverted the
+  Rust `genesis_rank` winner for "Genesis 9 (2024)"-style names until twin tests
+  pinned both. If a rule lives on both sides of the FFI, its tests do too.
 - **Rust std reports NTFS junctions as symlinks** (`file_type().is_symlink()`
   true, `is_dir()` false). All fs walkers share `fsutil::walk_dir` with one
   explicit dir-link policy (link = leaf, counted) — a hand-rolled walker that
@@ -163,9 +176,10 @@ current code before relying on details, but assume the *lesson* still holds.
   hit-testing. That's why `SidePanel` is built from the `radix-ui/internal`
   primitives (`FocusScope` + `DismissableLayer` — the exact pieces Dialog
   composes) instead of Dialog itself. Related: `DismissableLayer`'s Escape is a
-  document-CAPTURE listener, so a component swallowing Escape via React
-  `stopPropagation` (MultiSelect) cannot block a surrounding Radix layer's
-  dismissal.
+  document-CAPTURE listener, so React `stopPropagation` (bubble phase) can never
+  block a surrounding Radix layer's dismissal. The working counter (MultiSelect):
+  a WINDOW-level capture listener registered while the widget is open — capture
+  visits window before document, beating Radix regardless of registration order.
 - **`role="combobox"` removes an input from `getByRole('textbox')` queries** —
   after the morph-autocomplete a11y work, tests locate those cells by
   `combobox`/`option` roles (rom-sections tests hit this).
@@ -190,8 +204,6 @@ current code before relying on details, but assume the *lesson* still holds.
   instead (author `\\u2028` so the file receives the escape sequence as text), or do the
   replace with a `String.fromCharCode`-based Node script. A printable delimiter like
   `|` (illegal in Windows paths) is a safe cache-key separator — never a NUL.
-  or a `String.fromCharCode`-based replace; a printable separator like `|` (illegal
-  in Windows paths) is a safe cache-key delimiter.
 
 ## Releases
 

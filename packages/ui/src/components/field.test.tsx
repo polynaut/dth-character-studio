@@ -44,4 +44,27 @@ describe('Field', () => {
     )
     expect(getByRole('textbox').getAttribute('aria-describedby')).toBe('hint')
   })
+
+  it('an explicit controlId wins over the auto-wiring (control nested in a wrapper)', () => {
+    // The auto clone-wiring would land the id on the wrapper div (non-labelable)
+    // — controlId points the label at the real input instead, and derives the
+    // error line's id so the caller can wire aria-describedby to it.
+    const { getByRole, getByText, container } = render(
+      <Field label="Name" error="Required" controlId="the-input">
+        <div className="wrapper">
+          <span>prefix/</span>
+          <input id="the-input" aria-describedby="the-input-error" />
+        </div>
+      </Field>,
+    )
+    const input = getByRole('textbox')
+    expect(getByText('Name').getAttribute('for')).toBe('the-input')
+    expect(input.id).toBe('the-input')
+    // The wrapper was NOT cloned with a generated id or describedby.
+    const wrapper = container.querySelector('.wrapper') as HTMLElement
+    expect(wrapper.hasAttribute('id')).toBe(false)
+    expect(wrapper.hasAttribute('aria-describedby')).toBe(false)
+    // The error line's id is derived from controlId, matching the input's wiring.
+    expect(document.getElementById('the-input-error')?.textContent).toBe('Required')
+  })
 })

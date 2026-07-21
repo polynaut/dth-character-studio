@@ -24,6 +24,14 @@
       "detail": "already installed",
       "filesList": [],
       "note": "same files as Golden Palace G9"
+    },
+    {
+      "label": "Broken Download.zip",
+      "files": 0,
+      "status": "error",
+      "detail": "unzip failed: invalid Zip archive: Could not find central directory end",
+      "filesList": [],
+      "note": ""
     }
   ],
   "totalFiles": 2147

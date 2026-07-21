@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { buildSeed, P } from './fixtures.ts'
-import { installTauriMock } from './tauri-mock.ts'
+import { buildSeed, P, prime, settle } from './fixtures.ts'
 import { GifRecorder } from './gif-recorder.ts'
 
 // Interaction GIFs for docs/guide/* — the moving-picture siblings of
@@ -18,30 +17,22 @@ import { dirname, join } from 'node:path'
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../docs/guide/gifs')
 
-const FIXED_TIME = new Date('2026-07-01T12:00:00')
-
-async function prime(page: Page, seed: ReturnType<typeof buildSeed>) {
-  await page.clock.setFixedTime(FIXED_TIME)
-  await page.addInitScript(() => {
-    ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
-    // Headless Chromium rejects the async clipboard API (permission grants
-    // included proved flaky) — stub it so click-to-copy takes its SUCCESS path
-    // and the "Copied" check badge shows in recordings. The app code path is
-    // unchanged; only the OS clipboard itself is faked.
+// prime()/settle()/FIXED_TIME are shared with guide.screenshots.ts — they live
+// in fixtures.ts. Only the clipboard stub is gif-specific:
+// headless Chromium rejects the async clipboard API (permission grants
+// included proved flaky) — stub it so click-to-copy takes its SUCCESS path
+// and the "Copied" check badge shows in recordings. The app code path is
+// unchanged; only the OS clipboard itself is faked.
+const stubClipboard = (page: Page) =>
+  page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: () => Promise.resolve() },
     })
   })
-  await page.addInitScript(installTauriMock, seed)
-}
-
-async function settle(page: Page) {
-  await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(400)
-}
 
 test('path-chip-copy', async ({ page }) => {
   await prime(page, buildSeed({ demo: true, activeProjectFile: P.dcsp }))
+  await stubClipboard(page)
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).waitFor()
   await settle(page)

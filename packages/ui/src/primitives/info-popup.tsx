@@ -4,6 +4,7 @@ import {
   autoUpdate,
   flip,
   FloatingArrow,
+  FloatingFocusManager,
   FloatingPortal,
   offset,
   safePolygon,
@@ -148,24 +149,32 @@ export function InfoPopup({
 
       {isMounted && (
         <FloatingPortal>
-          <div
-            ref={refs.setFloating}
-            style={{ ...floatingStyles, ...transitionStyles }}
-            className="z-50 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
-            {...getFloatingProps({ onClick: onContentClick })}
-          >
-            {children}
-            <FloatingArrow
-              ref={arrowRef}
-              context={context}
-              height={ARROW_HEIGHT}
-              width={ARROW_HEIGHT * 2}
-              tipRadius={2}
-              className="fill-neutral-900"
-              stroke="rgb(255 255 255 / 0.1)"
-              strokeWidth={1}
-            />
-          </div>
+          {/* Pinned = a real role="dialog" the user opened on purpose — move
+              focus into it (first link, or the popup itself) so its links are
+              reachable without tabbing across the whole page, and return focus
+              to the "i" on close. Disabled while merely hover-peeking, so a
+              pointer pass-over never steals focus. Non-modal: the popup isn't
+              a focus trap, just a focus target. */}
+          <FloatingFocusManager context={context} disabled={!pinned} modal={false}>
+            <div
+              ref={refs.setFloating}
+              style={{ ...floatingStyles, ...transitionStyles }}
+              className="z-50 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+              {...getFloatingProps({ onClick: onContentClick })}
+            >
+              {children}
+              <FloatingArrow
+                ref={arrowRef}
+                context={context}
+                height={ARROW_HEIGHT}
+                width={ARROW_HEIGHT * 2}
+                tipRadius={2}
+                className="fill-neutral-900"
+                stroke="rgb(255 255 255 / 0.1)"
+                strokeWidth={1}
+              />
+            </div>
+          </FloatingFocusManager>
         </FloatingPortal>
       )}
     </>

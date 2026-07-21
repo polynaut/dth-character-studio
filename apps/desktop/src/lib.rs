@@ -52,8 +52,9 @@ pub fn run() {
     // Updater + relaunch + single-instance + the native app menu are desktop-only.
     #[cfg(desktop)]
     {
-        use tauri::Emitter;
-        use crate::windows::{build_app_menu, open_home_window_impl, open_project_window_impl};
+        use crate::windows::{
+            build_app_menu, emit_menu_to_focused, open_home_window_impl, open_project_window_impl,
+        };
 
         builder = builder
             // A second launch (e.g. opening another `.dcsp` from Explorer) is routed
@@ -96,15 +97,13 @@ pub fn run() {
                         }
                     });
                 }
-                "refresh_assets" => {
-                    let _ = app.emit("menu-refresh-assets", ());
-                }
-                "about" => {
-                    let _ = app.emit("menu-about", ());
-                }
-                "check_updates" => {
-                    let _ = app.emit("menu-check-updates", ());
-                }
+                // These frontend-driven items go to the FOCUSED window only — a
+                // broadcast (`app.emit`) reaches every window, so with two open
+                // windows one "Check for Updates" click used to spawn an update
+                // check (and its prompt) in each of them.
+                "refresh_assets" => emit_menu_to_focused(app, "menu-refresh-assets"),
+                "about" => emit_menu_to_focused(app, "menu-about"),
+                "check_updates" => emit_menu_to_focused(app, "menu-check-updates"),
                 _ => {}
             });
     }

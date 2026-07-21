@@ -45,8 +45,10 @@ export function UiConfigProvider({
   children: ReactNode
 }) {
   // Memoized per handler, not per `value` object: hosts typically pass an
-  // inline literal, and an unmemoized merge re-rendered every useUiConfig
-  // consumer whenever the host root re-rendered.
+  // inline object literal, and an unmemoized merge re-rendered every useUiConfig
+  // consumer whenever the host root re-rendered. Note this only helps when the
+  // HANDLERS themselves are referentially stable (useCallback / module-level in
+  // the host) — inline arrow handlers defeat the memo just the same.
   const { onNavigate, onOpenExternal, onError } = value
   const merged = useMemo(
     () => ({

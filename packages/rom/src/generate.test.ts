@@ -273,6 +273,35 @@ describe('mirrorGroup', () => {
     expect(right.poses[0].morphs[1].prop).toBe('r_thigh')
   })
 
+  it('swaps mid-name prefix markers after _ or digits symmetrically in both cases', () => {
+    const left: RomGroup = {
+      id: 'gl',
+      label: '',
+      suffix: 'left',
+      method: 'individual',
+      calculateFrom: 'default',
+      poses: [
+        {
+          id: 'pl',
+          name: 'Bend',
+          morphs: [
+            // `_` and digits are word chars, so `\b` never fired here — the
+            // uppercase prefix rule must use the same letter-only lookbehind
+            // as its lowercase twin.
+            { id: 'm1', node: 'Genesis9', prop: 'Foot_L_Bend', value: 1 },
+            { id: 'm2', node: 'Genesis9', prop: 'Foot_l_Bend', value: 1 },
+            { id: 'm3', node: 'Genesis9', prop: 'x3L_twist', value: 1 },
+          ],
+          boneScaleRef: false,
+        },
+      ],
+    }
+    const right = mirrorGroup(left)
+    expect(right.poses[0].morphs[0].prop).toBe('Foot_R_Bend')
+    expect(right.poses[0].morphs[1].prop).toBe('Foot_r_Bend')
+    expect(right.poses[0].morphs[2].prop).toBe('x3R_twist')
+  })
+
   it('leaves non-marker _L / l_ letter runs untouched (Ball_Large, Curl_lower)', () => {
     const left: RomGroup = {
       id: 'gl',

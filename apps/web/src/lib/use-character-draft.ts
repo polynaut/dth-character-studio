@@ -146,15 +146,18 @@ export function useCharacterDraft(options: {
   }, [])
 
   /**
-   * Run every save-blocking check on the current draft and toast/jump on the
+   * Run every save-blocking check on the current draft — or on an explicit
+   * `candidate` (persistPatch re-checks the MERGED patch+interim result, which
+   * React state hasn't re-rendered into the ref yet) — and toast/jump on the
    * first failure. Returns true when the draft is safe to persist+generate. Shared
    * by `save` AND every immediate-persist flow (rename, avatar, scene/Houdini link,
    * product store — via `persistPatch`) so those can never persist an invalid
    * character or regenerate broken artifacts behind the user's back.
    * Pure-check + side-effecting toast.
    */
-  const validate = useCallback((): boolean => {
-    const { character: current, onValidationErrors } = stateRef.current
+  const validate = useCallback((candidate?: Character): boolean => {
+    const { onValidationErrors } = stateRef.current
+    const current = candidate ?? stateRef.current.character
     // Invalid required custom-morph fields (empty, or a pose name with characters
     // Houdini rejects) — hand the errors to the page so it can jump to the first.
     // Template-baked pose names are reserved: a custom pose sharing one would
@@ -253,7 +256,9 @@ export function useCharacterDraft(options: {
    * 3. resolve the patch (an async producer runs only past the guards), THEN
    *    snapshot the draft — a producer can take seconds (it may copy scene
    *    files) while the form stays editable, so a pre-producer snapshot would
-   *    silently discard everything typed during it
+   *    silently discard everything typed during it — and re-run `validate` on
+   *    the MERGED result (patch + interim edits): step 2 only saw the
+   *    pre-producer draft, and what actually persists is this merge
    * 4. apply it to the draft optimistically + persist
    * 5. `settleAfterSave` — baseline := saved; interim edits are preserved —
    *    BEFORE regenerating, so a generate failure can't leave the editor
@@ -291,6 +296,14 @@ export function useCharacterDraft(options: {
         // (they must survive the patch application AND key the rollback).
         before = stateRef.current.character
         const updated = { ...before, ...p }
+        // Re-validate the MERGED result: the step-2 check saw the PRE-producer
+        // draft, but interim edits typed during a slow producer (or the patch
+        // itself) can make what would actually persist invalid. Same refusal
+        // semantics as the up-front guard: nothing applied, nothing persisted.
+        if (!validate(updated)) {
+          setSaving(false)
+          return null
+        }
         setCharacter(updated)
         appliedPatch = p
         const saved = opts?.persist

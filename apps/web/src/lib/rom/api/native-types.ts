@@ -144,6 +144,11 @@ export const sceneWearablesSchema = z.object({
 export const housekeepingResultSchema = z.object({
   filesDeleted: z.number(),
   bytesFreed: z.number(),
+  /** Files past the cutoff the sweep could NOT delete (locked/readonly) — so
+   *  every-delete-failing no longer reads as "0 files freed, nothing to do".
+   *  Rust always sends it; optional here so browser no-op / aggregated results
+   *  (maintenance.ts) stay constructible without it. Not surfaced in the UI yet. */
+  filesFailed: z.number().optional(),
 })
 
 // --- network-drive remap (drives.rs `RemapResult`) ----------------------------

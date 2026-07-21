@@ -177,6 +177,22 @@ export async function resolvePresetFrames(
 }
 
 /**
+ * The stale-artifact sweep candidates that may actually be removed: `candidates`
+ * minus the just-written `written` names, compared case-INSENSITIVELY. On
+ * Windows both `exists` and `remove` resolve names case-insensitively, so a
+ * candidate differing from a written file only by case — a case-only rename
+ * (kira → Kira; `characterSlug` preserves case) — would pass a case-sensitive
+ * filter and then delete the very file that was just written.
+ */
+export function removalSweepNames(
+  candidates: Array<string>,
+  written: Array<string>,
+): Array<string> {
+  const writtenLower = new Set(written.map((name) => name.toLowerCase()))
+  return candidates.filter((name) => !writtenLower.has(name.toLowerCase()))
+}
+
+/**
  * Compiles the character into its DTH artifacts and writes them to two places:
  *  - the Houdini PoseAsset CSV → the character's own folder (next to its
  *    definition JSON), and
@@ -278,20 +294,23 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     if (previousName) {
       await storage.removeFilesFromFolder(
         outDir,
-        [
-          poseAssetFileName({ ...character, name: previousName }),
-          ...overrideCsvNames(previousName),
-        ].filter((name) => !writtenHoudini.includes(name)),
+        removalSweepNames(
+          [
+            poseAssetFileName({ ...character, name: previousName }),
+            ...overrideCsvNames(previousName),
+          ],
+          writtenHoudini,
+        ),
       )
     }
     // Drop the legacy-cased CSV (<name>_PoseAsset.csv) left by older versions —
     // the file is now <name>_pose_asset.csv — and the CSVs of overrides that no
     // longer generate.
     const legacyPose = poseAssetFileName(character).replace(/_pose_asset\.csv$/, '_PoseAsset.csv')
-    await storage.removeFilesFromFolder(outDir, [
-      legacyPose,
-      ...overrideCsvNames(character.name).filter((name) => !writtenHoudini.includes(name)),
-    ])
+    await storage.removeFilesFromFolder(
+      outDir,
+      removalSweepNames([legacyPose, ...overrideCsvNames(character.name)], writtenHoudini),
+    )
     // Record which DTH release the CSV was generated for (its era drives staleness).
     await storage.setGeneratedDthVersion(lib, id, activeRelease, location.definitionAbs)
   }
@@ -325,18 +344,21 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       const writtenDaz = dazFiles.map((file) => file.fileName)
       await storage.removeFilesFromFolder(
         charDir,
-        [
-          `${dazBase}.dsa`,
-          `ROM_${dazBase}.dsa`,
-          `Export_${dazBase}.dsa`,
-          `Export_Hair_${dazBase}.dsa`,
-          // Legacy name (pre-Hair rename) — never in the written set now, so it's
-          // always swept from a character folder that still has the old script.
-          `Export_Groom_${dazBase}.dsa`,
-          `Open_Scene_${dazBase}.dsa`,
-          `Scan_Products_${characterSlug(character)}.dsa`,
-          ...overrideScriptNames(character.name),
-        ].filter((name) => !writtenDaz.includes(name)),
+        removalSweepNames(
+          [
+            `${dazBase}.dsa`,
+            `ROM_${dazBase}.dsa`,
+            `Export_${dazBase}.dsa`,
+            `Export_Hair_${dazBase}.dsa`,
+            // Legacy name (pre-Hair rename) — never in the written set now, so it's
+            // always swept from a character folder that still has the old script.
+            `Export_Groom_${dazBase}.dsa`,
+            `Open_Scene_${dazBase}.dsa`,
+            `Scan_Products_${characterSlug(character)}.dsa`,
+            ...overrideScriptNames(character.name),
+          ],
+          writtenDaz,
+        ),
       )
       // Migration: older versions wrote the script flat in the root — drop this
       // character's flat-layout script (current + previous name) if it lingers.

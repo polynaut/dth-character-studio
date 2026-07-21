@@ -227,7 +227,7 @@ function SettingsPage() {
       // the machine settings — saved by onSaveProjectSettings alongside the manifest.
       settings.dimManifestsFolder !== initial.dimManifestsFolder)
 
-  async function onSaveProjectSettings() {
+  async function onSaveProjectSettings(machineSettingsSaved = false) {
     if (!project) return
     // The manifest-normalized values — the ONE shape both the payload below and
     // the dirty comparison use (see normalizeProjectSettings).
@@ -245,8 +245,11 @@ function SettingsPage() {
     setSavingProject(true)
     try {
       // The DIM manifests folder lives under the Daz Products toggle on this tab
-      // but is a machine setting (settings.json, not the .dcsp) — persist it too.
-      if (settings.dimManifestsFolder !== initial.dimManifestsFolder) {
+      // but is a machine setting (settings.json, not the .dcsp) — persist it too,
+      // UNLESS the header's Save-all just ran onSave: that already wrote the full
+      // settings object, and a second write here would ride the stale `initial`
+      // baseline.
+      if (!machineSettingsSaved && settings.dimManifestsFolder !== initial.dimManifestsFolder) {
         await saveSettings({ data: { settings, baseline: initial } })
       }
       await saveProjectSettings({
@@ -292,6 +295,17 @@ function SettingsPage() {
       try {
         const result = await listDthReleases({ data: { folder } })
         if (!cancelled) setReleases(result)
+      } catch (e) {
+        // Without this, a rejected inspection was an unhandled rejection AND the
+        // pane kept showing the previous folder's releases — clear them and use
+        // the pane's existing error surface instead.
+        if (!cancelled)
+          setReleases({
+            mode: 'none',
+            version: '',
+            releases: [],
+            error: e instanceof Error ? e.message : String(e),
+          })
       } finally {
         if (!cancelled) setReleasesLoading(false)
       }
@@ -317,6 +331,15 @@ function SettingsPage() {
       try {
         const result = await listDthExporterReleases({ data: { folder } })
         if (!cancelled) setExporter(result)
+      } catch (e) {
+        // Clear the stale list + show the error (see the releases effect above).
+        if (!cancelled)
+          setExporter({
+            mode: 'none',
+            version: '',
+            releases: [],
+            error: e instanceof Error ? e.message : String(e),
+          })
       } finally {
         if (!cancelled) setExporterLoading(false)
       }
@@ -370,9 +393,24 @@ function SettingsPage() {
   }, [settings.dazInstallFolder])
 
   useEffect(() => {
-    const timer = setTimeout(() => void loadInstalledExporter(), 350)
-    return () => clearTimeout(timer)
-  }, [loadInstalledExporter])
+    // `cancelled` (same pattern as the folder-inspection effects above): the
+    // debounce timer only guards the START of the read — a slow first read could
+    // otherwise resolve after a later one and stamp a stale version over it.
+    const folder = settings.dazInstallFolder
+    if (!folder) {
+      setInstalledExporter(null)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      const version = await installedExporterVersion(folder)
+      if (!cancelled) setInstalledExporter(version)
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [settings.dazInstallFolder])
 
   // Scoped to the machine-setting fields the General tab edits. Save still writes the
   // full settings object, but the Tools-page fields are untouched here so they never
@@ -471,7 +509,9 @@ function SettingsPage() {
   const anyDirty = dirty || projectDirty
   async function onSaveAll() {
     if (dirty) await onSave()
-    if (projectDirty) await onSaveProjectSettings()
+    // When onSave just ran it wrote the FULL settings object (dim manifests
+    // folder included) — tell the project save so it doesn't write them again.
+    if (projectDirty) await onSaveProjectSettings(dirty)
   }
   function onDiscardAll() {
     setSettings(initial)

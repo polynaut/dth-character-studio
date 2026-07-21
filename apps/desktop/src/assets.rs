@@ -386,8 +386,13 @@ struct CollectedSources {
 /// `keep_zip_handles`: pass true when a REAL install follows, so each zip
 /// asset's archive handles + nested temp inflations are kept for extraction
 /// (see `collect_asset_files`) instead of re-walking/re-inflating; scans and
-/// dry runs pass false so temps don't pile up on disk.
-fn collect_sources(sources: &[String], keep_zip_handles: bool) -> CollectedSources {
+/// dry runs pass false so temps don't pile up on disk. With a non-empty `only`
+/// filter, handles are kept ONLY for the assets the install will actually
+/// process: winner resolution still inventories every asset, but the
+/// filtered-out ones must not pin their nested-zip temp inflations — a real
+/// install used to retain EVERY wrapper's temps for the whole command, a
+/// multi-GB disk peak for a one-asset install.
+fn collect_sources(sources: &[String], keep_zip_handles: bool, only: &[String]) -> CollectedSources {
     let mut listings = Vec::new();
     let mut files = HashMap::new();
     for source in sources {
@@ -397,7 +402,13 @@ fn collect_sources(sources: &[String], keep_zip_handles: bool) -> CollectedSourc
             // Independent reads → parallel, like the per-asset processing.
             let collected: Vec<(PathBuf, AssetFiles)> = assets
                 .par_iter()
-                .filter_map(|a| collect_asset_files(a, keep_zip_handles).map(|af| (a.clone(), af)))
+                .filter_map(|a| {
+                    // Same name-match as process_assets — keep handles exactly
+                    // for the assets that will be diffed and written.
+                    let keep = keep_zip_handles
+                        && (only.is_empty() || only.iter().any(|n| *n == folder_name(a)));
+                    collect_asset_files(a, keep).map(|af| (a.clone(), af))
+                })
                 .collect();
             for (path, af) in collected {
                 files.insert(path, (genesis, af));
@@ -409,22 +420,28 @@ fn collect_sources(sources: &[String], keep_zip_handles: bool) -> CollectedSourc
 }
 
 /// Resolve, across ALL collected assets, the winner of every shared library file
-/// by (newer Genesis, then bigger size), and return per-asset the set of
-/// case-folded dest-relative paths to treat as already in-sync — `accepted` plus
-/// every file where this asset is NOT the winner. The install then writes only
-/// the winning copy of a shared file and never flags the losing copies, so the
-/// result is deterministic and independent of folder order ("newer genesis wins,
-/// then bigger wins"). Keys fold case, so case-variant copies of a shared file
-/// meet in ONE bucket instead of racing last-write-wins under rayon.
+/// by (newer Genesis, then bigger size, then FIRST asset path), and return
+/// per-asset the set of case-folded dest-relative paths to treat as already
+/// in-sync — `accepted` plus every file where this asset is NOT the winner. The
+/// install then writes only the winning copy of a shared file and never flags
+/// the losing copies, so the result is deterministic and independent of folder
+/// order ("newer genesis wins, then bigger wins"). A FULL tie (equal rank AND
+/// size, e.g. two same-size variants of one file) is broken by the
+/// lexicographically first asset path — without that, both copies installed in
+/// rayon-nondeterministic order. Keys fold case, so case-variant copies of a
+/// shared file meet in ONE bucket instead of racing last-write-wins under rayon.
 fn winner_skip_map(
     collected: &HashMap<PathBuf, (u32, AssetFiles)>,
     accepted: &HashSet<String>,
 ) -> HashMap<PathBuf, HashSet<String>> {
-    // Winner per dest path = the max (genesis, size) tuple across all copies.
-    let mut winners: HashMap<String, (u32, u64)> = HashMap::new();
-    for (genesis, af) in collected.values() {
+    use std::cmp::Reverse;
+    // Winner per dest path = the max (genesis, size, Reverse(asset path)) tuple
+    // across all copies — Reverse so the tie goes to the FIRST path in sort
+    // order (the order the assets list under their header).
+    let mut winners: HashMap<String, (u32, u64, Reverse<&Path>)> = HashMap::new();
+    for (path, (genesis, af)) in collected {
         for (rel, size) in &af.files {
-            let cand = (*genesis, *size);
+            let cand = (*genesis, *size, Reverse(path.as_path()));
             winners.entry(rel_key(rel)).and_modify(|w| *w = (*w).max(cand)).or_insert(cand);
         }
     }
@@ -434,7 +451,8 @@ fn winner_skip_map(
         let mut skip = accepted.clone();
         for (rel, size) in &af.files {
             let key = rel_key(rel);
-            if winners.get(&key).is_some_and(|&w| (*genesis, *size) != w) {
+            let cand = (*genesis, *size, Reverse(path.as_path()));
+            if winners.get(&key).is_some_and(|&w| cand != w) {
                 skip.insert(key);
             }
         }
@@ -459,7 +477,7 @@ pub fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
     let only = request.only;
     // Case-folded for lookups (NTFS); reports keep original casing.
     let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
-    let CollectedSources { listings, files } = collect_sources(&request.sources, !dry);
+    let CollectedSources { listings, mut files } = collect_sources(&request.sources, !dry, &only);
     let skip_map = winner_skip_map(&files, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
     for (source, listing) in listings {
@@ -470,7 +488,7 @@ pub fn install_daz_assets(request: DazAssetsRequest) -> InstallReport {
             }
             Ok(assets) => {
                 let asset_items =
-                    process_assets(&assets, &files, dest, dry, force, &only, &skip_map);
+                    process_assets(&assets, &mut files, dest, dry, force, &only, &skip_map);
                 // When filtering to a changed-asset set, skip a header whose whole
                 // source contributed nothing (every asset already installed).
                 if !asset_items.is_empty() {
@@ -511,22 +529,28 @@ fn collect_assets(source: &str) -> Result<Vec<PathBuf>, InstallStep> {
 /// When `only` is non-empty, only assets whose name is listed are processed (the
 /// changed-asset set from a prior dry-run — matched by name; a name shared across
 /// two sources installs in both, which is harmless: the other is already in sync).
+/// Each processed asset's collected inventory is MOVED out of `files` and drops
+/// when its step finishes — so a zip asset's nested-temp inflations live only
+/// while THAT asset installs, instead of all of them piling up on disk until the
+/// whole command returns (each asset appears in exactly one source's listing, so
+/// the take-out never starves a later source).
 fn process_assets(
     assets: &[PathBuf],
-    files: &HashMap<PathBuf, (u32, AssetFiles)>,
+    files: &mut HashMap<PathBuf, (u32, AssetFiles)>,
     dest: &Path,
     dry: bool,
     force: bool,
     only: &[String],
     skip_map: &HashMap<PathBuf, HashSet<String>>,
 ) -> Vec<AssetStep> {
-    assets
-        .par_iter()
+    let tasks: Vec<(PathBuf, Option<AssetFiles>)> = assets
+        .iter()
         .filter(|asset| only.is_empty() || only.iter().any(|n| *n == folder_name(asset)))
-        .filter_map(|asset| {
-            let af = files.get(asset.as_path()).map(|(_, af)| af);
-            process_asset(asset, af, dest, dry, force, skip_map)
-        })
+        .map(|asset| (asset.clone(), files.remove(asset.as_path()).map(|(_, af)| af)))
+        .collect();
+    tasks
+        .into_par_iter()
+        .filter_map(|(asset, af)| process_asset(&asset, af.as_ref(), dest, dry, force, skip_map))
         .collect()
 }
 
@@ -535,7 +559,7 @@ fn process_assets(
 pub fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
     let dest = Path::new(&request.dest);
     let accepted: HashSet<String> = request.accepted.iter().map(|r| rel_key(r)).collect();
-    let CollectedSources { listings, files } = collect_sources(&request.sources, false);
+    let CollectedSources { listings, mut files } = collect_sources(&request.sources, false, &[]);
     let skip_map = winner_skip_map(&files, &accepted);
     let mut items: Vec<AssetStep> = Vec::new();
     for (source, listing) in listings {
@@ -543,7 +567,7 @@ pub fn list_daz_assets(request: AssetScanRequest) -> InstallReport {
         match listing {
             Err(step) => items.push((step, None)),
             Ok(assets) => {
-                items.extend(process_assets(&assets, &files, dest, true, false, &[], &skip_map));
+                items.extend(process_assets(&assets, &mut files, dest, true, false, &[], &skip_map));
             }
         }
     }
@@ -650,6 +674,97 @@ mod tests {
         if let Some(step) = report.steps.iter().find(|s| s.label == "67582_Meipe.zip") {
             assert_eq!(step.status, "skipped", "detail: {}", step.detail);
         }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn collect_keeps_zip_handles_only_for_the_only_filtered_assets() {
+        // A real install of ONE changed asset must not pin every wrapper's
+        // nested-zip temp inflation on disk — handles/temps are kept only for
+        // the assets the `only` filter lets through; the rest are still
+        // inventoried (winner resolution needs them) but handle-free.
+        let base = unique_temp_dir("only_handles");
+        let source = base.join("src");
+        fs::create_dir_all(&source).unwrap();
+        write_wrapper_zip(&source.join("AAA.zip"));
+        write_wrapper_zip(&source.join("BBB.zip"));
+        let sources = vec![source.to_string_lossy().to_string()];
+        let only = vec!["AAA.zip".to_string()];
+        let CollectedSources { files, .. } = collect_sources(&sources, true, &only);
+        let af_of = |name: &str| {
+            files
+                .iter()
+                .find(|(p, _)| folder_name(p) == name)
+                .map(|(_, (_, af))| af)
+                .unwrap()
+        };
+        let kept = af_of("AAA.zip");
+        assert_eq!(kept.zip_entries.len(), kept.files.len(), "the installed asset keeps handles");
+        assert_eq!(kept.nested_temps.len(), 1);
+        let skipped = af_of("BBB.zip");
+        assert!(!skipped.files.is_empty(), "still inventoried for winner resolution");
+        assert!(skipped.zip_entries.is_empty() && skipped.nested_temps.is_empty());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn install_drops_a_zip_assets_temps_when_its_step_finishes() {
+        // The kept nested-temp inflations must live only as long as their
+        // asset's install step — not until the whole command returns (a full
+        // real install used to hold EVERY asset's temps to the end).
+        let base = unique_temp_dir("temps_scoped");
+        let source = base.join("src");
+        fs::create_dir_all(&source).unwrap();
+        write_wrapper_zip(&source.join("67582_Meipe.zip"));
+        let sources = vec![source.to_string_lossy().to_string()];
+        let CollectedSources { listings, mut files } = collect_sources(&sources, true, &[]);
+        let temp_paths: Vec<PathBuf> = files
+            .values()
+            .flat_map(|(_, af)| af.nested_temps.iter().map(|t| t.0.clone()))
+            .collect();
+        assert_eq!(temp_paths.len(), 1);
+        assert!(temp_paths[0].is_file(), "the nested inflation is kept for the install");
+        let Ok(assets) = &listings[0].1 else { panic!("listing failed") };
+        let dest = base.join("lib");
+        let skip_map = winner_skip_map(&files, &HashSet::new());
+        let steps = process_assets(assets, &mut files, &dest, false, false, &[], &skip_map);
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].0.status, "ok", "detail: {}", steps[0].0.detail);
+        // The asset's inventory was consumed BY its step — its temp is gone
+        // now, not at command end.
+        assert!(files.is_empty(), "each inventory is consumed by its asset's step");
+        assert!(!temp_paths[0].exists(), "the nested temp drops with the step");
+        assert!(join_rel(&dest, "data/Meipe/morph.dsf").is_file());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn winner_tie_breaks_deterministically_by_asset_path() {
+        // Equal genesis rank AND equal size but different bytes: without a
+        // tie-break, NEITHER copy was skipped and both installed in
+        // rayon-nondeterministic order. The lexicographically first asset path
+        // must win, every run.
+        let base = unique_temp_dir("winner_tie");
+        let source = base.join("src");
+        for (asset, bytes) in [("Alpha", b"aaaa"), ("Bravo", b"bbbb")] {
+            let dir = source.join(asset).join("data");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("shared.dsf"), bytes).unwrap();
+        }
+        let dest = base.join("lib");
+        let report = install_daz_assets(DazAssetsRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dest: dest.to_string_lossy().to_string(),
+            force: false,
+            dry_run: false,
+            only: vec![],
+            accepted: vec![],
+        });
+        let step = |label: &str| report.steps.iter().find(|s| s.label == label).unwrap();
+        assert_eq!(step("Alpha").status, "ok", "detail: {}", step("Alpha").detail);
+        // Bravo loses the tie deterministically — its copy is never flagged.
+        assert_eq!(step("Bravo").status, "skipped", "detail: {}", step("Bravo").detail);
+        assert_eq!(fs::read(dest.join("data").join("shared.dsf")).unwrap(), b"aaaa");
         let _ = fs::remove_dir_all(&base);
     }
 

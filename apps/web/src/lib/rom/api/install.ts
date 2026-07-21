@@ -201,10 +201,10 @@ export async function listDazAssets(): Promise<InstallReport> {
 /** Accept files as legitimately shared between products — they stop showing as
  *  "to copy" / as a conflict (left as whatever is installed). Returns the updated
  *  accepted list. Pass `clear: true` with the same paths to un-accept them. */
-export async function setAcceptedConflicts(
-  rels: Array<string>,
-  clear = false,
-): Promise<Array<string>> {
+export async function setAcceptedConflicts({ data }: { data: unknown }): Promise<Array<string>> {
+  const { rels, clear } = z
+    .object({ rels: z.array(z.string()), clear: z.boolean().optional() })
+    .parse(data)
   const s = await storage.getSettings()
   const set = new Set(s.acceptedConflicts)
   for (const r of rels) {

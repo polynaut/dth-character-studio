@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 #[cfg(desktop)]
 use std::collections::HashSet;
-#[cfg(desktop)]
 use std::path::Path;
 use std::sync::Mutex;
+
+use crate::fsutil::rail_target;
 
 // --- Multi-window: one project (.dcsp) per window -------------------------
 // Each window is pinned to the `.dcsp` it was opened with. The map (window label →
@@ -27,9 +28,21 @@ pub(crate) fn dcsp_from_args(args: &[String]) -> Option<String> {
 /// paths case-insensitively, and the fold must be Unicode-aware like
 /// `fsutil::rel_key` — `eq_ignore_ascii_case` missed non-ASCII variants
 /// (Ärger.dcsp vs ärger.dcsp), letting two windows open on ONE project: the
-/// exact hazard `PROJECT_WINDOW_LOCK` exists to prevent.
+/// exact hazard `PROJECT_WINDOW_LOCK` exists to prevent. A fold alone still
+/// misses different SPELLINGS of one file — a mapped drive (`X:\proj.dcsp`) vs
+/// its UNC (`\\host\share\proj.dcsp`, a routine pair via drives.rs), a
+/// `..`-laden path, a junction — so unequal folds are re-compared on the
+/// canonical form (`rail_target`, like the dedup source rails). Residual: std
+/// can only canonicalize EXISTING paths, so two spellings of a missing/offline
+/// file keep the fold-only compare and could still open two windows — but a
+/// `.dcsp` being opened exists in practice, and the fold catches the common
+/// same-spelling case regardless.
 pub(crate) fn same_project_path(a: &str, b: &str) -> bool {
-    a.to_lowercase() == b.to_lowercase()
+    if a.to_lowercase() == b.to_lowercase() {
+        return true;
+    }
+    let canon = |s: &str| rail_target(Path::new(s)).to_string_lossy().to_lowercase();
+    canon(a) == canon(b)
 }
 
 /// Lock the window→project map, recovering from a poisoned mutex (the guarded map
@@ -75,6 +88,28 @@ pub(crate) fn build_app_menu<R: tauri::Runtime>(
     let updates = MenuItemBuilder::with_id("check_updates", "Check for Updates").build(handle)?;
     let help = SubmenuBuilder::new(handle, "Help").item(&about).item(&updates).build()?;
     MenuBuilder::new(handle).item(&main).item(&help).build()
+}
+
+/// Emit a frontend-driven menu event to the window whose menu bar was clicked —
+/// the FOCUSED one, like `open_home_window_impl`'s `emit_to`. A broadcast
+/// (`app.emit`) reaches every window, so with 2+ windows one menu click used to
+/// navigate/spawn an update check in each of them. Menu events don't carry
+/// their window in tauri 2, but clicking a native menu bar focuses its window,
+/// so the focused window IS the clicked one. If none reports focus (nothing to
+/// go on), fall back to the broadcast rather than dropping the click.
+#[cfg(desktop)]
+pub(crate) fn emit_menu_to_focused(app: &tauri::AppHandle, event: &str) {
+    use tauri::{Emitter, Manager};
+    let focused =
+        app.webview_windows().into_iter().find(|(_, w)| w.is_focused().unwrap_or(false));
+    match focused {
+        Some((label, _)) => {
+            let _ = app.emit_to(&label, event, ());
+        }
+        None => {
+            let _ = app.emit(event, ());
+        }
+    }
 }
 
 /// Serializes PROJECT-window creation, the same way HOME_WINDOW_LOCK does for
@@ -238,5 +273,26 @@ mod tests {
         assert!(same_project_path("D:/P/Ärger.dcsp", "D:/P/ärger.dcsp"));
         assert!(same_project_path("D:/P/proj.dcsp", "D:/P/PROJ.DCSP"));
         assert!(!same_project_path("D:/P/a.dcsp", "D:/P/b.dcsp"));
+    }
+
+    #[test]
+    fn same_project_path_canonicalizes_variant_spellings_of_an_existing_file() {
+        use crate::testutil::unique_temp_dir;
+        let base = unique_temp_dir("same_project_canon");
+        std::fs::create_dir_all(base.join("sub")).unwrap();
+        let file = base.join("proj.dcsp");
+        std::fs::write(&file, b"{}").unwrap();
+        let direct = file.to_string_lossy().replace('\\', "/");
+        // A `..`-laden spelling of the same existing file: the raw fold differs,
+        // canonicalization unifies them. (A unit-testable stand-in for the
+        // mapped-drive X:\… vs UNC \\host\share\… pair, which true drive↔UNC
+        // equivalence needs a real mapping for — same rail, same mechanism.)
+        let sneaky =
+            base.join("sub").join("..").join("proj.dcsp").to_string_lossy().replace('\\', "/");
+        assert_ne!(direct.to_lowercase(), sneaky.to_lowercase(), "the raw folds must differ");
+        assert!(same_project_path(&direct, &sneaky));
+        // A different (missing) file stays different — the fold-only fallback.
+        assert!(!same_project_path(&direct, "D:/P/definitely-missing.dcsp"));
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

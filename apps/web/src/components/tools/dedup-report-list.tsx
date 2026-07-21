@@ -6,10 +6,16 @@ import { displayPath } from '#/lib/path.ts'
 import type { ConflictCopy, DedupReport, FileConflict } from '#/lib/rom/api.ts'
 
 /** Parse the Genesis number from a source folder name ("_genesis 9" → 9) — mirrors
- *  the Rust `genesis_rank` so the UI can show which copy the install picks. */
-function genesisRank(source: string): number {
-  const nums = source.match(/\d+/g)
-  return nums ? Number(nums[nums.length - 1]) : 0
+ *  the Rust `genesis_rank` EXACTLY so the "◀ keeps" marker always highlights the
+ *  copy the install actually picks: the FIRST digit run after the "genesis" token
+ *  ("_genesis 9 (2024)" → 9, "Genesis 8.1" → 8), 0 without a "genesis" token.
+ *  Exported for the test that pins the same cases as the Rust one (dedup.rs). */
+export function genesisRank(source: string): number {
+  const lower = source.toLowerCase()
+  const i = lower.indexOf('genesis')
+  if (i === -1) return 0
+  const digits = /\d+/.exec(lower.slice(i + 'genesis'.length))
+  return digits ? Number(digits[0]) : 0
 }
 /** The copy the install keeps for a shared file: newer Genesis, then bigger. */
 function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {

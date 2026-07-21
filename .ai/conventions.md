@@ -74,7 +74,7 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    folder-repoint sites are now unified in one place —
    **`repointCharacterPaths`** (`apps/web/src/lib/rom/storage/characters.ts`),
    consumed by `saveCharacter`'s rename, `moveCharacter`, AND `moveCharactersRoot`
-   (add the field to that helper). Still separate: `moveScenesFolder`
+   (add the field to that helper). Still separate: `moveCharacterScenesFolder`
    (`apps/web/src/lib/rom/api/characters.ts`) and the prefill field list
    `romFields` (same file). `sceneOverrides` and `groomScenes` are the existing
    examples — grep them to find every site. (Regression fixed: `moveCharacter`

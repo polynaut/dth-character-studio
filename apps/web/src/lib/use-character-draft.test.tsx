@@ -422,6 +422,38 @@ describe('useCharacterDraft persistPatch()', () => {
     expect(result.current.dirty).toBe(false)
   })
 
+  it('re-validates the MERGED result: interim edits that invalidate it refuse the persist', async () => {
+    const { result, onValidationErrors } = setup()
+    const producing = deferred<Partial<Character> | null>()
+
+    let done!: Promise<Character | null>
+    act(() => {
+      done = result.current.persistPatch(() => producing.promise)
+    })
+    await waitFor(() => expect(result.current.saving).toBe(true))
+    // While the producer runs, the user types the draft into a save-blocking
+    // state (an enabled custom FBM pose with an empty name). The step-2 check
+    // only saw the pre-producer draft — without the merged re-check, this
+    // invalid state would persist and regenerate broken artifacts.
+    act(() => result.current.patch({ sections: makeInvalidCharacter().sections }))
+
+    let saved: Character | null = makeCharacter()
+    await act(async () => {
+      producing.resolve({ exportPath: 'D:/export' })
+      saved = await done
+    })
+
+    // Guard-refusal semantics: nothing persisted, errors handed to the page,
+    // the patch NOT applied to the draft (the interim edits stay as-is).
+    expect(saved).toBeNull()
+    expect(saveMock).not.toHaveBeenCalled()
+    expect(generateMock).not.toHaveBeenCalled()
+    expect(onValidationErrors).toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalled()
+    expect(result.current.character.exportPath).toBe('')
+    expect(result.current.saving).toBe(false)
+  })
+
   it('a generate failure AFTER a successful persist keeps the patch, warns, resolves saved', async () => {
     const { result } = setup()
     saveMock.mockImplementationOnce(async ({ data }) => stamped((data as { character: Character }).character))

@@ -3,6 +3,7 @@ import {
   commentSafe,
   dazJson,
   figureAutoSelectSnippet,
+  groomSceneLookupSnippet,
   hideTreeSnippet,
   indentLines,
   sceneSubfolderSnippet,
@@ -215,9 +216,7 @@ ${csvCopyBlock}`
     // different hair); a scene without an entry exports as-is.
     var dthRunExport = function () {
 ${indentBlock(indentBlock(exportCore))}    };
-    var dthGroomByScene = ${dazJson(groomMap)};
-    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
-    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
+${groomSceneLookupSnippet(groomMap)}
 ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
     if (dthGroomLabels.length == 0) {
         print("No hair list for the open scene - exporting as-is.");
@@ -581,9 +580,7 @@ ${figureAutoSelectSnippet(character.genesis)}if (!dthAction) {
 } else if (!dthFig || !dthFig.inherits("DzNode")) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-    var dthGroomByScene = ${dazJson(groomMap)};
-    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
-    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];
+${groomSceneLookupSnippet(groomMap)}
     if (dthGroomLabels.length == 0) {
         MessageBox.information("The open scene has no hair list in DTH Character Studio - nothing to export. Open one of the character's scenes with hair items defined.", "DTH Character Studio", "&OK");
     } else {

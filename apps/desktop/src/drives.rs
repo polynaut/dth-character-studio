@@ -142,7 +142,9 @@ pub fn ensure_network_drives(mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
             let drive = m.drive.trim().to_string();
             let unc = m.unc.trim().to_string();
             match unc_for(&drive) {
-                Some(cur) if cur.eq_ignore_ascii_case(&unc) => RemapResult {
+                // Unicode fold, not ascii-only (the pinned rule — Ärger/ärger):
+                // a non-ASCII share name must still read as "already mapped".
+                Some(cur) if cur.to_lowercase() == unc.to_lowercase() => RemapResult {
                     drive,
                     unc,
                     status: "already".into(),

@@ -483,3 +483,128 @@ describe('deleteCharacter', () => {
     expect(dirs.has('/games/Nova/Kira/houdini')).toBe(false)
   })
 })
+
+describe('repointCharacterPaths', () => {
+  it('repoints every in-folder path — including per-section customAssetPath', () => {
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      scenePath: '/games/Nova/kira/daz3d/kira.duf',
+    })
+    // A custom base ROM copied INTO the character folder must travel with it —
+    // it was the one path field the single repoint site omitted.
+    c.sections.JCM.mode = 'custom'
+    c.sections.JCM.customAssetPath = '/games/Nova/kira/daz3d/Custom Base.duf'
+    // A custom asset linked in place OUTSIDE the folder stays untouched.
+    c.sections.PHY.customAssetPath = 'X:/shared/roms/Physics.duf'
+
+    const moved = storage.repointCharacterPaths(c, '/games/Nova/kira', '/games/Nova/Kira2')
+
+    expect(moved.scenePath).toBe('/games/Nova/Kira2/daz3d/kira.duf')
+    expect(moved.sections.JCM.customAssetPath).toBe('/games/Nova/Kira2/daz3d/Custom Base.duf')
+    expect(moved.sections.PHY.customAssetPath).toBe('X:/shared/roms/Physics.duf')
+  })
+})
+
+describe('saveCharacter returns the post-save location', () => {
+  const project = { id: 'p1', name: 'Nova', path: '/games/Nova' }
+
+  it('a rename reports the NEW folder/definition (so callers can cache it)', async () => {
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    addDir('/games/Nova/Kira')
+    files.set('/games/Nova/Kira/Kira.json', JSON.stringify(c))
+
+    const saved = await storage.saveCharacter(project, { ...c, name: 'Nova Kira' })
+
+    expect(saved.character.name).toBe('Nova Kira')
+    expect(saved.location).toEqual({
+      definitionAbs: '/games/Nova/Nova Kira/Nova Kira.json',
+      folderAbs: '/games/Nova/Nova Kira',
+      relFolder: 'Nova Kira',
+      libraryFolder: '/games/Nova',
+    })
+    // The location is live: the definition actually sits there.
+    expect(files.has('/games/Nova/Nova Kira/Nova Kira.json')).toBe(true)
+  })
+})
+
+describe('known network drives (network-drives.json)', () => {
+  it('overlapping mutations merge instead of clobbering (serialized queue)', async () => {
+    // Two un-awaited mutations in flight at once: the unlocked read-modify-write
+    // this replaces had both read the empty file and the second write dropped
+    // the first entry.
+    await Promise.all([
+      storage.rememberDrive('x:', '\\\\host\\a'),
+      storage.rememberDrive('Y:', '\\\\host\\b'),
+    ])
+    expect(await storage.listKnownDrives()).toEqual([
+      { drive: 'X:', unc: '\\\\host\\a' },
+      { drive: 'Y:', unc: '\\\\host\\b' },
+    ])
+
+    // A forget racing a remember: both land.
+    await Promise.all([storage.forgetDrive('X:'), storage.rememberDrive('Z:', '\\\\host\\c')])
+    expect(await storage.listKnownDrives()).toEqual([
+      { drive: 'Y:', unc: '\\\\host\\b' },
+      { drive: 'Z:', unc: '\\\\host\\c' },
+    ])
+  })
+})
+
+describe('DTH release resolution (pinned version)', () => {
+  it('surfaces a vanished pinned version instead of silently swapping to the newest', async () => {
+    addDir('/dth/Release 2.4.0')
+    files.set('/dth/Release 2.4.0/copyright.txt', 'c')
+    addDir('/dth/Release 2.4.3')
+    files.set('/dth/Release 2.4.3/copyright.txt', 'c')
+
+    // The pinned release is gone from disk → newest still resolves, but the
+    // swap is DISCOVERABLE via pinnedMissing (the old cascade was silent).
+    const swapped = await storage.resolveActiveReleaseRoot('/dth', '2.3.0')
+    expect(swapped.releaseRoot).toBe('/dth/Release 2.4.3')
+    expect(swapped.version).toBe('2.4.3')
+    expect(swapped.error).toBeNull()
+    expect(swapped.pinnedMissing).toBe('2.3.0')
+
+    // A pin that resolves — and no pin at all — carry no signal.
+    const pinned = await storage.resolveActiveReleaseRoot('/dth', '2.4.0')
+    expect(pinned.releaseRoot).toBe('/dth/Release 2.4.0')
+    expect(pinned.pinnedMissing).toBeUndefined()
+    expect((await storage.resolveActiveReleaseRoot('/dth', '')).pinnedMissing).toBeUndefined()
+  })
+})
+
+describe('copyRuntimeFiles', () => {
+  const root = '/daz/Scripts/DTH-Character-Studio'
+
+  it('skips the rewrite when the installed marker is current; reinstalls when stale', async () => {
+    await storage.copyRuntimeFiles(root)
+    expect(files.has(`${root}/.DthWorkflow.dsa`)).toBe(true)
+    expect(files.has(`${root}/Scan_Frames.dsa`)).toBe(true)
+    const marker = files.get(`${root}/.dth-runtime-installed`)
+    expect(typeof marker).toBe('string')
+
+    // Same runtime already installed → the whole write is skipped (a tampered
+    // file stays tampered — proof nothing was rewritten).
+    files.set(`${root}/.DthWorkflow.dsa`, 'tampered')
+    await storage.copyRuntimeFiles(root)
+    expect(files.get(`${root}/.DthWorkflow.dsa`)).toBe('tampered')
+
+    // An older marker (previous runtime version) → full reinstall + restamp.
+    files.set(`${root}/.dth-runtime-installed`, 'v1|/appdata')
+    await storage.copyRuntimeFiles(root)
+    expect(files.get(`${root}/.DthWorkflow.dsa`)).not.toBe('tampered')
+    expect(files.get(`${root}/.dth-runtime-installed`)).toBe(marker)
+  })
+})

@@ -54,9 +54,12 @@ pnpm --filter @dth/desktop tauri signer generate -w ./dth-updater.key
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | contents of the generated private key |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password set during generation |
+| `RELEASE_PAT` | a fine-grained PAT (this repo, Contents: read+write) the **publish** job creates the GitHub Release with. Needed because the default `GITHUB_TOKEN` (github-actions[bot]) gets `403 Resource not accessible by integration` on `POST /releases` here even with `contents: write` — see `.ai/release.md`. Falls back to `GITHUB_TOKEN` if unset (expect the 403). |
 | `CHANGESETS_TOKEN` (optional) | a PAT / GitHub App token (`repo` + `pull-requests:write`) used by the **Version** workflow to author the "version packages" PR. Optional — falls back to `GITHUB_TOKEN`, but with the fallback GitHub does **not** fire PR checks on the bot's version PR (it can't satisfy required checks without a manual close/reopen). Set this and the version PR's checks run on their own. |
 
-`GITHUB_TOKEN` is provided automatically — no secret needed (used for release publishing).
+`GITHUB_TOKEN` is provided automatically — no secret needed. Release publishing,
+though, runs under `RELEASE_PAT` (see the table): the bot token 403s on release
+creation on this repo.
 
 ### 3. Branch protection (main is PR-only)
 
@@ -124,7 +127,8 @@ Both **`sign-win`** and **`sign-mac`** run in the protected
 restricted to `main`) — they run in **parallel**, and every release **pauses
 for a manual approval of each** in the Actions UI before anything touches the
 SimplySign session or the Apple Developer-ID material. **`publish`** is a plain hosted job
-(needs only `GITHUB_TOKEN`, no signing secret), so a GitHub-API hiccup can be
+(no signing secret — it authenticates with `RELEASE_PAT`, falling back to
+`GITHUB_TOKEN`; see the secrets table), so a GitHub-API hiccup can be
 re-run without re-signing, and the real updater key never leaves the signer.
 The artifact round-trip is byte-exact, so the updater `.sig` still verifies
 against the released installer. The NAS remains the single point of failure
@@ -278,10 +282,11 @@ Two residual softnesses to keep in mind (both accepted, documented from the
   purpose is running its generated scripts in Daz), but remember it when
   reasoning about what a compromised webview could reach.
 
-## Later: macOS
+## macOS
 
-Windows-first for now. macOS needs Apple signing + notarization (Developer ID
-cert as `CSC_LINK`/`CSC_KEY_PASSWORD`, notarytool API key as
-`APPLE_API_KEY`/`APPLE_API_KEY_ID`/`APPLE_API_ISSUER`), a `zip` updater target,
-hardened runtime + entitlements (allow-jit / allow-unsigned-executable-memory),
-and a `macos-latest` matrix leg in `release.yml`.
+Implemented as an opt-in — see [macOS builds (opt-in)](#macos-builds-opt-in)
+above. `release.yml` already carries the `build-mac` and `sign-mac` jobs
+(Developer-ID signing, notarization + stapling, the `darwin-aarch64` updater
+entry); the repo **variable** `ENABLE_MAC_RELEASE=true` switches the mac side on
+once the Apple secrets are in place. Until then it's skipped and Windows
+releases normally — no extra matrix leg is needed.

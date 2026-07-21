@@ -35,6 +35,11 @@ export function TooltipHost() {
     const tip = tipRef.current
     if (!tip) return
     let anchor: HTMLElement | null = null
+    // The anchor a show-timer is currently counting down for. Without it, every
+    // mouseover on a CHILD of the anchor (sweeping across a multi-element card)
+    // re-resolves to the same anchor, restarts the delay and stacks another
+    // cancel-listener pair — enough children and the tooltip never appears.
+    let pending: HTMLElement | null = null
     // The anchor whose tooltip a click just dismissed — if the click flips its
     // title (PathCode's "Copied!"), the observer below brings the tooltip back.
     let clicked: HTMLElement | null = null
@@ -44,6 +49,7 @@ export function TooltipHost() {
       window.clearTimeout(timer)
       timer = 0
       anchor = null
+      pending = null
       clicked = null
       tip.style.display = 'none'
     }
@@ -63,6 +69,7 @@ export function TooltipHost() {
         }
       }
       anchor = el
+      pending = null
       tip.textContent = text
       tip.className = el.getAttribute('data-tooltip-variant') === 'error' ? TIP_ERROR : TIP_DEFAULT
       tip.style.display = 'block'
@@ -104,12 +111,17 @@ export function TooltipHost() {
       const title = target.getAttribute('title')
       if (title !== null) steal(target, title)
       const text = target.getAttribute('data-tooltip')
-      if (!text || target === anchor) return
+      // Already showing for this anchor, or its timer is already running (a
+      // mouseover on one of its children) — bail before restarting the delay
+      // or attaching a second cancel-listener pair.
+      if (!text || target === anchor || target === pending) return
       window.clearTimeout(timer)
+      pending = target
       timer = window.setTimeout(
         () => show(target, text),
         e.type === 'focusin' ? 0 : SHOW_DELAY_MS,
       )
+      // Attached exactly once per pending anchor (the bail above guarantees it).
       const cancel = () => {
         target.removeEventListener('mouseleave', cancel)
         target.removeEventListener('blur', cancel)

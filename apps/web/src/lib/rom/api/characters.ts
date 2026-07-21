@@ -1,5 +1,6 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
+import { toast } from 'sonner'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
 
@@ -32,6 +33,7 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
+import { generateCharacterFiles } from './generate'
 import { isExternalImage } from '../image'
 
 import type { Character, GenesisVersion, ImportedPose } from '@dth/rom'
@@ -358,10 +360,15 @@ const saveInput = z.object({ projectId: z.string().min(1), character: z.unknown(
 export async function saveCharacter({ data }: { data: unknown }): Promise<Character> {
   const { projectId, character } = saveInput.parse(data)
   const project = await resolveProject(projectId)
-  // A name change renames the character's folder on disk — drop the cached
-  // locations so the next read re-scans instead of chasing the old path.
-  invalidateCharacterLocations()
-  return storage.saveCharacter(project, characterSchema.parse(character), charsRoot(project))
+  const lib = charsRoot(project)
+  // The save resolves (and, on a rename, moves) the character's folder itself
+  // and reports where it landed — prime the session cache with that POST-save
+  // location instead of blanket-clearing it, which forced the save+generate
+  // pair into a second full library walk on every save. The entry is keyed by
+  // id, so a rename simply overwrites the stale old-path entry.
+  const saved = await storage.saveCharacter(project, characterSchema.parse(character), lib)
+  cacheCharacterLocation(lib, saved.character.id, saved.location)
+  return saved.character
 }
 
 const deleteCharacterInput = charScopeInput.extend({
@@ -560,7 +567,23 @@ export async function moveCharacterScenesFolder({
   // had already drifted: it omitted `houdiniProjects`).
   const next = storage.repointCharacterPaths(character, oldDir, newDir)
   const project = await resolveProject(projectId)
-  return storage.saveCharacter(project, next, root)
+  const saved = await storage.saveCharacter(project, next, root)
+  cacheCharacterLocation(root, saved.character.id, saved.location)
+  // The installed ROM/Export scripts embed the repointed paths (the groom map is
+  // keyed by ABSOLUTE scene path, and the CSV-delivery path is baked in) — a
+  // repointed save without regeneration leaves them targeting the old folder.
+  // Regenerate like every other persisting flow; a failure here is a warning on
+  // top of a LANDED save (the persistPatch posture), never a rollback.
+  try {
+    await generateCharacterFiles({ data: { projectId, id } })
+  } catch (e) {
+    toast.warning(
+      `Moved the scenes folder, but couldn't regenerate the DTH files: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    )
+  }
+  return saved.character
 }
 
 /** Constant-time-irrelevant byte compare for small avatar/preview images. */

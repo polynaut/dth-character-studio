@@ -1,6 +1,6 @@
 import { exists, mkdir, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs'
 
-import { characterScriptName } from '@dth/rom'
+import { characterScriptName, RUNTIME_VERSION } from '@dth/rom'
 import type { Character } from '@dth/rom'
 
 import { characterFolderName } from '../library'
@@ -87,15 +87,35 @@ export function studioCharScriptsDir(
   )
 }
 
+/** Marker file (hidden like the runtime it describes) recording which runtime
+ *  version — and which baked-in app-data folder — is installed at the root.
+ *  Lets every save+generate skip rewriting the ~11 runtime scripts when the
+ *  install is already current. Written LAST, so a failed/partial install never
+ *  records success. */
+const RUNTIME_MARKER_FILE = '.dth-runtime-installed'
+
 /**
  * Install the bundled DTH runtime files into `destDir` (the DTH-Character-Studio
  * root), creating it if missing. They're written dot-prefixed (`.DthWorkflow.dsa`
  * etc.) so they read as hidden, and the sibling `include()` references inside
  * them are rewritten so resolution still works from a character script two levels
  * deep — see the rewrite below. Overwrites so the runtime stays current with the
- * app version.
+ * app version — but skips the whole write when the installed marker already
+ * matches this app's RUNTIME_VERSION (and app-data path): the runtime files
+ * only change with a RUNTIME_VERSION bump, so rewriting them on EVERY
+ * save+generate was pure overhead.
  */
 export async function copyRuntimeFiles(destDir: string): Promise<void> {
+  // The visible scan scripts get the app-data folder baked in below — it's part
+  // of what "installed and current" means, so it joins the marker stamp.
+  const appData = (await dataDir()).replace(/\\/g, '/')
+  const markerPath = join(destDir, RUNTIME_MARKER_FILE)
+  const stamp = `v${RUNTIME_VERSION}|${appData}`
+  try {
+    if ((await readTextFile(markerPath)) === stamp) return // already current
+  } catch {
+    // no marker (fresh/legacy/partial install) — do the full install below
+  }
   await mkdir(destDir, { recursive: true })
   for (const [name, raw] of Object.entries(RUNTIME_FILES)) {
     // The runtime files include each other via `dir_self.filePath("Dep.dsa")`,
@@ -114,7 +134,6 @@ export async function copyRuntimeFiles(destDir: string): Promise<void> {
   // includes of the dot-prefixed runtime resolve right here), with the studio's
   // app-data folder baked into their output paths so the scans land where the
   // studio reads them (DzFile wants '/').
-  const appData = (await dataDir()).replace(/\\/g, '/')
   for (const [name, raw] of Object.entries(VISIBLE_SCAN_SCRIPTS)) {
     await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
   }
@@ -125,6 +144,8 @@ export async function copyRuntimeFiles(destDir: string): Promise<void> {
     const old = join(destDir, legacy)
     if (await exists(old)) await remove(old)
   }
+  // Every file above landed — only now record the install as current.
+  await writeTextFile(markerPath, stamp)
 }
 
 /**

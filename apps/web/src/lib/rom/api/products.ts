@@ -62,6 +62,12 @@ export interface ProductScanResult {
   files: Array<ProductScanFile>
 }
 
+/** Monotonic per-run stamp appended to a listing signature that contains a
+ *  stat-FAILED entry: an unstattable CSV can't prove it's unchanged, so its
+ *  signature must never match a stored one (a bare `name||-1` is the same
+ *  string every run and would serve the cached merge forever). */
+let unstattableRun = 0
+
 export async function fetchProductScan({ data }: { data: unknown }): Promise<ProductScanResult> {
   const { projectId, id } = charScopeInput.parse(data)
   const project = await resolveProject(projectId)
@@ -75,6 +81,7 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
     // signature (names + mtimes + sizes), serve the cached merge instead of
     // re-reading and re-parsing every file on each navigation to the character.
     const listing: Array<{ name: string; modifiedAt: string; size: number }> = []
+    let anyUnstattable = false
     for (const entry of await readDir(dir)) {
       if (!entry.isFile || !entry.name.toLowerCase().endsWith('.csv')) continue
       let modifiedAt = ''
@@ -84,13 +91,19 @@ export async function fetchProductScan({ data }: { data: unknown }): Promise<Pro
         modifiedAt = info.mtime ? info.mtime.toISOString() : ''
         size = info.size
       } catch {
-        // mtime unavailable — leave '' (and a -1 size keeps the entry "unstable",
-        // so an unstattable file is simply re-read next time)
+        // stat failed — the entry can't be revalidated; taint the signature
+        // below so this run (and the next) re-reads instead of trusting cache
+        anyUnstattable = true
       }
       listing.push({ name: entry.name, modifiedAt, size })
     }
     listing.sort((a, b) => a.name.localeCompare(b.name))
-    const signature = listing.map((f) => `${f.name}|${f.modifiedAt}|${f.size}`).join('\n')
+    // The per-run nonce makes a stat-failed listing genuinely unstable: it can
+    // never equal the stored signature, so the cache is bypassed AND the stored
+    // entry from such a run can never be served later.
+    const signature =
+      listing.map((f) => `${f.name}|${f.modifiedAt}|${f.size}`).join('\n') +
+      (anyUnstattable ? `\n!unstattable:${++unstattableRun}` : '')
     const cached = productScanCache.get(dir)
     if (cached && cached.signature === signature) return cached.result
 

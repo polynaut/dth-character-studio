@@ -8,10 +8,12 @@ afterEach(() => {
 })
 
 const setUnrealProjects = vi.fn(async (_: { data: { projectId: string; paths: Array<string> } }) => {})
+const unrealDthContentPresent = vi.fn(async (_: { data: { uprojectPath: string } }) => true)
 vi.mock('#/lib/rom/api.ts', () => ({
   setUnrealProjects: (args: { data: { projectId: string; paths: Array<string> } }) =>
     setUnrealProjects(args),
-  unrealDthContentPresent: async () => true,
+  unrealDthContentPresent: (args: { data: { uprojectPath: string } }) =>
+    unrealDthContentPresent(args),
   installUnrealDthContent: async () => 0,
   openScene: async () => {},
   revealPath: async () => {},
@@ -71,6 +73,21 @@ describe('UnrealProjectsBar mutations', () => {
     finish()
     await waitFor(() =>
       expect(screen.getByLabelText('Unlink B')).toHaveProperty('disabled', false),
+    )
+  })
+
+  it('a failed Content/DazToHue probe enables the install button (unknown ≠ disabled forever)', async () => {
+    unrealDthContentPresent.mockRejectedValueOnce(new Error('share offline'))
+    render(<UnrealProjectsBar project={projectWith([A])} />)
+
+    await waitFor(() => expect(unrealDthContentPresent).toHaveBeenCalledTimes(1))
+    // The probe failed → treated as "not installed": the button is usable, not
+    // permanently disabled with no explanation.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Install DTH content into A')).toHaveProperty(
+        'disabled',
+        false,
+      ),
     )
   })
 })

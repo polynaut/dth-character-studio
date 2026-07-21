@@ -129,9 +129,24 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return new TextEncoder().encode(content).buffer
       }
       case 'plugin:fs|write_text_file':
-      case 'plugin:fs|write_file':
-        files.set(headerPath(options), new TextDecoder().decode(args))
+      case 'plugin:fs|write_file': {
+        // The payload arrives as raw bytes. Text stays a plain string in the
+        // map (specs read `files` contents directly) — but a BINARY payload
+        // (non-UTF-8, e.g. a copied image) is stored as a base64 data URL, the
+        // same form binary SEEDS use, so read_file above returns the exact
+        // bytes instead of a lossily TextDecoder-mangled string.
+        const path = headerPath(options)
+        const bytes = args instanceof Uint8Array ? args : new Uint8Array(args)
+        try {
+          files.set(path, new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+        } catch {
+          let bin = ''
+          for (let i = 0; i < bytes.length; i += 0x8000)
+            bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+          files.set(path, `data:application/octet-stream;base64,${btoa(bin)}`)
+        }
         return null
+      }
       case 'plugin:fs|read_dir':
         return listDir(norm(args.path))
       case 'plugin:fs|mkdir': {

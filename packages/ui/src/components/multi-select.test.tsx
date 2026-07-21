@@ -105,21 +105,33 @@ describe('MultiSelect', () => {
     expect(onChange).toHaveBeenCalledWith(['Banana'])
   })
 
-  it('Escape closes the list without bubbling to a surrounding dialog', () => {
+  it('Escape closes the list without reaching a surrounding dialog — even one dismissing from a document-level capture listener (Radix)', () => {
     const outer = vi.fn()
-    const { getByRole, queryByRole } = render(
-      <div onKeyDown={outer}>
-        <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />
-      </div>,
-    )
-    const input = getByRole('combobox')
-    fireEvent.focus(input)
-    expect(queryByRole('listbox')).toBeTruthy()
-    fireEvent.keyDown(input, { key: 'Escape' })
-    expect(queryByRole('listbox')).toBeNull()
-    expect(outer).not.toHaveBeenCalled()
-    fireEvent.keyDown(input, { key: 'Escape' }) // closed: bubbles normally
-    expect(outer).toHaveBeenCalled()
+    // Radix overlays dismiss Escape from a document-level CAPTURE keydown
+    // listener registered when the dialog mounts — i.e. BEFORE the option list
+    // ever opens. Simulate exactly that: React stopPropagation alone can never
+    // beat it, only the component's window-capture swallow can.
+    const radixLikeCapture = vi.fn()
+    document.addEventListener('keydown', radixLikeCapture, { capture: true })
+    try {
+      const { getByRole, queryByRole } = render(
+        <div onKeyDown={outer}>
+          <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />
+        </div>,
+      )
+      const input = getByRole('combobox')
+      fireEvent.focus(input)
+      expect(queryByRole('listbox')).toBeTruthy()
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(queryByRole('listbox')).toBeNull()
+      expect(radixLikeCapture).not.toHaveBeenCalled()
+      expect(outer).not.toHaveBeenCalled()
+      fireEvent.keyDown(input, { key: 'Escape' }) // closed: propagates normally
+      expect(radixLikeCapture).toHaveBeenCalledTimes(1)
+      expect(outer).toHaveBeenCalled()
+    } finally {
+      document.removeEventListener('keydown', radixLikeCapture, { capture: true })
+    }
   })
 
   it('allowCustom offers adding an unknown query via Enter', () => {

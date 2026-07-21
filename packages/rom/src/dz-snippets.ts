@@ -59,6 +59,21 @@ if (dthSceneFile != "") {
 }
 
 /**
+ * The "which hair items belong to the OPEN scene" resolution: embed the
+ * per-scene groom map and look up the open scene's entry by its forward-slash
+ * lowercased absolute path. ONE body for the ROM/Export script's export
+ * bracket and the standalone groom export (the two used to carry
+ * byte-duplicated copies) — a normalization tweak must land in both or the
+ * scripts disagree on which scene has a groom list. Base indent 4 (both
+ * callers embed at that level).
+ */
+export function groomSceneLookupSnippet(groomMap: Record<string, Array<string>>): string {
+  return `    var dthGroomByScene = ${dazJson(groomMap)};
+    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];`
+}
+
+/**
  * Strip the characters that could break OUT of a `//` comment line in a generated
  * Daz script — CR/LF and the Unicode line separators U+2028/U+2029 that Daz's
  * ECMAScript engine also treats as line terminators. Without this, a crafted

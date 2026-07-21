@@ -13,11 +13,40 @@ import {
   characterSchema,
 } from '../../../packages/rom/src/types.ts'
 
+import { installTauriMock } from './tauri-mock.ts'
+
 import type { TauriMockSeed } from './tauri-mock.ts'
+import type { Page } from '@playwright/test'
 
 import { readFileSync } from 'node:fs'
 import { dirname, join as joinNodePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+// ── Shared page helpers for the docs suites (guide.screenshots / guide.gifs) ─
+
+/** Every date/time the app renders resolves against this frozen instant — file
+ *  mtimes from the mock (statOf uses Date.now IN the page), "saved …" stamps,
+ *  recents. Frozen so a regeneration never diffs on timestamps alone. */
+export const FIXED_TIME = new Date('2026-07-01T12:00:00')
+
+/** Prime the page BEFORE the app bundle runs: freeze the clock (see
+ *  FIXED_TIME — timers keep running, only Date is pinned), set the flag that
+ *  gates the dev TanStack devtools trigger off (so it stays out of the shots —
+ *  a DOM/CSS hack loses to the widget re-mounting during the capture), then
+ *  install the in-memory Tauri fake with the fixture world. */
+export async function prime(page: Page, seed: TauriMockSeed) {
+  await page.clock.setFixedTime(FIXED_TIME)
+  await page.addInitScript(() => {
+    ;(window as unknown as { __dthHideDevtools?: boolean }).__dthHideDevtools = true
+  })
+  await page.addInitScript(installTauriMock, seed)
+}
+
+/** Let the route settle (fonts/images/layout) before measuring or shooting. */
+export async function settle(page: Page) {
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(400)
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 /** Kira's avatar — the Daz scene's `.tip.png`, inlined as a data URL

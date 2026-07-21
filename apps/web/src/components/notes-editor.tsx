@@ -61,6 +61,11 @@ export function NotesEditor({
 }) {
   const [text, setText] = useState('')
   const [loaded, setLoaded] = useState(false)
+  // Initial load failure (e.g. an offline share): without surfacing it the tab
+  // just sat permanently disabled with zero feedback. `loadNonce` re-runs the
+  // load effect for the Retry button.
+  const [loadError, setLoadError] = useState('')
+  const [loadNonce, setLoadNonce] = useState(0)
   const [mode, setMode] = useState<'write' | 'preview'>('preview')
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const areaRef = useRef<HTMLTextAreaElement>(null)
@@ -88,18 +93,23 @@ export function NotesEditor({
 
   useEffect(() => {
     let active = true
-    void fetchNotes({ data: { projectId, characterId } }).then(({ text: stored, mtime }) => {
-      if (!active) return
-      mtimeRef.current = mtime
-      saveFailedRef.current = false
-      lastSavedRef.current = stored
-      setText(stored)
-      setLoaded(true)
-    })
+    setLoadError('')
+    void fetchNotes({ data: { projectId, characterId } })
+      .then(({ text: stored, mtime }) => {
+        if (!active) return
+        mtimeRef.current = mtime
+        saveFailedRef.current = false
+        lastSavedRef.current = stored
+        setText(stored)
+        setLoaded(true)
+      })
+      .catch((e: unknown) => {
+        if (active) setLoadError(e instanceof Error ? e.message : String(e))
+      })
     return () => {
       active = false
     }
-  }, [projectId, characterId])
+  }, [projectId, characterId, loadNonce])
 
   /** Load the disk version into the editor, discarding the local draft. */
   async function reloadFromDisk() {
@@ -223,10 +233,14 @@ export function NotesEditor({
       }
     }
     if (!snippets.length) return
+    // Splice into the CURRENT text (the ref), not the `text` closure captured at
+    // drop time — the media copy above can take a while, and anything typed
+    // during it would otherwise be silently reverted (and then autosaved away).
+    const current = textRef.current
     const area = areaRef.current
-    const at = area ? area.selectionStart : text.length
-    const before = text.slice(0, at)
-    const after = text.slice(at)
+    const at = area ? area.selectionStart : current.length
+    const before = current.slice(0, at)
+    const after = current.slice(at)
     const insert = `${before && !before.endsWith('\n') ? '\n' : ''}${snippets.join('\n')}\n`
     const next = before + insert + after
     scheduleSave(next)
@@ -236,6 +250,26 @@ export function NotesEditor({
       area?.focus()
       area?.setSelectionRange(at + insert.length, at + insert.length)
     })
+  }
+
+  // A failed initial load renders the error + Retry instead of a permanently
+  // disabled editor (same red surface as the app's other inline error boxes).
+  if (loadError) {
+    return (
+      <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
+        <p className="break-all text-red-600 dark:text-red-400">
+          Couldn't load the notes: {loadError}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => setLoadNonce((n) => n + 1)}
+        >
+          Retry
+        </Button>
+      </div>
+    )
   }
 
   return (

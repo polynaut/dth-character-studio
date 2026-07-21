@@ -166,10 +166,17 @@ pub(crate) fn zip_file_entries(
         if entry.is_dir() {
             continue;
         }
-        // enclosed_name rejects absolute / `..` paths (zip-slip).
+        // enclosed_name rejects absolute / `..` paths (zip-slip). A rejected
+        // name is an entry the inventory DROPPED — count it, or a malicious/
+        // broken archive still reads as a complete inventory to the
+        // read_errors gates (install would report the rest "already installed",
+        // dedup could quarantine on partial data).
         let rel = match entry.enclosed_name() {
             Some(p) => p.to_string_lossy().replace('\\', "/"),
-            None => continue,
+            None => {
+                skipped += 1;
+                continue;
+            }
         };
         entries.push((i, rel, entry.size()));
     }
@@ -313,5 +320,26 @@ mod tests {
         assert!(budget.check_entry_count(MAX_ZIP_ENTRIES).is_ok());
         let err = budget.check_entry_count(MAX_ZIP_ENTRIES + 1).unwrap_err();
         assert!(err.to_string().contains("many.zip"), "error must name the archive: {err}");
+    }
+
+    #[test]
+    fn zip_slip_names_count_as_skipped_entries() {
+        use crate::testutil::{unique_temp_dir, write_zip};
+        // An entry whose name escapes the archive (zip-slip) is rejected by
+        // enclosed_name — it must COUNT as skipped, so the archive reads as an
+        // INCOMPLETE inventory to the read_errors gates instead of a clean one.
+        let base = unique_temp_dir("zip_slip_skipped");
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("evil.zip");
+        write_zip(
+            &path,
+            &[("data/ok.dsf", b"ok".as_slice()), ("../evil.dsf", b"evil".as_slice())],
+        );
+        let mut archive = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let (entries, skipped) = zip_file_entries(&mut archive);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].1, "data/ok.dsf");
+        assert_eq!(skipped, 1, "the rejected zip-slip name is counted, not silently dropped");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
