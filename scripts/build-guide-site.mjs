@@ -191,7 +191,7 @@ const shell = (md, content) => `<!doctype html>
   <body class="guide-body">
     <header class="topbar shown">
       <div class="container topbar-inner">
-        <a class="topbar-brand" href="index.html">
+        <a class="topbar-brand" href="../">
           <img src="../assets/logo-192.png" alt="" width="26" height="26" />
           <span>DTH Character Studio</span>
         </a>
