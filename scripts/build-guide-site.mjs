@@ -220,6 +220,11 @@ const sidebarLabel = (md) => {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
+// The <title> tag (browser tab / address bar) drops the leading "N · " step
+// number too — a title starting with a digit looks odd there. The on-page H1
+// and the pager keep it (it's useful reading order, just not as a title).
+const pageTitle = (md) => titles.get(md).replace(/^\d+\s*·\s*/, '')
+
 const sidebar = (current) =>
   NAV.map(
     (g) => `
@@ -251,7 +256,7 @@ const shell = (md, content) => `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(titles.get(md))} · DTH Character Studio</title>
+    <title>${escapeHtml(pageTitle(md))} · DTH Character Studio</title>
     <link rel="icon" href="../assets/logo-192.png" />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="../guide.css" />
