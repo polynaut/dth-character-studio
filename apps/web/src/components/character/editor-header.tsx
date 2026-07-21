@@ -6,61 +6,12 @@ import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { SceneLabel } from '#/components/character/scene-label.tsx'
 import { Button, EditableTitle, useModifierHeld } from '@dth/ui'
-import { prettySceneName } from '#/lib/scene-name.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
 import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
-
-/**
- * Glide the page to a target scrollY with a rAF-driven ease-out — NOT
- * `behavior: 'smooth'`, which Windows' reduced-motion setting silently turns
- * into an instant jump; this glide is part of the interaction (the scene tag
- * "travels" to the scene cards it stands for), so it always animates. A wheel
- * or touch during the glide cancels it — the user's scroll wins.
- */
-function smoothScrollToY(target: number) {
-  const dest = Math.max(0, target)
-  const start = window.scrollY
-  if (Math.abs(dest - start) < 1) return
-  const duration = 400
-  const t0 = performance.now()
-  let cancelled = false
-  const cancel = () => {
-    cancelled = true
-  }
-  window.addEventListener('wheel', cancel, { once: true, passive: true })
-  window.addEventListener('touchstart', cancel, { once: true, passive: true })
-  const step = (now: number) => {
-    if (cancelled) return
-    const t = Math.min(1, (now - t0) / duration)
-    const eased = 1 - Math.pow(1 - t, 3)
-    window.scrollTo(0, Math.round(start + (dest - start) * eased))
-    if (t < 1) requestAnimationFrame(step)
-    else {
-      window.removeEventListener('wheel', cancel)
-      window.removeEventListener('touchstart', cancel)
-    }
-  }
-  requestAnimationFrame(step)
-}
-
-/**
- * Scroll the "Daz scenes" section heading to just below the sticky header, from
- * wherever the page is (up OR down) — clicking the header's scene label jumps to
- * the scene cards. The offset is the sticky header's live height (collapsed
- * while scrolled down).
- */
-function scrollDazScenesIntoView() {
-  const el = document.getElementById('daz-scenes')
-  if (!el) return
-  const header = document.querySelector('header')
-  const offset = (header?.offsetHeight ?? 96) + 12
-  smoothScrollToY(window.scrollY + el.getBoundingClientRect().top - offset)
-}
 
 /**
  * Discard + Save, in their own component ON PURPOSE: `useModifierHeld` flips
@@ -119,8 +70,6 @@ export function EditorHeader({
   folderChip,
   folderMove,
   hasRunProblems,
-  sceneTag,
-  sceneAvatarPath,
 }: {
   projectId: string
   draft: CharacterDraft
@@ -132,12 +81,6 @@ export function EditorHeader({
   folderMove: { editValue: string; onMove: (next: string) => Promise<unknown> } | null
   /** Show the "errors in the last ROM run" scroll-up button. */
   hasRunProblems: boolean
-  /** The selected scene's tag next to the title (null hides it — single scene
-   *  or while renaming). */
-  sceneTag: string | null
-  /** With a non-primary scene selected, the portrait previews that scene's
-   *  `.tip.png` instead of the stored avatar (null → stored avatar). */
-  sceneAvatarPath: string | null
 }) {
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
@@ -167,10 +110,8 @@ export function EditorHeader({
   }, [])
 
   // A character has ONE main avatar (`character.image`), shown in this big
-  // portrait and everywhere else in the app. Selecting a non-primary scene no
-  // longer swaps the portrait — instead that scene rides the title as a small
-  // thumbnail (`sceneAvatarPath`, in the title row below), so the avatar stays
-  // constant and editable in EVERY state.
+  // portrait and everywhere else in the app — it stays constant and editable in
+  // EVERY state (a scene selection never swaps it).
 
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button. Routed
@@ -298,28 +239,6 @@ export function EditorHeader({
                 onSave={onRenameCharacter}
               />
             </span>
-            {/* The SELECTED scene rides the title as a "label" AFTER the name —
-                ONE orange tag holding a small landscape thumbnail of the scene
-                (or a plain "P" box for the PRIMARY scene) at its start, then the
-                scene name. Clicking it jumps to the scene cards. Only with
-                several scenes linked; hidden while renaming. */}
-            {sceneTag && !editingTitle && (
-              <button
-                type="button"
-                className="label-scroll cursor-pointer"
-                onClick={scrollDazScenesIntoView}
-              >
-                {/* The selected scene as the shared green pill — the SAME label the
-                    per-scene override toggles use. `muted` (greyscale + plain tile)
-                    when the PRIMARY scene is the active selection. */}
-                <SceneLabel
-                  scenePath={sceneAvatarPath ?? character.scenePath}
-                  name={prettySceneName(sceneTag, character.name)}
-                  muted={!sceneAvatarPath}
-                  fallbackName={character.name}
-                />
-              </button>
-            )}
           </div>
           <p className="title-subtitle text-muted-foreground">
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}

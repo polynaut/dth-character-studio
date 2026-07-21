@@ -32,16 +32,14 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
   // The PRIMARY scene is selected by default — it IS the base definition, so the
-  // header carries NO scene pill and the per-panel override toggles are hidden.
-  const titleRow = page.locator('.title-scroll')
-  await expect(titleRow.getByText('Default G9 GP')).toHaveCount(0)
+  // per-panel override toggles are hidden entirely.
   await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(0)
 
-  // Select a non-primary scene → its name rides the header as the green pill (the
-  // tag strips the character name + spaces the separators, so "KiraBeach" reads
-  // "Beach"; see prettySceneName), and the ROM override toggle appears.
+  // Selecting a non-primary scene reveals the override toggles; the ROM one's label
+  // carries the scene as a green pill ("KiraBeach" reads "Beach", see prettySceneName).
   await page.getByText('KiraBeach', { exact: true }).first().click()
-  await expect(titleRow.getByText('Beach', { exact: true })).toBeVisible()
+  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(1)
+  await expect(page.getByText('Beach', { exact: true }).first()).toBeVisible()
   await page.getByRole('switch', { name: /Override ROM frames/ }).click()
 
   // Arming unlocks the ROM: the FBM rows' Override checkboxes appear. Check the

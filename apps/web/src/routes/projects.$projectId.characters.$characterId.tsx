@@ -329,12 +329,6 @@ function CharacterPage() {
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
-        sceneTag={sceneSel.overrideEligible ? sceneSel.selectedSceneName : null}
-        sceneAvatarPath={
-          sceneSel.effectiveScene && sceneSel.effectiveScene !== character.scenePath
-            ? sceneSel.effectiveScene
-            : null
-        }
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
@@ -438,8 +432,6 @@ function CharacterPage() {
           />
         </section>
       )}
-
-      <ScriptsSection character={character} scriptsPath={scriptsPath} />
       </div>
 
       {project?.dazProductsEnabled && (
@@ -462,6 +454,23 @@ function CharacterPage() {
         persistPatch={draft.persistPatch}
         location={location}
         houdiniSubdir={project?.houdiniSubdir}
+      />
+
+      <RomEditorSection
+        character={character}
+        patch={patch}
+        catalog={catalog}
+        presetFrames={presetFrames}
+        failedFrames={runLog.failedFrames}
+        revealFrame={runLog.revealFrame}
+        revealPose={revealPose}
+        morphIndex={morphIndex}
+        overrideEligible={sceneSel.overrideEligible}
+        overrideActive={sceneSel.overrideActive}
+        selectedSceneName={sceneSel.selectedSceneName}
+        scenePath={sceneSel.effectiveScene}
+        sceneOverride={sceneSel.sceneOverride}
+        setOverrideEnabled={sceneSel.setOverrideEnabled}
       />
 
       <details className="mb-8 rounded-lg border bg-card">
@@ -491,22 +500,7 @@ function CharacterPage() {
         </div>
       </details>
 
-      <RomEditorSection
-        character={character}
-        patch={patch}
-        catalog={catalog}
-        presetFrames={presetFrames}
-        failedFrames={runLog.failedFrames}
-        revealFrame={runLog.revealFrame}
-        revealPose={revealPose}
-        morphIndex={morphIndex}
-        overrideEligible={sceneSel.overrideEligible}
-        overrideActive={sceneSel.overrideActive}
-        selectedSceneName={sceneSel.selectedSceneName}
-        scenePath={sceneSel.effectiveScene}
-        sceneOverride={sceneSel.sceneOverride}
-        setOverrideEnabled={sceneSel.setOverrideEnabled}
-      />
+      <ScriptsSection character={character} scriptsPath={scriptsPath} />
 
       <DeleteCharacterSection
         projectId={projectId}
