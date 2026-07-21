@@ -4,6 +4,12 @@ version = "0.1.0"
 description = "DTH Character Studio"
 authors = ["Polynaut"]
 edition = "2021"
+# GPL-3.0, NOT MIT like the rest of the workspace: this crate (the distributed
+# desktop application) links `xbrz-rs`, which is GPL-3.0-only, so the combined
+# binary is GPL-3.0. The pure-TypeScript libraries (@dth/rom, @dth/ui) and the web
+# app stay MIT — MIT is GPL-compatible, so they still compile into this binary
+# while remaining reusable elsewhere. See apps/desktop/LICENSE and avatar.rs.
+license = "GPL-3.0-only"
 
 # The library the desktop and (future) mobile entry points share.
 [lib]
@@ -41,6 +47,16 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 # Parallelize the per-asset Optional-tab scan/install (independent I/O-bound
 # folder walks + zip central-directory reads).
 rayon = "1"
+# Avatar upscaling (avatar.rs): a 256px Daz scene `.tip.png` (or a small cropped
+# upload) magnified into the character-header portrait looks soft, so we upscale
+# anything under 512² to 512² with xBRZ — an edge-directed magnifier that suits the
+# flat-shaded Daz figures far better than a plain resample. xbrz-rs is
+# GPL-3.0-only; linking it is why THIS crate is GPL-3.0 (see the `license` above).
+# `image` (png only — no jpeg/webp/etc.) does the PNG decode/encode + the Lanczos
+# down-step to land exactly on 512; its png stack is miniz_oxide/fdeflate, so it
+# does NOT touch the brotli/alloc-stdlib pins noted above.
+xbrz-rs = "0.1"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Desktop-only plugins (updater + relaunch + single-instance).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

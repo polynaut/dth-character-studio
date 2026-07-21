@@ -238,6 +238,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
       // --- the app's own Rust commands --------------------------------------
       case 'active_project_file':
         return seed.activeProjectFile
+      case 'upscale_avatar_file':
+        // No real image processing in the mock — stored avatar bytes are left as
+        // written (`false` = "nothing upscaled"). Keeps avatar-set flows off the
+        // unhandled-command guard.
+        return false
       case 'probe_locked_files':
         return seed.lockedFiles ?? []
       case 'open_project_window': // opens a separate OS window on the desktop —

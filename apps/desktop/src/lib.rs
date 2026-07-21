@@ -1,5 +1,6 @@
 mod archive;
 mod assets;
+mod avatar;
 mod content;
 #[cfg(test)]
 mod contract_tests;
@@ -119,6 +120,7 @@ pub fn run() {
             install::install_dth_plugin,
             assets::install_daz_assets,
             assets::list_daz_assets,
+            avatar::upscale_avatar_file,
             dedup::dedup_daz_assets,
             uninstall::default_daz_uninstall_folders,
             uninstall::uninstall_daz,

@@ -213,26 +213,33 @@ a {
   }
 }
 
-/* The image is a SQUARE that the zoom below always blows up past the wrapper, so
-   it's over-scanned in every state — which frees the pan to drift either way
-   without exposing the wrapper's grey fill. Here it eases from 12% down at the
-   top to 3% as the header collapses; translateY is composited, so it's smooth
-   and never touches layout. */
+/* The image is a SQUARE that the zoom below over-scans past the wrapper, so an
+   OPAQUE avatar (an uploaded photo) still fills the 3:4 frame in every state, and
+   the pan can drift either way without exposing the wrapper's grey fill. Here it
+   eases from 16% down at the top to 3% as the header collapses; translateY is
+   composited, so it's smooth and never touches layout. (16%, up from 12%: it
+   pairs with the gentler rest zoom below — a softer zoom needs a touch more pan
+   to keep the bottom edge covered. See the coverage note on the zoom.) */
 @keyframes dth-avatar-pan {
   from {
-    transform: translateY(12%);
+    transform: translateY(16%);
   }
   to {
     transform: translateY(3%);
   }
 }
-/* The zoom is what makes the square image over-scan the 3:4 (rest) / landscape
-   (collapsed) wrapper, so it always fills. Zoomed harder at the top (1.55),
-   easing to 1.3 by sticky mode. `scale` (not `transform`) composes with the
-   pan's translateY above; transform-origin center keeps it centered. */
+/* The zoom makes the square image over-scan the 3:4 (rest) / landscape (collapsed)
+   wrapper so an opaque avatar always fills it. Kept as GENTLE as coverage allows:
+   a square in the 3:4 rest box needs >=1.33x just to cover its height, so 1.40
+   here sits just above that minimum (with the 16% pan). Softer than before (was
+   1.55) ON PURPOSE — the avatar is often a 256px Daz scene tip, and less
+   magnification (~291px painted vs ~322px) means that low-res source is blown up
+   less, so it reads sharper. Eases to 1.3 by sticky mode. `scale` (not `transform`)
+   composes with the pan's translateY above; transform-origin center keeps it
+   centered. */
 @keyframes dth-avatar-zoom {
   from {
-    scale: 1.55;
+    scale: 1.4;
   }
   to {
     scale: 1.3;
@@ -241,15 +248,18 @@ a {
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-pan {
     transform-origin: center center;
-    /* Both track the scroll 1:1 (linear): the portrait rests zoomed in at the
-       top and eases out to scale 1 as the header collapses into sticky mode. */
+    /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value until the
+       shrink starts (100px, matching .avatar-scroll-shrink's range) then eases in
+       lockstep with the height — so at the gentler 1.4 it never dips below frame
+       coverage while the wrapper is still full-height. The portrait rests zoomed
+       in and eases out as the header collapses into sticky mode. */
     animation:
       dth-avatar-pan linear both,
       dth-avatar-zoom linear both;
     animation-timeline: scroll(root block), scroll(root block);
     animation-range:
       130px 248px,
-      0px 242px;
+      100px 242px;
     will-change: transform, scale;
   }
 }
