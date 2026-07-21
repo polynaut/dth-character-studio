@@ -71,6 +71,10 @@ export async function scanPoseAssets(): Promise<{
   version: string
   assets: Array<DthPoseAsset>
   error: string | null
+  /** The pinned `currentDthVersion` no longer exists on disk — the newest
+   *  available release was scanned instead. Holds the missing version so the
+   *  Settings/generation surfaces can display the silent swap. */
+  pinnedMissing?: string
 }> {
   const empty = { folder: '', releaseName: '', version: '', assets: [] as Array<DthPoseAsset> }
   const { dthPosesFolder, currentDthVersion } = await getSettings()
@@ -81,6 +85,8 @@ export async function scanPoseAssets(): Promise<{
     return { ...empty, folder: dthPosesFolder, error: `Folder not reachable: ${dthPosesFolder}` }
   }
   const resolved = await resolveActiveRelease(dthPosesFolder, currentDthVersion)
+  const pinned =
+    resolved.pinnedMissing !== undefined ? { pinnedMissing: resolved.pinnedMissing } : {}
   if (resolved.error) {
     return {
       ...empty,
@@ -88,6 +94,7 @@ export async function scanPoseAssets(): Promise<{
       releaseName: resolved.releaseName,
       version: resolved.version,
       error: resolved.error,
+      ...pinned,
     }
   }
   const posesFolder = resolved.posesFolder
@@ -98,10 +105,18 @@ export async function scanPoseAssets(): Promise<{
       releaseName: resolved.releaseName,
       version: resolved.version,
       error: `Release "${resolved.releaseName}" has no Poses folder (expected at ${posesFolder})`,
+      ...pinned,
     }
   }
   const assets = (await scanDufPaths(posesFolder))
     .map((relPath) => classifyPose(relPath))
     .sort((a, b) => a.relPath.localeCompare(b.relPath))
-  return { folder: posesFolder, releaseName: resolved.releaseName, version: resolved.version, assets, error: null }
+  return {
+    folder: posesFolder,
+    releaseName: resolved.releaseName,
+    version: resolved.version,
+    assets,
+    error: null,
+    ...pinned,
+  }
 }

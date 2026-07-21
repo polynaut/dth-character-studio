@@ -4,8 +4,20 @@
     {
       "rel": "Runtime/Textures/Vendor/icon.png",
       "copies": [
-        { "label": "Product A", "source": "_genesis 9", "size": 4096, "inZip": false },
-        { "label": "Product B", "source": "_genesis 8", "size": 5120, "inZip": true }
+        {
+          "label": "Product A",
+          "source": "_genesis 9",
+          "path": "X:/assets/_genesis 9/Product A",
+          "size": 4096,
+          "inZip": false
+        },
+        {
+          "label": "Product B",
+          "source": "_genesis 8",
+          "path": "X:/assets/_genesis 8/Product B.zip",
+          "size": 5120,
+          "inZip": true
+        }
       ]
     }
   ],

@@ -144,9 +144,17 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   useEffect(() => {
     let active = true
     for (const path of project.unrealProjects) {
-      void unrealDthContentPresent({ data: { uprojectPath: path } }).then((present) => {
-        if (active) setDthStatus((s) => ({ ...s, [path]: present }))
-      })
+      void unrealDthContentPresent({ data: { uprojectPath: path } })
+        .then((present) => {
+          if (active) setDthStatus((s) => ({ ...s, [path]: present }))
+        })
+        .catch(() => {
+          // A failed probe must not leave the card stuck on `undefined` (the
+          // install button disables forever with no explanation). Treat it as
+          // "not installed": the button enables with the default (non-overwrite)
+          // install, and a genuinely broken path fails THERE with its own toast.
+          if (active) setDthStatus((s) => ({ ...s, [path]: false }))
+        })
     }
     return () => {
       active = false
@@ -161,16 +169,26 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       return
     }
     setInstallingPath(path)
+    // Ctrl/Cmd is an explicit overwrite regardless of what the probe said: a
+    // FAILED probe reads as "absent", so `!!present` alone sent overwrite:false,
+    // the install errored "Ctrl+click to overwrite", and Ctrl+click looped the
+    // same error — user intent wins over a possibly-wrong probe.
+    const overwrite = !!present || e.ctrlKey || e.metaKey
     try {
       const files = await installUnrealDthContent({
-        data: { uprojectPath: path, overwrite: !!present },
+        data: { uprojectPath: path, overwrite },
       })
       toast.success(
         `${present ? 'Overwrote' : 'Installed'} DTH Unreal content — ${files} file(s)`,
       )
       setDthStatus((s) => ({ ...s, [path]: true }))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      // The install just proved the content IS there — adopt that over the stale
+      // probe result, so the next plain click gets the overwrite hint instead of
+      // re-running into the same error.
+      if (message.includes('already exists')) setDthStatus((s) => ({ ...s, [path]: true }))
+      toast.error(message)
     } finally {
       setInstallingPath('')
     }

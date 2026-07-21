@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, memo, useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
 import { Check, ChevronDown, ChevronRight, ExternalLink, RefreshCw, Save } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,8 +31,13 @@ function dazProductUrl(sku: string): string {
  * plus the merged "Matched products" review panel. The tab owns its view state
  * (scene filter, expanded rows) and the store/clear actions; storing hands the
  * saved character back to the route via `onStored`.
+ *
+ * Memoized over what it actually READS (see the comparator on the export): the
+ * route keeps it mounted-but-hidden behind the other tabs, and keyed on the whole
+ * draft `character` it re-reconciled its full table (hundreds of rows) on every
+ * ROM keystroke.
  */
-export function CharacterProductsTab({
+function CharacterProductsTabImpl({
   projectId,
   character,
   productScan,
@@ -543,3 +548,28 @@ export function CharacterProductsTab({
     </>
   )
 }
+
+/**
+ * The draft `character` is a fresh object on every ROM keystroke while this tab
+ * sits hidden — compare only the fields the tab reads (products,
+ * productsScannedAt, name via `characterSlug`, id) plus the other props.
+ * `scriptsPath` is rebuilt by the route each render, so it compares by value;
+ * `persistPatch`/`productScan` are stable (useCallback / loader data).
+ */
+export const CharacterProductsTab = memo(
+  CharacterProductsTabImpl,
+  (prev, next) =>
+    prev.projectId === next.projectId &&
+    prev.productScan === next.productScan &&
+    prev.dimManifestsFolder === next.dimManifestsFolder &&
+    prev.persistPatch === next.persistPatch &&
+    (prev.scriptsPath === next.scriptsPath ||
+      (prev.scriptsPath !== null &&
+        next.scriptsPath !== null &&
+        prev.scriptsPath.dir === next.scriptsPath.dir &&
+        prev.scriptsPath.root === next.scriptsPath.root)) &&
+    prev.character.id === next.character.id &&
+    prev.character.name === next.character.name &&
+    prev.character.products === next.character.products &&
+    prev.character.productsScannedAt === next.character.productsScannedAt,
+)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 
 const MOUSE_FLAG = {
   Control: 'ctrlKey',
@@ -6,6 +6,85 @@ const MOUSE_FLAG = {
   Meta: 'metaKey',
   Alt: 'altKey',
 } as const
+
+type ModifierKey = keyof typeof MOUSE_FLAG
+
+type ModifierStore = {
+  subscribe: (onChange: () => void) => () => void
+  getSnapshot: () => boolean
+}
+
+/**
+ * ONE shared store (and one set of window listeners) per modifier key, no
+ * matter how many components consume it — pages mount a dozen+ `useModifierHeld`
+ * consumers (every path chip / card), and per-instance listeners meant five
+ * window listeners each, including a mousemove. The store lazily attaches its
+ * listeners when the first subscriber arrives and detaches when the last one
+ * leaves.
+ */
+const stores = new Map<ModifierKey, ModifierStore>()
+
+function storeFor(key: ModifierKey): ModifierStore {
+  const existing = stores.get(key)
+  if (existing) return existing
+
+  const flag = MOUSE_FLAG[key]
+  const listeners = new Set<() => void>()
+  let held = false
+  let detach: (() => void) | null = null
+
+  const set = (next: boolean) => {
+    if (held === next) return
+    held = next
+    for (const listener of listeners) listener()
+  }
+  const attach = () => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === key) set(true)
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.key === key) set(false)
+    }
+    // Every pointer event reports the CURRENT modifier state — a cheap sync
+    // (set() bails on identical values) that self-heals missed key events.
+    const sync = (e: MouseEvent) => set(e[flag])
+    const clear = () => set(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('mousemove', sync)
+    window.addEventListener('mouseover', sync)
+    window.addEventListener('blur', clear)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('mousemove', sync)
+      window.removeEventListener('mouseover', sync)
+      window.removeEventListener('blur', clear)
+    }
+  }
+
+  const store: ModifierStore = {
+    subscribe: (onChange) => {
+      if (listeners.size === 0) detach = attach()
+      listeners.add(onChange)
+      return () => {
+        listeners.delete(onChange)
+        if (listeners.size === 0) {
+          detach?.()
+          detach = null
+          // Nothing is listening anymore — don't leak a stale "held" into the
+          // next mount (matches the old per-instance useState(false) start).
+          held = false
+        }
+      }
+    },
+    getSnapshot: () => held,
+  }
+  stores.set(key, store)
+  return store
+}
+
+const getServerSnapshot = () => false
 
 /**
  * Whether a modifier key is currently held. Drives the "a modifier changes what
@@ -20,32 +99,7 @@ const MOUSE_FLAG = {
  *    re-syncs the moment the pointer moves. Window blur resets, so nothing can
  *    stick after Alt+Tab.
  */
-export function useModifierHeld(key: 'Control' | 'Shift' | 'Meta' | 'Alt'): boolean {
-  const [held, setHeld] = useState(false)
-  useEffect(() => {
-    const flag = MOUSE_FLAG[key]
-    const down = (e: KeyboardEvent) => {
-      if (e.key === key) setHeld(true)
-    }
-    const up = (e: KeyboardEvent) => {
-      if (e.key === key) setHeld(false)
-    }
-    // Every pointer event reports the CURRENT modifier state — a cheap sync
-    // (React bails on identical values) that self-heals missed key events.
-    const sync = (e: MouseEvent) => setHeld(e[flag])
-    const clear = () => setHeld(false)
-    window.addEventListener('keydown', down)
-    window.addEventListener('keyup', up)
-    window.addEventListener('mousemove', sync)
-    window.addEventListener('mouseover', sync)
-    window.addEventListener('blur', clear)
-    return () => {
-      window.removeEventListener('keydown', down)
-      window.removeEventListener('keyup', up)
-      window.removeEventListener('mousemove', sync)
-      window.removeEventListener('mouseover', sync)
-      window.removeEventListener('blur', clear)
-    }
-  }, [key])
-  return held
+export function useModifierHeld(key: ModifierKey): boolean {
+  const store = storeFor(key)
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, getServerSnapshot)
 }

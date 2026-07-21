@@ -175,7 +175,7 @@ export async function relinkScene({ data }: { data: unknown }): Promise<Characte
     next.imageScene = scenePath
   }
   const project = await resolveProject(projectId)
-  return storage.saveCharacter(project, next, charsRoot(project))
+  return (await storage.saveCharacter(project, next, charsRoot(project))).character
 }
 
 /**

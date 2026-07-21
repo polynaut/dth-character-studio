@@ -454,7 +454,10 @@ function ProjectCharactersPage() {
               <ScenePreview scenePath={scenePath} />
               <div className="min-w-[20rem] flex-1 space-y-4">
                 {/* Row 1: character name on its own line. */}
-                <Field label="Character name" error={nameError}>
+                {/* The Input is wrapped in a div (path prefix + input), so Field's
+                    automatic label wiring can't reach it — controlId points the
+                    label (and the error line's id) at the Input explicitly. */}
+                <Field label="Character name" error={nameError} controlId="create-character-name">
                   {/* The folder is created from the name, so it carries the
                       project-path prefix. */}
                   <div className="flex items-center gap-2">
@@ -462,6 +465,10 @@ function ProjectCharactersPage() {
                       {displayPath('/project/')}
                     </span>
                     <Input
+                      id="create-character-name"
+                      // Field renders the error line as `${controlId}-error`;
+                      // the slot is always present here (error is '' when valid).
+                      aria-describedby="create-character-name-error"
                       className="min-w-0 flex-1"
                       placeholder="Aria_G9"
                       value={name}
@@ -474,7 +481,9 @@ function ProjectCharactersPage() {
 
                 {/* Row 2: Genesis, Gender and ROM prefill together. */}
                 <div className="flex flex-wrap items-start gap-3">
-                  <Field label="Genesis" className="shrink-0">
+                  {/* Radix Select.Root renders no DOM and drops `id` — the label
+                      wires to the trigger button via controlId (same below). */}
+                  <Field label="Genesis" className="shrink-0" controlId="create-genesis">
                     <Select
                       value={genesis}
                       onValueChange={(v) => {
@@ -482,7 +491,7 @@ function ProjectCharactersPage() {
                         setPrefill('empty')
                       }}
                     >
-                      <SelectTrigger className="w-24">
+                      <SelectTrigger id="create-genesis" className="w-24">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -493,7 +502,7 @@ function ProjectCharactersPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Gender" className="shrink-0">
+                  <Field label="Gender" className="shrink-0" controlId="create-gender">
                     <Select
                       value={gender}
                       onValueChange={(v) => {
@@ -501,7 +510,7 @@ function ProjectCharactersPage() {
                         setPrefill('empty')
                       }}
                     >
-                      <SelectTrigger className="w-28">
+                      <SelectTrigger id="create-gender" className="w-28">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -523,13 +532,14 @@ function ProjectCharactersPage() {
                       </span>
                     }
                     className="min-w-[12rem] flex-1"
+                    controlId="create-rom-prefill"
                   >
                     <Select
                       value={prefill}
                       onValueChange={setPrefill}
                       onOpenChange={(isOpen) => isOpen && loadPrefillCandidates()}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="create-rom-prefill">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

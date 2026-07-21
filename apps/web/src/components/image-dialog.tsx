@@ -35,9 +35,11 @@ export function ImageDialog({
    *  page's persist primitive, e.g.
    *  `onApply={(produce) => draft.persistPatch(produce, { toast: '…' })}`,
    *  so the upload side effect only runs AFTER its single-flight/validate
-   *  guards (the daz-scene-field applyAdd pattern — a refused persist must not
-   *  leave an uploaded file behind). Resolves to the persisted result, or
-   *  `null` when the persist was refused or failed — the dialog then resets
+   *  guards (the daz-scene-field applyAdd pattern), and once it HAS run the
+   *  uploaded file is never stranded: interim edits that invalidate the merged
+   *  draft don't refuse the persist — the image patch alone still persists,
+   *  with those edits kept dirty. Resolves to the persisted result, or `null`
+   *  when the persist was refused up front or failed — the dialog then resets
    *  its preview to the last persisted image. */
   onApply: (
     produce: () => Promise<{ image: string; imageScene: string }>,
@@ -51,8 +53,10 @@ export function ImageDialog({
 
   // Native OS drag-drop gives a path — read + upload it server-side. The upload
   // runs INSIDE the persist producer — after persistPatch's single-flight and
-  // validation guards — so a refused persist can never have already written the
-  // file and left the preview showing an avatar that never persisted.
+  // validation guards — so an up-front refusal can never have already written
+  // the file; once the upload HAS run, the hook persists at least the image
+  // patch itself, so the preview never shows an avatar that failed to persist
+  // (only a genuinely failed save resets it below).
   async function uploadPath(path: string) {
     setBusy(true)
     setError('')

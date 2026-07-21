@@ -217,10 +217,24 @@ export const ZIP_RELEASE_WARNING = 'Extract the release zip first and select fol
  * version, falling back to the newest extracted folder; a zip-only release
  * resolves to the extract-first warning (Daz can't load from an archive).
  */
+/** What the release-selection cascade resolved to. */
+export interface ActiveReleaseEntry {
+  releaseRoot: string
+  version: string
+  name: string
+  error: string | null
+  /** Set when a PINNED version (`currentDthVersion`) no longer exists on disk
+   *  and the newest available release was used instead — holds the missing
+   *  version so Settings/generation can surface the silent swap ("pinned
+   *  2.4.0 is gone; using 2.4.3") instead of quietly generating against a
+   *  different release than the one the user chose. */
+  pinnedMissing?: string
+}
+
 async function resolveActiveReleaseEntry(
   folder: string,
   currentVersion: string,
-): Promise<{ releaseRoot: string; version: string; name: string; error: string | null }> {
+): Promise<ActiveReleaseEntry> {
   if (!folder) {
     return { releaseRoot: '', version: '', name: '', error: 'No DTH release folder configured' }
   }
@@ -244,14 +258,29 @@ async function resolveActiveReleaseEntry(
       error: list.error ?? `No DTH release found in: ${folder}`,
     }
   }
-  const chosen =
-    list.releases.find((r) => r.version === currentVersion) ??
-    list.releases.find((r) => r.kind === 'folder') ??
-    list.releases[0]
+  const pinned = currentVersion
+    ? list.releases.find((r) => r.version === currentVersion)
+    : undefined
+  const chosen = pinned ?? list.releases.find((r) => r.kind === 'folder') ?? list.releases[0]
+  // A configured version that no longer resolves is a broken pin, not a free
+  // choice — fall back to the newest, but SAY so (see ActiveReleaseEntry).
+  const pinnedMissing = currentVersion && !pinned ? { pinnedMissing: currentVersion } : {}
   if (chosen.kind === 'zip') {
-    return { releaseRoot: '', version: chosen.version, name: chosen.name, error: ZIP_RELEASE_WARNING }
+    return {
+      releaseRoot: '',
+      version: chosen.version,
+      name: chosen.name,
+      error: ZIP_RELEASE_WARNING,
+      ...pinnedMissing,
+    }
   }
-  return { releaseRoot: join(folder, chosen.name), version: chosen.version, name: chosen.name, error: null }
+  return {
+    releaseRoot: join(folder, chosen.name),
+    version: chosen.version,
+    name: chosen.name,
+    error: null,
+    ...pinnedMissing,
+  }
 }
 
 /**
@@ -267,6 +296,9 @@ export async function resolveActiveRelease(
   version: string
   releaseName: string
   error: string | null
+  /** The pinned version vanished from disk; the newest release was used instead
+   *  (see {@link ActiveReleaseEntry.pinnedMissing}). */
+  pinnedMissing?: string
 }> {
   const entry = await resolveActiveReleaseEntry(folder, currentVersion)
   return {
@@ -274,6 +306,7 @@ export async function resolveActiveRelease(
     version: entry.version,
     releaseName: entry.name,
     error: entry.error,
+    ...(entry.pinnedMissing !== undefined ? { pinnedMissing: entry.pinnedMissing } : {}),
   }
 }
 
@@ -292,7 +325,7 @@ export async function resolveActiveRelease(
 export async function resolveActiveReleaseRoot(
   folder: string,
   currentVersion: string,
-): Promise<{ releaseRoot: string; version: string; name: string; error: string | null }> {
+): Promise<ActiveReleaseEntry> {
   return resolveActiveReleaseEntry(folder, currentVersion)
 }
 

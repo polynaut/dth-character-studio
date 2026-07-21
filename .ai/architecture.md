@@ -110,7 +110,7 @@ drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview C
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
 (recursive-delete rails), `report.rs`, `contract_tests.rs`.
 
-**FFI surface: 24 commands** registered in `generate_handler!` — installs
+**FFI surface: 23 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows

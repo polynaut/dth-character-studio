@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 
 import { cn } from '../cn.ts'
@@ -84,11 +84,39 @@ export function MultiSelect({
     if (open) optionRefs.current[highlightIndex]?.scrollIntoView?.({ block: 'nearest' })
   }, [open, highlightIndex])
 
-  const close = () => {
+  const close = useCallback(() => {
     setOpen(false)
     setQuery('')
     setArmed(false)
-  }
+  }, [])
+
+  // An Escape that closes the list must NOT also close a surrounding dialog.
+  // React-level stopPropagation can't guarantee that: Radix overlays (our
+  // Modal/SidePanel) dismiss from a document-level CAPTURE keydown listener,
+  // which fires before React's root-delegated handlers ever see the event. So
+  // while the list is open, swallow Escape one level higher still — a WINDOW
+  // capture listener, which the capture phase visits before document, beating
+  // Radix regardless of registration order.
+  useEffect(() => {
+    if (!open) return
+    const swallowEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      // An IME-cancel Escape (Firefox reports key 'Escape' with isComposing)
+      // only dismisses the composition — it must not close the list and wipe
+      // the query.
+      if (event.isComposing) return
+      // Only an Escape that belongs to this widget is ours to eat. open ⟺
+      // focus-within, so if focus is elsewhere the event is meant for some
+      // other overlay (a document-level tooltip hide, a hover-peeked info
+      // popup) — leave it alone.
+      if (!rootRef.current?.contains(document.activeElement)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      close()
+    }
+    window.addEventListener('keydown', swallowEscape, { capture: true })
+    return () => window.removeEventListener('keydown', swallowEscape, { capture: true })
+  }, [open, close])
   const add = (value: string) => {
     onChange([...values, value])
     // With no query the list only loses the picked row, so keeping the index
@@ -274,13 +302,10 @@ export function MultiSelect({
               } else if (rows[highlightIndex] !== undefined) {
                 add(rows[highlightIndex])
               }
-            } else if (event.key === 'Escape' && open) {
-              // Swallow it: an Escape that closed the list must not also close
-              // a surrounding dialog.
-              event.preventDefault()
-              event.stopPropagation()
-              close()
             }
+            // Escape-while-open is handled by the window capture listener above
+            // (it never reaches this handler); Escape-while-closed propagates
+            // normally so a surrounding dialog can close.
           }}
         />
         <span aria-hidden className="ml-auto pr-1.5 text-muted-foreground">

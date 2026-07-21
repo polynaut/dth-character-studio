@@ -6,7 +6,7 @@ import { Button, Input, SidePanel } from '@dth/ui'
 import { pathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { formatDate } from '#/components/overview-controls.tsx'
-import { createProject, fetchRecents, forgetRecent, openProject } from '#/lib/rom/api.ts'
+import { createProject, fetchRecents, forgetRecent, isDirectory, openProject } from '#/lib/rom/api.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { onMenu, pickDcspPath, pickFolder } from '#/lib/desktop.ts'
 import { dirOf, displayPath } from '#/lib/path.ts'
@@ -119,6 +119,12 @@ function HomePage() {
     if (!dropped) return
     if (/\.dcsp$/i.test(dropped)) {
       await onOpen(dropped)
+      return
+    }
+    // Only an actual FOLDER can seed a new project — any other dropped file
+    // (a .duf, a zip…) must not open the create panel with a file as its path.
+    if (!(await isDirectory(dropped))) {
+      toast.error('Drop a .dcsp project file to open it, or a folder to start a new project.')
       return
     }
     setError('')

@@ -6,17 +6,36 @@ import { displayPath } from '#/lib/path.ts'
 import type { ConflictCopy, DedupReport, FileConflict } from '#/lib/rom/api.ts'
 
 /** Parse the Genesis number from a source folder name ("_genesis 9" → 9) — mirrors
- *  the Rust `genesis_rank` so the UI can show which copy the install picks. */
-function genesisRank(source: string): number {
-  const nums = source.match(/\d+/g)
-  return nums ? Number(nums[nums.length - 1]) : 0
+ *  the Rust `genesis_rank` EXACTLY so the "◀ keeps" marker always highlights the
+ *  copy the install actually picks: the FIRST digit run after the "genesis" token
+ *  ("_genesis 9 (2024)" → 9, "Genesis 8.1" → 8), 0 without a "genesis" token.
+ *  Exported for the test that pins the same cases as the Rust one (dedup.rs). */
+export function genesisRank(source: string): number {
+  const lower = source.toLowerCase()
+  const i = lower.indexOf('genesis')
+  if (i === -1) return 0
+  const digits = /\d+/.exec(lower.slice(i + 'genesis'.length))
+  const n = digits ? Number(digits[0]) : 0
+  // Rust parses the digit run as a u32 (`parse().unwrap_or(0)`), so an
+  // overflowing run saturates to 0 THERE — clamp identically, or a
+  // "_genesis 4294967296" source ranks 0 in the install and huge here,
+  // inverting the "◀ keeps" marker.
+  return n > 0xffffffff ? 0 : n
 }
-/** The copy the install keeps for a shared file: newer Genesis, then bigger. */
-function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
+/** The copy the install keeps for a shared file: newer Genesis, then bigger,
+ *  then — on a full (genesis, size) tie — the lexicographically FIRST asset
+ *  path, mirroring the Rust `winner_skip_map`'s max over
+ *  (genesis, size, Reverse(asset path)) in apps/desktop/src/assets.rs.
+ *  Exported for the twin test of the Rust
+ *  `winner_tie_breaks_deterministically_by_asset_path`. */
+export function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
   return copies.reduce((best, cp) => {
+    const rank = genesisRank(cp.source)
+    const bestRank = genesisRank(best.source)
     const better =
-      genesisRank(cp.source) > genesisRank(best.source) ||
-      (genesisRank(cp.source) === genesisRank(best.source) && cp.size > best.size)
+      rank > bestRank ||
+      (rank === bestRank && cp.size > best.size) ||
+      (rank === bestRank && cp.size === best.size && (cp.path ?? '') < (best.path ?? ''))
     return better ? cp : best
   })
 }

@@ -45,6 +45,12 @@ struct ConflictCopy {
     label: String,
     /// The source folder this copy lives in (e.g. "_genesis 9").
     source: String,
+    /// Full path of the ASSET shipping this copy — the install's full-tie
+    /// breaker: `winner_skip_map` (assets.rs) resolves an equal (genesis, size)
+    /// tie to the lexicographically first asset path, and the UI's "◀ keeps"
+    /// marker (`conflictWinner`, dedup-report-list.tsx) mirrors that tiebreak,
+    /// so it needs the same key on the wire.
+    path: String,
     size: u64,
     in_zip: bool,
 }
@@ -247,6 +253,12 @@ pub(crate) struct AssetFiles {
     /// zip entries, unreadable nested zips). Non-zero means `files` may be an
     /// INCOMPLETE inventory — quarantine decisions refuse such groups.
     pub(crate) read_errors: u64,
+    /// Zip entries whose NAMES were refused (absolute/`..` — zip-slip; see
+    /// `zip_file_entries`). Also an incomplete inventory for quarantine
+    /// purposes, but a name-safety refusal, not an access failure: the install
+    /// proceeds with the safe subset and surfaces the count (assets.rs) instead
+    /// of hard-erroring with a misleading "fix access". Always 0 for folders.
+    pub(crate) unsafe_names: u64,
 }
 
 /// Collects one content folder's files (rel path → size) via the shared walker;
@@ -297,6 +309,7 @@ pub(crate) fn collect_asset_files(asset: &Path, keep_zip_handles: bool) -> Optio
         let mut zip_entries: Vec<(PathBuf, usize)> = Vec::new();
         let mut nested_temps: Vec<TempFile> = Vec::new();
         let mut read_errors = 0u64;
+        let mut unsafe_names = 0u64;
         // Lenient posture: unreadable nested zips are counted, never fatal — the
         // shared walk descends into nested package zips exactly like the install.
         let found = walk_zip_content(
@@ -307,6 +320,7 @@ pub(crate) fn collect_asset_files(asset: &Path, keep_zip_handles: bool) -> Optio
                 budget: &mut budget,
                 strict: false,
                 read_errors: &mut read_errors,
+                unsafe_names: &mut unsafe_names,
                 keep_temps: if keep_zip_handles { Some(&mut nested_temps) } else { None },
             },
             &mut |_archive, _budget, apath, idx, sub, size| {
@@ -331,6 +345,7 @@ pub(crate) fn collect_asset_files(asset: &Path, keep_zip_handles: bool) -> Optio
             zip_entries,
             nested_temps,
             read_errors,
+            unsafe_names,
         })
     } else {
         let (content_root, folders) = find_content_level(asset, 5)?;
@@ -354,6 +369,7 @@ pub(crate) fn collect_asset_files(asset: &Path, keep_zip_handles: bool) -> Optio
             zip_entries: Vec::new(),
             nested_temps: Vec::new(),
             read_errors,
+            unsafe_names: 0,
         })
     }
 }
@@ -609,6 +625,7 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
             .map(|&(i, s)| ConflictCopy {
                 label: assets[i].label.clone(),
                 source: assets[i].source_root.clone(),
+                path: assets[i].asset_path.to_string_lossy().to_string(),
                 size: s,
                 in_zip: assets[i].is_zip,
             })
@@ -667,13 +684,30 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
         let mut fixed = false;
         if !dry && !quarantine.is_empty() {
             let scan_gaps: u64 = members.iter().map(|&m| assets[m].read_errors).sum();
-            if scan_gaps > 0 {
+            let name_gaps: u64 = members.iter().map(|&m| assets[m].unsafe_names).sum();
+            if scan_gaps > 0 || name_gaps > 0 {
                 // An incomplete inventory must never drive a quarantine: what
-                // looked identical may differ in the unread entries.
+                // looked identical may differ in the entries the scan never saw
+                // — unreadable (an access problem) or refused for unsafe names
+                // (zip-slip; named accurately, since "fix access" would be both
+                // wrong and un-actionable for a bad NAME).
+                let mut reasons = Vec::new();
+                if scan_gaps > 0 {
+                    reasons.push(format!(
+                        "{scan_gaps} entr{} couldn't be read",
+                        if scan_gaps == 1 { "y" } else { "ies" }
+                    ));
+                }
+                if name_gaps > 0 {
+                    reasons.push(format!(
+                        "{name_gaps} entr{} had unsafe names (absolute or '..' paths)",
+                        if name_gaps == 1 { "y" } else { "ies" }
+                    ));
+                }
                 errors.push(format!(
-                    "Not quarantining the “{}” group — {scan_gaps} entr{} couldn't be read during the scan, so its inventory may be incomplete.",
+                    "Not quarantining the “{}” group — {} during the scan, so its inventory may be incomplete.",
                     assets[keeper].label,
-                    if scan_gaps == 1 { "y" } else { "ies" }
+                    reasons.join(" and ")
                 ));
             } else if chosen.is_none() && have_stale {
                 // The disk changed since the scan AND this group carries no
@@ -962,5 +996,78 @@ mod tests {
         assert_eq!(genesis_rank("Genesis 8.1"), 8); // not 1
         assert!(genesis_rank("_genesis 9 (2020)") > genesis_rank("_genesis 8 (2024)"));
         assert_eq!(genesis_rank("Genesis"), 0); // token, no number
+        // A digit run that overflows u32 saturates to 0 (`parse().unwrap_or(0)`).
+        // The JS mirror clamps identically (twin cases in
+        // dedup-report-list.test.ts) — a bare Number() there would return the
+        // huge value and invert the "◀ keeps" marker against the install.
+        assert_eq!(genesis_rank("_genesis 4294967296"), 0); // u32::MAX + 1
+        assert_eq!(genesis_rank("_genesis 99999999999999999999"), 0);
+        assert_eq!(genesis_rank("_genesis 4294967295"), u32::MAX); // still parses on both sides
+    }
+
+    #[test]
+    fn conflict_copies_carry_their_asset_paths() {
+        // The UI's "◀ keeps" marker breaks a full (genesis, size) tie by the
+        // same key the install does — the lexicographically first ASSET path
+        // (winner_skip_map) — so every conflict copy must carry its asset path
+        // on the wire (mirrored by conflictCopySchema + conflictWinner in the
+        // web app; shape pinned by contracts/dedup-report.json).
+        let base = unique_temp_dir("conflict_paths");
+        let source = base.join("assets");
+        for (asset, bytes) in [("Alpha", b"aaaa".as_slice()), ("Bravo", b"bbbbbb".as_slice())] {
+            let dir = source.join(asset).join("data");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("shared.dsf"), bytes).unwrap();
+        }
+        let report = dedup_daz_assets(DedupRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dry_run: true,
+            accepted: vec![],
+            keepers: vec![],
+            quarantine: String::new(),
+        });
+        assert_eq!(report.conflicts.len(), 1, "errors: {:?}", report.errors);
+        let copies = &report.conflicts[0].copies;
+        assert_eq!(copies.len(), 2);
+        for c in copies {
+            assert_eq!(c.path, source.join(&c.label).to_string_lossy().to_string());
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn dedup_refuses_quarantine_when_an_inventory_dropped_unsafe_names() {
+        use crate::testutil::write_zip;
+        // Two zips identical in their SAFE entries but each carrying a zip-slip
+        // name: the safe subsets group as exact duplicates, but the inventories
+        // are incomplete (entries refused by NAME), so apply must refuse to
+        // quarantine — and say "unsafe names", not "couldn't be read" (there is
+        // no access problem to fix).
+        let base = unique_temp_dir("dedup_unsafe_names");
+        let source = base.join("assets");
+        fs::create_dir_all(&source).unwrap();
+        for name in ["A.zip", "B.zip"] {
+            write_zip(
+                &source.join(name),
+                &[("data/x.dsf", b"x".as_slice()), ("../evil.dsf", b"evil".as_slice())],
+            );
+        }
+        let quarantine = base.join("q");
+        fs::create_dir_all(&quarantine).unwrap();
+        let report = dedup_daz_assets(DedupRequest {
+            sources: vec![source.to_string_lossy().to_string()],
+            dry_run: false,
+            accepted: vec![],
+            keepers: vec![],
+            quarantine: quarantine.to_string_lossy().to_string(),
+        });
+        assert_eq!(report.duplicates.len(), 1);
+        assert!(!report.duplicates[0].fixed);
+        assert_eq!(report.assets_quarantined, 0);
+        assert_eq!(report.errors.len(), 1, "errors: {:?}", report.errors);
+        assert!(report.errors[0].contains("unsafe names"), "error: {}", report.errors[0]);
+        assert!(!report.errors[0].contains("couldn't be read"), "error: {}", report.errors[0]);
+        assert!(source.join("A.zip").is_file() && source.join("B.zip").is_file(), "nothing moved");
+        let _ = fs::remove_dir_all(&base);
     }
 }

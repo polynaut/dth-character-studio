@@ -33,6 +33,16 @@ pub(crate) struct RemapResult {
     detail: String,
 }
 
+/// Whether two UNC spellings name the same share. Unicode fold, not ascii-only
+/// (the pinned rule — Ärger/ärger): a non-ASCII share name whose stored casing
+/// differs must still read as "already mapped", not "conflict". Extracted so
+/// the fold rule is test-pinned; only the Windows `ensure_network_drives` calls
+/// it in production.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn same_unc(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
+}
+
 #[cfg(windows)]
 fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -142,7 +152,7 @@ pub fn ensure_network_drives(mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
             let drive = m.drive.trim().to_string();
             let unc = m.unc.trim().to_string();
             match unc_for(&drive) {
-                Some(cur) if cur.eq_ignore_ascii_case(&unc) => RemapResult {
+                Some(cur) if same_unc(&cur, &unc) => RemapResult {
                     drive,
                     unc,
                     status: "already".into(),
@@ -171,4 +181,19 @@ pub fn ensure_network_drives(mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
 #[tauri::command(async)]
 pub fn ensure_network_drives(_mappings: Vec<DriveMapping>) -> Vec<RemapResult> {
     Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_unc;
+
+    #[test]
+    fn same_unc_folds_unicode_case() {
+        // Unicode fold, not eq_ignore_ascii_case: a re-spelled non-ASCII share
+        // name is still the same share (Ärger/ärger) — an ascii-only compare
+        // reported it as a "conflict" and refused the remap.
+        assert!(same_unc("\\\\host\\Ärger", "\\\\host\\ärger"));
+        assert!(same_unc("\\\\HOST\\Share", "\\\\host\\share"));
+        assert!(!same_unc("\\\\host\\a", "\\\\host\\b"));
+    }
 }

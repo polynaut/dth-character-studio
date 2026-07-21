@@ -39,7 +39,10 @@ export function useUnsavedChangesGuard(dirty: boolean, message: string) {
     [],
   )
   useBlocker({
-    shouldBlockFn: async () => {
+    shouldBlockFn: async ({ current, next }) => {
+      // Search-only navigation (same pathname, e.g. Tools' `?tab=` switch):
+      // nothing unmounts, no edits are lost — never ask.
+      if (current.pathname === next.pathname) return false
       if (!dirtyRef.current || bypassRef.current) return false
       const leave = await ask()
       return !leave

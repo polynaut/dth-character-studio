@@ -95,6 +95,7 @@ export {
   resolveReleaseInstall,
 } from './storage/releases'
 export type {
+  ActiveReleaseEntry,
   DthExporterReleaseInfo,
   DthReleaseInfo,
   PluginInstall,

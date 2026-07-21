@@ -308,11 +308,15 @@ export function mirrorGroup(group: RomGroup): RomGroup {
       // them alone. Word-initial covers the real cases (left_thigh, leftFoot).
       .replace(/(?<![A-Za-z])left/g, 'right')
       .replace(/_l\b/g, '_r')
-      .replace(/\bL_/g, 'R_')
+      // Prefix markers use the SAME letter-only lookbehind in both cases: `\b`
+      // would miss a marker after `_` or a digit (Foot_L_Bend, 3L_x — `_`/digits
+      // are word chars, so there is no boundary before the L), which is exactly
+      // where mid-name side markers live.
+      .replace(/(?<![A-Za-z])L_/g, 'R_')
       // The case twins of the two markers above: stock Daz JCM names carry an
       // UPPERCASE _L suffix (pJCMShldrDown_40_L) and G9 bone names a lowercase
-      // l_ prefix (l_thigh). `\b` / the lookbehind keep non-marker letters
-      // safe (Ball_Large, Curl_lower stay untouched), and none of the swaps
+      // l_ prefix (l_thigh). The lookbehinds keep non-marker letters safe
+      // (Ball_Large, Curl_lower stay untouched), and none of the swaps
       // produces text an earlier or later one re-swaps.
       .replace(/_L\b/g, '_R')
       .replace(/(?<![A-Za-z])l_/g, 'r_')

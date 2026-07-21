@@ -19,23 +19,35 @@ import { cn } from '../cn.ts'
 export function Field({
   label,
   error,
+  controlId: explicitControlId,
   className,
   children,
 }: {
   label?: ReactNode
   error?: ReactNode
+  /**
+   * The id of the labelable control inside `children`, for when the control is
+   * NOT the direct single-element child — an input inside a wrapper div, or a
+   * Radix Select (whose `Root` renders no DOM and drops `id`; put the id on the
+   * `SelectTrigger` instead). The automatic clone-wiring below only works on a
+   * direct DOM child — on anything else it silently labels nothing. An explicit
+   * `controlId` wins over the auto-wiring; when `error` is used too, the error
+   * line's id is `${controlId}-error` so the caller can point the control's
+   * `aria-describedby` at it (Field can't reach inside `children` to set it).
+   */
+  controlId?: string
   className?: string
   children: ReactNode
 }) {
   const generatedId = useId()
-  const errorId = `${generatedId}-error`
+  const errorId = `${explicitControlId ?? generatedId}-error`
   // Wire the label to its control: htmlFor needs an id on the child, and the
   // error line needs aria-describedby — without them the label isn't clickable
   // and assistive tech never hears the field name or its error. Only possible
   // when the child is a single element; an explicit child id wins.
   let control = children
-  let controlId: string | undefined
-  if (isValidElement(children)) {
+  let controlId = explicitControlId
+  if (explicitControlId === undefined && isValidElement(children)) {
     const props = children.props as { id?: string; 'aria-describedby'?: string }
     controlId = props.id ?? generatedId
     // MERGE the error id with a child-supplied aria-describedby (the attribute

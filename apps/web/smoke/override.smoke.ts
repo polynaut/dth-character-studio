@@ -9,6 +9,8 @@ const filesWritten = (page: Page) =>
   page.evaluate(() => [...(window as any).__tauriMock.files.keys()] as Array<string>)
 const fileContent = (page: Page, path: string) =>
   page.evaluate((p) => ((window as any).__tauriMock.files.get(p) ?? null) as string | null, path)
+const unhandledCommands = (page: Page) =>
+  page.evaluate(() => (window as any).__tauriMock.unhandled as Array<string>)
 
 // A per-scene ROM override end-to-end: select an extra scene, arm the Override
 // toggle, check a row, save — the scene gets its own script + CSV next to the
@@ -66,4 +68,8 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   expect(definition.sceneOverrides).toHaveLength(1)
   expect(definition.sceneOverrides[0]).toMatchObject({ scenePath: extraScene, enabled: true })
   expect(definition.sceneOverrides[0].poses).toHaveLength(1)
+
+  // The completeness guard: every native call the flow made was one this mock
+  // (and therefore the map it encodes) knows about.
+  expect(await unhandledCommands(page)).toEqual([])
 })

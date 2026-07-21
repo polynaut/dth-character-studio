@@ -77,6 +77,10 @@ export async function housekeepingSweep(): Promise<HousekeepingResult> {
   return {
     filesDeleted: scans.filesDeleted + frames.filesDeleted + media.filesDeleted,
     bytesFreed: scans.bytesFreed + frames.bytesFreed + media.bytesFreed,
+    // Locked/readonly files past the cutoff that could NOT be deleted — summed
+    // across both native sweeps so "0 files freed" is distinguishable from
+    // "every delete failed" (the note-media GC reports no failures).
+    filesFailed: (scans.filesFailed ?? 0) + (frames.filesFailed ?? 0),
   }
 }
 

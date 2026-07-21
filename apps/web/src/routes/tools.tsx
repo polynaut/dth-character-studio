@@ -235,7 +235,7 @@ function ToolsPage() {
   async function acceptShared(rels: Array<string>, clear = false) {
     setDedupBusy(true)
     try {
-      const acceptedConflicts = await setAcceptedConflicts(rels, clear)
+      const acceptedConflicts = await setAcceptedConflicts({ data: { rels, clear } })
       // Keep the in-memory settings in step with what we just wrote, so a later
       // Save (baseline-merged) doesn't revert the acceptance.
       setSettings((s) => ({ ...s, acceptedConflicts }))
