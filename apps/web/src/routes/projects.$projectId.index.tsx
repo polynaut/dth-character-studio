@@ -708,10 +708,14 @@ function ProjectCharactersPage() {
                       <Portrait
                         image={character.image}
                         name={character.name}
+                        // Grid keeps the portrait face-zoom; list view uses the
+                        // landscape 13:9 crop the character page's sticky header
+                        // settles into — a plain top-anchored cover (no zoom), so
+                        // the image sits flush against the container's top border.
+                        zoom={view === 'grid'}
+                        imgClassName={view === 'list' ? 'object-top' : undefined}
                         className={cn(
                           'shrink-0 rounded-md',
-                          // List view: landscape crop, same 13:9 ratio the character
-                          // page's sticky header settles into once collapsed.
                           view === 'grid' ? 'aspect-[3/4] w-16' : 'aspect-[13/9] w-16',
                         )}
                         fallbackClassName={view === 'grid' ? 'text-2xl' : 'text-xs'}
