@@ -200,7 +200,10 @@ const shell = (md, content) => `<!doctype html>
           <a href="index.html">Guide</a>
           <a href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener">GitHub</a>
         </nav>
-        <a class="btn btn-primary btn-compact" href="../">Download</a>
+        <a class="btn btn-primary btn-compact" href="../">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
       </div>
     </header>
     <div class="container guide-layout">
