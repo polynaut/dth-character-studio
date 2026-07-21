@@ -159,7 +159,8 @@
    sticky range). The opaque background covers content scrolling beneath. */
 .guide-content h2 {
   position: sticky;
-  top: var(--topbar-h);
+  /* -1px tucks the title under the topbar's border so no seam shows. */
+  top: calc(var(--topbar-h) - 1px);
   z-index: 5;
   margin: 44px 0 12px;
   padding-top: 20px;
