@@ -22,8 +22,22 @@ export function genesisRank(source: string): number {
   // inverting the "◀ keeps" marker.
   return n > 0xffffffff ? 0 : n
 }
+/** Rust `Path` ordering is COMPONENT-wise, not full-string: at a fork where one
+ *  side ends a component ("…/_genesis 8/…" vs "…/_genesis 8.1/…") the string
+ *  compare sees '.' (0x2E) < '/' (0x2F) and inverts the order Rust picks.
+ *  Compare per path component like `Path` does, or cross-parent full ties
+ *  highlight a different winner than the install keeps. */
+function comparePathComponents(a: string, b: string): number {
+  const as = a.split(/[\\/]+/)
+  const bs = b.split(/[\\/]+/)
+  const len = Math.min(as.length, bs.length)
+  for (let i = 0; i < len; i++) {
+    if (as[i] !== bs[i]) return as[i] < bs[i] ? -1 : 1
+  }
+  return as.length - bs.length
+}
 /** The copy the install keeps for a shared file: newer Genesis, then bigger,
- *  then — on a full (genesis, size) tie — the lexicographically FIRST asset
+ *  then — on a full (genesis, size) tie — the component-wise FIRST asset
  *  path, mirroring the Rust `winner_skip_map`'s max over
  *  (genesis, size, Reverse(asset path)) in apps/desktop/src/assets.rs.
  *  Exported for the twin test of the Rust
@@ -35,7 +49,9 @@ export function conflictWinner(copies: Array<ConflictCopy>): ConflictCopy {
     const better =
       rank > bestRank ||
       (rank === bestRank && cp.size > best.size) ||
-      (rank === bestRank && cp.size === best.size && (cp.path ?? '') < (best.path ?? ''))
+      (rank === bestRank &&
+        cp.size === best.size &&
+        comparePathComponents(cp.path ?? '', best.path ?? '') < 0)
     return better ? cp : best
   })
 }

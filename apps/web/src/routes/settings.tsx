@@ -538,7 +538,20 @@ function SettingsPage() {
   // report. On failure the first errored step's message is toasted verbatim — it
   // carries the "close all apps / restart as administrator" guidance.
   // Shared with the Tools page: save pending settings edits, then run the install.
-  const { runInstall } = useSettingsActions({ dirty, settings, baseline: initial })
+  const { runInstall } = useSettingsActions({
+    dirty,
+    settings,
+    baseline: initial,
+    // The save-before-action applies the release selection exactly like Save
+    // does — rescan so the session catalog + `pinnedMissing` (the amber banner)
+    // reflect the just-persisted pick even when the action is only a dry run.
+    // Errors stay silent, like the seed effect above: an unreachable release
+    // already surfaces through the pickers, and a failed scan must not abort
+    // the install the user actually asked for.
+    onSaved: async () => {
+      await rebuildCatalog().catch(() => {})
+    },
+  })
 
   // The sticky header's Save persists EVERY pending change — the machine settings
   // (General tab) and, in a project window, the project manifest (Project tab) —

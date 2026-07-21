@@ -186,7 +186,9 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       const message = err instanceof Error ? err.message : String(err)
       // The install just proved the content IS there — adopt that over the stale
       // probe result, so the next plain click gets the overwrite hint instead of
-      // re-running into the same error.
+      // re-running into the same error. The matched substring is a CONTRACT with
+      // Rust's UNREAL_CONTENT_EXISTS_ERROR (apps/desktop/src/install.rs), whose
+      // test pins the exact phrase — reword both sides together.
       if (message.includes('already exists')) setDthStatus((s) => ({ ...s, [path]: true }))
       toast.error(message)
     } finally {
