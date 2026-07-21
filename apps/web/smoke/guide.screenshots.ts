@@ -274,6 +274,9 @@ async function shootTopThrough(page: Page, path: string, endFeature: Locator) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await page.setViewportSize({ width: VW, height: 1500 })
   await settle(page)
+  // Selecting a scene card (openCharacterOnOutfitScene) scrolls the page down to
+  // click it; anchor back at the top so the from-top clip stays in-bounds.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const bottom = await endFeature.evaluate((el) => Math.ceil(el.getBoundingClientRect().bottom))
   await page.screenshot({
     path,
@@ -470,12 +473,13 @@ test('character-scene-tag', async ({ page }) => {
 test('rom-override-toggle', async ({ page }) => {
   await openCharacterOnOutfitScene(page)
   await page.getByRole('switch', { name: /Override ROM frames/ }).click()
-  // The ROM header row (Override armed + on) down through the override banner.
+  // The ROM header row (Override armed + on) down through the timeline and the
+  // first (now-locked) section — the "Scene override active" banner is gone.
   await shootStrip(
     page,
     join(OUT, 'rom-override-toggle.png'),
     page.getByRole('heading', { name: /^ROM/ }).locator('xpath=..'),
-    page.getByText(/Scene override active/),
+    page.getByText('Retargeting', { exact: true }),
   )
 })
 
