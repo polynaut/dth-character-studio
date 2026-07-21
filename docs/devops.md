@@ -105,24 +105,25 @@ token by **SimplySign Desktop**, which runs headless in a container on polynaut'
 ```
 release.yml
   build-win (windows-latest)             → unsigned NSIS installer artifact
-  build-mac (macos-latest, opt-in)       → universal .app + .dmg, Developer-ID
-                                           signed + Apple-notarized inline
-  sign      (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over the
+  build-mac (macos-latest, opt-in)       → UNSIGNED arm64 .app + .dmg artifact
+  sign-win  (self-hosted, certum-signer) → osslsigncode sign (PKCS#11 over the
                                            p11-kit socket shared from
                                            certum-container)
-                                         → regenerate updater .sig over the signed
-                                           Windows + notarized macOS bytes
-                                         → upload signed installer + .sig
-                                           (+ mac bundle + .sig when built)
+                                         → regenerate updater .sig over the
+                                           signed Windows bytes
+  sign-mac  (macos-latest, gated)        → Developer-ID sign, notarize + staple
+                                           app & dmg, regenerate the macOS
+                                           updater .sig with the real key
   publish   (ubuntu-latest, hosted)      → download the signed artifacts
                                          → build ONE latest.json (all platforms)
                                            + gh release create
 ```
 
-Only the **`sign`** job runs in the protected **`release-signing` environment**
-(required reviewer: `polynaut`, deployments restricted to `main`) — every
-release and smoke test **pauses for manual approval** in the Actions UI before
-anything touches the SimplySign session. **`publish`** is a plain hosted job
+Both **`sign-win`** and **`sign-mac`** run in the protected
+**`release-signing` environment** (required reviewer: `polynaut`, deployments
+restricted to `main`) — they run in **parallel**, and every release **pauses
+for a manual approval of each** in the Actions UI before anything touches the
+SimplySign session or the Apple Developer-ID material. **`publish`** is a plain hosted job
 (needs only `GITHUB_TOKEN`, no signing secret), so a GitHub-API hiccup can be
 re-run without re-signing, and the real updater key never leaves the signer.
 The artifact round-trip is byte-exact, so the updater `.sig` still verifies
@@ -143,7 +144,7 @@ The NAS runs two containers:
 
 ### macOS builds (opt-in)
 
-The `build-mac` job adds a **universal** (Intel + Apple Silicon) macOS build — a
+The `build-mac` job adds an **Apple Silicon (arm64)** macOS build — a
 `.dmg` for fresh installs and a notarized `.app.tar.gz` the updater consumes —
 alongside the Windows installer. It's **off by default**; turn it on by setting
 the repo **variable** `ENABLE_MAC_RELEASE=true` once these secrets exist (one
@@ -158,13 +159,15 @@ Developer ID covers every app under the Apple team):
 | `APPLE_API_KEY` | App Store Connect API key ID |
 | `APPLE_API_KEY_P8` | the `AuthKey_*.p8` contents (for `notarytool`) |
 
-tauri-action Developer-ID-signs + notarizes the app inline on the mac runner (the
-real updater key never touches it — a throwaway key satisfies the build, same as
-Windows). The `sign` job then regenerates the updater `.sig` over the notarized
-tarball with the real key, and `publish` folds `darwin-x86_64` + `darwin-aarch64`
-entries (both the one universal tarball) into `latest.json`. If the mac build
-**fails**, the whole release fails loudly — it never silently ships Windows-only;
-a **skipped** mac build (flag off) releases Windows exactly as before.
+`build-mac` builds **unsigned** (like `build-win`, the hosted build job that
+runs third-party actions sees no real signing material — a throwaway updater
+key satisfies the build). The gated **`sign-mac`** job then Developer-ID-signs
+the app, notarizes + staples both the app and the dmg, rebuilds the updater
+tarball over the stapled bundle and signs it with the real updater key;
+`publish` folds the `darwin-aarch64` entry into `latest.json`. If the mac side
+**fails**, the whole release fails loudly — it never silently ships
+Windows-only; a **skipped** mac side (flag off) releases Windows exactly as
+before.
 
 ### The SimplySign session (fully automated — no phone, no manual step)
 
