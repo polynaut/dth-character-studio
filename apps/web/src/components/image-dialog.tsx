@@ -2,12 +2,14 @@ import { useRef, useState } from 'react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import { ImageCropEditor } from '#/components/image-crop-editor.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Modal } from '@dth/ui'
+import { validateAvatarSource } from '#/lib/image-crop.ts'
 import {
+  readAvatarSourceFile,
   setAvatarFromScene,
-  uploadCharacterImage,
-  uploadCharacterImageFromPath,
+  uploadCroppedAvatar,
 } from '#/lib/rom/api.ts'
 
 /**
@@ -49,28 +51,50 @@ export function ImageDialog({
   const [url, setUrl] = useState(image)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /** A decoded, size-validated upload awaiting its 1:1 crop. */
+  const [cropSource, setCropSource] = useState<ImageBitmap | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  // Native OS drag-drop gives a path — read + upload it server-side. The upload
-  // runs INSIDE the persist producer — after persistPatch's single-flight and
-  // validation guards — so an up-front refusal can never have already written
-  // the file; once the upload HAS run, the hook persists at least the image
-  // patch itself, so the preview never shows an avatar that failed to persist
-  // (only a genuinely failed save resets it below).
+  // Every custom upload goes through decode → size validation (256..1024 on
+  // both sides) → the 1:1 crop editor; only the CROPPED square is ever stored
+  // (so previews render consistently everywhere). Decoding and validating are
+  // side-effect free and run up front — the actual write waits inside the
+  // persist producer (see applyCrop).
+  async function startCrop(blob: Blob) {
+    setBusy(true)
+    setError('')
+    try {
+      let bitmap: ImageBitmap
+      try {
+        bitmap = await createImageBitmap(blob)
+      } catch {
+        throw new Error('Could not read that image.')
+      }
+      const problem = validateAvatarSource(bitmap.width, bitmap.height)
+      if (problem) {
+        bitmap.close()
+        throw new Error(problem)
+      }
+      setCropSource(bitmap)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Native OS drag-drop gives a path — the lib layer reads the bytes (extension
+  // allowlist + byte cap live there), then the same decode/validate/crop flow.
   async function uploadPath(path: string) {
     setBusy(true)
     setError('')
     try {
-      const saved = await onApply(async () => {
-        const served = await uploadCharacterImageFromPath({ data: { characterId, path } })
-        setUrl(served)
-        return { image: served, imageScene: '' }
-      })
-      // Refused or failed → reset the preview to the last persisted image.
-      if (saved === null) setUrl(image)
+      const { bytes, mimeType } = await readAvatarSourceFile({ data: { path } })
+      // Copy into a fresh ArrayBuffer-backed view — the plugin-fs Uint8Array is
+      // typed over ArrayBufferLike, which BlobPart no longer accepts directly.
+      await startCrop(new Blob([new Uint8Array(bytes)], { type: mimeType }))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
       setBusy(false)
     }
   }
@@ -84,28 +108,30 @@ export function ImageDialog({
       setError('Image is larger than 10 MB.')
       return
     }
+    await startCrop(file)
+  }
+
+  // The crop editor produced the final square PNG — store it. The write runs
+  // INSIDE the persist producer — after persistPatch's single-flight and
+  // validation guards — so an up-front refusal can never have already written
+  // the file; once the upload HAS run, the hook persists at least the image
+  // patch itself, so the preview never shows an avatar that failed to persist
+  // (only a genuinely failed save resets it below).
+  async function applyCrop(png: Uint8Array) {
     setBusy(true)
     setError('')
+    // Leave the crop step either way — a refused/failed persist returns to the
+    // main view with the avatar preview reset (and any error shown); a success
+    // shows the new avatar. Either way the staged bitmap is done.
+    cropSource?.close()
+    setCropSource(null)
     try {
-      // Reading the picked file is side-effect free, so it may run up front;
-      // the actual upload waits inside the producer (see uploadPath).
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-        reader.onerror = () => reject(new Error('Could not read the file'))
-        reader.readAsDataURL(file)
-      })
       const saved = await onApply(async () => {
-        const served = await uploadCharacterImage({
-          data: {
-            characterId,
-            mimeType: file.type,
-            dataBase64: dataUrl.split(',')[1] ?? '',
-          },
-        })
+        const served = await uploadCroppedAvatar({ data: { characterId, bytes: png } })
         setUrl(served)
         return { image: served, imageScene: '' }
       })
+      // Refused or failed → reset the preview to the last persisted image.
       if (saved === null) setUrl(image)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -134,11 +160,36 @@ export function ImageDialog({
     }
   }
 
+  function cancelCrop() {
+    cropSource?.close()
+    setCropSource(null)
+    setError('')
+  }
+
   // The Modal primitive carries the dialog semantics the old hand-rolled portal
   // was missing: focus trap, initial focus, ESCAPE (there was none here), and
   // focus restore to the opener.
   return (
-    <Modal open onClose={onClose} title="Character image" showClose>
+    <Modal
+      open
+      onClose={() => {
+        cropSource?.close()
+        onClose()
+      }}
+      title={cropSource ? 'Crop to a square' : 'Character image'}
+      showClose
+    >
+      {/* Once an upload is staged, the dialog becomes the crop step — only the
+          cropped square is ever stored, so every avatar preview is 1:1. */}
+      {cropSource ? (
+        <ImageCropEditor
+          bitmap={cropSource}
+          busy={busy}
+          onApply={(png) => void applyCrop(png)}
+          onCancel={cancelCrop}
+        />
+      ) : (
+        <>
         <div className="flex justify-center">
           <Avatar
             image={url}
@@ -161,7 +212,10 @@ export function ImageDialog({
             className="flex w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-input px-4 py-6 text-center text-sm text-muted-foreground transition-colors hover:border-primary"
             onClick={() => fileInput.current?.click()}
           >
-            {busy ? 'Uploading…' : 'Drop an image here, or click to pick one'}
+            {busy ? 'Reading…' : 'Drop an image here, or click to pick one'}
+            <span className="mt-1 text-xs text-muted-foreground/70">
+              256–1024px, any shape — you&rsquo;ll crop it to a square
+            </span>
           </button>
         </FileDropZone>
 
@@ -220,7 +274,6 @@ export function ImageDialog({
             Apply
           </Button>
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
       <input
         ref={fileInput}
         type="file"
@@ -232,6 +285,9 @@ export function ImageDialog({
           e.target.value = ''
         }}
       />
+        </>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </Modal>
   )
 }

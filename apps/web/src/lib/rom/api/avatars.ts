@@ -111,39 +111,9 @@ export async function setAvatarFromScene({ data }: { data: unknown }): Promise<s
   return fileName
 }
 
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-}
-
-const uploadImageInput = z.object({
-  characterId: z.string().min(1),
-  mimeType: z.string(),
-  /** Raw image data, base64 (no data-URL prefix). Capped at ~10 MB. */
-  dataBase64: z.string().max(14_000_000),
-})
-
-/**
- * Stores a dropped avatar image under the active project's `.dcsmeta/images/`
- * (via {@link writeAvatarBytes}) and returns its bare filename — the portable
- * canonical reference saved on the character (see ./image). Avatars are
- * PER-PROJECT (they live in the project's hidden `.dcsmeta`), keyed by character id.
- */
-export async function uploadCharacterImage({ data }: { data: unknown }): Promise<string> {
-  const input = uploadImageInput.parse(data)
-  const extension = IMAGE_EXTENSIONS[input.mimeType]
-  if (!extension) throw new Error(`Unsupported image type: ${input.mimeType}`)
-  const bytes = Uint8Array.from(atob(input.dataBase64), (c) => c.charCodeAt(0))
-  // extension is like ".png"; writeAvatarBytes wants the bare "png".
-  return writeAvatarBytes(input.characterId, bytes, extension.slice(1))
-}
-
 /** Extension → MIME for avatar images dropped as a file path (native drag-drop).
  *  An UPLOAD allowlist — deliberately narrower than the shared display table in
- *  data-url.ts (no svg/bmp/avif): every entry must map back through
- *  `IMAGE_EXTENSIONS` to a canonical stored extension. */
+ *  data-url.ts (no svg/bmp/avif): only formats the crop pipeline can decode. */
 const IMAGE_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -153,23 +123,41 @@ const IMAGE_MIME: Record<string, string> = {
 }
 
 /**
- * Store an avatar image from an absolute file path — native OS drag-drop hands us
- * a path, not file bytes. Reads it, infers the MIME from the extension, and
- * writes the bytes DIRECTLY via {@link writeAvatarBytes} — the old route
- * detoured through base64 (readFile → chunked btoa → atob → bytes), tripling
- * the memory of a multi-MB image for nothing.
+ * Read an image file (native OS drag-drop hands the webview a PATH, not bytes)
+ * so the avatar dialog can decode, validate and crop it — the ONLY native
+ * access the crop flow needs, kept in the lib layer per the boundary rule.
+ * Enforces the same extension allowlist and byte cap as the old direct upload.
  */
-export async function uploadCharacterImageFromPath({ data }: { data: unknown }): Promise<string> {
-  const { characterId, path } = z
-    .object({ characterId: z.string().min(1), path: z.string().min(1) })
-    .parse(data)
+export async function readAvatarSourceFile({
+  data,
+}: {
+  data: unknown
+}): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  const { path } = z.object({ path: z.string().min(1) }).parse(data)
   const ext = fileExt(path)
   const mimeType = IMAGE_MIME[ext]
   if (!mimeType) throw new Error(`Unsupported image type${ext ? `: .${ext}` : ''}`)
   const bytes = await readFile(path)
   if (bytes.length > 10 * 1024 * 1024) throw new Error('Image is larger than 10 MB.')
-  // Same canonical extension the base64 upload derives (jpeg → jpg).
-  return writeAvatarBytes(characterId, bytes, IMAGE_EXTENSIONS[mimeType].slice(1))
+  return { bytes, mimeType }
+}
+
+/**
+ * Store a CROPPED avatar produced by the 1:1 crop editor — always PNG, always
+ * one of the two square output sizes (the editor guarantees both; this is the
+ * only write path for user-uploaded avatars, so everything stored is square).
+ * Takes raw bytes DIRECTLY — no base64 round-trip through the webview.
+ */
+export async function uploadCroppedAvatar({ data }: { data: unknown }): Promise<string> {
+  const { characterId, bytes } = z
+    .object({
+      characterId: z.string().min(1),
+      bytes: z.instanceof(Uint8Array).refine((b) => b.length <= 4 * 1024 * 1024, {
+        message: 'Cropped avatar is unexpectedly large.',
+      }),
+    })
+    .parse(data)
+  return writeAvatarBytes(characterId, bytes, 'png')
 }
 
 /** Inline raw image bytes as a `data:` URL, MIME inferred from the file name
