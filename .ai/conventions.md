@@ -76,11 +76,13 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    path) must join the repoint helper, or renames/moves silently orphan it. The
    folder-repoint sites are now unified in one place —
    **`repointCharacterPaths`** (`apps/web/src/lib/rom/storage/characters.ts`),
-   consumed by `saveCharacter`'s rename, `moveCharacter`, AND `moveCharactersRoot`
-   (add the field to that helper). Still separate: `moveCharacterScenesFolder`
-   (`apps/web/src/lib/rom/api/characters.ts`) and the prefill field list
-   `romFields` (same file). `sceneOverrides` and `groomScenes` are the existing
-   examples — grep them to find every site. (Regression fixed: `moveCharacter`
+   consumed by `saveCharacter`'s rename, `moveCharacter`, `moveCharactersRoot`,
+   AND `moveCharacterScenesFolder` — including the character route's post-move
+   DRAFT merge (`onScenesFolderMoved`), which must never keep a hand-picked
+   field list (a list that misses a path field writes the dead old path back on
+   the next Save). Add the field to that ONE helper. Still separate: only the
+   prefill field list `romFields` (`api/characters.ts`). `sceneOverrides` and
+   `groomScenes` are the existing examples — grep them to find every site. (Regression fixed: `moveCharacter`
    used to repoint only `scenePath`, orphaning extra scenes/grooms/overrides on a
    folder move.)
 
