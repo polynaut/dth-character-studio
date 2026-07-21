@@ -2,6 +2,7 @@ import { InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, Selec
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
 import type { Character, GenesisVersion, SceneOverride } from '@dth/rom'
+import type { ReactNode } from 'react'
 
 /**
  * The character's identity block: Genesis generation + gender, and the
@@ -18,8 +19,10 @@ export function IdentitySection({
   identityOverrideActive,
   setIdentityOverrideEnabled,
   selectedSceneName,
+  scenePath,
   sceneOverride,
   patchOverride,
+  hairSlot,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -28,8 +31,13 @@ export function IdentitySection({
   identityOverrideActive: boolean
   setIdentityOverrideEnabled: (enabled: boolean) => void
   selectedSceneName: string
+  /** The selected scene's path — renders the override toggle label's mini render. */
+  scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
+  /** The Hair-items field, rendered as the middle sidebar row (between Genesis/
+   *  Gender and the Genesis-9 fieldset). It carries its OWN override toggle. */
+  hairSlot: ReactNode
 }) {
   // While armed on a non-primary scene the three dials read/write the scene's
   // identity override; otherwise the base character.
@@ -50,14 +58,25 @@ export function IdentitySection({
   const fieldsetDisabled = character.genesis !== 'G9' || (overrideEligible && !overriding)
 
   return (
-    <div className="flex flex-wrap gap-x-12 gap-y-5">
-      <div className="flex flex-col gap-5 pt-2">
-        <div className="flex flex-wrap gap-4">
+    // Sidebar rows: Genesis + Gender, then Hair items, then the Genesis-9 fieldset.
+    <div className="flex flex-col gap-5">
+      {/* Genesis + Gender are CHARACTER-level, never per-scene — disabled while a
+          non-primary scene is selected (switch back to the primary to change them). */}
+      <div className="flex flex-col gap-5">
+        <div
+          className="flex flex-wrap gap-4"
+          title={
+            overrideEligible
+              ? "Genesis and gender aren't per-scene — select the primary Daz scene to change them"
+              : undefined
+          }
+        >
           <div>
             <Label className="mb-1">Genesis</Label>
             <Select
               value={character.genesis}
               onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
+              disabled={overrideEligible}
             >
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -75,6 +94,7 @@ export function IdentitySection({
             <Select
               value={character.gender}
               onValueChange={(v) => patch({ gender: v as Character['gender'] })}
+              disabled={overrideEligible}
             >
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -88,6 +108,9 @@ export function IdentitySection({
         </div>
       </div>
 
+      {/* Hair items — the middle sidebar row (carries its own override toggle). */}
+      {hairSlot}
+
       {/* The legend is positioned absolutely (a notch on the border) so it
           doesn't consume a row of flow. The override toggle sits in its own row
           ABOVE the fieldset (right-aligned to the box) — OUTSIDE it, so it stays
@@ -96,14 +119,16 @@ export function IdentitySection({
           control inside (the strengths and tear UV only exist on Genesis 9, and
           are locked on a non-primary scene until the override is armed) and the
           text goes muted. */}
-      <div className="w-fit self-start">
+      <div className="w-full">
         {character.genesis === 'G9' && (
           <div className="mb-2.5 flex w-full justify-end">
             <PanelOverrideToggle
               eligible={overrideEligible}
               active={identityOverrideActive}
+              scenePath={scenePath}
               sceneName={selectedSceneName}
               noun="Genesis 9 settings"
+              compact
               onToggle={setIdentityOverrideEnabled}
               info={
                 <>
