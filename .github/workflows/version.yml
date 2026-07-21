@@ -63,5 +63,5 @@ jobs:
           esac
           rest="${body#*'# Releases'}"
           printf '%s\n\n# Releases%s' \
-            '🚀 **The release train.** Kept up to date automatically — every merge to `main` that carries changesets refreshes this PR. **Merging it ships the release**: build → `sign-win` (one manual approval on the *release-signing* gate) → publish. Nothing is released by hand.' \
+            '🚀 **The release train.** Kept up to date automatically — every merge to `main` that carries changesets refreshes this PR. **Merging it ships the release**: build → `sign-win` + `sign-mac` in parallel (each pauses for its own manual approval on the *release-signing* gate; `sign-mac` only when the mac release is enabled) → publish. Nothing is released by hand.' \
             "$rest" | gh pr edit "$num" --repo "$GITHUB_REPOSITORY" --body-file -
