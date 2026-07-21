@@ -172,6 +172,20 @@
   color: var(--fg-bright);
 }
 
+/* The inter-chapter gap lives INSIDE each section (::after) instead of on the
+   next h2's top margin — the gap then counts toward the sticky range, so a
+   stuck title keeps sticking through it and only gets pushed away when the
+   next chapter's divider actually reaches it. */
+.guide-section:not(:last-of-type)::after {
+  content: '';
+  display: block;
+  height: 44px;
+}
+
+.guide-section + .guide-section h2 {
+  margin-top: 0;
+}
+
 /* Hash navigation lands headings below the topbar (and the stuck title). */
 .guide-content h1,
 .guide-content h2,
