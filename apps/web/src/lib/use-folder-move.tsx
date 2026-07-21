@@ -67,7 +67,7 @@ export function useFolderMove() {
         </ul>
       )}
       <div className="flex justify-end gap-2">
-        <Button variant="ghost-destructive" onClick={() => decideRef.current?.('cancel')}>
+        <Button variant="outline-destructive" onClick={() => decideRef.current?.('cancel')}>
           Cancel
         </Button>
         <Button onClick={() => decideRef.current?.('retry')}>Continue</Button>

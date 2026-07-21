@@ -22,6 +22,12 @@ const buttonVariants = cva(
         // red hover. For Cancel / Clear next to a primary action.
         "ghost-destructive":
           "text-destructive/90 hover:bg-destructive/10 hover:text-destructive",
+        // Destructive, but bordered like `outline` rather than filled — a LIGHT
+        // red border + muted red glyph, so it reads as a real (not link) button
+        // that matches the visual weight/height of the outline buttons and path
+        // chips it sits beside, without the heft of a filled `destructive`.
+        "outline-destructive":
+          "border border-destructive/40 text-destructive/90 hover:border-destructive/60 hover:bg-destructive/10 hover:text-destructive",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

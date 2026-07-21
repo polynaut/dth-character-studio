@@ -86,9 +86,14 @@ export function ExportSettingsSection({
               path={displayPath(character.exportPath)}
               className="flex h-9 items-center"
             />
+            {/* Icon-only, light-red-bordered destructive button so Clear reads
+                as a real action next to Change… (matching that chip/button
+                height + weight) rather than a link. */}
             <Button
-              variant="ghost-destructive"
-              size="sm"
+              variant="outline-destructive"
+              size="icon"
+              title="Clear the export directory"
+              aria-label="Clear the export directory"
               onClick={() =>
                 void persistPatch(
                   { exportPath: '' },
@@ -96,7 +101,7 @@ export function ExportSettingsSection({
                 )
               }
             >
-              <X /> Clear
+              <X />
             </Button>
           </>
         )}
