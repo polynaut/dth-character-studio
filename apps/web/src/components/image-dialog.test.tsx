@@ -10,12 +10,14 @@ afterEach(() => {
 })
 
 const uploadCroppedAvatar = vi.fn(async () => 'uploaded-img')
+const deleteCharacterUpload = vi.fn(async () => {})
 let recentUploads: Array<string> = []
 vi.mock('#/lib/rom/api.ts', () => ({
   uploadCroppedAvatar: () => uploadCroppedAvatar(),
   readAvatarSourceFile: async () => ({ bytes: new Uint8Array([1]), mimeType: 'image/png' }),
   setAvatarFromScene: async () => 'scene-img',
   listCharacterUploads: async () => recentUploads,
+  deleteCharacterUpload: () => deleteCharacterUpload(),
   // Avatar resolves the stored reference asynchronously — identity is enough here.
   resolveImageSrc: async (image: string) => image,
 }))
@@ -139,5 +141,22 @@ describe('ImageDialog crop + persist flow', () => {
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
     expect(uploadCroppedAvatar).not.toHaveBeenCalled()
     await waitFor(() => expect(previewSrc()).toBe('c1--up-100.png'))
+  })
+
+  it('deletes a past upload but disables the ✕ on the active image', async () => {
+    // The active avatar is the first upload; its delete must be disabled.
+    recentUploads = ['orig-img', 'c1--up-100.png']
+    const onApply = vi.fn(async () => null)
+    render(<ImageDialog {...baseProps} image="orig-img" onApply={onApply} />)
+    const dels = await screen.findAllByRole('button', { name: 'Delete this upload' })
+    expect(dels).toHaveLength(2)
+    expect(dels[0]).toHaveProperty('disabled', true) // active image
+    expect(dels[1]).toHaveProperty('disabled', false)
+    fireEvent.click(dels[1])
+    await waitFor(() => expect(deleteCharacterUpload).toHaveBeenCalledTimes(1))
+    // Removed from the gallery; the active one remains.
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Delete this upload' })).toHaveLength(1),
+    )
   })
 })

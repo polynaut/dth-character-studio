@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -7,6 +8,7 @@ import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Modal } from '@dth/ui'
 import { validateAvatarSource } from '#/lib/image-crop.ts'
 import {
+  deleteCharacterUpload,
   listCharacterUploads,
   readAvatarSourceFile,
   setAvatarFromScene,
@@ -29,7 +31,9 @@ export function ImageDialog({
   image: string
   name: string
   characterId: string
-  /** Linked Daz scene paths — each offers its `.tip.png` as a pickable avatar. */
+  /** The PRIMARY Daz scene (as a 0-or-1 array), offering its `.tip.png` as a
+   *  pickable avatar. Only the primary is selectable — a non-primary scene
+   *  can be previewed in the header but never set as the stored avatar. */
   scenes: Array<string>
   /** Persists a new stored image reference. Receives an async PRODUCER of
    *  `{ image, imageScene }` (`imageScene` is the linked scene whose preview
@@ -192,6 +196,21 @@ export function ImageDialog({
     }
   }
 
+  // Delete a past upload from the gallery (never the active one — its ✕ is
+  // disabled). Drops it from the list optimistically on success.
+  async function deleteRecent(fileName: string) {
+    setBusy(true)
+    setError('')
+    try {
+      await deleteCharacterUpload({ data: { characterId, fileName } })
+      setRecent((r) => r.filter((f) => f !== fileName))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function cancelCrop() {
     cropSource?.close()
     setCropSource(null)
@@ -259,39 +278,55 @@ export function ImageDialog({
             <p className="mb-1.5 text-sm text-muted-foreground">Recent uploads:</p>
             <div className="flex flex-wrap gap-2">
               {recent.map((fileName) => (
-                <button
-                  key={fileName}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void applyRecent(fileName)}
-                  title="Use this uploaded image"
-                  className={`rounded-md ring-2 transition focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
-                    fileName === url ? 'ring-primary' : 'ring-transparent hover:ring-primary'
-                  }`}
-                >
-                  {/* Same portrait frame as the scene thumbnails below, so the
-                      two rows read as one gallery. The stored upload is square;
-                      shown object-top (no zoom) it mirrors the header crop. */}
-                  <Portrait
-                    image={fileName}
-                    name={name}
-                    zoom={false}
-                    imgClassName="object-top"
-                    className="aspect-[3/4] w-16 rounded-md"
-                    fallbackClassName="text-lg"
-                  />
-                </button>
+                <div key={fileName} className="relative">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void applyRecent(fileName)}
+                    title="Use this uploaded image"
+                    className={`block rounded-md ring-2 transition focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
+                      fileName === url ? 'ring-primary' : 'ring-transparent hover:ring-primary'
+                    }`}
+                  >
+                    {/* Same portrait frame as the scene thumbnails below, so the
+                        two rows read as one gallery. The stored upload is square;
+                        shown object-top (no zoom) it mirrors the header crop. */}
+                    <Portrait
+                      image={fileName}
+                      name={name}
+                      zoom={false}
+                      imgClassName="object-top"
+                      className="aspect-[3/4] w-16 rounded-md"
+                      fallbackClassName="text-lg"
+                    />
+                  </button>
+                  {/* Delete ✕ — a sibling (not nested in the select button).
+                      Disabled for the active image (deleting the referenced file
+                      would break the avatar). Scene thumbnails have no ✕: they
+                      re-derive from the scene and aren't stored uploads. */}
+                  <button
+                    type="button"
+                    disabled={busy || fileName === url}
+                    onClick={() => void deleteRecent(fileName)}
+                    title={
+                      fileName === url ? "Can't delete the current image" : 'Delete this upload'
+                    }
+                    aria-label="Delete this upload"
+                    className="absolute -top-1.5 -right-1.5 rounded-full border border-background bg-neutral-900 p-0.5 text-white shadow transition hover:bg-destructive disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Offer the linked scenes' thumbnails whenever there's at least one — the
-            current avatar may have come from a scene since unlinked, so even a
-            single remaining scene needs to be selectable to switch back to it. */}
+        {/* Offer the PRIMARY scene's thumbnail as an avatar source (only when a
+            primary is linked). Non-primary scenes are intentionally not offered. */}
         {scenes.length > 0 && (
           <div>
-            <p className="mb-1.5 text-sm text-muted-foreground">Daz scene&rsquo;s image:</p>
+            <p className="mb-1.5 text-sm text-muted-foreground">Primary Daz scene image:</p>
             <div className="flex flex-wrap gap-2">
               {scenes.map((scene) => (
                 <button

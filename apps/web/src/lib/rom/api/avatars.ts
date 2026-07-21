@@ -2,7 +2,13 @@ import { exists, mkdir, readDir, readFile, remove, writeFile } from '@tauri-apps
 import { z } from 'zod'
 
 import * as storage from '../storage'
-import { avatarFileName, avatarIdOf, avatarsToPrune, uploadsNewestFirst } from '../avatar-names'
+import {
+  avatarFileName,
+  avatarIdOf,
+  avatarsToPrune,
+  parseAvatarName,
+  uploadsNewestFirst,
+} from '../avatar-names'
 import { isExternalImage } from '../image'
 import { basename, getActiveProjectDir, joinPath } from './core'
 import { bytesToDataUrl, fileExt, IMAGE_EXT_MIME } from './data-url'
@@ -99,6 +105,26 @@ export async function listCharacterUploads({ data }: { data: unknown }): Promise
   if (!(await exists(dir))) return []
   const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
   return uploadsNewestFirst(entries, basename(characterId))
+}
+
+/**
+ * Delete one stored UPLOAD (the gallery's per-image ✕). Refuses anything that
+ * isn't an `up` avatar for this character — never a scene snapshot (those
+ * re-derive from the scene) or another character's file. The caller must not
+ * offer it for the currently-active avatar (deleting the referenced file would
+ * break the stored reference).
+ */
+export async function deleteCharacterUpload({ data }: { data: unknown }): Promise<void> {
+  const { characterId, fileName } = z
+    .object({ characterId: z.string().min(1), fileName: z.string().min(1) })
+    .parse(data)
+  const parsed = parseAvatarName(fileName)
+  if (!parsed || parsed.kind !== 'up' || parsed.id !== basename(characterId)) {
+    throw new Error('Only uploaded images can be deleted.')
+  }
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return
+  await remove(joinPath(storage.metaImagesDir(projectDir), fileName))
 }
 
 /**

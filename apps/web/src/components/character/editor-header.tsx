@@ -121,6 +121,13 @@ export function EditorHeader({
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
 
+  // What the small corner badge shows (see the badge JSX below), or null.
+  const cornerBadge: { image?: string; scenePath?: string } | null = sceneAvatarPath
+    ? { image: character.image } // previewing a non-primary scene → the main avatar
+    : character.scenePath && character.imageScene !== character.scenePath
+      ? { scenePath: character.scenePath } // custom avatar → the primary scene render
+      : null
+
   // Inline rename from the title — persists immediately (like the avatar) so the
   // new name + folder rename stick without needing the Save button. Routed
   // through persistPatch so it runs the SAME guards as every persisting flow —
@@ -223,21 +230,25 @@ export function EditorHeader({
           <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <Pencil className="size-8 text-white" />
           </span>
-          {/* Previewing a NON-primary scene (sceneAvatarPath set): keep the
-              character's own main avatar (the custom upload / primary snapshot)
-              visible as a small badge in the corner, so the header still
-              identifies the character while you inspect an outfit scene. Lives
-              outside the clipping box so it's never cropped; pointer-events-none
-              so the whole portrait still opens the image dialog. */}
-          {sceneAvatarPath && (
+          {/* Corner badge: the "other" view of the character, so the big
+              portrait and the badge together always show both the avatar and the
+              primary Daz render. Previewing a non-primary scene → the big shows
+              that scene, the badge the MAIN avatar; a custom main avatar with a
+              primary scene linked → the big shows the avatar, the badge the
+              PRIMARY scene render. Otherwise (the big already IS the primary
+              scene, or none is linked) there's no badge. Lives outside the
+              clipping box so it's never cropped; pointer-events-none so the whole
+              portrait still opens the image dialog. */}
+          {cornerBadge && (
             <span
               className="pointer-events-none absolute bottom-1.5 left-1.5"
-              title="Main avatar"
+              title={cornerBadge.scenePath ? 'Primary Daz scene' : 'Main avatar'}
             >
               <Avatar
-                image={character.image}
+                image={cornerBadge.image ?? ''}
+                scenePath={cornerBadge.scenePath}
                 name={character.name}
-                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 object-top shadow-md"
+                className="aspect-[3/4] w-11 rounded-md border border-neutral-900 bg-neutral-500 object-top shadow-md"
                 fallbackClassName="rounded-md border border-neutral-900 text-sm shadow-md"
               />
             </span>
@@ -298,7 +309,7 @@ export function EditorHeader({
           image={character.image}
           name={character.name}
           characterId={character.id}
-          scenes={[...new Set([character.scenePath, ...character.extraScenes].filter(Boolean))]}
+          scenes={character.scenePath ? [character.scenePath] : []}
           // Persist the avatar immediately — it's a deliberate change and
           // should survive a reload without needing the Save button. The
           // dialog hands a PRODUCER (the upload/copy runs inside it, past
