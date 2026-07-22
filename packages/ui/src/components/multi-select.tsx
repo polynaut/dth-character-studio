@@ -167,7 +167,7 @@ export function MultiSelect({
     >
       <div
         className={cn(
-          'flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-1.5 py-1 text-base shadow-xs transition-[color,box-shadow] md:text-sm dark:bg-input/30',
+          'flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-1.5 py-1 text-base shadow-xs transition-[color,box-shadow] md:text-sm dark:bg-input/50',
           'focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50',
           disabled && 'pointer-events-none opacity-50',
         )}

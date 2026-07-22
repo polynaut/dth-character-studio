@@ -61,9 +61,12 @@ export function NumberField({
   const shownSuffix = suffix ?? (percent ? '%' : undefined)
   if (!shownSuffix) return input
   return (
-    <span className="relative inline-block">
+    // `group/nf` + `has-[:disabled]` so the suffix dims in lockstep with the input
+    // when it's disabled (e.g. a locked preserve/identity fieldset) — the number
+    // fades via disabled:opacity-50 and the "%" would otherwise stay fully lit.
+    <span className="group/nf relative inline-block">
       {input}
-      <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs text-muted-foreground">
+      <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs text-muted-foreground transition-opacity group-has-[:disabled]/nf:opacity-50">
         {shownSuffix}
       </span>
     </span>
