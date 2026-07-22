@@ -106,7 +106,10 @@ export const RomEditorSection = memo(function RomEditorSection({
         {/* Per-scene override toggle: armed only while an EXTRA scene is
             selected in the Daz scenes cards (the primary scene IS the base
             ROM). Toggling off keeps the stored override, just inactive. */}
-        <span className="ml-auto">
+        {/* mr-[21px] insets it to the p-5 + border edge of the other panels, so
+            the ROM toggle lines up vertically with their compact override toggles
+            (this section is full-bleed, they are not). */}
+        <span className="mr-[21px] ml-auto">
           <PanelOverrideToggle
             eligible={overrideEligible}
             active={overrideActive}

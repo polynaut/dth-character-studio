@@ -52,7 +52,7 @@ export function StickyOverrideBar({
   return (
     <div
       ref={ref}
-      className="sticky z-[9] -mx-8 mb-6 flex items-center justify-between gap-4 border-b bg-background/95 px-8 py-2 backdrop-blur-sm"
+      className="sticky z-[9] -mx-8 flex items-center justify-between gap-4 border-b bg-background/95 px-8 py-2 pb-4 backdrop-blur-sm"
       style={{ top: 'var(--editor-header-h)' }}
     >
       {children}
@@ -63,6 +63,7 @@ export function StickyOverrideBar({
           scenePath={scenePath}
           name={sceneName}
           eyebrow={`Overrides ${overrideCount}`}
+          className="-mt-[23px]"
         />
       )}
     </div>

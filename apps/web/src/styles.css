@@ -371,6 +371,27 @@ a {
   }
 }
 
+/* The sticky header's own bottom margin collapses with it: mb-8 (2rem) at the top
+   → 0 as it shrinks, so the body slides up flush under the collapsed header
+   instead of keeping the pre-collapse gap. Same scroll range as the collapse; the
+   mb-8 class stays the base for browsers without scroll timelines. */
+@keyframes dth-header-margin {
+  from {
+    margin-bottom: 2rem; /* mb-8 */
+  }
+  to {
+    margin-bottom: 0;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .header-margin-scroll {
+    animation: dth-header-margin linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+    will-change: margin-bottom;
+  }
+}
+
 /* The Discard / Save actions start a little larger — taller, more horizontal
    padding, bigger text — and settle to the default Button size as the header
    collapses. Real size properties (not a transform) so the buttons genuinely

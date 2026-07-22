@@ -158,7 +158,7 @@ export function EditorHeader({
           fallback live in `liquid-glass-header` (styles.css). */}
       <header
         ref={headerRef}
-        className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5"
+        className="header-margin-scroll liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5"
       >
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
