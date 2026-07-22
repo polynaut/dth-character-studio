@@ -49,6 +49,34 @@ export function useUnsavedChangesGuard(dirty: boolean, message: string) {
     },
     enableBeforeUnload: () => dirtyRef.current && !bypassRef.current,
   })
+  // A keyboard reload (Ctrl/Cmd+R, F5, Ctrl+Shift+R) would otherwise hit the
+  // browser's NATIVE, unstyleable `beforeunload` dialog. Intercept the keystroke
+  // and route it through the app's own modal instead, then reload programmatically
+  // — so reloads look like every other "unsaved changes" prompt. A genuine unload
+  // we can't catch (a browser tab-close) still falls back to `enableBeforeUnload`
+  // above; the desktop shell's titlebar ✕ is handled by the close-request hook.
+  useEffect(() => {
+    let asking = false
+    const onKeydown = (event: KeyboardEvent) => {
+      const isReload =
+        event.key === 'F5' || ((event.ctrlKey || event.metaKey) && (event.key === 'r' || event.key === 'R'))
+      if (!isReload || !dirtyRef.current || bypassRef.current || asking) return
+      event.preventDefault()
+      asking = true
+      void ask()
+        .then((leave) => {
+          if (leave) {
+            bypassRef.current = true
+            window.location.reload()
+          }
+        })
+        .finally(() => {
+          asking = false
+        })
+    }
+    window.addEventListener('keydown', onKeydown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeydown, { capture: true })
+  }, [ask])
   useEffect(() => {
     // Tauri holds the close while the (possibly async) handler runs and only
     // destroys the window if preventDefault wasn't called — so awaiting the

@@ -92,7 +92,6 @@ export function ExportSettingsSection({
             <Button
               variant="outline-destructive"
               size="icon"
-              title="Clear the export directory"
               aria-label="Clear the export directory"
               onClick={() =>
                 void persistPatch(
