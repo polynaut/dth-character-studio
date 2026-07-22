@@ -94,7 +94,10 @@ export const RomEditorSection = memo(function RomEditorSection({
 
   return (
     <section className="mb-8">
-      <div className="mb-3 flex items-center gap-3">
+      {/* The "ROM" title is sticky under the header; the accordion + table headers
+          pin below it via the constant --rom-title-h, and the next panel's title
+          pushes it away on scroll. */}
+      <div className="sticky top-[var(--editor-header-h)] z-[6] mb-3 flex items-center gap-3 bg-background">
         <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
           ROM
           <InfoPopup label="ROM — more information">

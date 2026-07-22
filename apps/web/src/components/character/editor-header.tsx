@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
@@ -86,28 +86,6 @@ export function EditorHeader({
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
-  const headerRef = useRef<HTMLElement>(null)
-
-  // The sticky header's height is DYNAMIC — its content (and so its collapsed
-  // height) changes as the design evolves, and the ROM section / column-title
-  // tiers pin right below it. Publish the live height as `--editor-header-h` so
-  // their sticky `top` tracks it instead of a hardcoded px that silently drifts.
-  // ResizeObserver covers the scroll-driven collapse AND content/resize reflows;
-  // the sections only pin once the header is fully collapsed (they're far down the
-  // page), so the value is stable whenever it actually matters.
-  useEffect(() => {
-    const header = headerRef.current
-    if (!header) return
-    const root = document.documentElement
-    const update = () => root.style.setProperty('--editor-header-h', `${header.offsetHeight}px`)
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(header)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty('--editor-header-h')
-    }
-  }, [])
 
   // A character has ONE main avatar (`character.image`), shown in this big
   // portrait and everywhere else in the app — it stays constant and editable in
@@ -156,10 +134,7 @@ export function EditorHeader({
           saturated backdrop blur that FEATHERS at its lower edge (no hard blur
           seam), echoing the native macOS title bar above. The effect + opaque
           fallback live in `liquid-glass-header` (styles.css). */}
-      <header
-        ref={headerRef}
-        className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5"
-      >
+      <header className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5">
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}

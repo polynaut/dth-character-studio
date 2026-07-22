@@ -191,6 +191,36 @@ a {
    Scroll-driven animation — Chromium / WebView2 support it; browsers without
    scroll timelines just keep it full size. The transparent `from` shadow
    guarantees a smooth fade. */
+/* Sticky-offset variables — pure CSS, no JS. --editor-header-h animates on scroll
+   to TRACK the collapsing header (317px expanded → 160px collapsed, same range as
+   the avatar/header collapse), so every sticky layer below it (the panel titles,
+   the ROM accordion + table headers) pins right under the header's CURRENT height.
+   Registered via @property so a custom property can animate. --rom-title-h is the
+   ROM title row's constant height (the accordion + table headers offset below it). */
+@property --editor-header-h {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 317px; /* expanded — the base for browsers without scroll timelines */
+}
+:root {
+  --rom-title-h: 28px;
+}
+@keyframes dth-editor-header-h {
+  from {
+    --editor-header-h: 317px; /* expanded */
+  }
+  to {
+    --editor-header-h: 160px; /* collapsed */
+  }
+}
+@supports (animation-timeline: scroll()) {
+  :root {
+    animation: dth-editor-header-h linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+}
+
 @keyframes dth-avatar-shrink {
   from {
     height: 277px;
