@@ -997,8 +997,13 @@ export const CHARACTER_SCHEMA_VERSION = 20
  *       export block likewise selects the scene's PoseAsset CSV by open scene.
  *       Refresh assets to regenerate onto the one script (the old per-scene
  *       scripts are swept on the next save/refresh).
+ *  33 — The Hair export (`Export_Hair_…`) exports EACH hair item on its own now,
+ *       named `<Name>_Hair_<item>`, instead of one combined `<Name>_groom` .abc.
+ *       For every item in the open scene's list it hides every OTHER wearable
+ *       (including the other hair items) and exports just that one, so Houdini
+ *       gets one alembic per hair asset. Refresh assets to regenerate.
  */
-export const RUNTIME_VERSION = 32
+export const RUNTIME_VERSION = 33
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

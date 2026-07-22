@@ -280,6 +280,53 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(script).toContain(sceneKey)
   })
 
+  it('MULTIPLE overrides fold into the ONE script: each scene selectable + its own CSV', () => {
+    const beach = 'D:\\scenes\\Electra Beach.duf'
+    const office = 'D:\\scenes\\Electra Office.duf'
+    const beachKey = 'd:/scenes/electra beach.duf'
+    const officeKey = 'd:/scenes/electra office.duf'
+    const romOverride = (path: string, poseName: string) =>
+      makeOverride({
+        scenePath: path,
+        poses: [
+          {
+            id: 'p1',
+            name: poseName,
+            morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }],
+            boneScaleRef: false,
+          },
+        ],
+      })
+    const files = generateAll(
+      makeCharacter({
+        extraScenes: [beach, office],
+        sceneOverrides: [romOverride(beach, 'BeachTone'), romOverride(office, 'OfficeTone')],
+      }),
+      {},
+      FRAMES,
+    )
+    // ONE ROM script (no per-scene scripts) + base CSV + one CSV PER Daz scene
+    // that overrides the ROM (Houdini has no runtime to pick frames).
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_ElectraG9_G9.dsa',
+      'ElectraG9_pose_asset.csv',
+      'ElectraG9_ElectraBeach_pose_asset.csv',
+      'ElectraG9_ElectraOffice_pose_asset.csv',
+    ])
+    // The one script embeds BOTH scenes' deltas, keyed by the open scene's path,
+    // and selects the right one at run time from Scene.getFilename().
+    const script = files[0].content
+    const overrides = grabObject(script, 'dthSceneOverrides')
+    expect(overrides[beachKey].extraFrames.frames.map((f: { name: string }) => f.name)).toContain(
+      'BeachTone',
+    )
+    expect(overrides[officeKey].extraFrames.frames.map((f: { name: string }) => f.name)).toContain(
+      'OfficeTone',
+    )
+    expect(script).toContain('Scene.getFilename()')
+    expect(script).toContain('dthCharacterConfig[dthOk] = dthSceneDelta[dthOk]')
+  })
+
   it('an identity-only override adds a config delta but NO scene CSV', () => {
     const idOverride = makeOverride({
       scenePath: scene,
