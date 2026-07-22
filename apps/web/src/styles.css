@@ -195,12 +195,12 @@ a {
   from {
     height: 277px;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
-    border-color: transparent;
+    border-color: #6a6b70;
   }
   to {
     height: 120px;
     box-shadow: 2px 6px 8px 0 rgb(0 0 0 / 0.75);
-    border-color: var(--color-neutral-500);
+    border-color: #757679;
   }
 }
 @supports (animation-timeline: scroll()) {
