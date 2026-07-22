@@ -69,7 +69,7 @@ export function ExportSettingsSection({
 
   return (
     <section className="mb-8 rounded-lg border bg-card p-5">
-      <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
+      <h2 className="sticky top-[var(--editor-header-h)] z-[6] -mx-5 -mt-5 flex items-center gap-1 rounded-t-lg bg-card px-5 pt-5 pb-4 text-xl font-semibold">
         Export directory
         <InfoPopup label="Export directory — more information">
           <GuideLink href={EXPORT_GUIDE_URL}>How the export directory works — open the guide</GuideLink>

@@ -59,4 +59,17 @@ test('sticky panel title: --editor-header-h animates, ROM title pins under the h
   // Pinned flush under the header: no overlap, no big gap.
   expect(gap).toBeGreaterThanOrEqual(-1)
   expect(gap).toBeLessThanOrEqual(2)
+
+  // 3. A p-5 card panel title (Advanced options) pins flush under the header too —
+  //    proving the padding-fill / card-bg sticky treatment on those panels.
+  const advTitle = page.getByRole('heading', { name: 'Advanced options' }).locator('xpath=..')
+  const advTop = await advTitle.evaluate((el) => el.getBoundingClientRect().top + window.scrollY)
+  await page.evaluate((y) => window.scrollTo({ top: y + 40 }), advTop)
+  await page.waitForTimeout(400)
+  const ahb = (await header.boundingBox())!
+  const atb = (await advTitle.boundingBox())!
+  const advGap = atb.y - (ahb.y + ahb.height)
+  console.log('STICKY_ADV ' + JSON.stringify({ advTitleTop: Math.round(atb.y), gapPx: Math.round(advGap) }))
+  expect(advGap).toBeGreaterThanOrEqual(-1)
+  expect(advGap).toBeLessThanOrEqual(2)
 })

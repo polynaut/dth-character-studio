@@ -22,7 +22,7 @@ export function ScriptsSection({
 
   return (
     <section className="mb-8 rounded-lg border bg-card p-5">
-      <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+      <h2 className="sticky top-[var(--editor-header-h)] z-[6] -mx-5 -mt-5 flex items-center gap-1 rounded-t-lg bg-card px-5 pt-5 pb-4 text-xl font-semibold">
         Daz scripts generated
         <InfoPopup label="Daz scripts generated — more information">
           Where the generated Daz script installs in your DAZ library on Save — open it in Daz to

@@ -67,8 +67,8 @@ export function PreserveFields({
   return (
     <MorphIndexProvider morphIndex={morphIndex}>
       {/* Heading + override toggle on one row, matching the ROM section (the toggle
-          rides the heading line, not a separate row below it). */}
-      <div className="mb-4 flex items-center justify-between gap-2">
+          rides the heading line). Sticky under the header like every panel title. */}
+      <div className="sticky top-[var(--editor-header-h)] z-[6] -mx-5 -mt-5 flex items-center justify-between gap-2 rounded-t-lg bg-card px-5 pt-5 pb-4">
         <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
           Advanced options
           <InfoPopup label="Advanced options — more information">
