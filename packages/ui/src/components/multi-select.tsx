@@ -192,7 +192,7 @@ export function MultiSelect({
               data-pill
               title={warning ?? undefined}
               className={cn(
-                'flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-sm',
+                'flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs',
                 warning !== null && 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
                 isArmed && 'ring-2 ring-ring',
               )}

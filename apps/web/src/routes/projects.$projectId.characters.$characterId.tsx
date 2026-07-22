@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { InfoPopup, Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
-import { GuideLink } from '#/components/guide-link.tsx'
+import { Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
 import {
   fetchCharacter,
   fetchPoseAssets,
@@ -191,6 +190,14 @@ function CharacterPage() {
   // Which Daz scene card is selected — groom lists, the header's scene tag and
   // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
   const sceneSel = useSceneSelection(character, patch)
+  // How many of the selected scene's panels are actively overridden — the count
+  // shown in the sticky bar's green "OVERRIDES <n>" pill.
+  const overrideCount = [
+    sceneSel.overrideActive,
+    sceneSel.identityOverrideActive,
+    sceneSel.groomOverrideActive,
+    sceneSel.preserveOverrideActive,
+  ].filter(Boolean).length
   // The ROM run log + the "reveal failed frame" signal for the editor.
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
 
@@ -340,13 +347,28 @@ function CharacterPage() {
         hasRunProblems={runLog.hasRunProblems}
       />
 
-      {/* The persistent "OVERRIDE · <scene>" indicator, sticky under the header, so
-          the scene context follows you down and every panel toggle can stay compact. */}
+      {/* Sticky bar under the header: the editor tab nav on the LEFT, and — while an
+          extra (non-primary) scene is selected — the green "OVERRIDES <n> · <scene>"
+          pill RIGHT-aligned, so the scene context follows you down the page. */}
       <StickyOverrideBar
         scenePath={sceneSel.effectiveScene}
         sceneName={sceneSel.selectedSceneName}
         show={sceneSel.overrideEligible}
-      />
+        overrideCount={overrideCount}
+      >
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) =>
+            void navigate({ search: v === 'products' || v === 'notes' ? { tab: v } : {} })
+          }
+        >
+          <TabsList>
+            <TabsTrigger value="character">Character</TabsTrigger>
+            {project?.dazProductsEnabled && <TabsTrigger value="products">Products</TabsTrigger>}
+            <TabsTrigger value="notes">Notes</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </StickyOverrideBar>
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
           header collapses on scroll its height changes, and without this the whole
@@ -355,7 +377,7 @@ function CharacterPage() {
           popup dialogs are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
-      {/* Above the tabs, so the report is visible from the Products tab too. */}
+      {/* Above the body, so the report is visible from the Products tab too. */}
       {runLog.romRunLog && !runLog.romRunLog.ok && (
         <RomRunLogReport
           romRunLog={runLog.romRunLog}
@@ -363,20 +385,6 @@ function CharacterPage() {
           onRevealFrame={runLog.revealFailedFrame}
         />
       )}
-
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) =>
-          void navigate({ search: v === 'products' || v === 'notes' ? { tab: v } : {} })
-        }
-        className="mb-6"
-      >
-        <TabsList>
-          <TabsTrigger value="character">Character</TabsTrigger>
-          {project?.dazProductsEnabled && <TabsTrigger value="products">Products</TabsTrigger>}
-          <TabsTrigger value="notes">Notes</TabsTrigger>
-        </TabsList>
-      </Tabs>
 
       {activeTab === 'notes' && (
         <section className="mb-8 rounded-lg border bg-card p-5">
@@ -487,14 +495,6 @@ function CharacterPage() {
       />
 
       <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          Advanced options
-          <InfoPopup label="Advanced options — more information">
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
-              Preserve morphs &amp; node transforms — open the guide
-            </GuideLink>
-          </InfoPopup>
-        </h2>
         <PreserveFields
           character={character}
           patch={patch}
