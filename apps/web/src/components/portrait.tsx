@@ -80,7 +80,7 @@ export function Portrait({
   const resolvedSrc = usePortraitSrc({ image, scenePath })
   const src = srcOverride ?? resolvedSrc
   return (
-    <div className={cn('overflow-hidden border-2 border-neutral-500 bg-neutral-500', className)}>
+    <div className={cn('overflow-hidden border-2 border-[#4B4D57] bg-[#4B4D57]', className)}>
       {src ? (
         <img
           src={src}
