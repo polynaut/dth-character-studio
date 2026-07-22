@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
-import { Button, InfoPopup, MultiSelect } from '@dth/ui'
+import { Button, InfoPopup, MultiSelect, useRefetchOnFocus } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
@@ -99,6 +99,19 @@ export function GroomFields({
     return () => {
       cancelled = true
     }
+  }, [selectedScene])
+
+  // Re-read the scene when the window regains focus — the user may have just
+  // added or removed a hair item in Daz and Alt-Tabbed back. No reset here (the
+  // scene is unchanged, so don't flash the pills away): the fresh read overwrites
+  // in place, and the Rust reader always reads the `.duf` live (no cache), so a
+  // newly-added hair item shows up without switching scenes.
+  useRefetchOnFocus(() => {
+    if (!selectedScene) return
+    void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
+      setWearables(result.items)
+      setScanned(result.error === '')
+    })
   }, [selectedScene])
 
   const entry = character.groomScenes.find((g) => g.scenePath === selectedScene)
