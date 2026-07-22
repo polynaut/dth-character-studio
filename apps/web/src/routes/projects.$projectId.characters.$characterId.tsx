@@ -46,6 +46,11 @@ import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { Character, PresetFrames, RomSection } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
+  // The page's top tabs live in `?tab=` so switching them pushes a history entry
+  // — the mouse Back button returns to the previous tab. 'character' is the
+  // default, encoded as the ABSENCE of the param (keeps the base URL clean).
+  validateSearch: (search: Record<string, unknown>): { tab?: 'products' | 'notes' } =>
+    search.tab === 'products' || search.tab === 'notes' ? { tab: search.tab } : {},
   loader: async ({ params, preload }) => {
     const { projectId, characterId: id } = params
     // The route param IS the project's folder — pin it so avatars resolve. NOT on
@@ -177,9 +182,12 @@ function CharacterPage() {
   // preset/custom selections change (kept from the last good measure during a
   // re-measure; null only when an included asset can't be read).
   const [presetFrames, setPresetFrames] = useState<PresetFrames | null>(initialFrames)
-  // Only meaningful when the project enables Daz Products: splits this page into a
-  // "Character" tab (everything) and a "Products" tab (the scan section).
-  const [activeTab, setActiveTab] = useState<'character' | 'products' | 'notes'>('character')
+  // The active top tab lives in the URL (`?tab=`) so switching pushes a history
+  // entry (mouse Back returns to the last tab). 'character' is the default (no
+  // param). Products only appears when the project enables Daz Products.
+  const navigate = Route.useNavigate()
+  const { tab } = Route.useSearch()
+  const activeTab: 'character' | 'products' | 'notes' = tab ?? 'character'
   // Which Daz scene card is selected — groom lists, the header's scene tag and
   // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
   const sceneSel = useSceneSelection(character, patch)
@@ -359,7 +367,7 @@ function CharacterPage() {
       <Tabs
         value={activeTab}
         onValueChange={(v) =>
-          setActiveTab(v === 'products' || v === 'notes' ? v : 'character')
+          void navigate({ search: v === 'products' || v === 'notes' ? { tab: v } : {} })
         }
         className="mb-6"
       >
