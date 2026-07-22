@@ -1,4 +1,4 @@
-import { FolderOpen, X } from 'lucide-react'
+import { FolderOpen, Trash2 } from 'lucide-react'
 
 import { PathCode } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
@@ -86,12 +86,13 @@ export function ExportSettingsSection({
               path={displayPath(character.exportPath)}
               className="flex h-9 items-center"
             />
-            {/* Icon-only, light-red-bordered destructive button so Clear reads
-                as a real action next to Change… (matching that chip/button
-                height + weight) rather than a link. */}
+            {/* Trash button, light-red-bordered, h-9 so it matches the input +
+                Change… button height on either side (a real destructive action,
+                not a bare icon). */}
             <Button
               variant="outline-destructive"
               size="icon"
+              className="h-9 w-9"
               aria-label="Clear the export directory"
               onClick={() =>
                 void persistPatch(
@@ -100,7 +101,7 @@ export function ExportSettingsSection({
                 )
               }
             >
-              <X />
+              <Trash2 />
             </Button>
           </>
         )}

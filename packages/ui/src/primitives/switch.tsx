@@ -23,7 +23,7 @@ function Switch({
       className={cn(
         "peer group/switch inline-flex shrink-0 items-center border shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:w-8 data-[size=sm]:h-3.5 data-[size=sm]:w-6",
         green
-          ? "data-[size=default]:h-[1.15rem] rounded-[5px] border-[color-mix(in_oklab,var(--color-daz-green)_60%,black)] shadow-[inset_0_1px_2.5px_rgb(0_0_0/0.28)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_78%,white)] data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_16%,white)] disabled:grayscale disabled:border-border disabled:shadow-none"
+          ? "data-[size=default]:h-[1.15rem] rounded-[5px] border-[color-mix(in_oklab,var(--color-daz-green)_60%,black)] shadow-[inset_0_1px_2.5px_rgb(0_0_0/0.28)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_78%,white)] data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_16%,white)]"
           : "data-[size=default]:h-5 rounded-[4px] border-transparent data-[state=checked]:bg-[#fe5c01e0] data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80",
         className
       )}

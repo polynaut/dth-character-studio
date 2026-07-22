@@ -59,7 +59,9 @@ export function IdentitySection({
 
   return (
     // Sidebar rows: Genesis + Gender, then Hair items, then the Genesis-9 fieldset.
-    <div className="flex flex-col gap-5">
+    // gap-8 keeps clear air between the Hair-items override toggle and the
+    // Genesis-9 one below it (the fieldset box that used to space them is gone).
+    <div className="flex flex-col gap-8">
       {/* Genesis + Gender are CHARACTER-level, never per-scene — disabled while a
           non-primary scene is selected (switch back to the primary to change them). */}
       <div className="flex flex-col gap-5">
@@ -151,7 +153,7 @@ export function IdentitySection({
               percentages, same as every morph value field — NumberField's
               `percent` mode owns that conversion (and the "%" suffix). */}
           <div
-            className={`flex flex-wrap items-start gap-5${fieldsetDisabled ? ' text-muted-foreground' : ''}`}
+            className={`flex flex-wrap items-start justify-between gap-4${fieldsetDisabled ? ' text-muted-foreground' : ''}`}
           >
             <div>
               <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
@@ -184,10 +186,14 @@ export function IdentitySection({
                   Surfaces-tab step.
                 </InfoPopup>
               </Label>
-              <Switch
-                checked={applyUE5TearUV}
-                onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
-              />
+              {/* h-9 wrapper so the toggle centres on the same line as the two
+                  h-9 number inputs beside it. */}
+              <span className="flex h-9 items-center">
+                <Switch
+                  checked={applyUE5TearUV}
+                  onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
+                />
+              </span>
             </div>
           </div>
         </fieldset>
