@@ -21,7 +21,7 @@ the product**.
 | **Art direction** | Named override frames inside the GP/DK preset blocks (e.g. `VaginaOpen` @ GP frame 96) carrying their own morph values (`ART_DIRECTION_CATALOG`). |
 | **JCM morph mods** | Rules riding custom morphs along the shipped joint-corrective bends: per bone/axis, a signed `drives[]` list (angle range → value range; the **sign of the angle extreme picks the bend direction**). Split into runtime `positive[]`/`negative[]` by `jcmMorphModForRuntime` at generation. |
 | **Bone scale** | Per-pose flag (`boneScaleRef`) marking a morph that scales bones. Only meaningful in **GEN and FBM** (`REFERENCE_FBX_SECTIONS`) — a reference path on a MIS row breaks the HDA import. |
-| **Groom / hair** | Daz-side it's "hair", Houdini-side "groom". Hair is ALWAYS per scene by presence (no more `groomMode` — removed in schema v20): a scene's `groomScenes` items ARE its hair, none listed → nothing excluded. The generated script hides them for the ROM export (hide-only, needs Exporter Plugin ≥ 2.0.1 = `MIN_GROOM_EXPORTER_VERSION`), and a separate `Export_Hair_…` script produces the `_grooms.abc`. |
+| **Groom / hair** | Daz-side it's "hair", Houdini-side "groom". Hair is ALWAYS per scene by presence (no more `groomMode` — removed in schema v20): a scene's `groomScenes` items ARE its hair, none listed → nothing excluded. The generated script hides them for the ROM export (hide-only, needs Exporter Plugin ≥ 2.0.1 = `MIN_GROOM_EXPORTER_VERSION`), and a separate `Export_Hair_…` script exports EACH hair item of the open scene ON ITS OWN (runtime v33) as `<Name>_Hair_<item>_grooms.abc` — for every item it hides the other wearables (incl. the other hair items) and exports just that one, so Houdini gets one alembic per hair asset. |
 | **Scene override** | A per-EXTRA-scene delta (`sceneOverrides` on `Character`, schema v17; per-panel gates since v20): four independently-armed panels — **ROM** (`enabled` + `poses`/`additions`: replaced rows keyed by the base pose's **id**, content swaps, frame stays, + additions appended at group ends; `flatSectionGroupId` covers flat sections without a stored group), **identity** (`identity.enabled` + G9 FACS-detail/flexion/tear-UV), **groom** (`groom.enabled`, a UI gate only — hair lists live per scene in `groomScenes`), **preserve** (`preserve.enabled` + own `morphs`/`nodeTransforms` — a FULL replacement of the base preserve lists, emitted even when empty so a scene can clear them). `applySceneOverride` merges ROM; `mergeSceneOverride` yields the scene's effective character (ROM sections + identity dials). All gates default OFF, so a fresh scene starts fully disabled; arming identity/preserve seeds from the base. `activeSceneOverrides` (any panel armed + scene still in `extraScenes`) is THE single gate; `sceneOverrideBuildsRom` narrows to the ROM subset that also mints a scene-suffixed CSV. Disabled/unlinked overrides keep their data; their files retire on the next save. |
 
 ## The core invariant (do not break)
@@ -53,8 +53,9 @@ offsets byte-identically — if a generation change moves them, the change is wr
   once at that root (`copyRuntimeFiles` in `apps/web/src/lib/rom/storage.ts`).
 - `<name>_pose_asset.csv` — the Houdini PoseAsset CSV, written next to the
   character JSON and copied into the export dir by the ROM script's export block.
-- Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (groom
-  alembic), `Scan_Products_…` (product scan).
+- Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (one
+  `<Name>_Hair_<item>_grooms.abc` per hair item of the open scene), `Scan_Products_…`
+  (product scan).
 - **Scene overrides fold into the ONE ROM script** (runtime v32): it embeds a
   `dthSceneOverrides` map (normalized open-scene path → the few config fields that
   scene changes — a fresh `extraFrames` for a ROM override, the G9 dials for an
