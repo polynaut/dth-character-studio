@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { InfoPopup, Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
-import { GuideLink } from '#/components/guide-link.tsx'
+import { Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
 import {
   fetchCharacter,
   fetchPoseAssets,
@@ -452,14 +451,6 @@ function CharacterPage() {
       )}
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
-      <ExportSettingsSection
-        character={character}
-        saving={draft.saving}
-        persistPatch={draft.persistPatch}
-        location={location}
-        houdiniSubdir={project?.houdiniSubdir}
-      />
-
       <RomEditorSection
         character={character}
         patch={patch}
@@ -478,14 +469,6 @@ function CharacterPage() {
       />
 
       <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          Advanced options
-          <InfoPopup label="Advanced options — more information">
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
-              Preserve morphs &amp; node transforms — open the guide
-            </GuideLink>
-          </InfoPopup>
-        </h2>
         <PreserveFields
           character={character}
           patch={patch}
@@ -499,6 +482,14 @@ function CharacterPage() {
           morphIndex={morphIndex}
         />
       </section>
+
+      <ExportSettingsSection
+        character={character}
+        saving={draft.saving}
+        persistPatch={draft.persistPatch}
+        location={location}
+        houdiniSubdir={project?.houdiniSubdir}
+      />
 
       <ScriptsSection character={character} scriptsPath={scriptsPath} />
 

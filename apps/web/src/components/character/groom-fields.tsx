@@ -181,17 +181,18 @@ export function GroomFields({
 
   return (
     <div className="max-w-xl">
-      <div className="mb-3 flex items-center gap-3">
-        <span className="flex items-center gap-1 text-sm font-medium">
-          Hair items
-          <InfoPopup label="Hair items — more information">
-            Each scene carries its own hair — the items you list here are hidden around the DTH
-            export so they never ride into the ROM artifacts. None listed means the scene has no
-            hair to exclude. For a hair-only variant, link it as its own scene (or use
-            Attachments).
-          </InfoPopup>
-        </span>
-        <span className="ml-auto">
+      {/* The override toggle rides the label's right edge, absolutely positioned so
+          the (taller) toggle can't inflate the label's row height — the label keeps
+          the same tight margin to its field as every other label (mb-1). */}
+      <div className="relative mb-1 flex items-center gap-1 text-sm font-medium">
+        Hair items
+        <InfoPopup label="Hair items — more information">
+          Each scene carries its own hair — the items you list here are hidden around the DTH
+          export so they never ride into the ROM artifacts. None listed means the scene has no
+          hair to exclude. For a hair-only variant, link it as its own scene (or use
+          Attachments).
+        </InfoPopup>
+        <span className="absolute top-1/2 right-0 -translate-y-1/2">
           <PanelOverrideToggle
             eligible={overrideEligible}
             active={groomOverrideActive}

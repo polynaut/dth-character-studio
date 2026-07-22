@@ -1,4 +1,5 @@
-import { Input, KeyedListEditor, Label, NumberField } from '@dth/ui'
+import { InfoPopup, Input, KeyedListEditor, Label, NumberField } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
@@ -65,7 +66,17 @@ export function PreserveFields({
 
   return (
     <MorphIndexProvider morphIndex={morphIndex}>
-      <div className="mb-3 flex justify-end">
+      {/* Heading + override toggle on one row, matching the ROM section (the toggle
+          rides the heading line, not a separate row below it). */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
+          Advanced options
+          <InfoPopup label="Advanced options — more information">
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+              Preserve morphs &amp; node transforms — open the guide
+            </GuideLink>
+          </InfoPopup>
+        </h2>
         <PanelOverrideToggle
           eligible={overrideEligible}
           active={preserveOverrideActive}
