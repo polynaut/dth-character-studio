@@ -21,6 +21,7 @@ export function SceneLabel({
   fallbackName,
   eyebrow,
   trailing,
+  end,
   showAvatar = true,
   className,
 }: {
@@ -37,6 +38,10 @@ export function SceneLabel({
   eyebrow?: string
   /** Rendered inline right after the name (e.g. the override info "i" popup). */
   trailing?: ReactNode
+  /** Rendered at the pill's RIGHT edge, its own column after the name (e.g. the
+   *  override toggle switch, folded into the pill). Gets a left divider to set it
+   *  off from the name. */
+  end?: ReactNode
   /** Show the scene's mini render at the pill's start (default). `false` → a
    *  compact, avatar-less pill (e.g. the Genesis-9 override toggle). */
   showAvatar?: boolean
@@ -81,6 +86,11 @@ export function SceneLabel({
         <span className="flex min-w-0 items-center gap-1">
           <span className="truncate">{name}</span>
           {trailing}
+        </span>
+      )}
+      {end && (
+        <span className="ml-0.5 flex items-center self-stretch border-l border-[color-mix(in_oklab,var(--color-daz-green)_40%,transparent)] pl-2">
+          {end}
         </span>
       )}
     </Tag>

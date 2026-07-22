@@ -46,14 +46,12 @@ export function PanelOverrideToggle({
   // with visibility:hidden so it keeps reserving its exact space; aria-hidden +
   // disabled keep the hidden control out of the a11y tree and non-interactive.
   return (
-    <span
-      className={`flex items-center gap-2${eligible ? '' : ' invisible'}`}
-      aria-hidden={!eligible || undefined}
-    >
-      {/* Full pill: mini render + "OVERRIDE" eyebrow over the scene name, with the
-          info "i" inline after it. Compact: a bare green "OVERRIDE" pill — no render,
-          no scene name, no info (the full pill right above it already names the
-          scene). */}
+    <span className={eligible ? undefined : 'invisible'} aria-hidden={!eligible || undefined}>
+      {/* The toggle switch is folded INTO the pill's right edge (SceneLabel `end`)
+          as a squared-off green/white switch, so the label + control read as one
+          control. Full pill: mini render + "OVERRIDE" eyebrow over the scene name,
+          info "i" inline. Compact: a bare green "OVERRIDE" pill + the switch (the
+          full pill right above it already names the scene). */}
       <SceneLabel
         scenePath={scenePath}
         name={compact ? 'OVERRIDE' : sceneName}
@@ -62,12 +60,15 @@ export function PanelOverrideToggle({
         trailing={
           compact ? undefined : <InfoPopup label="Scene override — more information">{info}</InfoPopup>
         }
-      />
-      <Switch
-        checked={active}
-        disabled={!eligible}
-        aria-label={`Override ${noun}`}
-        onCheckedChange={onToggle}
+        end={
+          <Switch
+            variant="green"
+            checked={active}
+            disabled={!eligible}
+            aria-label={`Override ${noun}`}
+            onCheckedChange={onToggle}
+          />
+        }
       />
     </span>
   )
