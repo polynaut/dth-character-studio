@@ -64,6 +64,18 @@ export function GroomFields({
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
+  // Reset the scan DURING render (not in an effect) the instant the selected scene
+  // changes, so this render never judges the NEW scene's hair list against the OLD
+  // scene's wearables — that one-frame mismatch flashed a bogus "not found /
+  // unlisted" warning before the effect below could clear it. React re-renders
+  // immediately (no paint) with the cleared state, then the effect scans the new
+  // scene. (The recommended "adjust state on prop change" pattern.)
+  const [scannedScene, setScannedScene] = useState(selectedScene)
+  if (scannedScene !== selectedScene) {
+    setScannedScene(selectedScene)
+    setWearables([])
+    setScanned(false)
+  }
   // The installed Exporter Plugin version (read from the DLL). '' = not installed
   // / unknown — we don't warn then (see exporterSupportsGroomHide).
   const [exporterVersion, setExporterVersion] = useState('')
@@ -85,10 +97,8 @@ export function GroomFields({
   }, [hasGroom, dazInstallFolder])
 
   useEffect(() => {
-    // Drop the previous scene's scan immediately — judging this scene's list
-    // against another scene's wearables would flash bogus "not found" warnings.
-    setWearables([])
-    setScanned(false)
+    // The scan reset happens at render time (above) so no stale-scene frame paints;
+    // here we just kick off the new scene's async scan.
     if (!selectedScene) return
     let cancelled = false
     void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
