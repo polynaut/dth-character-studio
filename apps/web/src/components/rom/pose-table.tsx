@@ -57,6 +57,9 @@ export interface PoseTableMeta {
   figureNode: string
   /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
   override?: PoseOverrideMeta
+  /** Non-primary scene with the ROM override still OFF: the Override column
+   *  stays visible but its checkboxes render disabled (arm the override to use). */
+  locked?: boolean
 }
 
 /**
@@ -117,8 +120,24 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     id: 'override',
     header: 'Override',
     cell: ({ row, table }) => {
-      const override = (table.options.meta as PoseTableMeta).override
-      if (!override) return null
+      const meta = table.options.meta as PoseTableMeta
+      const override = meta.override
+      if (!override) {
+        // Locked (non-primary scene, override off): keep the control visible but
+        // disabled, so it reads as "available once this scene's ROM override is on".
+        if (!meta.locked) return null
+        return (
+          <span className="flex justify-center">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-primary"
+              checked={false}
+              disabled
+              title="Enable this scene's ROM override to choose which frames to replace"
+            />
+          </span>
+        )
+      }
       const added = row.index >= override.baseCount
       return (
         <span className="flex justify-center">

@@ -68,6 +68,7 @@ export const GroupCard = memo(function GroupCard({
   onRemove,
   onMirror,
   override,
+  locked = false,
 }: {
   section: RomSection
   group: RomGroup
@@ -81,6 +82,8 @@ export const GroupCard = memo(function GroupCard({
   onRemove: (groupId: string) => void
   onMirror: (groupId: string) => void
   override?: SectionOverrideCtl
+  /** Non-primary scene, ROM override OFF: show the Override column disabled. */
+  locked?: boolean
 }) {
   const showBoneScale = REFERENCE_FBX_SECTIONS.includes(section)
   const showBoneLabel = BONE_LABEL_SECTIONS.includes(section)
@@ -158,6 +161,7 @@ export const GroupCard = memo(function GroupCard({
     startFrame,
     failedFrames,
     showBoneScale,
+    locked,
     expandedIds,
     toggleExpanded: onToggleExpanded,
     figureNode,
@@ -234,7 +238,7 @@ export const GroupCard = memo(function GroupCard({
     columns: poseColumns,
     getCoreRowModel: getCoreRowModel(),
     meta,
-    state: { columnVisibility: { boneScaleRef: showBoneScale, override: !!override } },
+    state: { columnVisibility: { boneScaleRef: showBoneScale, override: !!override || locked } },
   })
 
   function addPose() {
