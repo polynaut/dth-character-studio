@@ -1,16 +1,16 @@
-import { InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { InfoPopup, Label, NumberField, Switch } from '@dth/ui'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
-import type { Character, GenesisVersion, SceneOverride } from '@dth/rom'
+import type { Character, SceneOverride } from '@dth/rom'
 import type { ReactNode } from 'react'
 
 /**
- * The character's identity block: Genesis generation + gender, and the
- * Genesis-9-specific fieldset (FACS/Flexion strengths, UE5 tear UV) that natively
- * disables on other generations. The G9 fieldset is also per-scene overridable:
- * with a non-primary Daz scene selected it disables until the top-right override
- * toggle arms it, then its three dials edit the scene's `identity` override
- * instead of the base character. Genesis/Gender are never per-scene.
+ * The character's identity block: the Genesis-9-specific fieldset (FACS/Flexion
+ * strengths, UE5 tear UV) that only applies on Genesis 9. It's per-scene
+ * overridable: with a non-primary Daz scene selected it disables until the
+ * top-right override toggle arms it, then its three dials edit the scene's
+ * `identity` override instead of the base character. (Genesis + Gender are set at
+ * character creation only, so they aren't editable here.)
  */
 export function IdentitySection({
   character,
@@ -35,8 +35,8 @@ export function IdentitySection({
   scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
-  /** The Hair-items field, rendered as the middle sidebar row (between Genesis/
-   *  Gender and the Genesis-9 fieldset). It carries its OWN override toggle. */
+  /** The Hair-items field, rendered as the top sidebar row (above the Genesis-9
+   *  fieldset). It carries its OWN override toggle. */
   hairSlot: ReactNode
 }) {
   // While armed on a non-primary scene the three dials read/write the scene's
@@ -58,57 +58,10 @@ export function IdentitySection({
   const fieldsetDisabled = character.genesis !== 'G9' || (overrideEligible && !overriding)
 
   return (
-    // Sidebar rows: Genesis + Gender, then Hair items, then the Genesis-9 fieldset.
+    // Sidebar rows: Hair items, then the Genesis-9 fieldset. (Genesis + Gender are
+    // set only when creating a character, so they aren't shown here.)
     <div className="flex flex-col gap-5">
-      {/* Genesis + Gender are CHARACTER-level, never per-scene — disabled while a
-          non-primary scene is selected (switch back to the primary to change them). */}
-      <div className="flex flex-col gap-5">
-        <div
-          className="flex flex-wrap gap-4"
-          title={
-            overrideEligible
-              ? "Genesis and gender aren't per-scene — select the primary Daz scene to change them"
-              : undefined
-          }
-        >
-          <div>
-            <Label className="mb-1">Genesis</Label>
-            <Select
-              value={character.genesis}
-              onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
-              disabled={overrideEligible}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="G9">G9</SelectItem>
-                <SelectItem value="G8.1">G8.1</SelectItem>
-                <SelectItem value="G8">G8</SelectItem>
-                <SelectItem value="G3">G3</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="mb-1">Gender</Label>
-            <Select
-              value={character.gender}
-              onValueChange={(v) => patch({ gender: v as Character['gender'] })}
-              disabled={overrideEligible}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Hair items — the middle sidebar row (carries its own override toggle). */}
+      {/* Hair items — the top sidebar row (carries its own override toggle). */}
       {hairSlot}
 
       {/* The legend is positioned absolutely (a notch on the border) so it
