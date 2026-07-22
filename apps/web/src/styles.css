@@ -371,23 +371,21 @@ a {
   }
 }
 
-/* The Discard / Save actions start a little larger — taller, more horizontal
-   padding, bigger text — and settle to the default Button size as the header
-   collapses. Real size properties (not a transform) so the buttons genuinely
-   occupy the space and stay crisp. The container's static mb-6 keeps them
-   bottom-aligned on the path-chip line (items-end), so they shrink in place from
-   the top while the right edge stays pinned. `to` matches the default Button. */
+/* The Discard / Save actions hold the default Button size; only their bottom
+   margin animates on scroll (mb-8 → mb-2). The container's static mb-6 + items-end
+   keeps them bottom-aligned on the path-chip line, so the shrinking margin settles
+   them onto that line as the header collapses. */
 @keyframes dth-actions-shrink {
   from {
-    height: 2.75rem;
-    padding-inline: 1.25rem;
-    font-size: 1rem;
-    margin-bottom: 0rem;
-  }
-  to {
-    height: 2.25rem; /* h-9 */
+    height: 2.25rem; /* h-9 — the buttons hold the default size */
     padding-inline: 0.75rem; /* px-3 (has icon) */
     font-size: 0.875rem; /* text-sm */
+    margin-bottom: 2rem; /* mb-8 */
+  }
+  to {
+    height: 2.25rem;
+    padding-inline: 0.75rem;
+    font-size: 0.875rem;
     margin-bottom: 1.0rem; /* mb-2 */
   }
 }
@@ -396,18 +394,12 @@ a {
     animation: dth-actions-shrink linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
-    will-change: height, padding, font-size;
-    /* Base state = the `from` frame (the large "at the top" size). On a page
-       too short to scroll (e.g. the Notes tab) the scroll timeline is INACTIVE
-       and the animation yields no values — without this base the buttons would
-       drop to the Button default (= the collapsed `to` size) while the rest of
-       the header (avatar, subtitle) still shows its expanded top state. Scoped
-       inside @supports: without scroll timelines the header never collapses
-       and the default size stays the intended look. */
-    height: 2.75rem;
-    padding-inline: 1.25rem;
-    font-size: 1rem;
-    margin-bottom: 0;
+    will-change: margin-bottom;
+    /* Base state = the `from` frame's margin. On a page too short to scroll (e.g.
+       the Notes tab) the scroll timeline is INACTIVE and the animation yields no
+       values — without this base the buttons would sit at the default margin
+       while the rest of the header still shows its expanded top state. */
+    margin-bottom: 2rem;
   }
 }
 
