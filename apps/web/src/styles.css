@@ -380,13 +380,13 @@ a {
     height: 2.25rem; /* h-9 — the buttons hold the default size */
     padding-inline: 0.75rem; /* px-3 (has icon) */
     font-size: 0.875rem; /* text-sm */
-    margin-bottom: 2rem; /* mb-8 */
+    margin-bottom: 3.5rem; /* mb-14 */
   }
   to {
     height: 2.25rem;
     padding-inline: 0.75rem;
     font-size: 0.875rem;
-    margin-bottom: 1.0rem; /* mb-2 */
+    margin-bottom: 2.25rem; /* mb-9 */
   }
 }
 @supports (animation-timeline: scroll()) {
@@ -399,7 +399,7 @@ a {
        the Notes tab) the scroll timeline is INACTIVE and the animation yields no
        values — without this base the buttons would sit at the default margin
        while the rest of the header still shows its expanded top state. */
-    margin-bottom: 2rem;
+    margin-bottom: 3.5rem;
   }
 }
 
