@@ -216,6 +216,11 @@ export const RomSections = memo(function RomSections({
         : undefined,
     [onOverrideChange, overrideData, overriddenById],
   )
+  // On a non-primary scene the section STRUCTURE (enable/mode/groups) is locked —
+  // whether the override is armed (overrideCtl) or not (locked). Mute the section
+  // titles to match their disabled enable toggle, so the whole block reads as
+  // "structure fixed for this scene, you're only overriding frame values".
+  const structureLocked = !!overrideCtl || locked
 
   // Absolute timeline frame of each custom group's first pose: the measured
   // preset ROM blocks (base, GP/DK, Physics) come first, then the custom
@@ -445,8 +450,14 @@ export const RomSections = memo(function RomSections({
                 <ChevronRight
                   className={`size-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}
                 />
-                <span className="w-12 font-mono text-sm font-semibold">{section}</span>
-                <span className="font-medium">{SECTION_LABELS[section]}</span>
+                <span
+                  className={`w-12 font-mono text-sm font-semibold${structureLocked ? ' text-muted-foreground' : ''}`}
+                >
+                  {section}
+                </span>
+                <span className={`font-medium${structureLocked ? ' text-muted-foreground' : ''}`}>
+                  {SECTION_LABELS[section]}
+                </span>
                 {missingPresetAsset && (
                   <span
                     className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
@@ -603,6 +614,7 @@ export const RomSections = memo(function RomSections({
                       failedFrames={failedFrames}
                       removable={false}
                       override={overrideCtl}
+                      locked={locked}
                       onGroupsChange={onSectionGroupsChange}
                     />
                     {!overrideCtl && <ImportCsvButton onImport={() => setPickerSection(section)} />}
@@ -617,6 +629,7 @@ export const RomSections = memo(function RomSections({
                       failedFrames={failedFrames}
                       removable
                       override={overrideCtl}
+                      locked={locked}
                       onGroupsChange={onSectionGroupsChange}
                     />
                     {/* Group management + CSV import change the base structure —
