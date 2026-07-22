@@ -58,6 +58,14 @@
   --sidebar-accent-foreground: #ededed;
   --sidebar-border: #484848;
   --sidebar-ring: #fe5c01;
+  /* Height of the sticky "chrome" (editor header + tabs row) WHEN COLLAPSED. The ROM
+     section / column-title tiers pin right below it (`top: var(--chrome-h)`). It's a
+     fixed constant, not a JS-measured var, because the header is ALWAYS fully
+     collapsed by the time you've scrolled far enough for a ROM tier to pin — so its
+     live height never matters there. Bump this if the collapsed header (avatar 100px
+     + margins) or the tabs-row/scene-label height changes. Includes the tabs row's
+     `pb-4` (the chrome group itself has no bottom padding). */
+  --chrome-h: 13rem;
 }
 
 @theme inline {
@@ -174,6 +182,12 @@ a {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Always reserve the scrollbar gutter, so switching between a tall page (the
+       Character tab almost always scrolls) and a short one (Notes) doesn't shift the
+       content width sideways as the scrollbar appears/disappears. */
+    scrollbar-gutter: stable;
+  }
   body {
     background-color: var(--background);
     color: var(--foreground);
@@ -193,12 +207,12 @@ a {
    guarantees a smooth fade. */
 @keyframes dth-avatar-shrink {
   from {
-    height: 277px;
+    height: 253px;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
     border-color: transparent;
   }
   to {
-    height: 120px;
+    height: 100px;
     box-shadow: 2px 6px 8px 0 rgb(0 0 0 / 0.75);
     border-color: var(--color-neutral-500);
   }
@@ -213,75 +227,99 @@ a {
   }
 }
 
-/* The image is a SQUARE that the zoom below over-scans past the wrapper, so an
-   OPAQUE avatar (an uploaded photo) still fills the 3:4 frame in every state, and
-   the pan can drift either way without exposing the wrapper's grey fill. It eases
-   from 11% down at the top to 15% as the header collapses; translateY is
-   composited, so it's smooth and never touches layout. */
-@keyframes dth-avatar-pan {
+/* The header's gap to the tabs row collapses as it shrinks: mb-4 (1rem) at rest → 0
+   when fully collapsed, so the tabs tuck right under the shrunken header. Same range
+   as the avatar shrink, so gap and header close together. */
+@keyframes dth-header-mb {
   from {
-    transform: translateY(11%);
+    margin-bottom: 1rem;
   }
   to {
-    transform: translateY(15%);
+    margin-bottom: 0;
   }
 }
-/* The zoom makes the square image over-scan the 3:4 (rest) / landscape (collapsed)
-   wrapper so an opaque avatar always fills it (a square in the 3:4 rest box needs
-   >=1.33x just to cover its height). Rests at 1.55 and pushes IN to 1.88 as the
-   header collapses, so the face reads larger in the small pinned tile. `scale`
-   (not `transform`) composes with the pan's translateY above; transform-origin
-   center keeps it centered. */
-@keyframes dth-avatar-zoom {
+@supports (animation-timeline: scroll()) {
+  .header-mb-scroll {
+    animation: dth-header-mb linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
+}
+
+/* A second, *staggered* scroll animation layered on the image itself: while the
+   wrapper above crops the box, the image drifts up — on a later, longer range than
+   the crop so the two motions don't move in lockstep and the portrait gently pans
+   as it settles. translateY is composited, so this stays smooth and never touches
+   layout. The clipped wrapper hides the top edge the drift exposes. */
+@keyframes dth-avatar-pan {
   from {
-    scale: 1.55;
+    transform: translateY(-1%);
+    scale: 1.2;
   }
   to {
-    scale: 1.88;
+    transform: translateY(4%);
+    scale: 1.4;
   }
 }
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-pan {
-    transform-origin: center center;
-    /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value until the
-       shrink starts (100px, matching .avatar-scroll-shrink's range) then eases in
-       lockstep with the height — so at the gentler 1.4 it never dips below frame
-       coverage while the wrapper is still full-height. The portrait rests zoomed
-       in and eases out as the header collapses into sticky mode. */
-    animation:
-      dth-avatar-pan linear both,
-      dth-avatar-zoom linear both;
-    animation-timeline: scroll(root block), scroll(root block);
-    animation-range:
-      130px 248px,
-      100px 242px;
-    will-change: transform, scale;
+    animation: dth-avatar-pan linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 130px 248px;
+    will-change: transform;
+  }
+}
+
+/* The tabs-row scene label slides DOWN (translateY 0 → 40px) as the header collapses
+   into its sticky state — un-tucking from the `-mt-[23px]` lift it wears at rest. It
+   also wears a background-coloured left+bottom border that rounds its bottom-left
+   corner (→ 8px) as it lands, carving a notch. Same range as the header collapse. */
+@keyframes dth-tabs-label-drop {
+  from {
+    transform: translateY(0);
+    border: 6px solid var(--background);
+    border-top: 0;
+    border-right: 0;
+  }
+  to {
+    transform: translateY(10px);
+    border: 6px solid var(--background);
+    border-top: 0;
+    border-right: 0;
+    border-radius: 0 0 0 8px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .tabs-label-drop {
+    animation: dth-tabs-label-drop linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+    will-change: transform;
   }
 }
 
 /* Title collapse, layered on the same scroll as the avatar: the title text
    scales down a touch, the subtitle below it collapses to nothing and fades out
-   (the path chip stays), and a growing margin-top drops the title so it isn't
-   jammed against the pinned top edge. The header is `items-end`, so the subtitle
-   collapsing already lets the bottom-aligned title sit lower — the margin-top
-   adds a bit extra once the block is shorter than the avatar. Tunable: the rem
-   values and ranges. These animate layout inside the sticky header, but
-   overflow-anchor:none + the contained body keep it smooth (same machinery as
-   the avatar's height). */
+   (the path chip stays), and a margin-bottom on the title block shrinks from 2rem
+   to 0 on scroll. The header is `items-end`, so at rest that margin floats the
+   bottom-aligned title block up off the header's bottom edge, and it settles flush
+   as the header collapses. Tunable: the rem values and ranges. These animate
+   layout inside the sticky header, but overflow-anchor:none + the contained body
+   keep it smooth (same machinery as the avatar's height). */
 @keyframes dth-title-drop {
   from {
-    margin-top: 0;
+    margin-bottom: 1.5rem;
   }
   to {
-    margin-top: 0.5rem;
+    margin-bottom: 0rem;
   }
 }
 @keyframes dth-title-text {
   from {
-    font-size: 3.25rem;
+    font-size: 2.875rem;
   }
   to {
-    font-size: 2.75rem;
+    font-size: 1.87rem;
   }
 }
 @keyframes dth-subtitle-collapse {
@@ -307,6 +345,20 @@ a {
   to {
     opacity: 1;
     transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+/* The sticky header's "Back" link: rises in from below (1rem) and settles at 2px as
+   the header collapses. Its own keyframe so the run-error hint keeps its own motion. */
+@keyframes dth-backlink-appear {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+    pointer-events: none;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(2px);
     pointer-events: auto;
   }
 }
@@ -354,7 +406,7 @@ a {
      link is visible there), fades/slides in as the header collapses so the
      navigation stays reachable however far the form is scrolled. */
   .backlink-scroll {
-    animation: dth-runhint-appear linear both;
+    animation: dth-backlink-appear linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }
@@ -371,24 +423,22 @@ a {
   }
 }
 
-/* The Discard / Save actions start a little larger — taller, more horizontal
-   padding, bigger text — and settle to the default Button size as the header
-   collapses. Real size properties (not a transform) so the buttons genuinely
-   occupy the space and stay crisp. The container's static mb-6 keeps them
-   bottom-aligned on the path-chip line (items-end), so they shrink in place from
-   the top while the right edge stays pinned. `to` matches the default Button. */
+/* The Discard / Save actions stay at the default Button size (h-9 / px-3 / text-sm);
+   only their BOTTOM MARGIN animates as the header collapses — 3rem → 1rem — so they
+   ride the shrinking header down. items-end keeps them bottom-aligned on the path-chip
+   line while the margin closes. */
 @keyframes dth-actions-shrink {
   from {
-    height: 2.75rem;
-    padding-inline: 1.25rem;
-    font-size: 1rem;
-    margin-bottom: 1.75rem;
+    height: 2.25rem;
+    padding-inline: 0.75rem;
+    font-size: 0.875rem;
+    margin-bottom: 3rem;
   }
   to {
     height: 2.25rem; /* h-9 */
     padding-inline: 0.75rem; /* px-3 (has icon) */
     font-size: 0.875rem; /* text-sm */
-    margin-bottom: 2.25rem;
+    margin-bottom: 1rem;
   }
 }
 @supports (animation-timeline: scroll()) {
@@ -397,17 +447,16 @@ a {
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
     will-change: height, padding, font-size;
-    /* Base state = the `from` frame (the large "at the top" size). On a page
-       too short to scroll (e.g. the Notes tab) the scroll timeline is INACTIVE
-       and the animation yields no values — without this base the buttons would
-       drop to the Button default (= the collapsed `to` size) while the rest of
-       the header (avatar, subtitle) still shows its expanded top state. Scoped
-       inside @supports: without scroll timelines the header never collapses
-       and the default size stays the intended look. */
-    height: 2.75rem;
-    padding-inline: 1.25rem;
-    font-size: 1rem;
-    margin-bottom: 0;
+    /* Base state = the `from` frame (margin-bottom 3rem, the "at the top" spacing).
+       On a page too short to scroll (e.g. the Notes tab) the scroll timeline is
+       INACTIVE and yields no values — without this base the actions would sit at the
+       collapsed 1rem margin while the rest of the header (avatar, subtitle) still
+       shows its expanded top state. Scoped inside @supports: without scroll timelines
+       the header never collapses and this stays the intended look. */
+    height: 2.25rem;
+    padding-inline: 0.75rem;
+    font-size: 0.875rem;
+    margin-bottom: 3rem;
   }
 }
 

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { InfoPopup, Tabs, TabsList, TabsTrigger, useRefetchOnFocus } from '@dth/ui'
+import { InfoPopup, useRefetchOnFocus } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import {
   fetchCharacter,
@@ -22,10 +22,11 @@ import {
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
 import { DeleteCharacterSection } from '#/components/character/delete-character-section.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
-import { StickyOverrideBar } from '#/components/character/sticky-override-bar.tsx'
+import { SceneTabsRow } from '#/components/character/scene-tabs-row.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
+import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
 import { RomEditorSection } from '#/components/character/rom-editor-section.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
@@ -180,9 +181,53 @@ function CharacterPage() {
   // Only meaningful when the project enables Daz Products: splits this page into a
   // "Character" tab (everything) and a "Products" tab (the scan section).
   const [activeTab, setActiveTab] = useState<'character' | 'products' | 'notes'>('character')
+  // Notes can be shorter than the viewport (no scrollbar). Switching to it while
+  // scrolled down would strand you with the sticky chrome pinned in its collapsed
+  // state and no way to scroll back up — so for Notes, smooth-scroll to the top FIRST
+  // and only switch once we've arrived (poll scrollY each frame until it settles).
+  const changeTab = (tab: 'character' | 'products' | 'notes') => {
+    if (tab !== 'notes' || window.scrollY <= 0) {
+      setActiveTab(tab)
+      return
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    let frames = 0
+    const settle = () => {
+      // Switch on arrival — or bail after ~2s if a manual scroll interrupts us.
+      if (window.scrollY <= 0 || ++frames > 120) setActiveTab(tab)
+      else requestAnimationFrame(settle)
+    }
+    requestAnimationFrame(settle)
+  }
   // Which Daz scene card is selected — groom lists, the header's scene tag and
   // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
   const sceneSel = useSceneSelection(character, patch)
+  // How many of the four override panels are armed for the selected scene — shown as
+  // "OVERRIDES <n>" in the big scene label.
+  const overrideCount = [
+    sceneSel.overrideActive,
+    sceneSel.identityOverrideActive,
+    sceneSel.groomOverrideActive,
+    sceneSel.preserveOverrideActive,
+  ].filter(Boolean).length
+  // The big scene label in the tabs row is a REMINDER of the selected scene — only
+  // wanted once the actual Daz scene cards have scrolled out of view. An
+  // IntersectionObserver (top-inset by the collapsed chrome so "in view" means BELOW
+  // the pinned header) hides it while the cards are on screen and fades it in once
+  // they slip behind the header. Callback ref so it re-attaches if the section
+  // re-mounts; default true = hidden at the top where the cards are visible.
+  const [cardsInView, setCardsInView] = useState(true)
+  const dazObserverRef = useRef<IntersectionObserver | null>(null)
+  const dazScenesRef = useCallback((el: HTMLDivElement | null) => {
+    dazObserverRef.current?.disconnect()
+    dazObserverRef.current = null
+    if (!el) return
+    const obs = new IntersectionObserver(([entry]) => setCardsInView(entry.isIntersecting), {
+      rootMargin: '-208px 0px 0px 0px', // ≈ --chrome-h (13rem): the pinned chrome's height
+    })
+    obs.observe(el)
+    dazObserverRef.current = obs
+  }, [])
   // The ROM run log + the "reveal failed frame" signal for the editor.
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
 
@@ -324,32 +369,38 @@ function CharacterPage() {
   return (
     <main className="p-8">
       {folderMoveDialog}
+      {/* The header owns the sticky "chrome" group (header + tabs) and keeps the plain
+          Back link ABOVE it, outside the group, so that link still scrolls away. The
+          tabs are handed in as a slot so they live inside the group and follow the
+          header's collapse. */}
       <EditorHeader
         projectId={projectId}
         draft={draft}
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
-      />
-
-      {/* The persistent "OVERRIDE · <scene>" indicator, sticky under the header, so
-          the scene context follows you down and every panel toggle can stay compact. */}
-      <StickyOverrideBar
-        scenePath={sceneSel.effectiveScene}
-        sceneName={sceneSel.selectedSceneName}
-        show={sceneSel.overrideEligible}
-        active={sceneSel.groomOverrideActive}
-        onToggle={sceneSel.setGroomOverrideEnabled}
+        tabs={
+          <SceneTabsRow
+            activeTab={activeTab}
+            onTabChange={changeTab}
+            showProducts={!!project?.dazProductsEnabled}
+            scenePath={sceneSel.effectiveScene}
+            sceneName={sceneSel.selectedSceneName}
+            showSceneLabel={sceneSel.overrideEligible}
+            overrideCount={overrideCount}
+            labelHidden={cardsInView}
+          />
+        }
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
-          header collapses on scroll its height changes, and without this the whole
+          chrome collapses on scroll its height changes, and without this the whole
           (heavy) form would re-flow every frame on the main thread — the lag. With
           containment the browser only re-positions this one cached layer. The
           popup dialogs are portaled to <body> so this containment doesn't
           become their containing block and break their viewport positioning. */}
       <div className="contain-editor-body">
-      {/* Above the tabs, so the report is visible from the Products tab too. */}
+      {/* Rendered before the tab switch, so the report shows on every tab. */}
       {runLog.romRunLog && !runLog.romRunLog.ok && (
         <RomRunLogReport
           romRunLog={runLog.romRunLog}
@@ -357,20 +408,6 @@ function CharacterPage() {
           onRevealFrame={runLog.revealFailedFrame}
         />
       )}
-
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) =>
-          setActiveTab(v === 'products' || v === 'notes' ? v : 'character')
-        }
-        className="mb-6"
-      >
-        <TabsList>
-          <TabsTrigger value="character">Character</TabsTrigger>
-          {project?.dazProductsEnabled && <TabsTrigger value="products">Products</TabsTrigger>}
-          <TabsTrigger value="notes">Notes</TabsTrigger>
-        </TabsList>
-      </Tabs>
 
       {activeTab === 'notes' && (
         <section className="mb-8 rounded-lg border bg-card p-5">
@@ -392,18 +429,21 @@ function CharacterPage() {
           <div className="min-w-0 flex-1 space-y-4">
             {location && (
               <>
-                <DazSceneField
-                  projectId={projectId}
-                  character={character}
-                  location={location}
-                  sceneExists={sceneExists}
-                  sceneFolderExists={sceneFolderExists}
-                  defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-                  persistPatch={draft.persistPatch}
-                  onScenesFolderMoved={onScenesFolderMoved}
-                  selectedScene={sceneSel.effectiveScene}
-                  onSelectScene={sceneSel.selectScene}
-                />
+                {/* Ref'd for the IntersectionObserver that toggles the tabs-row label. */}
+                <div ref={dazScenesRef}>
+                  <DazSceneField
+                    projectId={projectId}
+                    character={character}
+                    location={location}
+                    sceneExists={sceneExists}
+                    sceneFolderExists={sceneFolderExists}
+                    defaultSubdir={project?.dazSubdir ?? 'daz3d'}
+                    persistPatch={draft.persistPatch}
+                    onScenesFolderMoved={onScenesFolderMoved}
+                    selectedScene={sceneSel.effectiveScene}
+                    onSelectScene={sceneSel.selectScene}
+                  />
+                </div>
                 <HoudiniProjectsField
                   character={character}
                   location={location}
@@ -412,7 +452,7 @@ function CharacterPage() {
               </>
             )}
           </div>
-          <div className="shrink-0 lg:w-[27rem] xl:w-[32rem]">
+          <div className="shrink-0 lg:w-[27rem] 2xl:w-[32rem]">
             <IdentitySection
               character={character}
               patch={patch}
@@ -431,6 +471,8 @@ function CharacterPage() {
                   dazInstallFolder={settings.dazInstallFolder}
                   overrideEligible={sceneSel.overrideEligible}
                   groomOverrideActive={sceneSel.groomOverrideActive}
+                  setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
+                  selectedSceneName={sceneSel.selectedSceneName}
                 />
               }
             />
@@ -479,22 +521,39 @@ function CharacterPage() {
       />
 
       <section className="mb-8 rounded-lg border bg-card p-5">
-        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
-          Advanced options
-          <InfoPopup label="Advanced options — more information">
-            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
-              Preserve morphs &amp; node transforms — open the guide
-            </GuideLink>
-          </InfoPopup>
-        </h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2
+            className={`flex w-fit items-center gap-1 text-xl font-semibold${
+              sceneSel.overrideEligible && !sceneSel.preserveOverrideActive
+                ? ' text-muted-foreground'
+                : ''
+            }`}
+          >
+            Advanced options
+            <InfoPopup label="Advanced options — more information">
+              <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#advanced-options--preserve-morphs--node-transforms">
+                Preserve morphs &amp; node transforms — open the guide
+              </GuideLink>
+            </InfoPopup>
+          </h2>
+          {/* Preserve-lists override toggle, up in the section header (matches ROM). */}
+          <span className="ml-auto">
+            <PanelOverrideToggle
+              eligible={sceneSel.overrideEligible}
+              active={sceneSel.preserveOverrideActive}
+              scenePath={sceneSel.effectiveScene}
+              sceneName={sceneSel.selectedSceneName}
+              noun="preserve lists"
+              compact
+              onToggle={sceneSel.setPreserveOverrideEnabled}
+            />
+          </span>
+        </div>
         <PreserveFields
           character={character}
           patch={patch}
           overrideEligible={sceneSel.overrideEligible}
           preserveOverrideActive={sceneSel.preserveOverrideActive}
-          setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
-          selectedSceneName={sceneSel.selectedSceneName}
-          scenePath={sceneSel.effectiveScene}
           sceneOverride={sceneSel.sceneOverride}
           patchOverride={sceneSel.patchOverride}
         />

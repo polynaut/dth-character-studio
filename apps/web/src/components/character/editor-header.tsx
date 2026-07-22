@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
@@ -70,6 +71,7 @@ export function EditorHeader({
   folderChip,
   folderMove,
   hasRunProblems,
+  tabs,
 }: {
   projectId: string
   draft: CharacterDraft
@@ -81,33 +83,14 @@ export function EditorHeader({
   folderMove: { editValue: string; onMove: (next: string) => Promise<unknown> } | null
   /** Show the "errors in the last ROM run" scroll-up button. */
   hasRunProblems: boolean
+  /** The sticky tabs/scene-label row — rendered INSIDE this component's sticky
+   *  "chrome" group (below the header) so it follows the header's scroll collapse. */
+  tabs: ReactNode
 }) {
   const { character } = draft
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const swallowNavRef = useRef(false)
-  const headerRef = useRef<HTMLElement>(null)
-
-  // The sticky header's height is DYNAMIC — its content (and so its collapsed
-  // height) changes as the design evolves, and the ROM section / column-title
-  // tiers pin right below it. Publish the live height as `--editor-header-h` so
-  // their sticky `top` tracks it instead of a hardcoded px that silently drifts.
-  // ResizeObserver covers the scroll-driven collapse AND content/resize reflows;
-  // the sections only pin once the header is fully collapsed (they're far down the
-  // page), so the value is stable whenever it actually matters.
-  useEffect(() => {
-    const header = headerRef.current
-    if (!header) return
-    const root = document.documentElement
-    const update = () => root.style.setProperty('--editor-header-h', `${header.offsetHeight}px`)
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(header)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty('--editor-header-h')
-    }
-  }, [])
 
   // A character has ONE main avatar (`character.image`), shown in this big
   // portrait and everywhere else in the app — it stays constant and editable in
@@ -152,24 +135,26 @@ export function EditorHeader({
         </Link>
       </div>
 
-      {/* Liquid-glass sticky header: content scrolling beneath frosts through a
-          saturated backdrop blur that FEATHERS at its lower edge (no hard blur
-          seam), echoing the native macOS title bar above. The effect + opaque
-          fallback live in `liquid-glass-header` (styles.css). */}
-      <header
-        ref={headerRef}
-        className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5"
-      >
+      {/* The sticky "chrome" group: the header (collapses on scroll) + the tabs row,
+          as ONE sticky element at top:0 — so the tabs follow the header's scroll-driven
+          collapse for free (no JS measuring a header-height var). The FIRST Back link
+          above stays OUTSIDE the group so it scrolls away normally. The gap to the
+          scrolling body is the tabs row's own `pb-4` — padding INSIDE this sticky box,
+          so it persists when stuck (a bottom margin would collapse away). */}
+      <div className="sticky top-0 z-10 bg-background">
+      {/* The header. `header-mb-scroll` animates its gap to the tabs (mb-4 → 0) as it
+          collapses; avatar/title/actions collapse via scroll-timelines (styles.css). */}
+      <header className="editor-header header-mb-scroll flex items-end gap-5 bg-background">
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
             scroll-timeline as the header collapse) once that one is gone. */}
         {/* top-5 matches the avatar's mt-5, so the link tops align; left aligns
-            with the title beside the avatar (208px box + gap-5). */}
-        <div className="absolute top-5 left-[228px] z-20">
+            with the title beside the avatar (188px box + gap-5). */}
+        <div className="absolute top-5 left-[208px] z-20">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
-            className="backlink-scroll flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
+            className="backlink-scroll flex items-center gap-1 text-xs text-muted-foreground/60! no-underline hover:text-foreground!"
           >
             <ArrowLeft className="size-4" /> Back
           </Link>
@@ -198,21 +183,16 @@ export function EditorHeader({
           title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
-          {/* The wrapper owns the shrink: only its height animates (277 → 120).
-              At rest it's a 3:4 portrait (208×277); collapsed it's a 26:15
-              landscape (208×120). It clips a fixed-size image via overflow-hidden,
-              so the portrait is *cropped* top-down rather than re-fit every frame
-              — the image is rasterized once and the box just changes its clip
-              rect, which stays smooth even with the heavy form relaying out below
-              the sticky header. */}
-          <div className="avatar-scroll-shrink h-[277px] w-[208px] overflow-hidden rounded-lg bg-neutral-500">
+          {/* The wrapper owns the shrink: only its height animates (253 → 100). It
+              clips a fixed-size image via overflow-hidden, so the portrait is
+              *cropped* top-down rather than re-fit every frame — the image is
+              rasterized once and the box just changes its clip rect, which stays
+              smooth even with the heavy form relaying out below the sticky header. */}
+          <div className="avatar-scroll-shrink h-[253px] w-[188px] overflow-hidden rounded-lg bg-neutral-500">
             <Avatar
               image={character.image}
               name={character.name}
-              // A square image the zoom over-scans to fill the wrapper (see the
-              // avatar-scroll-pan/zoom keyframes) — simpler than sizing it to the
-              // wrapper's changing 3:4 → landscape aspect.
-              className="avatar-scroll-pan aspect-square w-full object-top"
+              className="avatar-scroll-pan h-[253px] w-[188px] object-top"
               fallbackClassName="text-6xl"
             />
           </div>
@@ -222,24 +202,13 @@ export function EditorHeader({
             <Pencil className="size-8 text-white" />
           </span>
         </button>
-        <div className="title-scroll pb-6">
-          {/* Name + scene label in one row, bottom-aligned (items-end) so they
-              share a baseline under the big title. */}
-          <div className="flex items-end gap-4">
-            {/* Nudged up to optically center the name with the taller scene
-                label beside it. */}
-            {/* Override EditableTitle's hardcoded text-3xl for this header only
-                (arbitrary variant reaches its inner h1 + edit input). Matches the
-                dth-title-text scroll animation's `from` so there's no jump. */}
-            <span className="-translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
-              <EditableTitle
-                name={character.name}
-                ariaLabel="Character name"
-                onEditingChange={setEditingTitle}
-                onSave={onRenameCharacter}
-              />
-            </span>
-          </div>
+        <div className="title-scroll pb-5">
+          <EditableTitle
+            name={character.name}
+            ariaLabel="Character name"
+            onEditingChange={setEditingTitle}
+            onSave={onRenameCharacter}
+          />
           <p className="title-subtitle text-muted-foreground">
             {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
             {countPoses(character.sections)} custom ROM frames
@@ -267,6 +236,8 @@ export function EditorHeader({
           <HeaderActions draft={draft} />
         </div>
       </header>
+      {tabs}
+      </div>
 
       {imageDialogOpen && (
         <ImageDialog

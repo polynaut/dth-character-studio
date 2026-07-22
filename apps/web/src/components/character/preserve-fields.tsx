@@ -1,5 +1,4 @@
 import { Input, KeyedListEditor, Label, NumberField } from '@dth/ui'
-import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
 import type { Character, SceneOverride } from '@dth/rom'
 
@@ -16,21 +15,15 @@ export function PreserveFields({
   patch,
   overrideEligible,
   preserveOverrideActive,
-  setPreserveOverrideEnabled,
-  selectedSceneName,
-  scenePath,
   sceneOverride,
   patchOverride,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
-  /** Scene-override arming, from useSceneSelection. */
+  /** Scene-override arming, from useSceneSelection. The arming TOGGLE lives up in the
+   *  section header (rendered by the route); these just gate the lists' lock state. */
   overrideEligible: boolean
   preserveOverrideActive: boolean
-  setPreserveOverrideEnabled: (enabled: boolean) => void
-  selectedSceneName: string
-  /** The selected scene's path — renders the override toggle label's mini render. */
-  scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
 }) {
@@ -53,25 +46,6 @@ export function PreserveFields({
 
   return (
     <div>
-      <div className="mb-3 flex justify-end">
-        <PanelOverrideToggle
-          eligible={overrideEligible}
-          active={preserveOverrideActive}
-          scenePath={scenePath}
-          sceneName={selectedSceneName}
-          noun="preserve lists"
-          compact
-          onToggle={setPreserveOverrideEnabled}
-          info={
-            <>
-              Give this Daz scene its <strong>own preserve-after-ROM lists</strong>: select one of
-              the extra scenes in the Daz scenes cards, enable the override, then add, edit or
-              remove entries for that scene. On Save they ride the character's one Daz script and
-              apply when this scene is open; the base scene keeps its own.
-            </>
-          }
-        />
-      </div>
       {/* Native fieldset disable cascades to every input + the add/remove buttons,
           so the whole preserve area locks with one flag. */}
       <fieldset

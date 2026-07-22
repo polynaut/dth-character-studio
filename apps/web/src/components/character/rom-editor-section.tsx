@@ -94,8 +94,16 @@ export const RomEditorSection = memo(function RomEditorSection({
 
   return (
     <section className="mb-8">
-      <div className="mb-3 flex items-center gap-3">
-        <h2 className="flex w-fit items-center gap-1 text-xl font-semibold">
+      {/* pr matches the sibling cards' content inset (border + p-5 = 21px): the ROM
+          section is full-bleed (no card), so without this its ml-auto override toggle
+          sits 21px right of the identity/Advanced toggles. This lands its switch on
+          the same rail and its OVERRIDE pill's right edge under the big scene label. */}
+      <div className="mb-3 flex items-center gap-3 pr-[21px]">
+        <h2
+          className={`flex w-fit items-center gap-1 text-xl font-semibold${
+            overrideEligible && !overrideActive ? ' text-muted-foreground' : ''
+          }`}
+        >
           ROM
           <InfoPopup label="ROM — more information">
             The eight pose-asset categories in canonical order. Frame numbers follow section, group
@@ -115,17 +123,6 @@ export const RomEditorSection = memo(function RomEditorSection({
             noun="ROM frames"
             compact
             onToggle={setOverrideEnabled}
-            info={
-              <>
-                Drive <strong>different morphs for another Daz scene</strong> of this character
-                (e.g. a second outfit): select one of the extra scenes in the Daz scenes cards,
-                enable the override, then check <strong>Override</strong> on the rows to replace
-                for that scene or add frames at the end of a group. Everything unchecked stays
-                exactly as the base ROM. On Save the scene's frames go into the character's{' '}
-                <em>one</em> Daz script (picked by the open scene at run time) and its own
-                PoseAsset CSV.
-              </>
-            }
           />
         </span>
       </div>

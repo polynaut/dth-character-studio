@@ -243,6 +243,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // written (`false` = "nothing upscaled"). Keeps avatar-set flows off the
         // unhandled-command guard.
         return false
+      case 'upscale_png_bytes':
+        // No real xBRZ in the mock — hand the scene-tip bytes straight back (the app
+        // inlines them as the preview). Keeps scene-tip resolution off the guard.
+        return (args.bytes as Array<number>) ?? []
       case 'probe_locked_files':
         return seed.lockedFiles ?? []
       case 'open_project_window': // opens a separate OS window on the desktop —

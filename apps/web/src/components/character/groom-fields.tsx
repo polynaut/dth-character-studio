@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { InfoPopup, MultiSelect } from '@dth/ui'
+import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -41,6 +42,8 @@ export function GroomFields({
   dazInstallFolder,
   overrideEligible,
   groomOverrideActive,
+  setGroomOverrideEnabled,
+  selectedSceneName,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -50,11 +53,13 @@ export function GroomFields({
    *  Exporter Plugin's DLL version and warn when it's too old for hide-only groom. */
   dazInstallFolder: string
   /** Per-scene override arming, from useSceneSelection. On a non-primary scene the
-   *  hair list is locked until the override is armed. The ARMING switch is the page's
-   *  sticky OVERRIDE bar (the first, big toggle) — this field only reads the state to
-   *  lock/unlock; the switch no longer lives here. */
+   *  hair list is locked until the override is armed. This is the FIRST override
+   *  toggle, so it wears the full (big) pill — its switch right-aligns to sit on the
+   *  same vertical line as the compact toggles below (Genesis-9, ROM…). */
   overrideEligible: boolean
   groomOverrideActive: boolean
+  setGroomOverrideEnabled: (enabled: boolean) => void
+  selectedSceneName: string
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
@@ -131,16 +136,30 @@ export function GroomFields({
 
   return (
     <div className="max-w-xl">
-      <div className="mb-3 flex items-center gap-3">
-        <span className="flex items-center gap-1 text-sm font-medium">
+      <div className="mb-5 flex items-center gap-3">
+        <span
+          className={`flex items-center gap-1 text-sm font-medium${groomLocked ? ' text-muted-foreground' : ''}`}
+        >
           Hair items
           <InfoPopup label="Hair items — more information">
             Each scene carries its own hair — the items you list here are hidden around the DTH
             export so they never ride into the ROM artifacts. None listed means the scene has no
             hair to exclude. For a hair-only variant, link it as its own scene (or use
-            Attachments). On a non-primary scene this list locks until you arm the OVERRIDE bar at
-            the top of the page.
+            Attachments).
           </InfoPopup>
+        </span>
+        {/* Compact toggle like every other override — the selected scene is named by
+            the sticky scene label up in the tabs row, not here. */}
+        <span className="ml-auto">
+          <PanelOverrideToggle
+            eligible={overrideEligible}
+            active={groomOverrideActive}
+            scenePath={selectedScene}
+            sceneName={selectedSceneName}
+            noun="hair"
+            compact
+            onToggle={setGroomOverrideEnabled}
+          />
         </span>
       </div>
       {exporterTooOld && (

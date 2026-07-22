@@ -375,22 +375,21 @@ export const GroupCard = memo(function GroupCard({
         <table className="w-full border-collapse text-sm">
           <thead>
             {/* Third sticky tier: the column titles pin right under the section
-                title — the live `--editor-header-h` (from EditorHeader) plus the
-                section title's own 48px height. z under its z-[5]. Sticky lives on
-                the th's (not the tr), with a solid bg and an inset bottom shadow
-                standing in for the border — collapsed table borders don't travel
-                with sticky cells. */}
+                title — the fixed `--chrome-h` (page chrome) plus the section title's
+                own 48px height. z under its z-[5]. Sticky lives on the th's (not the
+                tr), with a solid bg and an inset bottom shadow standing in for the
+                border — collapsed table borders don't travel with sticky cells. */}
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 <th
                   className="sticky z-[4] w-7 bg-background shadow-[inset_0_-1px_0_0_var(--color-border)]"
-                  style={{ top: 'calc(var(--editor-header-h, 128px) + var(--override-bar-h, 0px) + 48px)' }}
+                  style={{ top: 'calc(var(--chrome-h) + 48px)' }}
                 />
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     className="sticky z-[4] bg-background px-2 py-1.5 text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border)]"
-                    style={{ top: 'calc(var(--editor-header-h, 128px) + var(--override-bar-h, 0px) + 48px)' }}
+                    style={{ top: 'calc(var(--chrome-h) + 48px)' }}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>

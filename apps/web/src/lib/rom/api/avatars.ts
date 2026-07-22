@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { exists, mkdir, readDir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs'
 import { z } from 'zod'
 
 import * as storage from '../storage'
@@ -302,10 +302,31 @@ export async function upscaleStoredAvatar(projectDir: string, image: string): Pr
   }
 }
 
+/** In-memory cache of upscaled scene-tip data URLs, keyed by `${tipPath}|${mtimeMs}`.
+ *  Daz rewrites tips IN PLACE (path stable, bytes change) and `usePortraitSrc`
+ *  re-resolves on every window focus — without this we'd re-run xBRZ on every focus
+ *  for every visible tip. The mtime in the key invalidates it the instant Daz saves a
+ *  new tip, so the focus refresh still shows the current preview. */
+const scenePreviewCache = new Map<string, string>()
+
+/** Upscale a Daz tip's raw PNG bytes to 512² via the native xBRZ command, WITHOUT
+ *  rewriting the user-owned Daz asset. Best-effort: the browser (no native) or any
+ *  failure yields the raw bytes; the command no-ops on a tip already ≥ 512². */
+async function upscaleTipBytes(bytes: Uint8Array): Promise<Uint8Array> {
+  if (!isTauri()) return bytes
+  try {
+    return new Uint8Array(await invoke<Array<number>>('upscale_png_bytes', { bytes: Array.from(bytes) }))
+  } catch {
+    return bytes
+  }
+}
+
 /**
- * Preview a picked Daz scene's tip thumbnail (`<scene>.tip.png`) as a data URL.
- * The asset protocol is scoped to the app folder, so an arbitrary scene path
- * can't be served via convertFileSrc — we read the bytes and inline them.
+ * Preview a picked Daz scene's tip thumbnail (`<scene>.tip.png`) as a data URL,
+ * UPSCALED to 512² (xBRZ, native) so the small scene-tip mini avatars aren't soft —
+ * the tip itself (in the user's Daz library) is never rewritten. The asset protocol
+ * is scoped to the app folder, so an arbitrary scene path can't be served via
+ * convertFileSrc — we read the bytes and inline them. Cached by path + mtime.
  * Returns '' when there's no tip image.
  */
 export async function resolveScenePreview(scenePath: string): Promise<string> {
@@ -313,7 +334,17 @@ export async function resolveScenePreview(scenePath: string): Promise<string> {
   try {
     const tipPath = await findTipImage(scenePath)
     if (!tipPath) return ''
-    return imageDataUrl(await readFile(tipPath), tipPath)
+    let key = tipPath
+    try {
+      key = `${tipPath}|${(await stat(tipPath)).mtime?.getTime() ?? ''}`
+    } catch {
+      // stat unavailable — fall back to a path-only key (best effort).
+    }
+    const cached = scenePreviewCache.get(key)
+    if (cached) return cached
+    const url = imageDataUrl(await upscaleTipBytes(await readFile(tipPath)), tipPath)
+    scenePreviewCache.set(key, url)
+    return url
   } catch {
     return ''
   }

@@ -21,7 +21,9 @@ export function SceneLabel({
   fallbackName,
   eyebrow,
   trailing,
+  end,
   showAvatar = true,
+  active,
   className,
 }: {
   /** The scene whose `.tip.png` renders in the pill. */
@@ -37,18 +39,31 @@ export function SceneLabel({
   eyebrow?: string
   /** Rendered inline right after the name (e.g. the override info "i" popup). */
   trailing?: ReactNode
+  /** Rendered at the pill's RIGHT edge, its own column after the name (e.g. the
+   *  override toggle switch, folded into the pill). Gets a left divider to set it
+   *  off from the name. */
+  end?: ReactNode
   /** Show the scene's mini render at the pill's start (default). `false` → a
    *  compact, avatar-less pill (e.g. the Genesis-9 override toggle). */
   showAvatar?: boolean
+  /** Override-toggle state: GREENER when armed, greyer (more card) when not (with a
+   *  colour transition). Omit for the plain fixed green (the passive tabs-row label). */
+  active?: boolean
   className?: string
 }) {
   return (
     <Tag
-      // Always the Daz-green "linked-scene card" tint + border, a touch stronger
-      // since this is a small pill.
+      // The Daz-green "linked-scene card" tint + border, a touch stronger since this
+      // is a small pill. The tint tracks the override toggle: GREENER when armed,
+      // greyer (more card) when unarmed; the plain 35% mix for non-toggle uses.
       tone="green"
       className={cn(
-        'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 text-sm font-normal normal-case',
+        'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] py-1 pr-2 text-sm font-normal normal-case transition-colors',
+        active === undefined
+          ? 'bg-[color-mix(in_oklab,#3fae6b_35%,var(--card))]'
+          : active
+            ? 'bg-[color-mix(in_oklab,#3fae6bcf_48%,var(--card))]'
+            : 'bg-[color-mix(in_oklab,#3fae6bcf_22%,var(--card))]',
         showAvatar ? 'pl-1.5' : 'pl-3',
         className,
       )}
@@ -63,12 +78,12 @@ export function SceneLabel({
           scenePath={scenePath}
           name={fallbackName ?? name}
           imgClassName={cn('-translate-y-1/2', muted && 'grayscale')}
-          className={`h-8 w-[56px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
+          className={`h-[40px] w-[75px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
           fallbackClassName="text-[8px]"
         />
       )}
       {eyebrow ? (
-        <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-none">
+        <span className="flex min-w-0 flex-col justify-center gap-1.5 leading-none">
           <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">
             {eyebrow}
           </span>
@@ -85,6 +100,11 @@ export function SceneLabel({
         <span className="flex min-w-0 items-center gap-1">
           <span className="truncate">{name}</span>
           {trailing}
+        </span>
+      )}
+      {end && (
+        <span className="ml-0.5 flex items-center self-stretch border-l border-[color-mix(in_oklab,var(--color-daz-green)_40%,transparent)] pl-2">
+          {end}
         </span>
       )}
     </Tag>
