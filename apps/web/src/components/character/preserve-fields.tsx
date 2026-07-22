@@ -1,7 +1,16 @@
 import { Input, KeyedListEditor, Label, NumberField } from '@dth/ui'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
+import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
+import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 
 import type { Character, SceneOverride } from '@dth/rom'
+import type { MorphIndexEntry } from '#/lib/rom/api.ts'
+
+// The morph-name field wears the ordinary form-input look (bordered, h-9) rather
+// than MorphNameCell's default borderless table-cell style, so it matches the
+// node-transform Input beside it.
+const MORPH_FIELD_CLASS =
+  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30'
 
 /**
  * The two "preserve across the ROM load" list editors from the character editor's
@@ -21,6 +30,7 @@ export function PreserveFields({
   scenePath,
   sceneOverride,
   patchOverride,
+  morphIndex,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -33,6 +43,8 @@ export function PreserveFields({
   scenePath: string
   sceneOverride: SceneOverride | undefined
   patchOverride: (partial: Partial<SceneOverride>) => void
+  /** The scanned morph index — powers the Morph-name autocomplete, same as ROM. */
+  morphIndex: Array<MorphIndexEntry>
 }) {
   // Armed on a non-primary scene → edit the scene's preserve override; else base.
   const activePreserve = preserveOverrideActive ? sceneOverride?.preserve : undefined
@@ -52,7 +64,7 @@ export function PreserveFields({
   const locked = overrideEligible && !overriding
 
   return (
-    <div>
+    <MorphIndexProvider morphIndex={morphIndex}>
       <div className="mb-3 flex justify-end">
         <PanelOverrideToggle
           eligible={overrideEligible}
@@ -91,11 +103,17 @@ export function PreserveFields({
             >
               {(item, set) => (
                 <>
-                  <Input
-                    value={item.name}
-                    placeholder="body_ctrl_BreastsUp-Down"
-                    onChange={(e) => set({ ...item, name: e.target.value })}
-                  />
+                  <div className="min-w-0 flex-1">
+                    <MorphNameCell
+                      value={item.name}
+                      placeholder="body_ctrl_BreastsUp-Down"
+                      inputClassName={MORPH_FIELD_CLASS}
+                      onCommit={(name) => set({ ...item, name })}
+                      // Preserve morphs store only a name (no node), so a pick just
+                      // takes the internal name.
+                      onPick={(entry) => set({ ...item, name: entry.name })}
+                    />
+                  </div>
                   <NumberField
                     className="w-24 pr-6 text-right tabular-nums"
                     percent
@@ -127,6 +145,6 @@ export function PreserveFields({
           </div>
         </div>
       </fieldset>
-    </div>
+    </MorphIndexProvider>
   )
 }

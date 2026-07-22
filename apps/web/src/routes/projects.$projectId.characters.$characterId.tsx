@@ -497,6 +497,7 @@ function CharacterPage() {
           scenePath={sceneSel.effectiveScene}
           sceneOverride={sceneSel.sceneOverride}
           patchOverride={sceneSel.patchOverride}
+          morphIndex={morphIndex}
         />
       </section>
 
