@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Sparkles } from 'lucide-react'
 
-import { InfoPopup, MultiSelect } from '@dth/ui'
+import { Button, InfoPopup, MultiSelect } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
@@ -134,6 +135,27 @@ export function GroomFields({
   const groomLocked = overrideEligible && !groomOverrideActive
   const exporterTooOld = hasGroom && !exporterSupportsGroomHide(exporterVersion)
 
+  // The hair the scene's `.duf` actually contains (the HAIRISH suggestions) —
+  // what the ✦ button grabs in one click. Detected hair the current list
+  // doesn't already cover would ride into the ROM export; on a non-primary
+  // scene that's a mismatch we arm + warn about (the outfit brought its own
+  // hair, so the primary's list can't be trusted for it).
+  const detectedHair = candidates.filter((label) => HAIRISH.test(label))
+  const listedSet = new Set(listed)
+  const unlistedHair = scanned ? detectedHair.filter((label) => !listedSet.has(label)) : []
+  const hairMismatch = overrideEligible && unlistedHair.length > 0
+
+  // Auto-arm the hair override ONCE when switching to a non-primary scene whose
+  // detected hair isn't covered by its list. Only ever ARM (never disarm) and
+  // never twice for the same scene, so a manual disarm within a visit sticks;
+  // evaluated only after that scene's wearables have been scanned.
+  const autoArmedScene = useRef<string | null>(null)
+  useEffect(() => {
+    if (!scanned || autoArmedScene.current === selectedScene) return
+    autoArmedScene.current = selectedScene
+    if (hairMismatch && !groomOverrideActive) setGroomOverrideEnabled(true)
+  }, [scanned, selectedScene, hairMismatch, groomOverrideActive, setGroomOverrideEnabled])
+
   return (
     <div className="max-w-xl">
       <div className="mb-3 flex items-center gap-3">
@@ -181,17 +203,37 @@ export function GroomFields({
         <p className="text-sm text-muted-foreground">Link a Daz scene to define its hair items.</p>
       ) : (
         <>
-          <MultiSelect
-            values={listed}
-            options={candidates}
-            onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}
-            placeholder="Pick the hair items of this scene…"
-            allowCustom
-            disabled={groomLocked}
-            pillWarning={(label) =>
-              scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
-            }
-          />
+          <div className="flex items-start gap-2">
+            <MultiSelect
+              className="flex-1"
+              values={listed}
+              options={candidates}
+              onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}
+              placeholder="Pick the hair items of this scene…"
+              allowCustom
+              disabled={groomLocked}
+              pillWarning={(label) =>
+                scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
+              }
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              title="Select all detected hair items"
+              aria-label="Select all detected hair items"
+              disabled={groomLocked || detectedHair.length === 0}
+              onClick={() => setNodes(detectedHair.map((nodeLabel) => ({ nodeLabel })))}
+            >
+              <Sparkles />
+            </Button>
+          </div>
+          {hairMismatch && (
+            <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
+              Unlisted hair: <strong>{unlistedHair.join(', ')}</strong> — it'd ride into the
+              export. Override enabled; pick it or hit{' '}
+              <Sparkles className="inline size-3.5 -translate-y-px" aria-hidden />.
+            </p>
+          )}
           {missing.length > 0 && (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
               Not found in “{sceneName}”: <strong>{missing.join(', ')}</strong> — the export
