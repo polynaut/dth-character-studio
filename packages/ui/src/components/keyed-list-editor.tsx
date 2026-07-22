@@ -44,8 +44,7 @@ export function KeyedListEditor<T>({
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 shrink-0"
-            title={removeLabel}
+            className="size-9 shrink-0"
             aria-label={removeLabel}
             onClick={() => removeAt(index)}
           >

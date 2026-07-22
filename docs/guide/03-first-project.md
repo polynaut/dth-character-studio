@@ -50,7 +50,7 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
   Daz scenes, Houdini projects and Unreal projects.
 
   <p align="center">
-    <img width="372" alt="Clicking a path chip copies the full path" src="gifs/path-chip-copy.gif" />
+    <img width="372" alt="Clicking a path chip copies the full path" src="clips/path-chip-copy.webp" />
     <br>
     <sub><em>Hover shows the copy badge; a click copies the full path.</em></sub>
   </p>

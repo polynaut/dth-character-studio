@@ -54,7 +54,7 @@ const VW = 1280
 const MAX_H = 720
 
 // prime() (frozen clock + devtools flag + Tauri fake) and settle() are shared
-// with guide.gifs.ts — they live in fixtures.ts (see FIXED_TIME there).
+// with guide.clips.ts — they live in fixtures.ts (see FIXED_TIME there).
 
 /**
  * Screenshot the documented feature at a realistic height — you work on a 16:9
@@ -274,6 +274,9 @@ async function shootTopThrough(page: Page, path: string, endFeature: Locator) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await page.setViewportSize({ width: VW, height: 1500 })
   await settle(page)
+  // Selecting a scene card (openCharacterOnOutfitScene) scrolls the page down to
+  // click it; anchor back at the top so the from-top clip stays in-bounds.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const bottom = await endFeature.evaluate((el) => Math.ceil(el.getBoundingClientRect().bottom))
   await page.screenshot({
     path,
@@ -470,12 +473,13 @@ test('character-scene-tag', async ({ page }) => {
 test('rom-override-toggle', async ({ page }) => {
   await openCharacterOnOutfitScene(page)
   await page.getByRole('switch', { name: /Override ROM frames/ }).click()
-  // The ROM header row (Override armed + on) down through the override banner.
+  // The ROM header row (Override armed + on) down through the timeline and the
+  // first (now-locked) section — the "Scene override active" banner is gone.
   await shootStrip(
     page,
     join(OUT, 'rom-override-toggle.png'),
     page.getByRole('heading', { name: /^ROM/ }).locator('xpath=..'),
-    page.getByText(/Scene override active/),
+    page.getByText('Retargeting', { exact: true }),
   )
 })
 
@@ -598,7 +602,7 @@ async function shootTight(page: Page, path: string, el: Locator) {
   })
 }
 
-// (The plain hover/copy interaction is a GIF now — guide.gifs.ts' path-chip-copy.)
+// (The plain hover/copy interaction is a WebP clip now — guide.clips.ts' path-chip-copy.)
 
 test('detail-path-chip-alt', async ({ page }) => {
   await openProject(page)
@@ -671,21 +675,21 @@ test('detail-morph-autocomplete', async ({ page }) => {
 test('coverage: guide references and generated screenshots match 1:1', async () => {
   const guideDir = join(OUT, '..')
   const referenced = new Set<string>()
-  const referencedGifs = new Set<string>()
+  const referencedClips = new Set<string>()
   for (const md of (await readdir(guideDir)).filter((f) => f.endsWith('.md'))) {
     const text = await readFile(join(guideDir, md), 'utf8')
     for (const m of text.matchAll(/screenshots\/([\w.-]+\.png)/g)) referenced.add(m[1])
-    for (const m of text.matchAll(/gifs\/([\w.-]+\.gif)/g)) referencedGifs.add(m[1])
+    for (const m of text.matchAll(/clips\/([\w.-]+\.webp)/g)) referencedClips.add(m[1])
   }
   const onDisk = (await readdir(OUT)).filter((f) => f.endsWith('.png'))
   const missing = [...referenced].filter((f) => !onDisk.includes(f)).sort()
   const orphans = onDisk.filter((f) => !referenced.has(f)).sort()
   expect(missing, `referenced in docs/guide but missing from screenshots/: ${missing.join(', ')}`).toEqual([])
   expect(orphans, `in screenshots/ but referenced by no guide page: ${orphans.join(', ')}`).toEqual([])
-  // Same lockstep for the interaction GIFs (guide.gifs.ts → docs/guide/gifs).
-  const gifsOnDisk = await readdir(join(guideDir, 'gifs')).catch(() => [] as string[])
-  const missingGifs = [...referencedGifs].filter((f) => !gifsOnDisk.includes(f)).sort()
-  const orphanGifs = gifsOnDisk.filter((f) => f.endsWith('.gif') && !referencedGifs.has(f)).sort()
-  expect(missingGifs, `referenced in docs/guide but missing from gifs/: ${missingGifs.join(', ')}`).toEqual([])
-  expect(orphanGifs, `in gifs/ but referenced by no guide page: ${orphanGifs.join(', ')}`).toEqual([])
+  // Same lockstep for the interaction clips (guide.clips.ts → docs/guide/clips).
+  const clipsOnDisk = await readdir(join(guideDir, 'clips')).catch(() => [] as string[])
+  const missingClips = [...referencedClips].filter((f) => !clipsOnDisk.includes(f)).sort()
+  const orphanClips = clipsOnDisk.filter((f) => f.endsWith('.webp') && !referencedClips.has(f)).sort()
+  expect(missingClips, `referenced in docs/guide but missing from clips/: ${missingClips.join(', ')}`).toEqual([])
+  expect(orphanClips, `in clips/ but referenced by no guide page: ${orphanClips.join(', ')}`).toEqual([])
 })

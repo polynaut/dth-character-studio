@@ -1617,7 +1617,7 @@ describe('groom items (hair kept out of the export)', () => {
     ])
   })
 
-  it('the groom script bakes the map and calls the DOCUMENTED 3-arg export (saveSettings false)', () => {
+  it('the groom script exports each hair item on its own via the DOCUMENTED 3-arg export', () => {
     const script = toGroomExportScriptDsa(groomChar())
     expect(script.fileName).toBe('Export_Hair_Electra_G9.dsa')
     expect(script.content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
@@ -1630,8 +1630,12 @@ describe('groom items (hair kept out of the export)', () => {
         '    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();\n' +
         '    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];',
     )
-    // The 2-arg call crashes Daz in the settings-save path — false is mandatory.
-    expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, "Electra_groom", false)')
+    // Per-item: loops the open scene's hair list, exporting each on its own as
+    // "<Name>_Hair_<item>" (the 2-arg call crashes Daz — false is mandatory).
+    expect(script.content).toContain('for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++)')
+    expect(script.content).toContain('var dthHairName = "Electra_Hair_" + dthHairSlug(dthKeepLabel)')
+    expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, dthHairName, false)')
+    expect(script.content).not.toContain('"Electra_groom"')
     expect(script.content).toContain('} finally {')
   })
 })
