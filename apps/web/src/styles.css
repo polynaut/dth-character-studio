@@ -398,7 +398,7 @@ a {
    calc(--editor-header-h + --override-bar-h) off these fixed values. */
 :root {
   --editor-header-h: 163px;
-  --override-bar-h: 61px;
+  --override-bar-h: 66px;
 }
 
 /* The Discard / Save actions hold the default Button size; only their bottom

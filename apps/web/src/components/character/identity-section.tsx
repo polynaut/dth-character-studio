@@ -1,4 +1,4 @@
-import { InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
 import type { Character, GenesisVersion, SceneOverride } from '@dth/rom'
@@ -177,17 +177,12 @@ export function IdentitySection({
                 onCommit={(v) => setIdentity({ flexionStrength: v })}
               />
             </div>
-            <div>
-              <Label className="mb-1 flex items-center gap-1" title="Set UE5 tear UV">
+            <div className="flex flex-col items-center">
+              <Label className="mb-1" title="Set UE5 tear UV">
                 UE5 tear UV
-                <InfoPopup label="Set UE5 tear UV — more information">
-                  Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
-                  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
-                  Surfaces-tab step.
-                </InfoPopup>
               </Label>
-              {/* h-9 wrapper so the toggle centres on the same line as the two
-                  h-9 number inputs beside it. */}
+              {/* h-9 wrapper so the toggle sits on the same line as the two h-9
+                  number inputs beside it; items-center centres it under its label. */}
               <span className="flex h-9 items-center">
                 <Switch
                   checked={applyUE5TearUV}
