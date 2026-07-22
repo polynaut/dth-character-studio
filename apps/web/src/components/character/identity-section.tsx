@@ -142,54 +142,52 @@ export function IdentitySection({
             />
           </div>
         )}
-        <fieldset
-          disabled={fieldsetDisabled}
-          className="relative rounded-md border px-4 pt-4 pb-4"
-        >
-          <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
-            Genesis 9 Specific
-          </legend>
-          <div className={`space-y-4${fieldsetDisabled ? ' text-muted-foreground' : ''}`}>
-            {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
-                percentages, same as every morph value field — NumberField's
-                `percent` mode owns that conversion (and the "%" suffix). */}
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                  FACS detail strength
-                </Label>
-                <NumberField
-                  className="w-28 pr-6 text-right tabular-nums"
-                  percent
-                  value={facsDetailStrength}
-                  onCommit={(v) => setIdentity({ facsDetailStrength: v })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                  Flexion strength
-                </Label>
-                <NumberField
-                  className="w-28 pr-6 text-right tabular-nums"
-                  percent
-                  value={flexionStrength}
-                  onCommit={(v) => setIdentity({ flexionStrength: v })}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={applyUE5TearUV}
-                onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
+        {/* The "Genesis 9 Specific" fieldset box is gone — the three dials sit on
+            ONE ROW. The bare <fieldset disabled> stays (no border/legend) purely
+            for its disable cascade: it locks every control inside AND drives the
+            NumberField "%"-suffix fade (group-has-[:disabled]). */}
+        <fieldset disabled={fieldsetDisabled} className="min-w-0 border-0 p-0">
+          {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
+              percentages, same as every morph value field — NumberField's
+              `percent` mode owns that conversion (and the "%" suffix). */}
+          <div
+            className={`flex flex-wrap items-start gap-5${fieldsetDisabled ? ' text-muted-foreground' : ''}`}
+          >
+            <div>
+              <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+                FACS detail strength
+              </Label>
+              <NumberField
+                className="w-28 pr-6 text-right tabular-nums"
+                percent
+                value={facsDetailStrength}
+                onCommit={(v) => setIdentity({ facsDetailStrength: v })}
               />
-              <span className="flex items-center gap-1 text-sm">
-                Set UE5 tear UV
+            </div>
+            <div>
+              <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+                Flexion strength
+              </Label>
+              <NumberField
+                className="w-28 pr-6 text-right tabular-nums"
+                percent
+                value={flexionStrength}
+                onCommit={(v) => setIdentity({ flexionStrength: v })}
+              />
+            </div>
+            <div>
+              <Label className="mb-1 flex items-center gap-1" title="Set UE5 tear UV">
+                UE5 tear UV
                 <InfoPopup label="Set UE5 tear UV — more information">
                   Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
                   ROM build, so DTH's Lacrimal Fluid material lines up without the manual
                   Surfaces-tab step.
                 </InfoPopup>
-              </span>
+              </Label>
+              <Switch
+                checked={applyUE5TearUV}
+                onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
+              />
             </div>
           </div>
         </fieldset>
