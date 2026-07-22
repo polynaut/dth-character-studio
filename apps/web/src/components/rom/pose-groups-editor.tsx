@@ -50,6 +50,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   failedFrames,
   removable,
   override,
+  overrideLocked,
   onGroupsChange,
 }: {
   section: RomSection
@@ -59,6 +60,9 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   failedFrames?: Set<number>
   removable: boolean
   override?: SectionOverrideCtl
+  /** Non-primary scene selected but its ROM override isn't armed: the groups
+   *  show a disabled Override column (passed straight to each GroupCard). */
+  overrideLocked?: boolean
   onGroupsChange: (section: RomSection, groups: Array<RomGroup>) => void
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -254,6 +258,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
             override={override}
+            overrideLocked={overrideLocked}
             onChange={changeGroup}
             onRemove={removeGroup}
             onMirror={mirrorGroupAfter}

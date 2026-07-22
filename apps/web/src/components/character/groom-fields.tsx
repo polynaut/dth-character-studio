@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
-import { Button, InfoPopup, MultiSelect } from '@dth/ui'
+import { Button, MultiSelect } from '@dth/ui'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
@@ -64,6 +64,11 @@ export function GroomFields({
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
+  // The scene the wearables scan is FOR. Selecting a scene resets + re-scans ASYNC,
+  // so for one painted render the new scene's list would be judged against the
+  // previous scene's wearables — a bogus warning flash. Warnings trust the scan only
+  // once `scannedScene` matches the selection (`scanValid` below).
+  const [scannedScene, setScannedScene] = useState('')
   // The installed Exporter Plugin version (read from the DLL). '' = not installed
   // / unknown — we don't warn then (see exporterSupportsGroomHide).
   const [exporterVersion, setExporterVersion] = useState('')
@@ -95,11 +100,16 @@ export function GroomFields({
       if (cancelled) return
       setWearables(result.items)
       setScanned(result.error === '')
+      setScannedScene(selectedScene)
     })
     return () => {
       cancelled = true
     }
   }, [selectedScene])
+
+  // Trust the scan (and every warning derived from it) only once it's for the
+  // CURRENTLY selected scene — until then it's the previous scene's, stale.
+  const scanValid = scanned && scannedScene === selectedScene
 
   const entry = character.groomScenes.find((g) => g.scenePath === selectedScene)
   const nodes = entry?.nodes ?? []
@@ -128,7 +138,7 @@ export function GroomFields({
     )
     .map((wearable) => wearable.label)
   const knownLabels = new Set(wearables.map((wearable) => wearable.label))
-  const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
+  const missing = scanValid ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
   // On a non-primary scene the per-scene hair list is locked until its override
   // is armed — the same opt-in gate the ROM / Genesis-9 panels use.
@@ -142,7 +152,7 @@ export function GroomFields({
   // hair, so the primary's list can't be trusted for it).
   const detectedHair = candidates.filter((label) => HAIRISH.test(label))
   const listedSet = new Set(listed)
-  const unlistedHair = scanned ? detectedHair.filter((label) => !listedSet.has(label)) : []
+  const unlistedHair = scanValid ? detectedHair.filter((label) => !listedSet.has(label)) : []
   const hairMismatch = overrideEligible && unlistedHair.length > 0
 
   // Auto-arm the hair override ONCE when switching to a non-primary scene whose
@@ -151,10 +161,10 @@ export function GroomFields({
   // evaluated only after that scene's wearables have been scanned.
   const autoArmedScene = useRef<string | null>(null)
   useEffect(() => {
-    if (!scanned || autoArmedScene.current === selectedScene) return
+    if (!scanValid || autoArmedScene.current === selectedScene) return
     autoArmedScene.current = selectedScene
     if (hairMismatch && !groomOverrideActive) setGroomOverrideEnabled(true)
-  }, [scanned, selectedScene, hairMismatch, groomOverrideActive, setGroomOverrideEnabled])
+  }, [scanValid, selectedScene, hairMismatch, groomOverrideActive, setGroomOverrideEnabled])
 
   return (
     <div className="max-w-xl">
@@ -163,12 +173,6 @@ export function GroomFields({
           className={`flex items-center gap-1 text-sm font-medium${groomLocked ? ' text-muted-foreground' : ''}`}
         >
           Hair items
-          <InfoPopup label="Hair items — more information">
-            Each scene carries its own hair — the items you list here are hidden around the DTH
-            export so they never ride into the ROM artifacts. None listed means the scene has no
-            hair to exclude. For a hair-only variant, link it as its own scene (or use
-            Attachments).
-          </InfoPopup>
         </span>
         {/* Compact toggle like every other override — the selected scene is named by
             the sticky scene label up in the tabs row, not here. */}
@@ -206,7 +210,7 @@ export function GroomFields({
               allowCustom
               disabled={groomLocked}
               pillWarning={(label) =>
-                scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
+                scanValid && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
               }
             />
             <Button

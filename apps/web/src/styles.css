@@ -16,31 +16,31 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Single dark theme matched to Daz Studio (and close to Houdini): warm-neutral
- * grays + a teal / spring-green accent. The app is dark-only by design — the
+ * Single dark theme matched to Daz Studio (and close to Houdini): cool-neutral
+ * dark-slate grays + a teal / spring-green accent. The app is dark-only by design — the
  * tools it generates for (Daz, Houdini) have no light mode — so these tokens
  * live in :root and `<html class="dark">` is set so Tailwind `dark:` variants
  * still resolve.
  */
 :root {
-  --background: #2e2e2e; /* app background — neutral dark gray */
-  --foreground: #d4d4d4; /* body text — light gray, not pure white */
-  --card: #383838; /* panels / group boxes */
-  --card-foreground: #d4d4d4;
-  --popover: #383838;
-  --popover-foreground: #d4d4d4;
+  --background: #232529; /* app background — cool dark slate */
+  --foreground: #d6d7da; /* body text — light gray, not pure white */
+  --card: #2c2e33; /* panels / group boxes */
+  --card-foreground: #d6d7da;
+  --popover: #2c2e33;
+  --popover-foreground: #d6d7da;
   --primary: #fe5c01; /* logo orange — accent / primary action / focus */
   --primary-foreground: #2b1200; /* dark warm text on the orange (AA-legible) */
-  --secondary: #4a4a4a; /* raised gray buttons */
+  --secondary: #44474e; /* raised gray buttons */
   --secondary-foreground: #e6e6e6;
-  --muted: #2a2a2a; /* recessed surfaces (inputs, code) */
-  --muted-foreground: #9b9b9b; /* dimmed labels / secondary text */
-  --accent: #414141; /* hover / selected background */
+  --muted: #1d1f22; /* recessed surfaces (inputs, code) */
+  --muted-foreground: #9a9ca2; /* dimmed labels / secondary text */
+  --accent: #34373d; /* hover / selected background */
   --accent-foreground: #ededed;
   --destructive: #e5605e; /* errors — a red readable on dark */
   --destructive-foreground: #fbe9e9;
-  --border: #484848; /* subtle separators */
-  --input: #4a4a4a; /* input field borders */
+  --border: #3b3e44; /* subtle separators */
+  --input: #44474e; /* input field borders */
   --ring: #ee7027; /* orange focus ring */
   --daz-green: #3fae6b; /* Daz brand leaf-green — the linked-scene card accent */
   --houdini-orange: #ff6a13; /* Houdini brand orange — the linked-project card accent */
@@ -50,22 +50,24 @@
   --chart-4: #c98bdb;
   --chart-5: #e5605e;
   --radius: 0.4rem; /* tighter corners — closer to Daz's squared UI */
-  --sidebar: #333333;
-  --sidebar-foreground: #d4d4d4;
+  --sidebar: #26282c;
+  --sidebar-foreground: #d6d7da;
   --sidebar-primary: #fe5c01;
   --sidebar-primary-foreground: #2b1200;
-  --sidebar-accent: #414141;
+  --sidebar-accent: #34373d;
   --sidebar-accent-foreground: #ededed;
-  --sidebar-border: #484848;
+  --sidebar-border: #3b3e44;
   --sidebar-ring: #fe5c01;
   /* Height of the sticky "chrome" (editor header + tabs row) WHEN COLLAPSED. The ROM
      section / column-title tiers pin right below it (`top: var(--chrome-h)`). It's a
      fixed constant, not a JS-measured var, because the header is ALWAYS fully
      collapsed by the time you've scrolled far enough for a ROM tier to pin — so its
      live height never matters there. Bump this if the collapsed header (avatar 100px
-     + margins) or the tabs-row/scene-label height changes. Includes the tabs row's
-     `pb-4` (the chrome group itself has no bottom padding). */
-  --chrome-h: 13rem;
+     + margins = 140px) or the tabs-row/scene-label height changes. Includes the tabs
+     row's `pb-4` (the chrome group itself has no bottom padding). Measured collapsed:
+     header 140px + tabs 56px = 196px — keep this flush with that or a gap opens
+     between the chrome and the pinned section title (rows show through). */
+  --chrome-h: 12.25rem; /* 196px */
 }
 
 @theme inline {
@@ -220,6 +222,7 @@ a {
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-shrink {
     border: 2px solid transparent;
+    box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35); /* base for an inactive timeline (Notes) */
     animation: dth-avatar-shrink linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
@@ -240,6 +243,7 @@ a {
 }
 @supports (animation-timeline: scroll()) {
   .header-mb-scroll {
+    margin-bottom: 1rem; /* base for an inactive timeline (Notes) */
     animation: dth-header-mb linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
@@ -263,6 +267,8 @@ a {
 }
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-pan {
+    transform: translateY(-1%); /* base for an inactive timeline (Notes) */
+    scale: 1.2;
     animation: dth-avatar-pan linear both;
     animation-timeline: scroll(root block);
     animation-range: 130px 248px;
@@ -319,7 +325,7 @@ a {
     font-size: 2.875rem;
   }
   to {
-    font-size: 1.87rem;
+    font-size: 2.25rem;
   }
 }
 @keyframes dth-subtitle-collapse {
@@ -381,11 +387,13 @@ a {
     will-change: transform;
   }
   .title-scroll {
+    margin-bottom: 1.5rem; /* base for an inactive (too-short) timeline — e.g. Notes */
     animation: dth-title-drop linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }
   .title-scroll h1 {
+    font-size: 2.875rem; /* base for an inactive timeline (Notes) — the rest-state size */
     animation: dth-title-text linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;

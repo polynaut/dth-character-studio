@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
@@ -210,24 +210,6 @@ function CharacterPage() {
     sceneSel.groomOverrideActive,
     sceneSel.preserveOverrideActive,
   ].filter(Boolean).length
-  // The big scene label in the tabs row is a REMINDER of the selected scene — only
-  // wanted once the actual Daz scene cards have scrolled out of view. An
-  // IntersectionObserver (top-inset by the collapsed chrome so "in view" means BELOW
-  // the pinned header) hides it while the cards are on screen and fades it in once
-  // they slip behind the header. Callback ref so it re-attaches if the section
-  // re-mounts; default true = hidden at the top where the cards are visible.
-  const [cardsInView, setCardsInView] = useState(true)
-  const dazObserverRef = useRef<IntersectionObserver | null>(null)
-  const dazScenesRef = useCallback((el: HTMLDivElement | null) => {
-    dazObserverRef.current?.disconnect()
-    dazObserverRef.current = null
-    if (!el) return
-    const obs = new IntersectionObserver(([entry]) => setCardsInView(entry.isIntersecting), {
-      rootMargin: '-208px 0px 0px 0px', // ≈ --chrome-h (13rem): the pinned chrome's height
-    })
-    obs.observe(el)
-    dazObserverRef.current = obs
-  }, [])
   // The ROM run log + the "reveal failed frame" signal for the editor.
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
 
@@ -388,7 +370,6 @@ function CharacterPage() {
             sceneName={sceneSel.selectedSceneName}
             showSceneLabel={sceneSel.overrideEligible}
             overrideCount={overrideCount}
-            labelHidden={cardsInView}
           />
         }
       />
@@ -429,21 +410,18 @@ function CharacterPage() {
           <div className="min-w-0 flex-1 space-y-4">
             {location && (
               <>
-                {/* Ref'd for the IntersectionObserver that toggles the tabs-row label. */}
-                <div ref={dazScenesRef}>
-                  <DazSceneField
-                    projectId={projectId}
-                    character={character}
-                    location={location}
-                    sceneExists={sceneExists}
-                    sceneFolderExists={sceneFolderExists}
-                    defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-                    persistPatch={draft.persistPatch}
-                    onScenesFolderMoved={onScenesFolderMoved}
-                    selectedScene={sceneSel.effectiveScene}
-                    onSelectScene={sceneSel.selectScene}
-                  />
-                </div>
+                <DazSceneField
+                  projectId={projectId}
+                  character={character}
+                  location={location}
+                  sceneExists={sceneExists}
+                  sceneFolderExists={sceneFolderExists}
+                  defaultSubdir={project?.dazSubdir ?? 'daz3d'}
+                  persistPatch={draft.persistPatch}
+                  onScenesFolderMoved={onScenesFolderMoved}
+                  selectedScene={sceneSel.effectiveScene}
+                  onSelectScene={sceneSel.selectScene}
+                />
                 <HoudiniProjectsField
                   character={character}
                   location={location}

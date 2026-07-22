@@ -68,6 +68,7 @@ export const GroupCard = memo(function GroupCard({
   onRemove,
   onMirror,
   override,
+  overrideLocked = false,
 }: {
   section: RomSection
   group: RomGroup
@@ -81,6 +82,9 @@ export const GroupCard = memo(function GroupCard({
   onRemove: (groupId: string) => void
   onMirror: (groupId: string) => void
   override?: SectionOverrideCtl
+  /** Non-primary scene selected but its ROM override isn't armed: show a
+   *  disabled Override column (see PoseTableMeta.overrideColumnDisabled). */
+  overrideLocked?: boolean
 }) {
   const showBoneScale = REFERENCE_FBX_SECTIONS.includes(section)
   const showBoneLabel = BONE_LABEL_SECTIONS.includes(section)
@@ -227,6 +231,7 @@ export const GroupCard = memo(function GroupCard({
           },
         }
       : undefined,
+    overrideColumnDisabled: overrideLocked,
   }
 
   const table = useReactTable({
@@ -234,7 +239,9 @@ export const GroupCard = memo(function GroupCard({
     columns: poseColumns,
     getCoreRowModel: getCoreRowModel(),
     meta,
-    state: { columnVisibility: { boneScaleRef: showBoneScale, override: !!override } },
+    state: {
+      columnVisibility: { boneScaleRef: showBoneScale, override: !!override || overrideLocked },
+    },
   })
 
   function addPose() {

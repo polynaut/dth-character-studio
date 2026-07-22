@@ -181,13 +181,13 @@ function ArtDirectionFrameRow({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-6"
+                className="size-9 shrink-0 border border-input"
                 title="Remove this morph"
                 onClick={() =>
                   onCommit({ ...entry, morphs: entry.morphs.filter((_, mi) => mi !== index) })
                 }
               >
-                <Trash2 className="size-3 text-destructive" />
+                <Trash2 className="size-3.5 text-destructive" />
               </Button>
             </div>
           ))}

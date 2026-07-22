@@ -462,7 +462,7 @@ export const RomSections = memo(function RomSections({
                     : sectionSummary(displaySections[section])}
                 </span>
               </button>
-              <span>
+              <span className="flex items-center">
                 <Switch
                   checked={effectiveEnabled}
                   disabled={tiedToJcm || !!overrideCtl || locked}
@@ -602,6 +602,7 @@ export const RomSections = memo(function RomSections({
                       failedFrames={failedFrames}
                       removable={false}
                       override={overrideCtl}
+                      overrideLocked={locked}
                       onGroupsChange={onSectionGroupsChange}
                     />
                     {!overrideCtl && <ImportCsvButton onImport={() => setPickerSection(section)} />}
@@ -616,6 +617,7 @@ export const RomSections = memo(function RomSections({
                       failedFrames={failedFrames}
                       removable
                       override={overrideCtl}
+                      overrideLocked={locked}
                       onGroupsChange={onSectionGroupsChange}
                     />
                     {/* Group management + CSV import change the base structure —

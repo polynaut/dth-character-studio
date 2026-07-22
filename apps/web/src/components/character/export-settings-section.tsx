@@ -91,8 +91,7 @@ export function ExportSettingsSection({
             <Button
               variant="ghost"
               size="icon"
-              className="size-7 shrink-0"
-              title="Clear the export directory"
+              className="size-9 shrink-0 border border-input"
               aria-label="Clear the export directory"
               onClick={() =>
                 void persistPatch(

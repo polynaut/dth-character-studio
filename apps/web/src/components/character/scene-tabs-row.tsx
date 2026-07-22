@@ -1,4 +1,4 @@
-import { Tabs, TabsList, TabsTrigger, cn } from '@dth/ui'
+import { Tabs, TabsList, TabsTrigger } from '@dth/ui'
 
 import { SceneLabel } from '#/components/character/scene-label.tsx'
 
@@ -17,7 +17,6 @@ export function SceneTabsRow({
   sceneName,
   showSceneLabel,
   overrideCount,
-  labelHidden,
 }: {
   activeTab: string
   onTabChange: (tab: 'character' | 'products' | 'notes') => void
@@ -27,8 +26,6 @@ export function SceneTabsRow({
   showSceneLabel: boolean
   /** Number of override panels armed for the selected scene → the label's eyebrow. */
   overrideCount: number
-  /** Fade the label out (it's redundant while the Daz scene cards are on screen). */
-  labelHidden: boolean
 }) {
   return (
     <Tabs
@@ -46,10 +43,7 @@ export function SceneTabsRow({
             view without fighting the collapsing chrome's height. */}
         {showSceneLabel && (
           <span
-            className={cn(
-              'ml-auto -mt-[23px] tabs-label-drop bg-background transition-opacity duration-300 select-none',
-              labelHidden && 'pointer-events-none opacity-0',
-            )}
+            className="ml-auto -mt-[23px] tabs-label-drop bg-background select-none"
             onDoubleClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
             <SceneLabel scenePath={scenePath} name={sceneName} eyebrow={`Overrides ${overrideCount}`} />

@@ -57,6 +57,10 @@ export interface PoseTableMeta {
   figureNode: string
   /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
   override?: PoseOverrideMeta
+  /** Non-primary scene selected but its ROM override isn't armed yet: keep the
+   *  Override column visible but render every checkbox disabled, so arming the
+   *  override doesn't shift the grid. Ignored when {@link override} is set. */
+  overrideColumnDisabled?: boolean
 }
 
 /**
@@ -117,8 +121,26 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     id: 'override',
     header: 'Override',
     cell: ({ row, table }) => {
-      const override = (table.options.meta as PoseTableMeta).override
-      if (!override) return null
+      const meta = table.options.meta as PoseTableMeta
+      const override = meta.override
+      if (!override) {
+        // Non-primary scene, override not armed: the column stays so arming it
+        // doesn't shift the grid, but there's nothing to override yet — every
+        // box is disabled + unchecked until the page's Override toggle arms it.
+        if (!meta.overrideColumnDisabled) return null
+        return (
+          <span className="flex justify-center">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-primary"
+              checked={false}
+              disabled
+              readOnly
+              title="Arm this scene's ROM override to replace frames"
+            />
+          </span>
+        )
+      }
       const added = row.index >= override.baseCount
       return (
         <span className="flex justify-center">
@@ -148,8 +170,8 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <span className="pr-1 pl-2 text-sm text-muted-foreground tabular-nums">
             {meta.startFrame + row.index}
           </span>
-          {/* Override mode appends at the group end only — no in-between inserts. */}
-          {!meta.override && (
+          {/* Override / locked mode: the base frame order is fixed — no inserts. */}
+          {!meta.override && !meta.overrideColumnDisabled && (
             <InsertFrameMenu
               onBefore={() => meta.insertAt(row.index)}
               onAfter={() => meta.insertAt(row.index + 1)}
@@ -298,14 +320,18 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     header: '',
     cell: ({ row, table }) => {
       const meta = table.options.meta as PoseTableMeta
-      // An override never deletes base rows (the base frame layout is fixed) —
-      // only its own added frames.
-      if (meta.override && row.index < meta.override.baseCount) return null
+      // Read-only rows have no delete button: the locked base view (non-primary
+      // scene, override off) and an armed override's fixed base rows (only its
+      // own appended frames delete). Render an EMPTY bin-width spacer, NOT null —
+      // else the actions column collapses to 0 and the whole grid shifts sideways
+      // when the override (dis)arms. w-9 = the size-9 bin's width.
+      if (meta.overrideColumnDisabled || (meta.override && row.index < meta.override.baseCount))
+        return <span className="block w-9" />
       return (
         <Button
           variant="ghost"
           size="icon"
-          className="size-7"
+          className="size-9 shrink-0 border border-input"
           title="Remove pose"
           onClick={() => meta.remove(row.index)}
         >
@@ -357,8 +383,8 @@ export function SortablePoseRow({
         } ${isDragging ? 'relative z-10 bg-muted/50 opacity-70' : ''}`}
       >
         <td className="px-1 py-0.5">
-          {/* Frame order is fixed in override mode — no drag handle. */}
-          {!override && (
+          {/* Frame order is fixed in override / locked mode — no drag handle. */}
+          {!override && !meta.overrideColumnDisabled && (
             <button
               type="button"
               className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
@@ -457,12 +483,12 @@ export function SortablePoseRow({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6"
+                    className="size-9 shrink-0 border border-input"
                     title="Remove this morph"
                     disabled={pose.morphs.length <= 1}
                     onClick={() => meta.removeMorphAt(row.index, morphIndex)}
                   >
-                    <Trash2 className="size-3 text-destructive" />
+                    <Trash2 className="size-3.5 text-destructive" />
                   </Button>
                 </div>
               ))}
