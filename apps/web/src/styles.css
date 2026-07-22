@@ -392,13 +392,34 @@ a {
   }
 }
 
-/* Sticky-offset constants — pure CSS (no JS writing them per frame). The header's
-   collapsed height and the tab bar's height are stable, so the tab bar pins at
-   --editor-header-h and the ROM column-title tiers at
-   calc(--editor-header-h + --override-bar-h) off these fixed values. */
+/* Sticky-offset constants — pure CSS (no JS writing them per frame).
+   --override-bar-h is fixed (the bar height is stable). --editor-header-h is
+   ANIMATED on scroll to TRACK the collapsing header (317px → 163px, same range as
+   the header collapse), so the tab bar always pins right below the header's CURRENT
+   height — never sticking behind the still-taller header mid-collapse (that was the
+   sliced-off pill / "poke through"). Registered via @property so it can animate. */
+@property --editor-header-h {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 317px; /* expanded header — base for browsers w/o scroll timelines */
+}
 :root {
-  --editor-header-h: 163px;
   --override-bar-h: 66px;
+}
+@keyframes dth-header-h {
+  from {
+    --editor-header-h: 317px; /* expanded */
+  }
+  to {
+    --editor-header-h: 163px; /* collapsed */
+  }
+}
+@supports (animation-timeline: scroll()) {
+  :root {
+    animation: dth-header-h linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 100px 242px;
+  }
 }
 
 /* The Discard / Save actions hold the default Button size; only their bottom
