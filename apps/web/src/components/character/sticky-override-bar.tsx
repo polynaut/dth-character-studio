@@ -1,23 +1,18 @@
-import { useEffect, useRef } from 'react'
-
 import { SceneLabel } from '#/components/character/scene-label.tsx'
 
 import type { ReactNode } from 'react'
 
 /**
- * The sticky bar pinned right under the character header (`--editor-header-h`):
- * the editor's tab navigation on the LEFT, and — while an EXTRA (non-primary) Daz
- * scene is selected — the green "OVERRIDES <n> · <scene>" pill RIGHT-aligned, so
- * the scene whose overrides you're editing stays visible ALL the way down the
- * page (which is what lets every panel's own toggle stay compact).
+ * The sticky bar pinned right under the character header (`--editor-header-h`, a
+ * pure-CSS constant): the editor's tab navigation on the LEFT, and — while an
+ * EXTRA (non-primary) Daz scene is selected — the green "OVERRIDES <n> · <scene>"
+ * pill RIGHT-aligned, so the scene whose overrides you're editing stays visible
+ * ALL the way down the page (which is what lets every panel's toggle stay compact).
  *
- * It publishes its own height as `--override-bar-h` (a live ResizeObserver) so the
- * ROM sticky tiers can pin BELOW it — `top: calc(--editor-header-h +
- * --override-bar-h)` — instead of colliding with it at the same offset.
- *
- * Lives as a direct child of `<main>` (before the contained editor body) so its
- * sticky containing block spans the whole page; `-mx-8/px-8` full-bleeds it to the
- * padded main's edges so content scrolls cleanly under it.
+ * Sits ABOVE the header (z-20 > the header's z-10) so the pill, which is nudged up
+ * into the header's zone, isn't covered by it. Lives as a direct child of `<main>`
+ * (before the contained editor body) so its sticky containing block spans the whole
+ * page; `-mx-8/px-8` full-bleeds it to the padded main's edges.
  */
 export function StickyOverrideBar({
   scenePath,
@@ -35,29 +30,14 @@ export function StickyOverrideBar({
   /** The tab navigation, rendered on the bar's left. */
   children: ReactNode
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const root = document.documentElement
-    const update = () => root.style.setProperty('--override-bar-h', `${el.offsetHeight}px`)
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty('--override-bar-h')
-    }
-  }, [])
   return (
     <div
-      ref={ref}
-      className="sticky z-[9] -mx-8 flex items-center justify-between gap-4 border-b bg-background/95 px-8 py-2 pb-4 backdrop-blur-sm"
+      className="sticky z-20 -mx-8 flex items-center justify-between gap-4 border-b bg-background/95 px-8 py-2 pb-4 backdrop-blur-sm"
       style={{ top: 'var(--editor-header-h)' }}
     >
       {children}
       {/* The green scene pill, right-aligned: "OVERRIDES <n>" eyebrow over the
-          scene name (the eyebrow uppercases via SceneLabel). */}
+          scene name (the eyebrow uppercases via SceneLabel), nudged up to align. */}
       {show && (
         <SceneLabel
           scenePath={scenePath}
