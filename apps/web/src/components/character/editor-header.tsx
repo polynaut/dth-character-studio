@@ -205,7 +205,7 @@ export function EditorHeader({
               — the image is rasterized once and the box just changes its clip
               rect, which stays smooth even with the heavy form relaying out below
               the sticky header. */}
-          <div className="avatar-scroll-shrink h-[277px] w-[208px] overflow-hidden rounded-lg bg-neutral-500">
+          <div className="avatar-scroll-shrink h-[277px] w-[208px] overflow-hidden rounded-lg bg-[#4B4D57]">
             <Avatar
               image={character.image}
               name={character.name}
