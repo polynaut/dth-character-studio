@@ -39,8 +39,8 @@ import type {
 
 import { ArtDirectionEditor } from './rom/art-direction.tsx'
 import { JcmModsGrid } from './rom/jcm-mods-grid.tsx'
-import { EMPTY_MORPH_INDEX, FigureNodeContext, MorphIndexContext } from './rom/contexts.ts'
-import type { IndexedMorphEntry } from './rom/contexts.ts'
+import { FigureNodeContext } from './rom/contexts.ts'
+import { MorphIndexProvider } from './rom/morph-index-provider.tsx'
 import { ImportCsvButton } from './rom/import-csv-button.tsx'
 import { PRESET_DESCRIPTIONS, PresetAssetPicker } from './rom/preset-asset-picker.tsx'
 import { PoseGroupsEditor, flatGroup } from './rom/pose-groups-editor.tsx'
@@ -152,20 +152,6 @@ export const RomSections = memo(function RomSections({
     poses: Awaited<ReturnType<typeof importPosesFromCsv>>
   } | null>(null)
 
-  // Lowercase the autocomplete search keys ONCE per index (it can hold thousands
-  // of scanned morphs) — the per-keystroke filter in MorphNameCell then compares
-  // against these instead of re-lowercasing every entry on every character typed.
-  const indexedMorphs = useMemo<Array<IndexedMorphEntry>>(
-    () =>
-      morphIndex && morphIndex.length > 0
-        ? morphIndex.map((e) => ({
-            ...e,
-            nameLower: e.name.toLowerCase(),
-            labelLower: e.label.toLowerCase(),
-          }))
-        : EMPTY_MORPH_INDEX,
-    [morphIndex],
-  )
 
   // Scene-override mode: everything frame-related displays the MERGED sections
   // (replaced rows in place, added rows at group ends) — exactly what the
@@ -384,7 +370,7 @@ export const RomSections = memo(function RomSections({
   const figureNode = useMemo(() => genesisFigureNode(genesis, gender), [genesis, gender])
 
   return (
-    <MorphIndexContext.Provider value={indexedMorphs}>
+    <MorphIndexProvider morphIndex={morphIndex}>
     <FigureNodeContext.Provider value={figureNode}>
     <div className="space-y-2">
       {!presetFrames && (
@@ -698,6 +684,6 @@ export const RomSections = memo(function RomSections({
       )}
     </div>
     </FigureNodeContext.Provider>
-    </MorphIndexContext.Provider>
+    </MorphIndexProvider>
   )
 })

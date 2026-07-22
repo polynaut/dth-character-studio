@@ -49,11 +49,17 @@ export function MorphNameCell({
   placeholder,
   onCommit,
   onPick,
+  inputClassName,
+  disabled = false,
 }: {
   value: string
   placeholder?: string
   onCommit: (prop: string) => void
   onPick: (entry: MorphIndexEntry) => void
+  /** Override the input's look — defaults to the borderless table-cell style;
+   *  the preserve-morph list passes a bordered form-field class. */
+  inputClassName?: string
+  disabled?: boolean
 }) {
   const index = useContext(MorphIndexContext)
   const [draft, setDraft] = useState(value)
@@ -107,13 +113,14 @@ export function MorphNameCell({
   return (
     <div className="relative">
       <input
-        className={`${cellInputClass} w-full`}
+        className={inputClassName ?? `${cellInputClass} w-full`}
         role="combobox"
         aria-expanded={expanded}
         aria-controls={expanded ? listboxId : undefined}
         aria-activedescendant={expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined}
         aria-autocomplete="list"
         autoComplete="off"
+        disabled={disabled}
         value={draft}
         placeholder={placeholder}
         onChange={(e) => {
