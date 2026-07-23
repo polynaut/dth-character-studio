@@ -337,6 +337,8 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
             : []),
         ]
       : undefined,
+    // …and its base figure, so the create dialog auto-selects G9 from the scene.
+    sceneFigure: opts.demo ? { id: 'Genesis9', label: 'Genesis 9' } : null,
     dufFrames: {
       [DUF.base]: FRAMES.base,
       [DUF.mouth]: FRAMES.mouth,

@@ -16,5 +16,9 @@
       "conformTarget": "#Genesis9"
     }
   ],
+  "figure": {
+    "id": "Genesis9",
+    "label": "Genesis 9"
+  },
   "error": ""
 }

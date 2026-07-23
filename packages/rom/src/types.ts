@@ -626,6 +626,41 @@ export function genesisFigureNode(genesis: GenesisVersion, gender: Gender): stri
 }
 
 /**
+ * Inverse of {@link genesisFigureNode}: recover the generation — and, for the
+ * gendered generations, the gender — from a scene figure node's id/name
+ * (`Genesis9` → G9, `Genesis8_1Female` → G8.1 + female). Accepts a raw DSON ref
+ * too (a leading `#` and URL-encoding are stripped), so a wearable's
+ * `conformTarget` (`#Genesis8_1Male`) maps the same way. `gender` is `null` for
+ * the gender-neutral G9; the whole result is `null` when the name matches no
+ * known figure (e.g. a user-renamed figure) — the caller keeps its default.
+ */
+export function genesisFromFigureNode(
+  nodeName: string,
+): { genesis: GenesisVersion; gender: Gender | null } | null {
+  let name = nodeName.trim().replace(/^#/, '')
+  try {
+    name = decodeURIComponent(name)
+  } catch {
+    // Leave a malformed %-escape as-is rather than throwing on it.
+  }
+  const lower = name.toLowerCase()
+  // Longest figureBase first, so `Genesis8_1` wins over the `Genesis8` prefix.
+  const versions = (Object.keys(GENERATIONS) as Array<GenesisVersion>).sort(
+    (a, b) => GENERATIONS[b].figureBase.length - GENERATIONS[a].figureBase.length,
+  )
+  for (const genesis of versions) {
+    const d = GENERATIONS[genesis]
+    const base = d.figureBase.toLowerCase()
+    if (!lower.startsWith(base)) continue
+    const suffix = lower.slice(base.length) // '' | 'female' | 'male' | other
+    if (suffix !== '' && suffix !== 'female' && suffix !== 'male') continue
+    const gender: Gender | null = d.figureHasGender && suffix ? suffix : null
+    return { genesis, gender }
+  }
+  return null
+}
+
+/**
  * Which pre-made genitalia ROMs the GEN preset section includes: explicit
  * asset selection wins, otherwise the gender decides.
  */

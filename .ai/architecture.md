@@ -105,7 +105,7 @@ with more than one scene linked — the header's scene tag.
 Rust modules (`src/*.rs`): `lib.rs` (builder + `generate_handler!`), `windows.rs`
 (multi-window: label→`.dcsp` map, single-instance routing, async window
 creation), `install.rs`/`assets.rs`/`dedup.rs`/`uninstall.rs` (content install +
-dedup + guarded cleanup), `poses.rs` (`.duf` frame counting/wearables),
+dedup + guarded cleanup), `poses.rs` (`.duf` frame counting/wearables + base-figure detection),
 `housekeeping.rs`, `daz.rs` (process probe/script bridge), `drives.rs` (network
 drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview CSP
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`

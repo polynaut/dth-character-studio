@@ -37,6 +37,9 @@ export interface TauriMockSeed {
   /** Conformed items a scene's `.duf` reports (`scene_wearables`) — the groom
    *  picker's suggestions; a listed hair item resolves against these. */
   sceneWearables?: Array<{ id: string; label: string; conformTarget: string }>
+  /** The base figure node a scene reports (`scene_wearables`) — the create
+   *  dialog's Genesis/gender auto-select source. Default: null (none found). */
+  sceneFigure?: { id: string; label: string } | null
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -263,8 +266,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
         })
       case 'scene_wearables':
         // Groom suggestions: the seeded wearables (so a listed hair item resolves
-        // instead of flashing "not found"), else empty. Best-effort — never errors.
-        return { items: seed.sceneWearables ?? [], error: '' }
+        // instead of flashing "not found"), else empty. `figure` feeds the create
+        // dialog's Genesis auto-select. Best-effort — never errors.
+        return { items: seed.sceneWearables ?? [], figure: seed.sceneFigure ?? null, error: '' }
       case 'housekeeping_sweep':
         return { filesDeleted: 0, bytesFreed: 0 }
       case 'unc_for_path':
