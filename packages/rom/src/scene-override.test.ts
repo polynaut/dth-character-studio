@@ -622,4 +622,59 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(delta.extraFrames).toBeUndefined()
     expect(sceneOverrideBuildsRom(makeCharacter(), preserveOverride)).toBe(false)
   })
+
+  // ── per-scene CONFIG overrides (mode / preset / art direction / jcm) ──────────
+  // A female character whose GEN preset is ON → the base config includes the GP block.
+  const genFemale = (extra: Partial<Character> = {}): Character =>
+    makeCharacter({
+      gender: 'female',
+      extraScenes: [scene],
+      sections: {
+        ...defaultSections(),
+        GEN: { enabled: true, mode: 'preset', presetAssets: [], artDirection: [], groups: [], customAssetPath: '' },
+      },
+      ...extra,
+    })
+  const ownedGenConfig = (patch: Record<string, unknown>) => ({
+    section: 'GEN' as const,
+    config: { enabled: true, mode: 'preset' as const, presetAssets: [], artDirection: [], groups: [], customAssetPath: '', ...patch },
+  })
+
+  it('disabling a preset GEN for a scene now emits bIncludeGP:false (v22 sectionEnabled desync fix)', () => {
+    const off = makeOverride({ scenePath: scene, enabled: true, sectionEnabled: [{ section: 'GEN', enabled: false }] })
+    const files = generateAll(genFemale({ sceneOverrides: [off] }), {}, FRAMES)
+    expect(grabObject(files[0].content, 'dthCharacterConfig').bIncludeGP).toBe(true)
+    expect(grabObject(files[0].content, 'dthSceneOverrides')[sceneKey].bIncludeGP).toBe(false)
+  })
+
+  it('a per-scene preset-asset swap emits the changed include flags', () => {
+    const swap = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [ownedGenConfig({ presetAssets: ['DK9 - Dicktator.duf'] })] })
+    const delta = grabObject(generateAll(genFemale({ sceneOverrides: [swap] }), {}, FRAMES)[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.bIncludeGP).toBe(false)
+    expect(delta.bIncludeDK).toBe(true)
+  })
+
+  it('an art-direction-only scene override emits gpArtDirection but NO scene CSV', () => {
+    const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8 }] }
+    const ov = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [ownedGenConfig({ artDirection: [artB] })] })
+    const files = generateAll(genFemale({ sceneOverrides: [ov] }), {}, FRAMES)
+    // Art direction doesn't change the frame layout → no scene-suffixed CSV.
+    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.gpArtDirection).toBeDefined()
+    expect(delta.extraFrames).toBeUndefined()
+  })
+
+  it('a jcm-only scene override emits jcmMorphMods but NO scene CSV', () => {
+    const ov = makeOverride({
+      scenePath: scene,
+      enabled: false,
+      jcm: { enabled: true, mods: [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }] },
+    })
+    const files = generateAll(makeCharacter({ extraScenes: [scene], sceneOverrides: [ov] }), {}, FRAMES)
+    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.jcmMorphMods).toEqual([{ boneLabel: 'Left Thigh', axis: 'XRotate', positive: [], negative: [] }])
+    expect(delta.extraFrames).toBeUndefined()
+  })
 })
