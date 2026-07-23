@@ -8,6 +8,8 @@ export function NumberField({
   className,
   suffix,
   percent,
+  overridden,
+  title,
 }: {
   value: number
   onCommit: (value: number) => void
@@ -19,6 +21,10 @@ export function NumberField({
    *  value cells — the field shows `value * 100` and commits back `pct / 100`.
    *  Implies a "%" suffix. */
   percent?: boolean
+  /** Marks a per-scene override — a green border on the input. */
+  overridden?: boolean
+  /** Native tooltip on the input (e.g. "Can be overridden per Daz scene"). */
+  title?: string
 }) {
   // 0–1 ⇄ 0–100 for the percent mode; toFixed trims the *100 / /100 float noise.
   const format = useCallback(
@@ -33,6 +39,8 @@ export function NumberField({
   const input = (
     <Input
       className={className}
+      overridden={overridden}
+      title={title}
       value={draft}
       inputMode="decimal"
       onChange={(e) => setDraft(e.target.value)}

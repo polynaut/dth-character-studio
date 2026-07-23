@@ -2,10 +2,9 @@ import { memo, useCallback, useMemo } from 'react'
 
 import { InfoPopup } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
-import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
-import { applySceneOverride, characterSkinning, romTimeline } from '@dth/rom'
+import { applySceneOverride, characterSkinning, romTimeline, sceneOverrideSchema } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { PoseAssetCatalog } from '#/components/rom/preset-asset-picker.tsx'
@@ -27,11 +26,8 @@ export const RomEditorSection = memo(function RomEditorSection({
   revealPose,
   morphIndex,
   overrideEligible,
-  overrideActive,
-  selectedSceneName,
   scenePath,
   sceneOverride,
-  setOverrideEnabled,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -41,14 +37,12 @@ export const RomEditorSection = memo(function RomEditorSection({
   revealFrame: { frame: number; nonce: number } | null
   revealPose: { section: RomSection; poseId: string; nonce: number } | null
   morphIndex: Array<MorphIndexEntry>
-  /** Scene-override arming, from useSceneSelection. */
+  /** True while a non-primary Daz scene is selected — the grid then edits a
+   *  per-scene ROM override (arm-on-edit) instead of the base sections. */
   overrideEligible: boolean
-  overrideActive: boolean
-  selectedSceneName: string
-  /** The selected scene's path — renders the override toggle label's mini render. */
+  /** The selected scene's path — keys the per-scene override. */
   scenePath: string
   sceneOverride: SceneOverride | undefined
-  setOverrideEnabled: (enabled: boolean) => void
 }) {
   // Stable callback identities so the memoized RomSections doesn't re-render
   // on every ROM-editor render (deps change only when the data they map does).
@@ -61,20 +55,34 @@ export const RomEditorSection = memo(function RomEditorSection({
     [patch],
   )
   const onOverrideChange = useCallback(
-    (next: SceneOverride) =>
+    (next: SceneOverride) => {
+      // Derive the ROM gate from "has any override rows" — generation reads
+      // `enabled`, so this keeps the .dsa/CSV output identical without a toggle.
+      const hasRom = next.poses.length > 0 || next.additions.some((a) => a.poses.length > 0)
+      const withGate = { ...next, enabled: hasRom }
+      const exists = character.sceneOverrides.some((o) => o.scenePath === withGate.scenePath)
       patch({
-        sceneOverrides: character.sceneOverrides.map((o) =>
-          o.scenePath === next.scenePath ? next : o,
-        ),
-      }),
+        sceneOverrides: exists
+          ? character.sceneOverrides.map((o) =>
+              o.scenePath === withGate.scenePath ? withGate : o,
+            )
+          : [...character.sceneOverrides, withGate],
+      })
+    },
     [character.sceneOverrides, patch],
   )
+  // On a non-primary scene the grid is always in override mode: base rows edit into
+  // a per-scene override (arm-on-edit), the section structure stays the base ROM's.
+  // A fresh (unstored) override backs the display until the first edit persists one.
   const overrideProp = useMemo(
     () =>
-      overrideActive && sceneOverride
-        ? { data: sceneOverride, onChange: onOverrideChange }
+      overrideEligible
+        ? {
+            data: sceneOverride ?? sceneOverrideSchema.parse({ scenePath }),
+            onChange: onOverrideChange,
+          }
         : undefined,
-    [overrideActive, sceneOverride, onOverrideChange],
+    [overrideEligible, sceneOverride, scenePath, onOverrideChange],
   )
   // The timeline segments — a full walk over the (merged) sections, so compute
   // it only when its actual inputs change, not on every render.
@@ -82,14 +90,14 @@ export const RomEditorSection = memo(function RomEditorSection({
     () =>
       presetFrames
         ? romTimeline(
-            overrideActive && sceneOverride
-              ? applySceneOverride(character.sections, sceneOverride)
+            overrideProp
+              ? applySceneOverride(character.sections, overrideProp.data)
               : character.sections,
             character.gender,
             presetFrames,
           )
         : null,
-    [character.sections, character.gender, presetFrames, overrideActive, sceneOverride],
+    [character.sections, character.gender, presetFrames, overrideProp],
   )
 
   return (
@@ -103,31 +111,6 @@ export const RomEditorSection = memo(function RomEditorSection({
             <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#the-rom-definition" />
           </InfoPopup>
         </h2>
-        {/* Per-scene override toggle: armed only while an EXTRA scene is
-            selected in the Daz scenes cards (the primary scene IS the base
-            ROM). Toggling off keeps the stored override, just inactive. */}
-        <span className="ml-auto">
-          <PanelOverrideToggle
-            eligible={overrideEligible}
-            active={overrideActive}
-            scenePath={scenePath}
-            sceneName={selectedSceneName}
-            noun="ROM frames"
-            compact
-            onToggle={setOverrideEnabled}
-            info={
-              <>
-                Drive <strong>different morphs for another Daz scene</strong> of this character
-                (e.g. a second outfit): select one of the extra scenes in the Daz scenes cards,
-                enable the override, then check <strong>Override</strong> on the rows to replace
-                for that scene or add frames at the end of a group. Everything unchecked stays
-                exactly as the base ROM. On Save the scene's frames go into the character's{' '}
-                <em>one</em> Daz script (picked by the open scene at run time) and its own
-                PoseAsset CSV.
-              </>
-            }
-          />
-        </span>
       </div>
       {timelineSegments && (
         <div className="mb-4 rounded-lg border bg-card p-3">
@@ -148,7 +131,6 @@ export const RomEditorSection = memo(function RomEditorSection({
         jcmMorphMods={character.jcmMorphMods}
         onJcmMorphModsChange={onJcmMorphModsChange}
         override={overrideProp}
-        locked={overrideEligible && !overrideActive}
         onChange={onSectionsChange}
       />
     </section>

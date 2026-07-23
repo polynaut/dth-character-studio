@@ -15,7 +15,6 @@ import {
   SECTION_LABELS,
   SECTION_MODES,
   applySceneOverride,
-  clonePose,
   genesisFigureNode,
   newId,
   presetFrameCount,
@@ -179,17 +178,19 @@ export const RomSections = memo(function RomSections({
             additionsFor: (groupId) =>
               overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
               EMPTY_POSES,
-            onToggleRow: (pose, on) =>
+            // Arm-on-edit: editing a base row upserts its override copy (keyed by
+            // the base pose id); the display substitutes it in place. There's no
+            // explicit "check to override" — touching the row IS the override.
+            upsertPose: (pose) =>
               onOverrideChange({
                 ...overrideData,
-                poses: on
-                  ? [...overrideData.poses.filter((p) => p.id !== pose.id), clonePose(pose)]
-                  : overrideData.poses.filter((p) => p.id !== pose.id),
+                poses: [...overrideData.poses.filter((p) => p.id !== pose.id), pose],
               }),
-            onReplacePose: (pose) =>
+            // Reset a base row → drop its override copy so it falls back to the base.
+            resetPose: (poseId) =>
               onOverrideChange({
                 ...overrideData,
-                poses: overrideData.poses.map((p) => (p.id === pose.id ? pose : p)),
+                poses: overrideData.poses.filter((p) => p.id !== poseId),
               }),
             onAdditionsChange: (groupId, poses) => {
               const rest = overrideData.additions.filter((entry) => entry.groupId !== groupId)

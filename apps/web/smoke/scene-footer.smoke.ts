@@ -37,10 +37,9 @@ test('scene footer docks on scroll and switches scene', async ({ page }) => {
   await expect(footer.getByText('primary'), 'primary tag').toBeVisible()
   await page.screenshot({ path: OUT + '/footer-down.png' })
 
-  // Click the extra scene's pill → it becomes selected (per-scene override toggles appear).
-  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(0)
+  // Click the extra scene's pill → it becomes the selected (prominent, ringed) scene.
   await footer.getByText('Beach', { exact: false }).click()
-  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(1)
+  await expect(footer.locator('.ring-daz-green'), 'Beach now selected').toContainText('Beach')
 })
 
 // Same pattern in every case: a single-scene character still gets the bar on scroll —

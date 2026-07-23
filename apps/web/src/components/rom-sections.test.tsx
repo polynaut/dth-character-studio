@@ -399,35 +399,18 @@ describe('scene override mode', () => {
     )
   }
 
-  it('locks the base: no insert menus, no drag handles, unchecked rows read-only', () => {
-    let sectionsChanged = false
-    let latest: import('@dth/rom').SceneOverride | null = null
-    render(
-      <OverrideHarness
-        onOverrideChange={(next) => {
-          latest = next
-        }}
-        onSectionsChange={() => {
-          sectionsChanged = true
-        }}
-      />,
-    )
+  it('locks the structure: no insert menus, drag handles, or base-row actions', () => {
+    render(<OverrideHarness onOverrideChange={() => {}} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
     expect(screen.queryByLabelText('Insert a frame here')).toBeNull()
     expect(screen.queryByTitle('Drag to reorder')).toBeNull()
-    // A base row shows no delete button in override mode.
+    // A base row that hasn't been edited yet carries no action button — nothing to
+    // delete (the base layout is fixed) and nothing to reset.
     expect(screen.queryByTitle('Remove pose')).toBeNull()
-
-    // Editing the (unchecked) base row's name commits nowhere: the base is
-    // fixed and the row isn't part of the override.
-    const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
-    fireEvent.change(nameInput, { target: { value: 'Hacked' } })
-    fireEvent.blur(nameInput)
-    expect(sectionsChanged).toBe(false)
-    expect(latest).toBeNull()
+    expect(screen.queryByTitle('Reset this frame to the base ROM')).toBeNull()
   })
 
-  it('checking Override seeds a copy of the base row; edits then hit the override only', () => {
+  it('editing a base row arms it as an override; reset drops it', () => {
     let sectionsChanged = false
     let latest: import('@dth/rom').SceneOverride | null = null
     render(
@@ -441,27 +424,18 @@ describe('scene override mode', () => {
       />,
     )
     fireEvent.click(screen.getByText('Full Body'))
-    fireEvent.click(
-      screen.getByTitle(
-        'Override this frame for the selected scene — uncheck to fall back to the base row',
-      ),
-    )
-    expect(latest!.poses).toHaveLength(1)
-    expect(latest!.poses[0]).toMatchObject({ id: 'p1', name: 'SLGlutes SS' })
 
-    // The now-overridden row edits the override copy — the base stays fixed.
+    // Editing the base row's name arms it: an override copy (keyed by the base pose
+    // id) appears, the base stays fixed.
     const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
     fireEvent.change(nameInput, { target: { value: 'BeachGlutes' } })
     fireEvent.blur(nameInput)
-    expect(latest!.poses[0].name).toBe('BeachGlutes')
+    expect(latest!.poses).toHaveLength(1)
+    expect(latest!.poses[0]).toMatchObject({ id: 'p1', name: 'BeachGlutes' })
     expect(sectionsChanged).toBe(false)
 
-    // Unchecking reverts to the base row (the override entry is dropped).
-    fireEvent.click(
-      screen.getByTitle(
-        'Override this frame for the selected scene — uncheck to fall back to the base row',
-      ),
-    )
+    // The row now offers a reset → clicking it drops the override entry.
+    fireEvent.click(screen.getByTitle('Reset this frame to the base ROM'))
     expect(latest!.poses).toHaveLength(0)
   })
 
@@ -474,11 +448,10 @@ describe('scene override mode', () => {
       expect.objectContaining({ groupId: 'g1', poses: [expect.objectContaining({ name: '' })] }),
     ])
 
-    // Added frame: frame number continues after the base row (328 → 329), its
-    // checkbox is locked checked, and it is the only removable row.
+    // Added frame: frame number continues after the base row (328 → 329), and it's
+    // the removable override frame.
     expect(screen.getByText('329')).toBeTruthy()
-    expect(screen.getByTitle('Added frame — always part of the override')).toBeTruthy()
-    fireEvent.click(screen.getByTitle('Remove pose'))
+    fireEvent.click(screen.getByTitle('Remove added frame'))
     expect(latest!.additions).toEqual([])
   })
 })
