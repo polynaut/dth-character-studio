@@ -110,7 +110,8 @@ export function PreserveFields({
                         placeholder="body_ctrl_BreastsUp-Down"
                         inputClassName={cn(
                           MORPH_FIELD_CLASS,
-                          isOv && 'border-daz-green focus:border-daz-green',
+                          isOv &&
+                            'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
                         )}
                         onCommit={(name) => set({ ...item, name })}
                         // Preserve morphs store only a name (no node), so a pick just
