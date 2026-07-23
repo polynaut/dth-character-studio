@@ -3,23 +3,25 @@ import { romTimelineLength } from '@dth/rom'
 import type { RomSection, TimelineSegment } from '@dth/rom'
 
 // Preset blocks get fixed hues; each custom section a stable hue of its own, so
-// adjacent blocks stay distinguishable at a glance.
+// adjacent blocks stay distinguishable at a glance. Soft pastel (`-300`) shades
+// sit calmer against the dark UI than saturated fills — paired with dark text
+// below, since white would wash out on these lighter blocks.
 const KIND_BG: Record<TimelineSegment['kind'], string> = {
-  base: 'bg-neutral-500',
-  dk: 'bg-fuchsia-700',
-  gp: 'bg-amber-600',
-  phys: 'bg-sky-700',
-  custom: 'bg-primary',
+  base: 'bg-neutral-300',
+  dk: 'bg-fuchsia-300',
+  gp: 'bg-amber-300',
+  phys: 'bg-sky-300',
+  custom: 'bg-orange-300',
 }
 const SECTION_BG: Record<RomSection, string> = {
-  RET: 'bg-slate-600',
-  JCM: 'bg-indigo-600',
-  FAC: 'bg-teal-600',
-  EXP: 'bg-emerald-600',
-  GEN: 'bg-rose-600',
-  PHY: 'bg-cyan-700',
-  FBM: 'bg-violet-600',
-  MISC: 'bg-orange-600',
+  RET: 'bg-slate-300',
+  JCM: 'bg-indigo-300',
+  FAC: 'bg-teal-300',
+  EXP: 'bg-emerald-300',
+  GEN: 'bg-rose-300',
+  PHY: 'bg-cyan-300',
+  FBM: 'bg-violet-300',
+  MISC: 'bg-orange-300',
 }
 
 function colorFor(seg: TimelineSegment): string {
@@ -49,7 +51,7 @@ export function RomTimeline({ segments }: { segments: Array<TimelineSegment> }) 
         {segments.map((seg) => (
           <div
             key={`${seg.kind}-${seg.start}`}
-            className={`flex items-center justify-center overflow-hidden border-r border-black/20 px-1 text-[10px] font-medium text-white/95 last:border-r-0 ${colorFor(seg)}`}
+            className={`flex items-center justify-center overflow-hidden border-r border-black/10 px-1 text-[10px] font-medium text-neutral-900/85 last:border-r-0 ${colorFor(seg)}`}
             style={{ width: `${(seg.count / total) * 100}%`, minWidth: '3px' }}
             title={`${seg.label} — frames ${seg.start}–${seg.end} (${seg.count})`}
           >
