@@ -1,5 +1,5 @@
 import { ConfigError } from '#/components/config-error.tsx'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
+import { cn, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 import { genAssetGender } from '@dth/rom'
 
 import type {
@@ -31,6 +31,7 @@ const AUTO_ASSET = '__auto__'
 export function PresetAssetPicker({
   section,
   config,
+  baseConfig,
   genesis,
   gender,
   skinning,
@@ -40,6 +41,9 @@ export function PresetAssetPicker({
 }: {
   section: RomSection
   config: RomSectionConfig
+  /** The BASE (primary-scene) config — passed on a non-primary scene so the picker
+   *  greens when this scene's asset selection differs from the primary. */
+  baseConfig?: RomSectionConfig
   genesis: GenesisVersion
   gender: Gender
   skinning: 'linear' | 'dqs'
@@ -47,6 +51,10 @@ export function PresetAssetPicker({
   catalog: PoseAssetCatalog
   onChange: (presetAssets: Array<string>) => void
 }) {
+  // Green the control(s) when this scene overrides the base asset selection.
+  const presetOverridden =
+    baseConfig !== undefined &&
+    JSON.stringify(config.presetAssets) !== JSON.stringify(baseConfig.presetAssets)
   const available = catalog.assets.filter(
     (asset) =>
       asset.section === section &&
@@ -147,7 +155,7 @@ export function PresetAssetPicker({
             <label key={asset.relPath} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                className="size-4 accent-primary"
+                className={cn('size-4', presetOverridden ? 'accent-daz-green' : 'accent-primary')}
                 checked={checked}
                 onChange={(e) =>
                   onChange(
@@ -183,7 +191,10 @@ export function PresetAssetPicker({
           }
           onValueChange={(value) => onChange(value && value !== AUTO_ASSET ? [value] : [])}
         >
-          <SelectTrigger size="sm" className="w-fit max-w-[20rem]">
+          <SelectTrigger
+            size="sm"
+            className={cn('w-fit max-w-[20rem]', presetOverridden && 'border-daz-green')}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

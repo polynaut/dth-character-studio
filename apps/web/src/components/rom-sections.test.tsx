@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 afterEach(cleanup)
 
 import { RomSections } from './rom-sections'
-import { defaultSections } from '@dth/rom'
+import { defaultSections, sceneOverrideSchema } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { RomSections as RomSectionsModel } from '@dth/rom'
@@ -595,6 +595,48 @@ describe('scene override mode', () => {
     const header = screen.getByText('Full Body').closest('div') as HTMLElement
     fireEvent.click(within(header).getByRole('switch'))
     expect(sectionsChanged).toBe(false)
+  })
+
+  it('editing a section CONFIG field (JCM custom path) owns the section for the scene', () => {
+    // A JCM section in custom mode → an editable base-ROM path Input. On a non-primary
+    // scene editing it escalates the section to an owned config (per-scene), stores the
+    // path there, and shows the green section reset — WITHOUT touching the base.
+    let latest: import('@dth/rom').SceneOverride | null = null
+    let sectionsChanged = false
+    function JcmHarness() {
+      const [override, setOverride] = useState(
+        sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf', enabled: true }),
+      )
+      const sections = defaultSections()
+      sections.JCM = { ...sections.JCM, enabled: true, mode: 'custom', customAssetPath: 'C:/base.duf' }
+      return (
+        <RomSections
+          sections={sections}
+          genesis="G9"
+          gender="female"
+          skinning="dqs"
+          catalog={{ folder: '', assets: [], error: null }}
+          presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+          override={{
+            data: override,
+            onChange: (next) => {
+              setOverride(next)
+              latest = next
+            },
+          }}
+          onChange={() => (sectionsChanged = true)}
+        />
+      )
+    }
+    render(<JcmHarness />)
+    fireEvent.click(screen.getByText('Joint Corrective'))
+    fireEvent.change(screen.getByDisplayValue('C:/base.duf'), { target: { value: 'C:/beach.duf' } })
+
+    expect(latest!.sectionOverrides).toHaveLength(1)
+    expect(latest!.sectionOverrides[0].section).toBe('JCM')
+    expect(latest!.sectionOverrides[0].config.customAssetPath).toBe('C:/beach.duf')
+    expect(sectionsChanged).toBe(false)
+    expect(screen.getByTitle("Reset this section to the primary scene's ROM")).toBeTruthy()
   })
 })
 

@@ -77,23 +77,35 @@ offsets byte-identically — if a generation change moves them, the change is wr
   `romPoseEqual` from `@dth/rom` and drops instead of storing) — mirroring the identity/
   preserve writers (`use-scene-selection.ts`), which likewise derive `enabled` from
   "differs from base". Appended rows live in `additions` (auto-track later base edits).
-  A **structural** edit the sparse layer can't hold — reorder, insert-between, delete a
-  base frame, or add a group — ESCALATES the whole section: `onSectionGroupsChange`
-  snapshots the merged section into `sceneOverride.sectionOverrides` and drops that
-  section's sparse entries; `applySceneOverride` then uses those groups verbatim. The
-  section title carries an `OverrideMark` whose reset drops the whole-section override.
-  A section's **enable/disable** is overridable per scene too (`sceneOverride.sectionEnabled`,
-  a sparse `{section, enabled}[]`): the section Switch is live on a non-primary scene, and
-  toggling it to a value that differs from the base stores an entry (toggling back drops it).
-  `applySceneOverride` flips the base section's `enabled` per entry (mode/groups untouched —
-  a disabled section just contributes no frames, an enabled one uses the base config), so a
-  preset section can be dropped for an outfit without clearing its rows. It counts toward the
-  same section-title `OverrideMark` (green when the merged enable differs), and the section
-  reset clears it alongside the row layers.
-  `onOverrideChange` (`rom-editor-section.tsx`) derives the ROM gate from "has any
-  override rows OR a sectionOverride OR a sectionEnabled entry", so a fully-reverted scene
-  generates no `dthSceneOverrides` delta and no per-scene CSV. NB the grid value is a Daz
-  **percentage** (`valueToPct`): base `1` shows as `100`, so a revert types `100`.
+  ANY other section edit the sparse layer can't hold — a **structural** row change
+  (reorder / insert-between / delete a frame / add a group) OR a **config** change (mode,
+  preset asset, GEN art direction, custom JCM path) — ESCALATES the section: the ONE
+  writer `patchSectionForScene` (`rom-sections.tsx`) snapshots the merged section config +
+  applies the patch into `sceneOverride.sectionOverrides` as `{section, config:
+  RomSectionConfig}` (the scene OWNS the whole config, dropping its sparse entries);
+  `applySceneOverride` uses that config verbatim. Every config control (mode Select, preset
+  picker, art-direction editor, JCM path, Add group / Import) is live on a non-primary scene
+  and routes through it — so a scene can override anything in the ROM. Per-field green comes
+  from a merged-vs-base diff (art-direction frames, preset assets, custom path); the section
+  title's `OverrideMark` reset drops all of the section's override layers.
+  A section's **enable/disable** stays a lightweight overlay (`sceneOverride.sectionEnabled`,
+  `{section, enabled}[]`): `applySceneOverride` flips `enabled` on top of whichever config
+  (base or owned) applies, so a plain toggle doesn't "own"/freeze the section. The **JCM
+  "Modify frames"** grid is overridable too (`sceneOverride.jcm = {enabled, mods}`, a full
+  replacement like `preserve`). `onOverrideChange` (`rom-editor-section.tsx`) derives the ROM
+  gate from "has any rows / sectionOverride / sectionEnabled / jcm"; `sceneOverrideBuildsRom`
+  is now STRUCTURAL (merged-vs-base frame-layout signature), so an art-direction- or jcm-only
+  override rides the base CSV. NB the grid value is a Daz **percentage** (`valueToPct`).
+
+  **Generation** (`dsa.ts`): one `buildCharacterConfig(character, romPaths, frames, …)` builds
+  the full `dthCharacterConfig`; `buildSceneConfigMap` emits each scene's delta as the
+  whitelist-DIFF of `buildCharacterConfig(mergeSceneOverride(…), sceneRomPaths[key],
+  sceneFrames[key])` vs the base — so per-scene mode/preset/art-direction/enable all reach the
+  runtime automatically (identity/preserve/jcm stay explicit for delete-all safety). The host
+  (`api/generate.ts`) resolves per-scene `romPaths`/`presetFrames` over each merged override
+  (the catalog lookup + native `.duf` measurement can't run in the pure core) and threads the
+  maps in. The runtime scene-lookup (`sceneConfigLookupSnippet`) is unchanged: it swaps the
+  open scene's delta onto the base config by scene name, falling back to primary.
 
 ## The DTH runtime is studio-owned
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 
-import { Button, InfoPopup } from '@dth/ui'
+import { Button, cn, InfoPopup } from '@dth/ui'
 import {
   ART_DIRECTION_CATALOG,
   genRomIncludes,
@@ -29,12 +29,16 @@ import { MorphNameCell } from './morph-name-cell.tsx'
  */
 export function ArtDirectionEditor({
   config,
+  baseConfig,
   sections,
   gender,
   presetFrames,
   onChange,
 }: {
   config: RomSectionConfig
+  /** The BASE (primary-scene) config — passed on a non-primary scene so each frame
+   *  whose morphs differ from the primary greens (a per-scene art-direction override). */
+  baseConfig?: RomSectionConfig
   sections: RomSectionsModel
   gender: Gender
   presetFrames: PresetFrames | null
@@ -55,6 +59,16 @@ export function ArtDirectionEditor({
         morphs: [],
       }
     )
+  }
+
+  // A frame is a per-scene override when its morph content differs from the base's
+  // (ids ignored — they're editing handles). Only meaningful on a non-primary scene.
+  const morphKey = (ms: Array<Morph>) =>
+    JSON.stringify(ms.map((m) => [m.node, m.prop, m.value, m.base ?? null, m.autoBase ?? false]))
+  function frameOverridden(rom: 'gp' | 'dk', frame: number, entry: ArtDirectionFrame): boolean {
+    if (baseConfig === undefined) return false
+    const base = baseConfig.artDirection.find((e) => e.rom === rom && e.frame === frame)
+    return morphKey(entry.morphs) !== morphKey(base?.morphs ?? [])
   }
 
   function commit(entry: ArtDirectionFrame) {
@@ -90,6 +104,7 @@ export function ArtDirectionEditor({
                 catalogFrame={catalogFrame}
                 absoluteFrame={romStart === null ? null : romStart + catalogFrame.frame}
                 entry={entry}
+                overridden={frameOverridden(rom, catalogFrame.frame, entry)}
                 onCommit={commit}
               />
             )
@@ -105,12 +120,15 @@ function ArtDirectionFrameRow({
   catalogFrame,
   absoluteFrame,
   entry,
+  overridden,
   onCommit,
 }: {
   catalogFrame: { frame: number; name: string; required: boolean; note?: string }
   /** Absolute timeline frame, or null when the preset lengths couldn't be measured. */
   absoluteFrame: number | null
   entry: ArtDirectionFrame
+  /** This frame's morphs differ from the primary scene's — a per-scene override. */
+  overridden: boolean
   onCommit: (entry: ArtDirectionFrame) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -124,7 +142,7 @@ function ArtDirectionFrameRow({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className={cn('rounded-md border', overridden && 'border-daz-green')}>
       {/* A real accordion button (was a click-only div) — focusable and
           Enter/Space-operable, state announced via aria-expanded. Every child is
           a plain span, so there's no nested-interactive concern here. */}
@@ -142,7 +160,7 @@ function ArtDirectionFrameRow({
         <span className="w-12 text-right font-mono text-xs text-muted-foreground tabular-nums">
           {absoluteFrame ?? '—'}
         </span>
-        <span className="text-sm">{catalogFrame.name}</span>
+        <span className={cn('text-sm', overridden && 'text-daz-green')}>{catalogFrame.name}</span>
         {catalogFrame.required && !hasMorphs && (
           <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
             required — empty in the preset ROM
