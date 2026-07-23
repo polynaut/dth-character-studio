@@ -19,6 +19,12 @@ covers the network in depth; this page is just the hand-off.
 In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
+> [!NOTE]
+> A scene with [per-scene ROM overrides](./advanced.md#rom-overrides) has its own
+> **`<Name>_<Scene>_pose_asset.csv`** — point the PoseAsset import at the CSV for
+> the scene you exported (identity- or preserve-only overrides reuse the default
+> CSV).
+
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
   <img width="900" alt="houdini, daztohue hda poseasset import" src="ADD_IMAGE_URL" />

@@ -4,11 +4,12 @@
 
 > [!NOTE]
 > Two optional power features live here: **multiple Daz scenes** on one character —
-> outfits and hair variants, per-scene hair lists, and per-scene ROM overrides —
-> and the **Modify JCM frames** grid for morphs riding along the shipped joint
-> correctives. (The character page's collapsed **Advanced options** panel — storage
-> location, preserve morphs / node transforms — is covered in
-> [Your first character](./04-first-character.md#advanced-options--storage-location-preserve-morphs---node-transforms).)
+> outfits and hair variants, per-scene hair lists, and **per-scene overrides** (edit
+> an identity dial, a preserve morph or a ROM frame on an outfit scene to override
+> just that scene) — and the **Modify JCM frames** grid for morphs riding along the
+> shipped joint correctives. (The character page's **Advanced options** section —
+> preserve morphs / node transforms — is introduced in
+> [Your first character](./04-first-character.md#advanced-options--preserve-morphs--node-transforms).)
 
 &nbsp;
 
@@ -35,8 +36,9 @@ unlinked; extras can. Every card has **Open in Daz**.
 
 Clicking a card **selects** that scene, and the per-scene features follow the
 selection: the **hair items** list below the cards always edits the *selected*
-scene's list, and the ROM's **Override** toggle arms for the selected extra
-scene. With more than one scene linked, the header **tags the selected scene
+scene's list, and editing an overridable field — a ROM frame, an identity dial or
+a preserve item — overrides it for the selected scene. With more than one scene
+linked, the header **tags the selected scene
 right next to the character name** — it stays visible in the collapsed sticky
 header too, so you always know which scene you're working on. Clicking the tag
 scrolls back up to the scene cards to switch.
@@ -77,65 +79,74 @@ Characters with hair items also get an `Export_Hair_…` script — it exports t
 `_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom itself,
 worn, with everything else hidden).
 
-### Per-scene ROM overrides
+### Per-scene overrides — edit to override
+
+Beyond hair, a few fields can differ **per scene**: the **identity dials** (FACS
+detail strength, Flexion strength, Set UE5 tear UV), the **Advanced options**
+preserve morphs & node transforms, and the **ROM** grid itself. There's no
+override switch — on a non-primary scene you just **edit the field, and a value
+that differs from the primary becomes that scene's override.**
+
+Each overridable field carries a small **cube glyph** in its label. A plain cube
+means "can be overridden on this scene"; once you override it the cube grows a
+**green dot** and the field turns green (a toggle flipped *off* as an override
+keeps a light-green knob). Hover or keyboard-focus the cube for a **reset** button
+that drops the field back to the primary scene's value. On the primary scene there
+is nothing to override, so the cubes stay dotless.
+
+#### ROM overrides
 
 A second outfit sometimes needs **different morphs on a few frames** — a body
 shape that reads better in that clothing, other values, plus **a few extra
-frames** for morphs only that outfit's assets have (a skirt flow, a hood
-adjust). A **scene override** does exactly that without touching the base ROM:
-most frames stay as defined, a few rows are replaced for that scene, and new
-frames append at the end.
+frames** for morphs only that outfit's assets have (a skirt flow, a hood adjust).
 
-Select an **extra** scene in the cards (the primary *is* the base ROM), then
-flip the **Override** toggle at the top right of the ROM section:
+Select the extra scene (the primary *is* the base ROM). Its ROM grid is **always
+in override mode** — the base rows stay fully editable, and editing one arms it as
+this scene's override:
 
-<p align="center">
-  <img width="900" alt="the ROM header with the Override toggle enabled for the selected scene" src="screenshots/rom-override-toggle.png" />
-  <br>
-  <sub><em>Override enabled for the selected outfit scene — the base setup locks while the override is edited.</em></sub>
-</p>
-
-The grids switch into override mode: every base row turns **slightly
-transparent and read-only**, and a leading **Override** checkbox appears.
-
-- **Check a row** to replace it for this scene — it comes back at full strength,
-  seeded with the base row's content, and everything on it is editable: name,
-  morphs, values, bone scale, combined morphs. **Uncheck** to fall back to the
-  base row again.
+- **Edit a base row** — its value, name, morphs, bone scale, combined morphs — to
+  replace it for this scene. The row turns **green** and gains a **reset** button
+  (the green ↺) that drops it back to the base ROM frame. Rows you don't touch stay
+  exactly as the base ROM.
 - **Add morph** appends an override frame **at the end of the group** — added
   frames are always fully visible and are the only rows an override can delete.
   Inserting between existing frames, reordering, and all structural edits
-  (sections, modes, presets, groups) stay locked: the base frame layout is
-  fixed, so every untouched frame keeps its exact number.
+  (sections, modes, presets, groups) stay locked: the base frame layout is fixed,
+  so every untouched frame keeps its exact number.
 
 <p align="center">
-  <img width="900" alt="the override grid — one checked (replaced) row at full strength between dimmed base rows" src="screenshots/rom-override-grid.png" />
+  <img width="900" alt="a non-primary scene's ROM grid — one green (overridden) row with a reset button between untouched base rows" src="screenshots/rom-override-grid.png" />
   <br>
-  <sub><em>Override mode: the checked row is replaced for this scene; the transparent rows stay exactly as the base ROM.</em></sub>
+  <sub><em>A non-primary scene's ROM grid: the green row is overridden for this scene (↺ resets it); the rows around it stay exactly as the base ROM.</em></sub>
 </p>
 
-On **Save**, every scene with an active override gets its **own artifact pair**
-next to the defaults, from the merged result:
+#### What Save generates
 
-- **`ROM_<Name>_<Genesis>_<Scene>.dsa`** — the scene's apply-script, installed in
-  the same scripts folder. Run it **with that scene open in Daz**; the default
-  `ROM_…` script remains the one for the primary scene.
-- **`<Name>_<Scene>_pose_asset.csv`** — the scene's PoseAsset CSV, next to the
-  default one in the character folder. With split export on, a scene
-  `Export_…` variant delivers it.
+On Save it still comes out as **one** ROM apply-script — there are no per-scene
+scripts:
+
+- **`ROM_<Name>_<Genesis>.dsa`** embeds every scene's overrides and, at run time,
+  applies the delta for whichever scene is **open in Daz** — the identity dials and
+  the ROM frame changes alike. One script serves the primary and every outfit scene.
+- A scene with **ROM** overrides also gets its own
+  **`<Name>_<Scene>_pose_asset.csv`** next to the default one — Houdini has no
+  runtime to pick frames, so the export block writes the CSV matching the open
+  scene. Identity- or preserve-only overrides need no extra file; they're config the
+  one script applies.
 
 &nbsp;
 
 > [!NOTE]
-> Overrides are validated on Save exactly like the base ROM — an added frame
-> still needs a name and a morph, and a blocked save jumps straight to the
-> offending row. Frame numbers shown in override mode are the merged ones: what
-> the scene's own script and CSV actually generate.
+> Overrides are validated on Save exactly like the base ROM — an added frame still
+> needs a name and a morph, and a blocked save jumps straight to the offending row.
+> Frame numbers shown on a non-primary scene are the merged ones: what that scene's
+> CSV actually generates.
 
-Toggling an override **off** keeps its stored rows (re-enable it and they're
-back) but stops generating — the scene's artifacts are cleaned up on the next
-save. Unlinking the scene behaves the same way, so re-linking it later restores
-the work.
+An override isn't a mode you switch off — it exists exactly as long as a field
+differs from the primary. **Reset every overridden field** (and remove any added
+frames) and the scene falls back to the base; its extra CSV is cleaned up on the
+next save. Unlinking the scene does the same, so re-linking it later restores the
+work.
 
 &nbsp;
 
