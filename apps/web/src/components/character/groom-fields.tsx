@@ -4,17 +4,18 @@ import { Sparkles } from 'lucide-react'
 import { Button, InfoPopup, MultiSelect, useRefetchOnFocus } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
+import {
+  BODY_FOLLOWER,
+  HAIRISH,
+  groomBadge,
+  groomPillClass,
+} from '#/components/character/groom-kind.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
 
 import type { Character } from '@dth/rom'
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
-
-/** Hair-ish labels float to the top of the suggestions. */
-const HAIRISH = /hair|brow|lash|beard|wig|cap\b|pony|braid|bang|bun\b|fur/i
-/** Body followers + gen assets are never groom candidates. */
-const BODY_FOLLOWER = /^genesis ?9|goldenpalace|dicktator/i
 
 /** Decode a DSON ref ("#Black%20Tie%20Cap_1529") to the node id it points at. */
 function refKey(ref: string): string {
@@ -236,6 +237,8 @@ export function GroomFields({
               placeholder="Pick the hair items of this scene…"
               allowCustom
               disabled={groomLocked}
+              optionBadge={groomBadge}
+              pillClassName={groomPillClass}
               pillWarning={(label) =>
                 scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
               }
