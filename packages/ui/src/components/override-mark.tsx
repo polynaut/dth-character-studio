@@ -85,7 +85,7 @@ export function OverrideMark({
           stronger ring is keyboard-only (focus-visible) so a mouse hover stays quiet. */}
       <span
         aria-hidden
-        className="absolute -inset-1 flex items-center justify-center rounded-md bg-daz-green/15 text-daz-green opacity-0 ring-1 ring-inset ring-daz-green/30 transition-opacity group-hover/mark:opacity-100 group-hover/mark:bg-daz-green/25 group-focus/mark:opacity-100 group-focus-visible/mark:ring-2 group-focus-visible/mark:ring-daz-green/60"
+        className="absolute -inset-1 flex items-center justify-center rounded-md bg-daz-green/15 text-white opacity-0 ring-1 ring-inset ring-daz-green/30 transition-opacity group-hover/mark:opacity-100 group-hover/mark:bg-daz-green/25 group-focus/mark:opacity-100 group-focus-visible/mark:ring-2 group-focus-visible/mark:ring-daz-green/60"
       >
         <RotateCcw className="size-3.5" />
       </span>
