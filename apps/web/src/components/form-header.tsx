@@ -1,6 +1,7 @@
+import { useRef } from 'react'
 import { ArrowLeft, Save, Undo2 } from 'lucide-react'
 
-import { Button } from '@dth/ui'
+import { Button, useStickyHeaderInset } from '@dth/ui'
 
 /**
  * Sticky page header for the form pages (Settings / Tools) — the same trick as
@@ -24,12 +25,19 @@ export function FormHeader({
   onDiscard: () => void
   onSave: () => void
 }) {
+  // Publish this sticky header's live height so InfoPopups on the form pages keep
+  // clear of it, the same as the character editor's header (see the hook).
+  const headerRef = useRef<HTMLElement>(null)
+  useStickyHeaderInset(headerRef)
   return (
     // -mx-8/px-8 span the page's p-8 gutter so scrolling content can't peek
     // past the header's background at the edges. Liquid-glass background (same
     // as the character header): content frosts through a translucent fill +
     // backdrop blur, with an opaque fallback where backdrop-filter is absent.
-    <header className="sticky top-0 z-10 -mx-8 mb-8 bg-background px-8 pt-3 pb-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-10 -mx-8 mb-8 bg-background px-8 pt-3 pb-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
+    >
       <button
         type="button"
         onClick={onBack}

@@ -412,7 +412,7 @@ export const RomSections = memo(function RomSections({
           // title push the previous one out (iOS-contacts style) instead of stacking.
           <div key={section} className={`rounded-lg border ${effectiveEnabled ? '' : 'opacity-60'}`}>
             {/* Sticky section title: pins right below the character page's collapsed
-                sticky header via `--editor-header-h` (published live by EditorHeader,
+                sticky header via `--sticky-header-h` (published live by EditorHeader,
                 since the header's collapsed height is dynamic — a hardcoded px drifts
                 as the design changes). z below its z-10. Solid bg so rows can't show
                 through; rounded-t so the bg doesn't square out the card's top corners
@@ -422,7 +422,7 @@ export const RomSections = memo(function RomSections({
                 has overflow. */}
             <div
               className="sticky z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
-              style={{ top: 'calc(var(--editor-header-h, 128px) + var(--override-bar-h, 0px))' }}
+              style={{ top: 'calc(var(--sticky-header-h, 128px) + var(--override-bar-h, 0px))' }}
             >
               {/* A real accordion BUTTON (was a click-only div): the core editing
                   surface must be focusable and Enter/Space-operable, and announce
@@ -461,41 +461,44 @@ export const RomSections = memo(function RomSections({
                     : sectionSummary(displaySections[section])}
                 </span>
               </button>
-              <span>
-                <Switch
-                  checked={effectiveEnabled}
-                  disabled={tiedToJcm || !!overrideCtl || locked}
-                  title={
-                    overrideCtl || locked
-                      ? 'Sections are part of the base setup — locked for a per-scene override'
-                      : tiedToJcm
-                        ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
-                        : effectiveEnabled
-                          ? 'Disable this section'
-                          : 'Enable this section'
+              {/* A direct flex child of the items-center row so it centers on the
+                  summary text's line. (Wrapped in a bare <span> it blockified as a
+                  flex item, and the switch rode that span's text baseline — a hair
+                  high.) It stays a SIBLING of the button, never nested — a control
+                  inside a button is invalid HTML. */}
+              <Switch
+                checked={effectiveEnabled}
+                disabled={tiedToJcm || !!overrideCtl || locked}
+                title={
+                  overrideCtl || locked
+                    ? 'Sections are part of the base setup — locked for a per-scene override'
+                    : tiedToJcm
+                      ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
+                      : effectiveEnabled
+                        ? 'Disable this section'
+                        : 'Enable this section'
+                }
+                onCheckedChange={(enabled) => {
+                  // Enabling picks the sensible mode: no preset asset for this
+                  // generation → straight to the custom morph list; preset
+                  // available and the section untouched (no custom groups yet)
+                  // → preset. A section the user already put groups into keeps
+                  // its mode — that's a deliberate choice, not a default.
+                  if (enabled && !presetAvailable && config.mode === 'preset' && modes.includes('custom')) {
+                    patchSection(section, { enabled, mode: 'custom' })
+                  } else if (
+                    enabled &&
+                    presetAvailable &&
+                    config.mode === 'custom' &&
+                    config.groups.length === 0 &&
+                    modes.includes('preset')
+                  ) {
+                    patchSection(section, { enabled, mode: 'preset' })
+                  } else {
+                    patchSection(section, { enabled })
                   }
-                  onCheckedChange={(enabled) => {
-                    // Enabling picks the sensible mode: no preset asset for this
-                    // generation → straight to the custom morph list; preset
-                    // available and the section untouched (no custom groups yet)
-                    // → preset. A section the user already put groups into keeps
-                    // its mode — that's a deliberate choice, not a default.
-                    if (enabled && !presetAvailable && config.mode === 'preset' && modes.includes('custom')) {
-                      patchSection(section, { enabled, mode: 'custom' })
-                    } else if (
-                      enabled &&
-                      presetAvailable &&
-                      config.mode === 'custom' &&
-                      config.groups.length === 0 &&
-                      modes.includes('preset')
-                    ) {
-                      patchSection(section, { enabled, mode: 'preset' })
-                    } else {
-                      patchSection(section, { enabled })
-                    }
-                  }}
-                />
-              </span>
+                }}
+              />
             </div>
 
             {isOpen && (
