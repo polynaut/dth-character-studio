@@ -614,6 +614,21 @@ function ProjectCharactersPage() {
                   </li>
                 ))}
               </ul>
+              {scanProblems.some((p) => p.tooNew) && (
+                <p className="mt-2">
+                  Saved by a newer build — update the app to open{' '}
+                  {scanProblems.filter((p) => p.tooNew).length === 1 ? 'it' : 'them'}, or{' '}
+                  <Link
+                    to="/tools"
+                    search={{ tab: 'refresh' }}
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    Refresh assets
+                  </Link>{' '}
+                  can reset {scanProblems.filter((p) => p.tooNew).length === 1 ? 'it' : 'them'} to
+                  this version (dropping the newer fields).
+                </p>
+              )}
             </div>
           )}
           {characters.length === 0 ? (

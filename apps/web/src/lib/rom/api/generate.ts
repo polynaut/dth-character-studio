@@ -397,6 +397,20 @@ export interface RefreshResult {
   detail?: string
 }
 
+/** A definition saved by a NEWER build than this one — the one recoverable read
+ *  problem. A reset re-saves it at the current schema, dropping the newer fields.
+ *  In practice only development produces these (a released build only ever sees
+ *  the schema move forward). */
+export interface TooNewDefinition {
+  project: string
+  character: string
+  path: string
+  /** Schema version stored in the file. */
+  storedVersion: number
+  /** The highest schema version this build understands. */
+  supportedVersion: number
+}
+
 export interface RefreshSummary {
   /** Characters actually (re)generated this run (= regenerated + failed). */
   total: number
@@ -410,6 +424,9 @@ export interface RefreshSummary {
   counts: {
     /** Character definitions migrated + re-saved (schema was out of date). */
     migrated: number
+    /** Forward-version definitions force-downgraded to the current schema (only on
+     *  a `resetTooNew` run; the newer fields were dropped). */
+    reset: number
     /** Characters whose Daz scripts (ROM/Export) were regenerated. */
     scripts: number
     /** Characters whose PoseAsset CSV was regenerated. */
@@ -419,6 +436,10 @@ export interface RefreshSummary {
     avatars: number
   }
   results: Array<RefreshResult>
+  /** Definitions saved by a NEWER build, which this build can't read. On a normal
+   *  run: every one found (the UI offers to reset them). On a `resetTooNew` run:
+   *  only the ones that still couldn't be reset. Empty in the common case. */
+  tooNew: Array<TooNewDefinition>
   /** Outcome of force-reinstalling the bundled DTH runtime files (a refresh
    *  always repairs them; null = no DAZ library configured, nothing to copy to). */
   runtime: { ok: boolean; detail?: string } | null
@@ -439,10 +460,15 @@ export interface RefreshSummary {
  * Per-character failures are collected, not thrown, so one bad character can't
  * abort the sweep.
  */
-export function refreshAllAssets(): Promise<RefreshSummary> {
+export function refreshAllAssets(
+  /** `resetTooNew` force-downgrades definitions saved by a NEWER build back to
+   *  this build's schema (dropping the newer fields) instead of reporting them —
+   *  the explicit, opt-in recovery for a dev who ran a schema-bump branch. */
+  opts: { resetTooNew?: boolean } = {},
+): Promise<RefreshSummary> {
   // A full refresh regenerates every stale character across every known
   // project — minutes on large libraries; show the working cursor throughout.
-  return withBusyCursor(refreshAllAssetsInner())
+  return withBusyCursor(refreshAllAssetsInner(opts))
 }
 
 /** Map `items` through an async `fn` with at most `limit` in flight — for
@@ -471,7 +497,9 @@ const RUNTIME_READ_CONCURRENCY = 8
 /** Bounded fan-out for the per-character avatar upscales (Rust image work). */
 const AVATAR_UPSCALE_CONCURRENCY = 8
 
-async function refreshAllAssetsInner(): Promise<RefreshSummary> {
+async function refreshAllAssetsInner(refreshOpts: {
+  resetTooNew?: boolean
+}): Promise<RefreshSummary> {
   const settings = await storage.getSettings()
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
   const catalog = await fetchPoseAssetsCurrent()
@@ -498,6 +526,11 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
     character: Character
     location: storage.CharacterLocation
   }> = []
+  // Forward-version files still unreadable at the end (a normal run lists them all;
+  // a resetTooNew run keeps only the ones the downgrade couldn't repair).
+  const tooNew: Array<TooNewDefinition> = []
+  const nameFromPath = (p: string) => basename(p).replace(/\.json$/i, '')
+  let resetCount = 0
   for (const project of projects) {
     const lib = charsRoot(project)
     let scan: Awaited<ReturnType<typeof storage.scanCharacterLibrary>>
@@ -512,9 +545,44 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
       })
       continue
     }
-    // An unreadable definition is a character the sweep CANNOT refresh —
-    // surface it as a failure instead of silently reporting "all good".
     for (const problem of scan.problems) {
+      // A file saved by a NEWER build is the one recoverable read problem. With
+      // resetTooNew, force it down to this build's schema (dropping the newer
+      // fields) and fold it back in as a normal character so pass 2 regenerates
+      // it. Otherwise it stays a "reset me?" item, NOT a hard failure.
+      if (problem.tooNew) {
+        if (refreshOpts.resetTooNew) {
+          try {
+            const { character: reset, location } = await storage.resetDefinitionToCurrentVersion(
+              project,
+              problem.path,
+              lib,
+            )
+            cacheCharacterLocation(lib, reset.id, location)
+            gathered.push({ project, lib, character: reset, location })
+            resetCount += 1
+            continue
+          } catch (e) {
+            results.push({
+              project: project.name,
+              character: `(reset failed) ${nameFromPath(problem.path)}`,
+              ok: false,
+              detail: `${problem.path} — ${e instanceof Error ? e.message : String(e)}`,
+            })
+            // Fall through so it's still surfaced as a reset candidate below.
+          }
+        }
+        tooNew.push({
+          project: project.name,
+          character: nameFromPath(problem.path),
+          path: problem.path,
+          storedVersion: problem.tooNew.storedVersion,
+          supportedVersion: problem.tooNew.supportedVersion,
+        })
+        continue
+      }
+      // Genuine corruption (torn write / bad JSON / failed schema) is a character
+      // the sweep CANNOT refresh — surface it as a failure, not "all good".
       results.push({
         project: project.name,
         character: `(unreadable) ${basename(problem.path)}`,
@@ -570,7 +638,7 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
   // Pass 2 — regenerate per character. A schema change regenerates both artifacts
   // (the migration can alter generated output); runtime → Daz scripts; csv → CSV.
   let skipped = 0
-  const counts = { migrated: 0, scripts: 0, csv: 0, avatars: 0 }
+  const counts = { migrated: 0, reset: resetCount, scripts: 0, csv: 0, avatars: 0 }
   for (const item of items) {
     const { project, lib, character, targets } = item
     const regenSchema = force || targets.schema
@@ -658,6 +726,7 @@ async function refreshAllAssetsInner(): Promise<RefreshSummary> {
     skipped,
     counts,
     results,
+    tooNew,
     runtime,
   }
 }

@@ -300,6 +300,29 @@ describe('migrateCharacterData — version handling', () => {
       migrateCharacterData({ sections: {}, schemaVersion: CHARACTER_SCHEMA_VERSION + 1 }),
     ).toThrow(CharacterSchemaTooNewError)
   })
+
+  it('allowDowngrade forces a newer-build file to the current shape, dropping its newer fields', () => {
+    // The recovery escape hatch (web: resetDefinitionToCurrentVersion): a dev ran a
+    // schema-bump branch, then went back to an older build. The file must be
+    // openable again by DELIBERATELY discarding the fields this build never knew.
+    const newer = CHARACTER_SCHEMA_VERSION + 3
+    const raw = {
+      id: 'c1',
+      name: 'Electra',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      schemaVersion: newer,
+      // A field a future build added that this build's schema knows nothing about.
+      somethingFromTheFuture: { nested: [1, 2, 3] },
+    }
+    // The safe default is unchanged — without the opt-in it still refuses.
+    expect(() => migrateCharacterData(raw)).toThrow(CharacterSchemaTooNewError)
+    // With allowDowngrade it does NOT throw, and zod then strips the unknown newer
+    // field, leaving a valid current-shape definition.
+    const parsed = characterSchema.parse(migrateCharacterData(raw, { allowDowngrade: true }))
+    expect(parsed).not.toHaveProperty('somethingFromTheFuture')
+    expect(parsed.name).toBe('Electra')
+  })
 })
 
 // v11 removed `resetGenBeforeApplying` (runtime v26+ always closes the block

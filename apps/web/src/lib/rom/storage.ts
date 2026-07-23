@@ -51,6 +51,7 @@ export {
   moveFolder,
   readCharacterAt,
   repointCharacterPaths,
+  resetDefinitionToCurrentVersion,
   saveCharacter,
   scanCharacterLibrary,
   setGeneratedDthVersion,

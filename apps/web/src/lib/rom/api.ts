@@ -118,6 +118,7 @@ export type {
   RefreshResult,
   RefreshSummary,
   StaleTargets,
+  TooNewDefinition,
 } from './api/generate'
 
 // --- install: app settings + the Tools-page install features ----------------
