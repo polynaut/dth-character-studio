@@ -571,3 +571,22 @@ a {
     border-color: color-mix(in oklab, var(--primary) 70%, var(--border));
   }
 }
+
+/* SceneFooter pill reordering (see scene-footer.tsx): selecting a rail pill swaps
+   it into the prominent slot and the rest shift to fill in. Each pill carries a
+   stable `view-transition-name` + the `scene-pill` class, so the browser morphs
+   each one from its old slot to its new one. Keep it a quick, subtle slide. */
+::view-transition-group(.scene-pill) {
+  animation-duration: 300ms;
+  /* Ease-in: pills drift slowly out of their old slot, then accelerate into the new
+     one (slow start, quick finish) — cubic-bezier(easeInCubic). */
+  animation-timing-function: cubic-bezier(0.32, 0, 0.67, 0);
+}
+/* Only the pills should animate. The View Transitions API otherwise captures the
+   whole document as `root` and cross-fades it — a brief flash of the entire editor
+   on every pick — so swap the rest of the page instantly instead (the form updating
+   to the newly selected scene reads better as an instant change than a fade). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
