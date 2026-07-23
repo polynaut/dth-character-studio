@@ -22,13 +22,13 @@ import {
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
 import { DeleteCharacterSection } from '#/components/character/delete-character-section.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
-import { StickyOverrideBar } from '#/components/character/sticky-override-bar.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
 import { RomEditorSection } from '#/components/character/rom-editor-section.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
+import { SceneFooter } from '#/components/character/scene-footer.tsx'
 import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
@@ -191,6 +191,17 @@ function CharacterPage() {
   // Which Daz scene card is selected — groom lists, the header's scene tag and
   // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
   const sceneSel = useSceneSelection(character, patch)
+  // The scene footer names the selected Daz scene once the Daz-scenes cards have
+  // scrolled off-screen — an IntersectionObserver on the scenes area drives `show`.
+  const scenesRef = useRef<HTMLDivElement>(null)
+  const [scenesOnScreen, setScenesOnScreen] = useState(true)
+  useEffect(() => {
+    const el = scenesRef.current
+    if (!el) return
+    const io = new IntersectionObserver(([entry]) => setScenesOnScreen(entry.isIntersecting))
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   // The ROM run log + the "reveal failed frame" signal for the editor.
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
 
@@ -330,7 +341,7 @@ function CharacterPage() {
   const onProductsTab = !!project?.dazProductsEnabled && activeTab === 'products'
 
   return (
-    <main className="p-8">
+    <main className="p-8 pb-24">
       {folderMoveDialog}
       <EditorHeader
         projectId={projectId}
@@ -338,14 +349,6 @@ function CharacterPage() {
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}
-      />
-
-      {/* The persistent "OVERRIDE · <scene>" indicator, sticky under the header, so
-          the scene context follows you down and every panel toggle can stay compact. */}
-      <StickyOverrideBar
-        scenePath={sceneSel.effectiveScene}
-        sceneName={sceneSel.selectedSceneName}
-        show={sceneSel.overrideEligible}
       />
 
       {/* The editor body is isolated with `contain: layout paint`: when the sticky
@@ -398,18 +401,22 @@ function CharacterPage() {
           <div className="min-w-0 flex-1 space-y-4">
             {location && (
               <>
-                <DazSceneField
-                  projectId={projectId}
-                  character={character}
-                  location={location}
-                  sceneExists={sceneExists}
-                  sceneFolderExists={sceneFolderExists}
-                  defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-                  persistPatch={draft.persistPatch}
-                  onScenesFolderMoved={onScenesFolderMoved}
-                  selectedScene={sceneSel.effectiveScene}
-                  onSelectScene={sceneSel.selectScene}
-                />
+                {/* Observed so the scene footer knows when the Daz-scenes cards
+                    have scrolled out of view. */}
+                <div ref={scenesRef}>
+                  <DazSceneField
+                    projectId={projectId}
+                    character={character}
+                    location={location}
+                    sceneExists={sceneExists}
+                    sceneFolderExists={sceneFolderExists}
+                    defaultSubdir={project?.dazSubdir ?? 'daz3d'}
+                    persistPatch={draft.persistPatch}
+                    onScenesFolderMoved={onScenesFolderMoved}
+                    selectedScene={sceneSel.effectiveScene}
+                    onSelectScene={sceneSel.selectScene}
+                  />
+                </div>
                 <HoudiniProjectsField
                   character={character}
                   location={location}
@@ -520,6 +527,17 @@ function CharacterPage() {
       />
       </div>
       </div>
+
+      {/* Docked scene status bar — outside contain-editor-body so its `fixed`
+          positioning is relative to the viewport, not the contained subtree. */}
+      <SceneFooter
+        show={activeTab === 'character' && !scenesOnScreen}
+        scenes={sceneSel.linkedScenes}
+        primary={character.scenePath}
+        selected={sceneSel.effectiveScene}
+        characterName={character.name}
+        onSelect={sceneSel.selectScene}
+      />
     </main>
   )
 }
