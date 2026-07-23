@@ -621,6 +621,10 @@ export const RomSections = memo(function RomSections({
                   inside a button is invalid HTML. */}
               <Switch
                 checked={effectiveEnabled}
+                // Once the scene flips this section's on/off state, the toggle wears
+                // the override green like every other overridden boolean on the form
+                // (a green track when on, a light-green knob when off-but-overridden).
+                variant={enabledOverridden ? 'green' : 'default'}
                 disabled={tiedToJcm || locked}
                 title={
                   tiedToJcm
