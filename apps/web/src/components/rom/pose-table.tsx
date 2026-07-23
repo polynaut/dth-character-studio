@@ -220,8 +220,11 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
   }),
   columnHelper.accessor('boneScaleRef', {
     id: 'boneScaleRef',
+    // Center the title (+ its "i") over the column: the cell centers its checkbox,
+    // so a left-aligned header floated off to the side of it (same idea as the
+    // Value header mirroring the NumberCell).
     header: () => (
-      <span className="flex items-center gap-1">
+      <span className="flex items-center justify-center gap-1">
         Bone scale
         <InfoPopup label="Bone scale — more information">
           Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length,

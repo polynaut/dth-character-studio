@@ -112,11 +112,12 @@ export function SceneFooter({
       )}
     >
       <div className="flex items-center gap-3 px-4 py-2">
-        {/* The selected scene, prominent — a green ring (matching the selected
-            scene card), never dimmed. */}
+        {/* The selected scene, prominent — a green ring, never dimmed. The radius
+            MUST match the SceneLabel pill's (`Tag` uses `rounded`) so the ring hugs
+            its silhouette instead of bulging past its corners. */}
         <span
           style={{ viewTransitionName: vtName(selected), viewTransitionClass: 'scene-pill' }}
-          className="shrink-0 rounded-lg ring-2 ring-daz-green ring-offset-2 ring-offset-background"
+          className="shrink-0 rounded ring-2 ring-daz-green ring-offset-2 ring-offset-background"
         >
           <SceneLabel
             scenePath={selected}
@@ -143,7 +144,7 @@ export function SceneFooter({
                   style={{ viewTransitionName: vtName(path), viewTransitionClass: 'scene-pill' }}
                   onClick={() => selectScene(path)}
                   title={`Switch to ${nameOf(path)}`}
-                  className="shrink-0 rounded-lg opacity-65 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+                  className="shrink-0 rounded opacity-65 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <SceneLabel
                     scenePath={path}
