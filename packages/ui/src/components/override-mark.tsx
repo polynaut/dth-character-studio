@@ -24,7 +24,12 @@ export function OverrideMark({
   if (!overridden) return null
   return (
     <span
-      className={cn('relative inline-flex size-4 shrink-0 items-center justify-center', className)}
+      className={cn(
+        // `-my-px` keeps the 16px mark from growing a ~14px label row (which would
+        // nudge the field below down a pixel the moment a field goes overridden).
+        'relative -my-px inline-flex size-4 shrink-0 items-center justify-center',
+        className,
+      )}
     >
       {/* The resting marker — a green dot, faded out on hover. */}
       <span
