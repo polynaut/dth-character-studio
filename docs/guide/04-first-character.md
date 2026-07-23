@@ -72,8 +72,8 @@ fields:
 
 > [!TIP]
 > **Hair items** (per-scene hair kept out of the export) and everything else
-> around **multiple Daz scenes on one character** — outfit variants, the
-> selected scene, per-scene ROM overrides — read
+> around **multiple Daz scenes on one character** — outfit variants, the selected
+> scene, and per-scene overrides (ROM frames, identity dials, preserve items) — read
 > [Advanced: Multiple Daz scenes](https://polynaut.github.io/dth-character-studio/guide/advanced.html#multiple-daz-scenes--outfits-amp-hair-variants).
 
 ## Script install location & export directory
@@ -97,7 +97,7 @@ ride along as no-ops until you set one.
 <p align="center">
   <img width="900" alt="character page, Advanced options panel expanded" src="screenshots/character-advanced-options.png" />
   <br>
-  <sub><em>The Advanced options panel expanded on the character page.</em></sub>
+  <sub><em>The Advanced options section on the character page.</em></sub>
 </p>
 
 The **Advanced options** panel near the bottom of the character page — none of it
@@ -110,6 +110,11 @@ is needed for a working ROM:
 - **Preserve node transforms** — a node's transform is **memorized before** the ROM
   loads and **restored after**, so posed nodes (e.g. the eyes) keep their
   orientation instead of being reset. Enter the **node's label** as it appears in Daz.
+
+On a **non-primary Daz scene** each of these entries becomes **per-item
+overridable** — the cube glyph, green border and reset appear per row, so an outfit
+scene can preserve different morphs or nodes than the primary (see
+[Advanced: per-scene overrides](./advanced.md#per-scene-overrides--edit-to-override)).
 
 </td></tr></table>
 </details>
@@ -422,9 +427,10 @@ Two more scripts appear alongside the ROM one **only when their feature is on**:
   exports the `_grooms.abc` for Houdini's **DazToHueGroom Import** node (the groom
   worn, everything else hidden).
 
-A character with **[per-scene ROM overrides](./advanced.md#per-scene-rom-overrides)**
-additionally gets a `ROM_<Name>_G9_<Scene>.dsa` + `<Name>_<Scene>_pose_asset.csv`
-pair per overridden scene.
+A character with **[per-scene ROM overrides](./advanced.md#rom-overrides)**
+additionally gets a `<Name>_<Scene>_pose_asset.csv` per ROM-overridden scene — the
+single `ROM_<Name>_G9.dsa` still handles every scene, applying the open scene's
+overrides at run time (there is no per-scene `.dsa`).
 
 &nbsp;
 

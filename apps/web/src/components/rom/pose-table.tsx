@@ -57,8 +57,9 @@ export interface PoseTableMeta {
   figureNode: string
   /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
   override?: PoseOverrideMeta
-  /** Non-primary scene with the ROM override still OFF: the Override column
-   *  stays visible but its checkboxes render disabled (arm the override to use). */
+  /** Scene-override structural lock threaded down from the group card (which disables
+   *  the base-structure buttons in override mode). Vestigial here — the table body no
+   *  longer reads it (the old Override checkbox column it gated is gone). */
   locked?: boolean
 }
 

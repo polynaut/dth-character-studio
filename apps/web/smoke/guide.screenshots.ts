@@ -23,12 +23,9 @@ import { buildSeed, DIM_FOLDER, P, UPROJECT, prime, settle, type SeedOptions } f
 // empty. If it doesn't, a new source of nondeterminism crept in — fix it here
 // (never hand-revert PNGs as a workaround).
 // After a restyle, every PNG changing is EXPECTED — review the diff visually,
-// commit the lot. The only knobs that may need a one-time touch are the crop
-// constants below (HEADER + per-shot headerOffset/hideHeader): they mirror the
-// app's sticky-chrome heights (page header ~128px, pinned ROM section title,
-// pinned column headers). If the restyle changes those heights, adjust HEADER
-// (and the few explicit headerOffset values) once — nothing else is tuned by
-// hand.
+// commit the lot. There are NO hand-tuned crop constants: `shoot`/`shootStrip`
+// drop the app's sticky chrome, scroll the feature to the top and clip tight to
+// it, so a changed header / section-title height can't tuck a feature under it.
 // NOT covered here: the guide's Daz-/Houdini-side photos (user-attachments
 // CDN links in docs/guide/*.md) — those are taken manually in Daz/Houdini and
 // are unaffected by an app restyle.
@@ -67,94 +64,102 @@ const MAX_H = 720
  * - a big `feature`: capped at MAX_H, aligned to the feature's top (its start /
  *   most important part visible).
  */
-/** Assumed sticky-header height — we scroll the feature to the top then back off
- *  by this so the pinned header sits above it. A fixed value is generic and good
- *  in ~99% of cases (exact header measurement fought the inner-scroll container). */
-const HEADER = 150
+// ── Framing a feature (dynamic — lead with the feature, no pixel constants) ───
+// Every feature shot should START at the feature, not show the page header or a
+// pinned section title above it. So for an in-flow feature we DROP all sticky/fixed
+// chrome (nothing can pin over it or sit above it), scroll it to the top, and clip
+// tight to its box — a restyle that changes chrome heights can no longer tuck a
+// feature's title under a header. A `position: fixed` feature (a modal dialog) is
+// left in its overlay and only tight-clipped. Every shot asserts the feature is
+// visible, so a selector that matched a collapsed/off-screen node fails loudly
+// instead of yielding a blank or mis-cropped PNG.
 
-async function shoot(
-  page: Page,
-  path: string,
-  feature?: Locator,
-  opts: { hideHeader?: boolean; headerOffset?: number } = {},
-) {
+/** Tall viewport so any page can scroll far enough to bring a feature to the top. */
+const VH = MAX_H + 280
+
+/** Un-stick every sticky/fixed bar (page header, pinned section title, pinned table
+ *  column headers) so nothing overlays or sits above the feature being framed. */
+async function dropStickyChrome(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const node of Array.from(document.querySelectorAll('body *'))) {
+      const el = node as HTMLElement
+      const pos = getComputedStyle(el).position
+      if (pos === 'sticky' || pos === 'fixed') el.style.position = 'static'
+    }
+  })
+}
+
+/** True when `feature` lives inside a `position: fixed` subtree (a modal dialog) —
+ *  such a feature must NOT be un-stuck (it would drop out of its centered overlay). */
+async function inFixedOverlay(feature: Locator): Promise<boolean> {
+  return feature.evaluate((el) => {
+    for (let n: Element | null = el; n; n = n.parentElement) {
+      if (getComputedStyle(n).position === 'fixed') return true
+    }
+    return false
+  })
+}
+
+/** Scroll `feature` so its top lands `target` px below the viewport top and return its
+ *  box. `scrollIntoView` on a tall section can OVER-scroll (its top ends up above the
+ *  viewport), so after the initial jump we measure the real top and nudge the window
+ *  scroll until it lands — no hand-tuned offsets, robust to any height change. Throws
+ *  if the feature has no visible height, so a broken selector fails loudly. */
+async function frame(page: Page, feature: Locator, label: string, scroll: boolean, target = 20) {
+  if (scroll) {
+    await feature.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+    for (let i = 0; i < 6; i++) {
+      await settle(page)
+      const top = await feature.evaluate((el) => Math.round(el.getBoundingClientRect().top))
+      const delta = top - target
+      if (Math.abs(delta) <= 2) break // landed on target
+      await page.evaluate((d) => window.scrollBy(0, d), delta)
+    }
+  }
+  const box = await feature.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    return { top: Math.round(r.top), bottom: Math.ceil(r.bottom), height: r.height }
+  })
+  if (box.height < 4) throw new Error(`screenshot "${label}": feature has no visible height`)
+  return box
+}
+
+async function shoot(page: Page, path: string, feature?: Locator) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await settle(page)
   if (!feature) {
     await page.screenshot({ path })
     return
   }
-  // How far below the top to land the feature — enough to clear the sticky
-  // header. A page with a SECOND sticky layer (the character page pins a section
-  // title under its header) needs a taller offset so the feature's own label
-  // isn't tucked under it; those shots pass `headerOffset`.
-  const offset = opts.headerOffset ?? HEADER
-  // Room for the header + a capped feature; the pages are taller than this so
-  // they still scroll (needed to reach the feature).
-  const VH = MAX_H + offset
   await page.setViewportSize({ width: VW, height: VH })
-  // Edge case: a feature pinned too near the page top (e.g. the last card in a
-  // short form) can't scroll far enough to clear the sticky header, which then
-  // overlaps it. For those, drop the header entirely and align the feature to
-  // the very top (no room reserved for a header that's no longer there).
-  if (opts.hideHeader) {
-    await page
-      .locator('header.sticky')
-      .first()
-      .evaluate((el) => {
-        ;(el as HTMLElement).style.display = 'none'
-      })
-  }
-  // Scroll the feature just below the header via native `scroll-margin-top` —
-  // the browser picks the right scroll container and leaves HEADER px above the
-  // feature, so the pinned header ends up above it (not overlapping). With the
-  // header dropped, leave a small margin instead so the feature doesn't hug the
-  // top edge of the frame.
-  const topGap = 28
-  await feature.evaluate((el, back) => {
-    ;(el as HTMLElement).style.scrollMarginTop = `${back}px`
-    el.scrollIntoView({ block: 'start' })
-  }, opts.hideHeader ? topGap : offset)
-  await settle(page)
-  const rect = await feature.evaluate((el) => {
-    const r = el.getBoundingClientRect()
-    return { top: r.top, height: r.height }
-  })
+  const fixed = await inFixedOverlay(feature)
+  if (!fixed) await dropStickyChrome(page) // nothing pins over or above the feature
+  const box = await frame(page, feature, path, !fixed)
   const pad = 24
-  const height = Math.min(Math.max(0, Math.round(rect.top)) + Math.ceil(rect.height) + pad, VH)
-  await page.screenshot({ path, clip: { x: 0, y: 0, width: VW, height } })
+  // Clip tight so the shot LEADS with the feature (a dialog frames the same way, just
+  // without the scroll/un-stick above).
+  const y = Math.max(0, box.top - 12)
+  const height = Math.min(box.bottom + pad, VH) - y
+  await page.screenshot({ path, clip: { x: 0, y, width: VW, height } })
 }
 
 /**
- * A tight, full-width horizontal strip framing one region (`topEl` → `bottomEl`,
- * or just `topEl`): scrolls it into view, drops any sticky header so it can't
- * overlap, and clips exactly the region (+pad). The width stays VW like every
- * other shot, so a small control (a single toggle row, the footer bar) documents
- * as a clean band instead of the whole page.
+ * A tight, full-width horizontal strip framing one region (`topEl` → `bottomEl`, or
+ * just `topEl`): drops the sticky chrome so nothing overlaps, scrolls the region to
+ * the top, and clips exactly it (+pad). Width stays VW like every other shot, so a
+ * small control (a toggle row, the footer bar) documents as a clean band.
  */
 async function shootStrip(page: Page, path: string, topEl: Locator, bottomEl?: Locator) {
   await page.mouse.move(0, 0) // park the cursor off any control so no hover state is caught
   await settle(page)
-  await page.setViewportSize({ width: VW, height: MAX_H + HEADER })
-  // Drop the sticky page header (if any) so a mid-page strip can't sit under it.
-  // A one-shot querySelector — NOT a locator, whose auto-wait would hang for the
-  // full timeout on pages without one (the project overview). The pinned ROM
-  // section title / column headers are left alone (they're wanted as context).
-  await page.evaluate(() => {
-    const h = document.querySelector('header.sticky')
-    if (h) (h as HTMLElement).style.display = 'none'
-  })
-  await topEl.evaluate((el) => {
-    ;(el as HTMLElement).style.scrollMarginTop = '32px'
-    el.scrollIntoView({ block: 'start' })
-  })
-  await settle(page)
-  const top = await topEl.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
+  await page.setViewportSize({ width: VW, height: VH })
+  await dropStickyChrome(page)
+  const topBox = await frame(page, topEl, path, true)
   const bottom = await (bottomEl ?? topEl).evaluate((el) =>
     Math.ceil(el.getBoundingClientRect().bottom),
   )
   const pad = 20
-  const y = Math.max(0, top - pad)
+  const y = Math.max(0, topBox.top - pad)
   const height = Math.max(1, bottom - y + pad)
   await page.screenshot({ path, clip: { x: 0, y, width: VW, height } })
 }
@@ -303,29 +308,23 @@ test('character-header', async ({ page }) => {
 
 test('character-rom-sections', async ({ page }) => {
   await openCharacter(page)
-  // Extra offset so the full ROM timeline bar (+ its legend) clears the collapsed
-  // header instead of being clipped at the top.
-  await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'), {
-    headerOffset: 220,
-  })
+  await shoot(page, join(OUT, 'character-rom-sections.png'), card(page, 'ROM'))
 })
 
 test('character-export-directory', async ({ page }) => {
   await openCharacter(page)
-  // This card sits near the top of the form, too high to scroll clear of the
-  // sticky header — so drop the header for this one shot.
-  await shoot(page, join(OUT, 'character-export-directory.png'), card(page, 'Export directory'), {
-    hideHeader: true,
-  })
+  await shoot(page, join(OUT, 'character-export-directory.png'), card(page, 'Export directory'))
 })
 
 test('character-advanced-options', async ({ page }) => {
   await openCharacter(page)
-  await page.locator('summary', { hasText: 'Advanced options' }).click()
-  await shoot(
+  // "Advanced options" is a plain always-open section now (preserve morphs + node
+  // transforms) — no longer a collapsible <details>. Frame just its card (title →
+  // last field) so the shot leads with the "Advanced options" heading.
+  await shootStrip(
     page,
     join(OUT, 'character-advanced-options.png'),
-    page.locator('details').filter({ hasText: 'Advanced options' }),
+    page.getByRole('heading', { name: 'Advanced options' }).locator('xpath=ancestor::section[1]'),
   )
 })
 
@@ -338,9 +337,7 @@ test('jcm-modify-grid', async ({ page }) => {
   const grid = page
     .getByText('Modify JCM frames')
     .locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
-  // The character page pins a section title under its header, so land the grid
-  // lower than the default so its own "Modify JCM frames" label stays visible.
-  await shoot(page, join(OUT, 'jcm-modify-grid.png'), grid, { headerOffset: 210 })
+  await shoot(page, join(OUT, 'jcm-modify-grid.png'), grid)
 })
 
 test('character-bone-scale-toggle', async ({ page }) => {
@@ -395,7 +392,7 @@ test('gen-art-direction', async ({ page }) => {
   const gen = page
     .getByRole('button', { name: /Genitalia/ })
     .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
-  await shoot(page, join(OUT, 'gen-art-direction.png'), gen, { headerOffset: 210 })
+  await shoot(page, join(OUT, 'gen-art-direction.png'), gen)
 })
 
 test('combine-morphs', async ({ page }) => {
@@ -470,26 +467,16 @@ test('character-scene-tag', async ({ page }) => {
   )
 })
 
-test('rom-override-toggle', async ({ page }) => {
-  await openCharacterOnOutfitScene(page)
-  await page.getByRole('switch', { name: /Override ROM frames/ }).click()
-  // The ROM header row (Override armed + on) down through the timeline and the
-  // first (now-locked) section — the "Scene override active" banner is gone.
-  await shootStrip(
-    page,
-    join(OUT, 'rom-override-toggle.png'),
-    page.getByRole('heading', { name: /^ROM/ }).locator('xpath=..'),
-    page.getByText('Retargeting', { exact: true }),
-  )
-})
-
 test('rom-override-grid', async ({ page }) => {
   await openCharacterOnOutfitScene(page)
-  await page.getByRole('switch', { name: /Override ROM frames/ }).click()
   await page.getByRole('button', { name: /FBM/ }).click()
-  // Override the SECOND row, so the shot shows a replaced (full-strength) row
-  // between untouched (dimmed, read-only) base rows.
-  await page.getByRole('checkbox', { name: /Override this frame/ }).nth(1).check()
+  // On a non-primary scene the grid is ALWAYS in override mode — no toggle. Edit the
+  // SECOND pose's value to arm it as a per-scene override: the row turns green and
+  // gains a reset button, sitting between untouched (still fully editable) base rows.
+  const values = page.locator('table').first().locator('input[inputmode="decimal"]')
+  await values.nth(1).fill('80')
+  await values.nth(1).press('Enter')
+  await page.locator('[title="Reset this frame to the base ROM"]').first().waitFor()
   await page.mouse.move(0, 0)
   await settle(page)
   await page.setViewportSize({ width: VW, height: 900 })
@@ -508,9 +495,10 @@ test('rom-override-grid', async ({ page }) => {
   const top = await thead.evaluate((el) => Math.floor(el.getBoundingClientRect().top))
   const theadH = await thead.evaluate((el) => el.getBoundingClientRect().height)
   const rowH = await page
-    .getByRole('checkbox', { name: /Override this frame/ })
+    .locator('table')
     .first()
-    .locator('xpath=ancestor::tr[1]')
+    .locator('tbody tr')
+    .first()
     .evaluate((el) => el.getBoundingClientRect().height)
   const y = Math.max(0, top - 8)
   const height = Math.ceil(theadH + 4 * rowH + 8)
