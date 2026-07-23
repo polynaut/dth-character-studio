@@ -239,21 +239,27 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         </InfoPopup>
       </span>
     ),
-    cell: ({ getValue, row, table }) => (
-      <span className="flex justify-center">
-        <input
-          type="checkbox"
-          className="size-3.5 accent-primary"
-          title="This morph scales bones — export a reference-skeleton FBX for it"
-          checked={getValue()}
-          onChange={(e) =>
-            (table.options.meta as PoseTableMeta).update(row.index, {
-              boneScaleRef: e.target.checked,
-            })
-          }
-        />
-      </span>
-    ),
+    cell: ({ getValue, row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      // Match the row: an overridden row (a value-edited base frame or the override's
+      // own appended frame) reads green, so its active checkbox is green too — not the
+      // primary orange (same `overridden` test as SortablePoseRow).
+      const override = meta.override
+      const overridden =
+        override !== undefined &&
+        (override.isAddition(row.original.id) || override.isOverridden(row.original.id))
+      return (
+        <span className="flex justify-center">
+          <input
+            type="checkbox"
+            className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
+            title="This morph scales bones — export a reference-skeleton FBX for it"
+            checked={getValue()}
+            onChange={(e) => meta.update(row.index, { boneScaleRef: e.target.checked })}
+          />
+        </span>
+      )
+    },
   }),
   columnHelper.display({
     id: 'expand',

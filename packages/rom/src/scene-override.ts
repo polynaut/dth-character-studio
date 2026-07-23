@@ -150,7 +150,7 @@ export function clonePose(pose: RomPose): RomPose {
  * copy that keeps the row falsely marked overridden (green).
  */
 export function romPoseEqual(a: RomPose, b: RomPose): boolean {
-  if (a.name !== b.name || a.boneScaleRef !== b.boneScaleRef) return false
+  if (a.name !== b.name || (a.boneScaleRef ?? false) !== (b.boneScaleRef ?? false)) return false
   if (a.morphs.length !== b.morphs.length) return false
   return a.morphs.every((m, i) => {
     const n = b.morphs[i]
