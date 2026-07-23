@@ -520,11 +520,12 @@ export const RomSections = memo(function RomSections({
           escalated ||
           (overrideData?.poses.some((p) => sectionPoseIds.has(p.id)) ?? false) ||
           (overrideData?.additions.some((a) => sectionGroupIds.has(a.groupId)) ?? false)
-        // Head-area text colour. A section carrying a scene override brightens its
-        // whole title row to white so it reads as active; otherwise it dims to muted
-        // in the locked/override view, or keeps the default foreground on the primary.
+        // Head-area text colour. A section carrying a scene override turns its whole
+        // title row Daz-green (the override accent, matching the field labels + mark);
+        // otherwise it dims to muted in the locked/override view, or keeps the default
+        // foreground on the primary.
         const headText = sectionOverridden
-          ? 'text-white'
+          ? 'text-daz-green'
           : structureLocked
             ? 'text-muted-foreground'
             : ''
@@ -557,7 +558,7 @@ export const RomSections = memo(function RomSections({
                 className="flex min-w-0 cursor-pointer items-center gap-3 text-left"
               >
                 <ChevronRight
-                  className={`size-4 shrink-0 transition-transform ${sectionOverridden ? 'text-white' : 'text-muted-foreground'} ${isOpen ? 'rotate-90' : ''}`}
+                  className={`size-4 shrink-0 transition-transform ${sectionOverridden ? 'text-daz-green' : 'text-muted-foreground'} ${isOpen ? 'rotate-90' : ''}`}
                 />
                 <span className={`w-12 font-mono text-sm font-semibold ${headText}`}>
                   {section}
@@ -606,7 +607,7 @@ export const RomSections = memo(function RomSections({
                   so the override mark can hug the title. ml-auto pushes it + the Switch
                   to the right edge. */}
               <span
-                className={`ml-auto text-xs ${sectionOverridden ? 'text-white' : 'text-muted-foreground'}`}
+                className={`ml-auto text-xs ${sectionOverridden ? 'text-daz-green' : 'text-muted-foreground'}`}
               >
                 {tiedToJcm
                   ? effectiveEnabled
