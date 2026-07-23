@@ -30,7 +30,11 @@ export function FolderField({
     <div>
       <Label className="mb-1 flex w-fit items-center gap-1">
         {label}
-        {popup ? <InfoPopup label={`${label} — more information`}>{popup}</InfoPopup> : null}
+        {popup ? (
+          <InfoPopup label={`${label} — more information`} className="-translate-y-px">
+            {popup}
+          </InfoPopup>
+        ) : null}
       </Label>
       <div className="flex gap-2">
         <Input

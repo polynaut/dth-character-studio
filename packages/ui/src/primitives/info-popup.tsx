@@ -147,8 +147,17 @@ export function InfoPopup({
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
+        // `open` (and thus aria-expanded) is also true during a hover PEEK, so the
+        // pressed-in look keys off `pinned` (a real click) instead — otherwise it fired
+        // on hover too.
+        data-pinned={pinned || undefined}
         className={cn(
-          'relative inline-flex size-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          // A square icon-button chip (matching the override mark): a faint fill at
+          // rest. On hover it just gains a darker border (the popup itself is the main
+          // hover feedback). When PINNED (clicked) it presses in — a near-black fill
+          // with a black inset shadow (+ a subtle light bottom bevel) so a pinned popup
+          // reads as an active, recessed toggle.
+          'relative inline-flex size-6 cursor-pointer items-center justify-center rounded-md bg-white/5 text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-inset hover:ring-black/50 data-[pinned]:bg-[#0b0c0e] data-[pinned]:text-foreground data-[pinned]:shadow-[inset_0_1.5px_3px_rgb(0_0_0/0.85),inset_0_-1px_1px_rgb(255_255_255/0.05)] data-[pinned]:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           className,
         )}
         {...getReferenceProps({ onClick: onTriggerClick })}

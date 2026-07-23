@@ -2,7 +2,15 @@ import * as React from "react"
 
 import { cn } from '../cn.ts'
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({
+  className,
+  type,
+  overridden,
+  ...props
+}: React.ComponentProps<"input"> & {
+  /** Marks a per-scene override — a green border, kept while focused too. */
+  overridden?: boolean
+}) {
   return (
     <input
       type={type}
@@ -16,6 +24,9 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         // Keep the destructive border + ring while focused too — otherwise the
         // focus ring (equal specificity) hides the error state on the active field.
         "aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/50",
+        // A per-scene override reads as a green border + green focus ring (so the
+        // focus state doesn't clash with the override's green).
+        overridden && "border-daz-green focus-visible:border-daz-green focus-visible:ring-daz-green/50",
         className
       )}
       {...props}

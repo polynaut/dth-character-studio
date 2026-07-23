@@ -1,5 +1,4 @@
-import { Input, KeyedListEditor, Label, NumberField } from '@dth/ui'
-import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
+import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark } from '@dth/ui'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 
@@ -15,81 +14,77 @@ const MORPH_FIELD_CLASS =
 /**
  * The two "preserve across the ROM load" list editors from the character editor's
  * Advanced options — morphs (name + hold value) and node transforms (node label).
- * Both are homogeneous add/remove lists (`KeyedListEditor`). Per-scene overridable:
- * with a non-primary Daz scene selected the lists lock until the top-right override
- * toggle arms them, then they edit the scene's OWN preserve lists — a full copy the
- * user can add to and delete from. `patch` is the route's partial-Character updater.
+ * Both are homogeneous add/remove lists (`KeyedListEditor`).
+ *
+ * Per-scene overrides are IMPLICIT and PER-ITEM (no toggle). On a non-primary Daz
+ * scene the lists start inherited from the base and are editable inline; a row that
+ * differs from the base — a morph whose hold value changed, or a row not in the base
+ * at all — becomes an override: a green border + a green dot that swaps to a reset on
+ * row hover. Rows are matched to the base by their natural identity (morph name /
+ * node label), so reordering or deleting one never mismarks the others.
+ * `writePreserve` derives the `preserve.enabled` gate from "the list differs".
  */
 export function PreserveFields({
   character,
   patch,
   overrideEligible,
-  preserveOverrideActive,
-  setPreserveOverrideEnabled,
-  selectedSceneName,
-  scenePath,
   sceneOverride,
-  patchOverride,
+  writePreserve,
   morphIndex,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
-  /** Scene-override arming, from useSceneSelection. */
+  /** True while a non-primary Daz scene is selected — rows can then be overridden. */
   overrideEligible: boolean
-  preserveOverrideActive: boolean
-  setPreserveOverrideEnabled: (enabled: boolean) => void
-  selectedSceneName: string
-  /** The selected scene's path — renders the override toggle label's mini render. */
-  scenePath: string
   sceneOverride: SceneOverride | undefined
-  patchOverride: (partial: Partial<SceneOverride>) => void
+  /** Implicit-override writer for the preserve lists (from useSceneSelection). */
+  writePreserve: (next: {
+    morphs?: SceneOverride['preserve']['morphs']
+    nodeTransforms?: SceneOverride['preserve']['nodeTransforms']
+  }) => void
   /** The scanned morph index — powers the Morph-name autocomplete, same as ROM. */
   morphIndex: Array<MorphIndexEntry>
 }) {
-  // Armed on a non-primary scene → edit the scene's preserve override; else base.
-  const activePreserve = preserveOverrideActive ? sceneOverride?.preserve : undefined
-  const overriding = activePreserve != null
-  const morphs = overriding ? activePreserve.morphs : character.preserveMorphs
-  const nodes = overriding ? activePreserve.nodeTransforms : character.preserveNodeTransforms
-  const setMorphs = (next: Character['preserveMorphs']) => {
-    if (overriding) patchOverride({ preserve: { ...activePreserve, morphs: next } })
-    else patch({ preserveMorphs: next })
+  // The active preserve override (only when armed for this non-primary scene).
+  const ov =
+    overrideEligible && sceneOverride && sceneOverride.preserve.enabled
+      ? sceneOverride.preserve
+      : undefined
+  const morphs = ov ? ov.morphs : character.preserveMorphs
+  const nodes = ov ? ov.nodeTransforms : character.preserveNodeTransforms
+  const setMorphs = (next: Character['preserveMorphs']) =>
+    overrideEligible ? writePreserve({ morphs: next }) : patch({ preserveMorphs: next })
+  const setNodes = (next: Character['preserveNodeTransforms']) =>
+    overrideEligible ? writePreserve({ nodeTransforms: next }) : patch({ preserveNodeTransforms: next })
+
+  // Rows are matched to the base by their natural key (morph name / node label).
+  const baseMorphValue = new Map(character.preserveMorphs.map((m) => [m.name, m.keepValue]))
+  const baseNodeLabels = new Set(character.preserveNodeTransforms.map((n) => n.nodeLabel))
+  const morphOverridden = (i: number) => {
+    if (!ov) return false
+    const m = morphs[i]
+    return !baseMorphValue.has(m.name) || baseMorphValue.get(m.name) !== m.keepValue
   }
-  const setNodes = (next: Character['preserveNodeTransforms']) => {
-    if (overriding) patchOverride({ preserve: { ...activePreserve, nodeTransforms: next } })
-    else patch({ preserveNodeTransforms: next })
+  const resetMorph = (i: number) => {
+    const m = morphs[i]
+    const baseValue = baseMorphValue.get(m.name)
+    // A changed base row resets to its base hold value; a row not in the base
+    // (added / renamed) resets by dropping it.
+    setMorphs(
+      baseValue !== undefined
+        ? morphs.map((x, j) => (j === i ? { ...x, keepValue: baseValue } : x))
+        : morphs.filter((_, j) => j !== i),
+    )
   }
-  // Locked = a non-primary scene is selected but the override isn't armed (shows
-  // the base lists, dimmed and read-only, until the user opts in).
-  const locked = overrideEligible && !overriding
+  const nodeOverridden = (i: number) => !!ov && !baseNodeLabels.has(nodes[i].nodeLabel)
+  // A node has no value — it's inherited (in the base) or an addition; reset drops it.
+  const resetNode = (i: number) => setNodes(nodes.filter((_, j) => j !== i))
+
+  const rowClass = 'group/ovr mb-2 flex items-center gap-2'
 
   return (
     <MorphIndexProvider morphIndex={morphIndex}>
-      <div className="mb-3 flex justify-end">
-        <PanelOverrideToggle
-          eligible={overrideEligible}
-          active={preserveOverrideActive}
-          scenePath={scenePath}
-          sceneName={selectedSceneName}
-          noun="preserve lists"
-          compact
-          onToggle={setPreserveOverrideEnabled}
-          info={
-            <>
-              Give this Daz scene its <strong>own preserve-after-ROM lists</strong>: select one of
-              the extra scenes in the Daz scenes cards, enable the override, then add, edit or
-              remove entries for that scene. On Save they ride the character's one Daz script and
-              apply when this scene is open; the base scene keeps its own.
-            </>
-          }
-        />
-      </div>
-      {/* Native fieldset disable cascades to every input + the add/remove buttons,
-          so the whole preserve area locks with one flag. */}
-      <fieldset
-        disabled={locked}
-        className={`grid grid-cols-1 gap-6 lg:grid-cols-2${locked ? ' text-muted-foreground' : ''}`}
-      >
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-5">
           <div>
             <Label className="mb-2 flex w-fit items-center gap-1">
@@ -100,28 +95,40 @@ export function PreserveFields({
               onChange={setMorphs}
               newItem={() => ({ name: '', keepValue: 1 })}
               addLabel="Add morph"
+              rowClassName={rowClass}
             >
-              {(item, set) => (
-                <>
-                  <div className="min-w-0 flex-1">
-                    <MorphNameCell
-                      value={item.name}
-                      placeholder="body_ctrl_BreastsUp-Down"
-                      inputClassName={MORPH_FIELD_CLASS}
-                      onCommit={(name) => set({ ...item, name })}
-                      // Preserve morphs store only a name (no node), so a pick just
-                      // takes the internal name.
-                      onPick={(entry) => set({ ...item, name: entry.name })}
+              {(item, set, index) => {
+                const isOv = morphOverridden(index)
+                return (
+                  <>
+                    <span className="flex w-4 shrink-0 justify-center">
+                      <OverrideMark overridden={isOv} onReset={() => resetMorph(index)} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <MorphNameCell
+                        value={item.name}
+                        placeholder="body_ctrl_BreastsUp-Down"
+                        inputClassName={cn(
+                          MORPH_FIELD_CLASS,
+                          isOv &&
+                            'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
+                        )}
+                        onCommit={(name) => set({ ...item, name })}
+                        // Preserve morphs store only a name (no node), so a pick just
+                        // takes the internal name.
+                        onPick={(entry) => set({ ...item, name: entry.name })}
+                      />
+                    </div>
+                    <NumberField
+                      className="w-24 pr-6 text-right tabular-nums"
+                      percent
+                      overridden={isOv}
+                      value={item.keepValue}
+                      onCommit={(keepValue) => set({ ...item, keepValue })}
                     />
-                  </div>
-                  <NumberField
-                    className="w-24 pr-6 text-right tabular-nums"
-                    percent
-                    value={item.keepValue}
-                    onCommit={(keepValue) => set({ ...item, keepValue })}
-                  />
-                </>
-              )}
+                  </>
+                )
+              }}
             </KeyedListEditor>
           </div>
           <div>
@@ -133,18 +140,28 @@ export function PreserveFields({
               onChange={setNodes}
               newItem={() => ({ nodeLabel: '' })}
               addLabel="Add node"
+              rowClassName={rowClass}
             >
-              {(item, set) => (
-                <Input
-                  value={item.nodeLabel}
-                  placeholder="Left Eye"
-                  onChange={(e) => set({ nodeLabel: e.target.value })}
-                />
-              )}
+              {(item, set, index) => {
+                const isOv = nodeOverridden(index)
+                return (
+                  <>
+                    <span className="flex w-4 shrink-0 justify-center">
+                      <OverrideMark overridden={isOv} onReset={() => resetNode(index)} />
+                    </span>
+                    <Input
+                      value={item.nodeLabel}
+                      overridden={isOv}
+                      placeholder="Left Eye"
+                      onChange={(e) => set({ nodeLabel: e.target.value })}
+                    />
+                  </>
+                )
+              }}
             </KeyedListEditor>
           </div>
         </div>
-      </fieldset>
+      </div>
     </MorphIndexProvider>
   )
 }

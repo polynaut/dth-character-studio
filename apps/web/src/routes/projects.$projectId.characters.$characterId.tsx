@@ -432,12 +432,8 @@ function CharacterPage() {
               character={character}
               patch={patch}
               overrideEligible={sceneSel.overrideEligible}
-              identityOverrideActive={sceneSel.identityOverrideActive}
-              setIdentityOverrideEnabled={sceneSel.setIdentityOverrideEnabled}
-              selectedSceneName={sceneSel.selectedSceneName}
-              scenePath={sceneSel.effectiveScene}
               sceneOverride={sceneSel.sceneOverride}
-              patchOverride={sceneSel.patchOverride}
+              writeIdentity={sceneSel.writeIdentity}
               hairSlot={
                 <GroomFields
                   character={character}
@@ -445,9 +441,6 @@ function CharacterPage() {
                   selectedScene={sceneSel.effectiveScene}
                   dazInstallFolder={settings.dazInstallFolder}
                   overrideEligible={sceneSel.overrideEligible}
-                  groomOverrideActive={sceneSel.groomOverrideActive}
-                  setGroomOverrideEnabled={sceneSel.setGroomOverrideEnabled}
-                  selectedSceneName={sceneSel.selectedSceneName}
                 />
               }
             />
@@ -488,11 +481,8 @@ function CharacterPage() {
         revealPose={revealPose}
         morphIndex={morphIndex}
         overrideEligible={sceneSel.overrideEligible}
-        overrideActive={sceneSel.overrideActive}
-        selectedSceneName={sceneSel.selectedSceneName}
         scenePath={sceneSel.effectiveScene}
         sceneOverride={sceneSel.sceneOverride}
-        setOverrideEnabled={sceneSel.setOverrideEnabled}
       />
 
       <section className="mb-8 rounded-lg border bg-card p-5">
@@ -508,12 +498,8 @@ function CharacterPage() {
           character={character}
           patch={patch}
           overrideEligible={sceneSel.overrideEligible}
-          preserveOverrideActive={sceneSel.preserveOverrideActive}
-          setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
-          selectedSceneName={sceneSel.selectedSceneName}
-          scenePath={sceneSel.effectiveScene}
           sceneOverride={sceneSel.sceneOverride}
-          patchOverride={sceneSel.patchOverride}
+          writePreserve={sceneSel.writePreserve}
           morphIndex={morphIndex}
         />
       </section>

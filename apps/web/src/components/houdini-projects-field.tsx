@@ -204,7 +204,7 @@ export function HoudiniProjectsField({
     >
       <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1`}>
         Houdini projects
-        <InfoPopup label="Houdini projects — more information">
+        <InfoPopup label="Houdini projects — more information" className="-translate-y-px">
           Linked in place (not copied) — a Houdini project keeps absolute import paths that a
           copy would break. Drag <code>.hip</code> files here or use the button.
         </InfoPopup>

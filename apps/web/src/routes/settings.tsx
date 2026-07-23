@@ -1038,7 +1038,7 @@ function SettingsPage() {
               <div>
                 <Label className="mb-1 flex w-fit items-center gap-1">
                   Characters subfolder
-                  <InfoPopup label="Characters subfolder — more information">
+                  <InfoPopup label="Characters subfolder — more information" className="-translate-y-px">
                     Where character folders are stored, relative to the project — e.g.{' '}
                     <code className="rounded bg-muted px-1 py-0.5 text-xs">assets/characters</code>{' '}
                     stores them at{' '}
@@ -1081,7 +1081,7 @@ function SettingsPage() {
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
                   Enable attachments
-                  <InfoPopup label="Enable attachments — more information">
+                  <InfoPopup label="Enable attachments — more information" className="-translate-y-px">
                     Adds an <strong>Attachments</strong> tab for reusable Daz scenes (bases to build
                     characters on), stored in this project. Off by default — the project then has
                     characters only.
@@ -1095,7 +1095,7 @@ function SettingsPage() {
               <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm">
                 <span className="flex items-center gap-1 font-medium">
                   Enable Daz Products
-                  <InfoPopup label="Enable Daz Products — more information">
+                  <InfoPopup label="Enable Daz Products — more information" className="-translate-y-px">
                     Generates a <strong>Scan_Products_&lt;Character&gt;.dsa</strong> for each
                     character. Open the character's scene in Daz and run it: it analyses the scene
                     for used products and writes a CSV the character page reads back, so you can
