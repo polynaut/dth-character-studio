@@ -58,10 +58,15 @@ export function OverrideMark({
       )}
     >
       {/* The whole cube glyph turns Daz-green when overridden (cube + dot both follow
-          currentColor), white otherwise. It fades out when the ICON itself is hovered
-          (not the whole field — so clicking a nearby control doesn't reveal the reset). */}
+          currentColor), white otherwise. It fades out when the ICON is hovered OR its
+          reset button is keyboard-focused (both scoped to this mark's own group, so a
+          nearby control — e.g. a toggle in the same row — never reveals the reset). The
+          reveal below keys off the same predicate, so the two never overlap. */}
       <CubeDotIcon
-        className={cn('size-4', overridden && 'group-hover/mark:opacity-0')}
+        className={cn(
+          'size-4',
+          overridden && 'group-hover/mark:opacity-0 group-focus-within/mark:opacity-0',
+        )}
         dotClassName={cn('fill-current', overridden && 'animate-override-bob motion-reduce:animate-none')}
       />
       {overridden && (
@@ -70,7 +75,7 @@ export function OverrideMark({
           onClick={onReset}
           title={resetTitle}
           aria-label={resetTitle}
-          className="absolute inset-0 flex items-center justify-center rounded text-daz-green opacity-0 outline-none transition-opacity group-hover/mark:opacity-100 hover:text-[color-mix(in_oklab,var(--color-daz-green)_80%,white)] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-daz-green/50"
+          className="absolute inset-0 flex items-center justify-center rounded text-daz-green opacity-0 outline-none transition-opacity group-hover/mark:opacity-100 group-focus-within/mark:opacity-100 hover:text-[color-mix(in_oklab,var(--color-daz-green)_80%,white)] focus-visible:ring-2 focus-visible:ring-daz-green/50"
         >
           <RotateCcw className="size-3.5" />
         </button>
