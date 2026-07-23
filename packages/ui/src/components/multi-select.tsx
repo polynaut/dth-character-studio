@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 
 import { cn } from '../cn.ts'
@@ -25,6 +26,8 @@ export function MultiSelect({
   onChange,
   placeholder,
   pillWarning,
+  optionBadge,
+  pillClassName,
   allowCustom = false,
   disabled = false,
   className,
@@ -38,6 +41,12 @@ export function MultiSelect({
   placeholder?: string
   /** Warning tooltip for a pill (e.g. "not in the scene"), or null for none. */
   pillWarning?: (value: string) => string | null
+  /** Trailing badge (e.g. a type tag) for a value's dropdown-option row. Not
+   *  shown on the "add custom" row. */
+  optionBadge?: (value: string) => ReactNode
+  /** Extra classes for a value's selected pill (e.g. a per-type fill). Merged
+   *  after the base pill classes, so a background here overrides the default. */
+  pillClassName?: (value: string) => string | undefined
   /** Offer adding the typed query itself when it matches no option. */
   allowCustom?: boolean
   disabled?: boolean
@@ -193,6 +202,9 @@ export function MultiSelect({
               title={warning ?? undefined}
               className={cn(
                 'flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-sm',
+                // A per-type fill (pastel) — placed before the warning so an
+                // unresolved item's amber still wins.
+                pillClassName?.(value),
                 warning !== null && 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
                 isArmed && 'ring-2 ring-ring',
               )}
@@ -358,7 +370,10 @@ export function MultiSelect({
                   Add “<strong>{row}</strong>”
                 </>
               ) : (
-                <MatchedOption option={row} query={trimmed} />
+                <span className="flex items-center justify-between gap-2">
+                  <MatchedOption option={row} query={trimmed} />
+                  {optionBadge?.(row)}
+                </span>
               )}
             </button>
           ))}
