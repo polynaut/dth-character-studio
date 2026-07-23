@@ -17,8 +17,10 @@ import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
 /** A linked Houdini project: the Houdini logo (no preview image), the filename,
- *  and its folder — the whole card opens it in Houdini. Houdini projects are
- *  linked in place (never copied), so the folder is shown in full. */
+ *  and its folder — the corner icon opens it in Houdini. A Houdini project has no
+ *  per-card state to select (unlike a Daz scene), so the rest of the card is
+ *  inert (`openIconOnly`). Houdini projects are linked in place (never copied),
+ *  so the folder is shown in full. */
 function HoudiniCard({
   hipPath,
   charFolderAbs,
@@ -86,6 +88,7 @@ function HoudiniCard({
       accentClass="group-hover:text-houdini-orange"
       cardClass="houdini-card"
       barClass="bg-houdini-orange"
+      openIconOnly
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"

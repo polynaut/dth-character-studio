@@ -2,17 +2,18 @@ import { useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
 import { Button, InfoPopup, MultiSelect, OverrideMark, useRefetchOnFocus } from '@dth/ui'
+import {
+  BODY_FOLLOWER,
+  HAIRISH,
+  groomBadge,
+  groomPillClass,
+} from '#/components/character/groom-kind.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
 
 import type { Character } from '@dth/rom'
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
-
-/** Hair-ish labels float to the top of the suggestions. */
-const HAIRISH = /hair|brow|lash|beard|wig|cap\b|pony|braid|bang|bun\b|fur/i
-/** Body followers + gen assets are never groom candidates. */
-const BODY_FOLLOWER = /^genesis ?9|goldenpalace|dicktator/i
 
 /** Decode a DSON ref ("#Black%20Tie%20Cap_1529") to the node id it points at. */
 function refKey(ref: string): string {
@@ -28,9 +29,11 @@ function refKey(ref: string): string {
  * The hair (groom) block of the character editor's identity card. Hair is always
  * PER SCENE (`groomScenes`) — a scene's listed items ARE its hair, none listed
  * means none (empty scenes are dropped at generation). Every scene owns its list;
- * there is NO "inherit from the primary", so hair carries no per-scene override
- * chrome — the list is simply editable on whatever scene is selected. This edits
- * the SELECTED scene card's list (`selectedScene`, the primary by default). The
+ * there is NO "inherit from the primary". It still carries the Daz-scene cube glyph
+ * like the other overridable fields, but hair overrides by PRESENCE: the glyph goes
+ * green once a non-primary scene lists its own hair, and its reset just clears the
+ * list (there's no primary value to fall back to). This edits the SELECTED scene
+ * card's list (`selectedScene`, the primary by default). The
  * generated script bakes the whole map and hides the open scene's list around the
  * export at run time, so one script serves every scene. Suggestions come from the
  * selected scene's `.duf` (read natively, no Daz needed); a listed label the scene
@@ -190,6 +193,8 @@ export function GroomFields({
               onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}
               placeholder="Pick the hair items of this scene…"
               allowCustom
+              optionBadge={groomBadge}
+              pillClassName={groomPillClass}
               pillWarning={(label) =>
                 scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
               }
