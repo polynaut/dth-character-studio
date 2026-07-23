@@ -422,25 +422,33 @@ a {
   contain: layout paint;
 }
 
-/* The linked-scene "Daz card": a muted leaf-green tint — the Daz brand green
-   mixed into the dark card so the contrast against the text and portrait stays
-   soft — with a stronger green border that brightens on hover. */
+/* The linked-scene "Daz card": a dark card carrying a bold leaf-green LEFT
+   ACCENT BAR (drawn by LinkedAssetCard) over a faint green tint + border that
+   brighten on hover. Daz cards are selectable — `data-selected` lifts the tint
+   and rings the whole card in green (the corner check is drawn by the card). */
 @utility daz-card {
-  background-color: color-mix(in oklab, var(--daz-green) 15%, var(--card));
-  border-color: color-mix(in oklab, var(--daz-green) 38%, var(--border));
+  background-color: color-mix(in oklab, var(--daz-green) 7%, var(--card));
+  border-color: color-mix(in oklab, var(--daz-green) 26%, var(--border));
   &:hover {
-    border-color: color-mix(in oklab, var(--daz-green) 70%, var(--border));
+    background-color: color-mix(in oklab, var(--daz-green) 12%, var(--card));
+    border-color: color-mix(in oklab, var(--daz-green) 55%, var(--border));
+  }
+  &[data-selected='true'] {
+    background-color: color-mix(in oklab, var(--daz-green) 20%, var(--card));
+    border-color: var(--daz-green);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--daz-green) 65%, transparent);
   }
 }
 
-/* The linked-project "Houdini card": a very light orange tint — the Houdini brand
-   orange mixed faintly into the dark card — with an orange border that brightens
-   on hover. Mirrors `daz-card` (lighter fill, since the ask was "very light"). */
+/* The linked-project "Houdini card": mirrors `daz-card` with a Houdini-orange
+   LEFT ACCENT BAR + faint orange tint / border. Houdini projects are NOT
+   selectable, so there's no selected state. */
 @utility houdini-card {
-  background-color: color-mix(in oklab, var(--houdini-orange) 8%, var(--card));
-  border-color: color-mix(in oklab, var(--houdini-orange) 38%, var(--border));
+  background-color: color-mix(in oklab, var(--houdini-orange) 6%, var(--card));
+  border-color: color-mix(in oklab, var(--houdini-orange) 26%, var(--border));
   &:hover {
-    border-color: color-mix(in oklab, var(--houdini-orange) 70%, var(--border));
+    background-color: color-mix(in oklab, var(--houdini-orange) 11%, var(--card));
+    border-color: color-mix(in oklab, var(--houdini-orange) 55%, var(--border));
   }
 }
 
