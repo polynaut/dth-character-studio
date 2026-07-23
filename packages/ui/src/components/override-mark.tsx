@@ -37,10 +37,14 @@ function CubeDotIcon({ className, dotClassName }: { className?: string; dotClass
 export function OverrideMark({
   overridden,
   onReset,
+  resetTitle = "Reset to the primary scene's value",
   className,
 }: {
   overridden: boolean
   onReset: () => void
+  /** Title/aria on the reset control. Defaults to "reset to the primary"; hair
+   *  passes a "clear" variant since it has no primary value to fall back to. */
+  resetTitle?: string
   className?: string
 }) {
   return (
@@ -61,8 +65,8 @@ export function OverrideMark({
         <button
           type="button"
           onClick={onReset}
-          title="Reset to the primary scene's value"
-          aria-label="Reset to the primary scene's value"
+          title={resetTitle}
+          aria-label={resetTitle}
           className="absolute inset-0 flex items-center justify-center rounded text-daz-green opacity-0 outline-none transition-opacity group-hover/ovr:opacity-100 hover:text-[color-mix(in_oklab,var(--color-daz-green)_80%,white)] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-daz-green/50"
         >
           <RotateCcw className="size-3.5" />

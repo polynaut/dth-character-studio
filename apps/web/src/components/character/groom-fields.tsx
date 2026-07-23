@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
-import { Button, InfoPopup, MultiSelect, useRefetchOnFocus } from '@dth/ui'
+import { Button, InfoPopup, MultiSelect, OverrideMark, useRefetchOnFocus } from '@dth/ui'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -152,7 +152,7 @@ export function GroomFields({
   const hairMismatch = overrideEligible && unlistedHair.length > 0
 
   return (
-    <div className="max-w-xl">
+    <div className="group/ovr max-w-xl">
       <div className="mb-1 flex items-center gap-1 text-sm font-medium">
         Hair items
         <InfoPopup label="Hair items — more information">
@@ -161,6 +161,14 @@ export function GroomFields({
           hair to exclude. For a hair-only variant, link it as its own scene (or use
           Attachments).
         </InfoPopup>
+        {/* The glyph marks hair like the other Daz-scene fields. Hair is per-scene by
+            nature, so it goes green once THIS non-primary scene lists its own hair,
+            and the reset just clears it (there's no primary hair to fall back to). */}
+        <OverrideMark
+          overridden={overrideEligible && listed.length > 0}
+          onReset={() => setNodes([])}
+          resetTitle="Clear this scene's hair items"
+        />
       </div>
       {exporterTooOld && (
         <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
