@@ -76,8 +76,8 @@ export function IdentitySection({
     overrideEligible ? writeIdentity({ applyUE5TearUV: v }) : patch({ applyUE5TearUV: v })
   // The dials only exist on Genesis 9; off G9 the whole set disables/mutes at once.
   const offG9 = character.genesis !== 'G9'
-  const hint = 'Can be overridden per Daz scene'
-  // An overridable-but-still-inherited dial reads muted (with the hint tooltip).
+  // An overridable-but-still-inherited dial reads muted; the "can be overridden"
+  // hint now lives on the OverrideMark icon (not the field).
   const inherited = (overridden: boolean) => overrideEligible && !overridden
 
   return (
@@ -109,7 +109,6 @@ export function IdentitySection({
             )}
             percent
             overridden={facsOv}
-            title={inherited(facsOv) ? hint : undefined}
             value={facs}
             onCommit={setFacs}
           />
@@ -129,7 +128,6 @@ export function IdentitySection({
             )}
             percent
             overridden={flexOv}
-            title={inherited(flexOv) ? hint : undefined}
             value={flex}
             onCommit={setFlex}
           />
@@ -141,7 +139,6 @@ export function IdentitySection({
               'flex items-center gap-1 text-sm',
               inherited(tearOv) && 'text-muted-foreground',
             )}
-            title={inherited(tearOv) ? hint : undefined}
           >
             Set UE5 tear UV
             <InfoPopup label="Set UE5 tear UV — more information">
