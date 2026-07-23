@@ -141,7 +141,7 @@ export function IdentitySection({
             )}
           >
             Set UE5 tear UV
-            <InfoPopup label="Set UE5 tear UV — more information">
+            <InfoPopup label="Set UE5 tear UV — more information" className="-translate-y-px">
               Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
               ROM build, so DTH's Lacrimal Fluid material lines up without the manual
               Surfaces-tab step.

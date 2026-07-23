@@ -155,7 +155,7 @@ export function GroomFields({
     <div className="group/ovr max-w-xl">
       <div className="mb-1 flex items-center gap-2 text-sm font-medium">
         Hair items
-        <InfoPopup label="Hair items — more information">
+        <InfoPopup label="Hair items — more information" className="-translate-y-px">
           Each scene carries its own hair — the items you list here are hidden around the DTH
           export so they never ride into the ROM artifacts. None listed means the scene has no
           hair to exclude. For a hair-only variant, link it as its own scene (or use

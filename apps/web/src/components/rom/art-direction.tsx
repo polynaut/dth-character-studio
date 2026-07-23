@@ -71,7 +71,7 @@ export function ArtDirectionEditor({
     <div className="space-y-3">
       <p className="flex w-fit items-center gap-1 text-sm font-medium">
         Art direction
-        <InfoPopup label="Art direction — more information">
+        <InfoPopup label="Art direction — more information" className="-translate-y-px">
           Morph values stamped onto frames inside the pre-made ROM after loading — generated as a
           per-character art direction JSON. Frames marked <em>required</em> ship empty in the
           preset: without morphs here their generated morph does nothing.
