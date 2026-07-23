@@ -34,5 +34,5 @@ test('overridden glyph dot bobs', async ({ page }) => {
     await page.waitForTimeout(150)
   }
   const range = Math.max(...ys) - Math.min(...ys)
-  expect(range, 'dot bobs a clearly visible distance').toBeGreaterThan(3.5)
+  expect(range, 'dot bobs a clearly visible distance').toBeGreaterThan(5)
 })
