@@ -16,13 +16,14 @@ const MORPH_FIELD_CLASS =
  * Advanced options — morphs (name + hold value) and node transforms (node label).
  * Both are homogeneous add/remove lists (`KeyedListEditor`).
  *
- * Per-scene overrides are IMPLICIT and PER-ITEM (no toggle). On a non-primary Daz
- * scene the lists start inherited from the base and are editable inline; a row that
- * differs from the base — a morph whose hold value changed, or a row not in the base
- * at all — becomes an override: a green border + a green dot that swaps to a reset on
- * row hover. Rows are matched to the base by their natural identity (morph name /
- * node label), so reordering or deleting one never mismarks the others.
- * `writePreserve` derives the `preserve.enabled` gate from "the list differs".
+ * Per-scene overrides are IMPLICIT and PER-LIST (no toggle). On a non-primary Daz
+ * scene the lists start inherited from the base and are editable inline; the moment
+ * any row differs — a hold value changed, or a row added/removed — the whole list is
+ * overridden: ONE mark in the label (like the other fields) that goes green with a
+ * reset reverting the list to the primary. A green border still marks each differing
+ * row. Rows are matched to the base by their natural identity (morph name / node
+ * label), so reordering never mismarks them. `writePreserve` derives the
+ * `preserve.enabled` gate from "the list differs".
  */
 export function PreserveFields({
   character,
@@ -57,7 +58,8 @@ export function PreserveFields({
   const setNodes = (next: Character['preserveNodeTransforms']) =>
     overrideEligible ? writePreserve({ nodeTransforms: next }) : patch({ preserveNodeTransforms: next })
 
-  // Rows are matched to the base by their natural key (morph name / node label).
+  // Rows are matched to the base by their natural key (morph name / node label); a
+  // row differs from the base when it's new/renamed or its hold value changed.
   const baseMorphValue = new Map(character.preserveMorphs.map((m) => [m.name, m.keepValue]))
   const baseNodeLabels = new Set(character.preserveNodeTransforms.map((n) => n.nodeLabel))
   const morphOverridden = (i: number) => {
@@ -65,30 +67,31 @@ export function PreserveFields({
     const m = morphs[i]
     return !baseMorphValue.has(m.name) || baseMorphValue.get(m.name) !== m.keepValue
   }
-  const resetMorph = (i: number) => {
-    const m = morphs[i]
-    const baseValue = baseMorphValue.get(m.name)
-    // A changed base row resets to its base hold value; a row not in the base
-    // (added / renamed) resets by dropping it.
-    setMorphs(
-      baseValue !== undefined
-        ? morphs.map((x, j) => (j === i ? { ...x, keepValue: baseValue } : x))
-        : morphs.filter((_, j) => j !== i),
-    )
-  }
   const nodeOverridden = (i: number) => !!ov && !baseNodeLabels.has(nodes[i].nodeLabel)
-  // A node has no value — it's inherited (in the base) or an addition; reset drops it.
-  const resetNode = (i: number) => setNodes(nodes.filter((_, j) => j !== i))
+  // The override is per LIST, not per row: one control in the label (like the other
+  // fields), green once the whole list differs from the base — a row changed, or one
+  // was added/removed. Reset reverts the list to the primary scene's; the per-row
+  // green border still marks which rows differ.
+  const morphsOverridden =
+    !!ov &&
+    (morphs.length !== character.preserveMorphs.length || morphs.some((_, i) => morphOverridden(i)))
+  const nodesOverridden =
+    !!ov &&
+    (nodes.length !== character.preserveNodeTransforms.length ||
+      nodes.some((_, i) => nodeOverridden(i)))
+  const resetMorphs = () => setMorphs(character.preserveMorphs)
+  const resetNodes = () => setNodes(character.preserveNodeTransforms)
 
-  const rowClass = 'group/ovr mb-2 flex items-center gap-2'
+  const rowClass = 'mb-2 flex items-center gap-2'
 
   return (
     <MorphIndexProvider morphIndex={morphIndex}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-5">
           <div>
-            <Label className="mb-2 flex w-fit items-center gap-1">
+            <Label className="mb-2 flex w-fit items-center gap-2">
               Preserve morphs after ROM loading
+              <OverrideMark overridden={morphsOverridden} onReset={resetMorphs} />
             </Label>
             <KeyedListEditor
               items={morphs}
@@ -101,9 +104,6 @@ export function PreserveFields({
                 const isOv = morphOverridden(index)
                 return (
                   <>
-                    <span className="flex w-4 shrink-0 justify-center">
-                      <OverrideMark overridden={isOv} onReset={() => resetMorph(index)} />
-                    </span>
                     <div className="min-w-0 flex-1">
                       <MorphNameCell
                         value={item.name}
@@ -132,8 +132,9 @@ export function PreserveFields({
             </KeyedListEditor>
           </div>
           <div>
-            <Label className="mb-2 flex w-fit items-center gap-1">
+            <Label className="mb-2 flex w-fit items-center gap-2">
               Preserve node transforms (e.g. eyes)
+              <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
             </Label>
             <KeyedListEditor
               items={nodes}
@@ -146,9 +147,6 @@ export function PreserveFields({
                 const isOv = nodeOverridden(index)
                 return (
                   <>
-                    <span className="flex w-4 shrink-0 justify-center">
-                      <OverrideMark overridden={isOv} onReset={() => resetNode(index)} />
-                    </span>
                     <Input
                       value={item.nodeLabel}
                       overridden={isOv}
