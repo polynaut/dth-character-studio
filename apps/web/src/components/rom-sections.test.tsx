@@ -382,6 +382,7 @@ describe('scene override mode', () => {
       identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
       groom: { enabled: false },
       preserve: { enabled: false, morphs: [], nodeTransforms: [] },
+      jcm: { enabled: false, mods: [] },
     })
     return (
       <RomSections
@@ -429,7 +430,7 @@ describe('scene override mode', () => {
     // The scene now OWNS the section — snapshotted whole, with the extra frame.
     expect(latest!.sectionOverrides).toHaveLength(1)
     expect(latest!.sectionOverrides[0].section).toBe('FBM')
-    expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(2)
+    expect(latest!.sectionOverrides[0].config.groups[0].poses).toHaveLength(2)
     // The base sections are never touched by a scene override.
     expect(sectionsChanged).toBe(false)
     // The section title now carries the green reset-all control.
@@ -444,7 +445,7 @@ describe('scene override mode', () => {
     fireEvent.click(screen.getByText('Full Body'))
     fireEvent.click(screen.getByRole('button', { name: 'Delete this frame for this scene' }))
     expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(0)
+    expect(latest!.sectionOverrides[0].config.groups[0].poses).toHaveLength(0)
     // The section-title reset drops the whole-section override entirely.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
     expect(latest!.sectionOverrides).toHaveLength(0)

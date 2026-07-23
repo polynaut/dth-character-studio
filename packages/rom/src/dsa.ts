@@ -338,7 +338,7 @@ function buildSceneConfigMap(character: Character): Record<string, Record<string
 function buildSceneCsvMap(character: Character): Record<string, string> {
   const map: Record<string, string> = {}
   for (const override of activeSceneOverrides(character)) {
-    if (!sceneOverrideBuildsRom(override)) continue
+    if (!sceneOverrideBuildsRom(character, override)) continue
     const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
     if (key !== '') map[key] = poseAssetFileName(character, sceneOverrideSlug(override.scenePath))
   }
@@ -812,7 +812,7 @@ export function generateAll(
   // (their effect is a run-time config delta / the per-scene hair list), so they
   // ride the base CSV — no extra file.
   const overrideCsvs = activeSceneOverrides(character)
-    .filter(sceneOverrideBuildsRom)
+    .filter((override) => sceneOverrideBuildsRom(character, override))
     .map((override) =>
       toPoseAssetCsv(mergeSceneOverride(character, override), frames, era, sceneOverrideSlug(override.scenePath)),
     )

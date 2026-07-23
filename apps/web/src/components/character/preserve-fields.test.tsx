@@ -132,6 +132,7 @@ describe('PreserveFields per-scene override', () => {
           },
           groom: { enabled: false },
           preserve: { enabled: false, morphs: [], nodeTransforms: [] },
+          jcm: { enabled: false, mods: [] },
         },
       ],
     })

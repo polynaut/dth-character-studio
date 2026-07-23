@@ -314,41 +314,48 @@ export const RomSections = memo(function RomSections({
   overrideDataRef.current = overrideData
   const onOverrideChangeRef = useRef(onOverrideChange)
   onOverrideChangeRef.current = onOverrideChange
-  const onSectionGroupsChange = useCallback((section: RomSection, groups: Array<RomGroup>) => {
+  // THE per-scene section-config writer. On the primary scene it edits the base
+  // section; on a non-primary scene it makes the scene OWN the section's config —
+  // ANY config field (mode, preset assets, art direction, groups, custom path) can
+  // be overridden this way. The first owning edit ESCALATES: it snapshots the merged
+  // section config (base + this scene's sparse row edits), applies the patch, and
+  // drops the section's now-superseded sparse `poses`/`additions`. `sectionEnabled`
+  // still overlays `enabled` on top (a plain toggle doesn't own the section).
+  const patchSectionForScene = useCallback((section: RomSection, patch: Partial<RomSectionConfig>) => {
     const od = overrideDataRef.current
-    const emitOverride = onOverrideChangeRef.current
-    if (!od || !emitOverride) {
-      // Primary scene → edit the base sections directly.
+    const emit = onOverrideChangeRef.current
+    if (!od || !emit) {
       onChangeRef.current({
         ...sectionsRef.current,
-        [section]: { ...sectionsRef.current[section], groups },
+        [section]: { ...sectionsRef.current[section], ...patch },
       })
       return
     }
     if (od.sectionOverrides.some((s) => s.section === section)) {
-      // The scene already OWNS this section (escalated) → update its stored groups.
-      emitOverride({
+      emit({
         ...od,
         sectionOverrides: od.sectionOverrides.map((s) =>
-          s.section === section ? { section, groups } : s,
+          s.section === section ? { section, config: { ...s.config, ...patch } } : s,
         ),
       })
       return
     }
-    // First structural edit on this section for this scene → ESCALATE. `groups` is the
-    // merged section (base rows with their per-scene value edits + appended rows, now
-    // reordered / inserted / with a row removed), so snapshot it whole and drop this
-    // section's sparse entries — the whole-section override supersedes them.
     const base = sectionsRef.current[section]
+    const merged = applySceneOverride(sectionsRef.current, od)[section]
     const basePoseIds = new Set(base.groups.flatMap((g) => g.poses.map((p) => p.id)))
     const sectionGroupIds = new Set([...base.groups.map((g) => g.id), flatSectionGroupId(section)])
-    emitOverride({
+    emit({
       ...od,
       poses: od.poses.filter((p) => !basePoseIds.has(p.id)),
       additions: od.additions.filter((a) => !sectionGroupIds.has(a.groupId)),
-      sectionOverrides: [...od.sectionOverrides, { section, groups }],
+      sectionOverrides: [...od.sectionOverrides, { section, config: { ...merged, ...patch } }],
     })
   }, [])
+  // The groups editor reports (section, groups); route it through the general writer.
+  const onSectionGroupsChange = useCallback(
+    (section: RomSection, groups: Array<RomGroup>) => patchSectionForScene(section, { groups }),
+    [patchSectionForScene],
+  )
 
   // Per-scene enable/disable of a whole section. Stored only when it DIFFERS from
   // the base (toggling back to the base value drops the entry, so the mark quiets).
