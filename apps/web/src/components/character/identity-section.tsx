@@ -104,7 +104,7 @@ export function IdentitySection({
           </Label>
           <NumberField
             className={cn(
-              'w-28 pr-6 text-right tabular-nums',
+              'w-48 pr-6 text-right tabular-nums',
               inherited(facsOv) && 'text-muted-foreground',
             )}
             percent
@@ -123,7 +123,7 @@ export function IdentitySection({
           </Label>
           <NumberField
             className={cn(
-              'w-28 pr-6 text-right tabular-nums',
+              'w-48 pr-6 text-right tabular-nums',
               inherited(flexOv) && 'text-muted-foreground',
             )}
             percent
