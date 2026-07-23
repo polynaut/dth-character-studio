@@ -1,16 +1,16 @@
 import { InfoPopup, Label, NumberField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 
-import type { Character, GenesisVersion, SceneOverride } from '@dth/rom'
+import type { Character, SceneOverride } from '@dth/rom'
 import type { ReactNode } from 'react'
 
 /**
- * The character's identity block: Genesis generation + gender, and the
- * Genesis-9-specific fieldset (FACS/Flexion strengths, UE5 tear UV) that natively
- * disables on other generations. The G9 fieldset is also per-scene overridable:
- * with a non-primary Daz scene selected it disables until the top-right override
- * toggle arms it, then its three dials edit the scene's `identity` override
- * instead of the base character. Genesis/Gender are never per-scene.
+ * The character's identity block: hair items, the Genesis-9 dials (FACS/Flexion
+ * strengths, UE5 tear UV) which only exist on Genesis 9, and Gender at the bottom.
+ * The G9 dials are per-scene overridable: with a non-primary Daz scene selected they
+ * disable until the override toggle arms them, then edit the scene's `identity`
+ * override instead of the base character. Genesis is set once at creation (not shown
+ * here); Gender is character-level and never per-scene.
  */
 export function IdentitySection({
   character,
@@ -58,70 +58,64 @@ export function IdentitySection({
   const fieldsetDisabled = character.genesis !== 'G9' || (overrideEligible && !overriding)
 
   return (
-    // Sidebar rows: Genesis + Gender, then Hair items, then the Genesis-9 fieldset.
+    // Sidebar rows: Hair items, then the Genesis-9 dials, then Gender at the bottom.
+    // Genesis is creation-only (never editable here); Gender is character-level.
     <div className="flex flex-col gap-5">
-      {/* Genesis + Gender are CHARACTER-level, never per-scene — disabled while a
-          non-primary scene is selected (switch back to the primary to change them). */}
-      <div className="flex flex-col gap-5">
-        <div
-          className="flex flex-wrap gap-4"
-          title={
-            overrideEligible
-              ? "Genesis and gender aren't per-scene — select the primary Daz scene to change them"
-              : undefined
-          }
-        >
-          <div>
-            <Label className="mb-1">Genesis</Label>
-            <Select
-              value={character.genesis}
-              onValueChange={(v) => patch({ genesis: v as GenesisVersion })}
-              disabled={overrideEligible}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="G9">G9</SelectItem>
-                <SelectItem value="G8.1">G8.1</SelectItem>
-                <SelectItem value="G8">G8</SelectItem>
-                <SelectItem value="G3">G3</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="mb-1">Gender</Label>
-            <Select
-              value={character.gender}
-              onValueChange={(v) => patch({ gender: v as Character['gender'] })}
-              disabled={overrideEligible}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Hair items — the middle sidebar row (carries its own override toggle). */}
+      {/* Hair items — the first sidebar row (carries its own override toggle). */}
       {hairSlot}
 
-      {/* The legend is positioned absolutely (a notch on the border) so it
-          doesn't consume a row of flow. The override toggle sits in its own row
-          ABOVE the fieldset (right-aligned to the box) — OUTSIDE it, so it stays
-          clickable while the fields are disabled, and with room for the scene
-          name the border couldn't hold. The fieldset `disabled` turns off every
-          control inside (the strengths and tear UV only exist on Genesis 9, and
-          are locked on a non-primary scene until the override is armed) and the
-          text goes muted. */}
-      <div className="w-full">
+      {/* The Genesis-9 dials (FACS / flexion strengths, UE5 tear UV) sit on one
+          row — no fieldset border/legend. The override toggle rides the row's
+          right edge. A borderless `fieldset disabled` still turns off every
+          control at once (they only exist on Genesis 9, and are locked on a
+          non-primary scene until the override is armed) and mutes the text. */}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <fieldset
+          disabled={fieldsetDisabled}
+          className={`m-0 flex flex-wrap items-end gap-x-6 gap-y-3 border-0 p-0${fieldsetDisabled ? ' text-muted-foreground' : ''}`}
+        >
+          {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
+              percentages, same as every morph value field — NumberField's
+              `percent` mode owns that conversion (and the "%" suffix). */}
+          <div>
+            <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+              FACS detail strength
+            </Label>
+            <NumberField
+              className="w-28 pr-6 text-right tabular-nums"
+              percent
+              value={facsDetailStrength}
+              onCommit={(v) => setIdentity({ facsDetailStrength: v })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+              Flexion strength
+            </Label>
+            <NumberField
+              className="w-28 pr-6 text-right tabular-nums"
+              percent
+              value={flexionStrength}
+              onCommit={(v) => setIdentity({ flexionStrength: v })}
+            />
+          </div>
+          <div className="flex h-9 items-center gap-3">
+            <Switch
+              checked={applyUE5TearUV}
+              onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
+            />
+            <span className="flex items-center gap-1 text-sm">
+              Set UE5 tear UV
+              <InfoPopup label="Set UE5 tear UV — more information">
+                Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
+                ROM build, so DTH's Lacrimal Fluid material lines up without the manual
+                Surfaces-tab step.
+              </InfoPopup>
+            </span>
+          </div>
+        </fieldset>
         {character.genesis === 'G9' && (
-          <div className="mb-2.5 flex w-full justify-end">
+          <div className="ml-auto self-center">
             <PanelOverrideToggle
               eligible={overrideEligible}
               active={identityOverrideActive}
@@ -142,57 +136,32 @@ export function IdentitySection({
             />
           </div>
         )}
-        <fieldset
-          disabled={fieldsetDisabled}
-          className="relative rounded-md border px-4 pt-4 pb-4"
+      </div>
+
+      {/* Gender — its own row at the bottom. Character-level (never per-scene), so
+          it's disabled while a non-primary scene is selected; switch to the primary
+          to change it. Genesis is creation-only and no longer shown here. */}
+      <div
+        title={
+          overrideEligible
+            ? "Gender isn't per-scene — select the primary Daz scene to change it"
+            : undefined
+        }
+      >
+        <Label className="mb-1">Gender</Label>
+        <Select
+          value={character.gender}
+          onValueChange={(v) => patch({ gender: v as Character['gender'] })}
+          disabled={overrideEligible}
         >
-          <legend className="absolute -top-2 left-3 bg-card px-1 text-xs font-medium text-muted-foreground uppercase">
-            Genesis 9 Specific
-          </legend>
-          <div className={`space-y-4${fieldsetDisabled ? ' text-muted-foreground' : ''}`}>
-            {/* The strengths are stored raw (1 = 100%) but shown Daz-style as
-                percentages, same as every morph value field — NumberField's
-                `percent` mode owns that conversion (and the "%" suffix). */}
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
-                  FACS detail strength
-                </Label>
-                <NumberField
-                  className="w-28 pr-6 text-right tabular-nums"
-                  percent
-                  value={facsDetailStrength}
-                  onCommit={(v) => setIdentity({ facsDetailStrength: v })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
-                  Flexion strength
-                </Label>
-                <NumberField
-                  className="w-28 pr-6 text-right tabular-nums"
-                  percent
-                  value={flexionStrength}
-                  onCommit={(v) => setIdentity({ flexionStrength: v })}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={applyUE5TearUV}
-                onCheckedChange={(v) => setIdentity({ applyUE5TearUV: v })}
-              />
-              <span className="flex items-center gap-1 text-sm">
-                Set UE5 tear UV
-                <InfoPopup label="Set UE5 tear UV — more information">
-                  Switches the Genesis 9 Tear figure's shader UV set to “UE5” during the
-                  ROM build, so DTH's Lacrimal Fluid material lines up without the manual
-                  Surfaces-tab step.
-                </InfoPopup>
-              </span>
-            </div>
-          </div>
-        </fieldset>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="female">Female</SelectItem>
+            <SelectItem value="male">Male</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   )

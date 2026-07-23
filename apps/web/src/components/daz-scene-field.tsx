@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { Ref } from 'react'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -135,6 +136,7 @@ export function DazSceneField({
   onScenesFolderMoved,
   selectedScene,
   onSelectScene,
+  cardsRef,
 }: {
   projectId: string
   character: Character
@@ -154,6 +156,10 @@ export function DazSceneField({
    *  the classic click-to-open cards. */
   selectedScene?: string
   onSelectScene?: (scene: string) => void
+  /** Ref for the scene-cards grid — lets the page tell when the selection area
+   *  (the cards, not the "Add scene" button below them) scrolls out of view, so
+   *  the docked scene footer appears the moment the cards leave. */
+  cardsRef?: Ref<HTMLDivElement>
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -520,7 +526,7 @@ export function DazSceneField({
       label={linked ? 'Drop a Daz scene (.duf) to add' : 'Drop a Daz scene (.duf) to link'}
       className="rounded-lg"
     >
-      <Label id="daz-scenes" className="mb-1 block scroll-mt-28">
+      <Label id="daz-scenes" className="mb-3 block scroll-mt-28 text-xl font-semibold">
         Daz scenes
       </Label>
       {linked ? (
@@ -579,7 +585,7 @@ export function DazSceneField({
                 </Button>
               </div>
             )}
-            <div className="flex flex-wrap items-stretch gap-3">
+            <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
               {ready ? (
                 <SceneCard
                   scenePath={character.scenePath}
