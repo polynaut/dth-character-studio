@@ -1,5 +1,14 @@
 # @dth/ui
 
+## 0.45.5
+
+### Patch Changes
+
+- [#489](https://github.com/polynaut/dth-character-studio/pull/489) [`83a1482`](https://github.com/polynaut/dth-character-studio/commit/83a1482260501ce7c4b27943a9a38c0a8fdcd007) Thanks [@polynaut](https://github.com/polynaut)! - Restyle the toggle switches with a neumorphic look: a recessed pill track (inset
+  shadow) cradling a raised, softly-domed knob (drop shadow + gradient). The green
+  "override" variant is the same pill in Daz-green — one central switch style, two
+  accents (orange for the default, green for an overridden boolean).
+
 ## 0.45.4
 
 ## 0.45.3

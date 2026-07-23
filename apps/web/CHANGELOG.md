@@ -1,5 +1,256 @@
 # @dth/web
 
+## 0.45.5
+
+### Patch Changes
+
+- [#493](https://github.com/polynaut/dth-character-studio/pull/493) [`5436983`](https://github.com/polynaut/dth-character-studio/commit/5436983dbd56d77100f6043d59e8d615c4e9f547) Thanks [@polynaut](https://github.com/polynaut)! - The Unreal projects footer's "Add" button now stretches to the same height as
+  the linked project cards beside it (they share an `items-center` row), so it
+  reads as a sibling of the cards rather than a shorter afterthought. The `sm`
+  button's height floor is preserved for the empty "Link" state where no card
+  sets the row height.
+
+- [#487](https://github.com/polynaut/dth-character-studio/pull/487) [`e7dc351`](https://github.com/polynaut/dth-character-studio/commit/e7dc351485b2d5f65494a09386c8de506c50c1ba) Thanks [@polynaut](https://github.com/polynaut)! - Redesign the linked-asset cards with a brand-coloured left accent bar: the
+  Daz-scene (green) and Houdini-project (orange) cards get the delete button moved
+  down beside the always-present open icon (muted, red only when hovered) and a
+  green ring + corner check for the selected Daz scene, with the PRIMARY badge at
+  the card's bottom-left. The Unreal-project footer card joins the same visual
+  language with a cyan accent bar, and the docked scene-footer pills get the green
+  accent bar + a green (was orange) ring on the selected scene.
+
+- [#466](https://github.com/polynaut/dth-character-studio/pull/466) [`6d7f0b2`](https://github.com/polynaut/dth-character-studio/commit/6d7f0b22032ead43c2af3d2121a8a10a3e95e43e) Thanks [@polynaut](https://github.com/polynaut)! - Character header: soften the portrait's rest-state over-scan zoom (1.55 → 1.4) so a
+  low-resolution avatar (e.g. a 256px Daz scene `.tip.png`) is magnified less and
+  reads sharper. The zoom now holds until the header starts collapsing and the pan
+  is nudged up (12% → 16%), so an opaque uploaded avatar still fully covers the 3:4
+  frame at the gentler zoom.
+
+- [#469](https://github.com/polynaut/dth-character-studio/pull/469) [`54c4087`](https://github.com/polynaut/dth-character-studio/commit/54c4087e93863249ce02f05dfdec324df787ee80) Thanks [@polynaut](https://github.com/polynaut)! - Avatars now upscale to 768×768 (was 512×512). A 256px Daz scene tip becomes an
+  exact xBRZ ×3, and the source comfortably exceeds the header portrait's painted
+  size on HiDPI displays. Re-set an avatar or run Tools → Refresh assets to
+  re-upscale existing ones to the new size.
+
+- [#466](https://github.com/polynaut/dth-character-studio/pull/466) [`6d7f0b2`](https://github.com/polynaut/dth-character-studio/commit/6d7f0b22032ead43c2af3d2121a8a10a3e95e43e) Thanks [@polynaut](https://github.com/polynaut)! - Avatars: upscale low-resolution avatar images to 512×512 with **xBRZ**, an
+  edge-directed magnifier that suits the flat-shaded Daz figures. A 256px Daz scene
+  `.tip.png` (or a small cropped upload) is magnified less harshly into the
+  character-header portrait now, so it reads sharper. Done in Rust (in place,
+  idempotent, best-effort) at avatar-write time, covering both the crop-upload and
+  "use this scene's image" paths.
+
+  **Licensing:** `xbrz-rs` is GPL-3.0, so the distributed desktop application
+  (`apps/desktop`) is now **GPL-3.0** (see `apps/desktop/LICENSE`). The libraries and
+  web app — `@dth/rom`, `@dth/ui`, `@dth/web` — remain MIT and compile into the
+  binary unchanged.
+
+- [#477](https://github.com/polynaut/dth-character-studio/pull/477) [`b499e37`](https://github.com/polynaut/dth-character-studio/commit/b499e37dfb4cdaacb1318f336bc94bcf8d723d04) Thanks [@polynaut](https://github.com/polynaut)! - Character page tabs (Character / Products / Notes) now live in the URL (`?tab=`),
+  so switching them pushes a history entry — the browser (or mouse) Back button
+  returns to the previous tab, and a tab is deep-linkable/refresh-stable. 'Character'
+  is the default, encoded as the absence of the param so the base URL stays clean.
+
+- [#480](https://github.com/polynaut/dth-character-studio/pull/480) [`fa62f4d`](https://github.com/polynaut/dth-character-studio/commit/fa62f4d6284b76bfefd3fe7bc09347b8b84e775e) Thanks [@polynaut](https://github.com/polynaut)! - Editor visual refresh:
+
+  - **Darker, cooler theme** — the neutral-gray surfaces move to a deeper cool-slate ramp; the orange / green accents are unchanged.
+  - **Restyled toggle switch** — a squarer 4px track (was pill-shaped) with an even knob rim and a white on-knob over the orange on-state.
+  - **Avatar backgrounds** use `#4B4D57` (cool slate) instead of the neutral gray behind portraits.
+
+- [#462](https://github.com/polynaut/dth-character-studio/pull/462) [`df85486`](https://github.com/polynaut/dth-character-studio/commit/df85486aa3f029e47f85da1a01000df9418dff51) Thanks [@polynaut](https://github.com/polynaut)! - Character-page header rework:
+
+  - **One main avatar per character**, shown everywhere and editable in any state — selecting a scene no longer swaps the big portrait. It's a square image the header over-scans with a scroll-linked zoom + pan, and it resizes as the header collapses (208×277 → 208×120).
+  - **The selected scene rides the title as a green "label" pill** (the linked-scene-card green): a small landscape render of the scene (greyscaled when it's the primary) followed by its name. Clicking it jumps to the scene cards.
+  - **Bigger title** that eases smaller as the header collapses; the scene label scroll-shifts with it.
+
+  Also: the "Daz scripts generated" path chip matches the Export directory chip's height; a new `outline-destructive` button (a light-red-bordered destructive style) is used for the export-directory Clear (icon-only ×) and the folder-move Cancel buttons; and the header's vibrancy glass is now macOS-only — Windows (WebView2) uses a plain background instead of a muddy blur.
+
+- [#486](https://github.com/polynaut/dth-character-studio/pull/486) [`912e873`](https://github.com/polynaut/dth-character-studio/commit/912e8734d0b22656727fadc2f4b2cb0444767fed) Thanks [@polynaut](https://github.com/polynaut)! - Character-editor identity block + scene-footer polish:
+
+  - **Genesis-9 dials on one row** — FACS detail / flexion strengths and the UE5 tear-UV switch drop their fieldset border and legend and sit on a single row.
+  - **Genesis is creation-only** — it can't change after a character is made, so its selector is removed from the editor. **Gender** moves to its own row at the bottom of the identity block.
+  - **"Daz scenes" title** now matches the other section titles (ROM, Advanced options, …).
+  - **Override toggle** reads muted grey-green with a white knob when off, so an inactive override is clearly distinct from an armed one.
+  - **Scene footer** appears the moment the Daz-scene cards scroll off (keyed to the cards grid) instead of waiting for the whole panel — the "Add scene" button and all — to leave.
+
+- [#468](https://github.com/polynaut/dth-character-studio/pull/468) [`5a22416`](https://github.com/polynaut/dth-character-studio/commit/5a22416c934e8339137c4814ec60a5fbbd90c9c6) Thanks [@polynaut](https://github.com/polynaut)! - Fix: the mini scene-avatar in the character header's scene label lost its zoom-in + lift-up. The lift lived in an arbitrary Tailwind class (`-translate-y-[…]`) placed at the very start of a template-literal `imgClassName` — Tailwind didn't scan that token, so no rule was generated, and twMerge had already stripped the `Portrait` default's lift. Switched to a clean, always-generated fraction utility (`-translate-y-1/2`), so the label's scene thumbnail is framed on the face again like the scene cards.
+
+- [#481](https://github.com/polynaut/dth-character-studio/pull/481) [`a66c82d`](https://github.com/polynaut/dth-character-studio/commit/a66c82d607ca1e297dfcbc93bfef5e95717ea029) Thanks [@polynaut](https://github.com/polynaut)! - Form-field polish: lighter input backgrounds in dark mode (Input, MultiSelect,
+  Select and Textarea move from `bg-input/30` to `/50`); the `NumberField` "%" suffix
+  now fades together with its number when the field is disabled (a locked
+  preserve/identity fieldset); and the "Hair items" label sits tight to its field
+  like every other field's label — the override toggle is absolutely positioned so
+  its height can't inflate the label row.
+
+- [#490](https://github.com/polynaut/dth-character-studio/pull/490) [`6f472c4`](https://github.com/polynaut/dth-character-studio/commit/6f472c431135778328dca81e3f02ee458db66386) Thanks [@polynaut](https://github.com/polynaut)! - Hair-item picker now colour-codes each scene item by its guessed type — Hair
+  (violet), Clothing (sky), or Graft (amber). The dropdown suggestions carry a
+  pastel type badge, and each selected pill is filled with its type's pastel
+  colour, so it's easy to tell real hair from the outfit items it's mixed in with.
+  The type is a best-effort guess from the item's label (the scene file carries no
+  authoritative asset type). `MultiSelect` gains generic `optionBadge` and
+  `pillClassName` slots for the badge and the per-type pill fill.
+
+- [#501](https://github.com/polynaut/dth-character-studio/pull/501) [`e9c1232`](https://github.com/polynaut/dth-character-studio/commit/e9c1232c020f5d726215e17dacdece5c58287b2c) Thanks [@polynaut](https://github.com/polynaut)! - **Hair items marks as overridden when it differs from the primary scene.** On a non-primary Daz scene the Hair field's Daz-scene glyph now goes green (with the override dot) exactly when that scene's hair list differs from the primary scene's — compared as a set, the same test the other per-scene fields use — instead of whenever the scene simply listed any hair. A deliberately bald outfit scene (empty list against a primary that has hair) now reads as overridden too, and the glyph's reset copies the primary's list back so the two match again.
+
+- [#475](https://github.com/polynaut/dth-character-studio/pull/475) [`fe148c6`](https://github.com/polynaut/dth-character-studio/commit/fe148c610eb3975d4cc6bde994480707b9b093e1) Thanks [@polynaut](https://github.com/polynaut)! - Hair items: re-read the scene's `.duf` when the studio window regains focus, so a
+  hair item added or removed in Daz shows up in the suggestions without switching
+  scenes. The native reader already reads the file live; the editor previously only
+  re-scanned on a scene-path change, so an edit made while sitting on a scene was
+  missed.
+
+- [#474](https://github.com/polynaut/dth-character-studio/pull/474) [`5b3ea00`](https://github.com/polynaut/dth-character-studio/commit/5b3ea005b6e3df81d5ee4c1d1417bdf9870a751e) Thanks [@polynaut](https://github.com/polynaut)! - Hair items: a new ✦ button beside the multiselect selects every detected hair
+  item in one click (clearing the current pick first). Switching to an outfit
+  scene whose `.duf` contains hair its list doesn't cover now auto-arms that
+  scene's hair override and warns which item would otherwise ride into the export.
+
+  Also: the remove (bin) buttons in Advanced options and next to the export
+  directory now match the height of the fields beside them and drop their hover
+  tooltips; and a keyboard reload (Ctrl/Cmd+R, F5) while there are unsaved changes
+  now goes through the app's own "Unsaved changes" modal instead of the browser's
+  native, unstyleable reload prompt.
+
+- [#485](https://github.com/polynaut/dth-character-studio/pull/485) [`2d6ae80`](https://github.com/polynaut/dth-character-studio/commit/2d6ae803d09cee1440b396ef182430a1c5b154b0) Thanks [@polynaut](https://github.com/polynaut)! - Fix a bogus "not found / unlisted hair" warning that flashed for one frame when switching Daz scenes. The scene's hair scan now resets during render — the instant the selected scene changes — instead of in an effect, so a render never judges the new scene's hair list against the previous scene's wearables.
+
+- [#463](https://github.com/polynaut/dth-character-studio/pull/463) [`e331043`](https://github.com/polynaut/dth-character-studio/commit/e3310434682cbf2e04d2c6588aed5cf8809e17b0) Thanks [@polynaut](https://github.com/polynaut)! - The character header's frosted-glass now matches macOS vibrancy more closely: the backdrop blur is saturated (colours behind it stay vivid) and feathers out at its lower edge instead of ending in a hard blur line.
+
+- [#494](https://github.com/polynaut/dth-character-studio/pull/494) [`dc848e2`](https://github.com/polynaut/dth-character-studio/commit/dc848e226a949263ac2dd724a4dd37908e93a2a5) Thanks [@polynaut](https://github.com/polynaut)! - Houdini project cards now open only from the corner icon. A Houdini project has
+  no per-card state to select (unlike a Daz scene), so clicking anywhere else on
+  the card is a no-op instead of opening the project — and the inert card no
+  longer carries a redundant project-name tooltip.
+
+- [#501](https://github.com/polynaut/dth-character-studio/pull/501) [`e9c1232`](https://github.com/polynaut/dth-character-studio/commit/e9c1232c020f5d726215e17dacdece5c58287b2c) Thanks [@polynaut](https://github.com/polynaut)! - **Editor alignment polish** — three fixes to the character editor's layout:
+
+  - **Info popups never overlap the sticky header.** The "i" popup's floating box (a z-50 portal) could open straight over the header's Discard/Save actions. It now keeps clear of the header's live height — a `placement:"top"` popup with no room above the header flips below instead. Every mounted page header (editor + Settings/Tools) publishes its height as `--sticky-header-h` via a new shared `useStickyHeaderInset` hook, which the popup and the ROM sticky section/column tiers all read.
+  - **The "Bone scale" column header centers over its checkboxes** instead of floating off to the left (matching how the "Value" header mirrors its number cells).
+  - **The ROM section toggle switch is vertically centered on its summary text.** It was wrapped in a bare `<span>` that blockified as a flex item and rode its text baseline a hair high; the switch is now a direct child of the `items-center` row.
+
+- [#489](https://github.com/polynaut/dth-character-studio/pull/489) [`83a1482`](https://github.com/polynaut/dth-character-studio/commit/83a1482260501ce7c4b27943a9a38c0a8fdcd007) Thanks [@polynaut](https://github.com/polynaut)! - **Inline per-scene overrides** — every overridable panel drops its per-panel "OVERRIDE" toggle. On a non-primary Daz scene an overridable field is now editable inline: it shows the primary scene's value muted (with a "can be overridden per Daz scene" hint), and editing it to a value that differs makes it a per-scene override — a green border + a green dot that swaps to a reset button on hover. Global fields (Gender) stay editable on any scene.
+
+  - **Identity dials** (FACS / flexion strengths, UE5 tear UV) — green-on-edit per dial; hover the dot for a reset to the inherited value.
+  - **ROM grid** — the Override checkbox is gone; editing a base row arms it (the row turns green) with a reset button beside remove; the section structure stays locked.
+  - **Preserve lists** (Advanced options) — per-item green + reset; rows are matched to the base by their natural key (morph name / node label), so reordering or deleting one never mismarks the others.
+  - **Hair** — the toggle is gone and the list is always editable. Hair is per-scene by nature (no "primary" to inherit from), so it keeps no override chrome.
+
+  Generation is untouched: the per-scene gates (`identity.enabled`, ROM `enabled`, `preserve.enabled`) are now derived from "a value differs from the primary," so the `.dsa` + Houdini CSV output is byte-identical.
+
+- [#493](https://github.com/polynaut/dth-character-studio/pull/493) [`5436983`](https://github.com/polynaut/dth-character-studio/commit/5436983dbd56d77100f6043d59e8d615c4e9f547) Thanks [@polynaut](https://github.com/polynaut)! - The Unreal card's install button tooltip (and accessible label) now switches
+  from "Install DTH Content" to "Reinstall DTH Content" while Ctrl/Cmd is held —
+  matching the force-overwrite the button performs in that state, which is exactly
+  when a re-install is what a click does.
+
+- [#479](https://github.com/polynaut/dth-character-studio/pull/479) [`189da93`](https://github.com/polynaut/dth-character-studio/commit/189da937327962130da2049cbd820b5ba44c694c) Thanks [@polynaut](https://github.com/polynaut)! - The per-scene override toggle is now one integrated control: the switch is folded into the green scene-label pill (at its right edge, with a subtle divider) instead of sitting beside it. A new `Switch` `variant="green"` styles it to match — squared-off corners like the pill tile, an inset shadow, and green/white hues (a green track + white knob when on; a pale track + green knob when off) in place of the default grey/orange. The global default switch is unchanged.
+
+- [#470](https://github.com/polynaut/dth-character-studio/pull/470) [`73f110b`](https://github.com/polynaut/dth-character-studio/commit/73f110be79385cd580a3e31b1e9479ec67bc280f) Thanks [@polynaut](https://github.com/polynaut)! - Per-scene override toggles now show the selected scene as the same green pill —
+  mini scene render + name — the header tag uses, instead of a plain "for <scene>"
+  text label. The pill is factored into a shared `SceneLabel` used by both the header
+  and every override toggle (ROM, Genesis-9 identity, hair, preserve lists), so the
+  selected scene reads identically everywhere.
+
+- [#473](https://github.com/polynaut/dth-character-studio/pull/473) [`3dda30c`](https://github.com/polynaut/dth-character-studio/commit/3dda30c2193c0e3723d30e042df9635507363dc5) Thanks [@polynaut](https://github.com/polynaut)! - The Hair export (`Export_Hair_<Name>_<Genesis>.dsa`) now exports **each hair item of the open scene on its own** instead of one combined alembic. Open a character's Daz scene, run the single script, and it walks that scene's hair list and exports each item — hiding every other wearable (including the other hair items) so only that one is captured — as `<Name>_Hair_<item>_grooms.abc`. Houdini gets one alembic per hair asset. `RUNTIME_VERSION` 32 → 33; **Refresh assets** regenerates existing characters.
+
+  (Unchanged and re-verified: per-scene overrides still collapse into the ONE ROM script that selects the open scene's data by filename — even with several overrides set up — while the PoseAsset CSV stays one per ROM-override Daz scene.)
+
+- [#465](https://github.com/polynaut/dth-character-studio/pull/465) [`e3a8b5d`](https://github.com/polynaut/dth-character-studio/commit/e3a8b5d3cd8663ec611562cac236d376894ffb4d) Thanks [@polynaut](https://github.com/polynaut)! - Per-scene form overrides — a character's extra (outfit) Daz scenes can now override more than just the ROM:
+
+  - With a **non-primary scene selected**, the overridable panels — **ROM**, the **Genesis-9 box** (FACS detail / flexion strengths, UE5 tear UV), the **hair list**, and the Advanced-options **preserve lists** (preserve morphs / node transforms) — disable by default, each with its own top-right **Override** toggle. A new scene starts fully disabled; you opt each panel in. Genesis/Gender, Houdini projects and the export directory are never per-scene (the export already nests per scene).
+  - Arming a panel edits **that scene's** values, starting as a copy of the base you can tweak — or, for the lists, add to and delete from. The ROM section locks read-only on a non-primary scene until you arm it (check **Override** on a row to replace it, or add frames at a group's end).
+  - **Hair simplified**: the "Hair items live in the Daz scenes" toggle is gone — hair is per scene by presence now (a scene's listed items ARE its hair; none listed, none excluded). For a hair-only variant, link it as its own scene or use Attachments.
+
+  Under the hood the per-scene artifacts collapse into the **one** character Daz script: it embeds every linked scene's overrides and picks the open scene's values at run time (the same trick the hair map already used), instead of a separate `ROM_…_<Scene>.dsa` per scene. A ROM-override scene still gets its own PoseAsset CSV (Houdini can't select frames), delivered by the same scene lookup. **Refresh assets** regenerates existing characters onto the one script and sweeps the old per-scene scripts.
+
+- [#509](https://github.com/polynaut/dth-character-studio/pull/509) [`fa4bb58`](https://github.com/polynaut/dth-character-studio/commit/fa4bb582009ca6d8d6ba13cc0bce3abedbe10433) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): enable/disable a ROM section per Daz scene, + scene-override editor polish
+
+  Dropping a section for one outfit used to mean clearing its whole row list. The
+  section on/off toggle is now live on a non-primary scene: flipping it stores a
+  `sceneOverride.sectionEnabled` entry (only when it differs from the primary), and the
+  section reads as overridden like every other field — green title handle, and its reset
+  restores the primary's on/off state. `applySceneOverride` flips the base section's
+  `enabled` per entry (mode/groups untouched), so the section drops from the scene's
+  frames + CSV while the base is unchanged; works for preset sections too, no custom row
+  list needed. Schema 21 → 22 (additive, no migration).
+
+  Same-pass editor consistency:
+
+  - Preserve-morph / node-transform rows mute to gray when inherited on a non-primary
+    scene and go white + green when overridden; deleting a row surfaces the override on
+    the list label (no row left to mark).
+  - The Hair-items field gets the green override border when its list differs from the
+    primary scene.
+  - The overridden section toggle wears the green switch variant, and its tooltip is the
+    standard "can be overridden per Daz scene" hint; the primary-scene toggle drops its
+    redundant tooltip.
+  - Renamed the ROM timeline label to "Animation timeline".
+
+- [#499](https://github.com/polynaut/dth-character-studio/pull/499) [`1e36cdf`](https://github.com/polynaut/dth-character-studio/commit/1e36cdf7ed5a20a3043717f1f5e139b173f209e0) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): preserve overrides use one control per list, in the label
+
+  The Advanced-options preserve morphs / node transforms showed an override cube in
+  front of every row. The override is per-list (the `preserve.enabled` gate is derived
+  from "the list differs"), so move it to one control in each list's label — like the
+  other fields. The whole list counts as overridden the moment any row's value changes
+  or a row is added/removed; reset reverts the list to the primary, and a green border
+  still marks the individual rows that differ.
+
+- [#478](https://github.com/polynaut/dth-character-studio/pull/478) [`5abdb9a`](https://github.com/polynaut/dth-character-studio/commit/5abdb9aa24bcbaecc6533ff4b39b0a83ad8a12d6) Thanks [@polynaut](https://github.com/polynaut)! - The "Preserve morphs after ROM loading" name field now autocompletes from the
+  scanned morph index — the same suggestions (internal name + Daz UI name, with the
+  node, matched against either) the ROM editor's Morph-name column already offers.
+  A shared `MorphIndexProvider` now feeds both places one pre-lowercased index.
+
+- [#467](https://github.com/polynaut/dth-character-studio/pull/467) [`f72adcb`](https://github.com/polynaut/dth-character-studio/commit/f72adcb29923a6154c9995b16c2977a5c31620f6) Thanks [@polynaut](https://github.com/polynaut)! - **Refresh assets** now upscales existing low-resolution avatars. A character saved
+  before the xBRZ upscale-on-write feature keeps its 256px avatar until it's re-set;
+  Tools → Refresh assets now xBRZ-upscales every stored avatar still under 512² to
+  512² in place, so one click upgrades the whole library. Idempotent (avatars already
+  ≥512² are untouched) and best-effort (a failed upscale never aborts the refresh).
+
+- [#476](https://github.com/polynaut/dth-character-studio/pull/476) [`e6b2ca0`](https://github.com/polynaut/dth-character-studio/commit/e6b2ca0df7fc52ff17105c30508c244abe1abe3e) Thanks [@polynaut](https://github.com/polynaut)! - ROM editor on a non-primary (outfit) scene: the per-frame **Override** column now
+  stays visible but disabled while that scene's ROM override is off — instead of
+  disappearing — so it's clear the control is there and just needs arming. The eight
+  section titles are also muted on any override scene: the section structure
+  (enable / mode / groups) is locked whether the override is armed or not, so the
+  titles now read as disabled to match their already-locked toggles.
+
+- [#492](https://github.com/polynaut/dth-character-studio/pull/492) [`dc4273d`](https://github.com/polynaut/dth-character-studio/commit/dc4273d5c1a102c3817e5aa0f727cf53ffd64a3c) Thanks [@polynaut](https://github.com/polynaut)! - ROM timeline bar now uses soft pastel (`-300`) block colors instead of the
+  saturated `-600`/`-700` fills, which read as too vibrant against the dark UI.
+  Block labels flip to dark text so they stay legible on the lighter blocks, and
+  the segment dividers ease from `black/20` to `black/10`. Section hues are
+  unchanged in family (RET slate, JCM indigo, …), so each block keeps its identity.
+
+- [#496](https://github.com/polynaut/dth-character-studio/pull/496) [`7750634`](https://github.com/polynaut/dth-character-studio/commit/7750634e6bc6a46c83e2fc797625dbae5a19cae1) Thanks [@polynaut](https://github.com/polynaut)! - Animate the scene-footer rail on selection. Picking a pill now swaps it into the
+  prominent slot with a quick View Transitions morph — each pill slides from its
+  old slot to its new one instead of snapping — while the rest shift to fill in.
+  Falls back to a plain select where the API is unavailable or the user prefers
+  reduced motion.
+
+- [#500](https://github.com/polynaut/dth-character-studio/pull/500) [`aaac0f5`](https://github.com/polynaut/dth-character-studio/commit/aaac0f51eb4ea4209ac205da1303220d0e0461ac) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the selected Daz scene's ring in the footer hugs the pill
+
+  The ring wrapper used `rounded-lg` while the pill inside (`Tag`) uses `rounded`, so
+  the green selection ring bulged past the pill's corners. Match the wrapper's radius to
+  the pill's so the ring follows its silhouette.
+
+- [#484](https://github.com/polynaut/dth-character-studio/pull/484) [`3290a71`](https://github.com/polynaut/dth-character-studio/commit/3290a7135ec0874df37927810cadcc94ef1d5bd0) Thanks [@polynaut](https://github.com/polynaut)! - **Selected-scene footer** — a docked status bar (like the project page's Unreal-projects bar) that keeps the Daz scene you're editing on screen once its cards scroll off. The selected scene sits prominent and ringed on the left; after a divider the other linked scenes follow in a horizontally-scrollable rail (edge-fading when there are many), so you can switch scene mid-scroll. Always shown while scrolled, even for a single-scene character.
+
+  Replaces the old sticky "OVERRIDE · scene" bar that pinned under the header (the panel override toggles already read fine on their own).
+
+- [#508](https://github.com/polynaut/dth-character-studio/pull/508) [`f45beb5`](https://github.com/polynaut/dth-character-studio/commit/f45beb5627cd5df586927c549384cba768200d24) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): scene-override editor UI polish
+
+  Clearer per-scene override state in the character editor, and no layout shift
+  when switching to a non-primary scene:
+
+  - ROM section titles carry the override mark at the END of the title, and it goes
+    green whenever the section diverges from the primary in ANY way — a per-row
+    value edit, an added frame, or a whole-section escalation. Its reset clears
+    every override kind at once.
+  - An overridden section brightens its whole title row to white; overridable field
+    labels dim to gray until overridden, then go white too.
+  - Added frames now show the same reset handle + bin as edited base rows, plus a
+    green "\*" new-row marker. The reset button's footprint and the name marker slot
+    are reserved on every row, so scene switches (and a row becoming overridden)
+    never shift the grid in X.
+  - The sticky page header now sits above inline info popups (still below dialogs),
+    so a popup reaching into the header is covered instead of floating over it.
+  - The Unreal projects footer keeps a constant height whether empty or filled, and
+    its add trigger is an icon-only "+". The footer scene ring sits flush (0 offset).
+
+- [#505](https://github.com/polynaut/dth-character-studio/pull/505) [`8a3658a`](https://github.com/polynaut/dth-character-studio/commit/8a3658acd78d50d5459260c493b7b061da3eaefe) Thanks [@polynaut](https://github.com/polynaut)! - Per-scene ROM: reorder, insert and delete frames on a non-primary Daz scene. Drag handles and the insert "+" are no longer hidden there — the first structural edit (reorder / insert-between / delete a base frame / add a group) escalates the whole ROM section to a scene override. That section's title then shows a green overridden marker whose reset restores the section to the primary scene's ROM. Pure value edits keep the sparse per-row behaviour (green rows, per-row reset), and editing a value back to the base (e.g. a bone-scale flag toggled on then off) now un-arms the row instead of leaving it stuck green. An overridden row's bone-scale checkbox reads green to match the row.
+
+- Updated dependencies [[`fa62f4d`](https://github.com/polynaut/dth-character-studio/commit/fa62f4d6284b76bfefd3fe7bc09347b8b84e775e), [`235cd39`](https://github.com/polynaut/dth-character-studio/commit/235cd395ce0d1e48fa6dd59be6a865c3bc735bba), [`912e873`](https://github.com/polynaut/dth-character-studio/commit/912e8734d0b22656727fadc2f4b2cb0444767fed), [`6f472c4`](https://github.com/polynaut/dth-character-studio/commit/6f472c431135778328dca81e3f02ee458db66386), [`dc848e2`](https://github.com/polynaut/dth-character-studio/commit/dc848e226a949263ac2dd724a4dd37908e93a2a5), [`e9c1232`](https://github.com/polynaut/dth-character-studio/commit/e9c1232c020f5d726215e17dacdece5c58287b2c), [`83a1482`](https://github.com/polynaut/dth-character-studio/commit/83a1482260501ce7c4b27943a9a38c0a8fdcd007), [`83a1482`](https://github.com/polynaut/dth-character-studio/commit/83a1482260501ce7c4b27943a9a38c0a8fdcd007), [`189da93`](https://github.com/polynaut/dth-character-studio/commit/189da937327962130da2049cbd820b5ba44c694c), [`3dda30c`](https://github.com/polynaut/dth-character-studio/commit/3dda30c2193c0e3723d30e042df9635507363dc5), [`e3a8b5d`](https://github.com/polynaut/dth-character-studio/commit/e3a8b5d3cd8663ec611562cac236d376894ffb4d), [`4a4e4a4`](https://github.com/polynaut/dth-character-studio/commit/4a4e4a424603769ff2550196283c5ff924461c0e)]:
+  - @dth/ui@0.45.5
+  - @dth/rom@0.45.5
+
 ## 0.45.4
 
 ### Patch Changes

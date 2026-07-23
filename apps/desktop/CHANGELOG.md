@@ -1,5 +1,17 @@
 # @dth/desktop
 
+## 0.45.5
+
+### Patch Changes
+
+- [#491](https://github.com/polynaut/dth-character-studio/pull/491) [`235cd39`](https://github.com/polynaut/dth-character-studio/commit/235cd395ce0d1e48fa6dd59be6a865c3bc735bba) Thanks [@polynaut](https://github.com/polynaut)! - The **create-character dialog now auto-selects Genesis (and gender) from the picked Daz scene's contents** instead of guessing from its filename. Choosing or dropping a scene reads its base figure node (`Genesis9`, `Genesis8_1Female`, …) — which names both the generation and, for Genesis 8 / 8.1 / 3, the gender — and preselects the matching fields. A bare character scene (just the figure, no hair/clothes) is detected the same way. Both fields stay fully editable, so an unrecognized (e.g. renamed) figure just leaves the current selection in place.
+
+  The native `scene_wearables` command now also returns the scene's base `figure` node alongside its conformed items; the old filename-based generation guess is removed.
+
+- [#504](https://github.com/polynaut/dth-character-studio/pull/504) [`09b333f`](https://github.com/polynaut/dth-character-studio/commit/09b333fb70ecce746057baf0134ee2e22d3e4f26) Thanks [@polynaut](https://github.com/polynaut)! - **Fix "fs.copy_file not allowed" when copying a Daz scene into a character** — the whole-file scene copy moved onto the fs plugin's `copyFile` (audit PR [#435](https://github.com/polynaut/dth-character-studio/issues/435)) but the desktop capability that authorizes it was never added, so every copy/move of an external scene (and the one-time projects migration, which also copies) failed at runtime with a permissions error. Grants `fs:allow-copy-file` with the same `**` scope as the sibling fs write permissions in `capabilities/default.json`.
+
+- [#503](https://github.com/polynaut/dth-character-studio/pull/503) [`4a4e4a4`](https://github.com/polynaut/dth-character-studio/commit/4a4e4a424603769ff2550196283c5ff924461c0e) Thanks [@polynaut](https://github.com/polynaut)! - Refresh assets can now reset character files saved by a newer build. If a definition was written by a newer version of the app (its schema is ahead of yours), this build refuses to open it. Refresh assets now lists those files separately and offers a one-click "Reset to v<current>" that re-saves them at this build's schema — dropping any fields the newer version added. The read-error notice on the project page links straight to it.
+
 ## 0.45.4
 
 ## 0.45.3
