@@ -409,7 +409,7 @@ describe('scene override mode', () => {
     expect(screen.getAllByLabelText('Insert a frame here').length).toBeGreaterThan(0)
     expect(screen.getAllByTitle('Drag to reorder').length).toBeGreaterThan(0)
     // A base row can be deleted for this scene (a structural edit that escalates).
-    expect(screen.getByTitle('Delete this frame for this scene')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Delete this frame for this scene' })).toBeTruthy()
     // Nothing to reset until a value edit arms the row.
     expect(screen.queryByTitle('Reset this frame to the base ROM')).toBeNull()
   })
@@ -442,7 +442,7 @@ describe('scene override mode', () => {
       <OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />,
     )
     fireEvent.click(screen.getByText('Full Body'))
-    fireEvent.click(screen.getByTitle('Delete this frame for this scene'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this frame for this scene' }))
     expect(latest!.sectionOverrides).toHaveLength(1)
     expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(0)
     // The section-title reset drops the whole-section override entirely.
@@ -549,7 +549,7 @@ describe('scene override mode', () => {
     expect(
       screen.getByTitle('Reset this added frame — removes it (not in the primary scene)'),
     ).toBeTruthy()
-    fireEvent.click(screen.getByTitle('Delete this added frame for this scene'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this added frame for this scene' }))
     expect(latest!.additions).toEqual([])
   })
 

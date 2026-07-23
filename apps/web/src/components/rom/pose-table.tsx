@@ -322,7 +322,11 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              // Green reset glyph that turns white on hover over a button silhouette.
+              // The reset only ever shows on a green (overridden) row, where the plain
+              // ghost accent hover washes out — so use a foreground overlay that stays
+              // visible there. The icon inherits the button's text colour (currentColor).
+              className="size-7 text-daz-green hover:bg-foreground/15 hover:text-white dark:hover:bg-foreground/15"
               title={
                 isAddition
                   ? 'Reset this added frame — removes it (not in the primary scene)'
@@ -331,7 +335,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
               onClick={() => (isAddition ? meta.remove(row.index) : override?.reset(id))}
             >
               {/* translate-y-[2px]: optically centre the top-heavy reset glyph. */}
-              <RotateCcw className="size-3.5 translate-y-[2px] text-daz-green" />
+              <RotateCcw className="size-3.5 translate-y-[2px]" />
             </Button>
           ) : (
             // Reserve the reset button's footprint so nothing shifts when it appears.
@@ -340,8 +344,11 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
-            title={
+            // Gray at rest, white on hover over the SAME button silhouette as the reset
+            // (visible on the green overridden row too). No tooltip — the icon reads on
+            // its own; an aria-label keeps the icon-only button accessible.
+            className="size-7 text-muted-foreground hover:bg-foreground/15 hover:text-white dark:hover:bg-foreground/15"
+            aria-label={
               isAddition
                 ? 'Delete this added frame for this scene'
                 : override
@@ -350,7 +357,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
             }
             onClick={() => meta.remove(row.index)}
           >
-            <Trash2 className="size-3.5 text-destructive" />
+            <Trash2 className="size-3.5" />
           </Button>
         </span>
       )
