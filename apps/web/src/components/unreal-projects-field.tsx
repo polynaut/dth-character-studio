@@ -281,7 +281,17 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             }
           />
         ))}
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => void onPick()}>
+        <Button
+          variant="outline"
+          size="sm"
+          // Stretch to the linked cards' height when any are present (shared
+          // `items-center` row) so the button reads as their sibling, not a
+          // shorter afterthought; `min-h-8` keeps the sm floor in the empty
+          // "Link" state where no card sets the row height.
+          className="h-auto min-h-8 self-stretch"
+          disabled={busy}
+          onClick={() => void onPick()}
+        >
           <Plus />
           {busy ? 'Linking…' : project.unrealProjects.length ? 'Add' : 'Link'}
         </Button>
