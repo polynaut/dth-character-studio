@@ -11,8 +11,9 @@ import type { PoseAssetCatalog } from '#/components/rom/preset-asset-picker.tsx'
 import type { Character, PresetFrames, RomSection, SceneOverride } from '@dth/rom'
 
 /**
- * The ROM block: heading + per-scene Override toggle, the timeline, and the
- * eight-section editor. Memoized with identity-stable callbacks from the page
+ * The ROM block: heading, the timeline, and the eight-section editor. On a
+ * non-primary Daz scene the grid is implicitly in override mode (arm-on-edit — no
+ * toggle). Memoized with identity-stable callbacks from the page
  * (the draft hook's `patch` is stable) — this is the editor's heavy subtree,
  * and page-level churn that doesn't touch its props must not re-render it.
  */

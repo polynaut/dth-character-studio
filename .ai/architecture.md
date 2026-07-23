@@ -97,8 +97,9 @@ The character editor keeps a draft + baseline (`dirty` by JSON comparison);
 ROM-override scene's merged sections — `sceneOverrideBuildsRom`) → `saveCharacter` →
 `generateCharacterFiles` → settle draft+baseline in one paint → invalidate in the
 background. The editor's page-local **selected scene** (the Daz scene cards)
-drives every per-scene feature: the hair list, the ROM Override toggle, and —
-with more than one scene linked — the header's scene tag.
+drives every per-scene feature: the hair list, the implicit per-scene overrides
+(edit-to-override — ROM frames, the G9 identity dials, preserve items), and — with
+more than one scene linked — the header's scene tag.
 
 ## apps/desktop — the Tauri shell
 

@@ -65,6 +65,16 @@ Two switches tune this:
 &nbsp;
 
 > [!NOTE]
+> **Running a scene with per-scene overrides?** The one `ROM_<Name>_G9.dsa` embeds
+> every scene's [overrides](./advanced.md#per-scene-overrides--edit-to-override) and
+> applies the delta for whichever scene is **open in Daz** — so open the right scene
+> before running it. A scene with **ROM** overrides also writes its own
+> **`<Name>_<Scene>_pose_asset.csv`** (in that scene's subfolder when subfolders are
+> on); that's the CSV to import in Houdini for that scene.
+
+&nbsp;
+
+> [!NOTE]
 > No export directory set? The ROM is still built in Daz — export manually with the
 > DTH Exporter as described in the DazToHue docs; the PoseAsset CSV is waiting in
 > the character's folder.
