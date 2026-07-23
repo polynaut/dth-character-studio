@@ -32,7 +32,7 @@ function Switch({
         // variant also keeps a faint green hue when OFF, so an overridden-but-false
         // toggle reads "off, but overridden"; the default off track stays neutral.
         green
-          ? "data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_18%,#2b2f37)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_86%,black)]"
+          ? "focus-visible:ring-daz-green/50 data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_18%,#2b2f37)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_86%,black)]"
           : "data-[state=unchecked]:bg-[#2b2f37] data-[state=checked]:bg-[#fe5c01]",
         className
       )}

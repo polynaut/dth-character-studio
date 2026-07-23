@@ -95,7 +95,7 @@ export function IdentitySection({
         className="m-0 flex flex-wrap items-end gap-x-6 gap-y-3 border-0 p-0"
       >
         <div className="group/ovr">
-          <Label className="mb-1" title="G9 FACS Detail Strength, set at frame 0">
+          <Label className="mb-1">
             FACS detail strength
             <OverrideMark
               overridden={facsOv}
@@ -114,7 +114,7 @@ export function IdentitySection({
           />
         </div>
         <div className="group/ovr">
-          <Label className="mb-1" title="G9 Flexion Automatic Strength, set at frame 0">
+          <Label className="mb-1">
             Flexion strength
             <OverrideMark
               overridden={flexOv}
