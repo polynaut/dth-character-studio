@@ -10,23 +10,41 @@ import type { Character, RomPose, RomSections, SceneOverride } from './types'
  */
 
 /**
- * The sections a scene override actually compiles to: every base row stays at
- * its position (replaced rows substitute CONTENT only, by pose id), and the
- * override's added rows are appended at their group's end — so the base frames
- * keep their numbers and the additions continue after them. Orphaned entries
- * (a replaced pose or a target group that no longer exists in the base) are
- * ignored. Both the editor's frame display and the generation consume THIS, so
- * what the override grid shows is what the scene's script + CSV get.
+ * The sections a scene override actually compiles to. Two layers:
+ *
+ * - A **whole-section override** (`sectionOverrides`) replaces that section's groups
+ *   verbatim — used once a structural edit (reorder / insert / add / remove) makes the
+ *   section differ in order or count, which the sparse layer can't represent.
+ * - Otherwise the **sparse** layer: every base row stays at its position (replaced rows
+ *   substitute CONTENT only, by pose id) and the override's added rows are appended at
+ *   their group's end — so the base frames keep their numbers and the additions
+ *   continue after them.
+ *
+ * Orphaned entries (a replaced pose or a target group that no longer exists in the
+ * base) are ignored. Both the editor's frame display and the generation consume THIS,
+ * so what the override grid shows is what the scene's script + CSV get.
  */
 export function applySceneOverride(
   sections: RomSections,
-  override: Pick<SceneOverride, 'poses' | 'additions'>,
+  override: Pick<SceneOverride, 'poses' | 'additions'> & {
+    sectionOverrides?: SceneOverride['sectionOverrides']
+  },
 ): RomSections {
   const replaced = new Map(override.poses.map((pose) => [pose.id, pose]))
   const additions = new Map(override.additions.map((entry) => [entry.groupId, entry.poses]))
+  const sectionFull = new Map(
+    (override.sectionOverrides ?? []).map((entry) => [entry.section, entry.groups]),
+  )
   const next = { ...sections }
   for (const section of ROM_SECTIONS) {
     const config = sections[section]
+    // Whole-section override wins: a structural edit snapshotted the scene's entire
+    // section, so use its groups verbatim (the sparse replace/append no longer apply).
+    const full = sectionFull.get(section)
+    if (full) {
+      next[section] = { ...config, groups: full }
+      continue
+    }
     let groups = config.groups.map((group) => ({
       ...group,
       poses: [

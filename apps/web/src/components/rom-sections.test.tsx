@@ -375,6 +375,7 @@ describe('scene override mode', () => {
       enabled: true,
       poses: [],
       additions: [],
+      sectionOverrides: [],
       identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
       groom: { enabled: false },
       preserve: { enabled: false, morphs: [], nodeTransforms: [] },
