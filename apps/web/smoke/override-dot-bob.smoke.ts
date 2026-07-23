@@ -28,6 +28,11 @@ test('overridden glyph dot bobs', async ({ page }) => {
   // a full ~1.7s cycle). Guards both the wiring and a large-enough amplitude to notice.
   const dot = page.locator('circle.animate-override-bob').first()
   await expect(dot, 'overridden dot has the bob animation').toHaveCount(1)
+  // The bob must NOT be gated on prefers-reduced-motion — OS "reduce motion" (common on
+  // dev machines) was silently killing this deliberate "overridden" cue.
+  expect(await dot.getAttribute('class'), 'bob is not reduced-motion-gated').not.toContain(
+    'motion-reduce',
+  )
   const ys: number[] = []
   for (let i = 0; i < 12; i++) {
     ys.push((await dot.boundingBox())!.y)

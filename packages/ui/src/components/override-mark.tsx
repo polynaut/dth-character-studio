@@ -79,7 +79,10 @@ export function OverrideMark({
       {/* Resting face: the green cube (its dot bobs). Fades out on hover/keyboard focus. */}
       <CubeDotIcon
         className="size-4 transition-opacity group-hover/mark:opacity-0 group-focus/mark:opacity-0"
-        dotClassName="fill-current animate-override-bob motion-reduce:animate-none"
+        // No `motion-reduce:animate-none` here — the bob is a deliberate, small "this is
+        // overridden" cue we always want shown, even under OS "reduce motion" (which is
+        // common on dev machines and was silently killing it).
+        dotClassName="fill-current animate-override-bob"
       />
       {/* Revealed face: a white reset icon, inside the same persistent green chip. */}
       <span
