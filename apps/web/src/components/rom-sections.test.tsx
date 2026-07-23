@@ -597,6 +597,18 @@ describe('scene override mode', () => {
     expect(sectionsChanged).toBe(false)
   })
 
+  it('a section disabled for the scene keeps its rows at their absolute frames (no reset to 1)', () => {
+    render(<OverrideHarness onOverrideChange={() => {}} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body')) // expand FBM
+    // Enabled: the base row sits at absolute frame 328 (after the 328-frame base ROM).
+    expect(screen.getByText('328')).toBeTruthy()
+    // Disable FBM for the scene — its rows stay in place, they're just not generated.
+    const header = screen.getByText('Full Body').closest('div') as HTMLElement
+    fireEvent.click(within(header).getByRole('switch'))
+    // The frame number must NOT collapse to 1 — still 328.
+    expect(screen.getByText('328')).toBeTruthy()
+  })
+
   it('editing a section CONFIG field (JCM custom path) owns the section for the scene', () => {
     // A JCM section in custom mode → an editable base-ROM path Input. On a non-primary
     // scene editing it escalates the section to an owned config (per-scene), stores the

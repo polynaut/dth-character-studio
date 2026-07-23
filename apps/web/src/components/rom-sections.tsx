@@ -246,12 +246,21 @@ export const RomSections = memo(function RomSections({
       let frame = presetFrameCount(displaySections, gender, presetFrames)
       for (const section of ROM_SECTIONS) {
         const config = displaySections[section]
-        if (!config.enabled || config.mode !== 'custom') continue
+        if (config.mode !== 'custom') continue
+        // A DISABLED custom section still lays its rows out at the frame they'd occupy
+        // if it were on (so the numbers don't collapse to 1 while the user decides what
+        // to do with them) — but it must NOT advance the global counter, since a disabled
+        // section contributes no frames and mustn't shift the sections after it. Only
+        // enabled sections map into `byFrame` (the run-report jump) + move the counter.
+        let cursor = frame
         for (const group of config.groups) {
-          starts.set(group.id, frame)
-          for (let i = 0; i < group.poses.length; i++) byFrame.set(frame + i, section)
-          frame += group.poses.length
+          starts.set(group.id, cursor)
+          if (config.enabled) {
+            for (let i = 0; i < group.poses.length; i++) byFrame.set(cursor + i, section)
+          }
+          cursor += group.poses.length
         }
+        if (config.enabled) frame = cursor
       }
     }
     return { startFrames: starts, sectionByFrame: byFrame }
@@ -702,11 +711,19 @@ export const RomSections = memo(function RomSections({
             </div>
 
             {isOpen && (
-              // Locked (non-primary scene, override unarmed): the native fieldset
-              // disable cascades to every editing control below, so the rows show
-              // as a dimmed read-only base view. The accordion button + section
-              // Switch sit in the header ABOVE, so expanding still works.
-              <fieldset disabled={locked} className={`space-y-3 border-t px-4 py-4${locked ? ' opacity-60' : ''}`}>
+              // The BODY dims when the section is off: for a plain disabled section the
+              // whole wrapper already dims (above); for a disabled OVERRIDE the wrapper
+              // stays full (so the green title / label / toggle read active) and we dim
+              // just the content here instead — the section IS off, its content is inert,
+              // but it stays editable so the user can decide what to keep. `locked` (the
+              // vestigial unarmed-override gate) still hard-disables + dims when set.
+              <fieldset
+                disabled={locked}
+                className={cn(
+                  'space-y-3 border-t px-4 py-4',
+                  (locked || (!effectiveEnabled && sectionOverridden)) && 'opacity-60',
+                )}
+              >
                 {modes.length > 1 && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Mode:</span>
