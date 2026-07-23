@@ -153,7 +153,7 @@ export function GroomFields({
 
   return (
     <div className="group/ovr max-w-xl">
-      <div className="mb-1 flex items-center gap-1 text-sm font-medium">
+      <div className="mb-1 flex items-center gap-2 text-sm font-medium">
         Hair items
         <InfoPopup label="Hair items — more information">
           Each scene carries its own hair — the items you list here are hidden around the DTH

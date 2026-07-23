@@ -136,7 +136,7 @@ export function IdentitySection({
           <Switch variant={tearOv ? 'green' : 'default'} checked={tear} onCheckedChange={setTear} />
           <span
             className={cn(
-              'flex items-center gap-1 text-sm',
+              'flex items-center gap-2 text-sm',
               inherited(tearOv) && 'text-muted-foreground',
             )}
           >
