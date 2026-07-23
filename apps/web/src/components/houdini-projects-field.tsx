@@ -85,6 +85,7 @@ function HoudiniCard({
       openTitle="Open in Houdini"
       accentClass="group-hover:text-houdini-orange"
       cardClass="houdini-card"
+      barClass="bg-houdini-orange"
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"
