@@ -701,22 +701,30 @@ export const RomSections = memo(function RomSections({
                 )}
 
                 {config.mode === 'preset' ? (
-                  // The preset setup is base-only — inert while a scene
-                  // override is active (presets aren't overridable per scene).
-                  <div className={`space-y-3 ${overrideCtl ? 'pointer-events-none opacity-60' : ''}`}>
-                    <p className="text-sm text-muted-foreground">
-                      {PRESET_DESCRIPTIONS[section] ?? 'Pre-defined DTH assets.'}
-                    </p>
-                    <PresetAssetPicker
-                      section={section}
-                      config={config}
-                      genesis={genesis}
-                      gender={gender}
-                      skinning={skinning}
-                      facEnabled={sections.FAC.enabled}
-                      catalog={catalog}
-                      onChange={(presetAssets) => patchSection(section, { presetAssets })}
-                    />
+                  <div className="space-y-3">
+                    {/* The asset SELECTION is base structure — inert while a scene
+                        override is active (which preset ships isn't per-scene). */}
+                    <div
+                      className={`space-y-3 ${overrideCtl ? 'pointer-events-none opacity-60' : ''}`}
+                    >
+                      <p className="text-sm text-muted-foreground">
+                        {PRESET_DESCRIPTIONS[section] ?? 'Pre-defined DTH assets.'}
+                      </p>
+                      <PresetAssetPicker
+                        section={section}
+                        config={config}
+                        genesis={genesis}
+                        gender={gender}
+                        skinning={skinning}
+                        facEnabled={sections.FAC.enabled}
+                        catalog={catalog}
+                        onChange={(presetAssets) => patchSection(section, { presetAssets })}
+                      />
+                    </div>
+                    {/* Art direction is GLOBAL content — the same genitalia shaping on
+                        every scene, not a per-scene override. So it stays fully
+                        interactive on a non-primary scene (expand AND edit); its edits
+                        apply everywhere, like Gender. Kept OUTSIDE the asset lock above. */}
                     {section === 'GEN' && (
                       <ArtDirectionEditor
                         config={config}
