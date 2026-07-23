@@ -19,10 +19,31 @@ import {
 } from '@floating-ui/react'
 import { cn } from '../cn.ts'
 import { useUiConfig } from '../config.tsx'
+import { STICKY_HEADER_VAR } from '../hooks/use-sticky-header-inset.ts'
 
 const ARROW_HEIGHT = 7
 /** Gap between the "i" and the popup, on top of the arrow's own height. */
 const GAP = 4
+/** Minimum breathing room the popup keeps from the viewport edges. */
+const EDGE = 8
+
+/**
+ * The overflow padding for flip/shift: the usual {@link EDGE} on every side,
+ * PLUS the live sticky-header height on top. The app's sticky page header is a
+ * fixed overlay the popup's z-50 portal would otherwise render straight over, so
+ * a `placement:"top"` popup with no room above the header flips below instead of
+ * overlapping it. Read from the CSS var each compute (it's a derivable) so it
+ * tracks the header collapsing on scroll; absent (a plain page) it's 0.
+ */
+function overflowPadding() {
+  let headerH = 0
+  if (typeof document !== 'undefined') {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(STICKY_HEADER_VAR)
+    const parsed = Number.parseFloat(raw)
+    if (Number.isFinite(parsed)) headerH = parsed
+  }
+  return { top: headerH + EDGE, right: EDGE, bottom: EDGE, left: EDGE }
+}
 
 /**
  * An "i" info trigger with a popup of rich text (bold / italic / links).
@@ -73,8 +94,10 @@ export function InfoPopup({
     placement: 'top',
     middleware: [
       offset(ARROW_HEIGHT + GAP),
-      flip({ padding: 8 }),
-      shift({ padding: 8 }),
+      // Derivable options (re-read each compute) so the header inset tracks the
+      // header collapsing on scroll — see overflowPadding.
+      flip(() => ({ padding: overflowPadding() })),
+      shift(() => ({ padding: overflowPadding() })),
       arrow({ element: arrowRef }),
     ],
     whileElementsMounted: autoUpdate,

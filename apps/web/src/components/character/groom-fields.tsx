@@ -26,14 +26,14 @@ function refKey(ref: string): string {
 }
 
 /**
- * The hair (groom) block of the character editor's identity card. Hair is always
+ * The hair (groom) block of the character editor's identity card. Hair is stored
  * PER SCENE (`groomScenes`) — a scene's listed items ARE its hair, none listed
- * means none (empty scenes are dropped at generation). Every scene owns its list;
- * there is NO "inherit from the primary". It still carries the Daz-scene cube glyph
- * like the other overridable fields, but hair overrides by PRESENCE: the glyph goes
- * green once a non-primary scene lists its own hair, and its reset just clears the
- * list (there's no primary value to fall back to). This edits the SELECTED scene
- * card's list (`selectedScene`, the primary by default). The
+ * means none (empty scenes are dropped at generation); generation bakes each scene's
+ * own list. It carries the Daz-scene cube glyph like the other overridable fields,
+ * and marks as overridden the same way they do: the glyph goes green once THIS
+ * non-primary scene's hair DIFFERS from the primary scene's (compared as a set), and
+ * its reset copies the primary's list back. This edits the SELECTED scene card's
+ * list (`selectedScene`, the primary by default). The
  * generated script bakes the whole map and hides the open scene's list around the
  * export at run time, so one script serves every scene. Suggestions come from the
  * selected scene's `.duf` (read natively, no Daz needed); a listed label the scene
@@ -127,6 +127,21 @@ export function GroomFields({
 
   const ids = new Set(wearables.map((wearable) => wearable.id))
   const listed = nodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
+
+  // Hair "overrides" when THIS non-primary scene's list DIFFERS from the primary
+  // scene's — compared as a SET (order-independent), the same test the other
+  // per-scene fields use. The primary (`character.scenePath`) is the base: reset
+  // copies its list back so the two match and the mark goes quiet again. (An empty
+  // list against a primary that has hair still differs — a deliberately bald outfit
+  // scene reads as overridden too.)
+  const primaryNodes =
+    character.groomScenes.find((g) => g.scenePath === character.scenePath)?.nodes ?? []
+  const primaryListed = primaryNodes
+    .map((groom) => groom.nodeLabel.trim())
+    .filter((label) => label !== '')
+  const primarySet = new Set(primaryListed)
+  const hairDiffersFromPrimary =
+    listed.length !== primaryListed.length || listed.some((label) => !primarySet.has(label))
   const candidates = wearables
     // Top-level followers only: an item fitted to another wearable (hair base on
     // its cap) rides along with its parent and needs no own entry.
@@ -164,13 +179,13 @@ export function GroomFields({
           hair to exclude. For a hair-only variant, link it as its own scene (or use
           Attachments).
         </InfoPopup>
-        {/* The glyph marks hair like the other Daz-scene fields. Hair is per-scene by
-            nature, so it goes green once THIS non-primary scene lists its own hair,
-            and the reset just clears it (there's no primary hair to fall back to). */}
+        {/* The glyph marks hair like the other Daz-scene fields: it goes green once
+            THIS non-primary scene's hair differs from the primary scene's, and reset
+            copies the primary's list back (making them match). */}
         <OverrideMark
-          overridden={overrideEligible && listed.length > 0}
-          onReset={() => setNodes([])}
-          resetTitle="Clear this scene's hair items"
+          overridden={overrideEligible && hairDiffersFromPrimary}
+          onReset={() => setNodes(primaryNodes.map((n) => ({ nodeLabel: n.nodeLabel })))}
+          resetTitle="Reset to the primary scene's hair"
         />
       </div>
       {exporterTooOld && (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
@@ -6,7 +6,7 @@ import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
-import { Button, EditableTitle, useModifierHeld } from '@dth/ui'
+import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { characterSkinning, countPoses } from '@dth/rom'
 
@@ -88,26 +88,12 @@ export function EditorHeader({
   const swallowNavRef = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
 
-  // The sticky header's height is DYNAMIC — its content (and so its collapsed
-  // height) changes as the design evolves, and the ROM section / column-title
-  // tiers pin right below it. Publish the live height as `--editor-header-h` so
-  // their sticky `top` tracks it instead of a hardcoded px that silently drifts.
-  // ResizeObserver covers the scroll-driven collapse AND content/resize reflows;
-  // the sections only pin once the header is fully collapsed (they're far down the
-  // page), so the value is stable whenever it actually matters.
-  useEffect(() => {
-    const header = headerRef.current
-    if (!header) return
-    const root = document.documentElement
-    const update = () => root.style.setProperty('--editor-header-h', `${header.offsetHeight}px`)
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(header)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty('--editor-header-h')
-    }
-  }, [])
+  // Publish the sticky header's live height as `--sticky-header-h` so the things
+  // that must stay clear of it track it instead of a hardcoded px that silently
+  // drifts: the ROM section / column-title tiers pin right below it, and
+  // InfoPopup keeps its popup from overlapping it. The height is dynamic (its
+  // content — and so its collapsed height — changes as the design evolves).
+  useStickyHeaderInset(headerRef)
 
   // A character has ONE main avatar (`character.image`), shown in this big
   // portrait and everywhere else in the app — it stays constant and editable in
