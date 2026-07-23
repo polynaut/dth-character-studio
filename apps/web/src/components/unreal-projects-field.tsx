@@ -54,9 +54,10 @@ function UnrealCard({
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
   const dir = displayPath(uprojectPath).replace(/[\\/][^\\/]*$/, '')
+  const OpenIcon = altHeld ? FolderOpen : ExternalLink
   return (
     <div className="group/card relative">
-      <div className="flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors hover:border-foreground/40">
+      <div className="unreal-card flex items-center gap-3 rounded-lg border px-3 py-2 pl-4 transition-colors">
         <button
           type="button"
           onClick={onOpen}
@@ -69,11 +70,7 @@ function UnrealCard({
             <span className="block truncate text-sm font-medium">{displayName}</span>
             <span className="block max-w-72 truncate text-xs text-muted-foreground">{dir}</span>
           </span>
-          {altHeld ? (
-            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-          ) : (
-            <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
-          )}
+          <OpenIcon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover/card:text-unreal-blue" />
         </button>
         <button
           type="button"
@@ -94,6 +91,12 @@ function UnrealCard({
           <HardDriveDownload className="size-4" />
         </button>
       </div>
+      {/* Unreal-cyan left accent bar — painted over the card's left edge, rounded
+          to follow the corners (matching the Daz / Houdini cards). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-unreal-blue"
+      />
       {/* Always rendered (hover only fades it in) so it stays in the tab order —
           `hidden` removed keyboard users from unlinking entirely. Same recipe as
           the Home screen's remove-from-recents button. */}

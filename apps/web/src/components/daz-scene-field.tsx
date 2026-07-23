@@ -109,6 +109,8 @@ function SceneCard({
       openTitle="Open in Daz"
       accentClass="group-hover:text-daz-green"
       cardClass="daz-card"
+      barClass="bg-daz-green"
+      checkClass="bg-daz-green"
       onOpen={onOpen}
       onRemove={onRemove}
       removeTitle="Unlink from character"

@@ -80,11 +80,13 @@ export function SceneFooter({
       )}
     >
       <div className="flex items-center gap-3 px-4 py-2">
-        {/* The selected scene, prominent — ringed, never dimmed. */}
-        <span className="shrink-0 rounded-lg ring-2 ring-primary ring-offset-2 ring-offset-background">
+        {/* The selected scene, prominent — a green ring (matching the selected
+            scene card), never dimmed. */}
+        <span className="shrink-0 rounded-lg ring-2 ring-daz-green ring-offset-2 ring-offset-background">
           <SceneLabel
             scenePath={selected}
             name={nameOf(selected)}
+            accentBar
             trailing={selected === primary ? primaryTag : undefined}
           />
         </span>
@@ -110,6 +112,7 @@ export function SceneFooter({
                   <SceneLabel
                     scenePath={path}
                     name={nameOf(path)}
+                    accentBar
                     trailing={path === primary ? primaryTag : undefined}
                   />
                 </button>
