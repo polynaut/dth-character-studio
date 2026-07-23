@@ -634,9 +634,9 @@ export const RomSections = memo(function RomSections({
                         // same hint the other overridable fields' mark carries, not a
                         // verbose per-scene enable/disable line.
                         'Can be overridden per Daz scene'
-                      : effectiveEnabled
-                        ? 'Disable this section'
-                        : 'Enable this section'
+                      : // Primary scene: the on/off label next to it already says it —
+                        // no redundant native tooltip on the switch.
+                        undefined
                 }
                 onCheckedChange={(enabled) => {
                   // On a non-primary scene the toggle is a per-scene override: flip the

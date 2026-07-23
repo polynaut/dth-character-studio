@@ -270,14 +270,16 @@ describe('per-generation preset availability', () => {
         }}
       />,
     )
-    // Switches titled "Enable this section" belong to the disabled sections, in
-    // ROM order: EXP, GEN, PHY, FBM, MISC → index 1 is GEN.
-    fireEvent.click(screen.getAllByTitle('Enable this section')[1])
+    // Toggle each section via its own header (the primary-scene switch carries no
+    // title now, so anchor on the section label instead).
+    const gen = screen.getByText('Genitalia').closest('div') as HTMLElement
+    fireEvent.click(within(gen).getByRole('switch'))
     expect(next!.GEN.enabled).toBe(true)
     expect(next!.GEN.mode).toBe('custom') // no GP/DK for G8.1 — preset not offered
 
     // FAC exists for G8.1 (FAC-variant JCM base): enabling keeps preset mode.
-    fireEvent.click(screen.getAllByTitle('Enable this section')[0]) // EXP is custom-only anyway
+    const exp = screen.getByText('Expressions').closest('div') as HTMLElement
+    fireEvent.click(within(exp).getByRole('switch')) // EXP is custom-only anyway
     expect(next!.EXP.mode).toBe('custom')
   })
 
