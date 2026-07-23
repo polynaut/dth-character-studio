@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { Button, Input, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
 import { ScanCsvPickerDialog } from '#/components/scan-csv-picker-dialog.tsx'
 import {
@@ -15,9 +15,11 @@ import {
   SECTION_LABELS,
   SECTION_MODES,
   applySceneOverride,
+  flatSectionGroupId,
   genesisFigureNode,
   newId,
   presetFrameCount,
+  romPoseEqual,
   sectionPresetAvailable,
 } from '@dth/rom'
 
@@ -153,10 +155,15 @@ export const RomSections = memo(function RomSections({
 
 
   // Scene-override mode: everything frame-related displays the MERGED sections
-  // (replaced rows in place, added rows at group ends) — exactly what the
-  // scene's own artifacts generate. The base `sections` stay the editing model.
+  // (replaced rows in place, added rows at group ends, and a whole-owned section
+  // verbatim) — exactly what the scene's own artifacts generate. The base `sections`
+  // stay the editing model. Memoized so a section's `groups` keep a stable identity
+  // across renders (they feed the memoized group tables' `data`).
   const overrideData = override?.data
-  const displaySections = overrideData ? applySceneOverride(sections, overrideData) : sections
+  const displaySections = useMemo(
+    () => (overrideData ? applySceneOverride(sections, overrideData) : sections),
+    [sections, overrideData],
+  )
 
   // The scene override's grid controller, shared by every section's group
   // editor: replaced rows keyed by base pose id, additions keyed by group id.
@@ -169,6 +176,17 @@ export const RomSections = memo(function RomSections({
     () => new Map((overrideData?.poses ?? []).map((pose) => [pose.id, pose])),
     [overrideData?.poses],
   )
+  // Base (primary-scene) pose by id, across every section — so an override edited
+  // back to match its base row can be dropped instead of lingering as a green no-op.
+  const basePoseById = useMemo(() => {
+    const map = new Map<string, RomPose>()
+    for (const section of ROM_SECTIONS) {
+      for (const group of sections[section].groups) {
+        for (const pose of group.poses) map.set(pose.id, pose)
+      }
+    }
+    return map
+  }, [sections])
   const onOverrideChange = override?.onChange
   const overrideCtl = useMemo<SectionOverrideCtl | undefined>(
     () =>
@@ -178,14 +196,19 @@ export const RomSections = memo(function RomSections({
             additionsFor: (groupId) =>
               overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
               EMPTY_POSES,
-            // Arm-on-edit: editing a base row upserts its override copy (keyed by
-            // the base pose id); the display substitutes it in place. There's no
-            // explicit "check to override" — touching the row IS the override.
-            upsertPose: (pose) =>
+            // Arm-on-edit: editing a base row upserts its override copy (keyed by the
+            // base pose id); the display substitutes it in place. There's no explicit
+            // "check to override" — touching the row IS the override. But an edit that
+            // lands back ON the base row (e.g. a bone-scale flag toggled off again)
+            // drops the copy, so the row stops reading as overridden.
+            upsertPose: (pose) => {
+              const base = basePoseById.get(pose.id)
+              const rest = overrideData.poses.filter((p) => p.id !== pose.id)
               onOverrideChange({
                 ...overrideData,
-                poses: [...overrideData.poses.filter((p) => p.id !== pose.id), pose],
-              }),
+                poses: base && romPoseEqual(pose, base) ? rest : [...rest, pose],
+              })
+            },
             // Reset a base row → drop its override copy so it falls back to the base.
             resetPose: (poseId) =>
               onOverrideChange({
@@ -201,7 +224,7 @@ export const RomSections = memo(function RomSections({
             },
           }
         : undefined,
-    [onOverrideChange, overrideData, overriddenById],
+    [onOverrideChange, overrideData, overriddenById, basePoseById],
   )
   // On a non-primary scene the section STRUCTURE (enable/mode/groups) is locked —
   // whether the override is armed (overrideCtl) or not (locked). Mute the section
@@ -279,17 +302,51 @@ export const RomSections = memo(function RomSections({
     onChange({ ...sections, [section]: { ...sections[section], ...patch } })
   }
 
-  // ONE identity-stable groups handler shared by every section's (memoized)
-  // group editor — the editor reports its section alongside the new groups, so
-  // no per-section closure (which would defeat the memo) is needed.
+  // ONE identity-stable groups handler shared by every section's (memoized) group
+  // editor — the editor reports its section alongside the new groups, so no
+  // per-section closure (which would defeat the memo) is needed. Latest-ref so the
+  // stable callback always sees the current sections / override.
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const overrideDataRef = useRef(overrideData)
+  overrideDataRef.current = overrideData
+  const onOverrideChangeRef = useRef(onOverrideChange)
+  onOverrideChangeRef.current = onOverrideChange
   const onSectionGroupsChange = useCallback((section: RomSection, groups: Array<RomGroup>) => {
-    onChangeRef.current({
-      ...sectionsRef.current,
-      [section]: { ...sectionsRef.current[section], groups },
+    const od = overrideDataRef.current
+    const emitOverride = onOverrideChangeRef.current
+    if (!od || !emitOverride) {
+      // Primary scene → edit the base sections directly.
+      onChangeRef.current({
+        ...sectionsRef.current,
+        [section]: { ...sectionsRef.current[section], groups },
+      })
+      return
+    }
+    if (od.sectionOverrides.some((s) => s.section === section)) {
+      // The scene already OWNS this section (escalated) → update its stored groups.
+      emitOverride({
+        ...od,
+        sectionOverrides: od.sectionOverrides.map((s) =>
+          s.section === section ? { section, groups } : s,
+        ),
+      })
+      return
+    }
+    // First structural edit on this section for this scene → ESCALATE. `groups` is the
+    // merged section (base rows with their per-scene value edits + appended rows, now
+    // reordered / inserted / with a row removed), so snapshot it whole and drop this
+    // section's sparse entries — the whole-section override supersedes them.
+    const base = sectionsRef.current[section]
+    const basePoseIds = new Set(base.groups.flatMap((g) => g.poses.map((p) => p.id)))
+    const sectionGroupIds = new Set([...base.groups.map((g) => g.id), flatSectionGroupId(section)])
+    emitOverride({
+      ...od,
+      poses: od.poses.filter((p) => !basePoseIds.has(p.id)),
+      additions: od.additions.filter((a) => !sectionGroupIds.has(a.groupId)),
+      sectionOverrides: [...od.sectionOverrides, { section, groups }],
     })
   }, [])
 
@@ -406,6 +463,16 @@ export const RomSections = memo(function RomSections({
         )
         const missingPresetAsset =
           effectiveEnabled && config.mode === 'preset' && !presetAvailable
+        // Scene-override editing model for THIS section. Not escalated → the sparse
+        // ctl edits base rows/appends (green) over the merged display; once a
+        // structural edit escalates it, the scene OWNS the section and it edits like
+        // the primary (plain groups, no ctl) — just stored on its sectionOverride.
+        const escalated = !!overrideData?.sectionOverrides.some((s) => s.section === section)
+        const editorGroups = overrideData ? displaySections[section].groups : config.groups
+        const editorOverride = overrideData && !escalated ? overrideCtl : undefined
+        // The section-title override marker: shown for a custom, enabled section on a
+        // non-primary scene. Green (with reset-all) once the scene owns the section.
+        const showSectionMark = !!overrideData && effectiveEnabled && config.mode === 'custom'
         return (
           // Each section is its own wrapper on purpose: position:sticky constrains
           // the title to its parent, which is exactly what makes the NEXT section's
@@ -461,6 +528,25 @@ export const RomSections = memo(function RomSections({
                     : sectionSummary(displaySections[section])}
                 </span>
               </button>
+              {/* Per-scene section override marker — a SIBLING of the accordion button
+                  (never nested: a button inside a button is invalid HTML). Green once a
+                  structural edit escalated this section to a scene override; its reset
+                  drops the whole-section override, back to the primary scene's ROM. */}
+              {showSectionMark && (
+                <OverrideMark
+                  overridden={escalated}
+                  resetTitle="Reset this section to the primary scene's ROM"
+                  onReset={() => {
+                    if (!overrideData || !onOverrideChange) return
+                    onOverrideChange({
+                      ...overrideData,
+                      sectionOverrides: overrideData.sectionOverrides.filter(
+                        (s) => s.section !== section,
+                      ),
+                    })
+                  }}
+                />
+              )}
               {/* A direct flex child of the items-center row so it centers on the
                   summary text's line. (Wrapped in a bare <span> it blockified as a
                   flex item, and the switch rode that span's text baseline — a hair
@@ -598,56 +684,59 @@ export const RomSections = memo(function RomSections({
                   <div className="space-y-3">
                     <PoseGroupsEditor
                       section={section}
-                      groups={config.groups.length > 0 ? config.groups : flatGroupFallback(section)}
+                      groups={editorGroups.length > 0 ? editorGroups : flatGroupFallback(section)}
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}
                       removable={false}
-                      override={overrideCtl}
+                      override={editorOverride}
                       locked={locked}
                       onGroupsChange={onSectionGroupsChange}
                     />
-                    {!overrideCtl && <ImportCsvButton onImport={() => setPickerSection(section)} />}
+                    {/* CSV import bulk-edits the base structure — primary scene only. */}
+                    {!overrideData && <ImportCsvButton onImport={() => setPickerSection(section)} />}
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <PoseGroupsEditor
                       section={section}
-                      groups={config.groups}
+                      groups={editorGroups}
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}
                       removable
-                      override={overrideCtl}
+                      override={editorOverride}
                       locked={locked}
                       onGroupsChange={onSectionGroupsChange}
                     />
-                    {/* Group management + CSV import change the base structure —
-                        hidden while a scene override is active. */}
-                    {!overrideCtl && (
+                    {/* Add group edits whatever the editor owns (base on the primary,
+                        the scene's sectionOverride once escalated); hidden on a scene
+                        that hasn't escalated this section yet (a row edit escalates
+                        first). CSV import is a base-structure bulk op — primary only. */}
+                    {!editorOverride && (
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            patchSection(section, {
-                              groups: [
-                                ...config.groups,
-                                {
-                                  id: newId(),
-                                  label: '',
-                                  suffix: 'centre',
-                                  method: 'default',
-                                  calculateFrom: 'default',
-                                  poses: [],
-                                },
-                              ],
-                            })
+                            onSectionGroupsChange(section, [
+                              ...editorGroups,
+                              {
+                                id: newId(),
+                                label: '',
+                                suffix: 'centre',
+                                method: 'default',
+                                calculateFrom: 'default',
+                                poses: [],
+                              },
+                            ])
                           }
                         >
                           <Plus /> Add group
                         </Button>
-                        <ImportCsvButton onImport={() => setPickerSection(section)} />
+                        {!overrideData && (
+                          <ImportCsvButton onImport={() => setPickerSection(section)} />
+                        )}
                       </div>
                     )}
                   </div>

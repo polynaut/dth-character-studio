@@ -139,6 +139,24 @@ describe('schema v17 — sceneOverrides (additive, zod default)', () => {
   })
 })
 
+describe('schema v21 — sceneOverride.sectionOverrides (additive, zod default)', () => {
+  it('fills an empty list on a legacy sceneOverride (pre-v21)', () => {
+    const now = '2026-07-20T00:00:00.000Z'
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 20,
+        sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [] }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].sectionOverrides).toEqual([])
+  })
+})
+
 describe('schema v20 — per-scene identity/groom override blocks (additive, zod default)', () => {
   const now = '2026-07-20T00:00:00.000Z'
   it('fills identity + groom defaults on a legacy sceneOverride (pre-v20)', () => {

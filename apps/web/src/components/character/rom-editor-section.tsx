@@ -59,7 +59,10 @@ export const RomEditorSection = memo(function RomEditorSection({
     (next: SceneOverride) => {
       // Derive the ROM gate from "has any override rows" — generation reads
       // `enabled`, so this keeps the .dsa/CSV output identical without a toggle.
-      const hasRom = next.poses.length > 0 || next.additions.some((a) => a.poses.length > 0)
+      const hasRom =
+        next.poses.length > 0 ||
+        next.additions.some((a) => a.poses.length > 0) ||
+        next.sectionOverrides.length > 0
       const withGate = { ...next, enabled: hasRom }
       const exists = character.sceneOverrides.some((o) => o.scenePath === withGate.scenePath)
       patch({

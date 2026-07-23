@@ -71,3 +71,53 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   // (and therefore the map it encodes) knows about.
   expect(await unhandledCommands(page)).toEqual([])
 })
+
+// Arm-on-edit's inverse: editing a base ROM row back to the base content DISARMS
+// the override — the row un-greens (its per-frame reset control disappears) and
+// saving produces no scene-specific artifacts. Regression for an override that
+// stayed armed after a toggle round-trip (e.g. bone scale on then off again).
+test('project window: editing a base row back to the base disarms the override', async ({
+  page,
+}) => {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const extraScene = `${P.charFolder}/daz3d/KiraBeach.duf`
+  const kira = JSON.parse(seed.files[`${P.charFolder}/Kira.json`])
+  kira.extraScenes = [extraScene]
+  seed.files[`${P.charFolder}/Kira.json`] = JSON.stringify(kira, null, 2)
+  seed.files[extraScene] = 'duf-fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+
+  await page.getByText('KiraBeach', { exact: true }).first().click()
+  await page.getByRole('button', { name: /FBM Full Body/ }).click()
+
+  // Arm: change the first frame's value. Values edit as Daz percentages, so base
+  // BodyTone (1) shows as "100"; 42 differs and arms it. The per-frame reset control
+  // appears only for an overridden (green) row.
+  const value = page.locator('table input[inputmode="decimal"]').first()
+  await value.fill('42')
+  await value.press('Enter')
+  const reset = page.getByRole('button', { name: 'Reset this frame to the base ROM' })
+  await expect(reset).toBeVisible()
+
+  // Disarm: edit it back to the base value (100% = 1) — the row reverts, reset goes.
+  await value.fill('100')
+  await value.press('Enter')
+  await expect(reset).toHaveCount(0)
+
+  // Save → no scene-suffixed CSV, and the stored override is disarmed (gate off).
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/Saved “Kira”/)).toBeVisible()
+  const written = await filesWritten(page)
+  expect(written).toContain(`${P.charFolder}/Kira_pose_asset.csv`)
+  expect(written).not.toContain(`${P.charFolder}/Kira_KiraBeach_pose_asset.csv`)
+  const definition = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!)
+  const stored = definition.sceneOverrides.find((o: { scenePath: string }) => o.scenePath === extraScene)
+  // The entry may persist (other panels can share it) but its ROM gate is off with no rows.
+  if (stored) {
+    expect(stored.enabled).toBe(false)
+    expect(stored.poses).toEqual([])
+  }
+})
