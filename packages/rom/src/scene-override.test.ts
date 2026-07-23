@@ -6,6 +6,7 @@ import {
   applySceneOverride,
   clonePose,
   mergeSceneOverride,
+  romPoseEqual,
   sceneOverrideBuildsRom,
   sceneOverrideSlug,
 } from './scene-override'
@@ -139,6 +140,55 @@ describe('applySceneOverride', () => {
     expect(merged.MISC.groups[0].poses.map((p) => p.name)).toEqual(['OutfitFix'])
   })
 
+  it('a whole-section override replaces the section verbatim — reordered / restructured', () => {
+    // The scene reorders FBM (GluteSize before BodyTone) — a structural change the
+    // sparse layer can't express, so it's stored whole in `sectionOverrides`.
+    const override = makeOverride({
+      sectionOverrides: [
+        {
+          section: 'FBM',
+          groups: [
+            {
+              ...fbmGroup(),
+              poses: [fbmGroup().poses[1], fbmGroup().poses[0]], // GluteSize, BodyTone
+            },
+          ],
+        },
+      ],
+    })
+    const merged = applySceneOverride(makeSections(), override)
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['GluteSize', 'BodyTone'])
+  })
+
+  it('a whole-section override WINS over the sparse poses/additions for that section', () => {
+    const override = makeOverride({
+      poses: [{ id: 'p1', name: 'ShouldBeIgnored', morphs: [], boneScaleRef: false }],
+      additions: [
+        { groupId: 'g1', poses: [{ id: 'x', name: 'AlsoIgnored', morphs: [], boneScaleRef: false }] },
+      ],
+      sectionOverrides: [
+        {
+          section: 'FBM',
+          groups: [
+            { ...fbmGroup(), poses: [{ id: 'only', name: 'OnlyThis', morphs: [], boneScaleRef: false }] },
+          ],
+        },
+      ],
+    })
+    const merged = applySceneOverride(makeSections(), override)
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['OnlyThis'])
+  })
+
+  it('leaves sections WITHOUT a whole-section override on the sparse layer', () => {
+    const override = makeOverride({
+      poses: [{ id: 'p1', name: 'SparseReplace', morphs: [], boneScaleRef: false }],
+      sectionOverrides: [{ section: 'MISC', groups: [] }], // only MISC is whole-overridden
+    })
+    const merged = applySceneOverride(makeSections(), override)
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['SparseReplace', 'GluteSize'])
+    expect(merged.MISC.groups).toEqual([])
+  })
+
   it('never mutates the base sections', () => {
     const sections = makeSections()
     const before = structuredClone(sections)
@@ -185,6 +235,20 @@ describe('clonePose', () => {
     const clone = clonePose(base)
     clone.morphs[0].value = 99
     expect(base.morphs[0].value).toBe(1)
+  })
+})
+
+describe('romPoseEqual', () => {
+  it('ignores ids but compares name, boneScaleRef and morph content', () => {
+    const base = fbmGroup().poses[0]
+    // A clone with different row/morph ids is still equal (ids are editing handles).
+    expect(romPoseEqual({ ...clonePose(base), id: 'other', morphs: [{ ...base.morphs[0], id: 'x' }] }, base)).toBe(true)
+    // A toggled bone-scale flag / changed value / name makes it unequal.
+    expect(romPoseEqual({ ...clonePose(base), boneScaleRef: true }, base)).toBe(false)
+    expect(romPoseEqual({ ...base, morphs: [{ ...base.morphs[0], value: 0.5 }] }, base)).toBe(false)
+    expect(romPoseEqual({ ...base, name: 'Other' }, base)).toBe(false)
+    // Different morph count is unequal.
+    expect(romPoseEqual({ ...base, morphs: [...base.morphs, base.morphs[0]] }, base)).toBe(false)
   })
 })
 
@@ -257,6 +321,25 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(csv).toContain('BeachBodyTone')
     expect(csv).toContain('BeachDress')
     expect(csv).not.toContain('FBM,328,BodyTone')
+  })
+
+  it('a whole-section REORDER folds into the scene delta — Daz frames + CSV both reordered', () => {
+    // The scene reorders FBM (GluteSize before BodyTone), stored whole. Both the Daz
+    // frame delta and the scene's CSV must follow the new order (per-scene alignment).
+    const reordered = makeOverride({
+      scenePath: scene,
+      sectionOverrides: [
+        { section: 'FBM', groups: [{ ...fbmGroup(), poses: [fbmGroup().poses[1], fbmGroup().poses[0]] }] },
+      ],
+    })
+    const files = generateAll(withScene({ sceneOverrides: [reordered] }), {}, FRAMES)
+    const overrides = grabObject(files[0].content, 'dthSceneOverrides')
+    expect(overrides[sceneKey].extraFrames.frames.map((f: { name: string }) => f.name)).toEqual([
+      'GluteSize',
+      'BodyTone',
+    ])
+    const csv = files.find((f) => f.fileName === 'ElectraG9_ElectraBeach_pose_asset.csv')!.content
+    expect(csv.indexOf('GluteSize')).toBeLessThan(csv.indexOf('BodyTone'))
   })
 
   it('splits ONE Export_ script (not per-scene) when the character splits its export', () => {

@@ -69,6 +69,23 @@ offsets byte-identically — if a generation change moves them, the change is wr
   `sceneOverrideSlug(scenePath)` (file stem, `[A-Za-z0-9_]` only); duplicate ROM
   slugs across scenes are refused at save. The legacy per-scene scripts are swept
   on the next save/refresh.
+- **Per-scene ROM overrides are implicit — arm on edit, disarm on revert, escalate on
+  restructure.** With a non-primary scene selected the ROM grid edits into a
+  `SceneOverride` (no toggle). A **value** edit of a base row upserts its override copy
+  (green row); editing it back to the base *content* drops the copy again
+  (`rom-sections.tsx` `overrideCtl.upsertPose` compares against the base pose with
+  `romPoseEqual` from `@dth/rom` and drops instead of storing) — mirroring the identity/
+  preserve writers (`use-scene-selection.ts`), which likewise derive `enabled` from
+  "differs from base". Appended rows live in `additions` (auto-track later base edits).
+  A **structural** edit the sparse layer can't hold — reorder, insert-between, delete a
+  base frame, or add a group — ESCALATES the whole section: `onSectionGroupsChange`
+  snapshots the merged section into `sceneOverride.sectionOverrides` and drops that
+  section's sparse entries; `applySceneOverride` then uses those groups verbatim. The
+  section title carries an `OverrideMark` whose reset drops the whole-section override.
+  `onOverrideChange` (`rom-editor-section.tsx`) derives the ROM gate from "has any
+  override rows OR a sectionOverride", so a fully-reverted scene generates no
+  `dthSceneOverrides` delta and no per-scene CSV. NB the grid value is a Daz
+  **percentage** (`valueToPct`): base `1` shows as `100`, so a revert types `100`.
 
 ## The DTH runtime is studio-owned
 

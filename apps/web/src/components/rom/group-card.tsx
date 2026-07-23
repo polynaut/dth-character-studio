@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useMemo, useState } from 'react'
+import { memo, useContext, useEffect, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -33,13 +33,15 @@ import { SortablePoseRow, poseColumns } from './pose-table.tsx'
 import type { PoseTableMeta } from './pose-table.tsx'
 
 /**
- * Scene-override mode for a whole SECTION's groups (built once in RomSections,
- * shared by every group card): the BASE groups stay untouched — checked rows
- * read/write `overriddenById` (keyed by the base pose's id), added rows live in
- * per-group `additions` and only ever append after the base rows. All group
- * chrome (label, method, suffix, mirror, remove) locks: the structure is the
- * base ROM's. Each card slices its own view out of this via its group id — the
- * object itself is memoized in RomSections, so it stays a stable memo prop.
+ * The SPARSE scene-override layer for a section not yet wholly owned (built once in
+ * RomSections, shared by every group card): a base ROM row value-edited for the scene
+ * reads/writes `overriddenById` (keyed by the base pose's id, green), added rows live
+ * in per-group `additions` at the group's end. Group chrome (label, method, suffix,
+ * mirror, remove) locks — the structure is still the base ROM's. A STRUCTURAL edit
+ * (reorder / insert-between / delete a base row / add a group) can't be held sparsely,
+ * so it escalates the whole section to a scene override upstream, after which this ctl
+ * is absent and the section edits like the primary. Each card slices its own view out
+ * via its group id; the object is memoized in RomSections so it stays a stable memo prop.
  */
 export interface SectionOverrideCtl {
   overriddenById: ReadonlyMap<string, RomPose>
@@ -116,47 +118,38 @@ export const GroupCard = memo(function GroupCard({
     }
   }, [focusPoseId, group.poses])
 
-  // What the table shows: the base rows (each swapped for its override copy
-  // when checked) plus the override's appended rows. Without an override this
-  // is simply the group's poses. MEMOIZED because it feeds useReactTable's
-  // `data`: an identity that changes every render makes the table re-derive
-  // its row model each time, which can feed back into an endless sync
-  // re-render loop (the table's own "give data a stable reference" rule —
-  // group.poses used to provide that stability for free).
-  const baseCount = group.poses.length
-  const overriddenById = override?.overriddenById
-  // Stable per overrideCtl identity: additionsFor returns the stored array (or
-  // the shared EMPTY_POSES fallback), so this is a valid memo input.
+  // RomSections passes the already-MERGED display groups in scene-override mode
+  // (base rows carrying their per-scene value edits + the override's appended rows),
+  // and a section it wholly owns (escalated) edits like the primary — so the table
+  // renders `group.poses` directly, no second merge here.
+  const displayPoses = group.poses
+  // The override's own appended rows for this group (or the shared empty fallback) —
+  // used to tell a base ROM row from an added one, by id.
   const additions = override ? override.additionsFor(group.id) : undefined
-  const displayPoses = useMemo(
-    () =>
-      overriddenById && additions
-        ? [...group.poses.map((pose) => overriddenById.get(pose.id) ?? pose), ...additions]
-        : group.poses,
-    [group.poses, overriddenById, additions],
-  )
+  const isAddition = (poseId: string) =>
+    additions ? additions.some((p) => p.id === poseId) : false
 
-  // Route an edited row to where it lives: the base group, the override's
-  // replaced-row map (checked base rows only — unchecked ones are read-only in
-  // override mode), or the override's additions.
+  // Route an edited row to where it lives: the group's own poses (primary, or a
+  // section the scene fully owns), an added override row, or — for a base ROM row on
+  // a not-yet-owned section — a per-scene value override (arm-on-edit, green).
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
+    const pose = displayPoses[rowIndex]
     if (!override || !additions) {
       change({
         ...group,
-        poses: group.poses.map((pose, i) => (i === rowIndex ? { ...pose, ...patch } : pose)),
+        poses: group.poses.map((p, i) => (i === rowIndex ? { ...p, ...patch } : p)),
       })
       return
     }
-    const pose = displayPoses[rowIndex]
-    if (rowIndex < baseCount) {
+    if (isAddition(pose.id)) {
+      override.onAdditionsChange(
+        group.id,
+        additions.map((p) => (p.id === pose.id ? { ...p, ...patch } : p)),
+      )
+    } else {
       // Editing a base row arms it: upsert its override copy (by id) — it reads as
       // overridden (green) from here until reset, no explicit "check" step.
       override.upsertPose({ ...pose, ...patch })
-    } else {
-      override.onAdditionsChange(
-        group.id,
-        additions.map((p, i) => (i === rowIndex - baseCount ? { ...p, ...patch } : p)),
-      )
     }
   }
 
@@ -191,21 +184,21 @@ export const GroupCard = memo(function GroupCard({
       patchPose(rowIndex, { morphs: pose.morphs.filter((_, mi) => mi !== morphIndex) })
     },
     remove: (rowIndex) => {
-      if (!override || !additions) {
-        change({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) })
+      const pose = displayPoses[rowIndex]
+      if (override && additions && isAddition(pose.id)) {
+        // An added override frame → just drop it (stays a sparse edit).
+        override.onAdditionsChange(
+          group.id,
+          additions.filter((p) => p.id !== pose.id),
+        )
         return
       }
-      // Base rows never leave in override mode — only the override's own frames.
-      if (rowIndex < baseCount) return
-      override.onAdditionsChange(
-        group.id,
-        additions.filter((_, i) => i !== rowIndex - baseCount),
-      )
+      // A base ROM row (or the primary / an owned section): remove it. On a not-yet-
+      // owned scene section this changes the count, so `change` escalates the whole
+      // section to a scene override (routed through onGroupsChange a layer up).
+      change({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) })
     },
     insertAt: (index) => {
-      // Override mode appends at the group end only (the insert menu is hidden
-      // there — this guard just backs it up).
-      if (override) return
       // Inherit the node from the pose before the insertion point (falling back
       // to the one after, then the section default) — pose lists usually target
       // the same node throughout.
@@ -226,8 +219,8 @@ export const GroupCard = memo(function GroupCard({
     },
     override: override
       ? {
-          baseCount,
           isOverridden: (poseId) => override.overriddenById.has(poseId),
+          isAddition,
           reset: (poseId) => override.resetPose(poseId),
         }
       : undefined,

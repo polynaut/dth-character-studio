@@ -469,6 +469,24 @@ export const sceneOverrideSchema = z.object({
     )
     .default([]),
   /**
+   * WHOLE-SECTION overrides: a scene's complete groups for a section, stored when a
+   * STRUCTURAL edit (reorder, insert-between, or add/remove a frame) makes the section
+   * differ from the base in ORDER or COUNT — which the sparse `poses`/`additions` above
+   * can't represent (they only replace-by-id and append-at-end). When a section has an
+   * entry here it REPLACES that section wholesale in {@link applySceneOverride} (the
+   * sparse entries for it no longer apply), so — unlike them — it does NOT track later
+   * edits to the base ROM: the scene "owns" that section until it's reset. `groups` are
+   * the same shape as the base section's.
+   */
+  sectionOverrides: z
+    .array(
+      z.object({
+        section: romSectionSchema,
+        groups: z.array(romGroupSchema).default([]),
+      }),
+    )
+    .default([]),
+  /**
    * Per-scene GENESIS-9 identity override (FACS detail / flexion strength / UE5
    * tear UV) — the same three values as the base character's G9 fields. Its
    * `enabled` gates the panel + generation exactly like the ROM `enabled` above;
@@ -829,8 +847,13 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       hair is now always per-scene by presence — a scene's `groomScenes` items
  *       ARE its hair, none means none. A removed field needs no step (zod strips
  *       the old value on read); the old 'separate' choice just stops excluding.
+ *  21 — added `sceneOverride.sectionOverrides` (whole-section ROM overrides — a
+ *       scene's complete groups for a section, stored when a structural edit
+ *       reorders / inserts / adds / removes frames, which the sparse
+ *       poses/additions can't represent). Additive array with a zod default — no
+ *       migration step; `applySceneOverride` prefers it over the sparse layer.
  */
-export const CHARACTER_SCHEMA_VERSION = 20
+export const CHARACTER_SCHEMA_VERSION = 21
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
