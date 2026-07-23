@@ -146,8 +146,14 @@ function ArtDirectionFrameRow({
   return (
     <div className={cn('rounded-md border', overridden && 'border-daz-green')}>
       {/* The accordion button + (when this frame is a per-scene override) the reset
-          mark, which sits OUTSIDE the button — a button nested in a button is invalid. */}
-      <div className="flex items-center pr-2">
+          mark, which sits OUTSIDE the button — a button nested in a button is invalid.
+          An overridden frame's row wears the same green tint as an overridden pose row. */}
+      <div
+        className={cn(
+          'flex items-center rounded-md pr-2',
+          overridden && 'bg-[color-mix(in_oklab,var(--color-daz-green)_11%,transparent)]',
+        )}
+      >
         <button
           type="button"
           aria-expanded={open}
