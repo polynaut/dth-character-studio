@@ -19,6 +19,7 @@ import {
   genesisFigureNode,
   newId,
   presetFrameCount,
+  romPoseEqual,
   sectionPresetAvailable,
 } from '@dth/rom'
 
@@ -175,6 +176,17 @@ export const RomSections = memo(function RomSections({
     () => new Map((overrideData?.poses ?? []).map((pose) => [pose.id, pose])),
     [overrideData?.poses],
   )
+  // Base (primary-scene) pose by id, across every section — so an override edited
+  // back to match its base row can be dropped instead of lingering as a green no-op.
+  const basePoseById = useMemo(() => {
+    const map = new Map<string, RomPose>()
+    for (const section of ROM_SECTIONS) {
+      for (const group of sections[section].groups) {
+        for (const pose of group.poses) map.set(pose.id, pose)
+      }
+    }
+    return map
+  }, [sections])
   const onOverrideChange = override?.onChange
   const overrideCtl = useMemo<SectionOverrideCtl | undefined>(
     () =>
@@ -184,14 +196,19 @@ export const RomSections = memo(function RomSections({
             additionsFor: (groupId) =>
               overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
               EMPTY_POSES,
-            // Arm-on-edit: editing a base row upserts its override copy (keyed by
-            // the base pose id); the display substitutes it in place. There's no
-            // explicit "check to override" — touching the row IS the override.
-            upsertPose: (pose) =>
+            // Arm-on-edit: editing a base row upserts its override copy (keyed by the
+            // base pose id); the display substitutes it in place. There's no explicit
+            // "check to override" — touching the row IS the override. But an edit that
+            // lands back ON the base row (e.g. a bone-scale flag toggled off again)
+            // drops the copy, so the row stops reading as overridden.
+            upsertPose: (pose) => {
+              const base = basePoseById.get(pose.id)
+              const rest = overrideData.poses.filter((p) => p.id !== pose.id)
               onOverrideChange({
                 ...overrideData,
-                poses: [...overrideData.poses.filter((p) => p.id !== pose.id), pose],
-              }),
+                poses: base && romPoseEqual(pose, base) ? rest : [...rest, pose],
+              })
+            },
             // Reset a base row → drop its override copy so it falls back to the base.
             resetPose: (poseId) =>
               onOverrideChange({
@@ -207,7 +224,7 @@ export const RomSections = memo(function RomSections({
             },
           }
         : undefined,
-    [onOverrideChange, overrideData, overriddenById],
+    [onOverrideChange, overrideData, overriddenById, basePoseById],
   )
   // On a non-primary scene the section STRUCTURE (enable/mode/groups) is locked —
   // whether the override is armed (overrideCtl) or not (locked). Mute the section

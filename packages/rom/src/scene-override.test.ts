@@ -6,6 +6,7 @@ import {
   applySceneOverride,
   clonePose,
   mergeSceneOverride,
+  romPoseEqual,
   sceneOverrideBuildsRom,
   sceneOverrideSlug,
 } from './scene-override'
@@ -234,6 +235,20 @@ describe('clonePose', () => {
     const clone = clonePose(base)
     clone.morphs[0].value = 99
     expect(base.morphs[0].value).toBe(1)
+  })
+})
+
+describe('romPoseEqual', () => {
+  it('ignores ids but compares name, boneScaleRef and morph content', () => {
+    const base = fbmGroup().poses[0]
+    // A clone with different row/morph ids is still equal (ids are editing handles).
+    expect(romPoseEqual({ ...clonePose(base), id: 'other', morphs: [{ ...base.morphs[0], id: 'x' }] }, base)).toBe(true)
+    // A toggled bone-scale flag / changed value / name makes it unequal.
+    expect(romPoseEqual({ ...clonePose(base), boneScaleRef: true }, base)).toBe(false)
+    expect(romPoseEqual({ ...base, morphs: [{ ...base.morphs[0], value: 0.5 }] }, base)).toBe(false)
+    expect(romPoseEqual({ ...base, name: 'Other' }, base)).toBe(false)
+    // Different morph count is unequal.
+    expect(romPoseEqual({ ...base, morphs: [...base.morphs, base.morphs[0]] }, base)).toBe(false)
   })
 })
 

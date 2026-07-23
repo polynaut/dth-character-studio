@@ -476,6 +476,23 @@ describe('scene override mode', () => {
     expect(latest!.poses).toHaveLength(0)
   })
 
+  it('a value edited back to the base row un-arms it (no lingering green override)', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body'))
+    const boneScale = screen.getByTitle(
+      'This morph scales bones — export a reference-skeleton FBX for it',
+    )
+    // Toggle bone scale ON → the base row arms as a per-scene override.
+    fireEvent.click(boneScale)
+    expect(latest!.poses).toHaveLength(1)
+    expect(latest!.poses[0].boneScaleRef).toBe(true)
+    // Toggle it OFF again → the override now matches the base row, so it's dropped
+    // (the row stops reading as overridden) rather than lingering as a no-op copy.
+    fireEvent.click(boneScale)
+    expect(latest!.poses).toHaveLength(0)
+  })
+
   it('Add morph appends an override frame at the group end, removable again', () => {
     let latest: import('@dth/rom').SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)

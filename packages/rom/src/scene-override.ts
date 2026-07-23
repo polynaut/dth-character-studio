@@ -140,3 +140,26 @@ export function mergeSceneOverride(character: Character, override: SceneOverride
 export function clonePose(pose: RomPose): RomPose {
   return { ...pose, morphs: pose.morphs.map((morph) => ({ ...morph })) }
 }
+
+/**
+ * Whether two ROM poses are equal for OVERRIDE purposes — same name, bone-scale flag
+ * and morph list (each morph's node / prop / value / base / autoBase, in order). Row
+ * and morph ids are ignored: they're editing handles, not content. Used to tell when a
+ * per-scene value override has been edited back to the base row (e.g. a bone-scale flag
+ * toggled on then off), so the override can be DROPPED instead of lingering as a no-op
+ * copy that keeps the row falsely marked overridden (green).
+ */
+export function romPoseEqual(a: RomPose, b: RomPose): boolean {
+  if (a.name !== b.name || a.boneScaleRef !== b.boneScaleRef) return false
+  if (a.morphs.length !== b.morphs.length) return false
+  return a.morphs.every((m, i) => {
+    const n = b.morphs[i]
+    return (
+      m.node === n.node &&
+      m.prop === n.prop &&
+      m.value === n.value &&
+      m.base === n.base &&
+      m.autoBase === n.autoBase
+    )
+  })
+}
