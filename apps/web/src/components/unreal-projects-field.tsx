@@ -55,6 +55,9 @@ function UnrealCard({
   const altHeld = useModifierHeld('Alt')
   const dir = displayPath(uprojectPath).replace(/[\\/][^\\/]*$/, '')
   const OpenIcon = altHeld ? FolderOpen : ExternalLink
+  // Ctrl/Cmd held turns the click into a force-overwrite (see `ctrlHeld` above),
+  // so the label reads "Reinstall" to match what the button will actually do.
+  const installVerb = ctrlHeld ? 'Reinstall' : 'Install'
   return (
     <div className="group/card relative">
       <div className="unreal-card flex items-center gap-3 rounded-lg border px-3 py-2 pl-4 transition-colors">
@@ -76,8 +79,8 @@ function UnrealCard({
           type="button"
           onClick={onInstall}
           disabled={disabled || installing || dthPresent === undefined}
-          aria-label={`Install DTH content into ${displayName}`}
-          title="Install DTH Content"
+          aria-label={`${installVerb} DTH content into ${displayName}`}
+          title={`${installVerb} DTH Content`}
           className={cn(
             'shrink-0 rounded-md border p-1.5 transition-colors',
             // Installed → dimmed; holding Ctrl/Cmd wakes it up as the hint
@@ -281,7 +284,17 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             }
           />
         ))}
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => void onPick()}>
+        <Button
+          variant="outline"
+          size="sm"
+          // Stretch to the linked cards' height when any are present (shared
+          // `items-center` row) so the button reads as their sibling, not a
+          // shorter afterthought; `min-h-8` keeps the sm floor in the empty
+          // "Link" state where no card sets the row height.
+          className="h-auto min-h-8 self-stretch"
+          disabled={busy}
+          onClick={() => void onPick()}
+        >
           <Plus />
           {busy ? 'Linking…' : project.unrealProjects.length ? 'Add' : 'Link'}
         </Button>
