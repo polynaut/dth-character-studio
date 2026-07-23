@@ -498,12 +498,8 @@ function CharacterPage() {
           character={character}
           patch={patch}
           overrideEligible={sceneSel.overrideEligible}
-          preserveOverrideActive={sceneSel.preserveOverrideActive}
-          setPreserveOverrideEnabled={sceneSel.setPreserveOverrideEnabled}
-          selectedSceneName={sceneSel.selectedSceneName}
-          scenePath={sceneSel.effectiveScene}
           sceneOverride={sceneSel.sceneOverride}
-          patchOverride={sceneSel.patchOverride}
+          writePreserve={sceneSel.writePreserve}
           morphIndex={morphIndex}
         />
       </section>
