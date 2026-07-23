@@ -24,11 +24,15 @@ test('overridden glyph dot bobs', async ({ page }) => {
   await facs.press('Enter')
   await page.waitForTimeout(300)
 
-  // The overridden dot carries the bob animation and moves across frames.
+  // The overridden dot carries the bob animation and visibly travels (sampled across
+  // a full ~1.7s cycle). Guards both the wiring and a large-enough amplitude to notice.
   const dot = page.locator('circle.animate-override-bob').first()
   await expect(dot, 'overridden dot has the bob animation').toHaveCount(1)
-  const y1 = (await dot.boundingBox())!.y
-  await page.waitForTimeout(600)
-  const y2 = (await dot.boundingBox())!.y
-  expect(Math.abs(y2 - y1), 'dot bobs while overridden').toBeGreaterThan(0.2)
+  const ys: number[] = []
+  for (let i = 0; i < 12; i++) {
+    ys.push((await dot.boundingBox())!.y)
+    await page.waitForTimeout(150)
+  }
+  const range = Math.max(...ys) - Math.min(...ys)
+  expect(range, 'dot bobs a clearly visible distance').toBeGreaterThan(3.5)
 })

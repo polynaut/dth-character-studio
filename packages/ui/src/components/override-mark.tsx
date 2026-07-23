@@ -9,7 +9,7 @@ import { cn } from '../cn.ts'
  */
 function CubeDotIcon({ className, dotClassName }: { className?: string; dotClassName?: string }) {
   return (
-    <svg viewBox="5 5 40 40" fill="none" aria-hidden className={className}>
+    <svg viewBox="5 5 40 40" fill="none" aria-hidden className={cn('overflow-visible', className)}>
       <g stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
         <path d="M24 8L38 16L24 24L10 16L24 8Z" />
         <path d="M10 16V34L24 42V24" />

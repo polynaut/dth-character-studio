@@ -10,10 +10,10 @@
 @keyframes override-bob {
   0%,
   100% {
-    cy: 33px;
+    cy: 30px;
   }
   50% {
-    cy: 39px;
+    cy: 42px;
   }
 }
 
