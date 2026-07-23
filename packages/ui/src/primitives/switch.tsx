@@ -23,7 +23,7 @@ function Switch({
       className={cn(
         "peer group/switch inline-flex shrink-0 items-center border shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:w-8 data-[size=sm]:h-3.5 data-[size=sm]:w-6",
         green
-          ? "data-[size=default]:h-[1.15rem] rounded-[5px] border-[color-mix(in_oklab,var(--color-daz-green)_60%,black)] shadow-[inset_0_1px_2.5px_rgb(0_0_0/0.28)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_78%,white)] data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_16%,white)]"
+          ? "data-[size=default]:h-[1.15rem] rounded-[5px] border-[color-mix(in_oklab,var(--color-daz-green)_60%,black)] shadow-[inset_0_1px_2.5px_rgb(0_0_0/0.28)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_78%,white)] data-[state=unchecked]:border-[color-mix(in_oklab,var(--color-daz-green)_38%,#3a3f47)] data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_34%,#5b6472)]"
           : "data-[size=default]:h-5 rounded-[4px] border-transparent data-[state=checked]:bg-[#fe5c01e0] data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80",
         className
       )}
@@ -34,7 +34,7 @@ function Switch({
         className={cn(
           "pointer-events-none block ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0",
           green
-            ? "rounded-[3px] shadow-sm data-[state=checked]:bg-white data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_72%,white)]"
+            ? "rounded-[3px] shadow-sm data-[state=checked]:bg-white data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_8%,white)]"
             : "rounded-[3px] bg-background dark:data-[state=checked]:bg-white dark:data-[state=unchecked]:bg-foreground"
         )}
       />

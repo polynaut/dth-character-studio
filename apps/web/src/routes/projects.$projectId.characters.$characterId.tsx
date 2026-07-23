@@ -191,8 +191,10 @@ function CharacterPage() {
   // Which Daz scene card is selected — groom lists, the header's scene tag and
   // the per-scene ROM override all follow it (lib/use-scene-selection.ts).
   const sceneSel = useSceneSelection(character, patch)
-  // The scene footer names the selected Daz scene once the Daz-scenes cards have
-  // scrolled off-screen — an IntersectionObserver on the scenes area drives `show`.
+  // The scene footer names the selected Daz scene once the scene-cards GRID has
+  // scrolled off — an IntersectionObserver on that grid (via DazSceneField's
+  // `cardsRef`, not the whole panel) drives `show`, so the footer appears the moment
+  // the cards leave, not when the "Add scene" button and the rest also clear.
   const scenesRef = useRef<HTMLDivElement>(null)
   const [scenesOnScreen, setScenesOnScreen] = useState(true)
   useEffect(() => {
@@ -401,22 +403,22 @@ function CharacterPage() {
           <div className="min-w-0 flex-1 space-y-4">
             {location && (
               <>
-                {/* Observed so the scene footer knows when the Daz-scenes cards
-                    have scrolled out of view. */}
-                <div ref={scenesRef}>
-                  <DazSceneField
-                    projectId={projectId}
-                    character={character}
-                    location={location}
-                    sceneExists={sceneExists}
-                    sceneFolderExists={sceneFolderExists}
-                    defaultSubdir={project?.dazSubdir ?? 'daz3d'}
-                    persistPatch={draft.persistPatch}
-                    onScenesFolderMoved={onScenesFolderMoved}
-                    selectedScene={sceneSel.effectiveScene}
-                    onSelectScene={sceneSel.selectScene}
-                  />
-                </div>
+                {/* cardsRef points the footer's observer at the scene-cards grid
+                    itself, so the footer appears the moment the cards (not the whole
+                    panel or the "Add scene" button) scroll out of view. */}
+                <DazSceneField
+                  cardsRef={scenesRef}
+                  projectId={projectId}
+                  character={character}
+                  location={location}
+                  sceneExists={sceneExists}
+                  sceneFolderExists={sceneFolderExists}
+                  defaultSubdir={project?.dazSubdir ?? 'daz3d'}
+                  persistPatch={draft.persistPatch}
+                  onScenesFolderMoved={onScenesFolderMoved}
+                  selectedScene={sceneSel.effectiveScene}
+                  onSelectScene={sceneSel.selectScene}
+                />
                 <HoudiniProjectsField
                   character={character}
                   location={location}
