@@ -29,11 +29,12 @@ const EDGE = 8
 
 /**
  * The overflow padding for flip/shift: the usual {@link EDGE} on every side,
- * PLUS the live sticky-header height on top. The app's sticky page header is a
- * fixed overlay the popup's z-50 portal would otherwise render straight over, so
- * a `placement:"top"` popup with no room above the header flips below instead of
- * overlapping it. Read from the CSS var each compute (it's a derivable) so it
- * tracks the header collapsing on scroll; absent (a plain page) it's 0.
+ * PLUS the live sticky-header height on top. The sticky page header (z-40) now
+ * sits ABOVE this popup's z-30 portal, so a `placement:"top"` popup with no room
+ * above the header would be hidden BEHIND it — the header inset makes it flip
+ * below and stay visible instead. Read from the CSS var each compute (it's a
+ * derivable) so it tracks the header collapsing on scroll; absent (a plain page)
+ * it's 0.
  */
 function overflowPadding() {
   let headerH = 0
@@ -202,7 +203,10 @@ export function InfoPopup({
             <div
               ref={refs.setFloating}
               style={{ ...floatingStyles, ...transitionStyles }}
-              className="z-50 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+              // z-30: below the sticky page header (z-40, so a popup that reaches
+              // into the header is covered, not floating over it) and below modal
+              // dialogs (z-50); still above page content via its body portal.
+              className="z-30 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
               {...getFloatingProps({ onClick: onContentClick })}
             >
               {children}

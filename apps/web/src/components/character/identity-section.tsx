@@ -10,6 +10,7 @@ import {
   SelectValue,
   Switch,
   cn,
+  overrideLabelClass,
 } from '@dth/ui'
 
 import type { Character, SceneOverride } from '@dth/rom'
@@ -95,7 +96,7 @@ export function IdentitySection({
         className="m-0 flex flex-wrap items-end gap-x-6 gap-y-3 border-0 p-0"
       >
         <div className="group/ovr">
-          <Label className="mb-1">
+          <Label className={cn('mb-1', overrideLabelClass(facsOv, overrideEligible))}>
             FACS detail strength
             <OverrideMark
               overridden={facsOv}
@@ -114,7 +115,7 @@ export function IdentitySection({
           />
         </div>
         <div className="group/ovr">
-          <Label className="mb-1">
+          <Label className={cn('mb-1', overrideLabelClass(flexOv, overrideEligible))}>
             Flexion strength
             <OverrideMark
               overridden={flexOv}
@@ -137,7 +138,7 @@ export function IdentitySection({
           <span
             className={cn(
               'flex items-center gap-2 text-sm',
-              inherited(tearOv) && 'text-muted-foreground',
+              overrideLabelClass(tearOv, overrideEligible),
             )}
           >
             Set UE5 tear UV
