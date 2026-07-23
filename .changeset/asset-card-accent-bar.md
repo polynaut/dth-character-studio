@@ -2,7 +2,9 @@
 "@dth/web": patch
 ---
 
-Redesign the Daz-scene and Houdini-project cards: a brand-coloured left accent
-bar (green / orange), the delete button moved down beside the always-present open
-icon (muted, red only when hovered), and a green ring + corner check for the
-selected Daz scene. The PRIMARY badge sits at the card's bottom-left.
+Redesign the linked-asset cards with a brand-coloured left accent bar: the
+Daz-scene (green) and Houdini-project (orange) cards get the delete button moved
+down beside the always-present open icon (muted, red only when hovered) and a
+green ring + corner check for the selected Daz scene, with the PRIMARY badge at
+the card's bottom-left. The Unreal-project footer card joins the same visual
+language with a cyan accent bar.

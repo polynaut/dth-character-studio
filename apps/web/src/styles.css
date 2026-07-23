@@ -44,6 +44,7 @@
   --ring: #ee7027; /* orange focus ring */
   --daz-green: #3fae6b; /* Daz brand leaf-green — the linked-scene card accent */
   --houdini-orange: #ff6a13; /* Houdini brand orange — the linked-project card accent */
+  --unreal-blue: #03a3d7; /* Unreal brand cyan — the linked-uproject card accent */
   --chart-1: #fe5c01;
   --chart-2: #5aa9e6;
   --chart-3: #e6b85a;
@@ -83,6 +84,7 @@
   --color-ring: var(--ring);
   --color-daz-green: var(--daz-green);
   --color-houdini-orange: var(--houdini-orange);
+  --color-unreal-blue: var(--unreal-blue);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -449,6 +451,19 @@ a {
   &:hover {
     background-color: color-mix(in oklab, var(--houdini-orange) 11%, var(--card));
     border-color: color-mix(in oklab, var(--houdini-orange) 55%, var(--border));
+  }
+}
+
+/* The linked-project "Unreal card" in the project footer bar: smaller than the
+   Daz/Houdini cards but the same visual language — a Unreal-cyan LEFT ACCENT BAR
+   (drawn in the component) over a faint cyan tint / border that brighten on
+   hover. Not selectable. */
+@utility unreal-card {
+  background-color: color-mix(in oklab, var(--unreal-blue) 6%, var(--card));
+  border-color: color-mix(in oklab, var(--unreal-blue) 26%, var(--border));
+  &:hover {
+    background-color: color-mix(in oklab, var(--unreal-blue) 11%, var(--card));
+    border-color: color-mix(in oklab, var(--unreal-blue) 55%, var(--border));
   }
 }
 
