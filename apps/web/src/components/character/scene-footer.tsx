@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 import { cn } from '@dth/ui'
 
@@ -6,6 +7,18 @@ import { SceneLabel } from '#/components/character/scene-label.tsx'
 import { prettySceneName } from '#/lib/scene-name.ts'
 
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
+
+/**
+ * A stable, CSS-ident-safe `view-transition-name` for a scene. Scene paths aren't
+ * valid idents (backslashes, colons, spaces), so hash the path to a short token —
+ * the same scene keeps the same name whether it's the prominent pill or a rail one,
+ * which is what lets the browser morph it between the two slots on selection.
+ */
+const vtName = (path: string) => {
+  let h = 0
+  for (let i = 0; i < path.length; i++) h = (Math.imul(31, h) + path.charCodeAt(i)) | 0
+  return `scene-${(h >>> 0).toString(36)}`
+}
 
 /** The green "primary" tag shown on the primary scene's pill. */
 const primaryTag = (
@@ -67,6 +80,25 @@ export function SceneFooter({
     }
   }, [others.length])
 
+  // Selecting a pill reorders the rail (the clicked scene swaps into the prominent
+  // slot; the rest shift to fill in). Wrap the state change in a view transition so
+  // each pill — which carries a stable `view-transition-name` — slides from its old
+  // slot to its new one instead of snapping. `flushSync` makes React apply the
+  // selection synchronously inside the transition callback so the browser captures
+  // the "after" layout. Falls back to a plain select when unsupported or the user
+  // prefers reduced motion.
+  const selectScene = (path: string) => {
+    if (
+      path === selected ||
+      typeof document.startViewTransition !== 'function' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      onSelect(path)
+      return
+    }
+    document.startViewTransition(() => flushSync(() => onSelect(path)))
+  }
+
   if (scenes.length === 0) return null
   const nameOf = (p: string) => prettySceneName(stemOf(p), characterName)
   const railMask = `linear-gradient(to right, ${fade.left ? 'transparent' : '#000'}, #000 22px, #000 calc(100% - 22px), ${fade.right ? 'transparent' : '#000'})`
@@ -82,7 +114,10 @@ export function SceneFooter({
       <div className="flex items-center gap-3 px-4 py-2">
         {/* The selected scene, prominent — a green ring (matching the selected
             scene card), never dimmed. */}
-        <span className="shrink-0 rounded-lg ring-2 ring-daz-green ring-offset-2 ring-offset-background">
+        <span
+          style={{ viewTransitionName: vtName(selected), viewTransitionClass: 'scene-pill' }}
+          className="shrink-0 rounded-lg ring-2 ring-daz-green ring-offset-2 ring-offset-background"
+        >
           <SceneLabel
             scenePath={selected}
             name={nameOf(selected)}
@@ -105,7 +140,8 @@ export function SceneFooter({
                 <button
                   key={path}
                   type="button"
-                  onClick={() => onSelect(path)}
+                  style={{ viewTransitionName: vtName(path), viewTransitionClass: 'scene-pill' }}
+                  onClick={() => selectScene(path)}
                   title={`Switch to ${nameOf(path)}`}
                   className="shrink-0 rounded-lg opacity-65 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
                 >
