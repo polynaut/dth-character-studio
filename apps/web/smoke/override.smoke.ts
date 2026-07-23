@@ -12,13 +12,11 @@ const fileContent = (page: Page, path: string) =>
 const unhandledCommands = (page: Page) =>
   page.evaluate(() => (window as any).__tauriMock.unhandled as Array<string>)
 
-// A per-scene ROM override end-to-end: select an extra scene, arm the Override
-// toggle, check a row, save — the scene gets its own script + CSV next to the
-// defaults. The checkbox click doubles as the freeze regression: an unstable
-// table `data` identity once fed an endless sync re-render loop right here.
-// NB: locators go by ROLE, not title — the ui kit's tooltip host rewrites a
-// hovered element's `title` into `data-tooltip`/`aria-label`, so a title
-// locator silently stops matching the very control the test just touched.
+// A per-scene ROM override end-to-end: select an extra scene, EDIT a base ROM row
+// (implicit arm-on-edit — no toggle, no checkbox), save — the scene gets its own
+// CSV plus a shared script embedding its override, next to the defaults. The value
+// edit doubles as the freeze regression: an unstable table `data` identity once fed
+// an endless sync re-render loop right here.
 test('project window: a scene override saves scene-specific artifacts', async ({ page }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
   const extraScene = `${P.charFolder}/daz3d/KiraBeach.duf`
@@ -31,23 +29,18 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  // The PRIMARY scene is selected by default — it IS the base definition, so the
-  // per-panel override toggles are hidden entirely.
-  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(0)
-
-  // Selecting a non-primary scene reveals the override toggles; the ROM one's label
-  // carries the scene as a green pill ("KiraBeach" reads "Beach", see prettySceneName).
+  // Selecting a non-primary scene puts the ROM grid in override mode — no toggle,
+  // no checkbox (the footer names the scene: "KiraBeach" reads "Beach").
   await page.getByText('KiraBeach', { exact: true }).first().click()
-  await expect(page.getByRole('switch', { name: /Override ROM frames/ })).toHaveCount(1)
   await expect(page.getByText('Beach', { exact: true }).first()).toBeVisible()
-  await page.getByRole('switch', { name: /Override ROM frames/ }).click()
 
-  // Arming unlocks the ROM: the FBM rows' Override checkboxes appear. Check the
-  // first one — the row joins the override.
+  // Editing a base ROM row arms it as a per-scene override (implicit — the row turns
+  // green). Expand FBM and change the first frame's value.
   await page.getByRole('button', { name: /FBM Full Body/ }).click()
-  const checkbox = page.getByRole('checkbox', { name: /Override this frame/ }).first()
-  await checkbox.click()
-  await expect(checkbox).toBeChecked()
+  const value = page.locator('table input[inputmode="decimal"]').first()
+  await value.fill('42')
+  await value.press('Enter')
+  await expect(value).toHaveValue('42')
 
   // Save → the scene's own artifacts land next to the default ones.
   await page.getByRole('button', { name: 'Save', exact: true }).click()

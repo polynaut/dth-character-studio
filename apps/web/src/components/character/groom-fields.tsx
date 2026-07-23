@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
 import { Button, InfoPopup, MultiSelect, useRefetchOnFocus } from '@dth/ui'
-import { GuideLink } from '#/components/guide-link.tsx'
-import { PanelOverrideToggle } from '#/components/character/panel-override-toggle.tsx'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -29,13 +27,14 @@ function refKey(ref: string): string {
 /**
  * The hair (groom) block of the character editor's identity card. Hair is always
  * PER SCENE (`groomScenes`) — a scene's listed items ARE its hair, none listed
- * means none — and this component edits the list of the SELECTED scene card
- * (`selectedScene`, the primary scene by default). The generated script bakes the
- * whole map and hides the open scene's list around the export at run time, so one
- * script serves every scene. Suggestions come from the selected scene's `.duf`
- * (read natively, no Daz needed); a listed label the scene doesn't contain gets a
- * warning. On a non-primary scene the list locks until its override is armed.
- * `patch` is the route's partial-Character updater — saved with the ordinary Save.
+ * means none (empty scenes are dropped at generation). Every scene owns its list;
+ * there is NO "inherit from the primary", so hair carries no per-scene override
+ * chrome — the list is simply editable on whatever scene is selected. This edits
+ * the SELECTED scene card's list (`selectedScene`, the primary by default). The
+ * generated script bakes the whole map and hides the open scene's list around the
+ * export at run time, so one script serves every scene. Suggestions come from the
+ * selected scene's `.duf` (read natively, no Daz needed); a listed label the scene
+ * doesn't contain gets a warning. `patch` is the route's partial-Character updater.
  */
 export function GroomFields({
   character,
@@ -43,9 +42,6 @@ export function GroomFields({
   selectedScene,
   dazInstallFolder,
   overrideEligible,
-  groomOverrideActive,
-  setGroomOverrideEnabled,
-  selectedSceneName,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -54,22 +50,16 @@ export function GroomFields({
   /** The Daz install folder (from settings) — used to read the installed
    *  Exporter Plugin's DLL version and warn when it's too old for hide-only groom. */
   dazInstallFolder: string
-  /** Per-scene override arming, from useSceneSelection. On a non-primary scene the
-   *  hair list is locked until the override is armed (the list is per scene, but
-   *  editing an outfit scene's hair is an explicit opt-in like the other panels). */
+  /** True while a non-primary Daz scene is selected — only scopes the "unlisted
+   *  hair would ride into the export" warning to outfit scenes. */
   overrideEligible: boolean
-  groomOverrideActive: boolean
-  setGroomOverrideEnabled: (enabled: boolean) => void
-  selectedSceneName: string
 }) {
   const [wearables, setWearables] = useState<Array<SceneWearable>>([])
   const [scanned, setScanned] = useState(false)
   // Reset the scan DURING render (not in an effect) the instant the selected scene
   // changes, so this render never judges the NEW scene's hair list against the OLD
   // scene's wearables — that one-frame mismatch flashed a bogus "not found /
-  // unlisted" warning before the effect below could clear it. React re-renders
-  // immediately (no paint) with the cleared state, then the effect scans the new
-  // scene. (The recommended "adjust state on prop change" pattern.)
+  // unlisted" warning before the effect below could clear it.
   const [scannedScene, setScannedScene] = useState(selectedScene)
   if (scannedScene !== selectedScene) {
     setScannedScene(selectedScene)
@@ -111,11 +101,9 @@ export function GroomFields({
     }
   }, [selectedScene])
 
-  // Re-read the scene when the window regains focus — the user may have just
-  // added or removed a hair item in Daz and Alt-Tabbed back. No reset here (the
-  // scene is unchanged, so don't flash the pills away): the fresh read overwrites
-  // in place, and the Rust reader always reads the `.duf` live (no cache), so a
-  // newly-added hair item shows up without switching scenes.
+  // Re-read the scene when the window regains focus — the user may have just added
+  // or removed a hair item in Daz and Alt-Tabbed back. No reset here (the scene is
+  // unchanged, so don't flash the pills away): the fresh read overwrites in place.
   useRefetchOnFocus(() => {
     if (!selectedScene) return
     void api.sceneWearables({ data: { scenePath: selectedScene } }).then((result) => {
@@ -153,38 +141,19 @@ export function GroomFields({
   const knownLabels = new Set(wearables.map((wearable) => wearable.label))
   const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
-  // On a non-primary scene the per-scene hair list is locked until its override
-  // is armed — the same opt-in gate the ROM / Genesis-9 panels use.
-  const groomLocked = overrideEligible && !groomOverrideActive
   const exporterTooOld = hasGroom && !exporterSupportsGroomHide(exporterVersion)
 
-  // The hair the scene's `.duf` actually contains (the HAIRISH suggestions) —
-  // what the ✦ button grabs in one click. Detected hair the current list
-  // doesn't already cover would ride into the ROM export; on a non-primary
-  // scene that's a mismatch we arm + warn about (the outfit brought its own
-  // hair, so the primary's list can't be trusted for it).
+  // Detected hair the scene's list doesn't cover would ride into the ROM export.
+  // Flagged on an outfit (non-primary) scene, where the brought-along hair most
+  // often isn't listed yet.
   const detectedHair = candidates.filter((label) => HAIRISH.test(label))
   const listedSet = new Set(listed)
   const unlistedHair = scanned ? detectedHair.filter((label) => !listedSet.has(label)) : []
   const hairMismatch = overrideEligible && unlistedHair.length > 0
 
-  // Auto-arm the hair override ONCE when switching to a non-primary scene whose
-  // detected hair isn't covered by its list. Only ever ARM (never disarm) and
-  // never twice for the same scene, so a manual disarm within a visit sticks;
-  // evaluated only after that scene's wearables have been scanned.
-  const autoArmedScene = useRef<string | null>(null)
-  useEffect(() => {
-    if (!scanned || autoArmedScene.current === selectedScene) return
-    autoArmedScene.current = selectedScene
-    if (hairMismatch && !groomOverrideActive) setGroomOverrideEnabled(true)
-  }, [scanned, selectedScene, hairMismatch, groomOverrideActive, setGroomOverrideEnabled])
-
   return (
     <div className="max-w-xl">
-      {/* The override toggle rides the label's right edge, absolutely positioned so
-          the (taller) toggle can't inflate the label's row height — the label keeps
-          the same tight margin to its field as every other field's label (mb-1). */}
-      <div className="relative mb-1 flex items-center gap-1 text-sm font-medium">
+      <div className="mb-1 flex items-center gap-1 text-sm font-medium">
         Hair items
         <InfoPopup label="Hair items — more information">
           Each scene carries its own hair — the items you list here are hidden around the DTH
@@ -192,28 +161,6 @@ export function GroomFields({
           hair to exclude. For a hair-only variant, link it as its own scene (or use
           Attachments).
         </InfoPopup>
-        <span className="absolute top-1/2 right-0 -translate-y-1/2">
-          <PanelOverrideToggle
-            eligible={overrideEligible}
-            active={groomOverrideActive}
-            scenePath={selectedScene}
-            sceneName={selectedSceneName}
-            noun="hair"
-            compact
-            onToggle={setGroomOverrideEnabled}
-            info={
-              <>
-                Edit <strong>this Daz scene's own hair list</strong>: select one of the extra
-                scenes in the Daz scenes cards and enable the override to pick that outfit's hair.
-                The generated Daz script bakes every scene's list and hides the right one when that
-                scene is open — so one script covers them all. Unlike the ROM/Genesis panels,
-                disarming here only <strong>re-locks editing</strong> — the hair you listed stays
-                this scene's (hair is per scene by presence).{' '}
-                <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#hair-items--per-scene-kept-out-of-the-export" />
-              </>
-            }
-          />
-        </span>
       </div>
       {exporterTooOld && (
         <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -235,7 +182,6 @@ export function GroomFields({
               onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}
               placeholder="Pick the hair items of this scene…"
               allowCustom
-              disabled={groomLocked}
               pillWarning={(label) =>
                 scanned && !knownLabels.has(label) ? `Not found in “${sceneName}”` : null
               }
@@ -245,7 +191,7 @@ export function GroomFields({
               size="icon"
               title="Select all detected hair items"
               aria-label="Select all detected hair items"
-              disabled={groomLocked || detectedHair.length === 0}
+              disabled={detectedHair.length === 0}
               onClick={() => setNodes(detectedHair.map((nodeLabel) => ({ nodeLabel })))}
             >
               <Sparkles />
@@ -254,7 +200,7 @@ export function GroomFields({
           {hairMismatch && (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
               Unlisted hair: <strong>{unlistedHair.join(', ')}</strong> — it'd ride into the
-              export. Override enabled; pick it or hit{' '}
+              export. Pick it or hit{' '}
               <Sparkles className="inline size-3.5 -translate-y-px" aria-hidden />.
             </p>
           )}

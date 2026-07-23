@@ -128,6 +128,62 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     [character.sceneOverrides, effectiveScene, patch],
   )
 
+  /**
+   * Write the Genesis-9 identity dials for the selected non-primary scene under the
+   * implicit-override model: a dial that differs from the base character IS an
+   * override, so `identity.enabled` (the gate generation reads) is derived from
+   * "any dial differs". Untouched dials stay equal to the base, so they never read
+   * as overridden. Passing a base value back in is how a field resets. No-op on the
+   * primary scene (there editing goes straight to the base via `patch`).
+   */
+  const writeIdentity = useCallback(
+    (
+      next: Partial<
+        Pick<
+          SceneOverride['identity'],
+          'facsDetailStrength' | 'flexionStrength' | 'applyUE5TearUV'
+        >
+      >,
+    ) => {
+      if (!overrideEligible) return
+      const base = {
+        facsDetailStrength: character.facsDetailStrength,
+        flexionStrength: character.flexionStrength,
+        applyUE5TearUV: character.applyUE5TearUV,
+      }
+      const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
+      // Start from the base (inherited) unless an override is already active — so
+      // untouched dials compare equal to the base and never read as overridden even
+      // if the stored block carried stale defaults from another panel's arming.
+      const start = existing && existing.identity.enabled ? existing.identity : { enabled: false, ...base }
+      const merged = { ...start, ...next }
+      const enabled =
+        merged.facsDetailStrength !== base.facsDetailStrength ||
+        merged.flexionStrength !== base.flexionStrength ||
+        merged.applyUE5TearUV !== base.applyUE5TearUV
+      const identity = { ...merged, enabled }
+      patch({
+        sceneOverrides: existing
+          ? character.sceneOverrides.map((o) =>
+              o.scenePath === effectiveScene ? { ...o, identity } : o,
+            )
+          : [
+              ...character.sceneOverrides,
+              { ...sceneOverrideSchema.parse({ scenePath: effectiveScene }), identity },
+            ],
+      })
+    },
+    [
+      character.sceneOverrides,
+      character.facsDetailStrength,
+      character.flexionStrength,
+      character.applyUE5TearUV,
+      effectiveScene,
+      overrideEligible,
+      patch,
+    ],
+  )
+
   const setOverrideEnabled = useCallback(
     (enabled: boolean) => setPanelEnabled('rom', enabled),
     [setPanelEnabled],
@@ -155,6 +211,8 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     selectedSceneName,
     sceneOverride,
     patchOverride,
+    /** Implicit-override writer for the Genesis-9 dials (see above). */
+    writeIdentity,
     // ROM panel (names kept for RomEditorSection's memoized props).
     overrideActive: panelActive('rom'),
     setOverrideEnabled,

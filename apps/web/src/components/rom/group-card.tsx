@@ -44,8 +44,10 @@ import type { PoseTableMeta } from './pose-table.tsx'
 export interface SectionOverrideCtl {
   overriddenById: ReadonlyMap<string, RomPose>
   additionsFor: (groupId: string) => Array<RomPose>
-  onToggleRow: (pose: RomPose, on: boolean) => void
-  onReplacePose: (pose: RomPose) => void
+  /** Arm-on-edit: upsert a base row's override copy (keyed by its pose id). */
+  upsertPose: (pose: RomPose) => void
+  /** Reset a base row: drop its override copy, falling back to the base. */
+  resetPose: (poseId: string) => void
   onAdditionsChange: (groupId: string, poses: Array<RomPose>) => void
 }
 
@@ -147,8 +149,9 @@ export const GroupCard = memo(function GroupCard({
     }
     const pose = displayPoses[rowIndex]
     if (rowIndex < baseCount) {
-      if (!override.overriddenById.has(pose.id)) return
-      override.onReplacePose({ ...pose, ...patch })
+      // Editing a base row arms it: upsert its override copy (by id) — it reads as
+      // overridden (green) from here until reset, no explicit "check" step.
+      override.upsertPose({ ...pose, ...patch })
     } else {
       override.onAdditionsChange(
         group.id,
@@ -225,10 +228,7 @@ export const GroupCard = memo(function GroupCard({
       ? {
           baseCount,
           isOverridden: (poseId) => override.overriddenById.has(poseId),
-          toggle: (poseId, on) => {
-            const base = group.poses.find((pose) => pose.id === poseId)
-            if (base) override.onToggleRow(base, on)
-          },
+          reset: (poseId) => override.resetPose(poseId),
         }
       : undefined,
   }
@@ -238,7 +238,7 @@ export const GroupCard = memo(function GroupCard({
     columns: poseColumns,
     getCoreRowModel: getCoreRowModel(),
     meta,
-    state: { columnVisibility: { boneScaleRef: showBoneScale, override: !!override || locked } },
+    state: { columnVisibility: { boneScaleRef: showBoneScale } },
   })
 
   function addPose() {
