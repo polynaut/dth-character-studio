@@ -10,8 +10,9 @@ import { Button } from '../primitives/button.tsx'
  * media thumbnail, a title, an optional path chip + extra badge, and a
  * bottom-right control cluster (a hover remove button + an always-present open
  * button). Selectable cards additionally show a ring + a corner check when
- * selected. The reveal-icon in the corner previews the Alt+click "show in
- * Explorer" action.
+ * selected; `openIconOnly` cards make the body inert so only the corner icon
+ * opens (for assets with no per-card state to select). The reveal-icon in the
+ * corner previews the Alt+click "show in Explorer" action.
  *
  * It's deliberately presentational: the app injects the native pieces as
  * slots — `media` (its own Portrait/logo), `chip` (its PathCode), `badge`
@@ -37,6 +38,7 @@ export function LinkedAssetCard({
   removeTitle = 'Remove',
   selected,
   onSelect,
+  openIconOnly = false,
 }: {
   title: string
   /** Thumbnail slot — the app's Portrait or a logo, sized by the caller. */
@@ -69,41 +71,64 @@ export function LinkedAssetCard({
    *  classic whole-card-opens behavior). */
   selected?: boolean
   onSelect?: () => void
+  /** Icon-only mode: the card body is inert — a click anywhere but the corner
+   *  open icon is a no-op (no select, no whole-card open), and the body carries
+   *  no title tooltip. For linked assets with no per-card state to select (e.g.
+   *  Houdini projects). Ignored when `onSelect` is set. */
+  openIconOnly?: boolean
 }) {
   const CornerIcon = altHeld ? FolderOpen : ExternalLink
   const showCheck = Boolean(onSelect && selected)
+  // The corner icon is the real (and only) open target in both selectable and
+  // icon-only mode; only the whole-card-opens default leaves it a plain indicator.
+  const cornerOpens = Boolean(onSelect) || openIconOnly
+  // Icon-only mode makes the body a plain <div>: no click, no title tooltip, no
+  // alt-reveal — the corner icon carries the sole action. `onSelect` still wins.
+  const inertBody = openIconOnly && !onSelect
+  const bodyClass = cn(
+    'relative flex h-full w-full items-stretch gap-3 rounded-lg border p-3 text-left transition-colors',
+    cardClass,
+  )
+  const bodyInner = (
+    <>
+      <div className="relative shrink-0 self-start">
+        {media}
+        {badge}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col text-xs">
+        <div className="truncate text-sm font-medium">{title}</div>
+        {chip && <div className="mt-1">{chip}</div>}
+        {/* Pinned to the bottom-left, clear of the corner controls. */}
+        {extra && <div className="mt-auto pt-2">{extra}</div>}
+      </div>
+    </>
+  )
   return (
     // Both the named group (the overlay buttons' hover-reveal) and the plain
     // `group` (the caller's `group-hover:` accentClass) live on the wrapper, so
     // the corner overlay button below accents on card hover too.
     <div className={cn('group group/card relative', width)}>
-      <button
-        type="button"
-        onClick={onSelect ?? onOpen}
-        data-alt-reveal=""
-        // The selected fill + ring live on the card utility, keyed off this
-        // attribute (so the whole appearance stays themeable in CSS).
-        data-selected={showCheck ? 'true' : undefined}
-        // Selectable mode is a toggle button — the ring alone is invisible to
-        // assistive tech, so the selection state must also be aria-pressed.
-        aria-pressed={onSelect ? (selected ?? false) : undefined}
-        title={onSelect ? title : openTitle}
-        className={cn(
-          'relative flex h-full w-full items-stretch gap-3 rounded-lg border p-3 text-left transition-colors',
-          cardClass,
-        )}
-      >
-        <div className="relative shrink-0 self-start">
-          {media}
-          {badge}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col text-xs">
-          <div className="truncate text-sm font-medium">{title}</div>
-          {chip && <div className="mt-1">{chip}</div>}
-          {/* Pinned to the bottom-left, clear of the corner controls. */}
-          {extra && <div className="mt-auto pt-2">{extra}</div>}
-        </div>
-      </button>
+      {inertBody ? (
+        // Inert body — no title tooltip (the name is already the heading) and no
+        // click; opening is reachable only through the corner button below.
+        <div className={bodyClass}>{bodyInner}</div>
+      ) : (
+        <button
+          type="button"
+          onClick={onSelect ?? onOpen}
+          data-alt-reveal=""
+          // The selected fill + ring live on the card utility, keyed off this
+          // attribute (so the whole appearance stays themeable in CSS).
+          data-selected={showCheck ? 'true' : undefined}
+          // Selectable mode is a toggle button — the ring alone is invisible to
+          // assistive tech, so the selection state must also be aria-pressed.
+          aria-pressed={onSelect ? (selected ?? false) : undefined}
+          title={onSelect ? title : openTitle}
+          className={bodyClass}
+        >
+          {bodyInner}
+        </button>
+      )}
 
       {/* Left accent bar — painted over the card's left edge (after the button so
           it sits on top), rounded to follow the card corners. */}
@@ -147,11 +172,11 @@ export function LinkedAssetCard({
             <Trash2 className="size-3.5 text-muted-foreground transition-colors group-hover/del:text-destructive" />
           </Button>
         )}
-        {onSelect ? (
-          // Selectable mode: the corner icon is the ONLY open target — a real
-          // sibling <button>, never nested inside the main button (a focusable
-          // interactive descendant is invalid HTML and the outer accessible name
-          // swallows the inner label).
+        {cornerOpens ? (
+          // Selectable / icon-only mode: the corner icon is the ONLY open target
+          // — a real sibling <button>, never nested inside the main button (a
+          // focusable interactive descendant is invalid HTML and the outer
+          // accessible name swallows the inner label).
           <button
             type="button"
             data-alt-reveal=""
@@ -165,7 +190,7 @@ export function LinkedAssetCard({
             />
           </button>
         ) : (
-          // Non-selectable mode: the whole card opens, so this is a plain
+          // Whole-card-opens default: the whole card opens, so this is a plain
           // indicator — pointer-events stay off so the click hits the card.
           <span className="p-1">
             <CornerIcon
