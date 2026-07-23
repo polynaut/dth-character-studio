@@ -16,6 +16,15 @@ the reference.
   EVERY PR and exempts Dependabot/the version PR INSIDE the job (reporting
   success, not skipped) — a required check that never reports would block the
   merge as "Expected" forever.
+- **Always set branch UPSTREAM TRACKING on every branch you create** — this is
+  non-negotiable, not optional. After creating a branch, run
+  `git branch --set-upstream-to=origin/<branch> <branch>` so a bare `git pull` /
+  `git push` works for the maintainer (without it they get "there is no tracking
+  information for the current branch"). This is BRANCH config only (`branch.<name>.remote`
+  / `.merge`) — `origin` stays SSH; **never** reconfigure the remote to HTTPS. An agent
+  that pushes ad-hoc via a token must ALSO do this, and re-fetch the branch into
+  `refs/remotes/origin/<branch>` after each push so the maintainer's ahead/behind stays
+  accurate.
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.
