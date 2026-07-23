@@ -14,6 +14,7 @@ import {
   REFERENCE_FBX_SECTIONS,
   genDefaultNode,
   newId,
+  posesEqual,
 } from '@dth/rom'
 
 import type {
@@ -150,8 +151,16 @@ export const GroupCard = memo(function GroupCard({
     const pose = displayPoses[rowIndex]
     if (rowIndex < baseCount) {
       // Editing a base row arms it: upsert its override copy (by id) — it reads as
-      // overridden (green) from here until reset, no explicit "check" step.
-      override.upsertPose({ ...pose, ...patch })
+      // overridden (green) from here until reset, no explicit "check" step. But if
+      // the edit lands the row back on the base content (e.g. toggling bone scale
+      // off again), drop the override so the row reverts to normal instead of
+      // lingering as an identical, still-green copy — arm-on-edit's inverse.
+      const next = { ...pose, ...patch }
+      if (posesEqual(next, group.poses[rowIndex])) {
+        override.resetPose(group.poses[rowIndex].id)
+      } else {
+        override.upsertPose(next)
+      }
     } else {
       override.onAdditionsChange(
         group.id,

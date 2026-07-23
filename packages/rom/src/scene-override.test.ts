@@ -6,6 +6,7 @@ import {
   applySceneOverride,
   clonePose,
   mergeSceneOverride,
+  posesEqual,
   sceneOverrideBuildsRom,
   sceneOverrideSlug,
 } from './scene-override'
@@ -185,6 +186,41 @@ describe('clonePose', () => {
     const clone = clonePose(base)
     clone.morphs[0].value = 99
     expect(base.morphs[0].value).toBe(1)
+  })
+})
+
+describe('posesEqual', () => {
+  it('treats a base row and its untouched clone as equal (ids ignored)', () => {
+    const base = fbmGroup().poses[0]
+    const clone = clonePose(base)
+    clone.id = 'different-id'
+    clone.morphs[0].id = 'different-morph-id'
+    expect(posesEqual(base, clone)).toBe(true)
+  })
+
+  it('detects a bone-scale toggle as a difference, and equal again once toggled back', () => {
+    const base = fbmGroup().poses[0]
+    const armed = { ...clonePose(base), boneScaleRef: true }
+    expect(posesEqual(armed, base)).toBe(false)
+    const disarmed = { ...armed, boneScaleRef: false }
+    expect(posesEqual(disarmed, base)).toBe(true)
+  })
+
+  it('compares name, morph value/base/autoBase and morph count', () => {
+    const base = fbmGroup().poses[0]
+    expect(posesEqual({ ...clonePose(base), name: 'Other' }, base)).toBe(false)
+    const bumped = clonePose(base)
+    bumped.morphs[0].value = 0.5
+    expect(posesEqual(bumped, base)).toBe(false)
+    const based = clonePose(base)
+    based.morphs[0].base = 0.2
+    expect(posesEqual(based, base)).toBe(false)
+    const autoed = clonePose(base)
+    autoed.morphs[0].autoBase = true
+    expect(posesEqual(autoed, base)).toBe(false)
+    const extraMorph = clonePose(base)
+    extraMorph.morphs.push({ id: 'x', node: 'Genesis9', prop: 'p', value: 1 })
+    expect(posesEqual(extraMorph, base)).toBe(false)
   })
 })
 

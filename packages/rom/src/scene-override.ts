@@ -122,3 +122,27 @@ export function mergeSceneOverride(character: Character, override: SceneOverride
 export function clonePose(pose: RomPose): RomPose {
   return { ...pose, morphs: pose.morphs.map((morph) => ({ ...morph })) }
 }
+
+/**
+ * Whether two poses are materially identical — same name, bone-scale flag and
+ * morph list (node/prop/value/base/autoBase, in order). Stable-editing ids are
+ * ignored: they never reach generated output, so a pose differing only by id
+ * still produces the same frame. This is the inverse of arm-on-edit: the editor
+ * uses it to DISARM a scene override when a base row is edited back to match the
+ * base (otherwise the override lingers as an identical, still-green copy).
+ */
+export function posesEqual(a: RomPose, b: RomPose): boolean {
+  if (a.name !== b.name) return false
+  if ((a.boneScaleRef ?? false) !== (b.boneScaleRef ?? false)) return false
+  if (a.morphs.length !== b.morphs.length) return false
+  return a.morphs.every((m, i) => {
+    const n = b.morphs[i]
+    return (
+      m.node === n.node &&
+      m.prop === n.prop &&
+      m.value === n.value &&
+      m.base === n.base &&
+      m.autoBase === n.autoBase
+    )
+  })
+}
