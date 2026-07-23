@@ -26,12 +26,14 @@ function Switch({
         // knob evenly inset in both states (track width = 2× knob for every size, so
         // the offset is size-agnostic).
         "peer group/switch inline-flex shrink-0 items-center rounded-full px-[2px] transition-all outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-5 data-[size=default]:w-8 data-[size=sm]:h-3.5 data-[size=sm]:w-6",
-        "data-[state=unchecked]:bg-[#2b2f37] data-[state=unchecked]:shadow-[inset_0_1.5px_3px_rgb(0_0_0/0.6),inset_0_-1px_1px_rgb(255_255_255/0.05)]",
-        "data-[state=checked]:shadow-[inset_0_1.5px_2.5px_rgb(0_0_0/0.38),inset_0_-1px_1px_rgb(255_255_255/0.18)]",
-        // The on-state accent — orange by default, Daz-green for an override boolean.
+        // Recessed track (shared inset shadow both states).
+        "data-[state=unchecked]:shadow-[inset_0_1.5px_3px_rgb(0_0_0/0.6),inset_0_-1px_1px_rgb(255_255_255/0.05)] data-[state=checked]:shadow-[inset_0_1.5px_2.5px_rgb(0_0_0/0.38),inset_0_-1px_1px_rgb(255_255_255/0.18)]",
+        // Accent — orange (default) or Daz-green (override) when checked. The green
+        // variant also keeps a faint green hue when OFF, so an overridden-but-false
+        // toggle reads "off, but overridden"; the default off track stays neutral.
         green
-          ? "data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_86%,black)]"
-          : "data-[state=checked]:bg-[#fe5c01]",
+          ? "data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-daz-green)_18%,#2b2f37)] data-[state=checked]:bg-[color-mix(in_oklab,var(--color-daz-green)_86%,black)]"
+          : "data-[state=unchecked]:bg-[#2b2f37] data-[state=checked]:bg-[#fe5c01]",
         className
       )}
       {...props}

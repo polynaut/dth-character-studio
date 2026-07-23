@@ -21,11 +21,15 @@ test('a field going overridden does not shift its input', async ({ page }) => {
   await page.waitForTimeout(300)
 
   const facs = page.locator('input[inputmode="decimal"]').first()
-  const before = (await facs.boundingBox())!.y
-  // Edit it to differ from the primary → the label gains the green dot.
+  const flex = page.locator('input[inputmode="decimal"]').nth(1)
+  const beforeY = (await facs.boundingBox())!.y
+  const beforeX = (await flex.boundingBox())!.x
+  // Edit FACS to differ from the primary → its label gains the green dot. The slot
+  // is reserved, so neither FACS's own input (Y) nor the neighbouring Flexion (X)
+  // should move.
   await facs.fill('85')
   await facs.press('Enter')
   await page.waitForTimeout(300)
-  const after = (await facs.boundingBox())!.y
-  expect(Math.abs(after - before), 'input Y unchanged when overridden').toBeLessThan(1)
+  expect(Math.abs((await facs.boundingBox())!.y - beforeY), 'FACS input Y unchanged').toBeLessThan(1)
+  expect(Math.abs((await flex.boundingBox())!.x - beforeX), 'neighbour X unchanged').toBeLessThan(1)
 })
