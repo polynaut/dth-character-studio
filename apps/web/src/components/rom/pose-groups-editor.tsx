@@ -23,18 +23,15 @@ import type { Gender, RomGroup, RomPose, RomSection } from '@dth/rom'
 
 import { GroupCard } from './group-card.tsx'
 
-import type { SectionOverrideCtl } from './group-card.tsx'
-
-export type { SectionOverrideCtl } from './group-card.tsx'
-
 /**
  * Cross-group drag-and-drop for a section's pose groups: one DndContext spans
  * every group so a morph (pose) can be dragged *between* groups, not just
  * reordered within one. The move resolves on drag end — dropped onto a pose it
  * inserts at that position; dropped on an empty group's body it appends. Also
- * used for the flat FBM/MISC list (a single group → reorder only). In scene-
- * override mode the drag handles disappear (GroupCard/pose-table), so no drag
- * can start — the base order is fixed there.
+ * used for the flat FBM/MISC list (a single group → reorder only). On a
+ * non-primary Daz scene the editor works identically — it just operates on the
+ * scene's snapshot of the section, and `sceneBaseById` drives the per-row
+ * overridden marks.
  *
  * Memoized, with all GroupCard callbacks identity-stable (latest-ref + id
  * routing): editing one section must not re-render every other section's
@@ -49,8 +46,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   startFrames,
   failedFrames,
   removable,
-  override,
-  locked = false,
+  sceneBaseById,
   onGroupsChange,
 }: {
   section: RomSection
@@ -59,9 +55,8 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
   startFrames: Map<string, number>
   failedFrames?: Set<number>
   removable: boolean
-  override?: SectionOverrideCtl
-  /** Non-primary scene, ROM override OFF: keep the Override column shown-but-disabled. */
-  locked?: boolean
+  /** Non-primary scene: primary rows by id → per-row overridden marks + reset. */
+  sceneBaseById?: Map<string, RomPose>
   onGroupsChange: (section: RomSection, groups: Array<RomGroup>) => void
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -256,8 +251,7 @@ export const PoseGroupsEditor = memo(function PoseGroupsEditor({
             removable={removable}
             expandedIds={expandedIds}
             onToggleExpanded={toggleExpanded}
-            override={override}
-            locked={locked}
+            sceneBaseById={sceneBaseById}
             onChange={changeGroup}
             onRemove={removeGroup}
             onMirror={mirrorGroupAfter}

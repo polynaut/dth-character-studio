@@ -1,7 +1,79 @@
 import { sectionsFromFlatFrames } from './frames'
-import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections, newId } from './types'
+import {
+  CHARACTER_SCHEMA_VERSION,
+  ROM_SECTIONS,
+  defaultSections,
+  flatSectionGroupId,
+  newId,
+} from './types'
 
 import type { RomSection } from './types'
+
+/**
+ * v21 fold: turn a scene override's legacy `poses` (content swaps keyed by base
+ * pose id) + `additions` (rows appended at a group end) into the new per-section
+ * snapshot map `sections`. It reproduces the OLD `applySceneOverride` merge
+ * exactly (replace in place by id, append additions after the base rows,
+ * materialize the flat group for a flat-section addition), and stores ONLY the
+ * touched sections — so a migrated character's merged sections, and thus its
+ * generated .dsa + CSV, are byte-identical. Raw pre-zod data (zod re-clones on
+ * parse, so sharing base pose objects into the snapshot is safe).
+ */
+function foldLegacySceneOverride(
+  baseSections: Record<string, any>,
+  poses: Array<any>,
+  additions: Array<any>,
+): Record<string, Array<any>> {
+  const replacedById = new Map<any, any>(
+    poses.filter((p) => p && typeof p === 'object').map((p) => [p.id, p]),
+  )
+  const additionsByGroup = new Map<any, Array<any>>()
+  for (const entry of additions) {
+    if (entry && typeof entry === 'object' && Array.isArray(entry.poses)) {
+      additionsByGroup.set(entry.groupId, entry.poses)
+    }
+  }
+  const result: Record<string, Array<any>> = {}
+  for (const section of ROM_SECTIONS) {
+    const baseGroups: Array<any> = Array.isArray(baseSections[section]?.groups)
+      ? baseSections[section].groups
+      : []
+    const flatId = flatSectionGroupId(section)
+    const sectionGroupIds = new Set(baseGroups.map((g) => g?.id))
+    // Touched = a base row in this section is replaced, or an addition targets
+    // one of its groups (or its flat implicit group).
+    const touched =
+      baseGroups.some(
+        (g) => Array.isArray(g?.poses) && g.poses.some((p: any) => p && replacedById.has(p.id)),
+      ) ||
+      [...additionsByGroup.keys()].some((gid) => sectionGroupIds.has(gid) || gid === flatId)
+    if (!touched) continue
+    let groups = baseGroups.map((g) => ({
+      ...g,
+      poses: [
+        ...(Array.isArray(g?.poses)
+          ? g.poses.map((p: any) => (p && replacedById.has(p.id) ? replacedById.get(p.id) : p))
+          : []),
+        ...(additionsByGroup.get(g?.id) ?? []),
+      ],
+    }))
+    const flatAdds = additionsByGroup.get(flatId)
+    if (groups.length === 0 && Array.isArray(flatAdds) && flatAdds.length > 0) {
+      groups = [
+        {
+          id: flatId,
+          label: '',
+          suffix: 'centre',
+          method: 'default',
+          calculateFrom: 'default',
+          poses: flatAdds,
+        },
+      ]
+    }
+    result[section] = groups
+  }
+  return result
+}
 
 /**
  * Character-JSON migration framework.
@@ -108,6 +180,29 @@ export const characterMigrations: Record<
         if (!override || typeof override !== 'object') continue
         if (override.enabled === undefined) override.enabled = true
       }
+    }
+    return data
+  },
+  // v21 — the ROM override's `poses` (content swaps by id) + `additions` (rows
+  // appended at a group end) collapse into ONE per-section snapshot map
+  // `sections` (the scene's own groups). Fold the legacy deltas into it via the
+  // old merge so the merged sections — and thus generation — stay byte-identical;
+  // `enabled` is preserved as stored (the gate still means "the ROM diverges").
+  // Idempotent: a v21 override already carries `sections` and no legacy fields.
+  21: (data) => {
+    if (!Array.isArray(data.sceneOverrides)) return data
+    const base = data.sections && typeof data.sections === 'object' ? data.sections : {}
+    for (const override of data.sceneOverrides) {
+      if (!override || typeof override !== 'object') continue
+      if (override.sections === undefined) {
+        override.sections = foldLegacySceneOverride(
+          base,
+          Array.isArray(override.poses) ? override.poses : [],
+          Array.isArray(override.additions) ? override.additions : [],
+        )
+      }
+      delete override.poses
+      delete override.additions
     }
     return data
   },

@@ -8,7 +8,7 @@ import { ChevronDown, ChevronRight, GripVertical, Plus, RotateCcw, Trash2 } from
 import type { Row } from '@tanstack/react-table'
 
 import { Button, InfoPopup } from '@dth/ui'
-import { sanitizePoseName } from '@dth/rom'
+import { sanitizePoseName, sceneRowOverridden } from '@dth/rom'
 
 import type { ColumnDef } from '@tanstack/react-table'
 import type { RomPose } from '@dth/rom'
@@ -22,21 +22,6 @@ export interface MorphPatch {
   value?: number
   base?: number | undefined
   autoBase?: boolean | undefined
-}
-
-/**
- * Scene-override mode state for the table (a non-primary Daz scene is selected):
- * rows below `baseCount` are the BASE ROM rows — editable, and editing one arms it
- * as an override (it turns green); rows from `baseCount` on are the override's own
- * appended frames (green, removable, only ever at the END — inserting between base
- * frames is forbidden, so the insert menu and drag reordering disappear here). An
- * overridden base row can be reset to the base; added rows are removed.
- */
-export interface PoseOverrideMeta {
-  baseCount: number
-  isOverridden: (poseId: string) => boolean
-  /** Reset a base row: drop its override, falling back to the base ROM frame. */
-  reset: (poseId: string) => void
 }
 
 export interface PoseTableMeta {
@@ -55,12 +40,17 @@ export interface PoseTableMeta {
   insertAt: (index: number) => void
   /** Default scene node for new entries — the generation's unrenamed base figure. */
   figureNode: string
-  /** Set = the grid is in scene-override mode (see {@link PoseOverrideMeta}). */
-  override?: PoseOverrideMeta
-  /** Scene-override structural lock threaded down from the group card (which disables
-   *  the base-structure buttons in override mode). Vestigial here — the table body no
-   *  longer reads it (the old Override checkbox column it gated is gone). */
-  locked?: boolean
+  /**
+   * Non-primary Daz scene: the primary ROM's rows by pose id. The whole grid edits
+   * exactly like the primary (add / insert / delete / reorder), and a row is
+   * "overridden" (green) purely by DIFF — it has no primary twin (added) or its
+   * content differs from the twin with the same id ({@link sceneRowOverridden}). The
+   * actions column then offers a reset back to the twin. Undefined on the primary
+   * scene, where nothing is an override.
+   */
+  sceneBaseById?: Map<string, RomPose>
+  /** Restore this row's content from its primary twin (non-primary scene only). */
+  resetRow?: (rowIndex: number) => void
 }
 
 /**
@@ -124,13 +114,10 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <span className="pr-1 pl-2 text-sm text-muted-foreground tabular-nums">
             {meta.startFrame + row.index}
           </span>
-          {/* Override mode appends at the group end only — no in-between inserts. */}
-          {!meta.override && (
-            <InsertFrameMenu
-              onBefore={() => meta.insertAt(row.index)}
-              onAfter={() => meta.insertAt(row.index + 1)}
-            />
-          )}
+          <InsertFrameMenu
+            onBefore={() => meta.insertAt(row.index)}
+            onAfter={() => meta.insertAt(row.index + 1)}
+          />
         </span>
       )
     },
@@ -277,34 +264,36 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     header: '',
     cell: ({ row, table }) => {
       const meta = table.options.meta as PoseTableMeta
-      const override = meta.override
-      if (override && row.index < override.baseCount) {
-        // A base row: overridden → reset to the base ROM frame; otherwise nothing
-        // (the base layout is fixed — base rows are never deleted per scene).
-        if (!override.isOverridden(row.original.id)) return null
-        return (
+      // On a non-primary scene a row that diverges from its primary twin can be
+      // reset to it; every row can be removed (a base row too — deleting frames is
+      // how a scene changes the count).
+      const overridden =
+        meta.sceneBaseById !== undefined && sceneRowOverridden(meta.sceneBaseById, row.original)
+      const canReset =
+        overridden && meta.sceneBaseById!.has(row.original.id) && meta.resetRow !== undefined
+      return (
+        <span className="flex items-center justify-end">
+          {canReset && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              title="Reset this frame to the primary scene"
+              onClick={() => meta.resetRow!(row.index)}
+            >
+              <RotateCcw className="size-3.5 text-daz-green" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
             className="size-7"
-            title="Reset this frame to the base ROM"
-            onClick={() => override.reset(row.original.id)}
+            title="Remove pose"
+            onClick={() => meta.remove(row.index)}
           >
-            <RotateCcw className="size-3.5 text-daz-green" />
+            <Trash2 className="size-3.5 text-destructive" />
           </Button>
-        )
-      }
-      // Primary scene, or an override's own added frame → remove.
-      return (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          title={override ? 'Remove added frame' : 'Remove pose'}
-          onClick={() => meta.remove(row.index)}
-        >
-          <Trash2 className="size-3.5 text-destructive" />
-        </Button>
+        </span>
       )
     },
   }),
@@ -328,13 +317,11 @@ export function SortablePoseRow({
   // run report at the top of the page).
   const absFrame = meta.startFrame + row.index
   const failed = meta.failedFrames?.has(absFrame) === true
-  // Scene-override mode: a row is "overridden" when it's the override's own added
-  // frame, or a base row the user has edited (armed). Overridden rows read green;
-  // base rows not yet overridden stay normal and editable — edit one to override it.
-  const override = meta.override
+  // Non-primary scene: a row reads green purely by DIFF against the primary — it's
+  // an added row (no twin) or its content differs from its same-id twin. On the
+  // primary scene `sceneBaseById` is unset, so nothing is ever an override.
   const overridden =
-    override !== undefined &&
-    (row.index >= override.baseCount || override.isOverridden(row.original.id))
+    meta.sceneBaseById !== undefined && sceneRowOverridden(meta.sceneBaseById, pose)
   return (
     <>
       <tr
@@ -352,18 +339,15 @@ export function SortablePoseRow({
         } ${isDragging ? 'relative z-10 bg-muted/50 opacity-70' : ''}`}
       >
         <td className="px-1 py-0.5">
-          {/* Frame order is fixed in override mode — no drag handle. */}
-          {!override && (
-            <button
-              type="button"
-              className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
-              title="Drag to reorder"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="size-3.5" />
-            </button>
-          )}
+          <button
+            type="button"
+            className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+            title="Drag to reorder"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
         </td>
         {visibleCells.map((cell) => (
           <td key={cell.id} className="px-1 py-0.5">

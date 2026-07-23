@@ -372,9 +372,8 @@ describe('scene override mode', () => {
   }) {
     const [override, setOverride] = useState<import('@dth/rom').SceneOverride>({
       scenePath: 'X:/scenes/Beach.duf',
-      enabled: true,
-      poses: [],
-      additions: [],
+      enabled: false,
+      sections: {},
       identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
       groom: { enabled: false },
       preserve: { enabled: false, morphs: [], nodeTransforms: [] },
@@ -399,18 +398,16 @@ describe('scene override mode', () => {
     )
   }
 
-  it('locks the structure: no insert menus, drag handles, or base-row actions', () => {
+  it('the non-primary grid edits freely: insert menus and drag handles are shown', () => {
     render(<OverrideHarness onOverrideChange={() => {}} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
-    expect(screen.queryByLabelText('Insert a frame here')).toBeNull()
-    expect(screen.queryByTitle('Drag to reorder')).toBeNull()
-    // A base row that hasn't been edited yet carries no action button — nothing to
-    // delete (the base layout is fixed) and nothing to reset.
-    expect(screen.queryByTitle('Remove pose')).toBeNull()
-    expect(screen.queryByTitle('Reset this frame to the base ROM')).toBeNull()
+    expect(screen.getByLabelText('Insert a frame here')).toBeTruthy()
+    expect(screen.getByTitle('Drag to reorder')).toBeTruthy()
+    // Every row is deletable now (deleting frames is how a scene changes the count).
+    expect(screen.getByTitle('Remove pose')).toBeTruthy()
   })
 
-  it('editing a base row arms it as an override; reset drops it', () => {
+  it('editing a row diverges the section (green row + reset); reset re-inherits', () => {
     let sectionsChanged = false
     let latest: import('@dth/rom').SceneOverride | null = null
     render(
@@ -425,34 +422,48 @@ describe('scene override mode', () => {
     )
     fireEvent.click(screen.getByText('Full Body'))
 
-    // Editing the base row's name arms it: an override copy (keyed by the base pose
-    // id) appears, the base stays fixed.
+    // Editing the row's name writes the scene's snapshot of FBM; the base is fixed.
     const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
     fireEvent.change(nameInput, { target: { value: 'BeachGlutes' } })
     fireEvent.blur(nameInput)
-    expect(latest!.poses).toHaveLength(1)
-    expect(latest!.poses[0]).toMatchObject({ id: 'p1', name: 'BeachGlutes' })
+    expect(latest!.sections.FBM).toBeDefined()
+    expect(latest!.sections.FBM![0].poses[0]).toMatchObject({ id: 'p1', name: 'BeachGlutes' })
+    expect(latest!.enabled).toBe(true)
     expect(sectionsChanged).toBe(false)
 
-    // The row now offers a reset → clicking it drops the override entry.
-    fireEvent.click(screen.getByTitle('Reset this frame to the base ROM'))
-    expect(latest!.poses).toHaveLength(0)
+    // A content-only change is a per-ROW mark, not a section one.
+    expect(screen.queryByTitle('Reset this section to the primary scene')).toBeNull()
+
+    // The row offers a reset → clicking it re-inherits the primary, so the snapshot
+    // (now equal to base) is pruned away and the gate clears.
+    fireEvent.click(screen.getByTitle('Reset this frame to the primary scene'))
+    expect(latest!.sections.FBM).toBeUndefined()
+    expect(latest!.enabled).toBe(false)
   })
 
-  it('Add morph appends an override frame at the group end, removable again', () => {
+  it('adding a frame shows the section overridden mark; its reset re-inherits the section', () => {
     let latest: import('@dth/rom').SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
     fireEvent.click(screen.getByText('Add morph'))
-    expect(latest!.additions).toEqual([
-      expect.objectContaining({ groupId: 'g1', poses: [expect.objectContaining({ name: '' })] }),
-    ])
-
-    // Added frame: frame number continues after the base row (328 → 329), and it's
-    // the removable override frame.
+    // The scene's FBM snapshot now has the base row + the appended one.
+    expect(latest!.sections.FBM![0].poses).toHaveLength(2)
+    // The appended frame continues after the base row (328 → 329).
     expect(screen.getByText('329')).toBeTruthy()
-    fireEvent.click(screen.getByTitle('Remove added frame'))
-    expect(latest!.additions).toEqual([])
+    // Changing the count diverges the section STRUCTURALLY → the section-title mark.
+    const sectionReset = screen.getByTitle('Reset this section to the primary scene')
+    fireEvent.click(sectionReset)
+    expect(latest!.sections.FBM).toBeUndefined()
+    expect(latest!.enabled).toBe(false)
+  })
+
+  it('a base row can be deleted (changing the frame count)', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getByTitle('Remove pose'))
+    expect(latest!.sections.FBM![0].poses).toHaveLength(0)
+    expect(latest!.enabled).toBe(true)
   })
 })
 

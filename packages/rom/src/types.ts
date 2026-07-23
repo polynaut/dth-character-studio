@@ -425,49 +425,41 @@ export const preserveNodeTransformSchema = z.object({ nodeLabel: z.string().max(
 export type PreserveNodeTransform = z.infer<typeof preserveNodeTransformSchema>
 
 /**
- * A per-Daz-scene ROM override — "the same character in another scene/outfit":
- * most frames stay exactly as the base ROM defines them, a few rows are
- * REPLACED (other morphs / other values on the same frame) and a few extra
- * frames are APPENDED for morphs only that scene's assets have (e.g. clothing
- * morphs). The base structure is never edited through an override — sections,
- * groups and row order come from `sections`; an override only substitutes row
- * content by pose id and appends rows at group ends. Generation compiles the
- * merged result (see `applySceneOverride`) into its own scene-suffixed script +
- * CSV pair, so the default artifacts and the per-scene ones coexist.
+ * A per-Daz-scene ROM override — "the same character in another scene/outfit".
+ * The rule is simple: ANY divergence from the primary is an override. A scene
+ * stores its OWN groups for each ROM section it diverges on (`sections` below);
+ * a section it leaves alone inherits the primary's groups verbatim. So a scene
+ * can freely reorder / add / delete frames and whole groups, and every
+ * "overridden" mark is DERIVED by diffing the scene's section against the
+ * primary — a row differs (content) or the section's row/group order differs
+ * (structure). Generation compiles the merged result (see `applySceneOverride`)
+ * into its own scene-suffixed script + CSV pair, so the default artifacts and
+ * the per-scene ones coexist.
  */
 export const sceneOverrideSchema = z.object({
   /** Absolute path of the linked extra Daz scene (`.duf`) this override is for.
    *  Repointed alongside `scenePath`/`extraScenes` on folder moves. */
   scenePath: z.string().max(MAX_PATH_LENGTH),
   /**
-   * Whether the ROM override panel is armed for this scene — the ROM-frames
-   * gate, parallel to `identity.enabled` / `groom.enabled` below. Armed, the
-   * scene's merged rows drive its config delta + its own PoseAsset CSV; disarmed
-   * keeps the stored rows (re-arming restores them) but stops contributing.
-   * Defaults OFF so a freshly-minted override for a new scene starts fully
-   * disabled — the user opts each panel in.
+   * Whether the ROM override contributes — the ROM-frames gate, parallel to
+   * `identity.enabled` / `groom.enabled` below. Derived by the editor from "any
+   * section in `sections` differs from the primary" (a snapshot equal to the
+   * base is pruned away), so it's true exactly when the scene's ROM diverges.
+   * Armed, the scene's merged rows drive its config delta + its own PoseAsset
+   * CSV. Defaults OFF so a freshly-minted override contributes nothing until the
+   * user diverges from the primary.
    */
   enabled: z.boolean().default(false),
   /**
-   * Replaced rows: each pose's `id` names the BASE pose it substitutes, so the
-   * replacement survives base-row reordering. An entry whose base pose no
-   * longer exists is simply ignored (never breaks the merge).
+   * The scene's OWN groups for each ROM section it diverges from the primary on
+   * — present only for a section that differs in any way (content, count or
+   * order). A section absent here inherits the primary's groups verbatim:
+   * `applySceneOverride` takes `sections[S] ?? base[S].groups`. This single map
+   * IS the whole ROM override (it replaced the old `poses`/`additions` deltas in
+   * schema v21); the per-row and per-section "overridden" marks are derived by
+   * diffing it against the primary, never stored.
    */
-  poses: z.array(romPoseSchema).default([]),
-  /**
-   * Appended rows, per group (`groupId` = the base group's id, or
-   * {@link flatSectionGroupId} for a flat section with no stored group). Always
-   * appended AFTER the group's base poses — an override can't insert between
-   * existing frames. Entries for a group that no longer exists are ignored.
-   */
-  additions: z
-    .array(
-      z.object({
-        groupId: z.string().max(MAX_NAME_LENGTH),
-        poses: z.array(romPoseSchema).default([]),
-      }),
-    )
-    .default([]),
+  sections: z.partialRecord(romSectionSchema, z.array(romGroupSchema)).default({}),
   /**
    * Per-scene GENESIS-9 identity override (FACS detail / flexion strength / UE5
    * tear UV) — the same three values as the base character's G9 fields. Its
@@ -829,8 +821,16 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       hair is now always per-scene by presence — a scene's `groomScenes` items
  *       ARE its hair, none means none. A removed field needs no step (zod strips
  *       the old value on read); the old 'separate' choice just stops excluding.
+ *  21 — `sceneOverrideSchema` restructured: the `poses` (content swaps by id) +
+ *       `additions` (rows appended at a group end) ROM deltas collapse into ONE
+ *       per-section snapshot map `sections` (the scene's own groups for a section
+ *       it diverges on). This unlocks free reorder / insert / delete per scene —
+ *       any divergence from the primary is the override, derived by diffing.
+ *       Restructure — the migration step folds each override's legacy
+ *       poses/additions into `sections[S]` via the old merge, so a migrated
+ *       character's generated .dsa + CSV stay byte-identical.
  */
-export const CHARACTER_SCHEMA_VERSION = 20
+export const CHARACTER_SCHEMA_VERSION = 21
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime

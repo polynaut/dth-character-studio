@@ -61,11 +61,12 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   // The KiraBeach delta is keyed by the open scene's normalized (lowercased) path.
   expect(romDsa).toContain(extraScene.toLowerCase())
 
-  // The persisted definition carries the override entry.
+  // The persisted definition carries the override entry: the scene's OWN snapshot
+  // of the edited section (any divergence from the primary is the override).
   const definition = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!)
   expect(definition.sceneOverrides).toHaveLength(1)
   expect(definition.sceneOverrides[0]).toMatchObject({ scenePath: extraScene, enabled: true })
-  expect(definition.sceneOverrides[0].poses).toHaveLength(1)
+  expect(definition.sceneOverrides[0].sections.FBM).toBeDefined()
 
   // The completeness guard: every native call the flow made was one this mock
   // (and therefore the map it encodes) knows about.

@@ -57,24 +57,21 @@ export const RomEditorSection = memo(function RomEditorSection({
   )
   const onOverrideChange = useCallback(
     (next: SceneOverride) => {
-      // Derive the ROM gate from "has any override rows" — generation reads
-      // `enabled`, so this keeps the .dsa/CSV output identical without a toggle.
-      const hasRom = next.poses.length > 0 || next.additions.some((a) => a.poses.length > 0)
-      const withGate = { ...next, enabled: hasRom }
-      const exists = character.sceneOverrides.some((o) => o.scenePath === withGate.scenePath)
+      // The grid already normalized `next` (RomSections' `pruneSceneSections` drops
+      // no-op section snapshots and recomputes the `enabled` gate), so persist it
+      // as-is — upsert by scene path.
+      const exists = character.sceneOverrides.some((o) => o.scenePath === next.scenePath)
       patch({
         sceneOverrides: exists
-          ? character.sceneOverrides.map((o) =>
-              o.scenePath === withGate.scenePath ? withGate : o,
-            )
-          : [...character.sceneOverrides, withGate],
+          ? character.sceneOverrides.map((o) => (o.scenePath === next.scenePath ? next : o))
+          : [...character.sceneOverrides, next],
       })
     },
     [character.sceneOverrides, patch],
   )
-  // On a non-primary scene the grid is always in override mode: base rows edit into
-  // a per-scene override (arm-on-edit), the section structure stays the base ROM's.
-  // A fresh (unstored) override backs the display until the first edit persists one.
+  // On a non-primary scene the grid edits this scene's OWN snapshot of the
+  // sections (any divergence from the primary is the override). A fresh (unstored)
+  // override backs the display until the first edit persists one.
   const overrideProp = useMemo(
     () =>
       overrideEligible

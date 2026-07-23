@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useMemo, useState } from 'react'
+import { memo, useContext, useEffect, useState } from 'react'
 
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -12,6 +12,7 @@ import {
   GROUPED_SECTIONS,
   METHOD_SECTIONS,
   REFERENCE_FBX_SECTIONS,
+  clonePose,
   genDefaultNode,
   newId,
 } from '@dth/rom'
@@ -33,29 +34,17 @@ import { SortablePoseRow, poseColumns } from './pose-table.tsx'
 import type { PoseTableMeta } from './pose-table.tsx'
 
 /**
- * Scene-override mode for a whole SECTION's groups (built once in RomSections,
- * shared by every group card): the BASE groups stay untouched — checked rows
- * read/write `overriddenById` (keyed by the base pose's id), added rows live in
- * per-group `additions` and only ever append after the base rows. All group
- * chrome (label, method, suffix, mirror, remove) locks: the structure is the
- * base ROM's. Each card slices its own view out of this via its group id — the
- * object itself is memoized in RomSections, so it stays a stable memo prop.
- */
-export interface SectionOverrideCtl {
-  overriddenById: ReadonlyMap<string, RomPose>
-  additionsFor: (groupId: string) => Array<RomPose>
-  /** Arm-on-edit: upsert a base row's override copy (keyed by its pose id). */
-  upsertPose: (pose: RomPose) => void
-  /** Reset a base row: drop its override copy, falling back to the base. */
-  resetPose: (poseId: string) => void
-  onAdditionsChange: (groupId: string, poses: Array<RomPose>) => void
-}
-
-/**
- * One pose group's table. Memoized — a page-level render (modifier keys,
- * polling, unrelated form edits) must not re-render every open pose table; the
- * parent passes identity-stable, id-based callbacks so only the group whose
- * data actually changed re-renders.
+ * One pose group's table. On a non-primary Daz scene the grid edits exactly like
+ * the primary one (add / insert / delete / reorder, all through the same
+ * `onChange` path) — it just operates on the scene's own snapshot of the section.
+ * The only extra is `sceneBaseById`: the primary rows by id, which drive the
+ * per-row "overridden" green + reset purely by diff (see pose-table). There's no
+ * locked/override editing mode any more — divergence from the primary IS the
+ * override.
+ *
+ * Memoized — a page-level render (modifier keys, polling, unrelated form edits)
+ * must not re-render every open pose table; the parent passes identity-stable,
+ * id-based callbacks so only the group whose data actually changed re-renders.
  */
 export const GroupCard = memo(function GroupCard({
   section,
@@ -69,8 +58,7 @@ export const GroupCard = memo(function GroupCard({
   onChange,
   onRemove,
   onMirror,
-  override,
-  locked = false,
+  sceneBaseById,
 }: {
   section: RomSection
   group: RomGroup
@@ -83,9 +71,8 @@ export const GroupCard = memo(function GroupCard({
   onChange: (groupId: string, group: RomGroup) => void
   onRemove: (groupId: string) => void
   onMirror: (groupId: string) => void
-  override?: SectionOverrideCtl
-  /** Non-primary scene, ROM override OFF: show the Override column disabled. */
-  locked?: boolean
+  /** Non-primary scene: primary rows by id → per-row override diff + reset. */
+  sceneBaseById?: Map<string, RomPose>
 }) {
   const showBoneScale = REFERENCE_FBX_SECTIONS.includes(section)
   const showBoneLabel = BONE_LABEL_SECTIONS.includes(section)
@@ -116,68 +103,29 @@ export const GroupCard = memo(function GroupCard({
     }
   }, [focusPoseId, group.poses])
 
-  // What the table shows: the base rows (each swapped for its override copy
-  // when checked) plus the override's appended rows. Without an override this
-  // is simply the group's poses. MEMOIZED because it feeds useReactTable's
-  // `data`: an identity that changes every render makes the table re-derive
-  // its row model each time, which can feed back into an endless sync
-  // re-render loop (the table's own "give data a stable reference" rule —
-  // group.poses used to provide that stability for free).
-  const baseCount = group.poses.length
-  const overriddenById = override?.overriddenById
-  // Stable per overrideCtl identity: additionsFor returns the stored array (or
-  // the shared EMPTY_POSES fallback), so this is a valid memo input.
-  const additions = override ? override.additionsFor(group.id) : undefined
-  const displayPoses = useMemo(
-    () =>
-      overriddenById && additions
-        ? [...group.poses.map((pose) => overriddenById.get(pose.id) ?? pose), ...additions]
-        : group.poses,
-    [group.poses, overriddenById, additions],
-  )
+  const poses = group.poses
 
-  // Route an edited row to where it lives: the base group, the override's
-  // replaced-row map (checked base rows only — unchecked ones are read-only in
-  // override mode), or the override's additions.
   function patchPose(rowIndex: number, patch: Partial<RomPose>) {
-    if (!override || !additions) {
-      change({
-        ...group,
-        poses: group.poses.map((pose, i) => (i === rowIndex ? { ...pose, ...patch } : pose)),
-      })
-      return
-    }
-    const pose = displayPoses[rowIndex]
-    if (rowIndex < baseCount) {
-      // Editing a base row arms it: upsert its override copy (by id) — it reads as
-      // overridden (green) from here until reset, no explicit "check" step.
-      override.upsertPose({ ...pose, ...patch })
-    } else {
-      override.onAdditionsChange(
-        group.id,
-        additions.map((p, i) => (i === rowIndex - baseCount ? { ...p, ...patch } : p)),
-      )
-    }
+    change({ ...group, poses: poses.map((pose, i) => (i === rowIndex ? { ...pose, ...patch } : pose)) })
   }
 
   const meta: PoseTableMeta = {
     startFrame,
     failedFrames,
     showBoneScale,
-    locked,
     expandedIds,
     toggleExpanded: onToggleExpanded,
     figureNode,
     update: patchPose,
     updateMorphAt: (rowIndex, morphIndex, patch) => {
-      const pose = displayPoses[rowIndex]
+      const pose = poses[rowIndex]
       const morphs = pose.morphs.length
         ? pose.morphs.map((m, mi) => (mi === morphIndex ? { ...m, ...patch } : m))
         : [{ id: newId(), node: '', prop: '', value: 1, ...patch }]
       patchPose(rowIndex, { morphs })
     },
     addMorph: (rowIndex) => {
-      const pose = displayPoses[rowIndex]
+      const pose = poses[rowIndex]
       patchPose(rowIndex, {
         morphs: [
           ...pose.morphs,
@@ -186,55 +134,46 @@ export const GroupCard = memo(function GroupCard({
       })
     },
     removeMorphAt: (rowIndex, morphIndex) => {
-      const pose = displayPoses[rowIndex]
+      const pose = poses[rowIndex]
       if (pose.morphs.length <= 1) return
       patchPose(rowIndex, { morphs: pose.morphs.filter((_, mi) => mi !== morphIndex) })
     },
     remove: (rowIndex) => {
-      if (!override || !additions) {
-        change({ ...group, poses: group.poses.filter((_, i) => i !== rowIndex) })
-        return
-      }
-      // Base rows never leave in override mode — only the override's own frames.
-      if (rowIndex < baseCount) return
-      override.onAdditionsChange(
-        group.id,
-        additions.filter((_, i) => i !== rowIndex - baseCount),
-      )
+      change({ ...group, poses: poses.filter((_, i) => i !== rowIndex) })
     },
     insertAt: (index) => {
-      // Override mode appends at the group end only (the insert menu is hidden
-      // there — this guard just backs it up).
-      if (override) return
       // Inherit the node from the pose before the insertion point (falling back
       // to the one after, then the section default) — pose lists usually target
       // the same node throughout.
-      const neighbor = group.poses[index - 1] ?? group.poses[index]
+      const neighbor = poses[index - 1] ?? poses[index]
       const node =
         neighbor?.morphs[0]?.node ?? (section === 'GEN' ? genDefaultNode(gender) : figureNode)
       const id = newId()
-      const poses = [...group.poses]
-      poses.splice(index, 0, {
+      const next = [...poses]
+      next.splice(index, 0, {
         id,
         name: '',
         morphs: [{ id: newId(), node, prop: '', value: 1 }],
         boneScaleRef: false,
       })
-      change({ ...group, poses })
+      change({ ...group, poses: next })
       // Focus the new row's name field as soon as it renders.
       setFocusPoseId(id)
     },
-    override: override
-      ? {
-          baseCount,
-          isOverridden: (poseId) => override.overriddenById.has(poseId),
-          reset: (poseId) => override.resetPose(poseId),
+    sceneBaseById,
+    // Reset a row to its primary twin (non-primary scene only): swap in a fresh
+    // clone of the primary pose by id. A no-op if there's no twin (an added row).
+    resetRow: sceneBaseById
+      ? (rowIndex) => {
+          const twin = sceneBaseById.get(poses[rowIndex]?.id)
+          if (!twin) return
+          change({ ...group, poses: poses.map((p, i) => (i === rowIndex ? clonePose(twin) : p)) })
         }
       : undefined,
   }
 
   const table = useReactTable({
-    data: displayPoses,
+    data: poses,
     columns: poseColumns,
     getCoreRowModel: getCoreRowModel(),
     meta,
@@ -245,7 +184,7 @@ export const GroupCard = memo(function GroupCard({
     // Inherit the node from the previous pose — pose lists usually target the
     // same node throughout. A GEN group starts on the gender's geograft node.
     const lastNode =
-      displayPoses[displayPoses.length - 1]?.morphs[0]?.node ??
+      poses[poses.length - 1]?.morphs[0]?.node ??
       (section === 'GEN' ? genDefaultNode(gender) : figureNode)
     const pose: RomPose = {
       id: newId(),
@@ -253,19 +192,14 @@ export const GroupCard = memo(function GroupCard({
       morphs: [{ id: newId(), node: lastNode, prop: '', value: 1 }],
       boneScaleRef: false,
     }
-    if (override && additions) {
-      // Appended after the base rows — the only place an override adds frames.
-      override.onAdditionsChange(group.id, [...additions, pose])
-    } else {
-      change({ ...group, poses: [...group.poses, pose] })
-    }
+    change({ ...group, poses: [...poses, pose] })
   }
 
-  const endFrame = startFrame + displayPoses.length - 1
+  const endFrame = startFrame + poses.length - 1
   const frameRange =
-    displayPoses.length === 0
+    poses.length === 0
       ? 'empty'
-      : displayPoses.length === 1
+      : poses.length === 1
         ? `frame ${startFrame}`
         : `frames ${startFrame}–${endFrame}`
 
@@ -280,7 +214,6 @@ export const GroupCard = memo(function GroupCard({
             value={group.label}
             placeholder="driver bone(s)"
             title="The bone(s) driving this group's poses (CSV bones column)"
-            disabled={!!override}
             onChange={(e) => change({ ...group, label: e.target.value })}
           />
         )}
@@ -294,7 +227,7 @@ export const GroupCard = memo(function GroupCard({
               value={group.method}
               onValueChange={(value) => change({ ...group, method: value as GenerationMethod })}
             >
-              <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
+              <SelectTrigger size="sm" className="w-fit">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -319,7 +252,7 @@ export const GroupCard = memo(function GroupCard({
                 change({ ...group, calculateFrom: value as CalculateFrom })
               }
             >
-              <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
+              <SelectTrigger size="sm" className="w-fit">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -340,7 +273,7 @@ export const GroupCard = memo(function GroupCard({
               value={group.suffix}
               onValueChange={(value) => change({ ...group, suffix: value as GroupSuffix })}
             >
-              <SelectTrigger size="sm" className="w-fit" disabled={!!override}>
+              <SelectTrigger size="sm" className="w-fit">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -352,8 +285,7 @@ export const GroupCard = memo(function GroupCard({
           </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">{frameRange}</span>
-        {/* Mirror/remove change the base structure — locked in override mode. */}
-        {group.suffix === 'left' && !override && (
+        {group.suffix === 'left' && (
           <Button
             variant="ghost"
             size="sm"
@@ -363,7 +295,7 @@ export const GroupCard = memo(function GroupCard({
             <Copy /> Mirror right
           </Button>
         )}
-        {removable && !override && (
+        {removable && (
           <Button
             variant="ghost"
             size="icon"
@@ -403,7 +335,7 @@ export const GroupCard = memo(function GroupCard({
             ))}
           </thead>
           <SortableContext
-            items={displayPoses.map((pose) => pose.id)}
+            items={poses.map((pose) => pose.id)}
             strategy={verticalListSortingStrategy}
           >
             <tbody>
@@ -415,7 +347,7 @@ export const GroupCard = memo(function GroupCard({
                   meta={meta}
                 />
               ))}
-              {displayPoses.length === 0 && (
+              {poses.length === 0 && (
                 <tr>
                   {/* Mirror a TextCell's vertical metrics (1px border + py-1 +
                       a text-sm line) — a pose row's height is set by its name
@@ -437,16 +369,7 @@ export const GroupCard = memo(function GroupCard({
         </table>
       </div>
       <div className="border-t p-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          title={
-            override
-              ? 'Append an override frame for the selected scene — added frames always go at the end of the group'
-              : undefined
-          }
-          onClick={addPose}
-        >
+        <Button variant="outline" size="sm" onClick={addPose}>
           <Plus /> Add morph
         </Button>
       </div>

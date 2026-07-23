@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { Button, Input, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
 import { ScanCsvPickerDialog } from '#/components/scan-csv-picker-dialog.tsx'
 import {
@@ -18,6 +18,9 @@ import {
   genesisFigureNode,
   newId,
   presetFrameCount,
+  primaryRowsById,
+  pruneSceneSections,
+  sceneSectionDiverged,
   sectionPresetAvailable,
 } from '@dth/rom'
 
@@ -44,7 +47,6 @@ import { ImportCsvButton } from './rom/import-csv-button.tsx'
 import { PRESET_DESCRIPTIONS, PresetAssetPicker } from './rom/preset-asset-picker.tsx'
 import { PoseGroupsEditor, flatGroup } from './rom/pose-groups-editor.tsx'
 
-import type { SectionOverrideCtl } from './rom/pose-groups-editor.tsx'
 import type { PoseAssetCatalog } from './rom/preset-asset-picker.tsx'
 
 /**
@@ -80,23 +82,15 @@ interface RomSectionsProps {
   jcmMorphMods?: Array<JcmMorphMod>
   onJcmMorphModsChange?: (mods: Array<JcmMorphMod>) => void
   /**
-   * Scene-override mode (the page's Override toggle, one entry per extra Daz
-   * scene): the base setup locks, base rows dim until their Override checkbox
-   * marks them replaced for that scene, and new frames append at group ends
-   * only. Frame numbers shown come from the MERGED sections — exactly what the
-   * scene's own script + CSV generate.
+   * Non-primary Daz scene selected: the ROM grid edits this scene's OWN snapshot
+   * of the sections (any divergence from the primary is the override), while the
+   * section enable/mode and the preset setup stay tied to the primary. Frame
+   * numbers shown come from the MERGED sections — exactly what the scene's own
+   * script + CSV generate. Absent on the primary scene.
    */
   override?: { data: SceneOverride; onChange: (next: SceneOverride) => void }
-  /** A non-primary scene is selected but its ROM override isn't armed yet — the
-   *  whole ROM is read-only (a dimmed base view) until the page's Override toggle
-   *  arms it, exactly like the other per-scene panels. Sections still expand so
-   *  the rows can be inspected. */
-  locked?: boolean
   onChange: (sections: RomSectionsModel) => void
 }
-
-/** Shared empty-additions fallback — a stable identity (see overrideCtl). */
-const EMPTY_POSES: Array<RomPose> = []
 
 /** Stable per-section fallback for an EMPTY flat FBM/MISC section. flatGroup is
  *  deterministic per section (its id is the core's `flatSectionGroupId`), but a
@@ -139,7 +133,6 @@ export const RomSections = memo(function RomSections({
   jcmMorphMods,
   onJcmMorphModsChange,
   override,
-  locked = false,
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
@@ -152,62 +145,20 @@ export const RomSections = memo(function RomSections({
   } | null>(null)
 
 
-  // Scene-override mode: everything frame-related displays the MERGED sections
-  // (replaced rows in place, added rows at group ends) — exactly what the
-  // scene's own artifacts generate. The base `sections` stay the editing model.
+  // Non-primary scene: the grid edits this scene's OWN snapshot of the sections;
+  // everything frame-related displays the MERGED sections (snapshot-or-base per
+  // section) — exactly what the scene's own artifacts generate. Editing writes
+  // the snapshot through `onSectionGroupsChange` below (any divergence from the
+  // primary is the override).
   const overrideData = override?.data
   const displaySections = overrideData ? applySceneOverride(sections, overrideData) : sections
-
-  // The scene override's grid controller, shared by every section's group
-  // editor: replaced rows keyed by base pose id, additions keyed by group id.
-  // Checking a row seeds its override with a copy of the base pose. The map and
-  // the empty-additions fallback keep STABLE identities across re-renders —
-  // they end up in GroupCard's memoized table `data`, which must not churn.
-  // The controller itself is memoized too: it's a prop of the memoized group
-  // editors, so its identity may only change when the override data does.
-  const overriddenById = useMemo(
-    () => new Map((overrideData?.poses ?? []).map((pose) => [pose.id, pose])),
-    [overrideData?.poses],
+  const sceneActive = override !== undefined
+  // Primary rows by id → the per-row overridden diff the group editors show. Built
+  // only on a non-primary scene (on the primary, nothing is an override).
+  const sceneBaseById = useMemo(
+    () => (sceneActive ? primaryRowsById(sections) : undefined),
+    [sceneActive, sections],
   )
-  const onOverrideChange = override?.onChange
-  const overrideCtl = useMemo<SectionOverrideCtl | undefined>(
-    () =>
-      onOverrideChange && overrideData
-        ? {
-            overriddenById,
-            additionsFor: (groupId) =>
-              overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
-              EMPTY_POSES,
-            // Arm-on-edit: editing a base row upserts its override copy (keyed by
-            // the base pose id); the display substitutes it in place. There's no
-            // explicit "check to override" — touching the row IS the override.
-            upsertPose: (pose) =>
-              onOverrideChange({
-                ...overrideData,
-                poses: [...overrideData.poses.filter((p) => p.id !== pose.id), pose],
-              }),
-            // Reset a base row → drop its override copy so it falls back to the base.
-            resetPose: (poseId) =>
-              onOverrideChange({
-                ...overrideData,
-                poses: overrideData.poses.filter((p) => p.id !== poseId),
-              }),
-            onAdditionsChange: (groupId, poses) => {
-              const rest = overrideData.additions.filter((entry) => entry.groupId !== groupId)
-              onOverrideChange({
-                ...overrideData,
-                additions: poses.length > 0 ? [...rest, { groupId, poses }] : rest,
-              })
-            },
-          }
-        : undefined,
-    [onOverrideChange, overrideData, overriddenById],
-  )
-  // On a non-primary scene the section STRUCTURE (enable/mode/groups) is locked —
-  // whether the override is armed (overrideCtl) or not (locked). Mute the section
-  // titles to match their disabled enable toggle, so the whole block reads as
-  // "structure fixed for this scene, you're only overriding frame values".
-  const structureLocked = !!overrideCtl || locked
 
   // Absolute timeline frame of each custom group's first pose: the measured
   // preset ROM blocks (base, GP/DK, Physics) come first, then the custom
@@ -286,11 +237,32 @@ export const RomSections = memo(function RomSections({
   sectionsRef.current = sections
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const overrideRef = useRef(override)
+  overrideRef.current = override
+  // ONE stable groups writer for every section's (memoized) group editor. On the
+  // primary scene it writes the base sections; on a non-primary scene it writes
+  // that scene's snapshot, pruned back to base when it no longer diverges (which
+  // also recomputes the ROM `enabled` gate). Ref-routed so its identity is stable.
   const onSectionGroupsChange = useCallback((section: RomSection, groups: Array<RomGroup>) => {
-    onChangeRef.current({
-      ...sectionsRef.current,
-      [section]: { ...sectionsRef.current[section], groups },
-    })
+    const ov = overrideRef.current
+    if (ov) {
+      const nextSections = { ...ov.data.sections, [section]: groups }
+      ov.onChange(pruneSceneSections(sectionsRef.current, { ...ov.data, sections: nextSections }))
+    } else {
+      onChangeRef.current({
+        ...sectionsRef.current,
+        [section]: { ...sectionsRef.current[section], groups },
+      })
+    }
+  }, [])
+  // Drop a whole section's scene override so it re-inherits the primary — the
+  // section-title reset.
+  const resetSection = useCallback((section: RomSection) => {
+    const ov = overrideRef.current
+    if (!ov) return
+    const nextSections = { ...ov.data.sections }
+    delete nextSections[section]
+    ov.onChange(pruneSceneSections(sectionsRef.current, { ...ov.data, sections: nextSections }))
   }, [])
 
   // Bulk-import a DAZ morph CSV into a section: the picker dialog lists the
@@ -382,6 +354,15 @@ export const RomSections = memo(function RomSections({
       )}
       {ROM_SECTIONS.map((section) => {
         const config = sections[section]
+        // The section's displayed groups: the scene's snapshot when it diverges,
+        // else the primary's (on the primary scene, dConfig === config).
+        const dConfig = displaySections[section]
+        // The scene's section diverges STRUCTURALLY (count / order / group layout)
+        // from the primary → the section-title "overridden" mark. A content-only
+        // difference shows the per-row mark instead, not this one.
+        const sectionDiverged = override
+          ? sceneSectionDiverged(sections, override.data, section)
+          : false
         const modes = SECTION_MODES[section]
         const isOpen = open[section] ?? false
         // RET has no independent existence: the retargeting poses live inside
@@ -437,14 +418,8 @@ export const RomSections = memo(function RomSections({
                 <ChevronRight
                   className={`size-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}
                 />
-                <span
-                  className={`w-12 font-mono text-sm font-semibold${structureLocked ? ' text-muted-foreground' : ''}`}
-                >
-                  {section}
-                </span>
-                <span className={`font-medium${structureLocked ? ' text-muted-foreground' : ''}`}>
-                  {SECTION_LABELS[section]}
-                </span>
+                <span className="w-12 font-mono text-sm font-semibold">{section}</span>
+                <span className="font-medium">{SECTION_LABELS[section]}</span>
                 {missingPresetAsset && (
                   <span
                     className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
@@ -461,6 +436,19 @@ export const RomSections = memo(function RomSections({
                     : sectionSummary(displaySections[section])}
                 </span>
               </button>
+              {/* The section-title "overridden" mark — shown only when this scene's
+                  section diverges STRUCTURALLY from the primary (frame count / order
+                  / group layout); a content-only edit shows the per-row mark instead.
+                  Its reset returns the whole section to the primary. A SIBLING of the
+                  accordion button, never nested — a control inside a button is invalid
+                  HTML (same rule the Switch follows). */}
+              {sectionDiverged && (
+                <OverrideMark
+                  overridden
+                  onReset={() => resetSection(section)}
+                  resetTitle="Reset this section to the primary scene"
+                />
+              )}
               {/* A direct flex child of the items-center row so it centers on the
                   summary text's line. (Wrapped in a bare <span> it blockified as a
                   flex item, and the switch rode that span's text baseline — a hair
@@ -468,10 +456,10 @@ export const RomSections = memo(function RomSections({
                   inside a button is invalid HTML. */}
               <Switch
                 checked={effectiveEnabled}
-                disabled={tiedToJcm || !!overrideCtl || locked}
+                disabled={tiedToJcm || sceneActive}
                 title={
-                  overrideCtl || locked
-                    ? 'Sections are part of the base setup — locked for a per-scene override'
+                  sceneActive
+                    ? 'Enabling or disabling a section is part of the base setup — set it on the primary scene'
                     : tiedToJcm
                       ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
                       : effectiveEnabled
@@ -502,11 +490,7 @@ export const RomSections = memo(function RomSections({
             </div>
 
             {isOpen && (
-              // Locked (non-primary scene, override unarmed): the native fieldset
-              // disable cascades to every editing control below, so the rows show
-              // as a dimmed read-only base view. The accordion button + section
-              // Switch sit in the header ABOVE, so expanding still works.
-              <fieldset disabled={locked} className={`space-y-3 border-t px-4 py-4${locked ? ' opacity-60' : ''}`}>
+              <div className="space-y-3 border-t px-4 py-4">
                 {modes.length > 1 && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Mode:</span>
@@ -516,7 +500,7 @@ export const RomSections = memo(function RomSections({
                         patchSection(section, { mode: value as SectionMode })
                       }
                     >
-                      <SelectTrigger size="sm" className="w-fit min-w-[12rem]" disabled={!!overrideCtl}>
+                      <SelectTrigger size="sm" className="w-fit min-w-[12rem]" disabled={sceneActive}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -534,9 +518,9 @@ export const RomSections = memo(function RomSections({
                 )}
 
                 {config.mode === 'preset' ? (
-                  // The preset setup is base-only — inert while a scene
-                  // override is active (presets aren't overridable per scene).
-                  <div className={`space-y-3 ${overrideCtl ? 'pointer-events-none opacity-60' : ''}`}>
+                  // The preset setup is base-only — inert on a non-primary scene
+                  // (presets aren't overridable per scene).
+                  <div className={`space-y-3 ${sceneActive ? 'pointer-events-none opacity-60' : ''}`}>
                     <p className="text-sm text-muted-foreground">
                       {PRESET_DESCRIPTIONS[section] ?? 'Pre-defined DTH assets.'}
                     </p>
@@ -574,7 +558,7 @@ export const RomSections = memo(function RomSections({
                         className="max-w-xl"
                         value={config.customAssetPath}
                         placeholder="C:\…\My Custom JCM.duf"
-                        disabled={!!overrideCtl}
+                        disabled={sceneActive}
                         onChange={(e) => patchSection(section, { customAssetPath: e.target.value })}
                       />
                       <Button
@@ -582,7 +566,7 @@ export const RomSections = memo(function RomSections({
                         variant="outline"
                         size="sm"
                         className="shrink-0"
-                        disabled={!!overrideCtl}
+                        disabled={sceneActive}
                         onClick={async () => {
                           const picked = await pickDufPath('Select a custom JCM pose preset (.duf)')
                           if (picked) patchSection(section, { customAssetPath: picked })
@@ -598,58 +582,54 @@ export const RomSections = memo(function RomSections({
                   <div className="space-y-3">
                     <PoseGroupsEditor
                       section={section}
-                      groups={config.groups.length > 0 ? config.groups : flatGroupFallback(section)}
+                      groups={dConfig.groups.length > 0 ? dConfig.groups : flatGroupFallback(section)}
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}
                       removable={false}
-                      override={overrideCtl}
-                      locked={locked}
+                      sceneBaseById={sceneBaseById}
                       onGroupsChange={onSectionGroupsChange}
                     />
-                    {!overrideCtl && <ImportCsvButton onImport={() => setPickerSection(section)} />}
+                    {/* CSV import writes the base sections — primary scene only. */}
+                    {!sceneActive && <ImportCsvButton onImport={() => setPickerSection(section)} />}
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <PoseGroupsEditor
                       section={section}
-                      groups={config.groups}
+                      groups={dConfig.groups}
                       gender={gender}
                       startFrames={startFrames}
                       failedFrames={failedFrames}
                       removable
-                      override={overrideCtl}
-                      locked={locked}
+                      sceneBaseById={sceneBaseById}
                       onGroupsChange={onSectionGroupsChange}
                     />
-                    {/* Group management + CSV import change the base structure —
-                        hidden while a scene override is active. */}
-                    {!overrideCtl && (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            patchSection(section, {
-                              groups: [
-                                ...config.groups,
-                                {
-                                  id: newId(),
-                                  label: '',
-                                  suffix: 'centre',
-                                  method: 'default',
-                                  calculateFrom: 'default',
-                                  poses: [],
-                                },
-                              ],
-                            })
-                          }
-                        >
-                          <Plus /> Add group
-                        </Button>
-                        <ImportCsvButton onImport={() => setPickerSection(section)} />
-                      </div>
-                    )}
+                    <div className="flex gap-2">
+                      {/* Add group routes through the same groups writer, so it
+                          lands on the base sections or the scene snapshot. */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          onSectionGroupsChange(section, [
+                            ...dConfig.groups,
+                            {
+                              id: newId(),
+                              label: '',
+                              suffix: 'centre',
+                              method: 'default',
+                              calculateFrom: 'default',
+                              poses: [],
+                            },
+                          ])
+                        }
+                      >
+                        <Plus /> Add group
+                      </Button>
+                      {/* CSV import writes the base sections — primary scene only. */}
+                      {!sceneActive && <ImportCsvButton onImport={() => setPickerSection(section)} />}
+                    </div>
                   </div>
                 )}
 
@@ -658,14 +638,14 @@ export const RomSections = memo(function RomSections({
                     a custom base ROM; the runtime applies it after either). Set
                     off from the base-ROM fields above with a divider + spacing. */}
                 {section === 'JCM' && jcmMorphMods && onJcmMorphModsChange && (
-                  // Part of the base setup too — inert in override mode.
+                  // Part of the base setup too — inert on a non-primary scene.
                   <div
-                    className={`mt-5 border-t pt-5 ${overrideCtl ? 'pointer-events-none opacity-60' : ''}`}
+                    className={`mt-5 border-t pt-5 ${sceneActive ? 'pointer-events-none opacity-60' : ''}`}
                   >
                     <JcmModsGrid mods={jcmMorphMods} onChange={onJcmMorphModsChange} />
                   </div>
                 )}
-              </fieldset>
+              </div>
             )}
           </div>
         )

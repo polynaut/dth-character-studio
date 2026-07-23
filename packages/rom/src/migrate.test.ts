@@ -9,6 +9,7 @@ import { toCharacterScriptDsa } from './generate'
 import {
   CHARACTER_SCHEMA_VERSION,
   characterSchema,
+  flatSectionGroupId,
   jcmMorphModForRuntime,
   romGroupSchema,
 } from './types'
@@ -230,6 +231,94 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
       }),
     )
     expect(parsed.sceneOverrides[0].enabled).toBe(false)
+  })
+})
+
+describe('schema v21 — ROM override poses/additions → per-section snapshot', () => {
+  const scene = 'D:/scenes/Beach.duf'
+  const baseGroup = () => ({
+    id: 'g1',
+    label: '',
+    suffix: 'centre',
+    method: 'individual',
+    calculateFrom: 'default',
+    poses: [
+      { id: 'p1', name: 'BodyTone', boneScaleRef: false, morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }] },
+      { id: 'p2', name: 'GluteSize', boneScaleRef: false, morphs: [{ id: 'm2', node: 'Genesis9', prop: 'body_bs_GluteSize', value: -1 }] },
+    ],
+  })
+  const replacedP1 = { id: 'p1', name: 'BeachTone', boneScaleRef: false, morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }] }
+  const addedDress = { id: 'a1', name: 'BeachDress', boneScaleRef: false, morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }] }
+  const fbmConfig = () => ({ enabled: true, mode: 'custom', presetAssets: [], artDirection: [], groups: [baseGroup()], customAssetPath: '' })
+  // A pre-v21 definition: the override carries the legacy `poses` (replace p1) +
+  // `additions` (append a1) deltas, at schema v20.
+  const legacyRaw = () => ({
+    id: 'c1',
+    name: 'Electra',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+    schemaVersion: 20,
+    sections: { FBM: fbmConfig() },
+    extraScenes: [scene],
+    sceneOverrides: [
+      { scenePath: scene, enabled: true, poses: [replacedP1], additions: [{ groupId: 'g1', poses: [addedDress] }] },
+    ],
+  })
+
+  it('folds a replaced row + an appended row into the section snapshot, dropping the legacy fields', () => {
+    const parsed = characterSchema.parse(migrateCharacterData(legacyRaw()))
+    const ov = parsed.sceneOverrides[0]
+    expect(ov.sections.FBM?.[0].poses.map((p) => p.name)).toEqual(['BeachTone', 'GluteSize', 'BeachDress'])
+    expect('poses' in ov).toBe(false)
+    expect('additions' in ov).toBe(false)
+    expect(ov.enabled).toBe(true)
+  })
+
+  it('materializes the flat implicit group for a flat-section addition', () => {
+    const raw = {
+      id: 'c1',
+      name: 'Electra',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      schemaVersion: 20,
+      sections: { MISC: { enabled: true, mode: 'custom', presetAssets: [], artDirection: [], groups: [], customAssetPath: '' } },
+      extraScenes: [scene],
+      sceneOverrides: [
+        {
+          scenePath: scene,
+          enabled: true,
+          poses: [],
+          additions: [{ groupId: flatSectionGroupId('MISC'), poses: [{ id: 'x', name: 'Fix', boneScaleRef: false, morphs: [] }] }],
+        },
+      ],
+    }
+    const ov = characterSchema.parse(migrateCharacterData(raw)).sceneOverrides[0]
+    expect(ov.sections.MISC?.[0].id).toBe(flatSectionGroupId('MISC'))
+    expect(ov.sections.MISC?.[0].poses.map((p) => p.name)).toEqual(['Fix'])
+  })
+
+  it('generation is byte-identical to the equivalent v21 snapshot definition', () => {
+    const migrated = characterSchema.parse(migrateCharacterData(legacyRaw()))
+    const snapshotRaw = {
+      id: 'c1',
+      name: 'Electra',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      schemaVersion: CHARACTER_SCHEMA_VERSION,
+      sections: { FBM: fbmConfig() },
+      extraScenes: [scene],
+      sceneOverrides: [
+        { scenePath: scene, enabled: true, sections: { FBM: [{ ...baseGroup(), poses: [replacedP1, baseGroup().poses[1], addedDress] }] } },
+      ],
+    }
+    const direct = characterSchema.parse(migrateCharacterData(snapshotRaw))
+    expect(toCharacterScriptDsa(migrated).content).toBe(toCharacterScriptDsa(direct).content)
+  })
+
+  it('is idempotent — folding an already-folded override changes nothing', () => {
+    const once = migrateCharacterData(legacyRaw())
+    const twice = migrateCharacterData(structuredClone(once))
+    expect(twice).toEqual(once)
   })
 })
 

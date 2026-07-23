@@ -40,7 +40,6 @@ import {
   presetFrameCount,
   sectionsFromFlatFrames,
 } from './frames'
-import { applySceneOverride } from './scene-override'
 import { characterSchema, defaultSections, flatSectionGroupId, GENERATIONS } from './types'
 import { romValidationErrors } from './validation'
 import type { GenesisVersion } from './types'
@@ -166,17 +165,6 @@ describe('sectionsFromFlatFrames', () => {
     expect(sections.FBM.groups[0].poses.map((p) => p.name)).toEqual(['Heavy', 'Tall'])
     expect(sections.MISC.groups).toHaveLength(1)
     expect(sections.MISC.groups[0].id).toBe(flatSectionGroupId('MISC'))
-    // A scene override addressed at the flat group id reaches the imported poses.
-    const merged = applySceneOverride(sections, {
-      poses: [],
-      additions: [
-        {
-          groupId: flatSectionGroupId('FBM'),
-          poses: [{ id: 'add1', name: 'BeachFix', morphs: [], boneScaleRef: false }],
-        },
-      ],
-    })
-    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['Heavy', 'Tall', 'BeachFix'])
   })
 
   it('grouped sections still split alternating runs into separate groups', () => {

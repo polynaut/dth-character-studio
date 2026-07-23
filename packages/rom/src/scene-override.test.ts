@@ -6,13 +6,17 @@ import {
   applySceneOverride,
   clonePose,
   mergeSceneOverride,
+  primaryRowsById,
+  pruneSceneSections,
   sceneOverrideBuildsRom,
   sceneOverrideSlug,
+  sceneRowOverridden,
+  sceneSectionDiverged,
 } from './scene-override'
-import { characterSchema, defaultSections, flatSectionGroupId, sceneOverrideSchema } from './types'
+import { characterSchema, defaultSections, sceneOverrideSchema } from './types'
 
 import type { PresetFrames } from './frames'
-import type { Character, RomGroup, RomSections, SceneOverride } from './types'
+import type { Character, RomGroup, RomPose, RomSections, SceneOverride } from './types'
 
 const FRAMES: PresetFrames = { base: 328, gp: 104, dk: 54, phys: 43 }
 
@@ -47,6 +51,21 @@ function makeSections(): RomSections {
   return sections
 }
 
+/** A single-morph pose row, for building scene snapshots concisely. */
+function pose(id: string, name: string, prop: string, value = 1): RomPose {
+  return {
+    id,
+    name,
+    morphs: [{ id: `m-${id}`, node: 'Genesis9', prop, value }],
+    boneScaleRef: false,
+  }
+}
+
+/** An FBM snapshot: the base group (id g1) carrying `poses` instead of the base rows. */
+function fbmSnapshot(poses: Array<RomPose>): Partial<Record<'FBM', Array<RomGroup>>> {
+  return { FBM: [{ ...fbmGroup(), poses }] }
+}
+
 function makeCharacter(overrides: Partial<Character> = {}): Character {
   const now = '2026-07-20T00:00:00.000Z'
   return characterSchema.parse({
@@ -67,89 +86,110 @@ function makeOverride(patch: Partial<SceneOverride> = {}): SceneOverride {
 }
 
 describe('applySceneOverride', () => {
-  it('replaces a base row IN PLACE by pose id — same frame, other content', () => {
+  it('uses the scene snapshot for a section it has, the base for the rest', () => {
+    const base = makeSections()
     const override = makeOverride({
-      poses: [
-        {
-          id: 'p1',
-          name: 'BeachBodyTone',
-          morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
-          boneScaleRef: false,
-        },
-      ],
+      sections: fbmSnapshot([pose('p1', 'BeachBodyTone', 'body_bs_BeachTone', 0.5), fbmGroup().poses[1]]),
     })
-    const merged = applySceneOverride(makeSections(), override)
+    const merged = applySceneOverride(base, override)
+    // FBM comes from the snapshot …
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['BeachBodyTone', 'GluteSize'])
     expect(merged.FBM.groups[0].poses[0].morphs[0].prop).toBe('body_bs_BeachTone')
+    // … every other section inherits the base verbatim (the same object).
+    expect(merged.GEN).toBe(base.GEN)
   })
 
-  it('ignores a replacement whose base pose no longer exists', () => {
-    const override = makeOverride({
-      poses: [{ id: 'gone', name: 'Orphan', morphs: [], boneScaleRef: false }],
-    })
-    const merged = applySceneOverride(makeSections(), override)
+  it('a section with NO snapshot inherits the primary groups', () => {
+    const merged = applySceneOverride(makeSections(), makeOverride({ sections: {} }))
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['BodyTone', 'GluteSize'])
   })
 
-  it('appends added rows at the END of their group, never in between', () => {
+  it('reorder / add / delete in the snapshot drive the merged sections freely', () => {
+    // Delete GluteSize, reorder, add a clothing frame — none of which the old
+    // poses/additions deltas could express.
     const override = makeOverride({
-      additions: [
-        {
-          groupId: 'g1',
-          poses: [
-            {
-              id: 'a1',
-              name: 'BeachDress',
-              morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
-              boneScaleRef: false,
-            },
-          ],
-        },
-      ],
+      sections: fbmSnapshot([
+        pose('a1', 'BeachDress', 'dress_bs_Flow'),
+        fbmGroup().poses[0], // BodyTone, now second
+      ]),
     })
     const merged = applySceneOverride(makeSections(), override)
-    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual([
-      'BodyTone',
-      'GluteSize',
-      'BeachDress',
-    ])
-  })
-
-  it('ignores additions for a group that no longer exists', () => {
-    const override = makeOverride({
-      additions: [{ groupId: 'gone', poses: [{ id: 'a1', name: 'X', morphs: [], boneScaleRef: false }] }],
-    })
-    const merged = applySceneOverride(makeSections(), override)
-    expect(merged.FBM.groups[0].poses).toHaveLength(2)
-    expect(merged.MISC.groups).toEqual([])
-  })
-
-  it('materializes the implicit flat group for additions to an empty flat section', () => {
-    const override = makeOverride({
-      additions: [
-        {
-          groupId: flatSectionGroupId('MISC'),
-          poses: [{ id: 'a1', name: 'OutfitFix', morphs: [], boneScaleRef: false }],
-        },
-      ],
-    })
-    const merged = applySceneOverride(makeSections(), override)
-    expect(merged.MISC.groups).toHaveLength(1)
-    expect(merged.MISC.groups[0].id).toBe(flatSectionGroupId('MISC'))
-    expect(merged.MISC.groups[0].poses.map((p) => p.name)).toEqual(['OutfitFix'])
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['BeachDress', 'BodyTone'])
   })
 
   it('never mutates the base sections', () => {
     const sections = makeSections()
     const before = structuredClone(sections)
-    applySceneOverride(
-      sections,
-      makeOverride({
-        poses: [{ id: 'p1', name: 'Changed', morphs: [], boneScaleRef: false }],
-        additions: [{ groupId: 'g1', poses: [{ id: 'a1', name: 'Added', morphs: [], boneScaleRef: false }] }],
-      }),
-    )
+    applySceneOverride(sections, makeOverride({ sections: fbmSnapshot([pose('p1', 'Changed', 'x')]) }))
     expect(sections).toEqual(before)
+  })
+})
+
+describe('sceneSectionDiverged', () => {
+  const base = makeSections()
+  it('is false for a section with no snapshot', () => {
+    expect(sceneSectionDiverged(base, makeOverride({ sections: {} }), 'FBM')).toBe(false)
+  })
+  it('is false when only a row CONTENT differs (that is a per-row mark)', () => {
+    const override = makeOverride({
+      sections: fbmSnapshot([pose('p1', 'BeachBodyTone', 'body_bs_BeachTone', 0.5), fbmGroup().poses[1]]),
+    })
+    expect(sceneSectionDiverged(base, override, 'FBM')).toBe(false)
+  })
+  it('is true when a row is added (count differs)', () => {
+    const override = makeOverride({
+      sections: fbmSnapshot([...fbmGroup().poses, pose('a1', 'BeachDress', 'dress_bs_Flow')]),
+    })
+    expect(sceneSectionDiverged(base, override, 'FBM')).toBe(true)
+  })
+  it('is true when rows are reordered', () => {
+    const override = makeOverride({
+      sections: fbmSnapshot([fbmGroup().poses[1], fbmGroup().poses[0]]),
+    })
+    expect(sceneSectionDiverged(base, override, 'FBM')).toBe(true)
+  })
+})
+
+describe('sceneRowOverridden', () => {
+  const byId = primaryRowsById(makeSections())
+  it('flags an added row (no primary twin)', () => {
+    expect(sceneRowOverridden(byId, pose('a1', 'BeachDress', 'dress_bs_Flow'))).toBe(true)
+  })
+  it('flags a row whose content differs from its twin', () => {
+    expect(sceneRowOverridden(byId, pose('p1', 'BodyTone', 'body_bs_BodyTone', 0.5))).toBe(true)
+  })
+  it('does NOT flag a row identical to its twin (ignoring grid ids)', () => {
+    const twin = clonePose(fbmGroup().poses[0])
+    twin.morphs[0].id = 'different-grid-id'
+    expect(sceneRowOverridden(byId, twin)).toBe(false)
+  })
+})
+
+describe('pruneSceneSections', () => {
+  const base = makeSections()
+  it('drops a snapshot equal to the base and clears the enabled gate', () => {
+    const override = makeOverride({ sections: fbmSnapshot([...fbmGroup().poses]) })
+    const pruned = pruneSceneSections(base, override)
+    expect(pruned.sections.FBM).toBeUndefined()
+    expect(pruned.enabled).toBe(false)
+  })
+  it('keeps a diverging snapshot and arms the enabled gate', () => {
+    const override = makeOverride({
+      enabled: false,
+      sections: fbmSnapshot([pose('p1', 'BeachBodyTone', 'body_bs_BeachTone', 0.5), fbmGroup().poses[1]]),
+    })
+    const pruned = pruneSceneSections(base, override)
+    expect(pruned.sections.FBM).toBeDefined()
+    expect(pruned.enabled).toBe(true)
+  })
+  it('leaves the identity / preserve blocks untouched', () => {
+    const override = makeOverride({
+      sections: {},
+      identity: { enabled: true, facsDetailStrength: 0.5, flexionStrength: 1, applyUE5TearUV: false },
+    })
+    const pruned = pruneSceneSections(base, override)
+    expect(pruned.identity.enabled).toBe(true)
+    expect(pruned.identity.facsDetailStrength).toBe(0.5)
   })
 })
 
@@ -193,29 +233,15 @@ describe('generateAll — scene overrides folded into the one script', () => {
   // The open-scene key the generated lookup computes from Scene.getFilename():
   // forward-slashed and lowercased.
   const sceneKey = 'd:/scenes/electra beach.duf'
+  // A scene that replaces BodyTone's content (same p1 id) and appends a clothing
+  // frame — the merged FBM is [BeachBodyTone, GluteSize, BeachDress].
   const override = makeOverride({
     scenePath: scene,
-    poses: [
-      {
-        id: 'p1',
-        name: 'BeachBodyTone',
-        morphs: [{ id: 'mo2', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
-        boneScaleRef: false,
-      },
-    ],
-    additions: [
-      {
-        groupId: 'g1',
-        poses: [
-          {
-            id: 'a1',
-            name: 'BeachDress',
-            morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
-            boneScaleRef: false,
-          },
-        ],
-      },
-    ],
+    sections: fbmSnapshot([
+      pose('p1', 'BeachBodyTone', 'body_bs_BeachTone', 0.5),
+      fbmGroup().poses[1],
+      { id: 'a1', name: 'BeachDress', morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }], boneScaleRef: false },
+    ]),
   })
   // A scene override only generates once its scene is a LINKED extra scene.
   const withScene = (extra: Partial<Character> = {}): Character =>
@@ -288,14 +314,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
     const romOverride = (path: string, poseName: string) =>
       makeOverride({
         scenePath: path,
-        poses: [
-          {
-            id: 'p1',
-            name: poseName,
-            morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }],
-            boneScaleRef: false,
-          },
-        ],
+        sections: fbmSnapshot([pose('p1', poseName, 'p'), fbmGroup().poses[1]]),
       })
     const files = generateAll(
       makeCharacter({
@@ -350,14 +369,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
   it('mergeSceneOverride merges the ROM sections only (frames), not identity dials', () => {
     const romOverride = makeOverride({
       scenePath: scene,
-      poses: [
-        {
-          id: 'p1',
-          name: 'BeachTone',
-          morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5 }],
-          boneScaleRef: false,
-        },
-      ],
+      sections: fbmSnapshot([pose('p1', 'BeachTone', 'b', 0.5), fbmGroup().poses[1]]),
       identity: { enabled: true, facsDetailStrength: 0.25, flexionStrength: 0.75, applyUE5TearUV: true },
     })
     const merged = mergeSceneOverride(makeCharacter(), romOverride)
