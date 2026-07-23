@@ -58,6 +58,18 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Tauri fs plugin scope quirks:** on Unix the `**` glob doesn't match hidden
   dot-folders unless `plugins.fs.requireLiteralLeadingDot: false` is set in
   `tauri.conf.json` (it is — creating `.dcsmeta/images` failed on macOS without it).
+- **Every `@tauri-apps/plugin-fs` call needs its OWN `fs:allow-<cmd>` in
+  `capabilities/default.json` — the ACL is per-command, not a blanket write grant.**
+  Wide path scopes on `write-file`/`mkdir`/`remove` do NOT cover a sibling command:
+  adding a new plugin-fs call (e.g. `copyFile`) without its `fs:allow-copy-file`
+  permission throws `fs.copy_file not allowed. Permissions associated with this
+  command: …` at runtime — but only in the built/`dev:desktop` app, since the ACL is
+  compiled into the binary. No test layer catches it: the smoke `tauri-mock.ts` stubs
+  each `plugin:fs|<cmd>` directly and never enforces capabilities, so vitest + smoke
+  stay green while the real app is broken. This actually shipped — an audit PR switched
+  the scene copy from a Rust command to plugin-fs `copyFile` and left copy dead until a
+  rebuild grants the permission. When you add a plugin-fs verb, add the matching
+  permission in the SAME change.
 - **I/O-heavy commands must be `#[tauri::command(async)]`** or they freeze the
   window during long scans/installs.
 - **NTFS is case-insensitive; byte-exact rel-path keys never converge.** Any
