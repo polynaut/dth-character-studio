@@ -558,7 +558,13 @@ export const RomSections = memo(function RomSections({
           // Each section is its own wrapper on purpose: position:sticky constrains
           // the title to its parent, which is exactly what makes the NEXT section's
           // title push the previous one out (iOS-contacts style) instead of stacking.
-          <div key={section} className={`rounded-lg border ${effectiveEnabled ? '' : 'opacity-60'}`}>
+          <div
+            key={section}
+            // A disabled section dims — UNLESS it's a per-scene override (a scene that
+            // turned it off IS overriding it), which reads as active (full opacity, the
+            // green title / label / toggle stay fully visible).
+            className={`rounded-lg border ${effectiveEnabled || sectionOverridden ? '' : 'opacity-60'}`}
+          >
             {/* Sticky section title: pins right below the character page's collapsed
                 sticky header via `--sticky-header-h` (published live by EditorHeader,
                 since the header's collapsed height is dynamic — a hardcoded px drifts

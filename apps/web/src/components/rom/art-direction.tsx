@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 
-import { Button, cn, InfoPopup } from '@dth/ui'
+import { Button, cn, InfoPopup, OverrideMark } from '@dth/ui'
 import {
   ART_DIRECTION_CATALOG,
   genRomIncludes,
@@ -65,11 +65,8 @@ export function ArtDirectionEditor({
   // (ids ignored — they're editing handles). Only meaningful on a non-primary scene.
   const morphKey = (ms: Array<Morph>) =>
     JSON.stringify(ms.map((m) => [m.node, m.prop, m.value, m.base ?? null, m.autoBase ?? false]))
-  function frameOverridden(rom: 'gp' | 'dk', frame: number, entry: ArtDirectionFrame): boolean {
-    if (baseConfig === undefined) return false
-    const base = baseConfig.artDirection.find((e) => e.rom === rom && e.frame === frame)
-    return morphKey(entry.morphs) !== morphKey(base?.morphs ?? [])
-  }
+  const baseFrameMorphs = (rom: 'gp' | 'dk', frame: number): Array<Morph> =>
+    baseConfig?.artDirection.find((e) => e.rom === rom && e.frame === frame)?.morphs ?? []
 
   function commit(entry: ArtDirectionFrame) {
     const rest = config.artDirection.filter(
@@ -98,13 +95,15 @@ export function ArtDirectionEditor({
           {activeRoms.length > 1 && <p className="text-sm font-medium">{label}</p>}
           {ART_DIRECTION_CATALOG[rom].map((catalogFrame) => {
             const entry = entryFor(rom, catalogFrame.frame, catalogFrame.name)
+            const baseMorphs = baseFrameMorphs(rom, catalogFrame.frame)
             return (
               <ArtDirectionFrameRow
                 key={`${rom}-${catalogFrame.frame}`}
                 catalogFrame={catalogFrame}
                 absoluteFrame={romStart === null ? null : romStart + catalogFrame.frame}
                 entry={entry}
-                overridden={frameOverridden(rom, catalogFrame.frame, entry)}
+                overridden={baseConfig !== undefined && morphKey(entry.morphs) !== morphKey(baseMorphs)}
+                onReset={() => commit({ ...entry, morphs: baseMorphs })}
                 onCommit={commit}
               />
             )
@@ -121,6 +120,7 @@ function ArtDirectionFrameRow({
   absoluteFrame,
   entry,
   overridden,
+  onReset,
   onCommit,
 }: {
   catalogFrame: { frame: number; name: string; required: boolean; note?: string }
@@ -129,6 +129,8 @@ function ArtDirectionFrameRow({
   entry: ArtDirectionFrame
   /** This frame's morphs differ from the primary scene's — a per-scene override. */
   overridden: boolean
+  /** Restore this frame's morphs to the primary scene's (the override reset). */
+  onReset: () => void
   onCommit: (entry: ArtDirectionFrame) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -143,36 +145,46 @@ function ArtDirectionFrameRow({
 
   return (
     <div className={cn('rounded-md border', overridden && 'border-daz-green')}>
-      {/* A real accordion button (was a click-only div) — focusable and
-          Enter/Space-operable, state announced via aria-expanded. Every child is
-          a plain span, so there's no nested-interactive concern here. */}
-      <button
-        type="button"
-        aria-expanded={open}
-        className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left select-none"
-        onClick={() => setOpen((o) => !o)}
-      >
-        {open ? (
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-        )}
-        <span className="w-12 text-right font-mono text-xs text-muted-foreground tabular-nums">
-          {absoluteFrame ?? '—'}
-        </span>
-        <span className={cn('text-sm', overridden && 'text-daz-green')}>{catalogFrame.name}</span>
-        {catalogFrame.required && !hasMorphs && (
-          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
-            required — empty in the preset ROM
+      {/* The accordion button + (when this frame is a per-scene override) the reset
+          mark, which sits OUTSIDE the button — a button nested in a button is invalid. */}
+      <div className="flex items-center pr-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          className="flex flex-1 cursor-pointer items-center gap-2 px-2 py-1.5 text-left select-none"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className="w-12 text-right font-mono text-xs text-muted-foreground tabular-nums">
+            {absoluteFrame ?? '—'}
           </span>
+          <span className={cn('text-sm', overridden && 'text-daz-green')}>{catalogFrame.name}</span>
+          {catalogFrame.required && !hasMorphs && (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+              required — empty in the preset ROM
+            </span>
+          )}
+          <span
+            className={cn(
+              'ml-auto text-xs',
+              overridden ? 'text-daz-green' : 'text-muted-foreground',
+            )}
+          >
+            {hasMorphs ? `${entry.morphs.length} ${entry.morphs.length === 1 ? 'morph' : 'morphs'}` : 'preset default'}
+          </span>
+        </button>
+        {overridden && (
+          <OverrideMark
+            overridden
+            resetTitle="Reset this frame to the primary scene's art direction"
+            onReset={onReset}
+          />
         )}
-        {catalogFrame.note && !catalogFrame.required && (
-          <span className="text-xs text-muted-foreground">{catalogFrame.note}</span>
-        )}
-        <span className="ml-auto text-xs text-muted-foreground">
-          {hasMorphs ? `${entry.morphs.length} ${entry.morphs.length === 1 ? 'morph' : 'morphs'}` : 'preset default'}
-        </span>
-      </button>
+      </div>
       {open && (
         <div className="space-y-1 border-t px-2 py-2">
           {entry.morphs.map((morph, index) => (
