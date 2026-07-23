@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
-import { Button, InfoPopup, MultiSelect, OverrideMark, useRefetchOnFocus } from '@dth/ui'
+import { Button, InfoPopup, MultiSelect, OverrideMark, cn, overrideLabelClass, useRefetchOnFocus } from '@dth/ui'
 import {
   BODY_FOLLOWER,
   HAIRISH,
@@ -142,6 +142,7 @@ export function GroomFields({
   const primarySet = new Set(primaryListed)
   const hairDiffersFromPrimary =
     listed.length !== primaryListed.length || listed.some((label) => !primarySet.has(label))
+  const hairOverridden = overrideEligible && hairDiffersFromPrimary
   const candidates = wearables
     // Top-level followers only: an item fitted to another wearable (hair base on
     // its cap) rides along with its parent and needs no own entry.
@@ -171,7 +172,12 @@ export function GroomFields({
 
   return (
     <div className="group/ovr max-w-xl">
-      <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+      <div
+        className={cn(
+          'mb-1 flex items-center gap-2 text-sm font-medium',
+          overrideLabelClass(hairOverridden, overrideEligible),
+        )}
+      >
         Hair items
         <InfoPopup label="Hair items — more information" className="-translate-y-px">
           Each scene carries its own hair — the items you list here are hidden around the DTH
@@ -183,7 +189,7 @@ export function GroomFields({
             THIS non-primary scene's hair differs from the primary scene's, and reset
             copies the primary's list back (making them match). */}
         <OverrideMark
-          overridden={overrideEligible && hairDiffersFromPrimary}
+          overridden={hairOverridden}
           onReset={() => setNodes(primaryNodes.map((n) => ({ nodeLabel: n.nodeLabel })))}
           resetTitle="Reset to the primary scene's hair"
         />

@@ -44,6 +44,20 @@ const CHIP =
  *
  * Usage: drop this into the Label after the text — it's self-contained (no group needed).
  */
+/**
+ * Text colour for a per-scene overridable field's LABEL, mirroring the ROM
+ * section-title treatment:
+ * - **overridden** → fully white (reads as active),
+ * - **overridable but still inherited** (a non-primary scene, not yet overridden) →
+ *   a muted gray, the quiet "not yet overridden" tell,
+ * - **primary scene** (not overridable) → the default foreground (empty string).
+ *
+ * Drop it into the label's `cn(...)` alongside the {@link OverrideMark} glyph.
+ */
+export function overrideLabelClass(overridden: boolean, overrideEligible: boolean): string {
+  return overridden ? 'text-white' : overrideEligible ? 'text-muted-foreground' : ''
+}
+
 export function OverrideMark({
   overridden,
   onReset,

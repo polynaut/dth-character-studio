@@ -476,6 +476,39 @@ describe('scene override mode', () => {
     expect(latest!.poses).toHaveLength(0)
   })
 
+  it('a sparse per-row edit makes the section title diverge; the section reset clears it', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body'))
+    // No divergence yet → the section title carries no reset-all control.
+    expect(screen.queryByTitle("Reset this section to the primary scene's ROM")).toBeNull()
+
+    // A pure VALUE edit (no structural change, no escalation) still counts as an
+    // override: the section title now shows the green reset-all.
+    const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
+    fireEvent.change(nameInput, { target: { value: 'BeachGlutes' } })
+    fireEvent.blur(nameInput)
+    expect(latest!.poses).toHaveLength(1)
+    expect(latest!.sectionOverrides).toHaveLength(0) // stayed sparse — not escalated
+    const sectionReset = screen.getByTitle("Reset this section to the primary scene's ROM")
+
+    // The section reset clears the sparse override too (not just escalations).
+    fireEvent.click(sectionReset)
+    expect(latest!.poses).toHaveLength(0)
+    expect(screen.queryByTitle("Reset this section to the primary scene's ROM")).toBeNull()
+  })
+
+  it('an appended frame makes the section title diverge (green reset-all)', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getByText('Add morph'))
+    expect(latest!.additions).toHaveLength(1)
+    // An added frame is a divergence from the primary → section title goes green.
+    fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
+    expect(latest!.additions).toHaveLength(0)
+  })
+
   it('a value edited back to the base row un-arms it (no lingering green override)', () => {
     let latest: import('@dth/rom').SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
@@ -493,7 +526,7 @@ describe('scene override mode', () => {
     expect(latest!.poses).toHaveLength(0)
   })
 
-  it('Add morph appends an override frame at the group end, removable again', () => {
+  it('Add morph appends an override frame at the group end, marked new and removable', () => {
     let latest: import('@dth/rom').SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
@@ -502,10 +535,18 @@ describe('scene override mode', () => {
       expect.objectContaining({ groupId: 'g1', poses: [expect.objectContaining({ name: '' })] }),
     ])
 
-    // Added frame: frame number continues after the base row (328 → 329), and it's
-    // the removable override frame.
+    // Added frame: frame number continues after the base row (328 → 329), it's
+    // flagged NEW with a green "*", and it carries BOTH controls a base row has —
+    // the green reset handle and the red bin — each of which just removes it (there's
+    // no base ROM frame to fall back to).
     expect(screen.getByText('329')).toBeTruthy()
-    fireEvent.click(screen.getByTitle('Remove added frame'))
+    expect(
+      screen.getByTitle("New frame for this scene — not in the primary scene's ROM"),
+    ).toBeTruthy()
+    expect(
+      screen.getByTitle('Reset this added frame — removes it (not in the primary scene)'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByTitle('Delete this added frame for this scene'))
     expect(latest!.additions).toEqual([])
   })
 })

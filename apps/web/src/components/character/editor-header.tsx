@@ -142,9 +142,12 @@ export function EditorHeader({
           saturated backdrop blur that FEATHERS at its lower edge (no hard blur
           seam), echoing the native macOS title bar above. The effect + opaque
           fallback live in `liquid-glass-header` (styles.css). */}
+      {/* z-40: above inline info popups (z-30) so a popup reaching into the header
+          is covered by it, and above the editor body; still below modal dialogs
+          and dropdowns (z-50), which must cover the header when open. */}
       <header
         ref={headerRef}
-        className="liquid-glass-header sticky top-0 z-10 mb-8 flex items-end gap-5"
+        className="liquid-glass-header sticky top-0 z-40 mb-8 flex items-end gap-5"
       >
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
