@@ -27,19 +27,21 @@ test('overridden reset shows on keyboard focus', async ({ page }) => {
   await facs.press('Enter')
   await page.waitForTimeout(250)
 
+  // The mark IS the reset button now (keyboard-reachable); the cube is its resting
+  // face and the reset chip is the revealed face.
   const reset = page.getByRole('button', { name: /Reset to the primary/ }).first()
   await expect(reset).toHaveCount(1)
-  const mark = reset.locator('xpath=..')
-  const cube = mark.locator('> svg') // the cube glyph (RotateCcw lives inside the button)
+  const cube = reset.locator('> svg') // resting cube glyph (direct child)
+  const chip = reset.locator('> span') // the reset chip (holds the RotateCcw)
 
-  // Before focus: cube shown, reset hidden.
+  // Before focus: cube shown, reset chip hidden.
   expect(Number(await cube.evaluate((el) => getComputedStyle(el).opacity))).toBeGreaterThan(0.9)
-  expect(Number(await reset.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(0.1)
+  expect(Number(await chip.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(0.1)
 
   await reset.focus()
   await page.waitForTimeout(200)
 
-  // After focus: cube faded out, reset revealed.
+  // After focus: cube faded out, reset chip revealed.
   expect(Number(await cube.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(0.1)
-  expect(Number(await reset.evaluate((el) => getComputedStyle(el).opacity))).toBeGreaterThan(0.9)
+  expect(Number(await chip.evaluate((el) => getComputedStyle(el).opacity))).toBeGreaterThan(0.9)
 })

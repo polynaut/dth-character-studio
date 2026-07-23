@@ -20,18 +20,26 @@ function CubeDotIcon({ className, dotClassName }: { className?: string; dotClass
   )
 }
 
+// Layout footprint shared by both states, so a field going overridden never shifts:
+// a 16px inline box, `-my-px` so it doesn't grow the ~14px label row.
+const BOX = '-my-px inline-flex size-4 shrink-0 items-center justify-center'
+
 /**
- * The per-scene override marker on a Daz-scene-tied field's label: the cube glyph is
- * ALWAYS shown (so it also marks the field on the primary scene). Its dot is white
- * while the field matches the primary scene and turns Daz-green once the field is
- * overridden. Hovering the ICON itself (its own `group/mark`, not the whole field)
- * swaps the glyph for a reset button — only when overridden, since there's nothing to
- * reset otherwise. Scoping to the icon means clicking a nearby control (e.g. a toggle
- * in the same row) never reveals the reset. The "can be overridden per Daz scene" hint
- * lives here, on the icon, not on the field.
+ * The per-scene override marker on a Daz-scene-tied field's label.
  *
- * The 16px box is always rendered (no X/Y layout shift when a field goes overridden);
- * `-my-px` keeps it from growing a ~14px label row.
+ * The cube glyph is ALWAYS shown (so it also marks the field on the primary scene).
+ * Its dot is white while the field matches the primary scene and turns Daz-green once
+ * the field is overridden.
+ *
+ * - **Not overridden** → a plain, non-focusable hint span; the "can be overridden per
+ *   Daz scene" title lives here. Nothing to reset, so it isn't a tab stop.
+ * - **Overridden** → the mark IS a real `<button>` (the cube is its resting face, not a
+ *   separate invisible overlay), so it's properly keyboard-reachable. Hovering it OR
+ *   focusing it via the keyboard swaps the cube for a small green "reset" chip button.
+ *   Both the fade-out and the reveal key off this button's own `group/mark` state, so a
+ *   nearby control (e.g. a toggle in the same row) never triggers the swap. The reset
+ *   chip is `-inset-1` (a comfortable target past the 16px glyph) but absolutely
+ *   positioned, so the label footprint stays fixed.
  *
  * Usage: drop this into the Label after the text — it's self-contained (no group needed).
  */
@@ -48,38 +56,39 @@ export function OverrideMark({
   resetTitle?: string
   className?: string
 }) {
+  if (!overridden) {
+    // Decorative hint — the cube marks a field that CAN be overridden per Daz scene.
+    return (
+      <span
+        title="Can be overridden per Daz scene"
+        className={cn(BOX, 'text-foreground/85', className)}
+      >
+        <CubeDotIcon className="size-4" dotClassName="fill-current" />
+      </span>
+    )
+  }
   return (
-    <span
-      title={overridden ? undefined : 'Can be overridden per Daz scene'}
-      className={cn(
-        'group/mark relative -my-px inline-flex size-4 shrink-0 items-center justify-center',
-        overridden ? 'text-daz-green' : 'text-foreground/85',
-        className,
-      )}
+    <button
+      type="button"
+      onClick={onReset}
+      title={resetTitle}
+      aria-label={resetTitle}
+      className={cn('group/mark relative cursor-pointer rounded-md text-daz-green outline-none', BOX, className)}
     >
-      {/* The whole cube glyph turns Daz-green when overridden (cube + dot both follow
-          currentColor), white otherwise. It fades out when the ICON is hovered OR its
-          reset button is keyboard-focused (both scoped to this mark's own group, so a
-          nearby control — e.g. a toggle in the same row — never reveals the reset). The
-          reveal below keys off the same predicate, so the two never overlap. */}
+      {/* Resting face: the green cube (its dot bobs). Fades out on hover or keyboard
+          focus of this button, swapped for the reset chip below. */}
       <CubeDotIcon
-        className={cn(
-          'size-4',
-          overridden && 'group-hover/mark:opacity-0 group-focus-within/mark:opacity-0',
-        )}
-        dotClassName={cn('fill-current', overridden && 'animate-override-bob motion-reduce:animate-none')}
+        className="size-4 transition-opacity group-hover/mark:opacity-0 group-focus/mark:opacity-0"
+        dotClassName="fill-current animate-override-bob motion-reduce:animate-none"
       />
-      {overridden && (
-        <button
-          type="button"
-          onClick={onReset}
-          title={resetTitle}
-          aria-label={resetTitle}
-          className="absolute inset-0 flex items-center justify-center rounded text-daz-green opacity-0 outline-none transition-opacity group-hover/mark:opacity-100 group-focus-within/mark:opacity-100 hover:text-[color-mix(in_oklab,var(--color-daz-green)_80%,white)] focus-visible:ring-2 focus-visible:ring-daz-green/50"
-        >
-          <RotateCcw className="size-3.5" />
-        </button>
-      )}
-    </span>
+      {/* The reset chip — a rounded green button face. Revealed on hover/focus; the
+          stronger ring is keyboard-only (focus-visible) so a mouse hover stays quiet. */}
+      <span
+        aria-hidden
+        className="absolute -inset-1 flex items-center justify-center rounded-md bg-daz-green/15 text-daz-green opacity-0 ring-1 ring-inset ring-daz-green/30 transition-opacity group-hover/mark:opacity-100 group-hover/mark:bg-daz-green/25 group-focus/mark:opacity-100 group-focus-visible/mark:ring-2 group-focus-visible/mark:ring-daz-green/60"
+      >
+        <RotateCcw className="size-3.5" />
+      </span>
+    </button>
   )
 }
