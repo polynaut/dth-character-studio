@@ -350,6 +350,22 @@ export const RomSections = memo(function RomSections({
     })
   }, [])
 
+  // Per-scene enable/disable of a whole section. Stored only when it DIFFERS from
+  // the base (toggling back to the base value drops the entry, so the mark quiets).
+  // The base section's mode/groups are untouched — a disabled section just stops
+  // contributing frames for this scene; an enabled one uses the base config.
+  const onSectionEnabledChange = useCallback((section: RomSection, enabled: boolean) => {
+    const od = overrideDataRef.current
+    const emit = onOverrideChangeRef.current
+    if (!od || !emit) return
+    const baseEnabled = sectionsRef.current[section].enabled
+    const rest = od.sectionEnabled.filter((s) => s.section !== section)
+    emit({
+      ...od,
+      sectionEnabled: enabled === baseEnabled ? rest : [...rest, { section, enabled }],
+    })
+  }, [])
+
   // Bulk-import a DAZ morph CSV into a section: the picker dialog lists the
   // Scan_Frames scans (plus Browse for hand-curated files); a full scene scan
   // covers the whole ROM, so the chosen file then opens the frame-range dialog
@@ -439,14 +455,23 @@ export const RomSections = memo(function RomSections({
       )}
       {ROM_SECTIONS.map((section) => {
         const config = sections[section]
+        // The MERGED section (base + this scene's overrides, incl. per-scene
+        // enable/disable). On the primary scene displaySections === sections.
+        const mergedConfig = displaySections[section]
         const modes = SECTION_MODES[section]
         const isOpen = open[section] ?? false
         // RET has no independent existence: the retargeting poses live inside
         // the JCM base ROM, so its state is derived from the JCM section.
         const tiedToJcm = section === 'RET'
+        // The effective on/off state reads the MERGED sections, so a section a scene
+        // has toggled shows (and the wrapper dims) for the override, not the base.
         const effectiveEnabled = tiedToJcm
-          ? sections.JCM.enabled && sections.JCM.mode === 'preset'
-          : config.enabled
+          ? displaySections.JCM.enabled && displaySections.JCM.mode === 'preset'
+          : mergedConfig.enabled
+        // A scene has flipped THIS section's on/off state vs the primary — the section
+        // is overridden even with no row edits (RET follows JCM, never toggled alone).
+        const enabledOverridden =
+          !!overrideData && !tiedToJcm && mergedConfig.enabled !== config.enabled
         // Whether the installed DTH release ships this section's preset asset for
         // the character's generation (e.g. GP/DK and Physics don't exist for
         // G8/G8.1, FAC doesn't for G8). Unavailable → preset mode isn't offered:
@@ -477,13 +502,21 @@ export const RomSections = memo(function RomSections({
         // section escalation. Base pose / group ids attribute the sparse `poses` and
         // `additions` back to their section; upsertPose already drops a per-row copy
         // that matches its base, so every entry counted here is a real divergence.
-        const showSectionMark = !!overrideData && effectiveEnabled && config.mode === 'custom'
+        // The mark shows on a non-primary scene for any toggleable section (never RET):
+        // a custom+enabled section offers row overrides (its resting hint), and ANY
+        // section can be enable/disable-overridden — so it also shows once that diverges,
+        // even for a preset or a now-disabled section (which fails the first clause).
+        const showSectionMark =
+          !!overrideData &&
+          !tiedToJcm &&
+          ((effectiveEnabled && config.mode === 'custom') || enabledOverridden)
         const sectionPoseIds = new Set(config.groups.flatMap((g) => g.poses.map((p) => p.id)))
         const sectionGroupIds = new Set([
           ...config.groups.map((g) => g.id),
           flatSectionGroupId(section),
         ])
         const sectionOverridden =
+          enabledOverridden ||
           escalated ||
           (overrideData?.poses.some((p) => sectionPoseIds.has(p.id)) ?? false) ||
           (overrideData?.additions.some((a) => sectionGroupIds.has(a.groupId)) ?? false)
@@ -561,6 +594,10 @@ export const RomSections = memo(function RomSections({
                       sectionOverrides: overrideData.sectionOverrides.filter(
                         (s) => s.section !== section,
                       ),
+                      // Restore the primary scene's on/off state too (drop the entry).
+                      sectionEnabled: overrideData.sectionEnabled.filter(
+                        (s) => s.section !== section,
+                      ),
                     })
                   }}
                 />
@@ -584,22 +621,30 @@ export const RomSections = memo(function RomSections({
                   inside a button is invalid HTML. */}
               <Switch
                 checked={effectiveEnabled}
-                disabled={tiedToJcm || !!overrideCtl || locked}
+                disabled={tiedToJcm || locked}
                 title={
-                  overrideCtl || locked
-                    ? 'Sections are part of the base setup — locked for a per-scene override'
-                    : tiedToJcm
-                      ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
+                  tiedToJcm
+                    ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
+                    : overrideData
+                      ? effectiveEnabled
+                        ? 'Disable this section for this Daz scene'
+                        : 'Enable this section for this Daz scene'
                       : effectiveEnabled
                         ? 'Disable this section'
                         : 'Enable this section'
                 }
                 onCheckedChange={(enabled) => {
-                  // Enabling picks the sensible mode: no preset asset for this
-                  // generation → straight to the custom morph list; preset
-                  // available and the section untouched (no custom groups yet)
-                  // → preset. A section the user already put groups into keeps
-                  // its mode — that's a deliberate choice, not a default.
+                  // On a non-primary scene the toggle is a per-scene override: flip the
+                  // MERGED on/off state (mode/groups stay the base's).
+                  if (overrideData) {
+                    onSectionEnabledChange(section, enabled)
+                    return
+                  }
+                  // Base (primary) toggle. Enabling picks the sensible mode: no preset
+                  // asset for this generation → straight to the custom morph list; preset
+                  // available and the section untouched (no custom groups yet) → preset. A
+                  // section the user already put groups into keeps its mode — a deliberate
+                  // choice, not a default.
                   if (enabled && !presetAvailable && config.mode === 'preset' && modes.includes('custom')) {
                     patchSection(section, { enabled, mode: 'custom' })
                   } else if (

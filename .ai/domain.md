@@ -82,9 +82,17 @@ offsets byte-identically — if a generation change moves them, the change is wr
   snapshots the merged section into `sceneOverride.sectionOverrides` and drops that
   section's sparse entries; `applySceneOverride` then uses those groups verbatim. The
   section title carries an `OverrideMark` whose reset drops the whole-section override.
+  A section's **enable/disable** is overridable per scene too (`sceneOverride.sectionEnabled`,
+  a sparse `{section, enabled}[]`): the section Switch is live on a non-primary scene, and
+  toggling it to a value that differs from the base stores an entry (toggling back drops it).
+  `applySceneOverride` flips the base section's `enabled` per entry (mode/groups untouched —
+  a disabled section just contributes no frames, an enabled one uses the base config), so a
+  preset section can be dropped for an outfit without clearing its rows. It counts toward the
+  same section-title `OverrideMark` (green when the merged enable differs), and the section
+  reset clears it alongside the row layers.
   `onOverrideChange` (`rom-editor-section.tsx`) derives the ROM gate from "has any
-  override rows OR a sectionOverride", so a fully-reverted scene generates no
-  `dthSceneOverrides` delta and no per-scene CSV. NB the grid value is a Daz
+  override rows OR a sectionOverride OR a sectionEnabled entry", so a fully-reverted scene
+  generates no `dthSceneOverrides` delta and no per-scene CSV. NB the grid value is a Daz
   **percentage** (`valueToPct`): base `1` shows as `100`, so a revert types `100`.
 
 ## The DTH runtime is studio-owned
