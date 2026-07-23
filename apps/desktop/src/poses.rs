@@ -142,20 +142,45 @@ pub(crate) struct SceneWearable {
 #[derive(Serialize)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct SceneFigure {
+    /// The figure node's DSON id — "Genesis9", "Genesis8_1Female", … The create
+    /// dialog maps it to a Genesis version (+ gender for the gendered gens).
+    id: String,
+    /// The label shown in Daz's Scene pane (e.g. "Genesis 9").
+    label: String,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SceneWearables {
     items: Vec<SceneWearable>,
+    /// The base figure node, when the scene has a recognizable one — the create
+    /// dialog's Genesis/gender auto-select source. `None` (→ `null`) otherwise.
+    figure: Option<SceneFigure>,
     /// Empty on success; otherwise why the scene couldn't be read.
     error: String,
 }
 
-fn duf_conformed_items(path: &Path) -> Result<Vec<SceneWearable>, String> {
+/// A node's id/name begins (case-insensitively) with "Genesis" — how we spot the
+/// base figure among the scene nodes.
+fn looks_like_figure(s: &str) -> bool {
+    s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("genesis"))
+}
+
+/// The conformed wearables of a scene `.duf` AND its base figure node, in one
+/// parse. The figure is the first NON-conformed node whose id/name looks like a
+/// Genesis figure — wearables named "Genesis…" always carry a `conform_target`,
+/// so this can't mistake one for the figure, and it finds a bare figure (a scene
+/// with no followers) all the same.
+fn duf_scene(path: &Path) -> Result<(Vec<SceneWearable>, Option<SceneFigure>), String> {
     let json = read_duf_json(path, SCENE_INFLATE_FLOOR)?;
     let nodes = json
         .get("scene")
         .and_then(|s| s.get("nodes"))
         .and_then(|n| n.as_array())
         .ok_or_else(|| format!("{}: no scene.nodes (is it a scene file?)", path.display()))?;
-    Ok(nodes
+    let items = nodes
         .iter()
         .filter_map(|node| {
             let conform = node.get("conform_target").and_then(|v| v.as_str())?;
@@ -171,17 +196,35 @@ fn duf_conformed_items(path: &Path) -> Result<Vec<SceneWearable>, String> {
                 conform_target: conform.to_string(),
             })
         })
-        .collect())
+        .collect();
+    let figure = nodes.iter().find_map(|node| {
+        if node.get("conform_target").is_some() {
+            return None;
+        }
+        let id = node.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+        let name = node.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+        if !looks_like_figure(id) && !looks_like_figure(name) {
+            return None;
+        }
+        let label = node
+            .get("label")
+            .and_then(|v| v.as_str())
+            .or_else(|| node.get("name").and_then(|v| v.as_str()))
+            .unwrap_or(id);
+        Some(SceneFigure { id: id.to_string(), label: label.to_string() })
+    });
+    Ok((items, figure))
 }
 
-/// The fitted (conformed) items of a scene `.duf` — the groom-suggestion source.
-/// Never throws: an unreadable scene returns an empty list with the reason in
-/// `error`, so suggestions degrade instead of breaking the editor.
+/// The fitted (conformed) items of a scene `.duf` and its base figure node — the
+/// groom-suggestion source (items) and the create dialog's Genesis auto-select
+/// source (figure). Never throws: an unreadable scene returns an empty list +
+/// no figure with the reason in `error`, so callers degrade instead of breaking.
 #[tauri::command(async)]
 pub fn scene_wearables(path: String) -> SceneWearables {
-    match duf_conformed_items(Path::new(&path)) {
-        Ok(items) => SceneWearables { items, error: String::new() },
-        Err(error) => SceneWearables { items: Vec::new(), error },
+    match duf_scene(Path::new(&path)) {
+        Ok((items, figure)) => SceneWearables { items, figure, error: String::new() },
+        Err(error) => SceneWearables { items: Vec::new(), figure: None, error },
     }
 }
 
@@ -260,10 +303,34 @@ mod tests {
         assert_eq!(result.items[0].label, "dForce Black Tie Cap");
         assert_eq!(result.items[0].conform_target, "#Genesis9");
         assert_eq!(result.items[1].conform_target, "#Black%20Tie%20Cap_1529");
-        // An unreadable path degrades to an empty list + error, never a panic.
+        // The base figure is surfaced separately (it has no conform_target).
+        let figure = result.figure.expect("figure detected");
+        assert_eq!(figure.id, "Genesis9");
+        assert_eq!(figure.label, "Genesis 9");
+        // An unreadable path degrades to an empty list + no figure + error.
         let missing = scene_wearables(dir.join("nope.duf").to_string_lossy().to_string());
         assert!(missing.items.is_empty());
+        assert!(missing.figure.is_none());
         assert!(missing.error.contains("nope.duf"), "error: {}", missing.error);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scene_wearables_finds_a_bare_figure_with_no_wearables() {
+        // The common case for this tool: a scene that is just the figure — no
+        // hair/clothes, so no wearables to infer from. The figure must still
+        // surface (id names the generation + gender for the gendered gens).
+        let dir = unique_temp_dir("scene_bare");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bare.duf");
+        let json = br##"{"scene":{"nodes":[
+            {"id":"Genesis8Male","name":"Genesis8Male","label":"Genesis 8 Male"}
+        ]}}"##;
+        fs::write(&path, gzip(json)).unwrap();
+        let result = scene_wearables(path.to_string_lossy().to_string());
+        assert_eq!(result.error, "");
+        assert!(result.items.is_empty());
+        assert_eq!(result.figure.expect("bare figure detected").id, "Genesis8Male");
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -13,6 +13,7 @@ import {
   defaultSections,
   exporterSupportsGroomHide,
   genesisFigureNode,
+  genesisFromFigureNode,
   poseAssetCsvEra,
 } from './types'
 
@@ -350,6 +351,40 @@ describe('genesisFigureNode', () => {
     expect(genesisFigureNode('G8.1', 'male')).toBe('Genesis8_1Male')
     expect(genesisFigureNode('G8', 'female')).toBe('Genesis8Female')
     expect(genesisFigureNode('G3', 'male')).toBe('Genesis3Male')
+  })
+})
+
+describe('genesisFromFigureNode', () => {
+  it('recovers generation + gender from a figure node id', () => {
+    expect(genesisFromFigureNode('Genesis9')).toEqual({ genesis: 'G9', gender: null })
+    expect(genesisFromFigureNode('Genesis8_1Female')).toEqual({ genesis: 'G8.1', gender: 'female' })
+    expect(genesisFromFigureNode('Genesis8_1Male')).toEqual({ genesis: 'G8.1', gender: 'male' })
+    expect(genesisFromFigureNode('Genesis8Male')).toEqual({ genesis: 'G8', gender: 'male' })
+    expect(genesisFromFigureNode('Genesis3Female')).toEqual({ genesis: 'G3', gender: 'female' })
+  })
+
+  it('does not let the Genesis8 prefix swallow Genesis8_1', () => {
+    expect(genesisFromFigureNode('Genesis8_1Female')?.genesis).toBe('G8.1')
+    expect(genesisFromFigureNode('Genesis8Female')?.genesis).toBe('G8')
+  })
+
+  it('accepts a raw conformTarget ref (leading # + URL-encoding)', () => {
+    expect(genesisFromFigureNode('#Genesis8_1Male')).toEqual({ genesis: 'G8.1', gender: 'male' })
+    expect(genesisFromFigureNode('#Genesis9')).toEqual({ genesis: 'G9', gender: null })
+  })
+
+  it('is the inverse of genesisFigureNode for the gendered generations', () => {
+    for (const genesis of ['G8.1', 'G8', 'G3'] as const) {
+      for (const gender of ['female', 'male'] as const) {
+        expect(genesisFromFigureNode(genesisFigureNode(genesis, gender))).toEqual({ genesis, gender })
+      }
+    }
+  })
+
+  it('returns null for an unrecognized (renamed) figure', () => {
+    expect(genesisFromFigureNode('Kira')).toBeNull()
+    expect(genesisFromFigureNode('')).toBeNull()
+    expect(genesisFromFigureNode('Genesis')).toBeNull()
   })
 })
 

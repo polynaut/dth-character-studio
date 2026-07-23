@@ -137,11 +137,23 @@ export const sceneWearableSchema = z.object({
   conformTarget: z.string(),
 })
 
-/** Result of reading a scene's conformed items (mirrors Rust `SceneWearables`).
- *  Never a hard error: an unreadable scene comes back empty with the reason in
- *  `error`, so suggestions degrade instead of breaking the editor. */
+/** The base figure node of a scene `.duf` (mirrors Rust `SceneFigure`). Its id
+ *  ("Genesis9", "Genesis8_1Female", …) is what the create dialog maps to a
+ *  Genesis version + gender via `genesisFromFigureNode`. */
+export const sceneFigureSchema = z.object({
+  /** The figure node's DSON id — the auto-select source. */
+  id: z.string(),
+  /** The label shown in Daz's Scene pane (e.g. "Genesis 9"). */
+  label: z.string(),
+})
+
+/** Result of reading a scene's conformed items + base figure (mirrors Rust
+ *  `SceneWearables`). Never a hard error: an unreadable scene comes back empty
+ *  with the reason in `error`, so callers degrade instead of breaking. `figure`
+ *  is null when the scene has no recognizable figure. */
 export const sceneWearablesSchema = z.object({
   items: z.array(sceneWearableSchema),
+  figure: sceneFigureSchema.nullable(),
   error: z.string(),
 })
 
