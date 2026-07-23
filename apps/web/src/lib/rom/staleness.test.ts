@@ -303,4 +303,63 @@ describe('refreshAllAssets', () => {
     // The healthy character still refreshed.
     expect(summary.results.some((r) => r.character === 'GoodChar' && r.ok)).toBe(true)
   })
+
+  it('a NEWER-build definition is a reset candidate (not a failure); resetTooNew downgrades it in place', async () => {
+    // Seed a character saved by a build with a HIGHER schema than this one, plus a
+    // field this build's schema never knew — the exact dev situation (ran a
+    // schema-bump branch, then went back to an older build).
+    const dir = '/games/Future'
+    await storage.createProjectManifest(dir, 'Future')
+    await storage.rememberRecent(`${dir}/Future.dcsp`, 'Future')
+    const sections = defaultSections()
+    sections.JCM.enabled = false
+    sections.FBM.enabled = true
+    sections.FBM.groups = [
+      {
+        id: 'g',
+        label: '',
+        suffix: 'centre',
+        method: 'individual',
+        calculateFrom: 'default',
+        poses: [{ id: 'p', name: 'BodyTone', morphs: [], boneScaleRef: false }],
+      },
+    ]
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'FutureChar',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      sections,
+    })
+    const jsonPath = `${dir}/FutureChar/FutureChar.json`
+    addDir(`${dir}/FutureChar`)
+    files.set(
+      jsonPath,
+      JSON.stringify({ ...c, schemaVersion: CHARACTER_SCHEMA_VERSION + 1, aFutureField: { x: 1 } }),
+    )
+
+    // A plain refresh must NOT touch it — it's a reset CANDIDATE, surfaced in
+    // `tooNew`, never a hard failure, and left byte-for-byte on disk.
+    const detected = await api.refreshAllAssets()
+    expect(detected.tooNew).toHaveLength(1)
+    expect(detected.tooNew[0].character).toBe('FutureChar')
+    expect(detected.tooNew[0].storedVersion).toBe(CHARACTER_SCHEMA_VERSION + 1)
+    expect(detected.counts.reset).toBe(0)
+    expect(detected.results.some((r) => r.character.includes('FutureChar'))).toBe(false)
+    const untouched = JSON.parse(files.get(norm(jsonPath)) as string)
+    expect(untouched.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION + 1)
+    expect(untouched.aFutureField).toBeDefined()
+
+    // The explicit reset downgrades it in place: stamped at the current schema,
+    // the unknown newer field dropped, and it regenerates like any character.
+    const reset = await api.refreshAllAssets({ resetTooNew: true })
+    expect(reset.counts.reset).toBe(1)
+    expect(reset.tooNew).toHaveLength(0)
+    expect(reset.results.some((r) => r.character === 'FutureChar' && r.ok)).toBe(true)
+    const downgraded = JSON.parse(files.get(norm(jsonPath)) as string)
+    expect(downgraded.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION)
+    expect(downgraded.aFutureField).toBeUndefined()
+  })
 })

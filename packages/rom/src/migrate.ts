@@ -268,9 +268,19 @@ export class CharacterSchemaTooNewError extends Error {
  * @throws {CharacterSchemaTooNewError} when the stored `schemaVersion` is an
  *   integer above {@link CHARACTER_SCHEMA_VERSION} (a file from a newer build) —
  *   proceeding would silently strip its fields and a later save would destroy
- *   them. Thrown BEFORE any normalization touches the data.
+ *   them. Thrown BEFORE any normalization touches the data. Pass
+ *   `{ allowDowngrade: true }` to suppress this and force the file down to the
+ *   current shape instead (zod then drops the newer fields): a deliberate,
+ *   lossy reset — see `resetDefinitionToCurrentVersion` in the web storage layer.
  */
-export function migrateCharacterData(raw: unknown): Record<string, any> {
+export function migrateCharacterData(
+  raw: unknown,
+  opts: {
+    /** Force a forward-version file down to the current schema instead of
+     *  throwing — the newer fields are dropped. Off by default (data safety). */
+    allowDowngrade?: boolean
+  } = {},
+): Record<string, any> {
   // Non-object input (null, an array, a bare string…) must flow into a clean
   // zod validation failure downstream — not a TypeError inside the legacy
   // normalizer. Such input starts from an empty object, which zod then rejects
@@ -285,6 +295,7 @@ export function migrateCharacterData(raw: unknown): Record<string, any> {
   // falls into the clamp below like every other corrupt version.
   const stored = base.schemaVersion
   if (
+    !opts.allowDowngrade &&
     typeof stored === 'number' &&
     Number.isInteger(stored) &&
     stored > CHARACTER_SCHEMA_VERSION
