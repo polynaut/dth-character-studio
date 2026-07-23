@@ -111,9 +111,10 @@ is needed for a working ROM:
   loads and **restored after**, so posed nodes (e.g. the eyes) keep their
   orientation instead of being reset. Enter the **node's label** as it appears in Daz.
 
-On a **non-primary Daz scene** each of these entries becomes **per-item
-overridable** — the cube glyph, green border and reset appear per row, so an outfit
-scene can preserve different morphs or nodes than the primary (see
+On a **non-primary Daz scene** each list becomes **overridable** — its label's cube
+goes green (with a reset that reverts the list to the primary) the moment a row
+changes or one is added/removed, and a green border marks the rows that differ. So an
+outfit scene can preserve different morphs or nodes than the primary (see
 [Advanced: per-scene overrides](./advanced.md#per-scene-overrides--edit-to-override)).
 
 </td></tr></table>
