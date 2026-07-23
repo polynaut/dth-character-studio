@@ -83,8 +83,8 @@ export function repointCharacterPaths(
  * stored `schemaVersion` is preserved (so a migrated-on-read definition still
  * reads as below current) — it's bumped only when the character is written back.
  */
-function parseCharacter(raw: unknown): Character {
-  const data = migrateCharacterData(raw)
+function parseCharacter(raw: unknown, opts?: { allowDowngrade?: boolean }): Character {
+  const data = migrateCharacterData(raw, opts)
   // Avatar canonicalization stays here — it's web/storage-specific (it drops
   // machine-specific asset/convertFileSrc URLs the pure core knows nothing about).
   data.image = canonicalImage(data.image)
@@ -118,6 +118,11 @@ export interface CharacterScanProblem {
   path: string
   /** Human-readable reason: unreadable file / invalid JSON / failed schema. */
   reason: string
+  /** Present when the file was saved by a NEWER build (schema above this app's) —
+   *  the one problem that is RECOVERABLE in place: a deliberate downgrade re-saves
+   *  it at the current version, dropping the newer fields. `undefined` for genuine
+   *  corruption (torn write / bad JSON / failed schema), which a downgrade can't fix. */
+  tooNew?: { storedVersion: number; supportedVersion: number }
 }
 
 interface LibraryScan {
@@ -183,7 +188,11 @@ async function scanLibrary(lib: string): Promise<LibraryScan> {
       // (parse throws before any normalization) — surface "update the app",
       // not "corrupt". The definition is left untouched on disk.
       if (e instanceof CharacterSchemaTooNewError) {
-        problems.push({ path: definitionAbs, reason: e.message })
+        problems.push({
+          path: definitionAbs,
+          reason: e.message,
+          tooNew: { storedVersion: e.storedVersion, supportedVersion: e.supportedVersion },
+        })
         continue
       }
       // Foreign JSON (a generated sidecar) is simply not a character; a
@@ -249,6 +258,34 @@ export async function readCharacterAt(definitionAbs: string): Promise<Character 
   } catch {
     return null
   }
+}
+
+/**
+ * Force a forward-version definition (one saved by a NEWER build, which the scan
+ * refuses via {@link CharacterSchemaTooNewError}) back down to THIS build's
+ * schema: read it raw with the too-new guard suppressed, let zod drop the fields
+ * this build doesn't know, and re-save it in place stamped at the current version.
+ * **Lossy on purpose** — the newer fields are discarded. This only ever matters in
+ * development (running an older build after a schema-bump branch re-saved the
+ * library); a released build only ever sees the schema move forward. The re-save
+ * reuses `saveCharacter` via `preResolved` so it writes straight to the known
+ * path without a scan (the scan can't read a too-new file, so it never finds it). */
+export async function resetDefinitionToCurrentVersion(
+  project: Project,
+  definitionAbs: string,
+  charactersRoot: string,
+): Promise<{ character: Character; location: CharacterLocation }> {
+  const forced = parseCharacter(JSON.parse(await readTextFile(definitionAbs)), {
+    allowDowngrade: true,
+  })
+  const folderAbs = dirname(definitionAbs)
+  const location: CharacterLocation = {
+    definitionAbs,
+    folderAbs,
+    relFolder: normalizeRelFolder(relativeInside(charactersRoot, folderAbs) ?? ''),
+    libraryFolder: charactersRoot,
+  }
+  return saveCharacter(project, forced, charactersRoot, { location, character: forced })
 }
 
 export async function listCharacters(lib: string): Promise<Array<Character>> {
