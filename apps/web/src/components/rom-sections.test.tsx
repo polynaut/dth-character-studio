@@ -400,15 +400,51 @@ describe('scene override mode', () => {
     )
   }
 
-  it('locks the structure: no insert menus, drag handles, or base-row actions', () => {
+  it('exposes insert menus, drag handles and a per-scene delete on base rows', () => {
     render(<OverrideHarness onOverrideChange={() => {}} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
-    expect(screen.queryByLabelText('Insert a frame here')).toBeNull()
-    expect(screen.queryByTitle('Drag to reorder')).toBeNull()
-    // A base row that hasn't been edited yet carries no action button — nothing to
-    // delete (the base layout is fixed) and nothing to reset.
-    expect(screen.queryByTitle('Remove pose')).toBeNull()
+    expect(screen.getAllByLabelText('Insert a frame here').length).toBeGreaterThan(0)
+    expect(screen.getAllByTitle('Drag to reorder').length).toBeGreaterThan(0)
+    // A base row can be deleted for this scene (a structural edit that escalates).
+    expect(screen.getByTitle('Delete this frame for this scene')).toBeTruthy()
+    // Nothing to reset until a value edit arms the row.
     expect(screen.queryByTitle('Reset this frame to the base ROM')).toBeNull()
+  })
+
+  it('inserting a frame escalates the whole section to a scene override', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    let sectionsChanged = false
+    render(
+      <OverrideHarness
+        onOverrideChange={(next) => (latest = next)}
+        onSectionsChange={() => (sectionsChanged = true)}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
+    fireEvent.click(screen.getByText('Add after'))
+    // The scene now OWNS the section — snapshotted whole, with the extra frame.
+    expect(latest!.sectionOverrides).toHaveLength(1)
+    expect(latest!.sectionOverrides[0].section).toBe('FBM')
+    expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(2)
+    // The base sections are never touched by a scene override.
+    expect(sectionsChanged).toBe(false)
+    // The section title now carries the green reset-all control.
+    expect(screen.getByTitle("Reset this section to the primary scene's ROM")).toBeTruthy()
+  })
+
+  it('deleting a base frame escalates, and the section reset restores the primary', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(
+      <OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getByTitle('Delete this frame for this scene'))
+    expect(latest!.sectionOverrides).toHaveLength(1)
+    expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(0)
+    // The section-title reset drops the whole-section override entirely.
+    fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
+    expect(latest!.sectionOverrides).toHaveLength(0)
   })
 
   it('editing a base row arms it as an override; reset drops it', () => {

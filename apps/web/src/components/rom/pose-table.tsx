@@ -25,17 +25,21 @@ export interface MorphPatch {
 }
 
 /**
- * Scene-override mode state for the table (a non-primary Daz scene is selected):
- * rows below `baseCount` are the BASE ROM rows — editable, and editing one arms it
- * as an override (it turns green); rows from `baseCount` on are the override's own
- * appended frames (green, removable, only ever at the END — inserting between base
- * frames is forbidden, so the insert menu and drag reordering disappear here). An
- * overridden base row can be reset to the base; added rows are removed.
+ * Scene-override mode state for the table (a non-primary Daz scene is selected, and
+ * this section is NOT yet whole-overridden). Two row kinds, told apart by id:
+ * a BASE ROM row (editable — editing one arms a per-scene value override, so it
+ * turns green and can be reset) and the override's OWN appended frame ({@link
+ * isAddition} — green, removable). Reorder / insert-between / deleting a base row are
+ * structural edits the sparse layer can't hold, so they ESCALATE the whole section
+ * to a scene override (handled a layer up); once escalated the section edits like the
+ * primary and this meta is absent.
  */
 export interface PoseOverrideMeta {
-  baseCount: number
+  /** A base ROM row the user value-edited for this scene (green, resettable). */
   isOverridden: (poseId: string) => boolean
-  /** Reset a base row: drop its override, falling back to the base ROM frame. */
+  /** An override's own appended frame — green, freely removable (not base ROM). */
+  isAddition: (poseId: string) => boolean
+  /** Reset a base row: drop its value override, falling back to the base ROM frame. */
   reset: (poseId: string) => void
 }
 
@@ -124,13 +128,12 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <span className="pr-1 pl-2 text-sm text-muted-foreground tabular-nums">
             {meta.startFrame + row.index}
           </span>
-          {/* Override mode appends at the group end only — no in-between inserts. */}
-          {!meta.override && (
-            <InsertFrameMenu
-              onBefore={() => meta.insertAt(row.index)}
-              onAfter={() => meta.insertAt(row.index + 1)}
-            />
-          )}
+          {/* Insert an empty frame here — on a non-primary scene this escalates the
+              section to a scene override (the section title's Reset brings it back). */}
+          <InsertFrameMenu
+            onBefore={() => meta.insertAt(row.index)}
+            onAfter={() => meta.insertAt(row.index + 1)}
+          />
         </span>
       )
     },
@@ -278,23 +281,36 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     cell: ({ row, table }) => {
       const meta = table.options.meta as PoseTableMeta
       const override = meta.override
-      if (override && row.index < override.baseCount) {
-        // A base row: overridden → reset to the base ROM frame; otherwise nothing
-        // (the base layout is fixed — base rows are never deleted per scene).
-        if (!override.isOverridden(row.original.id)) return null
+      const id = row.original.id
+      if (override && !override.isAddition(id)) {
+        // A base ROM row: a value edit can be reset (green), and deleting the frame
+        // is a structural change that escalates the whole section to a scene override.
         return (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title="Reset this frame to the base ROM"
-            onClick={() => override.reset(row.original.id)}
-          >
-            <RotateCcw className="size-3.5 text-daz-green" />
-          </Button>
+          <span className="flex items-center justify-end gap-0.5">
+            {override.isOverridden(id) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                title="Reset this frame to the base ROM"
+                onClick={() => override.reset(id)}
+              >
+                <RotateCcw className="size-3.5 text-daz-green" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              title="Delete this frame for this scene"
+              onClick={() => meta.remove(row.index)}
+            >
+              <Trash2 className="size-3.5 text-destructive" />
+            </Button>
+          </span>
         )
       }
-      // Primary scene, or an override's own added frame → remove.
+      // Primary scene, an escalated section's row, or an override's own added frame.
       return (
         <Button
           variant="ghost"
@@ -328,13 +344,13 @@ export function SortablePoseRow({
   // run report at the top of the page).
   const absFrame = meta.startFrame + row.index
   const failed = meta.failedFrames?.has(absFrame) === true
-  // Scene-override mode: a row is "overridden" when it's the override's own added
-  // frame, or a base row the user has edited (armed). Overridden rows read green;
-  // base rows not yet overridden stay normal and editable — edit one to override it.
+  // Scene-override mode (section not yet whole-owned): a row reads green when it's
+  // the override's own added frame, or a base row the user has value-edited. Base
+  // rows not yet overridden stay normal and editable — edit one to override it.
   const override = meta.override
   const overridden =
     override !== undefined &&
-    (row.index >= override.baseCount || override.isOverridden(row.original.id))
+    (override.isAddition(row.original.id) || override.isOverridden(row.original.id))
   return (
     <>
       <tr
@@ -352,18 +368,18 @@ export function SortablePoseRow({
         } ${isDragging ? 'relative z-10 bg-muted/50 opacity-70' : ''}`}
       >
         <td className="px-1 py-0.5">
-          {/* Frame order is fixed in override mode — no drag handle. */}
-          {!override && (
-            <button
-              type="button"
-              className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
-              title="Drag to reorder"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="size-3.5" />
-            </button>
-          )}
+          {/* Drag to reorder. On a non-primary scene a reorder is a structural change
+              the sparse layer can't hold, so dropping escalates the whole section to a
+              scene override (its title's Reset control brings it back to the primary). */}
+          <button
+            type="button"
+            className="flex cursor-grab items-center px-1 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+            title="Drag to reorder"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
         </td>
         {visibleCells.map((cell) => (
           <td key={cell.id} className="px-1 py-0.5">
