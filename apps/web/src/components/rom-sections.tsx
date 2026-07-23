@@ -630,9 +630,10 @@ export const RomSections = memo(function RomSections({
                   tiedToJcm
                     ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
                     : overrideData
-                      ? effectiveEnabled
-                        ? 'Disable this section for this Daz scene'
-                        : 'Enable this section for this Daz scene'
+                      ? // On a non-primary scene the toggle is a per-scene override —
+                        // same hint the other overridable fields' mark carries, not a
+                        // verbose per-scene enable/disable line.
+                        'Can be overridden per Daz scene'
                       : effectiveEnabled
                         ? 'Disable this section'
                         : 'Enable this section'
