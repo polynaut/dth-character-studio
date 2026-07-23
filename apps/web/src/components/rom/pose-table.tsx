@@ -334,8 +334,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
               }
               onClick={() => (isAddition ? meta.remove(row.index) : override?.reset(id))}
             >
-              {/* translate-y-[2px]: optically centre the top-heavy reset glyph. */}
-              <RotateCcw className="size-3.5 translate-y-[2px]" />
+              <RotateCcw className="size-3.5" />
             </Button>
           ) : (
             // Reserve the reset button's footprint so nothing shifts when it appears.
@@ -344,10 +343,10 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <Button
             variant="ghost"
             size="icon"
-            // Gray at rest, white on hover over the SAME button silhouette as the reset
-            // (visible on the green overridden row too). No tooltip — the icon reads on
-            // its own; an aria-label keeps the icon-only button accessible.
-            className="size-7 text-muted-foreground hover:bg-foreground/15 hover:text-white dark:hover:bg-foreground/15"
+            // Gray at rest, red on hover (the delete-danger cue) over the SAME button
+            // silhouette as the reset (visible on the green overridden row too). No
+            // tooltip — the icon reads on its own; an aria-label keeps it accessible.
+            className="size-7 text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
             aria-label={
               isAddition
                 ? 'Delete this added frame for this scene'
