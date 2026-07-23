@@ -209,6 +209,7 @@ export function GroomFields({
           <div className="flex items-start gap-2">
             <MultiSelect
               className="flex-1"
+              overridden={hairOverridden}
               values={listed}
               options={candidates}
               onChange={(labels) => setNodes(labels.map((nodeLabel) => ({ nodeLabel })))}

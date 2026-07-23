@@ -140,6 +140,43 @@ describe('applySceneOverride', () => {
     expect(merged.MISC.groups[0].poses.map((p) => p.name)).toEqual(['OutfitFix'])
   })
 
+  it('disables an enabled section for the scene (mode/groups untouched, off for frames)', () => {
+    const override = makeOverride({ sectionEnabled: [{ section: 'FBM', enabled: false }] })
+    const merged = applySceneOverride(makeSections(), override)
+    expect(merged.FBM.enabled).toBe(false)
+    // The base groups stay put — re-enabling brings them back unchanged.
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['BodyTone', 'GluteSize'])
+  })
+
+  it('enables a section the base leaves disabled (uses the base config)', () => {
+    const base = makeSections()
+    expect(base.MISC.enabled).toBe(false)
+    const override = makeOverride({ sectionEnabled: [{ section: 'MISC', enabled: true }] })
+    const merged = applySceneOverride(base, override)
+    expect(merged.MISC.enabled).toBe(true)
+  })
+
+  it('a section-enabled override applies alongside a whole-section override', () => {
+    const override = makeOverride({
+      sectionEnabled: [{ section: 'FBM', enabled: false }],
+      sectionOverrides: [
+        {
+          section: 'FBM',
+          groups: [{ ...fbmGroup(), poses: [{ id: 'only', name: 'OnlyThis', morphs: [], boneScaleRef: false }] }],
+        },
+      ],
+    })
+    const merged = applySceneOverride(makeSections(), override)
+    expect(merged.FBM.enabled).toBe(false)
+    expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['OnlyThis'])
+  })
+
+  it('leaves a section untouched when it has no enable override entry', () => {
+    const override = makeOverride({ sectionEnabled: [{ section: 'FBM', enabled: false }] })
+    const merged = applySceneOverride(makeSections(), override)
+    expect(merged.JCM.enabled).toBe(makeSections().JCM.enabled)
+  })
+
   it('a whole-section override replaces the section verbatim — reordered / restructured', () => {
     // The scene reorders FBM (GluteSize before BodyTone) — a structural change the
     // sparse layer can't express, so it's stored whole in `sectionOverrides`.

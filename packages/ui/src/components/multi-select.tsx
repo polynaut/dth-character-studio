@@ -30,6 +30,7 @@ export function MultiSelect({
   pillClassName,
   allowCustom = false,
   disabled = false,
+  overridden = false,
   className,
 }: {
   /** The selected values, in selection order. */
@@ -50,6 +51,9 @@ export function MultiSelect({
   /** Offer adding the typed query itself when it matches no option. */
   allowCustom?: boolean
   disabled?: boolean
+  /** Marks a per-scene override — a green field border, kept while focused too
+   *  (mirrors the Input/NumberField `overridden` treatment). */
+  overridden?: boolean
   className?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -178,6 +182,10 @@ export function MultiSelect({
         className={cn(
           'flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-1.5 py-1 text-base shadow-xs transition-[color,box-shadow] md:text-sm dark:bg-input/50',
           'focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50',
+          // A per-scene override reads as a green border + green focus ring (so the
+          // focus-within state doesn't clash with the override's green).
+          overridden &&
+            'border-daz-green focus-within:border-daz-green focus-within:ring-daz-green/50',
           disabled && 'pointer-events-none opacity-50',
         )}
         onMouseDown={(event) => {
