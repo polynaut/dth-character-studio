@@ -88,3 +88,32 @@ test('scene footer rail scrolls with many scenes', async ({ page }) => {
   expect(box.sw, 'rail overflows → scrollable').toBeGreaterThan(box.cw)
   await page.screenshot({ path: OUT + '/footer-many.png' })
 })
+
+// The observer keys off the scene-cards GRID, not the whole panel: once the cards
+// scroll off, the footer appears even while the "Add scene" button (which sits below
+// the grid) is still on screen.
+test('scene footer appears when the cards leave, not the whole panel', async ({ page }) => {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const beach = `${P.charFolder}/daz3d/KiraBeach.duf`
+  const kira = JSON.parse(seed.files[`${P.charFolder}/Kira.json`])
+  kira.extraScenes = [beach]
+  seed.files[`${P.charFolder}/Kira.json`] = JSON.stringify(kira, null, 2)
+  seed.files[beach] = 'duf-fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.setViewportSize({ width: 1320, height: 900 })
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await expect(page.getByText(/custom ROM frames/)).toBeVisible()
+  await page.waitForTimeout(300)
+
+  // Scroll just past the cards grid's bottom — the panel below it (Add scene,
+  // Houdini) is NOT scrolled past yet, so the footer showing here proves it keys off
+  // the cards, not the whole panel.
+  const grid = page.locator('.flex.flex-wrap.items-stretch.gap-3').first()
+  const gb = (await grid.boundingBox())!
+  await page.evaluate((y) => window.scrollTo(0, y), gb.y + gb.height + 30)
+  await page.waitForTimeout(400)
+  const gbAfter = await grid.boundingBox()
+  expect(!gbAfter || gbAfter.y + gbAfter.height < 5, 'cards grid scrolled off top').toBe(true)
+  expect((await page.locator(FOOTER).boundingBox())!.y, 'footer shown once cards leave').toBeLessThan(900)
+})
