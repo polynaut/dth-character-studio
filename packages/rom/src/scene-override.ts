@@ -28,6 +28,7 @@ export function applySceneOverride(
   sections: RomSections,
   override: Pick<SceneOverride, 'poses' | 'additions'> & {
     sectionOverrides?: SceneOverride['sectionOverrides']
+    sectionEnabled?: SceneOverride['sectionEnabled']
   },
 ): RomSections {
   const replaced = new Map(override.poses.map((pose) => [pose.id, pose]))
@@ -35,14 +36,21 @@ export function applySceneOverride(
   const sectionFull = new Map(
     (override.sectionOverrides ?? []).map((entry) => [entry.section, entry.groups]),
   )
+  // Per-scene enable/disable: the stored value REPLACES the base section's on/off
+  // state (mode/groups stay the base's), so a disabled section contributes no frames
+  // and an enabled one uses the base config. Applied on BOTH assignment paths below.
+  const enabledFor = new Map(
+    (override.sectionEnabled ?? []).map((entry) => [entry.section, entry.enabled]),
+  )
   const next = { ...sections }
   for (const section of ROM_SECTIONS) {
     const config = sections[section]
+    const enabled = enabledFor.get(section) ?? config.enabled
     // Whole-section override wins: a structural edit snapshotted the scene's entire
     // section, so use its groups verbatim (the sparse replace/append no longer apply).
     const full = sectionFull.get(section)
     if (full) {
-      next[section] = { ...config, groups: full }
+      next[section] = { ...config, enabled, groups: full }
       continue
     }
     let groups = config.groups.map((group) => ({
@@ -67,7 +75,7 @@ export function applySceneOverride(
         },
       ]
     }
-    next[section] = { ...config, groups }
+    next[section] = { ...config, enabled, groups }
   }
   return next
 }

@@ -62,7 +62,8 @@ export const RomEditorSection = memo(function RomEditorSection({
       const hasRom =
         next.poses.length > 0 ||
         next.additions.some((a) => a.poses.length > 0) ||
-        next.sectionOverrides.length > 0
+        next.sectionOverrides.length > 0 ||
+        next.sectionEnabled.length > 0
       const withGate = { ...next, enabled: hasRom }
       const exists = character.sceneOverrides.some((o) => o.scenePath === withGate.scenePath)
       patch({

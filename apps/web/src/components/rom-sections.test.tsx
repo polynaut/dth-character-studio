@@ -270,14 +270,16 @@ describe('per-generation preset availability', () => {
         }}
       />,
     )
-    // Switches titled "Enable this section" belong to the disabled sections, in
-    // ROM order: EXP, GEN, PHY, FBM, MISC → index 1 is GEN.
-    fireEvent.click(screen.getAllByTitle('Enable this section')[1])
+    // Toggle each section via its own header (the primary-scene switch carries no
+    // title now, so anchor on the section label instead).
+    const gen = screen.getByText('Genitalia').closest('div') as HTMLElement
+    fireEvent.click(within(gen).getByRole('switch'))
     expect(next!.GEN.enabled).toBe(true)
     expect(next!.GEN.mode).toBe('custom') // no GP/DK for G8.1 — preset not offered
 
     // FAC exists for G8.1 (FAC-variant JCM base): enabling keeps preset mode.
-    fireEvent.click(screen.getAllByTitle('Enable this section')[0]) // EXP is custom-only anyway
+    const exp = screen.getByText('Expressions').closest('div') as HTMLElement
+    fireEvent.click(within(exp).getByRole('switch')) // EXP is custom-only anyway
     expect(next!.EXP.mode).toBe('custom')
   })
 
@@ -376,6 +378,7 @@ describe('scene override mode', () => {
       poses: [],
       additions: [],
       sectionOverrides: [],
+      sectionEnabled: [],
       identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
       groom: { enabled: false },
       preserve: { enabled: false, morphs: [], nodeTransforms: [] },
@@ -548,6 +551,49 @@ describe('scene override mode', () => {
     ).toBeTruthy()
     fireEvent.click(screen.getByTitle('Delete this added frame for this scene'))
     expect(latest!.additions).toEqual([])
+  })
+
+  it('disabling a section for the scene stores a sectionEnabled override + green reset', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    // FBM is enabled on the base and not overridden yet.
+    expect(screen.queryByTitle("Reset this section to the primary scene's ROM")).toBeNull()
+
+    // The FBM section's enable toggle (scoped to its header so the other enabled
+    // sections' switches don't collide).
+    const header = screen.getByText('Full Body').closest('div') as HTMLElement
+    fireEvent.click(within(header).getByRole('switch'))
+
+    // Only the per-section disable is stored — no phantom row/section entries.
+    expect(latest!.sectionEnabled).toEqual([{ section: 'FBM', enabled: false }])
+    expect(latest!.poses).toHaveLength(0)
+    expect(latest!.sectionOverrides).toHaveLength(0)
+
+    // The title now carries the green reset-all; it restores the primary on/off state.
+    fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
+    expect(latest!.sectionEnabled).toHaveLength(0)
+  })
+
+  it('enabling a base-disabled section for the scene stores enabled: true', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
+    // EXP is disabled on the base — flip it on for this scene.
+    const header = screen.getByText('Expressions').closest('div') as HTMLElement
+    fireEvent.click(within(header).getByRole('switch'))
+    expect(latest!.sectionEnabled).toEqual([{ section: 'EXP', enabled: true }])
+  })
+
+  it('never touches the base sections when a section is toggled for a scene', () => {
+    let sectionsChanged = false
+    render(
+      <OverrideHarness
+        onOverrideChange={() => {}}
+        onSectionsChange={() => (sectionsChanged = true)}
+      />,
+    )
+    const header = screen.getByText('Full Body').closest('div') as HTMLElement
+    fireEvent.click(within(header).getByRole('switch'))
+    expect(sectionsChanged).toBe(false)
   })
 })
 

@@ -487,6 +487,18 @@ export const sceneOverrideSchema = z.object({
     )
     .default([]),
   /**
+   * Per-scene ENABLE/DISABLE overrides: sections whose on/off state differs from the
+   * base FOR THIS SCENE — an outfit that drops GEN, or turns a normally-off section on.
+   * Only divergent sections are stored (resetting a section drops its entry). In
+   * {@link applySceneOverride} the stored value REPLACES the base section's `enabled`
+   * while its mode/groups stay the base's, so a disabled section simply contributes no
+   * frames and an enabled one uses the base config — the frame math then follows. Unlike
+   * the ROM row layers this needs no `custom` section: a preset section can be toggled too.
+   */
+  sectionEnabled: z
+    .array(z.object({ section: romSectionSchema, enabled: z.boolean() }))
+    .default([]),
+  /**
    * Per-scene GENESIS-9 identity override (FACS detail / flexion strength / UE5
    * tear UV) — the same three values as the base character's G9 fields. Its
    * `enabled` gates the panel + generation exactly like the ROM `enabled` above;
@@ -852,8 +864,12 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       reorders / inserts / adds / removes frames, which the sparse
  *       poses/additions can't represent). Additive array with a zod default — no
  *       migration step; `applySceneOverride` prefers it over the sparse layer.
+ *  22 — added `sceneOverride.sectionEnabled` (per-scene enable/disable of a ROM
+ *       section — an outfit scene that drops GEN, or turns a section on, instead
+ *       of clearing its rows). Additive array with a zod default — no migration
+ *       step; `applySceneOverride` flips the base section's `enabled` per entry.
  */
-export const CHARACTER_SCHEMA_VERSION = 21
+export const CHARACTER_SCHEMA_VERSION = 22
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime

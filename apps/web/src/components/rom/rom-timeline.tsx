@@ -42,7 +42,7 @@ export function RomTimeline({ segments }: { segments: Array<TimelineSegment> }) 
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium text-muted-foreground">ROM timeline</span>
+        <span className="text-xs font-medium text-muted-foreground">Animation timeline</span>
         <span className="text-xs tabular-nums text-muted-foreground">
           {total} frame{total === 1 ? '' : 's'}
         </span>

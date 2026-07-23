@@ -82,6 +82,14 @@ export function PreserveFields({
   const resetMorphs = () => setMorphs(character.preserveMorphs)
   const resetNodes = () => setNodes(character.preserveNodeTransforms)
 
+  // A row still matching the base (inherited) reads muted-gray on a non-primary
+  // scene — the "can be overridden, not yet" tell the other form fields carry
+  // (identity dials, groom). Once the row itself differs it drops the mute and
+  // takes the green override border instead. When a divergence has NO row to mark
+  // green (the list is shorter because a row was deleted), the list still counts
+  // as overridden, so the LABEL goes white + green handle on its own.
+  const inheritedRow = (isOv: boolean) => overrideEligible && !isOv
+
   const rowClass = 'mb-2 flex items-center gap-2'
 
   return (
@@ -115,6 +123,7 @@ export function PreserveFields({
                         placeholder="body_ctrl_BreastsUp-Down"
                         inputClassName={cn(
                           MORPH_FIELD_CLASS,
+                          inheritedRow(isOv) && 'text-muted-foreground',
                           isOv &&
                             'border-daz-green focus:border-daz-green focus-visible:ring-daz-green/50',
                         )}
@@ -125,7 +134,10 @@ export function PreserveFields({
                       />
                     </div>
                     <NumberField
-                      className="w-24 pr-6 text-right tabular-nums"
+                      className={cn(
+                        'w-24 pr-6 text-right tabular-nums',
+                        inheritedRow(isOv) && 'text-muted-foreground',
+                      )}
                       percent
                       overridden={isOv}
                       value={item.keepValue}
@@ -160,6 +172,7 @@ export function PreserveFields({
                     <Input
                       value={item.nodeLabel}
                       overridden={isOv}
+                      className={cn(inheritedRow(isOv) && 'text-muted-foreground')}
                       placeholder="Left Eye"
                       onChange={(e) => set({ nodeLabel: e.target.value })}
                     />
