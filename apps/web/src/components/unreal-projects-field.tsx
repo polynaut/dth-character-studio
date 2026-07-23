@@ -244,6 +244,14 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
     if (picked) add([picked])
   }
 
+  // The add/link trigger is an icon-only "+" — its accessible name carries the
+  // intent (and the in-flight state, which the single-flight test asserts on).
+  const addLabel = busy
+    ? 'Linking…'
+    : project.unrealProjects.length
+      ? 'Add an Unreal project'
+      : 'Link an Unreal project'
+
   return (
     <FileDropZone
       accept={['uproject']}
@@ -251,7 +259,10 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       label="Drop an Unreal project (.uproject) to link"
       className="fixed inset-x-0 bottom-0 z-20"
     >
-      <div className="flex flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-2 backdrop-blur">
+      {/* min-h reserves the linked-card row height (a card is ~54px: the U logo +
+          padding + border), so the empty bar doesn't collapse shorter than the
+          filled one — the footer height stays put as the first project is linked. */}
+      <div className="flex min-h-[71px] flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-2 backdrop-blur">
         <span className="mr-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Unreal projects
         </span>
@@ -284,19 +295,18 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             }
           />
         ))}
+        {/* Icon-only "+" (square). The bar reserves the linked-card row height
+            (min-h above), so this centres the same whether or not a card is present. */}
         <Button
           variant="outline"
-          size="sm"
-          // Stretch to the linked cards' height when any are present (shared
-          // `items-center` row) so the button reads as their sibling, not a
-          // shorter afterthought; `min-h-8` keeps the sm floor in the empty
-          // "Link" state where no card sets the row height.
-          className="h-auto min-h-8 self-stretch"
+          size="icon"
+          className={cn('shrink-0', busy && 'animate-pulse')}
           disabled={busy}
+          aria-label={addLabel}
+          title={addLabel}
           onClick={() => void onPick()}
         >
           <Plus />
-          {busy ? 'Linking…' : project.unrealProjects.length ? 'Add' : 'Link'}
         </Button>
       </div>
     </FileDropZone>

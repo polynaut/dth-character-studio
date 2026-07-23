@@ -1,4 +1,4 @@
-import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark } from '@dth/ui'
+import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
 
@@ -89,7 +89,12 @@ export function PreserveFields({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-5">
           <div>
-            <Label className="mb-2 flex w-fit items-center gap-2">
+            <Label
+              className={cn(
+                'mb-2 flex w-fit items-center gap-2',
+                overrideLabelClass(morphsOverridden, overrideEligible),
+              )}
+            >
               Preserve morphs after ROM loading
               <OverrideMark overridden={morphsOverridden} onReset={resetMorphs} />
             </Label>
@@ -132,7 +137,12 @@ export function PreserveFields({
             </KeyedListEditor>
           </div>
           <div>
-            <Label className="mb-2 flex w-fit items-center gap-2">
+            <Label
+              className={cn(
+                'mb-2 flex w-fit items-center gap-2',
+                overrideLabelClass(nodesOverridden, overrideEligible),
+              )}
+            >
               Preserve node transforms (e.g. eyes)
               <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
             </Label>

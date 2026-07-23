@@ -471,8 +471,30 @@ export const RomSections = memo(function RomSections({
         const editorGroups = overrideData ? displaySections[section].groups : config.groups
         const editorOverride = overrideData && !escalated ? overrideCtl : undefined
         // The section-title override marker: shown for a custom, enabled section on a
-        // non-primary scene. Green (with reset-all) once the scene owns the section.
+        // non-primary scene. Green (with a reset-all that clears every override kind
+        // for the section) whenever the section diverges from the primary scene's ROM
+        // in ANY way — a sparse per-row value edit, an appended frame, or a whole-
+        // section escalation. Base pose / group ids attribute the sparse `poses` and
+        // `additions` back to their section; upsertPose already drops a per-row copy
+        // that matches its base, so every entry counted here is a real divergence.
         const showSectionMark = !!overrideData && effectiveEnabled && config.mode === 'custom'
+        const sectionPoseIds = new Set(config.groups.flatMap((g) => g.poses.map((p) => p.id)))
+        const sectionGroupIds = new Set([
+          ...config.groups.map((g) => g.id),
+          flatSectionGroupId(section),
+        ])
+        const sectionOverridden =
+          escalated ||
+          (overrideData?.poses.some((p) => sectionPoseIds.has(p.id)) ?? false) ||
+          (overrideData?.additions.some((a) => sectionGroupIds.has(a.groupId)) ?? false)
+        // Head-area text colour. A section carrying a scene override brightens its
+        // whole title row to white so it reads as active; otherwise it dims to muted
+        // in the locked/override view, or keeps the default foreground on the primary.
+        const headText = sectionOverridden
+          ? 'text-white'
+          : structureLocked
+            ? 'text-muted-foreground'
+            : ''
         return (
           // Each section is its own wrapper on purpose: position:sticky constrains
           // the title to its parent, which is exactly what makes the NEXT section's
@@ -499,19 +521,15 @@ export const RomSections = memo(function RomSections({
                 type="button"
                 aria-expanded={isOpen}
                 onClick={() => setOpen((o) => ({ ...o, [section]: !isOpen }))}
-                className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+                className="flex min-w-0 cursor-pointer items-center gap-3 text-left"
               >
                 <ChevronRight
-                  className={`size-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                  className={`size-4 shrink-0 transition-transform ${sectionOverridden ? 'text-white' : 'text-muted-foreground'} ${isOpen ? 'rotate-90' : ''}`}
                 />
-                <span
-                  className={`w-12 font-mono text-sm font-semibold${structureLocked ? ' text-muted-foreground' : ''}`}
-                >
+                <span className={`w-12 font-mono text-sm font-semibold ${headText}`}>
                   {section}
                 </span>
-                <span className={`font-medium${structureLocked ? ' text-muted-foreground' : ''}`}>
-                  {SECTION_LABELS[section]}
-                </span>
+                <span className={`font-medium ${headText}`}>{SECTION_LABELS[section]}</span>
                 {missingPresetAsset && (
                   <span
                     className="rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
@@ -520,26 +538,26 @@ export const RomSections = memo(function RomSections({
                     no {genesis} asset
                   </span>
                 )}
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {tiedToJcm
-                    ? effectiveEnabled
-                      ? 'enabled with JCM'
-                      : 'disabled with JCM'
-                    : sectionSummary(displaySections[section])}
-                </span>
               </button>
-              {/* Per-scene section override marker — a SIBLING of the accordion button
-                  (never nested: a button inside a button is invalid HTML). Green once a
-                  structural edit escalated this section to a scene override; its reset
-                  drops the whole-section override, back to the primary scene's ROM. */}
+              {/* Per-scene section override marker — sits at the END of the section
+                  TITLE (right after the label), and is a SIBLING of the accordion
+                  button (never nested: a button inside a button is invalid HTML). It
+                  goes green whenever the section diverges from the primary scene's ROM
+                  — a per-row value edit, an added frame, or a whole-section escalation
+                  — and its reset clears every override kind for the section at once,
+                  restoring the primary scene's ROM. */}
               {showSectionMark && (
                 <OverrideMark
-                  overridden={escalated}
+                  overridden={sectionOverridden}
                   resetTitle="Reset this section to the primary scene's ROM"
                   onReset={() => {
                     if (!overrideData || !onOverrideChange) return
                     onOverrideChange({
                       ...overrideData,
+                      poses: overrideData.poses.filter((p) => !sectionPoseIds.has(p.id)),
+                      additions: overrideData.additions.filter(
+                        (a) => !sectionGroupIds.has(a.groupId),
+                      ),
                       sectionOverrides: overrideData.sectionOverrides.filter(
                         (s) => s.section !== section,
                       ),
@@ -547,6 +565,18 @@ export const RomSections = memo(function RomSections({
                   }}
                 />
               )}
+              {/* The section summary now floats right on its own (was inside the button)
+                  so the override mark can hug the title. ml-auto pushes it + the Switch
+                  to the right edge. */}
+              <span
+                className={`ml-auto text-xs ${sectionOverridden ? 'text-white' : 'text-muted-foreground'}`}
+              >
+                {tiedToJcm
+                  ? effectiveEnabled
+                    ? 'enabled with JCM'
+                    : 'disabled with JCM'
+                  : sectionSummary(displaySections[section])}
+              </span>
               {/* A direct flex child of the items-center row so it centers on the
                   summary text's line. (Wrapped in a bare <span> it blockified as a
                   flex item, and the switch rode that span's text baseline — a hair

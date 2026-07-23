@@ -36,7 +36,9 @@ export function FormHeader({
     // backdrop blur, with an opaque fallback where backdrop-filter is absent.
     <header
       ref={headerRef}
-      className="sticky top-0 z-10 -mx-8 mb-8 bg-background px-8 pt-3 pb-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
+      // z-40: above inline info popups (z-30), below modal dialogs (z-50) — the
+      // same layering as the character editor's header.
+      className="sticky top-0 z-40 -mx-8 mb-8 bg-background px-8 pt-3 pb-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
     >
       <button
         type="button"

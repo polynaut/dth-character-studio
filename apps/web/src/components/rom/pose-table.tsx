@@ -150,22 +150,42 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         </InfoPopup>
       </span>
     ),
-    cell: ({ getValue, row, table }) => (
-      <TextCell
-        value={getValue()}
-        placeholder="e.g. BodyTone"
-        dataId={row.original.id}
-        // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
-        // silently rewriting what the user typed (same rule the generator's
-        // sanitizePoseName enforces on the CSV).
-        validate={(v) =>
-          v !== sanitizePoseName(v)
-            ? 'Only letters, numbers and underscores — Houdini rejects anything else.'
-            : ''
-        }
-        onCommit={(name) => (table.options.meta as PoseTableMeta).update(row.index, { name })}
-      />
-    ),
+    cell: ({ getValue, row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      const field = (
+        <TextCell
+          value={getValue()}
+          placeholder="e.g. BodyTone"
+          dataId={row.original.id}
+          // Houdini only accepts [A-Za-z0-9_] — flag anything else instead of
+          // silently rewriting what the user typed (same rule the generator's
+          // sanitizePoseName enforces on the CSV).
+          validate={(v) =>
+            v !== sanitizePoseName(v)
+              ? 'Only letters, numbers and underscores — Houdini rejects anything else.'
+              : ''
+          }
+          onCommit={(name) => meta.update(row.index, { name })}
+        />
+      )
+      // Reserve a small slot before EVERY name (all scenes) so switching to a
+      // non-primary scene never shifts the grid in X. An override's OWN appended
+      // frame (isAddition — new relative to the primary scene) fills it with a green
+      // "*"; every other row keeps it empty. mt-1.5 optically drops the top-heavy
+      // glyph so it reads centred against the name text.
+      const isNew = meta.override?.isAddition(row.original.id) === true
+      return (
+        <span className="flex items-center">
+          <span
+            className={`w-3 shrink-0 text-center text-base leading-none font-bold text-daz-green ${isNew ? 'mt-1.5' : ''}`}
+            title={isNew ? "New frame for this scene — not in the primary scene's ROM" : undefined}
+          >
+            {isNew ? '*' : ''}
+          </span>
+          <span className="min-w-0 flex-1">{field}</span>
+        </span>
+      )
+    },
   }),
   // The node a morph lives on (Genesis9, GoldenPalace_G9, bone nodes, …) is
   // edited in the morphs expansion — it is constant for typical pose lists.
@@ -288,45 +308,51 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
       const meta = table.options.meta as PoseTableMeta
       const override = meta.override
       const id = row.original.id
-      if (override && !override.isAddition(id)) {
-        // A base ROM row: a value edit can be reset (green), and deleting the frame
-        // is a structural change that escalates the whole section to a scene override.
-        return (
-          <span className="flex items-center justify-end gap-0.5">
-            {override.isOverridden(id) && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                title="Reset this frame to the base ROM"
-                onClick={() => override.reset(id)}
-              >
-                <RotateCcw className="size-3.5 text-daz-green" />
-              </Button>
-            )}
+      const isAddition = override?.isAddition(id) === true
+      // The green reset handle: an edited base row resets its value override back to
+      // the base ROM; an added frame (no base to fall back to) is simply removed. Its
+      // footprint is ALWAYS reserved — an invisible placeholder when there's nothing
+      // to reset — so the actions column, and the whole grid, never shifts between
+      // scenes or when a row becomes overridden. The bin is always shown (an added
+      // frame keeps it for consistency, even though it too just removes the row).
+      const showReset = isAddition || override?.isOverridden(id) === true
+      return (
+        <span className="flex items-center justify-end gap-0.5">
+          {showReset ? (
             <Button
               variant="ghost"
               size="icon"
               className="size-7"
-              title="Delete this frame for this scene"
-              onClick={() => meta.remove(row.index)}
+              title={
+                isAddition
+                  ? 'Reset this added frame — removes it (not in the primary scene)'
+                  : 'Reset this frame to the base ROM'
+              }
+              onClick={() => (isAddition ? meta.remove(row.index) : override?.reset(id))}
             >
-              <Trash2 className="size-3.5 text-destructive" />
+              {/* translate-y-[2px]: optically centre the top-heavy reset glyph. */}
+              <RotateCcw className="size-3.5 translate-y-[2px] text-daz-green" />
             </Button>
-          </span>
-        )
-      }
-      // Primary scene, an escalated section's row, or an override's own added frame.
-      return (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          title={override ? 'Remove added frame' : 'Remove pose'}
-          onClick={() => meta.remove(row.index)}
-        >
-          <Trash2 className="size-3.5 text-destructive" />
-        </Button>
+          ) : (
+            // Reserve the reset button's footprint so nothing shifts when it appears.
+            <span className="size-7 shrink-0" aria-hidden />
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title={
+              isAddition
+                ? 'Delete this added frame for this scene'
+                : override
+                  ? 'Delete this frame for this scene'
+                  : 'Remove pose'
+            }
+            onClick={() => meta.remove(row.index)}
+          >
+            <Trash2 className="size-3.5 text-destructive" />
+          </Button>
+        </span>
       )
     },
   }),
