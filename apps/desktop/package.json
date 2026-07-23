@@ -1,6 +1,6 @@
 {
   "name": "@dth/desktop",
-  "version": "0.45.4",
+  "version": "0.45.5",
   "private": true,
   "description": "Tauri desktop shell for DTH Character Studio — loads the @dth/web SPA and provides native file/dialog/updater access.",
   "//license": "GPL-3.0-only, NOT MIT like the rest of the workspace: this crate links xbrz-rs (GPL-3.0) for avatar upscaling, so the distributed binary is GPL-3.0. The libraries (@dth/rom, @dth/ui) and the web app stay MIT. See ./LICENSE and apps/desktop/src/avatar.rs.",
