@@ -23,6 +23,7 @@ export function SceneLabel({
   trailing,
   end,
   showAvatar = true,
+  accentBar = false,
   className,
 }: {
   /** The scene whose `.tip.png` renders in the pill. */
@@ -45,6 +46,9 @@ export function SceneLabel({
   /** Show the scene's mini render at the pill's start (default). `false` → a
    *  compact, avatar-less pill (e.g. the Genesis-9 override toggle). */
   showAvatar?: boolean
+  /** Add the linked-scene cards' green LEFT ACCENT BAR (the scene-footer pills, so
+   *  they read as the same "card" as the full scene cards). */
+  accentBar?: boolean
   className?: string
 }) {
   return (
@@ -54,10 +58,16 @@ export function SceneLabel({
       tone="green"
       className={cn(
         'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 text-sm font-normal normal-case',
-        showAvatar ? 'pl-1.5' : 'pl-3',
+        accentBar && 'relative overflow-hidden',
+        showAvatar ? (accentBar ? 'pl-2.5' : 'pl-1.5') : 'pl-3',
         className,
       )}
     >
+      {/* The linked-scene card's green left accent bar, clipped to the pill's
+          rounded corners by the `overflow-hidden` above. */}
+      {accentBar && (
+        <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-daz-green" />
+      )}
       {/* Fixed h/w (not aspect-ratio) so the tile is a stable box; landscape
           face-zoom matches the list-view framing. Greyscaled for the primary.
           The lift MUST be a quoted `cn(...)` fraction util, not a leading
