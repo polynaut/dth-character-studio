@@ -52,16 +52,17 @@ export function OverrideMark({
     <span
       title={overridden ? undefined : 'Can be overridden per Daz scene'}
       className={cn(
-        'group/mark relative -my-px inline-flex size-4 shrink-0 items-center justify-center text-foreground/85',
+        'group/mark relative -my-px inline-flex size-4 shrink-0 items-center justify-center',
+        overridden ? 'text-daz-green' : 'text-foreground/85',
         className,
       )}
     >
-      {/* The cube glyph. Dot white by default, Daz-green when overridden. On an
-          overridden field it fades out when the ICON itself is hovered (not the
-          whole field — so clicking a nearby control doesn't reveal the reset). */}
+      {/* The whole cube glyph turns Daz-green when overridden (cube + dot both follow
+          currentColor), white otherwise. It fades out when the ICON itself is hovered
+          (not the whole field — so clicking a nearby control doesn't reveal the reset). */}
       <CubeDotIcon
         className={cn('size-4', overridden && 'group-hover/mark:opacity-0')}
-        dotClassName={overridden ? 'fill-daz-green' : 'fill-current'}
+        dotClassName={cn('fill-current', overridden && 'animate-override-bob motion-reduce:animate-none')}
       />
       {overridden && (
         <button

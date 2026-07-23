@@ -4,6 +4,19 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+/* Drives --animate-override-bob (the override glyph's bobbing dot). Animating the
+ * circle's `cy` geometry property is more reliable on an SVG element in Chromium
+ * (the app's WebView2) than a CSS transform. */
+@keyframes override-bob {
+  0%,
+  100% {
+    cy: 33px;
+  }
+  50% {
+    cy: 39px;
+  }
+}
+
 /* The @dth/ui package is a linked workspace dir outside this app's tree, so
  * Tailwind's automatic content detection doesn't reach it — scan its sources
  * explicitly so utility classes used ONLY in the kit (e.g. the linked-asset
@@ -83,6 +96,9 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-daz-green: var(--daz-green);
+  /* The override glyph's dot bobs gently while a field is overridden (keyframes at
+   * the top of the file — `@theme` doesn't reliably extract them). */
+  --animate-override-bob: override-bob 1.7s ease-in-out infinite;
   --color-houdini-orange: var(--houdini-orange);
   --color-unreal-blue: var(--unreal-blue);
   --color-chart-1: var(--chart-1);
