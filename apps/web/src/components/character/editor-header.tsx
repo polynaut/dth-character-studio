@@ -212,14 +212,14 @@ export function EditorHeader({
           </span>
         </button>
         <div className="title-scroll pb-6">
-          {/* Name + scene label in one row, bottom-aligned (items-end) so they
-              share a baseline under the big title. */}
+          {/* Just the character name now — the selected-scene tag that used to sit
+              beside it here moved to the docked scene footer. The wrapper's
+              items-end/gap are vestigial (single child) but harmless. */}
           <div className="flex items-end gap-4">
-            {/* Nudged up to optically center the name with the taller scene
-                label beside it. */}
             {/* Override EditableTitle's hardcoded text-3xl for this header only
                 (arbitrary variant reaches its inner h1 + edit input). Matches the
-                dth-title-text scroll animation's `from` so there's no jump. */}
+                dth-title-text scroll animation's `from` so there's no jump; the
+                -translate-y-[3px] is a small optical nudge kept from that layout. */}
             <span className="-translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
               <EditableTitle
                 name={character.name}
