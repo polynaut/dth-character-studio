@@ -530,7 +530,7 @@ export function SortablePoseRow({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-7 -translate-y-[2px] text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
+                    className="size-7 -translate-y-px text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
                     aria-label="Remove this morph"
                     disabled={pose.morphs.length <= 1}
                     onClick={() => meta.removeMorphAt(row.index, morphIndex)}
