@@ -98,8 +98,8 @@ export function LinkedAssetCard({
       <div className="flex min-w-0 flex-1 flex-col text-xs">
         <div className="mt-3 truncate text-base font-medium">{title}</div>
         {chip && <div className="mt-1">{chip}</div>}
-        {/* Pinned to the bottom-left, clear of the corner controls. */}
-        {extra && <div className="mt-auto pt-2">{extra}</div>}
+        {/* Sits just under the title (not pinned to the bottom). */}
+        {extra && <div className="mt-2">{extra}</div>}
       </div>
     </>
   )
