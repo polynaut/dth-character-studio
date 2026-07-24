@@ -196,7 +196,9 @@ export function useCharacterDraft(options: {
     // validate those too, so an overridden/added row can't ship a broken scene.
     // Identity/groom-only overrides don't touch the sections, so they need no
     // extra ROM validation.
-    for (const override of activeSceneOverrides(current).filter(sceneOverrideBuildsRom)) {
+    for (const override of activeSceneOverrides(current).filter((o) =>
+      sceneOverrideBuildsRom(current, o),
+    )) {
       const sceneErrors = romValidationErrors(
         applySceneOverride(current.sections, override),
         reserved,
@@ -216,7 +218,7 @@ export function useCharacterDraft(options: {
     // generate the same per-scene CSV name — refuse instead of silently
     // overwriting one. Only ROM overrides mint that CSV, so only they can clash.
     const slugs = activeSceneOverrides(current)
-      .filter(sceneOverrideBuildsRom)
+      .filter((o) => sceneOverrideBuildsRom(current, o))
       .map((o) => sceneOverrideSlug(o.scenePath))
     const dupe = slugs.find((slug, i) => slugs.indexOf(slug) < i)
     if (dupe) {

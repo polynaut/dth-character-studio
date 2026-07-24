@@ -112,6 +112,7 @@ export function PreserveFields({
               newItem={() => ({ name: '', keepValue: 1 })}
               addLabel="Add morph"
               rowClassName={rowClass}
+              emptyHint="No morphs to preserve yet."
             >
               {(item, set, index) => {
                 const isOv = morphOverridden(index)
@@ -120,7 +121,6 @@ export function PreserveFields({
                     <div className="min-w-0 flex-1">
                       <MorphNameCell
                         value={item.name}
-                        placeholder="body_ctrl_BreastsUp-Down"
                         inputClassName={cn(
                           MORPH_FIELD_CLASS,
                           inheritedRow(isOv) && 'text-muted-foreground',
@@ -155,7 +155,7 @@ export function PreserveFields({
                 overrideLabelClass(nodesOverridden, overrideEligible),
               )}
             >
-              Preserve node transforms (e.g. eyes)
+              Preserve node transforms
               <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
             </Label>
             <KeyedListEditor
@@ -164,6 +164,7 @@ export function PreserveFields({
               newItem={() => ({ nodeLabel: '' })}
               addLabel="Add node"
               rowClassName={rowClass}
+              emptyHint="No node transforms yet."
             >
               {(item, set, index) => {
                 const isOv = nodeOverridden(index)
@@ -173,7 +174,6 @@ export function PreserveFields({
                       value={item.nodeLabel}
                       overridden={isOv}
                       className={cn(inheritedRow(isOv) && 'text-muted-foreground')}
-                      placeholder="Left Eye"
                       onChange={(e) => set({ nodeLabel: e.target.value })}
                     />
                   </>

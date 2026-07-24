@@ -14,7 +14,12 @@ test('preserve morphs: the name field autocompletes from the scanned morph index
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  const field = page.getByPlaceholder('body_ctrl_BreastsUp-Down')
+  // The preserve-morph name field is the combobox in the Advanced-options section
+  // (the node field beside it is a plain textbox).
+  const advanced = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Advanced options' }) })
+  const field = advanced.getByRole('combobox').first()
   await field.scrollIntoViewIfNeeded()
   await field.click()
   await field.fill('glute')

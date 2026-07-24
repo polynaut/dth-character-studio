@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { pathChipClass } from '#/components/path-code.tsx'
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -10,7 +9,7 @@ import { Button, InfoPopup, Label, LinkedAssetCard, RemoveAssetDialog, useModifi
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { openScene, revealPath } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
-import { displayPath, normalizePath, parentDir, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -23,15 +22,11 @@ import type { Character } from '@dth/rom'
  *  so the folder is shown in full. */
 function HoudiniCard({
   hipPath,
-  charFolderAbs,
   avatarSrc,
   onOpen,
   onRemove,
 }: {
   hipPath: string
-  /** The character's folder; when the project sits inside it, the chip shows
-   *  "%CHAR%" in place of that prefix. */
-  charFolderAbs: string
   /** Gender-based placeholder avatar (a Houdini project has no thumbnail). */
   avatarSrc: string
   onOpen: (e: React.MouseEvent) => void
@@ -43,17 +38,6 @@ function HoudiniCard({
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
-  // The chip shows the project's folder; when it sits inside the character's own
-  // folder, collapse that prefix to "%CHAR%" (like the Daz scene cards).
-  const hipDir = parentDir(hipPath)
-  const base = normalizePath(charFolderAbs)
-  const inChar =
-    !!base &&
-    (hipDir.toLowerCase() === base.toLowerCase() ||
-      hipDir.toLowerCase().startsWith(base.toLowerCase() + '/'))
-  const dir = inChar
-    ? '%CHAR%' + hipDir.slice(base.length).split('/').join(pathSeparator())
-    : displayPath(hipDir)
   return (
     <LinkedAssetCard
       title={displayName}
@@ -73,15 +57,6 @@ function HoudiniCard({
           aria-hidden
           className="pointer-events-none absolute bottom-0 left-0 size-6 object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]"
         />
-      }
-      chip={
-        dir ? (
-          <code
-            className={`${pathChipClass('secondary')} inline-block max-w-full truncate align-middle`}
-          >
-            {dir}
-          </code>
-        ) : undefined
       }
       altHeld={altHeld}
       openTitle="Open in Houdini"
@@ -216,7 +191,6 @@ export function HoudiniProjectsField({
             <HoudiniCard
               key={hip}
               hipPath={hip}
-              charFolderAbs={charFolder}
               avatarSrc={placeholderSrc}
               onOpen={(e) => void onOpen(hip, e)}
               onRemove={() => askRemove(hip)}

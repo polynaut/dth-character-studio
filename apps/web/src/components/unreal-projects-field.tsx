@@ -244,8 +244,9 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
     if (picked) add([picked])
   }
 
-  // The add/link trigger is an icon-only "+" — its accessible name carries the
-  // intent (and the in-flight state, which the single-flight test asserts on).
+  // The add/link trigger's accessible name carries the intent (and the in-flight
+  // state, which the single-flight test asserts on) — its visible label is
+  // "+ Add project".
   const addLabel = busy
     ? 'Linking…'
     : project.unrealProjects.length
@@ -263,9 +264,25 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           padding + border), so the empty bar doesn't collapse shorter than the
           filled one — the footer height stays put as the first project is linked. */}
       <div className="flex min-h-[71px] flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-2 backdrop-blur">
-        <span className="mr-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Unreal projects
-        </span>
+        {/* Left column: the section title with a compact "+ Add" trigger stacked
+            underneath it. Kept short (h-7) so the two rows still fit the reserved
+            card-row height — the footer doesn't grow taller than a linked card. */}
+        <div className="mr-1 flex shrink-0 flex-col gap-1">
+          <span className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+            Unreal projects
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn('h-7 w-fit gap-1 px-2 text-xs', busy && 'animate-pulse')}
+            disabled={busy}
+            aria-label={addLabel}
+            title={addLabel}
+            onClick={() => void onPick()}
+          >
+            <Plus className="size-3.5" /> Add project
+          </Button>
+        </div>
         {project.unrealProjects.map((path) => (
           <UnrealCard
             key={path}
@@ -295,19 +312,6 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             }
           />
         ))}
-        {/* Icon-only "+" (square). The bar reserves the linked-card row height
-            (min-h above), so this centres the same whether or not a card is present. */}
-        <Button
-          variant="outline"
-          size="icon"
-          className={cn('shrink-0', busy && 'animate-pulse')}
-          disabled={busy}
-          aria-label={addLabel}
-          title={addLabel}
-          onClick={() => void onPick()}
-        >
-          <Plus />
-        </Button>
       </div>
     </FileDropZone>
   )

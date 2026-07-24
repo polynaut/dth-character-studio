@@ -173,6 +173,12 @@ a {
 }
 
 @layer base {
+  /* Always reserve the root scrollbar's gutter so switching between a tall page (has a
+     scrollbar — the character detail form) and a short one (Notes / Attachments, which
+     may not) never shifts the layout sideways. */
+  html {
+    scrollbar-gutter: stable;
+  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -197,17 +203,22 @@ a {
   from {
     height: 277px;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
-    border-color: #6a6b70;
+    border-color: #5c5e69;
   }
   to {
     height: 120px;
     box-shadow: 2px 6px 8px 0 rgb(0 0 0 / 0.75);
-    border-color: #757679;
+    border-color: #666873;
   }
 }
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-shrink {
-    border: 2px solid transparent;
+    /* Rest border + drop shadow baked into the BASE too (matching .avatar-scroll-pan):
+       on a short page the scroll timeline is inactive and the animation drops out, so
+       without this the wrapper would lose its border colour and shadow. The animation
+       overrides both from scroll 0 when the timeline is active. */
+    border: 2px solid #5c5e69;
+    box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
     animation: dth-avatar-shrink linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
@@ -245,6 +256,14 @@ a {
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-pan {
     transform-origin: center center;
+    /* The rest state as the element's BASE too. On a tab whose page is too short to
+       scroll (e.g. Notes, where the tall form is `hidden`), the root has no overflow,
+       so the `scroll()` timeline goes INACTIVE and the animation drops out entirely —
+       without this the image would fall back to scale 1 / no shift and under-fill the
+       wrapper. When the timeline IS active, the animation (fill both) overrides these
+       from scroll 0, so this is a no-op there. */
+    transform: translateY(11%);
+    scale: 1.55;
     /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value until the
        shrink starts (100px, matching .avatar-scroll-shrink's range) then eases in
        lockstep with the height — so at the gentler 1.4 it never dips below frame
@@ -540,6 +559,53 @@ a {
   filter: drop-shadow(2px 4px 6px black);
   mix-blend-mode: overlay;
   opacity: 0.4;
+}
+
+/* The "primary scene" role badge — a quiet, refined LABEL, not a control: a dark
+   translucent-green fill, a subtle green border, mint text, and a softly-glowing
+   four-point star. Reuses the app's radius + xs font size. `--dense` trims padding /
+   font / icon for the compact scene-footer pills. */
+.primary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px 8px;
+  color: #67e4aa;
+  background: linear-gradient(
+    180deg,
+    rgba(45, 128, 91, 0.26) 0%,
+    rgba(22, 78, 57, 0.22) 100%
+  );
+  border: 1px solid rgba(76, 205, 143, 0.48);
+  border-radius: var(--radius);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.045em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+.primary-badge__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #72edb6;
+  filter: drop-shadow(0 0 3px rgba(82, 225, 164, 0.65))
+    drop-shadow(0 0 7px rgba(82, 225, 164, 0.22));
+}
+.primary-badge--dense {
+  gap: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  border-radius: calc(var(--radius) - 2px);
+}
+.primary-badge--dense .primary-badge__icon {
+  width: 12px;
+  height: 12px;
 }
 
 /* The "Refresh assets" action pulses a soft (light) orange when a refresh is

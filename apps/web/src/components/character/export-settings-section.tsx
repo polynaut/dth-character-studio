@@ -1,4 +1,4 @@
-import { FolderOpen, X } from 'lucide-react'
+import { FolderOpen, Trash2 } from 'lucide-react'
 
 import { PathCode } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
@@ -86,9 +86,10 @@ export function ExportSettingsSection({
               path={displayPath(character.exportPath)}
               className="flex h-9 items-center"
             />
-            {/* Icon-only, light-red-bordered destructive button so Clear reads
-                as a real action next to Change… (matching that chip/button
-                height + weight) rather than a link. */}
+            {/* Icon-only destructive button (gray border → red on hover) so Clear
+                reads as a real action next to Change… (matching that chip/button
+                height + weight) rather than a link. Bin glyph, like the preserve
+                rows' delete. */}
             <Button
               variant="outline-destructive"
               size="icon"
@@ -100,7 +101,7 @@ export function ExportSettingsSection({
                 )
               }
             >
-              <X />
+              <Trash2 />
             </Button>
           </>
         )}

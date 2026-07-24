@@ -424,6 +424,38 @@ export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 export const preserveNodeTransformSchema = z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })
 export type PreserveNodeTransform = z.infer<typeof preserveNodeTransformSchema>
 
+// The JCM "Modify frames" schemas live here (above sceneOverrideSchema) because a
+// per-scene `jcm` override embeds jcmMorphModSchema — it must be defined first.
+const rangeSchema = z.object({ start: z.number(), end: z.number() })
+
+export const jcmMorphModDriveSchema = z.object({
+  /** Stable row id for grid editing (minted on read when absent). NEVER reaches
+   *  the generated runtime output — jcmMorphModForRuntime strips it. */
+  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
+  morphName: z.string().max(MAX_NAME_LENGTH),
+  range: z.object({ angle: rangeSchema, value: rangeSchema }),
+})
+export type JcmMorphModDrive = z.infer<typeof jcmMorphModDriveSchema>
+
+/**
+ * Drives morphs proportionally to a bone rotation across the JCM ROM
+ * (DthWorkflow.dsa `options.jcmMorphMods`). A rule holds one signed `drives[]`
+ * list: each drive's direction (which way the bone bends) is inferred from its
+ * angle-range sign, so there is no separate positive/negative selector — the
+ * runtime still consumes split lists, so generation splits them (see
+ * {@link jcmMorphModForRuntime}).
+ */
+export const jcmMorphModSchema = z.object({
+  /** Stable row id for grid editing (minted on read when absent). Not part of the
+   *  generated runtime output (jcmMorphModForRuntime never spreads the rule). */
+  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
+  boneLabel: z.string().max(MAX_NAME_LENGTH),
+  /** Rotation axis, e.g. "XRotate". */
+  axis: z.string().max(MAX_NAME_LENGTH),
+  drives: z.array(jcmMorphModDriveSchema).default([]),
+})
+export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
+
 /**
  * A per-Daz-scene ROM override — "the same character in another scene/outfit":
  * most frames stay exactly as the base ROM defines them, a few rows are
@@ -469,21 +501,34 @@ export const sceneOverrideSchema = z.object({
     )
     .default([]),
   /**
-   * WHOLE-SECTION overrides: a scene's complete groups for a section, stored when a
-   * STRUCTURAL edit (reorder, insert-between, or add/remove a frame) makes the section
-   * differ from the base in ORDER or COUNT — which the sparse `poses`/`additions` above
-   * can't represent (they only replace-by-id and append-at-end). When a section has an
-   * entry here it REPLACES that section wholesale in {@link applySceneOverride} (the
-   * sparse entries for it no longer apply), so — unlike them — it does NOT track later
-   * edits to the base ROM: the scene "owns" that section until it's reset. `groups` are
-   * the same shape as the base section's.
+   * WHOLE-SECTION overrides: a scene's complete OWNED config for a section. Stored when
+   * the scene diverges from the base in a way the sparse `poses`/`additions` above can't
+   * hold — a STRUCTURAL row edit (reorder / insert-between / add/remove a frame) OR any
+   * non-row config edit (mode, preset asset, GEN art direction, custom JCM path). When a
+   * section has an entry here its whole `config` REPLACES that section in
+   * {@link applySceneOverride} (the sparse entries for it no longer apply), so — unlike
+   * them — it does NOT track later edits to the base ROM: the scene "owns" that section
+   * until it's reset. `config` is the full base section config shape; `sectionEnabled`
+   * (below) still overlays `enabled` on top.
    */
   sectionOverrides: z
     .array(
-      z.object({
-        section: romSectionSchema,
-        groups: z.array(romGroupSchema).default([]),
-      }),
+      z
+        .object({
+          section: romSectionSchema,
+          config: romSectionConfigSchema,
+        })
+        // A scene can't put a section into a mode it doesn't support — the same rule the
+        // base sectionsSchema enforces, so an owned config can't desync generation.
+        .superRefine((entry, ctx) => {
+          if (!SECTION_MODES[entry.section].includes(entry.config.mode)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['config', 'mode'],
+              message: `${entry.section} does not support '${entry.config.mode}' mode`,
+            })
+          }
+        }),
     )
     .default([]),
   /**
@@ -532,6 +577,18 @@ export const sceneOverrideSchema = z.object({
       nodeTransforms: z.array(preserveNodeTransformSchema).default([]),
     })
     .default({ enabled: false, morphs: [], nodeTransforms: [] }),
+  /**
+   * Per-scene "Modify JCM frames" override — the scene's OWN `jcmMorphMods` list, a full
+   * replacement of the base one when `enabled` (a runtime config delta, like `preserve`;
+   * it doesn't change the frame layout / CSV). Armed, it overrides even when empty (an
+   * empty list means "no JCM modifications for this scene").
+   */
+  jcm: z
+    .object({
+      enabled: z.boolean().default(false),
+      mods: z.array(jcmMorphModSchema).default([]),
+    })
+    .default({ enabled: false, mods: [] }),
 })
 export type SceneOverride = z.infer<typeof sceneOverrideSchema>
 
@@ -707,36 +764,6 @@ export function genRomIncludes(
   }
 }
 
-const rangeSchema = z.object({ start: z.number(), end: z.number() })
-
-export const jcmMorphModDriveSchema = z.object({
-  /** Stable row id for grid editing (minted on read when absent). NEVER reaches
-   *  the generated runtime output — jcmMorphModForRuntime strips it. */
-  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
-  morphName: z.string().max(MAX_NAME_LENGTH),
-  range: z.object({ angle: rangeSchema, value: rangeSchema }),
-})
-export type JcmMorphModDrive = z.infer<typeof jcmMorphModDriveSchema>
-
-/**
- * Drives morphs proportionally to a bone rotation across the JCM ROM
- * (DthWorkflow.dsa `options.jcmMorphMods`). A rule holds one signed `drives[]`
- * list: each drive's direction (which way the bone bends) is inferred from its
- * angle-range sign, so there is no separate positive/negative selector — the
- * runtime still consumes split lists, so generation splits them (see
- * {@link jcmMorphModForRuntime}).
- */
-export const jcmMorphModSchema = z.object({
-  /** Stable row id for grid editing (minted on read when absent). Not part of the
-   *  generated runtime output (jcmMorphModForRuntime never spreads the rule). */
-  id: z.string().max(MAX_NAME_LENGTH).default(() => newId()),
-  boneLabel: z.string().max(MAX_NAME_LENGTH),
-  /** Rotation axis, e.g. "XRotate". */
-  axis: z.string().max(MAX_NAME_LENGTH),
-  drives: z.array(jcmMorphModDriveSchema).default([]),
-})
-export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
-
 /**
  * Which way a JCM drive corrects — inferred from its angle range's sign (the
  * extreme angle furthest from rest). A rest-only / zero range counts as positive;
@@ -868,8 +895,15 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       section — an outfit scene that drops GEN, or turns a section on, instead
  *       of clearing its rows). Additive array with a zod default — no migration
  *       step; `applySceneOverride` flips the base section's `enabled` per entry.
+ *  23 — a scene can now override the WHOLE section config per scene (mode, preset
+ *       asset, GEN art direction, custom JCM path), not just custom rows: the
+ *       whole-section override entry changed from `{section, groups}` to
+ *       `{section, config: RomSectionConfig}`. RESTRUCTURE — migration step wraps
+ *       old `groups` into a `custom` config. Also added a `jcm` override block
+ *       (per-scene `jcmMorphMods`, a runtime delta like `preserve`) — additive,
+ *       no step. `applySceneOverride` now applies the owned config wholesale.
  */
-export const CHARACTER_SCHEMA_VERSION = 22
+export const CHARACTER_SCHEMA_VERSION = 23
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime

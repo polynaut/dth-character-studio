@@ -18,8 +18,14 @@ vi.mock('#/lib/rom/api.ts', () => ({
   setAvatarFromScene: async () => 'scene-img',
   listCharacterUploads: async () => recentUploads,
   deleteCharacterUpload: () => deleteCharacterUpload(),
-  // Avatar resolves the stored reference asynchronously — identity is enough here.
-  resolveImageSrc: async (image: string) => image,
+  // The real resolver returns an inline data URL (never a bare filename); mirror
+  // that so the <img src> guard in usePortraitSrc lets it through, while still
+  // encoding the reference so tests can assert which upload is showing.
+  resolveImageSrc: async (image: string) => (image ? `data:image/png;base64,${image}` : ''),
+  // Portrait resolves a scene's sibling `.tip.png` through this — same data-URL
+  // shape so the staged-scene preview renders instead of throwing on an undefined
+  // (unlisted) mock export.
+  resolveScenePreview: async (scenePath: string) => (scenePath ? `data:image/png;base64,${scenePath}` : ''),
 }))
 // The drop-zone hook registers Tauri webview listeners — inert in jsdom.
 vi.mock('#/lib/file-drop.ts', () => ({ useFileDrop: () => ({ id: 1, isOver: false }) }))
@@ -43,6 +49,9 @@ beforeAll(() => {
     height: bitmapSize.height,
     close: () => {},
   }))
+  // jsdom has no object-URL support — a staged crop previews via one.
+  URL.createObjectURL = () => 'blob:staged'
+  URL.revokeObjectURL = () => {}
 })
 
 import { ImageDialog } from './image-dialog'
@@ -55,9 +64,14 @@ function pickFile() {
 }
 
 async function crop() {
-  // Wait for the validated source to open the (stubbed) crop editor, then apply.
+  // Wait for the validated source to open the (stubbed) crop editor, then STAGE it.
   const useCrop = await screen.findByRole('button', { name: 'Use this crop' })
   fireEvent.click(useCrop)
+}
+
+/** Hit the dialog's single save action. */
+function apply() {
+  fireEvent.click(screen.getByRole('button', { name: /Apply/ }))
 }
 
 function previewSrc(): string | null {
@@ -92,17 +106,18 @@ describe('ImageDialog crop + persist flow', () => {
     expect(onApply).not.toHaveBeenCalled()
   })
 
-  it('runs the upload only inside the persist producer — a refused persist never uploads', async () => {
+  it('staging a crop persists nothing — only Apply commits; a refused persist never uploads', async () => {
     const onApply = vi.fn(async () => null)
     render(<ImageDialog {...baseProps} onApply={onApply} />)
     pickFile()
-    await crop()
+    await crop() // stage the cropped square
+    expect(onApply).not.toHaveBeenCalled() // ← the crop click saves nothing
+    apply()
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
-    expect(uploadCroppedAvatar).not.toHaveBeenCalled()
-    await waitFor(() => expect(previewSrc()).toBe('orig-img'))
+    expect(uploadCroppedAvatar).not.toHaveBeenCalled() // refused → the producer never ran
   })
 
-  it('resets the preview when the persist fails after the upload ran', async () => {
+  it('keeps the staged crop (to retry) when the persist fails after the upload ran', async () => {
     const onApply = vi.fn(
       async (produce: () => Promise<{ image: string; imageScene: string }>) => {
         await produce()
@@ -112,35 +127,65 @@ describe('ImageDialog crop + persist flow', () => {
     render(<ImageDialog {...baseProps} onApply={onApply} />)
     pickFile()
     await crop()
+    apply()
     await waitFor(() => expect(uploadCroppedAvatar).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(previewSrc()).toBe('orig-img'))
+    // A failed persist leaves the dialog open with the staged crop still previewed.
+    await waitFor(() => expect(previewSrc()).toBe('blob:staged'))
   })
 
-  it('keeps the cropped preview when the persist succeeds', async () => {
+  it('uploads the crop on Apply and closes on a successful persist', async () => {
+    const onClose = vi.fn()
     const onApply = vi.fn(
       async (produce: () => Promise<{ image: string; imageScene: string }>) => await produce(),
     )
-    render(<ImageDialog {...baseProps} onApply={onApply} />)
+    render(<ImageDialog {...baseProps} onApply={onApply} onClose={onClose} />)
     pickFile()
     await crop()
+    expect(onApply).not.toHaveBeenCalled()
+    apply()
     await waitFor(() => expect(uploadCroppedAvatar).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(previewSrc()).toBe('uploaded-img'))
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
-  it('offers past uploads and re-selects one without re-uploading', async () => {
+  it('re-selects a past upload — staged, then committed on Apply, no re-upload', async () => {
     recentUploads = ['c1--up-200.png', 'c1--up-100.png']
+    const onClose = vi.fn()
     const onApply = vi.fn(
       async (produce: () => Promise<{ image: string; imageScene: string }>) => await produce(),
     )
-    render(<ImageDialog {...baseProps} onApply={onApply} />)
-    // The gallery loads on open (both past uploads shown).
+    render(<ImageDialog {...baseProps} onApply={onApply} onClose={onClose} />)
     const buttons = await screen.findAllByRole('button', { name: 'Use this uploaded image' })
     expect(buttons).toHaveLength(2)
-    // Clicking one persists that reference — no crop, no upload command.
     fireEvent.click(buttons[1])
+    expect(onApply).not.toHaveBeenCalled() // selecting a recent upload only STAGES it
+    await waitFor(() => expect(previewSrc()).toBe('data:image/png;base64,c1--up-100.png'))
+    apply()
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
     expect(uploadCroppedAvatar).not.toHaveBeenCalled()
-    await waitFor(() => expect(previewSrc()).toBe('c1--up-100.png'))
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('staging the primary scene commits with the scene as provenance (imageScene)', async () => {
+    // The scene path stages a preview (never persists on select), and Apply copies the
+    // scene tip in AND records the scene as the image's provenance — the field the avatar
+    // auto-sync keys off. It must NOT run the crop-upload producer.
+    let produced: { image: string; imageScene: string } | null = null
+    const onClose = vi.fn()
+    const onApply = vi.fn(async (produce: () => Promise<{ image: string; imageScene: string }>) => {
+      produced = await produce()
+      return produced
+    })
+    render(
+      <ImageDialog {...baseProps} scenes={['X:/scenes/Beach.duf']} onApply={onApply} onClose={onClose} />,
+    )
+    // Pick the primary scene thumbnail (its title is the scene file name).
+    fireEvent.click(await screen.findByTitle('Beach.duf'))
+    expect(onApply).not.toHaveBeenCalled() // selecting a scene only STAGES it
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(produced).toEqual({ image: 'scene-img', imageScene: 'X:/scenes/Beach.duf' })
+    expect(uploadCroppedAvatar).not.toHaveBeenCalled() // the scene path uploads no crop
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
   it('deletes a past upload but disables the ✕ on the active image', async () => {

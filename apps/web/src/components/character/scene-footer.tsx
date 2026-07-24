@@ -3,8 +3,8 @@ import { flushSync } from 'react-dom'
 
 import { cn } from '@dth/ui'
 
+import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { SceneLabel } from '#/components/character/scene-label.tsx'
-import { prettySceneName } from '#/lib/scene-name.ts'
 
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
 
@@ -20,12 +20,8 @@ const vtName = (path: string) => {
   return `scene-${(h >>> 0).toString(36)}`
 }
 
-/** The green "primary" tag shown on the primary scene's pill. */
-const primaryTag = (
-  <span className="rounded bg-[color-mix(in_oklab,var(--color-daz-green)_22%,transparent)] px-1 py-px text-[9px] font-semibold tracking-wide text-[color-mix(in_oklab,var(--color-daz-green)_82%,white)] uppercase">
-    primary
-  </span>
-)
+/** The "primary" role badge shown on the primary scene's footer pill (compact variant). */
+const primaryTag = <PrimaryBadge dense />
 
 /**
  * A footer/status bar — the same idea as the project page's Unreal-projects bar —
@@ -44,7 +40,6 @@ export function SceneFooter({
   scenes,
   primary,
   selected,
-  characterName,
   onSelect,
 }: {
   show: boolean
@@ -54,7 +49,6 @@ export function SceneFooter({
   primary: string
   /** The currently selected scene's path (`effectiveScene`) — shown prominent. */
   selected: string
-  characterName: string
   onSelect: (scenePath: string) => void
 }) {
   const others = scenes.filter((p) => p !== selected)
@@ -100,7 +94,8 @@ export function SceneFooter({
   }
 
   if (scenes.length === 0) return null
-  const nameOf = (p: string) => prettySceneName(stemOf(p), characterName)
+  // Show the scene's original filename (its .duf stem), same as the Daz-scene cards.
+  const nameOf = (p: string) => stemOf(p)
   const railMask = `linear-gradient(to right, ${fade.left ? 'transparent' : '#000'}, #000 22px, #000 calc(100% - 22px), ${fade.right ? 'transparent' : '#000'})`
 
   return (
@@ -111,7 +106,11 @@ export function SceneFooter({
         show ? 'translate-y-0' : 'pointer-events-none translate-y-full',
       )}
     >
-      <div className="flex items-center gap-3 px-4 py-2">
+      {/* Match the Unreal-projects footer's height so both docked bars line up. That
+          bar puts min-h + border-t on ONE div; here the border-t is on the fixed
+          wrapper above, so the inner min-h is 70px (+1px border = 71px total). A
+          `size="lg"` pill is ~54px, like the Unreal card. */}
+      <div className="flex min-h-[70px] items-center gap-3 px-8 py-1.5">
         {/* The selected scene, prominent — a green ring, never dimmed. The radius
             MUST match the SceneLabel pill's (`Tag` uses `rounded`) so the ring hugs
             its silhouette instead of bulging past its corners. No ring offset
@@ -124,13 +123,17 @@ export function SceneFooter({
             scenePath={selected}
             name={nameOf(selected)}
             accentBar
-            trailing={selected === primary ? primaryTag : undefined}
+            size="lg"
+            subline={selected === primary ? primaryTag : undefined}
           />
         </span>
 
         {others.length > 0 && (
           <>
-            <span className="h-8 w-px shrink-0 bg-border" aria-hidden />
+            {/* The selected pill's 2px ring (ring-offset-0) bleeds into the gap on the
+                divider's left, so without this it sits ~2px nearer the pill than the
+                rail. ml-0.5 adds that 2px back so the divider looks evenly spaced. */}
+            <span className="ml-0.5 h-8 w-px shrink-0 bg-border" aria-hidden />
             {/* Every other scene — a horizontally-scrollable rail (fits any number).
                 Click one to switch; it swaps into the prominent slot. */}
             <div
@@ -151,7 +154,8 @@ export function SceneFooter({
                     scenePath={path}
                     name={nameOf(path)}
                     accentBar
-                    trailing={path === primary ? primaryTag : undefined}
+                    size="lg"
+                    subline={path === primary ? primaryTag : undefined}
                   />
                 </button>
               ))}

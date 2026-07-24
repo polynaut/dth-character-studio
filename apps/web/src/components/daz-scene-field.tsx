@@ -3,10 +3,10 @@ import type { Ref } from 'react'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { pathChipClass } from '#/components/path-code.tsx'
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, Tag, useModifierHeld } from '@dth/ui'
+import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import dazLogo from '#/assets/daz-logo.png'
@@ -20,7 +20,7 @@ import {
   relinkScene,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
-import { displayPath, normalizePath, parentDir, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -33,7 +33,6 @@ import type { Character } from '@dth/rom'
 function SceneCard({
   scenePath,
   name,
-  charFolderAbs,
   onOpen,
   onRemove,
   primary,
@@ -42,9 +41,6 @@ function SceneCard({
 }: {
   scenePath: string
   name: string
-  /** The character's folder; the scene's path relative to it (incl. the daz
-   *  scenes folder) is shown as a chip, e.g. "%CHAR%\daz3d\Outfit_Summertide\". */
-  charFolderAbs: string
   onOpen: (e: React.MouseEvent) => void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
@@ -60,15 +56,6 @@ function SceneCard({
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
-  // The scene's folder relative to the character folder — e.g. "daz3d" for a
-  // scene directly in the scenes folder, or "daz3d/Outfit_Summertide" when
-  // nested. Empty for a scene linked outside the character folder.
-  const sceneDir = parentDir(scenePath)
-  const base = normalizePath(charFolderAbs)
-  const relSub =
-    base && sceneDir.toLowerCase().startsWith(base.toLowerCase() + '/')
-      ? sceneDir.slice(base.length + 1)
-      : ''
   return (
     <LinkedAssetCard
       title={displayName}
@@ -89,20 +76,9 @@ function SceneCard({
           className="pointer-events-none absolute bottom-0 left-0 size-6 object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]"
         />
       }
-      chip={
-        relSub ? (
-          <code
-            className={`${pathChipClass('secondary')} inline-block max-w-full truncate align-middle`}
-          >
-            {`%CHAR%${pathSeparator()}${displayPath(relSub)}${pathSeparator()}`}
-          </code>
-        ) : undefined
-      }
       extra={
         primary ? (
-          <Tag tone="green" title="The character's original scene — it can't be unlinked">
-            primary
-          </Tag>
+          <PrimaryBadge title="The character's original scene — it can't be unlinked" />
         ) : undefined
       }
       altHeld={altHeld}
@@ -592,7 +568,6 @@ export function DazSceneField({
                 <SceneCard
                   scenePath={character.scenePath}
                   name={character.name}
-                  charFolderAbs={charFolder}
                   onOpen={(e) => void onOpen(character.scenePath, e)}
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
@@ -611,7 +586,6 @@ export function DazSceneField({
                   key={scene}
                   scenePath={scene}
                   name={character.name}
-                  charFolderAbs={charFolder}
                   onOpen={(e) => void onOpen(scene, e)}
                   onRemove={() => askRemove(scene)}
                   selected={selectedScene !== undefined ? selectedScene === scene : undefined}

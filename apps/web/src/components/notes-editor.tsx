@@ -353,7 +353,19 @@ export function NotesEditor({
                     <strong className="font-semibold text-foreground">{children}</strong>
                   ),
                   code: ({ children }) => (
-                    <code className="rounded bg-muted px-1 py-0.5 text-sm">{children}</code>
+                    <code className="rounded bg-muted px-1 py-0.5 text-sm [overflow-wrap:anywhere]">
+                      {children}
+                    </code>
+                  ),
+                  // Fenced ``` blocks: monospace on a darker panel that WRAPS long lines
+                  // (and breaks unbreakable, space-less tokens) instead of overflowing —
+                  // overflow-x-auto still scrolls anything that somehow can't wrap rather
+                  // than letting it bleed past the note. The nested <code> (styled for the
+                  // inline case above) resets to the block's own surface.
+                  pre: ({ children }) => (
+                    <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-sm whitespace-pre-wrap text-foreground [overflow-wrap:anywhere] [&_code]:rounded-none [&_code]:bg-transparent [&_code]:p-0">
+                      {children}
+                    </pre>
                   ),
                   img: ({ src, alt }) => (
                     <NoteImage projectId={projectId} src={typeof src === 'string' ? src : undefined} alt={alt} />
