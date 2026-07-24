@@ -514,16 +514,19 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="px-1 py-0.5">
+              <td className="px-1 py-0.5 text-right">
+                {/* Right-aligned in the actions column (like the row's own bin) and
+                    styled to match it — gray at rest, red on hover over a silhouette —
+                    just a touch smaller. */}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6"
-                  title="Remove this morph"
+                  className="size-6 text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
+                  aria-label="Remove this morph"
                   disabled={pose.morphs.length <= 1}
                   onClick={() => meta.removeMorphAt(row.index, morphIndex)}
                 >
-                  <Trash2 className="size-3 text-destructive" />
+                  <Trash2 className="size-3" />
                 </Button>
               </td>
             </tr>
