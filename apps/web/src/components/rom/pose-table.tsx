@@ -506,7 +506,7 @@ export function SortablePoseRow({
                   onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
                 />
               </td>
-              <td className="px-1 py-0.5 text-center align-middle">
+              <td className="px-1 py-0.5 text-center">
                 <input
                   type="checkbox"
                   className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
@@ -519,21 +519,23 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="py-0.5 pr-4 pl-1 text-right align-middle">
-                {/* Right-aligned in the actions column near (a bit inset from) the row's
-                    own bin, and styled to match it — gray at rest, red on hover over a
-                    silhouette — just a touch smaller. Centered in the cell so the icon
-                    drops onto the text baseline instead of floating (its box baseline). */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6 text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
-                  aria-label="Remove this morph"
-                  disabled={pose.morphs.length <= 1}
-                  onClick={() => meta.removeMorphAt(row.index, morphIndex)}
-                >
-                  <Trash2 className="size-3" />
-                </Button>
+              <td className="py-0.5 pr-4 pl-1">
+                {/* The same bin as the row's own delete (size-7), centered with flexbox.
+                    An icon button's own baseline is its bottom edge, so baseline /
+                    vertical-align float it high — h-full + items-center pins it to the
+                    row's vertical centre reliably. */}
+                <div className="flex h-full items-center justify-end">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
+                    aria-label="Remove this morph"
+                    disabled={pose.morphs.length <= 1}
+                    onClick={() => meta.removeMorphAt(row.index, morphIndex)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
               </td>
             </tr>
           ))}
