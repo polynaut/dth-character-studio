@@ -87,7 +87,12 @@ export function SceneLabel({
         <Portrait
           scenePath={scenePath}
           name={fallbackName ?? name}
-          imgClassName={cn('-translate-y-1/2', muted && 'grayscale')}
+          imgClassName={cn(
+            // The taller `lg` (footer) tile frames a touch high, so nudge the render
+            // 4px lower than the -50% face-lift.
+            size === 'lg' ? 'translate-y-[calc(-50%_+_4px)]' : '-translate-y-1/2',
+            muted && 'grayscale',
+          )}
           className={cn(
             size === 'lg' ? 'h-10 w-[64px]' : 'h-8 w-[56px]',
             'shrink-0 rounded',
