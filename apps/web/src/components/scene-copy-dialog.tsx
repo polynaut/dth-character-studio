@@ -2,6 +2,9 @@ import type { ReactNode } from 'react'
 
 import { Button, Input, Label, Modal, Switch } from '@dth/ui'
 
+import { PathCode } from '#/components/path-code.tsx'
+import { displayPath } from '#/lib/path.ts'
+
 /**
  * The "this Daz scene lives outside — copy it in?" modal, shared by the create
  * flow and the editor's Add-scene flow so they stay identical. A subfolder field
@@ -14,6 +17,7 @@ import { Button, Input, Label, Modal, Switch } from '@dth/ui'
 export function SceneCopyDialog({
   title,
   description,
+  filePath,
   prefix,
   baseValue,
   onBaseChange,
@@ -31,6 +35,9 @@ export function SceneCopyDialog({
 }: {
   title: string
   description: ReactNode
+  /** The full path of the picked scene, shown as a copyable chip so the user can
+   *  confirm which file they selected before copying it in. */
+  filePath?: string
   /** A fixed, read-only scenes-folder chip (e.g. "daz3d\") before the subfolder. */
   prefix?: string
   /** An editable scenes-folder base instead of `prefix`: pass `onBaseChange` (and
@@ -52,6 +59,12 @@ export function SceneCopyDialog({
   return (
     <Modal open onClose={onClose} title={title} dismissible={!busy}>
       <p className="text-sm text-muted-foreground">{description}</p>
+        {filePath ? (
+          <div>
+            <Label className="mb-1 block">Selected file</Label>
+            <PathCode path={displayPath(filePath)} className="flex h-9 items-center" />
+          </div>
+        ) : null}
         <div>
           <Label className="mb-1 block">Subfolder</Label>
           <div className="flex items-center gap-1">
@@ -86,6 +99,9 @@ export function SceneCopyDialog({
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
+          <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             variant="outline"
             disabled={busy || deleteOriginal}
