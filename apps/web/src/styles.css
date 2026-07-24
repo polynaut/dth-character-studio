@@ -173,6 +173,12 @@ a {
 }
 
 @layer base {
+  /* Always reserve the root scrollbar's gutter so switching between a tall page (has a
+     scrollbar — the character detail form) and a short one (Notes / Attachments, which
+     may not) never shifts the layout sideways. */
+  html {
+    scrollbar-gutter: stable;
+  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -207,7 +213,12 @@ a {
 }
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-shrink {
-    border: 2px solid transparent;
+    /* Rest border + drop shadow baked into the BASE too (matching .avatar-scroll-pan):
+       on a short page the scroll timeline is inactive and the animation drops out, so
+       without this the wrapper would lose its border colour and shadow. The animation
+       overrides both from scroll 0 when the timeline is active. */
+    border: 2px solid #6a6b70;
+    box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
     animation: dth-avatar-shrink linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
