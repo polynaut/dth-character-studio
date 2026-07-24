@@ -245,6 +245,14 @@ a {
 @supports (animation-timeline: scroll()) {
   .avatar-scroll-pan {
     transform-origin: center center;
+    /* The rest state as the element's BASE too. On a tab whose page is too short to
+       scroll (e.g. Notes, where the tall form is `hidden`), the root has no overflow,
+       so the `scroll()` timeline goes INACTIVE and the animation drops out entirely —
+       without this the image would fall back to scale 1 / no shift and under-fill the
+       wrapper. When the timeline IS active, the animation (fill both) overrides these
+       from scroll 0, so this is a no-op there. */
+    transform: translateY(11%);
+    scale: 1.55;
     /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value until the
        shrink starts (100px, matching .avatar-scroll-shrink's range) then eases in
        lockstep with the height — so at the gentler 1.4 it never dips below frame
