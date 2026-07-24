@@ -20,10 +20,11 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
 > [!NOTE]
-> A scene with [per-scene ROM overrides](./advanced.md#rom-overrides) has its own
-> **`<Name>_<Scene>_pose_asset.csv`** — point the PoseAsset import at the CSV for
-> the scene you exported (identity- or preserve-only overrides reuse the default
-> CSV).
+> A scene whose [per-scene ROM overrides](./advanced.md#rom-overrides) change the
+> **frame layout** has its own **`<Name>_<Scene>_pose_asset.csv`** — point the
+> PoseAsset import at the CSV for the scene you exported (overrides that only change
+> run-time values — identity dials, preserve morphs, GEN art direction, JCM mods —
+> reuse the default CSV).
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
