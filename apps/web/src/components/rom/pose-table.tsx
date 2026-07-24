@@ -389,6 +389,11 @@ export function SortablePoseRow({
   const overridden =
     override !== undefined &&
     (override.isAddition(row.original.id) || override.isOverridden(row.original.id))
+  // An overridden pose IS the override (its whole morph list is stored per scene), so
+  // its expanded sub-rows read green too — the same faint tint as the row itself.
+  const morphRowBg = overridden
+    ? 'bg-[color-mix(in_oklab,var(--color-daz-green)_11%,transparent)]'
+    : 'bg-muted/20'
   return (
     <>
       <tr
@@ -432,7 +437,7 @@ export function SortablePoseRow({
         // morphs→Auto, actions→(remove). (A colSpan block with its own widths couldn't
         // align to the auto-sized table columns.)
         <>
-          <tr className="bg-muted/20 text-xs font-medium text-muted-foreground">
+          <tr className={`text-xs font-medium text-muted-foreground ${morphRowBg}`}>
             <td />
             <td className="px-1 py-1">
               <span className="pl-6">#</span>
@@ -463,7 +468,7 @@ export function SortablePoseRow({
             <td />
           </tr>
           {pose.morphs.map((morph, morphIndex) => (
-            <tr key={morph.id} className="bg-muted/20">
+            <tr key={morph.id} className={morphRowBg}>
               <td />
               <td className="px-1 py-0.5">
                 <span className="pl-6 text-xs text-muted-foreground tabular-nums">
@@ -504,7 +509,7 @@ export function SortablePoseRow({
               <td className="px-1 py-0.5 text-center">
                 <input
                   type="checkbox"
-                  className="size-3.5 accent-primary"
+                  className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
                   title="Resolve the base from the morph's current scene value at apply time"
                   checked={morph.autoBase === true}
                   onChange={(e) =>
@@ -531,7 +536,7 @@ export function SortablePoseRow({
               </td>
             </tr>
           ))}
-          <tr className="border-b bg-muted/20">
+          <tr className={`border-b ${morphRowBg}`}>
             <td />
             <td colSpan={visibleCells.length} className="px-1 py-1">
               <Button
