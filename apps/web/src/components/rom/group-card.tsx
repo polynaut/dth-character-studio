@@ -429,7 +429,7 @@ export const GroupCard = memo(function GroupCard({
           </SortableContext>
         </table>
       </div>
-      <div className="border-t p-1.5">
+      <div className="border-t px-1.5 pt-3 pb-4">
         <Button
           variant="outline"
           size="sm"

@@ -6,9 +6,10 @@ import type { ReactNode } from 'react'
 
 /**
  * The Daz-green "linked-scene" pill: a small landscape render of the scene's
- * `.tip.png` followed by its (already-prettified) name — the same look the
- * linked-scene cards use. Shared by the editor header's scene tag AND every
- * per-scene override toggle, so the selected scene reads identically everywhere.
+ * `.tip.png` followed by its name (the scene file's `.duf` stem, as the
+ * linked-scene cards show it) — the same look the linked-scene cards use. Shared
+ * by the editor header's scene tag AND every per-scene override toggle, so the
+ * selected scene reads identically everywhere.
  *
  * `muted` gives the PRIMARY-scene look (greyscale render + a plain tile) for the
  * header, where the primary can be the active selection; the override toggles
@@ -21,14 +22,16 @@ export function SceneLabel({
   fallbackName,
   eyebrow,
   trailing,
+  subline,
   end,
   showAvatar = true,
   accentBar = false,
+  size = 'sm',
   className,
 }: {
   /** The scene whose `.tip.png` renders in the pill. */
   scenePath: string
-  /** The display label — already name-stripped + spaced (see prettySceneName). */
+  /** The display label — typically the scene file's stem (original filename). */
   name: string
   /** The primary-scene look: greyscale render + plain tile. */
   muted?: boolean
@@ -39,6 +42,9 @@ export function SceneLabel({
   eyebrow?: string
   /** Rendered inline right after the name (e.g. the override info "i" popup). */
   trailing?: ReactNode
+  /** Rendered as a SECOND ROW beneath the name (e.g. the PRIMARY badge on the
+   *  footer's primary pill). Takes precedence over `eyebrow`. */
+  subline?: ReactNode
   /** Rendered at the pill's RIGHT edge, its own column after the name (e.g. the
    *  override toggle switch, folded into the pill). Gets a left divider to set it
    *  off from the name. */
@@ -49,6 +55,9 @@ export function SceneLabel({
   /** Add the linked-scene cards' green LEFT ACCENT BAR (the scene-footer pills, so
    *  they read as the same "card" as the full scene cards). */
   accentBar?: boolean
+  /** Pill size: `lg` (the footer — a bigger avatar with room for a `subline`) or
+   *  `sm` (the compact default: the header tag / per-scene override toggles). */
+  size?: 'sm' | 'lg'
   className?: string
 }) {
   return (
@@ -58,6 +67,8 @@ export function SceneLabel({
       tone="green"
       className={cn(
         'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 text-sm font-normal normal-case',
+        // The footer pill matches the Unreal-projects card's 54px height.
+        size === 'lg' && 'min-h-[54px]',
         accentBar && 'relative overflow-hidden',
         showAvatar ? (accentBar ? 'pl-2.5' : 'pl-1.5') : 'pl-3',
         className,
@@ -77,12 +88,26 @@ export function SceneLabel({
         <Portrait
           scenePath={scenePath}
           name={fallbackName ?? name}
-          imgClassName={cn('-translate-y-1/2', muted && 'grayscale')}
-          className={`h-8 w-[56px] shrink-0 rounded${muted ? ' scene-label-tile' : ''}`}
+          imgClassName={cn(
+            // The taller `lg` (footer) tile frames a touch high, so nudge the render
+            // 4px lower than the -50% face-lift.
+            size === 'lg' ? 'translate-y-[calc(-50%_+_4px)]' : '-translate-y-1/2',
+            muted && 'grayscale',
+          )}
+          className={cn(
+            size === 'lg' ? 'h-10 w-[64px]' : 'h-8 w-[56px]',
+            'shrink-0 rounded',
+            muted && 'scene-label-tile',
+          )}
           fallbackClassName="text-[8px]"
         />
       )}
-      {eyebrow ? (
+      {subline ? (
+        <span className="flex min-w-0 flex-col justify-center gap-1 leading-none">
+          <span className="truncate">{name}</span>
+          {subline}
+        </span>
+      ) : eyebrow ? (
         <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-none">
           <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">
             {eyebrow}

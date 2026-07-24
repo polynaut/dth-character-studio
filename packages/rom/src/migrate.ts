@@ -1,5 +1,5 @@
 import { sectionsFromFlatFrames } from './frames'
-import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections, newId } from './types'
+import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, SECTION_MODES, defaultSections, newId } from './types'
 
 import type { RomSection } from './types'
 
@@ -107,6 +107,39 @@ export const characterMigrations: Record<
       for (const override of data.sceneOverrides) {
         if (!override || typeof override !== 'object') continue
         if (override.enabled === undefined) override.enabled = true
+      }
+    }
+    return data
+  },
+  // v23 — a whole-section override became the section's full OWNED config, so a
+  // scene can override mode / preset asset / art direction / custom path too (not
+  // just groups). The stored entry changed from `{section, groups}` to `{section,
+  // config}`. Old entries only ever escalated on structural row edits, which only
+  // custom-capable sections have — so wrap the old groups in a `custom` config.
+  23: (data) => {
+    if (!Array.isArray(data.sceneOverrides)) return data
+    for (const override of data.sceneOverrides) {
+      if (!override || typeof override !== 'object' || !Array.isArray(override.sectionOverrides))
+        continue
+      for (const entry of override.sectionOverrides) {
+        if (entry && typeof entry === 'object' && entry.config === undefined && entry.groups !== undefined) {
+          // 'custom' is right for every entry the UI could produce (only custom-capable
+          // sections ever escalated). But a crafted/legacy file could carry an entry for a
+          // preset-only section (e.g. RET) — 'custom' there is UNSUPPORTED, and the
+          // sectionOverride superRefine is reject-only (unlike the base section schema's
+          // absent-mode healing), so it would hard-fail the WHOLE character on load. Heal
+          // to the section's own default mode when 'custom' isn't in its SECTION_MODES.
+          const modes = SECTION_MODES[entry.section as RomSection]
+          entry.config = {
+            enabled: true,
+            mode: modes && !modes.includes('custom') ? modes[0] : 'custom',
+            presetAssets: [],
+            artDirection: [],
+            groups: entry.groups,
+            customAssetPath: '',
+          }
+          delete entry.groups
+        }
       }
     }
     return data

@@ -30,9 +30,13 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
   // Selecting a non-primary scene puts the ROM grid in override mode — no toggle,
-  // no checkbox (the footer names the scene: "KiraBeach" reads "Beach").
+  // no checkbox. The footer's selected (green-ringed) pill names the scene by its
+  // .duf filename stem.
   await page.getByText('KiraBeach', { exact: true }).first().click()
-  await expect(page.getByText('Beach', { exact: true }).first()).toBeVisible()
+  await expect(
+    page.locator('div.fixed.inset-x-0.bottom-0 .ring-daz-green'),
+    'footer names the selected scene',
+  ).toContainText('KiraBeach')
 
   // Editing a base ROM row arms it as a per-scene override (implicit — the row turns
   // green). Expand FBM and change the first frame's value.

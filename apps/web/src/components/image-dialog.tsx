@@ -60,6 +60,11 @@ export function ImageDialog({
   const [cropSource, setCropSource] = useState<ImageBitmap | null>(null)
   /** Past uploads (newest first) offered for one-click re-selection. */
   const [recent, setRecent] = useState<Array<string>>([])
+  // A selection is STAGED, not persisted, until Apply. A picked scene (previewed
+  // from its .tip) or a freshly-cropped upload (previewed from its own bytes) sit
+  // here; a recent upload / pasted URL just moves `url`. Apply commits the winner.
+  const [stagedScene, setStagedScene] = useState<string | null>(null)
+  const [stagedCrop, setStagedCrop] = useState<{ png: Uint8Array; previewUrl: string } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   // Load the recent-uploads gallery on open and after each new upload lands.
@@ -72,6 +77,14 @@ export function ImageDialog({
       active = false
     }
   }, [characterId, url])
+
+  // Free a staged crop's object URL when it's replaced or the dialog unmounts.
+  useEffect(() => {
+    const staged = stagedCrop
+    return () => {
+      if (staged) URL.revokeObjectURL(staged.previewUrl)
+    }
+  }, [stagedCrop])
 
   // Every custom upload goes through decode → size validation (256..1024 on
   // both sides) → the 1:1 crop editor; only the CROPPED square is ever stored
@@ -129,66 +142,67 @@ export function ImageDialog({
     await startCrop(file)
   }
 
-  // The crop editor produced the final square PNG — store it. The write runs
-  // INSIDE the persist producer — after persistPatch's single-flight and
-  // validation guards — so an up-front refusal can never have already written
-  // the file; once the upload HAS run, the hook persists at least the image
-  // patch itself, so the preview never shows an avatar that failed to persist
-  // (only a genuinely failed save resets it below).
-  async function applyCrop(png: Uint8Array) {
-    setBusy(true)
-    setError('')
-    // Leave the crop step either way — a refused/failed persist returns to the
-    // main view with the avatar preview reset (and any error shown); a success
-    // shows the new avatar. Either way the staged bitmap is done.
+  // The crop editor produced the final square PNG — STAGE it (previewed from its
+  // own bytes). Nothing is uploaded until Apply commits.
+  function stageCrop(png: Uint8Array) {
     cropSource?.close()
     setCropSource(null)
-    try {
-      const saved = await onApply(async () => {
-        const served = await uploadCroppedAvatar({ data: { characterId, bytes: png } })
-        setUrl(served)
-        return { image: served, imageScene: '' }
-      })
-      // Refused or failed → reset the preview to the last persisted image.
-      if (saved === null) setUrl(image)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
+    setStagedScene(null)
+    // Copy into a fresh ArrayBuffer-backed view so it's a valid BlobPart (see uploadPath).
+    setStagedCrop({
+      png,
+      previewUrl: URL.createObjectURL(new Blob([new Uint8Array(png)], { type: 'image/png' })),
+    })
+    setError('')
   }
 
-  // Switch the avatar to a linked scene's tip thumbnail (copied into the app's
-  // images folder). Mirrors the upload handlers — the copy runs inside the
-  // persist producer, and the preview resets when the persist is refused.
-  async function applyScene(scenePath: string) {
+  // Stage a primary-scene selection — previewed from its tip; the copy into the
+  // app's images folder only runs when Apply commits.
+  function selectScene(scenePath: string) {
+    setStagedCrop(null)
+    setStagedScene(scenePath)
+    setError('')
+  }
+
+  // Select a past upload — already stored, so just repoint the preview; nothing to
+  // upload. Apply persists the reference.
+  function selectRecent(fileName: string) {
+    setStagedCrop(null)
+    setStagedScene(null)
+    setUrl(fileName)
+    setError('')
+  }
+
+  // The ONLY place that persists: commit the staged selection (cropped upload,
+  // picked scene, or a recent/URL reference) through the page's persist primitive,
+  // then close. The side effect (upload/scene-copy) runs INSIDE the producer, after
+  // persistPatch's single-flight + validation guards; a refused/failed persist keeps
+  // the dialog open with the staged selection intact and the error shown.
+  async function commit() {
+    // Nothing changed → just close (don't re-save the same image).
+    if (!stagedCrop && !stagedScene && url === image) {
+      onClose()
+      return
+    }
+    const crop = stagedCrop
+    const scene = stagedScene
     setBusy(true)
     setError('')
     try {
-      const saved = await onApply(async () => {
-        const served = await setAvatarFromScene({ data: { characterId, scenePath } })
-        setUrl(served)
-        return { image: served, imageScene: scenePath }
-      })
-      if (saved === null) setUrl(image)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // Re-select a past upload — no side effect, just point the reference at an
-  // already-stored file. Mirrors applyScene's refuse/reset handling.
-  async function applyRecent(fileName: string) {
-    setBusy(true)
-    setError('')
-    try {
-      const saved = await onApply(async () => {
-        setUrl(fileName)
-        return { image: fileName, imageScene: '' }
-      })
-      if (saved === null) setUrl(image)
+      const saved = await onApply(
+        crop
+          ? async () => {
+              const served = await uploadCroppedAvatar({ data: { characterId, bytes: crop.png } })
+              return { image: served, imageScene: '' }
+            }
+          : scene
+            ? async () => {
+                const served = await setAvatarFromScene({ data: { characterId, scenePath: scene } })
+                return { image: served, imageScene: scene }
+              }
+            : async () => ({ image: url, imageScene: '' }),
+      )
+      if (saved !== null) onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -236,18 +250,38 @@ export function ImageDialog({
         <ImageCropEditor
           bitmap={cropSource}
           busy={busy}
-          onApply={(png) => void applyCrop(png)}
+          onApply={(png) => stageCrop(png)}
           onCancel={cancelCrop}
         />
       ) : (
         <>
         <div className="flex justify-center">
-          <Avatar
-            image={url}
-            name={name}
-            className="size-40 rounded-lg"
-            fallbackClassName="text-5xl"
-          />
+          {stagedCrop ? (
+            // The freshly-cropped bytes, not yet uploaded.
+            <Portrait
+              src={stagedCrop.previewUrl}
+              name={name}
+              zoom={false}
+              className="size-40 rounded-lg"
+              fallbackClassName="text-5xl"
+            />
+          ) : stagedScene ? (
+            // The picked scene's tip, not yet copied in.
+            <Portrait
+              scenePath={stagedScene}
+              name={name}
+              zoom={false}
+              className="size-40 rounded-lg"
+              fallbackClassName="text-5xl"
+            />
+          ) : (
+            <Avatar
+              image={url}
+              name={name}
+              className="size-40 rounded-lg"
+              fallbackClassName="text-5xl"
+            />
+          )}
         </div>
 
         <FileDropZone
@@ -282,10 +316,12 @@ export function ImageDialog({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void applyRecent(fileName)}
+                    onClick={() => selectRecent(fileName)}
                     title="Use this uploaded image"
                     className={`block rounded-md ring-2 transition focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
-                      fileName === url ? 'ring-primary' : 'ring-transparent hover:ring-primary'
+                      fileName === url && !stagedScene && !stagedCrop
+                        ? 'ring-primary'
+                        : 'ring-transparent hover:ring-primary'
                     }`}
                   >
                     {/* Same portrait frame as the scene thumbnails below, so the
@@ -306,10 +342,12 @@ export function ImageDialog({
                       re-derive from the scene and aren't stored uploads. */}
                   <button
                     type="button"
-                    disabled={busy || fileName === url}
+                    disabled={busy || fileName === image || fileName === url}
                     onClick={() => void deleteRecent(fileName)}
                     title={
-                      fileName === url ? "Can't delete the current image" : 'Delete this upload'
+                      fileName === image || fileName === url
+                        ? "Can't delete the current image"
+                        : 'Delete this upload'
                     }
                     aria-label="Delete this upload"
                     className="absolute -top-1.5 -right-1.5 rounded-full border border-background bg-neutral-900 p-0.5 text-white shadow transition hover:bg-destructive disabled:pointer-events-none disabled:opacity-30"
@@ -333,9 +371,11 @@ export function ImageDialog({
                   key={scene}
                   type="button"
                   disabled={busy}
-                  onClick={() => void applyScene(scene)}
+                  onClick={() => selectScene(scene)}
                   title={scene.split(/[\\/]/).pop()}
-                  className="rounded-md ring-2 ring-transparent transition hover:ring-primary focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50"
+                  className={`rounded-md ring-2 transition focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
+                    stagedScene === scene ? 'ring-primary' : 'ring-transparent hover:ring-primary'
+                  }`}
                 >
                   <Portrait
                     scenePath={scene}
@@ -353,25 +393,20 @@ export function ImageDialog({
           <Input
             value={url}
             placeholder="Paste an image URL (https://…)"
-            onChange={(e) => setUrl(e.target.value)}
+            disabled={busy}
+            onChange={(e) => {
+              // Typing / pasting a URL supersedes any staged scene or crop.
+              setUrl(e.target.value)
+              setStagedScene(null)
+              setStagedCrop(null)
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                // No upload side effect for a URL — the producer just hands the
-                // patch over. The dialog closes right away; a refused persist
-                // surfaces via persistPatch's own toast.
-                void onApply(async () => ({ image: url, imageScene: '' }))
-                onClose()
-              }
+              if (e.key === 'Enter') void commit()
             }}
           />
-          <Button
-            variant="outline"
-            onClick={() => {
-              void onApply(async () => ({ image: url, imageScene: '' }))
-              onClose()
-            }}
-          >
-            Apply
+          {/* The ONLY save action — commits whichever selection is staged. */}
+          <Button disabled={busy} onClick={() => void commit()}>
+            {busy ? 'Applying…' : 'Apply'}
           </Button>
         </div>
       <input

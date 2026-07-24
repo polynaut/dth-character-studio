@@ -21,6 +21,7 @@ export function KeyedListEditor<T>({
   addLabel,
   removeLabel = 'Remove',
   rowClassName = 'mb-2 flex items-center gap-2',
+  emptyHint,
   children,
 }: {
   items: Array<T>
@@ -30,6 +31,8 @@ export function KeyedListEditor<T>({
   addLabel: ReactNode
   removeLabel?: string
   rowClassName?: string
+  /** Dashed placeholder box shown in place of the rows when the list is empty. */
+  emptyHint?: ReactNode
   children: (item: T, set: (next: T) => void, index: number) => ReactNode
 }) {
   const setAt = (index: number, next: T) =>
@@ -38,20 +41,30 @@ export function KeyedListEditor<T>({
 
   return (
     <>
-      {items.map((item, index) => (
-        <div key={index} className={rowClassName}>
-          {children(item, (next) => setAt(index, next), index)}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-9 shrink-0"
-            aria-label={removeLabel}
-            onClick={() => removeAt(index)}
-          >
-            <Trash2 className="size-3.5 text-destructive" />
-          </Button>
-        </div>
-      ))}
+      {items.length === 0 && emptyHint ? (
+        // A dashed placeholder box (like the ROM sections' "No groups yet"). It lives in
+        // the field column, so it's the width of the input rows, not the whole panel.
+        <p className="mb-2 rounded-lg border border-dashed px-4 py-4 text-center text-sm text-muted-foreground">
+          {emptyHint}
+        </p>
+      ) : (
+        items.map((item, index) => (
+          <div key={index} className={rowClassName}>
+            {children(item, (next) => setAt(index, next), index)}
+            {/* A light-red-bordered destructive icon button (like the Export-directory
+                Clear), size-9 to line up with the h-9 row inputs — not a bare glyph. */}
+            <Button
+              variant="outline-destructive"
+              size="icon"
+              className="shrink-0"
+              aria-label={removeLabel}
+              onClick={() => removeAt(index)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        ))
+      )}
       <Button variant="outline" size="sm" onClick={() => onChange([...items, newItem()])}>
         <Plus /> {addLabel}
       </Button>

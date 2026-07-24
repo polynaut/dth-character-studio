@@ -295,33 +295,82 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
 }
 
 /**
- * The run-time config deltas the ONE character script embeds: normalized scene
- * path → the handful of `dthCharacterConfig` fields the open scene overrides. A
- * ROM override contributes a fresh `extraFrames` (from the merged sections); an
- * identity override contributes the Genesis-9 dials (FACS detail / flexion /
- * UE5 tear UV, each honouring the same G9 gate as the base config). A scene with
- * no field to change is dropped. Same key normalization as {@link groomSceneMap}.
+ * The run-time config deltas the ONE character script embeds: normalized scene path
+ * → the `dthCharacterConfig` fields the open scene overrides. Section-derived fields
+ * (includes, extra frames, art direction, preset paths/lengths) come from DIFFING the
+ * scene's full {@link buildCharacterConfig} against the base; identity dials, preserve
+ * lists and JCM mods are emitted explicitly (so a cleared list still overrides). A
+ * scene with no field to change is dropped. Same key normalization as {@link groomSceneMap}.
  */
-function buildSceneConfigMap(character: Character): Record<string, Record<string, unknown>> {
+// Config keys that are DERIVED from the (merged) sections — diffed per scene against
+// the base config, so ANY section change (mode / preset / art direction / enable /
+// custom rows / custom path) reaches the runtime. Excludes identity / preserve / jcm:
+// those aren't section-derived, and they're emitted explicitly below so a cleared
+// array still OVERRIDES the base (the shallow runtime copy can only set keys, never
+// delete them). A key the merged config OMITS — a preset block a scene turned off —
+// is left stale on the base config but never read: its bIncludeX flag (which IS in
+// this list) gates the read, so `bIncludeGP:false` neutralizes a stale `gpArtDirection`.
+const SCENE_CONFIG_DIFF_KEYS = [
+  'bIncludeJCM',
+  'bIncludeFAC',
+  'bIncludeDK',
+  'bIncludeGP',
+  'bIncludePhysics',
+  'extraFrames',
+  'gpArtDirection',
+  'dkArtDirection',
+  'jcmRomPath',
+  'mouthRomPath',
+  'gpRomPath',
+  'dkRomPath',
+  'physRomPath',
+  'presetFrames',
+] as const
+
+function buildSceneConfigMap(
+  character: Character,
+  baseConfig: Record<string, unknown>,
+  romPaths: RomPaths,
+  frames: PresetFrames | undefined,
+  charFolderAbs: string | undefined,
+  sceneRomPaths: Record<string, RomPaths>,
+  sceneFrames: Record<string, PresetFrames>,
+): Record<string, Record<string, unknown>> {
   const g9Dials = GENERATIONS[character.genesis].hasStrengthDials
   const map: Record<string, Record<string, unknown>> = {}
   for (const override of activeSceneOverrides(character)) {
     const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
     if (key === '') continue
     const delta: Record<string, unknown> = {}
-    if (override.enabled) delta.extraFrames = buildFbmData(mergeSceneOverride(character, override))
+    // Section-derived keys: the DIFF of the scene's full config (built over the merged
+    // character with its own re-resolved rom paths + preset-block frames) vs the base.
+    const merged = buildCharacterConfig(
+      mergeSceneOverride(character, override),
+      sceneRomPaths[key] ?? romPaths,
+      sceneFrames[key] ?? frames,
+      charFolderAbs,
+    )
+    for (const k of SCENE_CONFIG_DIFF_KEYS) {
+      const value = merged[k]
+      if (value === undefined) continue // can't unset via shallow copy; bIncludeX gates it
+      if (JSON.stringify(value) !== JSON.stringify(baseConfig[k])) delta[k] = value
+    }
+    // Identity dials — not section-derived, emit explicitly (same G9 gate as the base).
     if (override.identity.enabled) {
       delta.FACsDetailStrength = g9Dials ? override.identity.facsDetailStrength : 0
       delta.FlexionStrength = g9Dials ? override.identity.flexionStrength : 0
       delta.bApplyUE5TearUV = character.genesis === 'G9' && override.identity.applyUE5TearUV
     }
+    // Preserve lists — full replacement, ALWAYS both keys even empty, so an armed scene
+    // that cleared a list overrides the base's (empty ⇒ preserve nothing) — delete-all.
     if (override.preserve.enabled) {
-      // Full replacement of the base lists — always set BOTH keys, even empty, so
-      // an armed scene that cleared a list overrides the base's (empty ⇒ preserve
-      // nothing for this scene) instead of the base value riding through the merge.
       delta.preserveMorphs = override.preserve.morphs
       delta.preserveNodeTransforms = override.preserve.nodeTransforms
     }
+    // JCM "Modify frames" — full replacement, emitted even empty (delete-all); excluded
+    // from the section diff above so a cleared list still overrides the base's.
+    if (override.jcm.enabled)
+      delta.jcmMorphMods = override.jcm.mods.map(jcmMorphModForRuntime)
     if (Object.keys(delta).length > 0) map[key] = delta
   }
   return map
@@ -338,7 +387,7 @@ function buildSceneConfigMap(character: Character): Record<string, Record<string
 function buildSceneCsvMap(character: Character): Record<string, string> {
   const map: Record<string, string> = {}
   for (const override of activeSceneOverrides(character)) {
-    if (!sceneOverrideBuildsRom(override)) continue
+    if (!sceneOverrideBuildsRom(character, override)) continue
     const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
     if (key !== '') map[key] = poseAssetFileName(character, sceneOverrideSlug(override.scenePath))
   }
@@ -346,24 +395,22 @@ function buildSceneCsvMap(character: Character): Record<string, string> {
 }
 
 /**
- * The one self-contained Daz script for a character: `ROM_<Name>_<Genesis>.dsa`.
- * It includes the DTH runtime (DthWorkflow.dsa, installed alongside it) and
- * makes a single `ApplyDTHCharacter(config)` call whose argument carries the
- * FULL character configuration AND all ROM morph definitions inline — replacing
- * the old wrapper + FBMs.json + CSV + art-direction JSON files.
+ * The FULL `dthCharacterConfig` object a character compiles to — every include
+ * flag, preset-block length, rom path, inline extra-frame + art-direction dataset,
+ * the identity dials, preserve lists and JCM mods. Pure derivation from
+ * `(character, romPaths, frames, charFolderAbs)`, so it's computed ONCE for the
+ * base AND — over `mergeSceneOverride(...)` with the scene's re-resolved paths /
+ * frames — per linked scene, whose config DELTA is the diff of the two
+ * ({@link buildSceneConfigMap}). Keeping one builder is what lets a per-scene
+ * mode / preset / art-direction / JCM change reach the runtime without the scene
+ * map hand-re-deriving the include logic (which would drift from `presetSelections`).
  */
-export function toCharacterScriptDsa(
+export function buildCharacterConfig(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
-  /**
-   * Absolute path of the character's folder — where the PoseAsset CSV is written
-   * at generation time. When provided (the desktop app), the generated script
-   * moves that CSV into the resolved export dir at run time. Omitted in pure/web
-   * contexts, where the move block is skipped.
-   */
   charFolderAbs?: string,
-): GeneratedFile {
+): Record<string, unknown> {
   const { sections } = character
   // JCM custom mode: a user-supplied .duf path used as the base ROM, just like
   // a pre-defined asset (so it still drives bIncludeJCM + jcmRomPath).
@@ -453,15 +500,56 @@ export function toCharacterScriptDsa(
     : null
   if (gpArt) config.gpArtDirection = gpArt
   if (dkArt) config.dkArtDirection = dkArt
+  return config
+}
 
-  // Per-scene overrides folded into the ONE script: each linked scene with an
-  // armed panel contributes a small run-time config delta (a ROM override → a
-  // fresh extraFrames; an identity override → the G9 dials); a ROM override also
-  // mints its own PoseAsset CSV (merged frames) the export block delivers by the
-  // same scene lookup. The config lookup swaps the open scene's delta onto
-  // dthCharacterConfig before the build — emitted only when some scene overrides
-  // (else the config stands as the primary scene's).
-  const sceneConfigMap = buildSceneConfigMap(character)
+/**
+ * The one self-contained Daz script for a character: `ROM_<Name>_<Genesis>.dsa`.
+ * It includes the DTH runtime (DthWorkflow.dsa, installed alongside it) and
+ * makes a single `ApplyDTHCharacter(config)` call whose argument carries the
+ * FULL character configuration AND all ROM morph definitions inline — replacing
+ * the old wrapper + FBMs.json + CSV + art-direction JSON files.
+ */
+export function toCharacterScriptDsa(
+  character: Character,
+  romPaths: RomPaths = {},
+  frames?: PresetFrames,
+  /**
+   * Absolute path of the character's folder — where the PoseAsset CSV is written
+   * at generation time. When provided (the desktop app), the generated script
+   * moves that CSV into the resolved export dir at run time. Omitted in pure/web
+   * contexts, where the move block is skipped.
+   */
+  charFolderAbs?: string,
+  /**
+   * Per-scene re-resolved rom paths / preset-block frames, keyed by the scene's
+   * normalized (lowercased '/'-path) key — the HOST resolves these from
+   * `mergeSceneOverride(...)` because the catalog lookup + native `.duf` measurement
+   * live outside the pure core. Omitted (or a scene missing) ⇒ that scene falls back
+   * to the base `romPaths`/`frames`, so a per-scene preset/mode/path change without
+   * host re-resolution would carry the base paths (see `buildSceneConfigMap`).
+   */
+  sceneRomPaths: Record<string, RomPaths> = {},
+  sceneFrames: Record<string, PresetFrames> = {},
+): GeneratedFile {
+  const config = buildCharacterConfig(character, romPaths, frames, charFolderAbs)
+
+  // Per-scene overrides folded into the ONE script: each linked scene with an armed
+  // panel contributes a run-time config DELTA (the diff of its full config vs the
+  // base — art direction, includes, extra frames, JCM mods, identity dials, …); a
+  // scene whose FRAME LAYOUT differs also mints its own PoseAsset CSV the export block
+  // delivers by the same scene lookup. The config lookup swaps the open scene's delta
+  // onto dthCharacterConfig before the build (emitted only when some scene overrides;
+  // else the config stands as the primary scene's).
+  const sceneConfigMap = buildSceneConfigMap(
+    character,
+    config,
+    romPaths,
+    frames,
+    charFolderAbs,
+    sceneRomPaths,
+    sceneFrames,
+  )
   const sceneCsvMap = buildSceneCsvMap(character)
   const sceneSelectBlock =
     Object.keys(sceneConfigMap).length > 0 ? `\n${sceneConfigLookupSnippet(sceneConfigMap)}` : ''
@@ -798,6 +886,11 @@ export function generateAll(
    *  `Scan_Products_<Name>.dsa`. The flag reaches the pure core only here — the
    *  core never imports host/app state. */
   scanProducts?: ScanProductsOptions,
+  /** Per-scene re-resolved rom paths / preset-block frames (host-resolved from each
+   *  `mergeSceneOverride(...)`), keyed by the scene's normalized path — see
+   *  {@link toCharacterScriptDsa}. A scene's frames also size its per-scene CSV. */
+  sceneRomPaths: Record<string, RomPaths> = {},
+  sceneFrames: Record<string, PresetFrames> = {},
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -806,18 +899,24 @@ export function generateAll(
   const groom =
     character.exportPath.trim() !== '' && Object.keys(groomSceneMap(character)).length > 0
   const era = poseAssetCsvEra(dthReleaseVersion ?? '')
-  // A ROM-override scene builds different frames, so it gets its OWN PoseAsset
-  // CSV from the merged sections; the one script's export block delivers the
-  // right CSV by open scene. Identity/groom-only overrides keep the base frames
-  // (their effect is a run-time config delta / the per-scene hair list), so they
-  // ride the base CSV — no extra file.
+  const sceneKey = (scenePath: string) => scenePath.trim().replace(/\\/g, '/').toLowerCase()
+  // A scene whose FRAME layout differs gets its OWN PoseAsset CSV from the merged
+  // sections, sized by that scene's own preset-block frames (a per-scene preset/mode
+  // change re-measures the blocks); the one script's export block delivers the right
+  // CSV by open scene. Art-direction-/identity-/jcm-/groom-only overrides keep the base
+  // frames (their effect is a run-time delta / hair list), so they ride the base CSV.
   const overrideCsvs = activeSceneOverrides(character)
-    .filter(sceneOverrideBuildsRom)
+    .filter((override) => sceneOverrideBuildsRom(character, override))
     .map((override) =>
-      toPoseAssetCsv(mergeSceneOverride(character, override), frames, era, sceneOverrideSlug(override.scenePath)),
+      toPoseAssetCsv(
+        mergeSceneOverride(character, override),
+        sceneFrames[sceneKey(override.scenePath)] ?? frames,
+        era,
+        sceneOverrideSlug(override.scenePath),
+      ),
     )
   return [
-    toCharacterScriptDsa(character, romPaths, frames, charFolderAbs),
+    toCharacterScriptDsa(character, romPaths, frames, charFolderAbs, sceneRomPaths, sceneFrames),
     ...(split ? [toExportScriptDsa(character, frames, charFolderAbs)] : []),
     ...(groom ? [toGroomExportScriptDsa(character)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),

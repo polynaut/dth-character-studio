@@ -71,7 +71,7 @@ function ScenePreview({ scenePath }: { scenePath: string }) {
     <img
       src={src}
       alt=""
-      className="aspect-[130/227] w-32 rounded-lg bg-[#4B4D57] object-cover object-top"
+      className="aspect-[130/227] w-32 rounded-lg bg-[#565963] object-cover object-top"
     />
   )
 }
