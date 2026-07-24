@@ -506,18 +506,20 @@ export function SortablePoseRow({
                   onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
                 />
               </td>
-              <td className="px-1 py-0.5 text-center">
-                <input
-                  type="checkbox"
-                  className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
-                  title="Resolve the base from the morph's current scene value at apply time"
-                  checked={morph.autoBase === true}
-                  onChange={(e) =>
-                    meta.updateMorphAt(row.index, morphIndex, {
-                      autoBase: e.target.checked ? true : undefined,
-                    })
-                  }
-                />
+              <td className="px-1 py-0.5">
+                <div className="flex h-full items-center justify-center">
+                  <input
+                    type="checkbox"
+                    className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
+                    title="Resolve the base from the morph's current scene value at apply time"
+                    checked={morph.autoBase === true}
+                    onChange={(e) =>
+                      meta.updateMorphAt(row.index, morphIndex, {
+                        autoBase: e.target.checked ? true : undefined,
+                      })
+                    }
+                  />
+                </div>
               </td>
               <td className="py-0.5 pr-4 pl-1">
                 {/* The same bin as the row's own delete (size-7), centered with flexbox.
