@@ -566,6 +566,10 @@ function CharacterPage() {
         primary={character.scenePath}
         selected={sceneSel.effectiveScene}
         onSelect={sceneSel.selectScene}
+        // The dock's "Add scene" brings the up-page Daz-scenes area (with its
+        // pick + copy-into-project flow) back into view — adding a scene lives
+        // there, and scrolling up also hides this dock (its cards are on screen).
+        onAddScene={() => scenesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
       />
     </main>
   )

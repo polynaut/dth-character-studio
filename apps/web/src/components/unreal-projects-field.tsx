@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -147,6 +147,29 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   const ctrlHeld = useModifierHeld('Control')
   const metaHeld = useModifierHeld('Meta')
 
+  // Subtle edge-fade on the cards rail: fade whichever side still has scrolled-off
+  // cards, so a long list hints that it scrolls — and nothing fades when they fit.
+  const railRef = useRef<HTMLDivElement>(null)
+  const [fade, setFade] = useState({ left: false, right: false })
+  useEffect(() => {
+    const el = railRef.current
+    if (!el) return
+    const update = () =>
+      setFade({
+        left: el.scrollLeft > 4,
+        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+      })
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    // jsdom (component tests) has no ResizeObserver — guard so this stays inert there.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    ro?.observe(el)
+    return () => {
+      el.removeEventListener('scroll', update)
+      ro?.disconnect()
+    }
+  }, [project.unrealProjects.length])
+
   useEffect(() => {
     let active = true
     for (const path of project.unrealProjects) {
@@ -253,6 +276,9 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       ? 'Add an Unreal project'
       : 'Link an Unreal project'
 
+  const railMask = `linear-gradient(to right, ${fade.left ? 'transparent' : '#000'}, #000 22px, #000 calc(100% - 22px), ${fade.right ? 'transparent' : '#000'})`
+  const pageRail = (dir: -1 | 1) => railRef.current?.scrollBy({ left: dir * 260, behavior: 'smooth' })
+
   return (
     <FileDropZone
       accept={['uproject']}
@@ -263,7 +289,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       {/* min-h reserves the linked-card row height (a card is ~54px: the U logo +
           padding + border), so the empty bar doesn't collapse shorter than the
           filled one — the footer height stays put as the first project is linked. */}
-      <div className="flex min-h-[71px] flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-2 backdrop-blur">
+      <div className="footer-3d flex min-h-[71px] items-center gap-3 px-4 py-2 backdrop-blur">
         {/* Left column: the section title with a compact "+ Add" trigger stacked
             underneath it. Kept short (h-7) so the two rows still fit the reserved
             card-row height — the footer doesn't grow taller than a linked card. */}
@@ -283,35 +309,75 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             <Plus className="size-3.5" /> Add project
           </Button>
         </div>
-        {project.unrealProjects.map((path) => (
-          <UnrealCard
-            key={path}
-            uprojectPath={path}
-            dthPresent={dthStatus[path]}
-            ctrlHeld={ctrlHeld || metaHeld}
-            installing={installingPath === path}
-            disabled={busy}
-            onOpen={(e) => {
-              // Alt+click = the app-wide "show in Explorer" hotkey (same as
-              // path chips); plain click opens the project in Unreal. Failures
-              // surface as toasts — a scope/association problem otherwise looks
-              // like a dead button (exactly how the .uproject scope bug hid).
-              const action = e.altKey
-                ? revealPath({ data: { path } })
-                : openScene({ data: { scenePath: path } })
-              void action.catch((err: unknown) =>
-                toast.error(err instanceof Error ? err.message : String(err)),
-              )
-            }}
-            onInstall={(e) => void installDth(path, e)}
-            onRemove={() =>
-              void save(
-                latestPaths.current.filter((p) => p !== path),
-                'Unlinked Unreal project',
-              )
-            }
-          />
-        ))}
+        {project.unrealProjects.length > 0 && (
+          <>
+            {/* Divider between the title column and the projects rail. */}
+            <span className="h-9 w-px shrink-0 bg-border" aria-hidden />
+            {/* Every linked project as a card in a horizontally-scrollable rail
+                (fits any number, ‹ › page it) — the same dock language as the
+                character page's scene dock. */}
+            <div
+              ref={railRef}
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:thin]"
+              style={{ maskImage: railMask, WebkitMaskImage: railMask }}
+            >
+              {project.unrealProjects.map((path) => (
+                <UnrealCard
+                  key={path}
+                  uprojectPath={path}
+                  dthPresent={dthStatus[path]}
+                  ctrlHeld={ctrlHeld || metaHeld}
+                  installing={installingPath === path}
+                  disabled={busy}
+                  onOpen={(e) => {
+                    // Alt+click = the app-wide "show in Explorer" hotkey (same as
+                    // path chips); plain click opens the project in Unreal. Failures
+                    // surface as toasts — a scope/association problem otherwise looks
+                    // like a dead button (exactly how the .uproject scope bug hid).
+                    const action = e.altKey
+                      ? revealPath({ data: { path } })
+                      : openScene({ data: { scenePath: path } })
+                    void action.catch((err: unknown) =>
+                      toast.error(err instanceof Error ? err.message : String(err)),
+                    )
+                  }}
+                  onInstall={(e) => void installDth(path, e)}
+                  onRemove={() =>
+                    void save(
+                      latestPaths.current.filter((p) => p !== path),
+                      'Unlinked Unreal project',
+                    )
+                  }
+                />
+              ))}
+            </div>
+            {/* Rail pager — only shown when the rail actually overflows (so a lone
+                card doesn't strand ‹ › over empty space); each arrow disables at
+                its end. `fade` already tracks the scrolled-off sides. */}
+            {(fade.left || fade.right) && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Scroll projects left"
+                  disabled={!fade.left}
+                  onClick={() => pageRail(-1)}
+                  className="flex size-8 items-center justify-center rounded-md border text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Scroll projects right"
+                  disabled={!fade.right}
+                  onClick={() => pageRail(1)}
+                  className="flex size-8 items-center justify-center rounded-md border text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </FileDropZone>
   )

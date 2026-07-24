@@ -541,6 +541,31 @@ a {
   }
 }
 
+/* The docked footer DOCKS (the character page's scene bar + the project page's
+   Unreal-projects bar) share a subtle RAISED 3D look so each reads as a panel
+   floating in front of the page rather than a flat strip:
+   - a lit TOP BORDER + a 1px cool inset highlight lip right under it (the raised
+     edge catching light),
+   - a cool-blue vertical GRADIENT running the FULL height — a two-stop ease
+     (richer just under the top edge, a gentle mid, out by the bottom) over a
+     translucent BG, so the host's `backdrop-blur` still shows through the ~10%
+     transparency and it reads as a smooth dome, not a hard band,
+   - a LIGHT drop shadow cast UPWARD over the content scrolling behind it.
+   Keep the base translucent — an opaque fill would kill the blur. */
+@utility footer-3d {
+  border-top: 1px solid color-mix(in oklab, var(--foreground) 12%, var(--border));
+  background-color: color-mix(in oklab, var(--background) 90%, transparent);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in oklab, #9cc4ff 9%, transparent) 0%,
+    color-mix(in oklab, #9cc4ff 3%, transparent) 45%,
+    transparent 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(184, 208, 255, 0.08),
+    0 -3px 12px -8px rgba(0, 0, 0, 0.38);
+}
+
 /* A tinted, drop-shadowed layer sitting OVER the header scene-label's thumbnail
    (`width/height: inherit` = the tile's own size) — a green wash matching the
    label. */
