@@ -468,7 +468,7 @@ export function SortablePoseRow({
             <td />
           </tr>
           {pose.morphs.map((morph, morphIndex) => (
-            <tr key={morph.id} className={morphRowBg}>
+            <tr key={morph.id} className={`${morphRowBg} [&>td]:align-middle`}>
               <td />
               <td className="px-1 py-0.5">
                 <span className="pl-6 text-xs text-muted-foreground tabular-nums">
