@@ -36,17 +36,18 @@ unlinked; extras can. Every card has **Open in Daz**.
 
 Clicking a card **selects** that scene, and the per-scene features follow the
 selection: the **hair items** list below the cards always edits the *selected*
-scene's list, and editing an overridable field — a ROM frame, an identity dial or
-a preserve item — overrides it for the selected scene. With more than one scene
-linked, the header **tags the selected scene
-right next to the character name** — it stays visible in the collapsed sticky
-header too, so you always know which scene you're working on. Clicking the tag
-scrolls back up to the scene cards to switch.
+scene's list, and editing an overridable field — anything in the ROM, an identity
+dial or a preserve item — overrides it for the selected scene. Once you scroll far
+enough that the scene cards leave the screen, a **docked scene bar** slides up along
+the bottom: the selected scene sits prominent (a green ring) on the left, every
+other linked scene follows in a scrollable rail — so you always know which scene
+you're on and can switch mid-scroll. Click a pill to select it, exactly like its
+card.
 
 <p align="center">
-  <img width="900" alt="the character header tagging the selected scene next to the name" src="screenshots/character-scene-tag.png" />
+  <img width="900" alt="the docked scene bar at the bottom of the character page — the selected scene prominent on the left, other linked scenes in a rail" src="screenshots/character-scene-footer.png" />
   <br>
-  <sub><em>The selected scene rides the header as a tag — click it to jump back to the scene cards.</em></sub>
+  <sub><em>Scroll the scene cards off-screen and the docked bar keeps the selected scene on hand — click a pill to switch.</em></sub>
 </p>
 
 ### Hair items — per scene, kept out of the export
