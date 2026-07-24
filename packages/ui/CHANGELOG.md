@@ -1,5 +1,21 @@
 # @dth/ui
 
+## 0.45.5
+
+### Patch Changes
+
+- [#489](https://github.com/polynaut/dth-character-studio/pull/489) [`83a1482`](https://github.com/polynaut/dth-character-studio/commit/83a1482260501ce7c4b27943a9a38c0a8fdcd007) Thanks [@polynaut](https://github.com/polynaut)! - Restyle the toggle switches with a neumorphic look: a recessed pill track (inset
+  shadow) cradling a raised, softly-domed knob (drop shadow + gradient). The green
+  "override" variant is the same pill in Daz-green — one central switch style, two
+  accents (orange for the default, green for an overridden boolean).
+
+- [#511](https://github.com/polynaut/dth-character-studio/pull/511) [`a60d7a8`](https://github.com/polynaut/dth-character-studio/commit/a60d7a843b8d0e9c8dbae78180850b6ca25379ef) Thanks [@polynaut](https://github.com/polynaut)! - fix(ui): only show tooltips after a 700ms hover, with a stronger shadow
+
+  The global `title` → floating-tooltip host now waits 700ms (was 350ms) before a
+  hovered tooltip appears, so sweeping the pointer across the UI no longer flashes
+  tooltips. Keyboard focus still shows its tooltip immediately. Tooltips also sit
+  more elevated (`shadow-2xl`).
+
 ## 0.45.4
 
 ## 0.45.3
