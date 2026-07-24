@@ -6,7 +6,7 @@ import { RomSections } from '#/components/rom-sections.tsx'
 import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
 import { applySceneOverride, characterSkinning, romTimeline, sceneOverrideSchema } from '@dth/rom'
 
-import type { MorphIndexEntry } from '#/lib/rom/api.ts'
+import type { BoneIndexEntry, MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { PoseAssetCatalog } from '#/components/rom/preset-asset-picker.tsx'
 import type { Character, PresetFrames, RomSection, SceneOverride } from '@dth/rom'
 
@@ -26,6 +26,7 @@ export const RomEditorSection = memo(function RomEditorSection({
   revealFrame,
   revealPose,
   morphIndex,
+  boneIndex,
   overrideEligible,
   scenePath,
   sceneOverride,
@@ -38,6 +39,7 @@ export const RomEditorSection = memo(function RomEditorSection({
   revealFrame: { frame: number; nonce: number } | null
   revealPose: { section: RomSection; poseId: string; nonce: number } | null
   morphIndex: Array<MorphIndexEntry>
+  boneIndex: Array<BoneIndexEntry>
   /** True while a non-primary Daz scene is selected — the grid then edits a
    *  per-scene ROM override (arm-on-edit) instead of the base sections. */
   overrideEligible: boolean
@@ -133,6 +135,7 @@ export const RomEditorSection = memo(function RomEditorSection({
         revealFrame={revealFrame}
         revealPose={revealPose}
         morphIndex={morphIndex}
+        boneIndex={boneIndex}
         jcmMorphMods={character.jcmMorphMods}
         onJcmMorphModsChange={onJcmMorphModsChange}
         override={overrideProp}
