@@ -514,10 +514,10 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="px-1 py-0.5 text-right">
-                {/* Right-aligned in the actions column (like the row's own bin) and
-                    styled to match it — gray at rest, red on hover over a silhouette —
-                    just a touch smaller. */}
+              <td className="py-0.5 pr-4 pl-1 text-right">
+                {/* Right-aligned in the actions column near (a bit inset from) the row's
+                    own bin, and styled to match it — gray at rest, red on hover over a
+                    silhouette — just a touch smaller. */}
                 <Button
                   variant="ghost"
                   size="icon"
