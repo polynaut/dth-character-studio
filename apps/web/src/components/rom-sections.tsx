@@ -23,7 +23,7 @@ import {
   sectionPresetAvailable,
 } from '@dth/rom'
 
-import type { MorphIndexEntry } from '#/lib/rom/api.ts'
+import type { BoneIndexEntry, MorphIndexEntry } from '#/lib/rom/api.ts'
 import type {
   Gender,
   GenesisVersion,
@@ -68,6 +68,9 @@ interface RomSectionsProps {
   /** Scanned morphs for this character's generation — enables the Morph-name
    *  autocomplete when a Scan_Morphs_<Genesis> run has produced an index. */
   morphIndex?: Array<MorphIndexEntry>
+  /** Scanned bones for this generation — enables the bone-name autocomplete in
+   *  the "Modify JCM frames" editor (same Scan_Morphs_<Genesis> index). */
+  boneIndex?: Array<BoneIndexEntry>
   /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
    *  matching pose rows are marked red. */
   failedFrames?: Set<number>
@@ -138,6 +141,7 @@ export const RomSections = memo(function RomSections({
   revealFrame,
   revealPose,
   morphIndex,
+  boneIndex,
   jcmMorphMods,
   onJcmMorphModsChange,
   override,
@@ -894,6 +898,7 @@ export const RomSections = memo(function RomSections({
                     <JcmModsGrid
                       mods={overrideData?.jcm.enabled ? overrideData.jcm.mods : jcmMorphMods}
                       onChange={overrideData ? onJcmModsForScene : onJcmMorphModsChange}
+                      boneIndex={boneIndex}
                     />
                   </div>
                 )}

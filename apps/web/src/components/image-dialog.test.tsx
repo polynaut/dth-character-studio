@@ -18,8 +18,10 @@ vi.mock('#/lib/rom/api.ts', () => ({
   setAvatarFromScene: async () => 'scene-img',
   listCharacterUploads: async () => recentUploads,
   deleteCharacterUpload: () => deleteCharacterUpload(),
-  // Avatar resolves the stored reference asynchronously — identity is enough here.
-  resolveImageSrc: async (image: string) => image,
+  // The real resolver returns an inline data URL (never a bare filename); mirror
+  // that so the <img src> guard in usePortraitSrc lets it through, while still
+  // encoding the reference so tests can assert which upload is showing.
+  resolveImageSrc: async (image: string) => (image ? `data:image/png;base64,${image}` : ''),
 }))
 // The drop-zone hook registers Tauri webview listeners — inert in jsdom.
 vi.mock('#/lib/file-drop.ts', () => ({ useFileDrop: () => ({ id: 1, isOver: false }) }))
@@ -152,7 +154,7 @@ describe('ImageDialog crop + persist flow', () => {
     expect(buttons).toHaveLength(2)
     fireEvent.click(buttons[1])
     expect(onApply).not.toHaveBeenCalled() // selecting a recent upload only STAGES it
-    await waitFor(() => expect(previewSrc()).toBe('c1--up-100.png'))
+    await waitFor(() => expect(previewSrc()).toBe('data:image/png;base64,c1--up-100.png'))
     apply()
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
     expect(uploadCroppedAvatar).not.toHaveBeenCalled()
