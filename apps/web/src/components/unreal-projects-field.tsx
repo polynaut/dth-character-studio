@@ -289,7 +289,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       {/* min-h reserves the linked-card row height (a card is ~54px: the U logo +
           padding + border), so the empty bar doesn't collapse shorter than the
           filled one — the footer height stays put as the first project is linked. */}
-      <div className="footer-3d flex min-h-[71px] items-center gap-3 px-4 py-2 backdrop-blur">
+      <div className="footer-3d flex min-h-[71px] items-center gap-3 px-4 backdrop-blur">
         {/* Left column: the section title with a compact "+ Add" trigger stacked
             underneath it. Kept short (h-7) so the two rows still fit the reserved
             card-row height — the footer doesn't grow taller than a linked card. */}
@@ -316,9 +316,12 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             {/* Every linked project as a card in a horizontally-scrollable rail
                 (fits any number, ‹ › page it) — the same dock language as the
                 character page's scene dock. */}
+            {/* `py-2` gives each card's hover-✕ (just outside its top-right) room
+                so `overflow-x-auto` — which forces overflow-y to auto — doesn't clip
+                it or spawn a stray vertical scrollbar. */}
             <div
               ref={railRef}
-              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:thin]"
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-2 [scrollbar-width:thin]"
               style={{ maskImage: railMask, WebkitMaskImage: railMask }}
             >
               {project.unrealProjects.map((path) => (

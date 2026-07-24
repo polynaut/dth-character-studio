@@ -29,7 +29,7 @@ import { IdentitySection } from '#/components/character/identity-section.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
 import { RomEditorSection } from '#/components/character/rom-editor-section.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
-import { SceneFooter } from '#/components/character/scene-footer.tsx'
+import { SceneFooter, type SceneDockActions } from '#/components/character/scene-footer.tsx'
 import { ScriptsSection } from '#/components/character/scripts-section.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { DazSceneField } from '#/components/daz-scene-field.tsx'
@@ -205,6 +205,9 @@ function CharacterPage() {
   // `cardsRef`, not the whole panel) drives `show`, so the footer appears the moment
   // the cards leave, not when the "Add scene" button and the rest also clear.
   const scenesRef = useRef<HTMLDivElement>(null)
+  // Populated by DazSceneField with its add/unlink flows so the docked scene bar
+  // can drive them (its "Add scene" button + per-card unlink).
+  const sceneDockActions = useRef<SceneDockActions | null>(null)
   const [scenesOnScreen, setScenesOnScreen] = useState(true)
   useEffect(() => {
     // Measure the cards' viewport position directly rather than via an
@@ -459,6 +462,7 @@ function CharacterPage() {
                   onScenesFolderMoved={onScenesFolderMoved}
                   selectedScene={sceneSel.effectiveScene}
                   onSelectScene={sceneSel.selectScene}
+                  dockActionsRef={sceneDockActions}
                 />
                 <HoudiniProjectsField
                   character={character}
@@ -566,10 +570,9 @@ function CharacterPage() {
         primary={character.scenePath}
         selected={sceneSel.effectiveScene}
         onSelect={sceneSel.selectScene}
-        // The dock's "Add scene" brings the up-page Daz-scenes area (with its
-        // pick + copy-into-project flow) back into view — adding a scene lives
-        // there, and scrolling up also hides this dock (its cards are on screen).
-        onAddScene={() => scenesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+        // "Add scene" + per-card unlink drive DazSceneField's own flows (pick,
+        // copy-into-project, unlink confirm) through the shared actions ref.
+        actionsRef={sceneDockActions}
       />
     </main>
   )

@@ -8,5 +8,6 @@ upward shadow) plus a shared layout — a left section label + Add shortcut, a
 horizontally-scrollable card rail, and ‹ › pager arrows that only appear when the
 rail overflows (each disables at its end). The character page's scene footer
 adopts the project page's Unreal-projects-dock layout (its scenes now sit in the
-rail, the selected one ringed green with the PRIMARY badge). The scene dock's
-"Add scene" scrolls the up-page Daz-scenes area into view.
+rail, the selected one ringed green with the PRIMARY badge) and gains the same
+controls: "Add scene" links a scene and each extra card has a hover-✕ to unlink,
+driving the up-page field's own pick/copy/confirm flows.

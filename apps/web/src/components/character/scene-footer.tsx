@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import type { MutableRefObject } from 'react'
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 
 import { Button, cn } from '@dth/ui'
 
@@ -10,6 +11,19 @@ const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\
 
 /** The "primary" role badge shown on the primary scene's footer card (compact variant). */
 const primaryTag = <PrimaryBadge dense />
+
+/**
+ * The scene-dock's per-card actions, OWNED by `DazSceneField` (which holds the
+ * pick/copy/unlink flows and their modals) and shared with the dock through a ref
+ * it populates — so the dock drives the same flows without duplicating them. The
+ * ref is null until the field has mounted and populated it.
+ */
+export interface SceneDockActions {
+  /** Pick + link another Daz scene (same flow as the up-page "Add scene"). */
+  add: () => void
+  /** Unlink a scene from the character (opens the field's confirm dialog). */
+  remove: (scenePath: string) => void
+}
 
 /**
  * A docked "Daz scenes" DOCK — the same layout language as the project page's
@@ -29,7 +43,7 @@ export function SceneFooter({
   primary,
   selected,
   onSelect,
-  onAddScene,
+  actionsRef,
 }: {
   show: boolean
   /** Every linked scene path (the primary first, then extras). */
@@ -39,9 +53,9 @@ export function SceneFooter({
   /** The currently selected scene's path (`effectiveScene`) — ringed green. */
   selected: string
   onSelect: (scenePath: string) => void
-  /** The "Add scene" shortcut — brings the up-page Daz-scenes area (with its
-   *  add/copy flow) into view. Omitted → the button renders disabled. */
-  onAddScene?: () => void
+  /** Per-card actions (add / unlink), populated by `DazSceneField`. Omitted → the
+   *  "Add scene" button and the per-card unlink render disabled/absent. */
+  actionsRef?: MutableRefObject<SceneDockActions | null>
 }) {
   // Subtle edge-fade on the rail: fade whichever side still has scrolled-off
   // scenes, so a long list hints that it scrolls — and nothing fades when they fit.
@@ -84,7 +98,7 @@ export function SceneFooter({
           footer-3d (and so the 1px top border) is on the fixed wrapper, so the
           inner min-h is 70px (+1px border = 71px total). A `size="lg"` scene card
           is ~54px, like the Unreal card. */}
-      <div className="flex min-h-[70px] items-center gap-3 px-6 py-1.5">
+      <div className="flex min-h-[70px] items-center gap-3 px-6">
         {/* Left column: the section title with a compact "Add scene" shortcut
             stacked underneath — the same recipe as the Unreal dock's left column. */}
         <div className="mr-1 flex shrink-0 flex-col gap-1">
@@ -95,8 +109,8 @@ export function SceneFooter({
             variant="outline"
             size="sm"
             className="h-7 w-fit gap-1 px-2 text-xs"
-            disabled={!onAddScene}
-            onClick={onAddScene}
+            disabled={!actionsRef}
+            onClick={() => actionsRef?.current?.add()}
           >
             <Plus className="size-3.5" /> Add scene
           </Button>
@@ -106,38 +120,59 @@ export function SceneFooter({
         <span className="h-9 w-px shrink-0 bg-border" aria-hidden />
 
         {/* Every linked scene as a card in a horizontally-scrollable rail (fits any
-            number). The SELECTED one is ringed green; clicking a card selects it. */}
+            number). The SELECTED one is ringed green; clicking a card selects it.
+            The rail's `py-2` gives the hover-✕ (which sits just outside the card's
+            top-right) room so `overflow-x-auto` — which forces overflow-y to auto —
+            doesn't clip it or spawn a stray vertical scrollbar. */}
         <div
           ref={railRef}
-          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:thin]"
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-2 [scrollbar-width:thin]"
           style={{ maskImage: railMask, WebkitMaskImage: railMask }}
         >
           {scenes.map((path) => {
             const isSelected = path === selected
+            const isPrimary = path === primary
             return (
-              <button
+              // A wrapper (not a button) so the unlink ✕ is a SIBLING of the select
+              // button, never a button nested in a button. The green ring / dim goes
+              // on the wrapper so it still hugs the SceneLabel pill's radius.
+              <div
                 key={path}
-                type="button"
-                onClick={() => onSelect(path)}
-                title={isSelected ? nameOf(path) : `Switch to ${nameOf(path)}`}
                 className={cn(
-                  // The selected card's ring MUST hug the SceneLabel pill's radius
-                  // (`Tag` uses `rounded`) with no offset (`ring-offset-0`) so it
-                  // sits flush on the pill edge.
-                  'shrink-0 rounded outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring',
+                  'group/scene relative shrink-0 rounded transition-opacity',
                   isSelected
                     ? 'ring-2 ring-daz-green ring-offset-0'
-                    : 'opacity-65 hover:opacity-100 focus-visible:opacity-100',
+                    : 'opacity-65 hover:opacity-100 focus-within:opacity-100',
                 )}
               >
-                <SceneLabel
-                  scenePath={path}
-                  name={nameOf(path)}
-                  accentBar
-                  size="lg"
-                  subline={path === primary ? primaryTag : undefined}
-                />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSelect(path)}
+                  title={isSelected ? nameOf(path) : `Switch to ${nameOf(path)}`}
+                  className="block rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <SceneLabel
+                    scenePath={path}
+                    name={nameOf(path)}
+                    accentBar
+                    size="lg"
+                    subline={isPrimary ? primaryTag : undefined}
+                  />
+                </button>
+                {/* The primary can't be unlinked (it's also the avatar source), so
+                    only extras get the ✕ — same recipe as the Unreal-dock card. */}
+                {!isPrimary && actionsRef && (
+                  <button
+                    type="button"
+                    aria-label={`Unlink ${nameOf(path)}`}
+                    title="Unlink from character (the file is kept)"
+                    onClick={() => actionsRef.current?.remove(path)}
+                    className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 transition-[opacity,color] group-hover/scene:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>

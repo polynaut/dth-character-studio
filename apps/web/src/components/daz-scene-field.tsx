@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Ref } from 'react'
+import type { MutableRefObject, Ref } from 'react'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -8,6 +8,7 @@ import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
+import type { SceneDockActions } from '#/components/character/scene-footer.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import dazLogo from '#/assets/daz-logo.png'
 import {
@@ -115,6 +116,7 @@ export function DazSceneField({
   selectedScene,
   onSelectScene,
   cardsRef,
+  dockActionsRef,
 }: {
   projectId: string
   character: Character
@@ -138,6 +140,9 @@ export function DazSceneField({
    *  (the cards, not the "Add scene" button below them) scrolls out of view, so
    *  the docked scene footer appears the moment the cards leave. */
   cardsRef?: Ref<HTMLDivElement>
+  /** Populated with this field's add/unlink flows so the docked scene bar
+   *  (SceneFooter) can drive them without duplicating the modals. */
+  dockActionsRef?: MutableRefObject<SceneDockActions | null>
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -496,6 +501,21 @@ export function DazSceneField({
       setBusy(false)
     }
   }
+
+  // Share the pick+link and unlink flows with the docked scene bar (SceneFooter):
+  // it drives the SAME handlers — whose pick dialog / copy / confirm modals all
+  // live in THIS field — instead of duplicating them. Reassigned every render so
+  // the handlers' closures stay current; nulled on unmount.
+  useEffect(() => {
+    if (!dockActionsRef) return
+    dockActionsRef.current = {
+      add: () => void onAddPick(),
+      remove: (scenePath: string) => askRemove(scenePath),
+    }
+    return () => {
+      dockActionsRef.current = null
+    }
+  })
 
   return (
     <FileDropZone
