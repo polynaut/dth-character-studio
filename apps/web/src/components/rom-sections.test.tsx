@@ -52,17 +52,13 @@ describe('RomSections multi-morph editor', () => {
     )
     // Open the FBM section accordion.
     fireEvent.click(screen.getByText('Full Body'))
-    // Expand the pose's morph list — the column header marks the editor.
+    // Expand the pose's morph list — the "Property" column header marks the editor.
     fireEvent.click(screen.getByTitle('Combine multiple Daz morphs into this single generated morph'))
-    const expansion = screen
-      .getByTitle('The internal property name of the Daz morph')
-      .closest('td') as HTMLElement
-    // Morph-name cells are comboboxes (autocomplete); plain cells are textboxes.
-    const inputs = [
-      ...within(expansion).queryAllByRole('textbox'),
-      ...within(expansion).queryAllByRole('combobox'),
-    ]
-    const values = inputs.map((input) => (input as HTMLInputElement).value)
+    expect(screen.getByTitle('The internal property name of the Daz morph')).toBeTruthy()
+    // The morph Property cells are comboboxes (autocomplete) in the expanded sub-rows.
+    const values = screen
+      .getAllByRole('combobox')
+      .map((input) => (input as HTMLInputElement).value)
     expect(values).toContain('SL_Glutes SS Left')
     expect(values).toContain('SL_Glutes SS Right')
   })

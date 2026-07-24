@@ -426,103 +426,117 @@ export function SortablePoseRow({
         ))}
       </tr>
       {expanded && (
-        <tr className="border-b bg-muted/20">
-          <td />
-          <td colSpan={visibleCells.length} className="px-2 py-2">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span className="w-5 text-right">#</span>
-                <span className="w-44 px-2" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
-                  Node
-                </span>
-                <span className="flex-1 px-2" title="The internal property name of the Daz morph">
-                  Property
-                </span>
-                <span className="w-20 px-2 text-right" title="The value the pose dials the morph to">
-                  Value
-                </span>
-                <span
-                  className="w-16 px-2 text-right"
-                  title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
-                >
-                  Base
-                </span>
-                <span
-                  className="w-14 text-center"
-                  title="Resolve the base from the morph's current scene value at apply time"
-                >
-                  Auto
-                </span>
-                <span className="w-6" />
-              </div>
-              {pose.morphs.map((morph, morphIndex) => (
-                <div key={morph.id} className="flex items-center gap-2">
-                  <span className="w-5 text-right text-xs text-muted-foreground tabular-nums">
-                    {morphIndex + 1}.
-                  </span>
-                  <div className="w-44">
-                    <TextCell
-                      value={morph.node}
-                      placeholder={meta.figureNode}
-                      onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <MorphNameCell
-                      value={morph.prop}
-                      placeholder="body_bs_BodyTone"
-                      onCommit={(prop) => meta.updateMorphAt(row.index, morphIndex, { prop })}
-                      onPick={(e) =>
-                        meta.updateMorphAt(row.index, morphIndex, { prop: e.name, node: e.node })
-                      }
-                    />
-                  </div>
-                  <NumberCell
-                    value={morph.value}
-                    onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
-                  />
-                  <OptionalNumberCell
-                    value={morph.base}
-                    placeholder="0"
-                    disabled={morph.autoBase === true}
-                    onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
-                  />
-                  <span className="flex w-14 justify-center">
-                    <input
-                      type="checkbox"
-                      className="size-3.5 accent-primary"
-                      title="Resolve the base from the morph's current scene value at apply time"
-                      checked={morph.autoBase === true}
-                      onChange={(e) =>
-                        meta.updateMorphAt(row.index, morphIndex, {
-                          autoBase: e.target.checked ? true : undefined,
-                        })
-                      }
-                    />
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    title="Remove this morph"
-                    disabled={pose.morphs.length <= 1}
-                    onClick={() => meta.removeMorphAt(row.index, morphIndex)}
-                  >
-                    <Trash2 className="size-3 text-destructive" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-1 h-7 text-xs"
-              onClick={() => meta.addMorph(row.index)}
+        // The multi-morph editor renders as REAL table rows sharing the parent grid's
+        // columns, so its sub-columns line up under the main ones: drag→(blank),
+        // Frame→#, Name→Node, Morph name→Property, Value→Value, Bone scale→Base,
+        // morphs→Auto, actions→(remove). (A colSpan block with its own widths couldn't
+        // align to the auto-sized table columns.)
+        <>
+          <tr className="bg-muted/20 text-xs font-medium text-muted-foreground">
+            <td />
+            <td className="px-1 py-1 text-right">#</td>
+            <td className="px-1 py-1" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
+              Node
+            </td>
+            <td className="px-1 py-1" title="The internal property name of the Daz morph">
+              Property
+            </td>
+            <td className="px-1 py-1 text-right" title="The value the pose dials the morph to">
+              Value
+            </td>
+            <td
+              className="px-1 py-1 text-right"
+              title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
             >
-              <Plus className="size-3.5" /> Add morph
-            </Button>
-          </td>
-        </tr>
+              Base
+            </td>
+            <td
+              className="px-1 py-1 text-center"
+              title="Resolve the base from the morph's current scene value at apply time"
+            >
+              Auto
+            </td>
+            <td />
+          </tr>
+          {pose.morphs.map((morph, morphIndex) => (
+            <tr key={morph.id} className="bg-muted/20">
+              <td />
+              <td className="px-1 py-0.5 text-right text-xs text-muted-foreground tabular-nums">
+                {morphIndex + 1}.
+              </td>
+              <td className="px-1 py-0.5">
+                <TextCell
+                  value={morph.node}
+                  placeholder={meta.figureNode}
+                  onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
+                />
+              </td>
+              <td className="px-1 py-0.5">
+                <MorphNameCell
+                  value={morph.prop}
+                  placeholder="body_bs_BodyTone"
+                  onCommit={(prop) => meta.updateMorphAt(row.index, morphIndex, { prop })}
+                  onPick={(e) =>
+                    meta.updateMorphAt(row.index, morphIndex, { prop: e.name, node: e.node })
+                  }
+                />
+              </td>
+              <td className="px-1 py-0.5 text-right">
+                <NumberCell
+                  value={morph.value}
+                  onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
+                />
+              </td>
+              <td className="px-1 py-0.5 text-right">
+                <OptionalNumberCell
+                  value={morph.base}
+                  placeholder="0"
+                  disabled={morph.autoBase === true}
+                  onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
+                />
+              </td>
+              <td className="px-1 py-0.5 text-center">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-primary"
+                  title="Resolve the base from the morph's current scene value at apply time"
+                  checked={morph.autoBase === true}
+                  onChange={(e) =>
+                    meta.updateMorphAt(row.index, morphIndex, {
+                      autoBase: e.target.checked ? true : undefined,
+                    })
+                  }
+                />
+              </td>
+              <td className="px-1 py-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  title="Remove this morph"
+                  disabled={pose.morphs.length <= 1}
+                  onClick={() => meta.removeMorphAt(row.index, morphIndex)}
+                >
+                  <Trash2 className="size-3 text-destructive" />
+                </Button>
+              </td>
+            </tr>
+          ))}
+          <tr className="border-b bg-muted/20">
+            <td />
+            <td />
+            <td colSpan={visibleCells.length - 1} className="px-1 py-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => meta.addMorph(row.index)}
+              >
+                <Plus className="size-3.5" /> Add morph
+              </Button>
+            </td>
+          </tr>
+        </>
       )}
     </>
   )
