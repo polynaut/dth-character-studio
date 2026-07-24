@@ -9,6 +9,18 @@ import { cn } from '@dth/ui'
  * read as a data URL. `scenePath` wins when both are passed. Returns '' until it
  * resolves — or when nothing is available — so the caller can show a fallback.
  */
+/**
+ * Guard a resolved value before it reaches an `<img src>`. A stored avatar
+ * reference can be an arbitrary user-pasted URL (`isExternalImage` lets `data:` and
+ * `https://` through), so allow ONLY image URL schemes to the DOM — an
+ * `https://`/`http://` image, a `data:image/…` inline image, or a `blob:` object
+ * URL. Anything else (`data:text/html`, `javascript:`, …) becomes '' and the caller
+ * renders the name-initial fallback instead.
+ */
+function safeImgSrc(src: string): string {
+  return /^(https?:\/\/|data:image\/|blob:)/i.test(src) ? src : ''
+}
+
 export function usePortraitSrc({
   image = '',
   scenePath = '',
@@ -35,7 +47,7 @@ export function usePortraitSrc({
         : Promise.resolve('')
     // Keep the previous image while re-resolving; only swap on a result (or
     // clear on failure) so focus refreshes don't flash the fallback initial.
-    resolve.then((s) => active && setSrc(s)).catch(() => active && setSrc(''))
+    resolve.then((s) => active && setSrc(safeImgSrc(s))).catch(() => active && setSrc(''))
     return () => {
       active = false
     }
