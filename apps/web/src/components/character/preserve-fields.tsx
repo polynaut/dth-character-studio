@@ -120,7 +120,6 @@ export function PreserveFields({
                     <div className="min-w-0 flex-1">
                       <MorphNameCell
                         value={item.name}
-                        placeholder="body_ctrl_BreastsUp-Down"
                         inputClassName={cn(
                           MORPH_FIELD_CLASS,
                           inheritedRow(isOv) && 'text-muted-foreground',
@@ -155,7 +154,7 @@ export function PreserveFields({
                 overrideLabelClass(nodesOverridden, overrideEligible),
               )}
             >
-              Preserve node transforms (e.g. eyes)
+              Preserve node transforms
               <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
             </Label>
             <KeyedListEditor
@@ -173,7 +172,6 @@ export function PreserveFields({
                       value={item.nodeLabel}
                       overridden={isOv}
                       className={cn(inheritedRow(isOv) && 'text-muted-foreground')}
-                      placeholder="Left Eye"
                       onChange={(e) => set({ nodeLabel: e.target.value })}
                     />
                   </>

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 afterEach(cleanup)
 
 import { RomSections } from './rom-sections'
-import { defaultSections } from '@dth/rom'
+import { defaultSections, sceneOverrideSchema } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { RomSections as RomSectionsModel } from '@dth/rom'
@@ -52,17 +52,13 @@ describe('RomSections multi-morph editor', () => {
     )
     // Open the FBM section accordion.
     fireEvent.click(screen.getByText('Full Body'))
-    // Expand the pose's morph list — the column header marks the editor.
+    // Expand the pose's morph list — the "Property" column header marks the editor.
     fireEvent.click(screen.getByTitle('Combine multiple Daz morphs into this single generated morph'))
-    const expansion = screen
-      .getByTitle('The internal property name of the Daz morph')
-      .closest('td') as HTMLElement
-    // Morph-name cells are comboboxes (autocomplete); plain cells are textboxes.
-    const inputs = [
-      ...within(expansion).queryAllByRole('textbox'),
-      ...within(expansion).queryAllByRole('combobox'),
-    ]
-    const values = inputs.map((input) => (input as HTMLInputElement).value)
+    expect(screen.getByTitle('The internal property name of the Daz morph')).toBeTruthy()
+    // The morph Property cells are comboboxes (autocomplete) in the expanded sub-rows.
+    const values = screen
+      .getAllByRole('combobox')
+      .map((input) => (input as HTMLInputElement).value)
     expect(values).toContain('SL_Glutes SS Left')
     expect(values).toContain('SL_Glutes SS Right')
   })
@@ -382,6 +378,7 @@ describe('scene override mode', () => {
       identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
       groom: { enabled: false },
       preserve: { enabled: false, morphs: [], nodeTransforms: [] },
+      jcm: { enabled: false, mods: [] },
     })
     return (
       <RomSections
@@ -409,7 +406,7 @@ describe('scene override mode', () => {
     expect(screen.getAllByLabelText('Insert a frame here').length).toBeGreaterThan(0)
     expect(screen.getAllByTitle('Drag to reorder').length).toBeGreaterThan(0)
     // A base row can be deleted for this scene (a structural edit that escalates).
-    expect(screen.getByTitle('Delete this frame for this scene')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Delete this frame for this scene' })).toBeTruthy()
     // Nothing to reset until a value edit arms the row.
     expect(screen.queryByTitle('Reset this frame to the base ROM')).toBeNull()
   })
@@ -429,7 +426,7 @@ describe('scene override mode', () => {
     // The scene now OWNS the section — snapshotted whole, with the extra frame.
     expect(latest!.sectionOverrides).toHaveLength(1)
     expect(latest!.sectionOverrides[0].section).toBe('FBM')
-    expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(2)
+    expect(latest!.sectionOverrides[0].config.groups[0].poses).toHaveLength(2)
     // The base sections are never touched by a scene override.
     expect(sectionsChanged).toBe(false)
     // The section title now carries the green reset-all control.
@@ -442,9 +439,9 @@ describe('scene override mode', () => {
       <OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />,
     )
     fireEvent.click(screen.getByText('Full Body'))
-    fireEvent.click(screen.getByTitle('Delete this frame for this scene'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this frame for this scene' }))
     expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionOverrides[0].groups[0].poses).toHaveLength(0)
+    expect(latest!.sectionOverrides[0].config.groups[0].poses).toHaveLength(0)
     // The section-title reset drops the whole-section override entirely.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
     expect(latest!.sectionOverrides).toHaveLength(0)
@@ -549,7 +546,7 @@ describe('scene override mode', () => {
     expect(
       screen.getByTitle('Reset this added frame — removes it (not in the primary scene)'),
     ).toBeTruthy()
-    fireEvent.click(screen.getByTitle('Delete this added frame for this scene'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this added frame for this scene' }))
     expect(latest!.additions).toEqual([])
   })
 
@@ -594,6 +591,60 @@ describe('scene override mode', () => {
     const header = screen.getByText('Full Body').closest('div') as HTMLElement
     fireEvent.click(within(header).getByRole('switch'))
     expect(sectionsChanged).toBe(false)
+  })
+
+  it('a section disabled for the scene keeps its rows at their absolute frames (no reset to 1)', () => {
+    render(<OverrideHarness onOverrideChange={() => {}} onSectionsChange={() => {}} />)
+    fireEvent.click(screen.getByText('Full Body')) // expand FBM
+    // Enabled: the base row sits at absolute frame 328 (after the 328-frame base ROM).
+    expect(screen.getByText('328')).toBeTruthy()
+    // Disable FBM for the scene — its rows stay in place, they're just not generated.
+    const header = screen.getByText('Full Body').closest('div') as HTMLElement
+    fireEvent.click(within(header).getByRole('switch'))
+    // The frame number must NOT collapse to 1 — still 328.
+    expect(screen.getByText('328')).toBeTruthy()
+  })
+
+  it('editing a section CONFIG field (JCM custom path) owns the section for the scene', () => {
+    // A JCM section in custom mode → an editable base-ROM path Input. On a non-primary
+    // scene editing it escalates the section to an owned config (per-scene), stores the
+    // path there, and shows the green section reset — WITHOUT touching the base.
+    let latest: import('@dth/rom').SceneOverride | null = null
+    let sectionsChanged = false
+    function JcmHarness() {
+      const [override, setOverride] = useState(
+        sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf', enabled: true }),
+      )
+      const sections = defaultSections()
+      sections.JCM = { ...sections.JCM, enabled: true, mode: 'custom', customAssetPath: 'C:/base.duf' }
+      return (
+        <RomSections
+          sections={sections}
+          genesis="G9"
+          gender="female"
+          skinning="dqs"
+          catalog={{ folder: '', assets: [], error: null }}
+          presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+          override={{
+            data: override,
+            onChange: (next) => {
+              setOverride(next)
+              latest = next
+            },
+          }}
+          onChange={() => (sectionsChanged = true)}
+        />
+      )
+    }
+    render(<JcmHarness />)
+    fireEvent.click(screen.getByText('Joint Corrective'))
+    fireEvent.change(screen.getByDisplayValue('C:/base.duf'), { target: { value: 'C:/beach.duf' } })
+
+    expect(latest!.sectionOverrides).toHaveLength(1)
+    expect(latest!.sectionOverrides[0].section).toBe('JCM')
+    expect(latest!.sectionOverrides[0].config.customAssetPath).toBe('C:/beach.duf')
+    expect(sectionsChanged).toBe(false)
+    expect(screen.getByTitle("Reset this section to the primary scene's ROM")).toBeTruthy()
   })
 })
 

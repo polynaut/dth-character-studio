@@ -83,7 +83,7 @@ export function IdentitySection({
 
   return (
     // Sidebar rows: Hair items, then the Genesis-9 dials, then Gender at the bottom.
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-7">
       {/* Hair items — the first sidebar row. */}
       {hairSlot}
 
@@ -93,7 +93,7 @@ export function IdentitySection({
           exist, so the borderless fieldset disables and mutes them all at once. */}
       <fieldset
         disabled={offG9}
-        className="m-0 flex flex-wrap items-end gap-x-6 gap-y-3 border-0 p-0"
+        className="m-0 flex flex-wrap items-end gap-x-6 gap-y-5 border-0 p-0"
       >
         <div className="group/ovr">
           <Label className={cn('mb-1', overrideLabelClass(facsOv, overrideEligible))}>

@@ -139,6 +139,51 @@ describe('schema v17 — sceneOverrides (additive, zod default)', () => {
   })
 })
 
+describe('schema v23 — sectionOverrides {section,groups} → {section,config} + jcm block', () => {
+  const now = '2026-07-20T00:00:00.000Z'
+  it('wraps a legacy whole-section override groups into a custom config', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 22,
+        sceneOverrides: [
+          {
+            scenePath: 'D:/s.duf',
+            enabled: true,
+            poses: [],
+            additions: [],
+            sectionOverrides: [
+              { section: 'FBM', groups: [{ id: 'g1', label: '', suffix: 'centre', method: 'default', calculateFrom: 'default', poses: [] }] },
+            ],
+          },
+        ],
+      }),
+    )
+    const entry = parsed.sceneOverrides[0].sectionOverrides[0]
+    expect(entry.section).toBe('FBM')
+    expect(entry.config).toMatchObject({ enabled: true, mode: 'custom', presetAssets: [], artDirection: [], customAssetPath: '' })
+    expect(entry.config.groups[0].id).toBe('g1')
+    // The new per-scene jcm block defaults in too.
+    expect(parsed.sceneOverrides[0].jcm).toEqual({ enabled: false, mods: [] })
+  })
+
+  it('is idempotent — an already-config entry is left untouched', () => {
+    const already = {
+      section: 'FBM' as const,
+      config: { enabled: true, mode: 'custom' as const, presetAssets: [], artDirection: [], groups: [], customAssetPath: '' },
+    }
+    const out = migrateCharacterData({
+      sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [], sectionOverrides: [structuredClone(already)] }],
+      schemaVersion: 23,
+    })
+    expect(out.sceneOverrides[0].sectionOverrides[0]).toEqual(already)
+  })
+})
+
 describe('schema v21 — sceneOverride.sectionOverrides (additive, zod default)', () => {
   it('fills an empty list on a legacy sceneOverride (pre-v21)', () => {
     const now = '2026-07-20T00:00:00.000Z'

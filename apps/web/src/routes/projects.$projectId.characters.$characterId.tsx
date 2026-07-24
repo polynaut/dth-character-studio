@@ -523,7 +523,6 @@ function CharacterPage() {
         scenes={sceneSel.linkedScenes}
         primary={character.scenePath}
         selected={sceneSel.effectiveScene}
-        characterName={character.name}
         onSelect={sceneSel.selectScene}
       />
     </main>

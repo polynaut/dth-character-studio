@@ -6,11 +6,13 @@ import { normalizePathLower } from '#/lib/path.ts'
 import { withBusyCursor } from '../../busy-cursor.ts'
 
 import {
+  activeSceneOverrides,
   characterScriptName,
   characterSlug,
   generateAll,
   genRomIncludes,
   jcmIsBaseRom,
+  mergeSceneOverride,
   poseAssetFileName,
   resolveRomPaths,
   sceneOverrideSlug,
@@ -33,7 +35,7 @@ import {
   sweepTargets,
 } from './core'
 
-import type { Character, PresetFrames } from '@dth/rom'
+import type { Character, PresetFrames, RomPaths } from '@dth/rom'
 import type { PoseAssets, ProjectInfo } from './core'
 
 // Generating the DTH artifacts (Daz .dsa scripts + Houdini PoseAsset CSV) from a
@@ -260,11 +262,37 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         dazLibraryFolder: settings.dazLibraryFolder,
       }
     : undefined
+  // Per-scene rom paths + preset-block frames. A scene that overrides mode / preset
+  // asset / custom JCM path resolves DIFFERENT `.duf` assets and block lengths than the
+  // base — which the pure core can't recompute (the catalog lookup + native `.duf`
+  // measurement live here). Resolve them over each merged character so the per-scene
+  // config delta (and its CSV) carry the right paths/frames. Keyed by the normalized
+  // scene path, matching the runtime scene lookup + buildSceneConfigMap. Only ROM-armed
+  // overrides change sections; identity/groom/jcm-only ones ride the base paths/frames.
+  const sceneRomPaths: Record<string, RomPaths> = {}
+  const sceneFrames: Record<string, PresetFrames> = {}
+  for (const override of activeSceneOverrides(versioned)) {
+    if (!override.enabled) continue
+    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    if (!key) continue
+    const merged = mergeSceneOverride(versioned, override)
+    sceneRomPaths[key] = catalog.error ? {} : resolveRomPaths(merged, catalog)
+    sceneFrames[key] = await resolvePresetFrames(merged, catalog)
+  }
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
   // destinations get them below.
-  const files = generateAll(versioned, romPaths, frames, outDir, activeRelease, scanProducts)
+  const files = generateAll(
+    versioned,
+    romPaths,
+    frames,
+    outDir,
+    activeRelease,
+    scanProducts,
+    sceneRomPaths,
+    sceneFrames,
+  )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just
   // written, this removes the per-scene CSV of an override whose ROM was

@@ -322,7 +322,11 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              // Green reset glyph that turns white on hover over a button silhouette.
+              // The reset only ever shows on a green (overridden) row, where the plain
+              // ghost accent hover washes out — so use a foreground overlay that stays
+              // visible there. The icon inherits the button's text colour (currentColor).
+              className="size-7 text-daz-green hover:bg-foreground/15 hover:text-white dark:hover:bg-foreground/15"
               title={
                 isAddition
                   ? 'Reset this added frame — removes it (not in the primary scene)'
@@ -330,8 +334,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
               }
               onClick={() => (isAddition ? meta.remove(row.index) : override?.reset(id))}
             >
-              {/* translate-y-[2px]: optically centre the top-heavy reset glyph. */}
-              <RotateCcw className="size-3.5 translate-y-[2px] text-daz-green" />
+              <RotateCcw className="size-3.5" />
             </Button>
           ) : (
             // Reserve the reset button's footprint so nothing shifts when it appears.
@@ -340,8 +343,11 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
-            title={
+            // Gray at rest, red on hover (the delete-danger cue) over the SAME button
+            // silhouette as the reset (visible on the green overridden row too). No
+            // tooltip — the icon reads on its own; an aria-label keeps it accessible.
+            className="size-7 text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
+            aria-label={
               isAddition
                 ? 'Delete this added frame for this scene'
                 : override
@@ -350,7 +356,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
             }
             onClick={() => meta.remove(row.index)}
           >
-            <Trash2 className="size-3.5 text-destructive" />
+            <Trash2 className="size-3.5" />
           </Button>
         </span>
       )
@@ -383,6 +389,11 @@ export function SortablePoseRow({
   const overridden =
     override !== undefined &&
     (override.isAddition(row.original.id) || override.isOverridden(row.original.id))
+  // An overridden pose IS the override (its whole morph list is stored per scene), so
+  // its expanded sub-rows read green too — the same faint tint as the row itself.
+  const morphRowBg = overridden
+    ? 'bg-[color-mix(in_oklab,var(--color-daz-green)_11%,transparent)]'
+    : 'bg-muted/20'
   return (
     <>
       <tr
@@ -420,103 +431,130 @@ export function SortablePoseRow({
         ))}
       </tr>
       {expanded && (
-        <tr className="border-b bg-muted/20">
-          <td />
-          <td colSpan={visibleCells.length} className="px-2 py-2">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span className="w-5 text-right">#</span>
-                <span className="w-44 px-2" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
-                  Node
+        // The multi-morph editor renders as REAL table rows sharing the parent grid's
+        // columns, so its sub-columns line up under the main ones: drag→(blank),
+        // Frame→#, Name→Node, Morph name→Property, Value→Value, Bone scale→Base,
+        // morphs→Auto, actions→(remove). (A colSpan block with its own widths couldn't
+        // align to the auto-sized table columns.)
+        <>
+          <tr className={`text-xs font-medium text-muted-foreground ${morphRowBg}`}>
+            <td />
+            <td className="px-1 py-1">
+              <span className="pl-6">#</span>
+            </td>
+            <td className="py-1 pr-1 pl-8" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
+              Node
+            </td>
+            <td className="px-1 py-1" title="The internal property name of the Daz morph">
+              Property
+            </td>
+            <td className="px-1 py-1" title="The value the pose dials the morph to">
+              {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
+                  flush over the digits — the same trick the main grid's Value header uses. */}
+              <span className="block w-20 pr-5 text-right">Value</span>
+            </td>
+            <td
+              className="px-1 py-1 text-right"
+              title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
+            >
+              Base
+            </td>
+            <td
+              className="px-1 py-1 text-center"
+              title="Resolve the base from the morph's current scene value at apply time"
+            >
+              Auto
+            </td>
+            <td />
+          </tr>
+          {pose.morphs.map((morph, morphIndex) => (
+            <tr key={morph.id} className={morphRowBg}>
+              <td />
+              <td className="px-1 py-0.5">
+                <span className="pl-6 text-xs text-muted-foreground tabular-nums">
+                  {morphIndex + 1}.
                 </span>
-                <span className="flex-1 px-2" title="The internal property name of the Daz morph">
-                  Property
-                </span>
-                <span className="w-20 px-2 text-right" title="The value the pose dials the morph to">
-                  Value
-                </span>
-                <span
-                  className="w-16 px-2 text-right"
-                  title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
-                >
-                  Base
-                </span>
-                <span
-                  className="w-14 text-center"
-                  title="Resolve the base from the morph's current scene value at apply time"
-                >
-                  Auto
-                </span>
-                <span className="w-6" />
-              </div>
-              {pose.morphs.map((morph, morphIndex) => (
-                <div key={morph.id} className="flex items-center gap-2">
-                  <span className="w-5 text-right text-xs text-muted-foreground tabular-nums">
-                    {morphIndex + 1}.
-                  </span>
-                  <div className="w-44">
-                    <TextCell
-                      value={morph.node}
-                      placeholder={meta.figureNode}
-                      onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <MorphNameCell
-                      value={morph.prop}
-                      placeholder="body_bs_BodyTone"
-                      onCommit={(prop) => meta.updateMorphAt(row.index, morphIndex, { prop })}
-                      onPick={(e) =>
-                        meta.updateMorphAt(row.index, morphIndex, { prop: e.name, node: e.node })
-                      }
-                    />
-                  </div>
-                  <NumberCell
-                    value={morph.value}
-                    onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
+              </td>
+              <td className="py-0.5 pr-1 pl-8">
+                <TextCell
+                  value={morph.node}
+                  placeholder={meta.figureNode}
+                  onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
+                />
+              </td>
+              <td className="px-1 py-0.5">
+                <MorphNameCell
+                  value={morph.prop}
+                  placeholder="body_bs_BodyTone"
+                  onCommit={(prop) => meta.updateMorphAt(row.index, morphIndex, { prop })}
+                  onPick={(e) =>
+                    meta.updateMorphAt(row.index, morphIndex, { prop: e.name, node: e.node })
+                  }
+                />
+              </td>
+              <td className="px-1 py-0.5">
+                <NumberCell
+                  value={morph.value}
+                  onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
+                />
+              </td>
+              <td className="px-1 py-0.5 text-right">
+                <OptionalNumberCell
+                  value={morph.base}
+                  placeholder="0"
+                  disabled={morph.autoBase === true}
+                  onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
+                />
+              </td>
+              <td className="px-1 py-0.5">
+                <div className="flex h-full items-center justify-center">
+                  <input
+                    type="checkbox"
+                    className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
+                    title="Resolve the base from the morph's current scene value at apply time"
+                    checked={morph.autoBase === true}
+                    onChange={(e) =>
+                      meta.updateMorphAt(row.index, morphIndex, {
+                        autoBase: e.target.checked ? true : undefined,
+                      })
+                    }
                   />
-                  <OptionalNumberCell
-                    value={morph.base}
-                    placeholder="0"
-                    disabled={morph.autoBase === true}
-                    onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
-                  />
-                  <span className="flex w-14 justify-center">
-                    <input
-                      type="checkbox"
-                      className="size-3.5 accent-primary"
-                      title="Resolve the base from the morph's current scene value at apply time"
-                      checked={morph.autoBase === true}
-                      onChange={(e) =>
-                        meta.updateMorphAt(row.index, morphIndex, {
-                          autoBase: e.target.checked ? true : undefined,
-                        })
-                      }
-                    />
-                  </span>
+                </div>
+              </td>
+              <td className="py-0.5 pr-4 pl-1">
+                {/* The same bin as the row's own delete (size-7), centered with flexbox.
+                    An icon button's own baseline is its bottom edge, so baseline /
+                    vertical-align float it high — h-full + items-center pins it to the
+                    row's vertical centre reliably. */}
+                <div className="flex h-full items-center justify-end">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6"
-                    title="Remove this morph"
+                    className="size-7 -translate-y-px text-muted-foreground hover:bg-foreground/15 hover:text-destructive dark:hover:bg-foreground/15"
+                    aria-label="Remove this morph"
                     disabled={pose.morphs.length <= 1}
                     onClick={() => meta.removeMorphAt(row.index, morphIndex)}
                   >
-                    <Trash2 className="size-3 text-destructive" />
+                    <Trash2 className="size-3.5" />
                   </Button>
                 </div>
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-1 h-7 text-xs"
-              onClick={() => meta.addMorph(row.index)}
-            >
-              <Plus className="size-3.5" /> Add morph
-            </Button>
-          </td>
-        </tr>
+              </td>
+            </tr>
+          ))}
+          <tr className={`border-b ${morphRowBg}`}>
+            <td />
+            <td colSpan={visibleCells.length} className="px-1 py-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="my-2 ml-3 h-7 text-xs"
+                onClick={() => meta.addMorph(row.index)}
+              >
+                <Plus className="size-3.5" /> Add morph
+              </Button>
+            </td>
+          </tr>
+        </>
       )}
     </>
   )

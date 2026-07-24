@@ -111,6 +111,32 @@ export const characterMigrations: Record<
     }
     return data
   },
+  // v23 — a whole-section override became the section's full OWNED config, so a
+  // scene can override mode / preset asset / art direction / custom path too (not
+  // just groups). The stored entry changed from `{section, groups}` to `{section,
+  // config}`. Old entries only ever escalated on structural row edits, which only
+  // custom-capable sections have — so wrap the old groups in a `custom` config.
+  23: (data) => {
+    if (!Array.isArray(data.sceneOverrides)) return data
+    for (const override of data.sceneOverrides) {
+      if (!override || typeof override !== 'object' || !Array.isArray(override.sectionOverrides))
+        continue
+      for (const entry of override.sectionOverrides) {
+        if (entry && typeof entry === 'object' && entry.config === undefined && entry.groups !== undefined) {
+          entry.config = {
+            enabled: true,
+            mode: 'custom',
+            presetAssets: [],
+            artDirection: [],
+            groups: entry.groups,
+            customAssetPath: '',
+          }
+          delete entry.groups
+        }
+      }
+    }
+    return data
+  },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────
   //
   // Case A — rename / restructure an existing field:

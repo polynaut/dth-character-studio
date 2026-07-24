@@ -28,7 +28,7 @@ export function SceneLabel({
 }: {
   /** The scene whose `.tip.png` renders in the pill. */
   scenePath: string
-  /** The display label — already name-stripped + spaced (see prettySceneName). */
+  /** The display label — typically the scene file's stem (original filename). */
   name: string
   /** The primary-scene look: greyscale render + plain tile. */
   muted?: boolean
