@@ -41,14 +41,16 @@ export function KeyedListEditor<T>({
       {items.map((item, index) => (
         <div key={index} className={rowClassName}>
           {children(item, (next) => setAt(index, next), index)}
+          {/* A light-red-bordered destructive icon button (like the Export-directory
+              Clear), size-9 to line up with the h-9 row inputs — not a bare glyph. */}
           <Button
-            variant="ghost"
+            variant="outline-destructive"
             size="icon"
-            className="size-9 shrink-0"
+            className="shrink-0"
             aria-label={removeLabel}
             onClick={() => removeAt(index)}
           >
-            <Trash2 className="size-3.5 text-destructive" />
+            <Trash2 className="size-3.5" />
           </Button>
         </div>
       ))}

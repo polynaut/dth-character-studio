@@ -123,7 +123,10 @@ export function LinkedAssetCard({
           // Selectable mode is a toggle button — the ring alone is invisible to
           // assistive tech, so the selection state must also be aria-pressed.
           aria-pressed={onSelect ? (selected ?? false) : undefined}
-          title={onSelect ? title : openTitle}
+          // Selectable body: no tooltip — the name is already the heading, and the
+          // body selects (it doesn't open, so `openTitle` would mislead). Only the
+          // whole-card-opens default carries the "Open…" tooltip on the body.
+          title={onSelect ? undefined : openTitle}
           className={bodyClass}
         >
           {bodyInner}

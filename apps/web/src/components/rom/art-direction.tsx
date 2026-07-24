@@ -214,18 +214,16 @@ function ArtDirectionFrameRow({
                 value={morph.value}
                 onCommit={(value) => patchMorph(index, { value })}
               />
-              {/* Matches the export-directory Clear button — a light-red-bordered
-                  destructive icon button (`outline-destructive`) at the row's input
-                  height — rather than a bare red glyph. */}
               <Button
-                variant="outline-destructive"
-                size="icon-sm"
-                aria-label="Remove this morph"
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                title="Remove this morph"
                 onClick={() =>
                   onCommit({ ...entry, morphs: entry.morphs.filter((_, mi) => mi !== index) })
                 }
               >
-                <Trash2 className="size-3.5" />
+                <Trash2 className="size-3 text-destructive" />
               </Button>
             </div>
           ))}
