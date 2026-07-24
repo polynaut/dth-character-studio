@@ -169,6 +169,16 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Character page sticky stack:** the character header (`sticky top-0`), ROM
   section titles (`top-[128px]`) and pose-table column headers (`top-[176px]`)
   overlap screenshots/crops — the guide-screenshot suite compensates per shot.
+- **The guide SITE build (`scripts/build-guide-site.mjs`) is a separate pipeline
+  from the screenshot suite's coverage guard.** Each guide asset dir
+  (`screenshots/`, `clips/`, `gifs/`) must be BOTH `cpSync`'d into `site/guide/`
+  AND reference-guarded. This shipped broken: `clips/` (animated `.webp`
+  interaction clips) was referenced and coverage-checked but never copied, so
+  `path-chip-copy.webp` 404'd **only on the deployed Pages site** — `pnpm build:guide`
+  and the vitest coverage test both stayed green because they read `docs/guide`, not
+  the built output. The build now re-checks the referenced sets against the OUTPUT
+  (`site/guide/`), so a dropped or mis-pathed copy step fails the build. Adding a new
+  guide asset dir needs its own `cpSync`; the output check then covers it.
 - **Immediate-persist flows go through `useCharacterDraft.persistPatch` — never a
   bare `saveCharacter` + settle from a component.** The audited bug class: scene/
   Houdini-link, avatar, and product-store flows persisted without `validate()`,
