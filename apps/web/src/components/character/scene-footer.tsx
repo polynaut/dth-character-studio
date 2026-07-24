@@ -110,7 +110,7 @@ export function SceneFooter({
           bar puts min-h + border-t on ONE div; here the border-t is on the fixed
           wrapper above, so the inner min-h is 70px (+1px border = 71px total). A
           `size="lg"` pill is ~54px, like the Unreal card. */}
-      <div className="flex min-h-[70px] items-center gap-3 px-4 py-1.5">
+      <div className="flex min-h-[70px] items-center gap-3 px-8 py-1.5">
         {/* The selected scene, prominent — a green ring, never dimmed. The radius
             MUST match the SceneLabel pill's (`Tag` uses `rounded`) so the ring hugs
             its silhouette instead of bulging past its corners. No ring offset
