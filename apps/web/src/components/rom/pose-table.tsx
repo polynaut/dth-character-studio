@@ -547,7 +547,7 @@ export function SortablePoseRow({
               <Button
                 variant="outline"
                 size="sm"
-                className="my-2 ml-3 h-7 text-xs"
+                className="my-4 ml-3 h-7 text-xs"
                 onClick={() => meta.addMorph(row.index)}
               >
                 <Plus className="size-3.5" /> Add morph

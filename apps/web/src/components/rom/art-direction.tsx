@@ -227,10 +227,11 @@ function ArtDirectionFrameRow({
               </Button>
             </div>
           ))}
+          {/* Same vertical margin as the pose-table expansion's Add-morph button. */}
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs"
+            className="my-4 h-7 text-xs"
             onClick={() =>
               onCommit({
                 ...entry,
