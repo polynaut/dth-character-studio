@@ -177,21 +177,23 @@ export function LinkedAssetCard({
         )}
         {cornerOpens ? (
           // Selectable / icon-only mode: the corner icon is the ONLY open target
-          // — a real sibling <button>, never nested inside the main button (a
-          // focusable interactive descendant is invalid HTML and the outer
-          // accessible name swallows the inner label).
-          <button
-            type="button"
+          // — a real sibling Button (same ghost icon-sm size/shape/hover as the
+          // remove button so the two align), never nested inside the main card
+          // button (a focusable interactive descendant is invalid HTML and the
+          // outer accessible name swallows the inner label).
+          <Button
+            variant="ghost"
+            size="icon-sm"
             data-alt-reveal=""
             title={openTitle}
             aria-label={openTitle}
             onClick={onOpen}
-            className="pointer-events-auto rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="pointer-events-auto"
           >
             <CornerIcon
-              className={cn('size-4 text-muted-foreground transition-colors', accentClass)}
+              className={cn('size-3.5 text-muted-foreground transition-colors', accentClass)}
             />
-          </button>
+          </Button>
         ) : (
           // Whole-card-opens default: the whole card opens, so this is a plain
           // indicator — pointer-events stay off so the click hits the card.
