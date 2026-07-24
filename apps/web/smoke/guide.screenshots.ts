@@ -457,14 +457,20 @@ test('character-daz-scenes', async ({ page }) => {
   )
 })
 
-test('character-scene-tag', async ({ page }) => {
+test('character-scene-footer', async ({ page }) => {
   await openCharacterOnOutfitScene(page)
-  // The header with the selected scene tagged next to the character name.
-  await shootTopThrough(
-    page,
-    join(OUT, 'character-scene-tag.png'),
-    page.getByRole('tab', { name: 'Character' }),
-  )
+  // The docked scene bar keeps the selected scene on screen once the Daz-scene cards
+  // scroll out of view. Bring the ROM section to the top (so the cards above it leave
+  // the viewport and the bar slides up), then grab the whole viewport — the bar docked
+  // at the bottom WITH the page content above it for context, not a lone strip.
+  await page.setViewportSize({ width: VW, height: MAX_H })
+  await settle(page)
+  await card(page, 'ROM').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  const footer = page.locator('div.fixed.inset-x-0.bottom-0').last()
+  await expect(footer).toHaveAttribute('aria-hidden', 'false')
+  await page.mouse.move(0, 0)
+  await settle(page)
+  await page.screenshot({ path: join(OUT, 'character-scene-footer.png') })
 })
 
 test('rom-override-grid', async ({ page }) => {
