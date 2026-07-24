@@ -32,7 +32,7 @@ describe('TooltipHost (global title → floating tooltip)', () => {
 
     const tip = screen.getByRole('tooltip', { hidden: true })
     expect(tip.style.display).toBe('none')
-    await vi.advanceTimersByTimeAsync(400)
+    await vi.advanceTimersByTimeAsync(700)
     expect(tip.style.display).toBe('block')
     expect(tip.textContent).toBe('Insert a frame here')
 
@@ -50,7 +50,7 @@ describe('TooltipHost (global title → floating tooltip)', () => {
     )
     const button = screen.getByRole('button')
     fireEvent.mouseOver(button)
-    await vi.advanceTimersByTimeAsync(400)
+    await vi.advanceTimersByTimeAsync(700)
     const tip = screen.getByRole('tooltip', { hidden: true })
     expect(tip.textContent).toBe('Click to copy')
 
@@ -79,13 +79,13 @@ describe('TooltipHost (global title → floating tooltip)', () => {
       </>,
     )
     fireEvent.mouseOver(screen.getByTestId('child-a'))
-    await vi.advanceTimersByTimeAsync(150)
+    await vi.advanceTimersByTimeAsync(300)
     fireEvent.mouseOver(screen.getByTestId('child-b'))
-    await vi.advanceTimersByTimeAsync(150)
+    await vi.advanceTimersByTimeAsync(300)
     fireEvent.mouseOver(screen.getByTestId('child-c'))
-    // 150+150+100 = 400ms since the FIRST enter — if each child restarted the
-    // 350ms delay, the tooltip would still be hidden here.
-    await vi.advanceTimersByTimeAsync(100)
+    // 300+300+150 = 750ms since the FIRST enter — if each child restarted the
+    // 700ms delay, the tooltip would still be hidden here.
+    await vi.advanceTimersByTimeAsync(150)
     const tip = screen.getByRole('tooltip', { hidden: true })
     expect(tip.style.display).toBe('block')
     expect(tip.textContent).toBe('Card tooltip')

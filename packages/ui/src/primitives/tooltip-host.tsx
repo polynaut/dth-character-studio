@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { computePosition, flip, offset, shift } from '@floating-ui/dom'
 
 /** Hover delay before the tooltip appears (keyboard focus shows immediately). */
-const SHOW_DELAY_MS = 350
+const SHOW_DELAY_MS = 700
 
 // break-words: long unbroken tokens (absolute paths, URLs) must wrap inside the
 // box — whitespace-pre-line alone only wraps at spaces, so they'd overflow.
