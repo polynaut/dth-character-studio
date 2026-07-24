@@ -130,7 +130,10 @@ export function SceneFooter({
 
         {others.length > 0 && (
           <>
-            <span className="h-8 w-px shrink-0 bg-border" aria-hidden />
+            {/* The selected pill's 2px ring (ring-offset-0) bleeds into the gap on the
+                divider's left, so without this it sits ~2px nearer the pill than the
+                rail. ml-0.5 adds that 2px back so the divider looks evenly spaced. */}
+            <span className="ml-0.5 h-8 w-px shrink-0 bg-border" aria-hidden />
             {/* Every other scene — a horizontally-scrollable rail (fits any number).
                 Click one to switch; it swaps into the prominent slot. */}
             <div
