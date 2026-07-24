@@ -568,9 +568,9 @@ a {
 .primary-badge {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   width: fit-content;
-  padding: 6px 11px;
+  padding: 5px 10px;
   color: #67e4aa;
   background: linear-gradient(
     180deg,
@@ -589,8 +589,8 @@ a {
   user-select: none;
 }
 .primary-badge__icon {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   color: #72edb6;
   filter: drop-shadow(0 0 3px rgba(82, 225, 164, 0.65))
