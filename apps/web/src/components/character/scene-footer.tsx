@@ -4,7 +4,6 @@ import { flushSync } from 'react-dom'
 import { cn } from '@dth/ui'
 
 import { SceneLabel } from '#/components/character/scene-label.tsx'
-import { prettySceneName } from '#/lib/scene-name.ts'
 
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
 
@@ -44,7 +43,6 @@ export function SceneFooter({
   scenes,
   primary,
   selected,
-  characterName,
   onSelect,
 }: {
   show: boolean
@@ -54,7 +52,6 @@ export function SceneFooter({
   primary: string
   /** The currently selected scene's path (`effectiveScene`) — shown prominent. */
   selected: string
-  characterName: string
   onSelect: (scenePath: string) => void
 }) {
   const others = scenes.filter((p) => p !== selected)
@@ -100,7 +97,8 @@ export function SceneFooter({
   }
 
   if (scenes.length === 0) return null
-  const nameOf = (p: string) => prettySceneName(stemOf(p), characterName)
+  // Show the scene's original filename (its .duf stem), same as the Daz-scene cards.
+  const nameOf = (p: string) => stemOf(p)
   const railMask = `linear-gradient(to right, ${fade.left ? 'transparent' : '#000'}, #000 22px, #000 calc(100% - 22px), ${fade.right ? 'transparent' : '#000'})`
 
   return (
