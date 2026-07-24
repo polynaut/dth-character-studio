@@ -66,6 +66,8 @@ export function SceneLabel({
       tone="green"
       className={cn(
         'inline-flex max-w-72 items-center gap-2 border-[color-mix(in_oklab,var(--color-daz-green)_55%,var(--border))] bg-[color-mix(in_oklab,#3fae6bcf_35%,var(--card))] py-1 pr-2 text-sm font-normal normal-case',
+        // The footer pill matches the Unreal-projects card's 54px height.
+        size === 'lg' && 'min-h-[54px]',
         accentBar && 'relative overflow-hidden',
         showAvatar ? (accentBar ? 'pl-2.5' : 'pl-1.5') : 'pl-3',
         className,
