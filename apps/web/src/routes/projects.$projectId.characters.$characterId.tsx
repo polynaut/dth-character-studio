@@ -198,15 +198,29 @@ function CharacterPage() {
   const scenesRef = useRef<HTMLDivElement>(null)
   const [scenesOnScreen, setScenesOnScreen] = useState(true)
   useEffect(() => {
-    const el = scenesRef.current
-    if (!el) return
-    // Shrink the observed region 100px in from the top so the cards read as "gone"
-    // — and the footer slides in — ~100px before they fully clear the viewport top.
-    const io = new IntersectionObserver(([entry]) => setScenesOnScreen(entry.isIntersecting), {
-      rootMargin: '-100px 0px 0px 0px',
-    })
-    io.observe(el)
-    return () => io.disconnect()
+    // Measure the cards' viewport position directly rather than via an
+    // IntersectionObserver: the editor body's `contain: paint` is an intermediate
+    // clip the observer honours, but `rootMargin` only grows the ROOT (viewport),
+    // so it can't push the trip point in. getBoundingClientRect is clip-agnostic.
+    // Footer shows once the cards' bottom is within 100px of the viewport top — i.e.
+    // ~100px before they fully clear the top as you scroll down.
+    let raf = 0
+    const check = () => {
+      raf = 0
+      const el = scenesRef.current
+      if (el) setScenesOnScreen(el.getBoundingClientRect().bottom > 100)
+    }
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(check)
+    }
+    check()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
   }, [])
   // The ROM run log + the "reveal failed frame" signal for the editor.
   const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
