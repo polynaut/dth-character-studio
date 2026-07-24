@@ -839,7 +839,9 @@ export const RomSections = memo(function RomSections({
                     />
                     {/* CSV import — on a non-primary scene it imports into the scene's own
                         section (escalates), same as adding frames. */}
-                    <ImportCsvButton onImport={() => setPickerSection(section)} />
+                    <div className="my-4">
+                      <ImportCsvButton onImport={() => setPickerSection(section)} />
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -858,7 +860,7 @@ export const RomSections = memo(function RomSections({
                         primary, the scene's owned section once it escalates (Add group /
                         an import IS a structural edit, so it escalates). Available on a
                         non-primary scene too, so an outfit can build up its own section. */}
-                    <div className="flex gap-2">
+                    <div className="my-4 flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"

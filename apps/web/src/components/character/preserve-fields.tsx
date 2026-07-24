@@ -154,7 +154,7 @@ export function PreserveFields({
                 overrideLabelClass(nodesOverridden, overrideEligible),
               )}
             >
-              Preserve node transforms (e.g. eyes)
+              Preserve node transforms
               <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
             </Label>
             <KeyedListEditor
