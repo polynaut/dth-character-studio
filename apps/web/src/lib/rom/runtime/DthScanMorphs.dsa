@@ -1,13 +1,14 @@
 // DAZ Studio version 4.22.0.16 filetype DAZ Script
 
-// DTH Character Studio — morph scanner. Included by the visible
+// DTH Character Studio — morph + bone scanner. Included by the visible
 // Scan_Morphs_<Genesis>.dsa wrappers installed next to this file; walks the
 // selected figure AND every descendant node (geografts like Golden Palace /
 // Dicktator, nipples/navel add-ons, fitted clothing — they all carry morphs of
 // their own) and writes every morph dial as { node, nodeLabel, label, name }
-// into a per-generation JSON in the studio's app-data folder. The studio's
-// Morph-name autocomplete reads that index. Studio-only (no DazToHue-Scripts
-// twin); the wrapper bakes the output path at install time.
+// AND every bone as { name, label } into a per-generation JSON in the studio's
+// app-data folder. The studio's Morph-name and bone (Modify-JCM) autocompletes
+// read that index. Studio-only (no DazToHue-Scripts twin); the wrapper bakes the
+// output path at install time.
 //
 // Two passes per node, mirroring how the ROM runtime resolves a morph name
 // (DthUtils: findProperty -> findPropertyByLabel -> morph-modifier scan):
@@ -46,7 +47,9 @@ function DthScanMorphs(config){
 	// The figure root plus every descendant (recursive) - grafts and clothing too.
 	var aNodes = [oSel].concat(oSel.getNodeChildren(true));
 	var aMorphs = [];
+	var aBones = [];
 	var oSeen = {};
+	var oSeenBone = {};
 	var iNodesWithMorphs = 0;
 	for(var n = 0; n < aNodes.length; n++){
 		var oNode = aNodes[n];
@@ -56,6 +59,16 @@ function DthScanMorphs(config){
 		var sNode = String(oNode.name).replace(/_\d+$/, "");
 		var sNodeLabel = String(oNode.getLabel());
 		var iBefore = aMorphs.length;
+
+		// Bones carry no morph dials (skipped by pass 2 below), but a JCM rule
+		// keys off a bone's rotation - so collect every bone's internal name +
+		// UI label for the studio's bone autocomplete. Deduped by internal name.
+		if(oNode.inherits("DzBone")){
+			if(!oSeenBone[sNode]){
+				oSeenBone[sNode] = true;
+				aBones.push({ name: sNode, label: sNodeLabel });
+			}
+		}
 
 		// Pass 1: DzMorph modifiers on the node's object (delta morphs).
 		var oObj = oNode.getObject();
@@ -102,11 +115,12 @@ function DthScanMorphs(config){
 	}
 
 	var oOut = {
-		version: 1,
+		version: 2,
 		genesis: config.genesis,
 		figure: sLabel,
 		scannedAt: new Date().toString(),
-		morphs: aMorphs
+		morphs: aMorphs,
+		bones: aBones
 	};
 	var oFile = new DzFile(config.outPath);
 	// One ORed mode arg - a second open() argument warns on DS6.
@@ -115,7 +129,8 @@ function DthScanMorphs(config){
 		oFile.close();
 		MessageBox.information(
 			"Scanned " + aMorphs.length + " morphs on " + iNodesWithMorphs +
-			" nodes.\n\nThe Morph name autocomplete in DTH Character Studio now knows them.",
+			" nodes and " + aBones.length + " bones.\n\nThe Morph name and bone " +
+			"autocompletes in DTH Character Studio now know them.",
 			"DTH Character Studio", "&OK");
 	} else {
 		MessageBox.information(

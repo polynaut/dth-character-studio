@@ -1076,8 +1076,13 @@ export const CHARACTER_SCHEMA_VERSION = 22
  *       For every item in the open scene's list it hides every OTHER wearable
  *       (including the other hair items) and exports just that one, so Houdini
  *       gets one alembic per hair asset. Refresh assets to regenerate.
+ *  34 — The morph scanner (`DthScanMorphs`) now also collects the figure's BONES
+ *       into a `bones` array in the scan index (`morphs_<G>.json`, version 2),
+ *       feeding the new bone autocomplete in the "Modify JCM frames" editor. No
+ *       change to any GENERATED script — bumped only so Refresh assets reinstalls
+ *       the updated scanner. Re-run Scan_Morphs in Daz to populate the bone list.
  */
-export const RUNTIME_VERSION = 33
+export const RUNTIME_VERSION = 34
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

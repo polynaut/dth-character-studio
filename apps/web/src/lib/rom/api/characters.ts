@@ -24,6 +24,7 @@ import {
   dirname,
   fetchPoseAssets,
   getActiveProjectDir,
+  boneIndexCache,
   invalidateCharacterLocations,
   joinPath,
   locateCharacter,
@@ -758,5 +759,62 @@ export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<Mo
     return out
   }
   if (stamp) morphIndexCache.set(genesis, { stamp, entries: out })
+  return out
+}
+
+// --- Bone index (same Scan_Morphs_<Genesis>.dsa output) ---------------------
+
+/** One scanned bone from a Scan_Morphs_<Genesis>.dsa run in Daz — a JCM rule
+ *  keys off a bone's rotation, so the "Modify JCM frames" editor autocompletes
+ *  the bone field from these. */
+export interface BoneIndexEntry {
+  /** The bone's internal name (e.g. "lThighBend"). */
+  name: string
+  /** The bone's UI label in Daz (e.g. "Left Thigh Bend") — what the runtime
+   *  resolves first (findNodeChildByLabel → findNodeChild), and what the field
+   *  stores by default. */
+  label: string
+}
+
+/**
+ * The figure's bones for a generation — written into the SAME per-generation
+ * scan index as the morphs (`morphs_<G>.json`'s `bones` array, index version 2+)
+ * by the Scan_Morphs_<Genesis>.dsa scripts. Feeds the bone autocomplete in the
+ * JCM editor. A missing/old (v1, no `bones`) or broken file just yields an empty
+ * list (the autocomplete stays quiet until the user re-runs the scan in Daz).
+ */
+export async function fetchBoneIndex(genesis: GenesisVersion): Promise<Array<BoneIndexEntry>> {
+  // Same cheap stat-then-cache dance as fetchMorphIndex, keyed on the file's
+  // mtime+size — a bone index is its own cache entry (the two are read on
+  // different focus cadences but share one source file).
+  let path: string
+  let stamp: string | null = null
+  try {
+    path = await storage.dataPath(`morphs_${genesis}.json`)
+    const info = await stat(path)
+    const mtime = info.mtime?.getTime()
+    if (mtime !== undefined) stamp = `${mtime}:${info.size}`
+  } catch {
+    boneIndexCache.delete(genesis)
+    return []
+  }
+  const cached = boneIndexCache.get(genesis)
+  if (stamp && cached && cached.stamp === stamp) return cached.entries
+  const out: Array<BoneIndexEntry> = []
+  const seen = new Set<string>()
+  try {
+    const raw = await readTextFile(path)
+    const parsed = JSON.parse(raw) as { bones?: Array<Record<string, unknown>> }
+    for (const b of parsed.bones ?? []) {
+      if (typeof b.name !== 'string' || !b.name) continue
+      if (seen.has(b.name)) continue
+      seen.add(b.name)
+      out.push({ name: b.name, label: typeof b.label === 'string' && b.label ? b.label : b.name })
+    }
+  } catch {
+    boneIndexCache.delete(genesis)
+    return out
+  }
+  if (stamp) boneIndexCache.set(genesis, { stamp, entries: out })
   return out
 }

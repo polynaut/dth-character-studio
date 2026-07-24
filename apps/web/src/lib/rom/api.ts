@@ -50,6 +50,7 @@ export {
   deleteCharacter,
   dismissRomRunLog,
   fetchAllCharacters,
+  fetchBoneIndex,
   fetchCharacter,
   fetchCharactersWithProblems,
   fetchMorphIndex,
@@ -62,7 +63,7 @@ export {
   syncAvatarWithScene,
   saveCharacter,
 } from './api/characters'
-export type { CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog, ScanFrameCsv } from './api/characters'
+export type { BoneIndexEntry, CharacterWithProject, MorphIndexEntry, RomRunFailedMorph, RomRunLog, ScanFrameCsv } from './api/characters'
 
 // --- avatars: avatar images + scene thumbnails ------------------------------
 export {

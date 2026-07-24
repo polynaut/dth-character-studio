@@ -9,6 +9,7 @@ import {
   fetchPoseAssets,
   fetchProductScan,
   fetchProject,
+  fetchBoneIndex,
   fetchMorphIndex,
   fetchRomRunLog,
   syncAvatarWithScene,
@@ -42,7 +43,7 @@ import { useRomRunLog } from '#/lib/use-rom-run-log.ts'
 import { useSceneSelection } from '#/lib/use-scene-selection.ts'
 import { presetFramesSignature } from '@dth/rom'
 
-import type { MorphIndexEntry } from '#/lib/rom/api.ts'
+import type { BoneIndexEntry, MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { Character, PresetFrames, RomSection } from '@dth/rom'
 
 export const Route = createFileRoute('/projects/$projectId/characters/$characterId')({
@@ -127,6 +128,14 @@ function sameMorphIndex(a: Array<MorphIndexEntry>, b: Array<MorphIndexEntry>): b
       e.node === o.node && e.name === o.name && e.label === o.label && e.nodeLabel === o.nodeLabel
     )
   })
+}
+
+/** Same scanned bone list, by content? (see {@link sameMorphIndex}) — preserves
+ *  array identity so the memoized ROM editor doesn't re-render on every focus. */
+function sameBoneIndex(a: Array<BoneIndexEntry>, b: Array<BoneIndexEntry>): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((e, i) => e.name === b[i].name && e.label === b[i].label)
 }
 
 /**
@@ -239,6 +248,20 @@ function CharacterPage() {
       // changes when the data does.
       void fetchMorphIndex(character.genesis).then((entries) =>
         setMorphIndex((prev) => (sameMorphIndex(prev, entries) ? prev : entries)),
+      )
+    },
+    [character.genesis],
+    { immediate: true },
+  )
+
+  // The scanned bones for this generation (same Scan_Morphs_<Genesis> index as
+  // the morphs), powering the bone autocomplete in the JCM editor. Same
+  // load-on-focus + content-compare rationale as the morph index above.
+  const [boneIndex, setBoneIndex] = useState<Array<BoneIndexEntry>>([])
+  useRefetchOnFocus(
+    () => {
+      void fetchBoneIndex(character.genesis).then((entries) =>
+        setBoneIndex((prev) => (sameBoneIndex(prev, entries) ? prev : entries)),
       )
     },
     [character.genesis],
@@ -480,6 +503,7 @@ function CharacterPage() {
         revealFrame={runLog.revealFrame}
         revealPose={revealPose}
         morphIndex={morphIndex}
+        boneIndex={boneIndex}
         overrideEligible={sceneSel.overrideEligible}
         scenePath={sceneSel.effectiveScene}
         sceneOverride={sceneSel.sceneOverride}

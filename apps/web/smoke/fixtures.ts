@@ -256,9 +256,11 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       // Machine-wide, but edited on the Settings → Project tab (product scanning).
       ...(opts.dimManifestsFolder ? { dimManifestsFolder: opts.dimManifestsFolder } : {}),
     }),
-    // Morph index (a Scan_Morphs_G9.dsa run's output) — feeds the Morph-name
-    // autocomplete (and its guide screenshot).
+    // Morph + bone index (a Scan_Morphs_G9.dsa run's output) — feeds the
+    // Morph-name autocomplete (and its guide screenshot) and the JCM bone
+    // autocomplete.
     [`${P.appData}/morphs_G9.json`]: JSON.stringify({
+      version: 2,
       morphs: [
         { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute UpDown', name: 'SS_body_bs_Glute UpDown' },
         { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Width', name: 'SS_body_bs_Glute Width' },
@@ -266,6 +268,13 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
         { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Height Inner', name: 'SS_body_bs_Glute Height Inner' },
         { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glute Angle', name: 'SS_body_bs_Glute Angle' },
         { node: 'Genesis9', nodeLabel: 'Kira', label: 'Glutes Widen (GP)', name: 'GP_GlutesWiden1_Both' },
+      ],
+      bones: [
+        { name: 'lThighBend', label: 'Left Thigh Bend' },
+        { name: 'rThighBend', label: 'Right Thigh Bend' },
+        { name: 'lShin', label: 'Left Shin' },
+        { name: 'rShin', label: 'Right Shin' },
+        { name: 'lForearmBend', label: 'Left Forearm Bend' },
       ],
     }),
     // NOTE: no projects.json / network-drives.json — their absence keeps the
