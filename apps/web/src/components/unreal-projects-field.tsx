@@ -245,7 +245,8 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   }
 
   // The add/link trigger's accessible name carries the intent (and the in-flight
-  // state, which the single-flight test asserts on) — its visible label is "+ Add".
+  // state, which the single-flight test asserts on) — its visible label is
+  // "+ Add project".
   const addLabel = busy
     ? 'Linking…'
     : project.unrealProjects.length
@@ -267,7 +268,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             underneath it. Kept short (h-7) so the two rows still fit the reserved
             card-row height — the footer doesn't grow taller than a linked card. */}
         <div className="mr-1 flex shrink-0 flex-col gap-1">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          <span className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
             Unreal projects
           </span>
           <Button
@@ -279,7 +280,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             title={addLabel}
             onClick={() => void onPick()}
           >
-            <Plus className="size-3.5" /> Add
+            <Plus className="size-3.5" /> Add project
           </Button>
         </div>
         {project.unrealProjects.map((path) => (
