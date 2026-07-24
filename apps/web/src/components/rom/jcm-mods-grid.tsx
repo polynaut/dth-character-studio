@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, FlipHorizontal2, Plus, Trash2 } from 'lucide-react'
 
 import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
 
 import { cellInputClass, pctToValue, valueToPct } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
+import { BoneNameCell, indexBones } from './bone-name-cell.tsx'
 
 import { newId } from '@dth/rom'
 import type { JcmMorphMod } from '@dth/rom'
+import type { BoneIndexEntry } from '#/lib/rom/api.ts'
 
 type Drive = JcmMorphMod['drives'][number]
 
@@ -148,11 +150,17 @@ function RawNumberCell({
 export function JcmModsGrid({
   mods,
   onChange,
+  boneIndex,
 }: {
   mods: Array<JcmMorphMod>
   onChange: (mods: Array<JcmMorphMod>) => void
+  /** Scanned bones for this generation — enables the bone-name autocomplete when
+   *  a Scan_Morphs_<Genesis> run has produced an index. */
+  boneIndex?: Array<BoneIndexEntry>
 }) {
   const [openGrid, setOpenGrid] = useState(false)
+  // Pre-lowercase the bone list once here, shared across every rule's cell.
+  const bones = useMemo(() => indexBones(boneIndex ?? []), [boneIndex])
 
   function patchMod(i: number, patch: Partial<JcmMorphMod>) {
     onChange(mods.map((mod, mi) => (mi === i ? { ...mod, ...patch } : mod)))
@@ -215,12 +223,13 @@ export function JcmModsGrid({
           {mods.map((mod, i) => (
             <div key={mod.id} className="rounded-md border">
               <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-2 py-1.5">
-                <input
-                  className={`${cellInputClass} w-44`}
+                <BoneNameCell
                   value={mod.boneLabel}
+                  bones={bones}
                   placeholder="bone, e.g. Left Thigh Bend"
                   title="The bone whose rotation keys drive this rule (label or internal name)"
-                  onChange={(e) => patchMod(i, { boneLabel: e.target.value })}
+                  inputClassName={`${cellInputClass} w-44`}
+                  onCommit={(boneLabel) => patchMod(i, { boneLabel })}
                 />
                 <Select value={mod.axis} onValueChange={(axis) => patchMod(i, { axis })}>
                   <SelectTrigger size="sm" className="w-28">

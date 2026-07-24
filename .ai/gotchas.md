@@ -221,7 +221,15 @@ current code before relying on details, but assume the *lesson* still holds.
   `:focus-visible` stub — a permanently-mouse stub masks the re-peek bug).
 - **`role="combobox"` removes an input from `getByRole('textbox')` queries** —
   after the morph-autocomplete a11y work, tests locate those cells by
-  `combobox`/`option` roles (rom-sections tests hit this).
+  `combobox`/`option` roles (rom-sections tests hit this). The JCM **bone** field
+  (`bone-name-cell.tsx`) is a second such combobox — same query rule applies.
+- **The `Scan_Morphs_<Genesis>` index feeds TWO autocompletes, from ONE file.**
+  `DthScanMorphs.dsa` writes `morphs_<G>.json` (in app-data) with both a `morphs`
+  array (morph dials) and, since index version 2 / RUNTIME_VERSION 34, a `bones`
+  array (every `DzBone`'s `{ name, label }`). `fetchMorphIndex`/`fetchBoneIndex`
+  read the two arrays from that same file, cached separately. Bones are otherwise
+  skipped by the morph scan (they carry no morph dials). An old (v1) or
+  never-scanned file just yields empty lists — re-run Scan_Morphs in Daz.
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
   `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
   `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's

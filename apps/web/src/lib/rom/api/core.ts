@@ -9,7 +9,7 @@ import { basename, dirname, join } from '../storage/fs'
 // Type-only imports from the sibling modules that consume the session caches
 // below — erased at compile time, so they can't create a runtime import cycle
 // (characters.ts / products.ts import core.ts for real).
-import type { MorphIndexEntry } from './characters'
+import type { BoneIndexEntry, MorphIndexEntry } from './characters'
 import type { ProductScanResult } from './products'
 
 // Shared plumbing for the api/ modules: path helpers, the per-window active
@@ -216,6 +216,13 @@ export async function rescanPoseAssets(): Promise<PoseAssets> {
 export const morphIndexCache = new Map<
   string,
   { stamp: string; entries: Array<MorphIndexEntry> }
+>()
+
+/** Parsed + deduped bone index per generation, from the SAME `morphs_<G>.json`
+ *  (its `bones` array) — see {@link import('./characters').fetchBoneIndex}. */
+export const boneIndexCache = new Map<
+  string,
+  { stamp: string; entries: Array<BoneIndexEntry> }
 >()
 
 /**
