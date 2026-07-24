@@ -437,7 +437,7 @@ export function SortablePoseRow({
             <td className="px-1 py-1">
               <span className="pl-6">#</span>
             </td>
-            <td className="px-1 py-1" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
+            <td className="py-1 pr-1 pl-8" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
               Node
             </td>
             <td className="px-1 py-1" title="The internal property name of the Daz morph">
@@ -468,7 +468,7 @@ export function SortablePoseRow({
                   {morphIndex + 1}.
                 </span>
               </td>
-              <td className="py-0.5 pr-1 pl-4">
+              <td className="py-0.5 pr-1 pl-8">
                 <TextCell
                   value={morph.node}
                   placeholder={meta.figureNode}
