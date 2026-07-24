@@ -200,7 +200,11 @@ function CharacterPage() {
   useEffect(() => {
     const el = scenesRef.current
     if (!el) return
-    const io = new IntersectionObserver(([entry]) => setScenesOnScreen(entry.isIntersecting))
+    // Shrink the observed region 100px in from the top so the cards read as "gone"
+    // — and the footer slides in — ~100px before they fully clear the viewport top.
+    const io = new IntersectionObserver(([entry]) => setScenesOnScreen(entry.isIntersecting), {
+      rootMargin: '-100px 0px 0px 0px',
+    })
     io.observe(el)
     return () => io.disconnect()
   }, [])
