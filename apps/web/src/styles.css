@@ -600,6 +600,7 @@ a {
   gap: 5px;
   padding: 2px 8px;
   font-size: 11px;
+  line-height: 1.2;
   border-radius: calc(var(--radius) - 2px);
 }
 .primary-badge--dense .primary-badge__icon {

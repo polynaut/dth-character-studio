@@ -86,7 +86,7 @@ export function LinkedAssetCard({
   // alt-reveal — the corner icon carries the sole action. `onSelect` still wins.
   const inertBody = openIconOnly && !onSelect
   const bodyClass = cn(
-    'relative flex h-full w-full items-stretch gap-3 rounded-lg border p-3 text-left transition-colors',
+    'relative flex h-full w-full items-stretch gap-3 rounded-lg border p-3 pl-4 text-left transition-colors',
     cardClass,
   )
   const bodyInner = (
