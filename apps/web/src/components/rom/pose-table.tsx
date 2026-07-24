@@ -468,7 +468,7 @@ export function SortablePoseRow({
             <td />
           </tr>
           {pose.morphs.map((morph, morphIndex) => (
-            <tr key={morph.id} className={`${morphRowBg} [&>td]:align-middle`}>
+            <tr key={morph.id} className={morphRowBg}>
               <td />
               <td className="px-1 py-0.5">
                 <span className="pl-6 text-xs text-muted-foreground tabular-nums">
@@ -506,7 +506,7 @@ export function SortablePoseRow({
                   onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
                 />
               </td>
-              <td className="px-1 py-0.5 text-center">
+              <td className="px-1 py-0.5 text-center align-middle">
                 <input
                   type="checkbox"
                   className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
@@ -519,10 +519,11 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="py-0.5 pr-4 pl-1 text-right">
+              <td className="py-0.5 pr-4 pl-1 text-right align-middle">
                 {/* Right-aligned in the actions column near (a bit inset from) the row's
                     own bin, and styled to match it — gray at rest, red on hover over a
-                    silhouette — just a touch smaller. */}
+                    silhouette — just a touch smaller. Centered in the cell so the icon
+                    drops onto the text baseline instead of floating (its box baseline). */}
                 <Button
                   variant="ghost"
                   size="icon"
