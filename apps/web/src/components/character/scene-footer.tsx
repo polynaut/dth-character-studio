@@ -106,7 +106,11 @@ export function SceneFooter({
         show ? 'translate-y-0' : 'pointer-events-none translate-y-full',
       )}
     >
-      <div className="flex items-center gap-3 px-4 py-2">
+      {/* Match the Unreal-projects footer's height so both docked bars line up. That
+          bar puts min-h + border-t on ONE div; here the border-t is on the fixed
+          wrapper above, so the inner min-h is 70px (+1px border = 71px total). A
+          `size="lg"` pill is ~54px, like the Unreal card. */}
+      <div className="flex min-h-[70px] items-center gap-3 px-4 py-1.5">
         {/* The selected scene, prominent — a green ring, never dimmed. The radius
             MUST match the SceneLabel pill's (`Tag` uses `rounded`) so the ring hugs
             its silhouette instead of bulging past its corners. No ring offset
@@ -119,7 +123,8 @@ export function SceneFooter({
             scenePath={selected}
             name={nameOf(selected)}
             accentBar
-            trailing={selected === primary ? primaryTag : undefined}
+            size="lg"
+            subline={selected === primary ? primaryTag : undefined}
           />
         </span>
 
@@ -149,7 +154,8 @@ export function SceneFooter({
                     scenePath={path}
                     name={nameOf(path)}
                     accentBar
-                    trailing={path === primary ? primaryTag : undefined}
+                    size="lg"
+                    subline={path === primary ? primaryTag : undefined}
                   />
                 </button>
               ))}

@@ -598,13 +598,13 @@ a {
 }
 .primary-badge--dense {
   gap: 5px;
-  padding: 3px 8px;
+  padding: 2px 8px;
   font-size: 11px;
   border-radius: calc(var(--radius) - 2px);
 }
 .primary-badge--dense .primary-badge__icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 /* The "Refresh assets" action pulses a soft (light) orange when a refresh is
