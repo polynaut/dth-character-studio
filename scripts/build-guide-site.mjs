@@ -343,4 +343,20 @@ for (const md of pages) {
 cpSync(join(SRC, 'screenshots'), join(OUT, 'screenshots'), { recursive: true })
 if (existsSync(join(SRC, 'clips'))) cpSync(join(SRC, 'clips'), join(OUT, 'clips'), { recursive: true })
 if (existsSync(join(SRC, 'gifs'))) cpSync(join(SRC, 'gifs'), join(OUT, 'gifs'), { recursive: true })
+
+// Deploy-artifact check: every referenced asset must land in the OUTPUT, not
+// just exist in SRC. The guards above are source-side — they can't see a
+// dropped or mis-pathed cpSync (the exact bug that shipped clips broken). This
+// re-checks the same referenced sets against the built site, so removing a copy
+// step fails the build instead of deploying a broken image.
+const outMissing = [
+  ...[...referencedShots].map((f) => `screenshots/${f}`),
+  ...[...referencedClips].map((f) => `clips/${f}`),
+  ...[...referencedGifs].map((f) => `gifs/${f}`),
+].filter((rel) => !existsSync(join(OUT, rel)))
+if (outMissing.length)
+  throw new Error(
+    `built site is missing referenced assets (a copy step above is broken): ${outMissing.join(', ')}`,
+  )
+
 console.log(`guide → site/guide: ${pages.length} pages + screenshots + clips + gifs`)
