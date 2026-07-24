@@ -112,6 +112,7 @@ export function PreserveFields({
               newItem={() => ({ name: '', keepValue: 1 })}
               addLabel="Add morph"
               rowClassName={rowClass}
+              emptyHint="No morphs to preserve yet."
             >
               {(item, set, index) => {
                 const isOv = morphOverridden(index)
@@ -163,6 +164,7 @@ export function PreserveFields({
               newItem={() => ({ nodeLabel: '' })}
               addLabel="Add node"
               rowClassName={rowClass}
+              emptyHint="No node transforms yet."
             >
               {(item, set, index) => {
                 const isOv = nodeOverridden(index)
