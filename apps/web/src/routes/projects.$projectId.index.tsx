@@ -775,6 +775,7 @@ function ProjectCharactersPage() {
         <SceneCopyDialog
           title="Copy Daz scene files?"
           description="Do you want to copy the Daz scene files into the character's folder structure?"
+          filePath={scenePath}
           baseValue={copyBase}
           onBaseChange={setCopyBase}
           separator={pathSeparator()}
