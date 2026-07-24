@@ -73,7 +73,7 @@ fields:
 > [!TIP]
 > **Hair items** (per-scene hair kept out of the export) and everything else
 > around **multiple Daz scenes on one character** — outfit variants, the selected
-> scene, and per-scene overrides (ROM frames, identity dials, preserve items) — read
+> scene, and per-scene overrides (the whole ROM, identity dials, preserve items) — read
 > [Advanced: Multiple Daz scenes](https://polynaut.github.io/dth-character-studio/guide/advanced.html#multiple-daz-scenes--outfits-amp-hair-variants).
 
 ## Script install location & export directory
@@ -429,9 +429,9 @@ Two more scripts appear alongside the ROM one **only when their feature is on**:
   worn, everything else hidden).
 
 A character with **[per-scene ROM overrides](./advanced.md#rom-overrides)**
-additionally gets a `<Name>_<Scene>_pose_asset.csv` per ROM-overridden scene — the
-single `ROM_<Name>_G9.dsa` still handles every scene, applying the open scene's
-overrides at run time (there is no per-scene `.dsa`).
+additionally gets a `<Name>_<Scene>_pose_asset.csv` for each scene whose overrides
+change the **frame layout** — the single `ROM_<Name>_G9.dsa` still handles every
+scene, applying the open scene's overrides at run time (there is no per-scene `.dsa`).
 
 &nbsp;
 

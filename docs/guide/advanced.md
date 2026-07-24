@@ -5,9 +5,9 @@
 > [!NOTE]
 > Two optional power features live here: **multiple Daz scenes** on one character —
 > outfits and hair variants, per-scene hair lists, and **per-scene overrides** (edit
-> an identity dial, a preserve morph or a ROM frame on an outfit scene to override
-> just that scene) — and the **Modify JCM frames** grid for morphs riding along the
-> shipped joint correctives. (The character page's **Advanced options** section —
+> an identity dial, a preserve morph or anything in the ROM on an outfit scene to
+> override just that scene) — and the **Modify JCM frames** grid for morphs riding
+> along the shipped joint correctives. (The character page's **Advanced options** section —
 > preserve morphs / node transforms — is introduced in
 > [Your first character](./04-first-character.md#advanced-options--preserve-morphs--node-transforms).)
 
@@ -81,38 +81,49 @@ worn, with everything else hidden).
 
 ### Per-scene overrides — edit to override
 
-Beyond hair, a few fields can differ **per scene**: the **identity dials** (FACS
-detail strength, Flexion strength, Set UE5 tear UV), the **Advanced options**
-preserve morphs & node transforms, and the **ROM** grid itself. There's no
-override switch — on a non-primary scene you just **edit the field, and a value
-that differs from the primary becomes that scene's override.**
+Beyond hair, almost everything on the character page can differ **per scene**: the
+**identity dials** (FACS detail strength, Flexion strength, Set UE5 tear UV), the
+**Advanced options** preserve morphs & node transforms, and the **whole ROM** —
+every section's mode, preset asset, GEN art direction, custom-JCM path, frames and
+groups, plus the **Modify JCM frames** grid. There's no override switch — on a
+non-primary scene you just **edit the field, and a value that differs from the
+primary becomes that scene's override.**
 
-Each overridable field carries a small **cube glyph** in its label. A plain cube
-means "can be overridden on this scene"; once you override it the cube grows a
-**green dot** and the field turns green (a toggle flipped *off* as an override
-keeps a light-green knob). Hover or keyboard-focus the cube for a **reset** button
-that drops the field back to the primary scene's value. On the primary scene there
-is nothing to override, so the cubes stay dotless.
+Each overridable field — and each ROM **section title** — carries a small **cube
+glyph**. A plain cube means "can be overridden on this scene"; once you override it
+the cube grows a **green dot** and the field (or the whole section) turns green (a
+toggle flipped *off* as an override keeps a light-green knob). Hover or
+keyboard-focus the cube for a **reset** button that drops it back to the primary
+scene's value. On the primary scene there is nothing to override, so the cubes stay
+dotless.
 
 #### ROM overrides
 
 A second outfit sometimes needs **different morphs on a few frames** — a body
-shape that reads better in that clothing, other values, plus **a few extra
-frames** for morphs only that outfit's assets have (a skirt flow, a hood adjust).
+shape that reads better in that clothing, other values, plus **extra frames** for
+morphs only that outfit's assets have (a skirt flow, a hood adjust) — or a whole
+section set up differently: a different preset, custom instead of preset, its own
+art direction.
 
-Select the extra scene (the primary *is* the base ROM). Its ROM grid is **always
-in override mode** — the base rows stay fully editable, and editing one arms it as
-this scene's override:
+Select the extra scene (the primary *is* the base ROM). Its ROM is **always in
+override mode** — every control stays live, with **two grains** of override
+depending on what you touch:
 
-- **Edit a base row** — its value, name, morphs, bone scale, combined morphs — to
-  replace it for this scene. The row turns **green** and gains a **reset** button
-  (the green ↺) that drops it back to the base ROM frame. Rows you don't touch stay
-  exactly as the base ROM.
-- **Add morph** appends an override frame **at the end of the group** — added
-  frames are always fully visible and are the only rows an override can delete.
-  Inserting between existing frames, reordering, and all structural edits
-  (sections, modes, presets, groups) stay locked: the base frame layout is fixed,
-  so every untouched frame keeps its exact number.
+- **Tweak a base row** — its value, name, morphs, bone scale, combined morphs — and
+  just **that row** becomes the scene's override: it turns **green** and gains a
+  **reset** button (the green ↺) that drops it back to the base ROM frame. Rows you
+  don't touch stay exactly as the base ROM and keep tracking later base edits.
+- **Restructure or reconfigure a section** — reorder (drag), insert a frame between
+  others, delete a base frame, add a group, switch the section's **mode** (Preset ⇄
+  Custom), swap its **preset asset**, edit a GEN **Art-direction** frame, set a
+  custom **JCM path**, or **Import from CSV** — and the **whole section** becomes this
+  scene's override. It then edits **exactly like the primary** — full drag, insert,
+  delete and group management — just stored on this scene.
+
+However a section diverges — one green row or a full takeover — its **title cube
+goes green**, and the section-title **reset** (the green ↺ on the title) restores the
+**entire section** to the primary at once. The per-row ↺ is the granular version:
+it resets only that frame.
 
 <p align="center">
   <img width="900" alt="a non-primary scene's ROM grid — one green (overridden) row with a reset button between untouched base rows" src="screenshots/rom-override-grid.png" />
@@ -128,11 +139,12 @@ scripts:
 - **`ROM_<Name>_<Genesis>.dsa`** embeds every scene's overrides and, at run time,
   applies the delta for whichever scene is **open in Daz** — the identity dials and
   the ROM frame changes alike. One script serves the primary and every outfit scene.
-- A scene with **ROM** overrides also gets its own
-  **`<Name>_<Scene>_pose_asset.csv`** next to the default one — Houdini has no
-  runtime to pick frames, so the export block writes the CSV matching the open
-  scene. Identity- or preserve-only overrides need no extra file; they're config the
-  one script applies.
+- A scene whose overrides change the **frame layout** — different frames or counts,
+  a swapped preset, a flipped mode — also gets its own
+  **`<Name>_<Scene>_pose_asset.csv`** next to the default one, since Houdini has no
+  runtime to pick frames. Overrides that only change values the one script applies at
+  run time (identity dials, preserve morphs, GEN art direction, JCM mods) ride the
+  base CSV — no extra file.
 
 &nbsp;
 
@@ -142,11 +154,10 @@ scripts:
 > Frame numbers shown on a non-primary scene are the merged ones: what that scene's
 > CSV actually generates.
 
-An override isn't a mode you switch off — it exists exactly as long as a field
-differs from the primary. **Reset every overridden field** (and remove any added
-frames) and the scene falls back to the base; its extra CSV is cleaned up on the
-next save. Unlinking the scene does the same, so re-linking it later restores the
-work.
+An override isn't a mode you switch off — it exists exactly as long as something
+differs from the primary. **Reset every green field and section title** and the
+scene falls back to the base; its extra CSV is cleaned up on the next save.
+Unlinking the scene does the same, so re-linking it later restores the work.
 
 &nbsp;
 
@@ -183,5 +194,10 @@ Each drive is one row:
 **mirror** button copies a rule to the other side, flipping every Left/Right and
 `_L`/`_R` token in the bone and morph names while carrying the angles and values
 over unchanged — so you set a limb up once and mirror it.
+
+Like the rest of the ROM, the grid is **overridable per scene** — edit it on a
+non-primary scene and that scene keeps its own JCM mods (the JCM section title goes
+green; its reset restores the primary). See
+[Per-scene overrides](#per-scene-overrides--edit-to-override).
 
 [← Your first character](./04-first-character.md)
