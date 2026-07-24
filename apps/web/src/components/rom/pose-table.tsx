@@ -443,8 +443,10 @@ export function SortablePoseRow({
             <td className="px-1 py-1" title="The internal property name of the Daz morph">
               Property
             </td>
-            <td className="px-1 py-1 text-right" title="The value the pose dials the morph to">
-              Value
+            <td className="px-1 py-1" title="The value the pose dials the morph to">
+              {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
+                  flush over the digits — the same trick the main grid's Value header uses. */}
+              <span className="block w-20 pr-5 text-right">Value</span>
             </td>
             <td
               className="px-1 py-1 text-right"
@@ -485,7 +487,7 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="px-1 py-0.5 text-right">
+              <td className="px-1 py-0.5">
                 <NumberCell
                   value={morph.value}
                   onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
