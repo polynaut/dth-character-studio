@@ -363,6 +363,11 @@ export const RomSections = memo(function RomSections({
       ...od,
       poses: od.poses.filter((p) => !basePoseIds.has(p.id)),
       additions: od.additions.filter((a) => !sectionGroupIds.has(a.groupId)),
+      // The owned config captures the CURRENT effective `enabled` (merged already folds
+      // the sectionEnabled overlay in), so the overlay is now redundant — DROP it, or it
+      // shadows the owned config in applySceneOverride and re-toggling the section goes
+      // dead (its overlay-vs-base compare no longer matches the owned resting value).
+      sectionEnabled: od.sectionEnabled.filter((s) => s.section !== section),
       sectionOverrides: [...od.sectionOverrides, { section, config: { ...merged, ...patch } }],
     })
   }, [])
@@ -380,13 +385,21 @@ export const RomSections = memo(function RomSections({
     const od = overrideDataRef.current
     const emit = onOverrideChangeRef.current
     if (!od || !emit) return
+    // An OWNED section keeps `enabled` in its own config (the overlay was dropped on
+    // escalation), so its toggle patches the owned config — NOT the overlay, whose
+    // base-relative drop rule can't express the owned resting value (that mismatch is
+    // what made a disabled-then-customized section's re-enable go dead).
+    if (od.sectionOverrides.some((s) => s.section === section)) {
+      patchSectionForScene(section, { enabled })
+      return
+    }
     const baseEnabled = sectionsRef.current[section].enabled
     const rest = od.sectionEnabled.filter((s) => s.section !== section)
     emit({
       ...od,
       sectionEnabled: enabled === baseEnabled ? rest : [...rest, { section, enabled }],
     })
-  }, [])
+  }, [patchSectionForScene])
 
   // Per-scene "Modify JCM frames" override — the scene's own jcmMorphMods list. Armed
   // (jcm.enabled) only when it DIFFERS from the base, so editing it back to the base

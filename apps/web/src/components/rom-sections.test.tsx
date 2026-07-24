@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 afterEach(cleanup)
 
 import { RomSections } from './rom-sections'
-import { defaultSections, sceneOverrideSchema } from '@dth/rom'
+import { applySceneOverride, defaultSections, sceneOverrideSchema } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { RomSections as RomSectionsModel } from '@dth/rom'
@@ -645,6 +645,94 @@ describe('scene override mode', () => {
     expect(latest!.sectionOverrides[0].config.customAssetPath).toBe('C:/beach.duf')
     expect(sectionsChanged).toBe(false)
     expect(screen.getByTitle("Reset this section to the primary scene's ROM")).toBeTruthy()
+  })
+
+  // A controlled harness parameterized by its BASE sections — for the enable-toggle /
+  // escalation interplay, where the base's on/off state is the whole point.
+  function EnableHarness({
+    base,
+    onLatest,
+  }: {
+    base: RomSectionsModel
+    onLatest: (next: import('@dth/rom').SceneOverride) => void
+  }) {
+    const [override, setOverride] = useState(
+      sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf', enabled: true }),
+    )
+    return (
+      <RomSections
+        sections={base}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        override={{
+          data: override,
+          onChange: (next) => {
+            setOverride(next)
+            onLatest(next)
+          },
+        }}
+        onChange={() => {}}
+      />
+    )
+  }
+
+  it('re-enabling a section disabled THEN customized is live, not dead (dual-source enabled)', () => {
+    // Two sources of truth for `enabled` — the sectionEnabled overlay and the owned
+    // config — used to disagree: escalation baked the effective (disabled) enabled into
+    // the owned config but left the overlay, and re-enabling dropped the overlay (it
+    // matched the base) while the owned config's enabled:false silently won. Repro:
+    // base FBM on → disable for scene → customize (escalate) → re-enable ⇒ must turn on.
+    let latest: import('@dth/rom').SceneOverride | null = null
+    const base = sectionsWithMultiMorphPose() // FBM enabled, one pose
+    render(<EnableHarness base={base} onLatest={(next) => (latest = next)} />)
+    fireEvent.click(screen.getByText('Full Body')) // expand FBM
+    const header = () => screen.getByText('Full Body').closest('div') as HTMLElement
+
+    // 1) Disable FBM for the scene → a lightweight overlay entry.
+    fireEvent.click(within(header()).getByRole('switch'))
+    expect(latest!.sectionEnabled).toEqual([{ section: 'FBM', enabled: false }])
+
+    // 2) Customize FBM (insert a frame) → escalates to an owned config; the now-redundant
+    // overlay is dropped and the owned config carries the effective enabled:false.
+    fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
+    fireEvent.click(screen.getByText('Add after'))
+    expect(latest!.sectionOverrides).toHaveLength(1)
+    expect(latest!.sectionEnabled).toHaveLength(0)
+    expect(latest!.sectionOverrides[0].config.enabled).toBe(false)
+
+    // 3) Re-enable FBM → the owned config flips back on (dead toggle would leave it off).
+    fireEvent.click(within(header()).getByRole('switch'))
+    expect(latest!.sectionOverrides[0].config.enabled).toBe(true)
+    expect(applySceneOverride(base, latest!).FBM.enabled).toBe(true)
+  })
+
+  it('disabling a section enabled THEN customized on a base-off section actually turns it off (mirror)', () => {
+    // Mirror of the above: base FBM off → enable for scene → customize (escalate) →
+    // disable ⇒ the section must go off, not keep generating the frames the user cut.
+    let latest: import('@dth/rom').SceneOverride | null = null
+    const base = sectionsWithMultiMorphPose()
+    base.FBM.enabled = false // base-disabled, but keeps its pose row so we can escalate
+    render(<EnableHarness base={base} onLatest={(next) => (latest = next)} />)
+    fireEvent.click(screen.getByText('Full Body')) // expand FBM
+    const header = () => screen.getByText('Full Body').closest('div') as HTMLElement
+
+    // 1) Enable FBM for the scene.
+    fireEvent.click(within(header()).getByRole('switch'))
+    expect(latest!.sectionEnabled).toEqual([{ section: 'FBM', enabled: true }])
+
+    // 2) Customize (insert a frame) → escalate. Overlay dropped, owned enabled:true.
+    fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
+    fireEvent.click(screen.getByText('Add after'))
+    expect(latest!.sectionEnabled).toHaveLength(0)
+    expect(latest!.sectionOverrides[0].config.enabled).toBe(true)
+
+    // 3) Disable → the owned config flips off (not swallowed by a stale overlay).
+    fireEvent.click(within(header()).getByRole('switch'))
+    expect(latest!.sectionOverrides[0].config.enabled).toBe(false)
+    expect(applySceneOverride(base, latest!).FBM.enabled).toBe(false)
   })
 })
 

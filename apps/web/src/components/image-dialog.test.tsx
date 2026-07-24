@@ -22,6 +22,10 @@ vi.mock('#/lib/rom/api.ts', () => ({
   // that so the <img src> guard in usePortraitSrc lets it through, while still
   // encoding the reference so tests can assert which upload is showing.
   resolveImageSrc: async (image: string) => (image ? `data:image/png;base64,${image}` : ''),
+  // Portrait resolves a scene's sibling `.tip.png` through this — same data-URL
+  // shape so the staged-scene preview renders instead of throwing on an undefined
+  // (unlisted) mock export.
+  resolveScenePreview: async (scenePath: string) => (scenePath ? `data:image/png;base64,${scenePath}` : ''),
 }))
 // The drop-zone hook registers Tauri webview listeners — inert in jsdom.
 vi.mock('#/lib/file-drop.ts', () => ({ useFileDrop: () => ({ id: 1, isOver: false }) }))
@@ -158,6 +162,29 @@ describe('ImageDialog crop + persist flow', () => {
     apply()
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
     expect(uploadCroppedAvatar).not.toHaveBeenCalled()
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('staging the primary scene commits with the scene as provenance (imageScene)', async () => {
+    // The scene path stages a preview (never persists on select), and Apply copies the
+    // scene tip in AND records the scene as the image's provenance — the field the avatar
+    // auto-sync keys off. It must NOT run the crop-upload producer.
+    let produced: { image: string; imageScene: string } | null = null
+    const onClose = vi.fn()
+    const onApply = vi.fn(async (produce: () => Promise<{ image: string; imageScene: string }>) => {
+      produced = await produce()
+      return produced
+    })
+    render(
+      <ImageDialog {...baseProps} scenes={['X:/scenes/Beach.duf']} onApply={onApply} onClose={onClose} />,
+    )
+    // Pick the primary scene thumbnail (its title is the scene file name).
+    fireEvent.click(await screen.findByTitle('Beach.duf'))
+    expect(onApply).not.toHaveBeenCalled() // selecting a scene only STAGES it
+    apply()
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1))
+    expect(produced).toEqual({ image: 'scene-img', imageScene: 'X:/scenes/Beach.duf' })
+    expect(uploadCroppedAvatar).not.toHaveBeenCalled() // the scene path uploads no crop
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 

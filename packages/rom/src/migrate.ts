@@ -1,5 +1,5 @@
 import { sectionsFromFlatFrames } from './frames'
-import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, defaultSections, newId } from './types'
+import { CHARACTER_SCHEMA_VERSION, ROM_SECTIONS, SECTION_MODES, defaultSections, newId } from './types'
 
 import type { RomSection } from './types'
 
@@ -123,9 +123,16 @@ export const characterMigrations: Record<
         continue
       for (const entry of override.sectionOverrides) {
         if (entry && typeof entry === 'object' && entry.config === undefined && entry.groups !== undefined) {
+          // 'custom' is right for every entry the UI could produce (only custom-capable
+          // sections ever escalated). But a crafted/legacy file could carry an entry for a
+          // preset-only section (e.g. RET) — 'custom' there is UNSUPPORTED, and the
+          // sectionOverride superRefine is reject-only (unlike the base section schema's
+          // absent-mode healing), so it would hard-fail the WHOLE character on load. Heal
+          // to the section's own default mode when 'custom' isn't in its SECTION_MODES.
+          const modes = SECTION_MODES[entry.section as RomSection]
           entry.config = {
             enabled: true,
-            mode: 'custom',
+            mode: modes && !modes.includes('custom') ? modes[0] : 'custom',
             presetAssets: [],
             artDirection: [],
             groups: entry.groups,

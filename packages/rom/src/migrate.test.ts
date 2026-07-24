@@ -182,6 +182,37 @@ describe('schema v23 — sectionOverrides {section,groups} → {section,config} 
     })
     expect(out.sceneOverrides[0].sectionOverrides[0]).toEqual(already)
   })
+
+  it('heals a preset-only section (RET) to its default mode instead of hard-failing', () => {
+    // The UI can't produce this, but a crafted/legacy v22 file could carry a whole-section
+    // override for RET (preset-only). A blanket mode:'custom' would fail the reject-only
+    // sectionOverride superRefine and take the WHOLE character down; RET must heal to
+    // 'preset' so the character still loads.
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        id: 'c',
+        name: 'X',
+        createdAt: now,
+        updatedAt: now,
+        sections: {},
+        schemaVersion: 22,
+        sceneOverrides: [
+          {
+            scenePath: 'D:/s.duf',
+            enabled: true,
+            poses: [],
+            additions: [],
+            sectionOverrides: [
+              { section: 'RET', groups: [{ id: 'g1', label: '', suffix: 'centre', method: 'default', calculateFrom: 'default', poses: [] }] },
+            ],
+          },
+        ],
+      }),
+    )
+    const entry = parsed.sceneOverrides[0].sectionOverrides[0]
+    expect(entry.section).toBe('RET')
+    expect(entry.config.mode).toBe('preset') // healed — RET has no 'custom' mode
+  })
 })
 
 describe('schema v21 — sceneOverride.sectionOverrides (additive, zod default)', () => {

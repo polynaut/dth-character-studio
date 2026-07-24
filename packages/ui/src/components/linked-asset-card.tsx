@@ -7,24 +7,23 @@ import { Button } from '../primitives/button.tsx'
 /**
  * A linked-asset card shell — the shared anatomy of the Daz-scene and Houdini
  * cards (and any future "linked file" card): a brand-coloured LEFT ACCENT BAR, a
- * media thumbnail, a title, an optional path chip + extra badge, and a
- * bottom-right control cluster (a hover remove button + an always-present open
- * button). Selectable cards additionally show a ring + a corner check when
- * selected; `openIconOnly` cards make the body inert so only the corner icon
- * opens (for assets with no per-card state to select). The reveal-icon in the
- * corner previews the Alt+click "show in Explorer" action.
+ * media thumbnail, a title, an optional extra badge, and a bottom-right control
+ * cluster (a hover remove button + an always-present open button). Selectable
+ * cards additionally show a ring + a corner check when selected; `openIconOnly`
+ * cards make the body inert so only the corner icon opens (for assets with no
+ * per-card state to select). The reveal-icon in the corner previews the Alt+click
+ * "show in Explorer" action.
  *
  * It's deliberately presentational: the app injects the native pieces as
- * slots — `media` (its own Portrait/logo), `chip` (its PathCode), `badge`
- * (a brand mark), `extra` (tags) — and the open/remove behaviour as callbacks.
- * The card itself imports nothing from Tauri, the router, or the filesystem, so
- * it is reusable by a future online build.
+ * slots — `media` (its own Portrait/logo), `badge` (a brand mark), `extra`
+ * (tags) — and the open/remove behaviour as callbacks. The card itself imports
+ * nothing from Tauri, the router, or the filesystem, so it is reusable by a
+ * future online build.
  */
 export function LinkedAssetCard({
   title,
   media,
   badge,
-  chip,
   extra,
   altHeld,
   openTitle,
@@ -45,8 +44,6 @@ export function LinkedAssetCard({
   media: ReactNode
   /** Brand mark floated bottom-left over the media. */
   badge?: ReactNode
-  /** Path chip shown under the title. */
-  chip?: ReactNode
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
   extra?: ReactNode
   /** Alt is held → the corner icon previews "show in Explorer". */
@@ -97,7 +94,6 @@ export function LinkedAssetCard({
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
         <div className="mt-3 truncate text-base font-medium">{title}</div>
-        {chip && <div className="mt-1">{chip}</div>}
         {/* Sits just under the title (not pinned to the bottom). */}
         {extra && <div className="mt-2">{extra}</div>}
       </div>

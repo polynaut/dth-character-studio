@@ -677,4 +677,98 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(delta.jcmMorphMods).toEqual([{ boneLabel: 'Left Thigh', axis: 'XRotate', positive: [], negative: [] }])
     expect(delta.extraFrames).toBeUndefined()
   })
+
+  it('a jcm DELETE-ALL (armed, empty mods) emits an empty jcmMorphMods delta', () => {
+    // Mirrors the preserve delete-all above: an armed jcm panel with an EMPTY list must
+    // still OVERRIDE the base's mods (empty ⇒ no JCM modifications for this scene) — the
+    // shallow runtime copy can only set a key, so the empty array has to be emitted.
+    const ov = makeOverride({ scenePath: scene, enabled: false, jcm: { enabled: true, mods: [] } })
+    const character = makeCharacter({
+      extraScenes: [scene],
+      jcmMorphMods: [{ id: 'base', boneLabel: 'Right Thigh', axis: 'XRotate', drives: [] }],
+      sceneOverrides: [ov],
+    })
+    const delta = grabObject(generateAll(character, {}, FRAMES)[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.jcmMorphMods).toEqual([])
+  })
+
+  it('a per-scene GEN mode preset→custom flips the include off AND mints a scene CSV', () => {
+    // Owning GEN in custom mode changes the frame layout (custom rows replace the preset
+    // block) — so the delta drops the GP include and a scene-suffixed CSV is minted.
+    const owned = {
+      section: 'GEN' as const,
+      config: {
+        enabled: true,
+        mode: 'custom' as const,
+        presetAssets: [],
+        artDirection: [],
+        groups: [
+          {
+            id: 'gg',
+            label: '',
+            suffix: 'centre' as const,
+            method: 'individual' as const,
+            calculateFrom: 'default' as const,
+            poses: [{ id: 'gp1', name: 'BeachGP', morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }], boneScaleRef: false }],
+          },
+        ],
+        customAssetPath: '',
+      },
+    }
+    const ov = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [owned] })
+    const files = generateAll(genFemale({ sceneOverrides: [ov] }), {}, FRAMES)
+    // Frame layout changed (custom GEN rows) → the scene gets its own CSV.
+    expect(files.map((f) => f.fileName)).toContain('ElectraG9_ElectraBeach_pose_asset.csv')
+    const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.bIncludeGP).toBe(false) // custom GEN → no GP preset block for the scene
+    expect(delta.extraFrames.frames.map((f: { name: string }) => f.name)).toContain('BeachGP')
+    const csv = files.find((f) => f.fileName === 'ElectraG9_ElectraBeach_pose_asset.csv')!.content
+    expect(csv).toContain('BeachGP')
+  })
+
+  it('a per-scene custom JCM path emits ONLY jcmRomPath in the delta (exact key set)', () => {
+    // A custom base-ROM `.duf` for the scene rides as a jcmRomPath delta (forward-slashed);
+    // the exact-key assertion pins that nothing else leaks into the delta.
+    const owned = {
+      section: 'JCM' as const,
+      config: {
+        enabled: true,
+        mode: 'custom' as const,
+        presetAssets: [],
+        artDirection: [],
+        groups: [],
+        customAssetPath: 'C:\\Custom\\Beach JCM.duf',
+      },
+    }
+    const ov = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [owned] })
+    const delta = grabObject(generateAll(withScene({ sceneOverrides: [ov] }), {}, FRAMES)[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(Object.keys(delta)).toEqual(['jcmRomPath'])
+    expect(delta.jcmRomPath).toBe('C:/Custom/Beach JCM.duf')
+  })
+
+  it('threads the HOST-resolved per-scene rom paths + preset frames into the delta', () => {
+    // A scene that swaps GEN to the DK preset resolves a different `.duf` + block lengths
+    // than the base — which only the host can measure. generateAll must carry the
+    // per-scene maps through to the delta (the base romPaths {} / FRAMES carry neither).
+    const ov = makeOverride({
+      scenePath: scene,
+      enabled: true,
+      sectionOverrides: [{ section: 'GEN' as const, config: { enabled: true, mode: 'preset' as const, presetAssets: ['DK9 - Dicktator.duf'], artDirection: [], groups: [], customAssetPath: '' } }],
+    })
+    const sceneRomPaths = { [sceneKey]: { dk: 'X:/poses/DK.duf' } }
+    const sceneFrames = { [sceneKey]: { base: 328, gp: 0, dk: 60, phys: 43 } }
+    const script = generateAll(
+      genFemale({ sceneOverrides: [ov] }),
+      {},
+      FRAMES,
+      undefined,
+      undefined,
+      undefined,
+      sceneRomPaths,
+      sceneFrames,
+    )[0].content
+    const delta = grabObject(script, 'dthSceneOverrides')[sceneKey]
+    expect(delta.dkRomPath).toBe('X:/poses/DK.duf') // host-resolved path reached the delta
+    expect(delta.presetFrames.dk).toBe(60) // scene's own block frames, not the base's 54
+  })
 })

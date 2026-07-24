@@ -6,9 +6,10 @@ import type { ReactNode } from 'react'
 
 /**
  * The Daz-green "linked-scene" pill: a small landscape render of the scene's
- * `.tip.png` followed by its (already-prettified) name — the same look the
- * linked-scene cards use. Shared by the editor header's scene tag AND every
- * per-scene override toggle, so the selected scene reads identically everywhere.
+ * `.tip.png` followed by its name (the scene file's `.duf` stem, as the
+ * linked-scene cards show it) — the same look the linked-scene cards use. Shared
+ * by the editor header's scene tag AND every per-scene override toggle, so the
+ * selected scene reads identically everywhere.
  *
  * `muted` gives the PRIMARY-scene look (greyscale render + a plain tile) for the
  * header, where the primary can be the active selection; the override toggles
