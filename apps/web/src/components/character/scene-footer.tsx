@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 
 import { cn } from '@dth/ui'
 
+import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { SceneLabel } from '#/components/character/scene-label.tsx'
 
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
@@ -19,12 +20,8 @@ const vtName = (path: string) => {
   return `scene-${(h >>> 0).toString(36)}`
 }
 
-/** The green "primary" tag shown on the primary scene's pill. */
-const primaryTag = (
-  <span className="rounded bg-[color-mix(in_oklab,var(--color-daz-green)_22%,transparent)] px-1 py-px text-[9px] font-semibold tracking-wide text-[color-mix(in_oklab,var(--color-daz-green)_82%,white)] uppercase">
-    primary
-  </span>
-)
+/** The "primary" role badge shown on the primary scene's footer pill (compact variant). */
+const primaryTag = <PrimaryBadge dense />
 
 /**
  * A footer/status bar — the same idea as the project page's Unreal-projects bar —
