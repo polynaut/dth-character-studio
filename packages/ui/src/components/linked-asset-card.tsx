@@ -96,7 +96,7 @@ export function LinkedAssetCard({
         {badge}
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
-        <div className="truncate text-base font-medium">{title}</div>
+        <div className="mt-3 truncate text-base font-medium">{title}</div>
         {chip && <div className="mt-1">{chip}</div>}
         {/* Pinned to the bottom-left, clear of the corner controls. */}
         {extra && <div className="mt-auto pt-2">{extra}</div>}
