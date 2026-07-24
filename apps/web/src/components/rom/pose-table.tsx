@@ -434,7 +434,9 @@ export function SortablePoseRow({
         <>
           <tr className="bg-muted/20 text-xs font-medium text-muted-foreground">
             <td />
-            <td className="px-1 py-1 text-right">#</td>
+            <td className="px-1 py-1">
+              <span className="pl-2">#</span>
+            </td>
             <td className="px-1 py-1" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
               Node
             </td>
@@ -461,8 +463,10 @@ export function SortablePoseRow({
           {pose.morphs.map((morph, morphIndex) => (
             <tr key={morph.id} className="bg-muted/20">
               <td />
-              <td className="px-1 py-0.5 text-right text-xs text-muted-foreground tabular-nums">
-                {morphIndex + 1}.
+              <td className="px-1 py-0.5">
+                <span className="pl-2 text-xs text-muted-foreground tabular-nums">
+                  {morphIndex + 1}.
+                </span>
               </td>
               <td className="px-1 py-0.5">
                 <TextCell
@@ -524,12 +528,11 @@ export function SortablePoseRow({
           ))}
           <tr className="border-b bg-muted/20">
             <td />
-            <td />
-            <td colSpan={visibleCells.length - 1} className="px-1 py-1">
+            <td colSpan={visibleCells.length} className="px-1 py-1">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs"
+                className="ml-2 h-7 text-xs"
                 onClick={() => meta.addMorph(row.index)}
               >
                 <Plus className="size-3.5" /> Add morph
