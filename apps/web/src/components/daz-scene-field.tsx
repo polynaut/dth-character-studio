@@ -680,6 +680,7 @@ export function DazSceneField({
         <SceneCopyDialog
           title="Add Daz scene to the character?"
           description="The selected scene lives outside the character folder. Copy it into the character folder?"
+          filePath={pendingAdd}
           prefix={displayPath(`${baseDazRel}/`)}
           subfolder={addSubfolder}
           onSubfolderChange={setAddSubfolder}
