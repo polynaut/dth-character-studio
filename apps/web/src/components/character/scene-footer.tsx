@@ -101,6 +101,11 @@ export function SceneFooter({
   return (
     <div
       aria-hidden={!show}
+      // `inert` while hidden: the bar is off-screen (translate-y-full), so its rail
+      // buttons must leave the tab order too — not just ignore the mouse
+      // (pointer-events-none) — or Tab lands focus on invisible controls inside an
+      // aria-hidden subtree. inert removes them from focus + the a11y tree.
+      inert={!show}
       className={cn(
         'fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur transition-transform duration-200 ease-out',
         show ? 'translate-y-0' : 'pointer-events-none translate-y-full',

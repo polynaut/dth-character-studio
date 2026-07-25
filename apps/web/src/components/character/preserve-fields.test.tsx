@@ -143,4 +143,26 @@ describe('PreserveFields per-scene override', () => {
     fireEvent.blur(input)
     expect(screen.queryByTitle(RESET)).not.toBeNull()
   })
+
+  it('renaming a node row to duplicate another base label still arms (multiset, not set)', () => {
+    // Base [Head, Neck]. Rename "Neck" → "Head": the list becomes [Head, Head] — a
+    // genuinely different multiset (Neck's preservation dropped). A SET compare reads
+    // it as equal (same length, both labels ∈ {Head, Neck}) and DISARMS, reverting the
+    // typed row back to "Neck" and silently generating the base list. The override must
+    // stay armed and the edit must persist.
+    const initial = makeCharacter({
+      preserveNodeTransforms: [{ nodeLabel: 'Head' }, { nodeLabel: 'Neck' }],
+    })
+    render(<Harness initial={initial} />)
+    fireEvent.click(screen.getByText('select-beach'))
+
+    const neck = screen.getByDisplayValue('Neck') as HTMLInputElement
+    fireEvent.change(neck, { target: { value: 'Head' } })
+
+    // Edit persisted (both node inputs now "Head") — not reverted to "Neck".
+    expect(screen.getAllByDisplayValue('Head')).toHaveLength(2)
+    expect(screen.queryByDisplayValue('Neck')).toBeNull()
+    // Override armed — the reset handle is visible.
+    expect(screen.queryByTitle(RESET)).not.toBeNull()
+  })
 })
