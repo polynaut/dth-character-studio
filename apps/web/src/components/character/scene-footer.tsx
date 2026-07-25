@@ -121,12 +121,14 @@ export function SceneFooter({
 
         {/* Every linked scene as a card in a horizontally-scrollable rail (fits any
             number). The SELECTED one is ringed green; clicking a card selects it.
-            The rail's `py-2` gives the hover-✕ (which sits just outside the card's
-            top-right) room so `overflow-x-auto` — which forces overflow-y to auto —
-            doesn't clip it or spawn a stray vertical scrollbar. */}
+            `overflow-x-auto` clips descendants to the padding box (and forces
+            overflow-y to auto), so the padding here is what keeps the selection
+            RING and the hover-✕ — both sitting just outside a card's edges — from
+            being clipped: `px-1.5` for the first/last card's ring, `py-2` for the
+            ✕ above the card. */}
         <div
           ref={railRef}
-          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-2 [scrollbar-width:thin]"
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-1.5 py-2 [scrollbar-width:thin]"
           style={{ maskImage: railMask, WebkitMaskImage: railMask }}
         >
           {scenes.map((path) => {
