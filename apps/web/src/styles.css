@@ -474,16 +474,18 @@ a {
   }
 }
 
-/* The linked-project "Unreal card" in the project footer bar: smaller than the
-   Daz/Houdini cards but the same visual language — a Unreal-cyan LEFT ACCENT BAR
-   (drawn in the component) over a faint cyan tint / border that brighten on
-   hover. Not selectable. */
+/* The linked-project "Unreal card" in the project footer bar: same visual
+   language as the Daz/Houdini cards — a Unreal-cyan LEFT ACCENT BAR (drawn in the
+   component) over a cyan tint / border that brighten on hover. Not selectable.
+   The tint runs stronger than the Daz/Houdini cards' because this card sits on
+   the footer dock's own cool-blue gradient, where a faint cyan would wash out to
+   "just the accent bar". */
 @utility unreal-card {
-  background-color: color-mix(in oklab, var(--unreal-blue) 6%, var(--card));
-  border-color: color-mix(in oklab, var(--unreal-blue) 26%, var(--border));
+  background-color: color-mix(in oklab, var(--unreal-blue) 16%, var(--card));
+  border-color: color-mix(in oklab, var(--unreal-blue) 45%, var(--border));
   &:hover {
-    background-color: color-mix(in oklab, var(--unreal-blue) 11%, var(--card));
-    border-color: color-mix(in oklab, var(--unreal-blue) 55%, var(--border));
+    background-color: color-mix(in oklab, var(--unreal-blue) 24%, var(--card));
+    border-color: color-mix(in oklab, var(--unreal-blue) 65%, var(--border));
   }
 }
 
