@@ -98,12 +98,16 @@ export function sceneOverrideSlug(scenePath: string): string {
 
 /**
  * The overrides that feed generation: at least one panel gate armed (ROM section
- * `enabled`, `identity`, `groom`, `preserve`, or `jcm`) AND still pointing at a
- * linked EXTRA scene (an override for an unlinked scene stays stored but inert;
- * the primary scene is by definition the base). THE single gate — the one
- * character script's per-scene config map, stale-artifact cleanup and save
- * validation all ask here, so they can't disagree. Use {@link sceneOverrideBuildsRom}
- * to narrow to the subset that also needs its own PoseAsset CSV.
+ * `enabled`, `identity`, `preserve`, or `jcm`) AND still pointing at a linked EXTRA
+ * scene (an override for an unlinked scene stays stored but inert; the primary scene
+ * is by definition the base). THE single gate — the one character script's per-scene
+ * config map, stale-artifact cleanup and save validation all ask here, so they can't
+ * disagree. Use {@link sceneOverrideBuildsRom} to narrow to the subset that also
+ * needs its own PoseAsset CSV.
+ *
+ * NB no `groom.enabled` term: hair is per scene by presence (it rides `groomScenes`,
+ * not this override) and nothing ever arms that gate — including it here only implied
+ * a hair-only scene could activate an (empty) override, which it can't.
  */
 export function activeSceneOverrides(
   character: Pick<Character, 'extraScenes' | 'sceneOverrides'>,
@@ -112,7 +116,6 @@ export function activeSceneOverrides(
     (override) =>
       (override.enabled ||
         override.identity.enabled ||
-        override.groom.enabled ||
         override.preserve.enabled ||
         override.jcm.enabled) &&
       character.extraScenes.includes(override.scenePath),

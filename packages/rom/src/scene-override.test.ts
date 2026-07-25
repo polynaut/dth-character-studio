@@ -368,6 +368,22 @@ describe('activeSceneOverrides', () => {
     })
     expect(activeSceneOverrides(character)).toEqual([linked])
   })
+
+  it('a groom-only gate does NOT activate an override (hair rides groomScenes)', () => {
+    // groom.enabled is never armed by the UI and hair generates from groomScenes,
+    // not this override — so a scene whose ONLY set gate is groom must stay inert.
+    const groomOnly = makeOverride({
+      scenePath: 'D:\\s\\Beach.duf',
+      enabled: false,
+      groom: { enabled: true },
+    })
+    const character = makeCharacter({
+      scenePath: 'D:\\s\\Primary.duf',
+      extraScenes: ['D:\\s\\Beach.duf'],
+      sceneOverrides: [groomOnly],
+    })
+    expect(activeSceneOverrides(character)).toEqual([])
+  })
 })
 
 describe('clonePose', () => {

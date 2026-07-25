@@ -20,7 +20,7 @@ import {
   relinkScene,
 } from '#/lib/rom/api.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
-import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
+import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -364,7 +364,14 @@ export function DazSceneField({
               },
             })
           : scene
-        return { scenePath: finalScene }
+        // A scene is linked at most once: if the new primary is already an extra
+        // (relinking the primary onto an existing outfit scene), drop it from the
+        // extras so it isn't both — else it shows as two cards and collides the
+        // footer's per-path key + view-transition-name.
+        return {
+          scenePath: finalScene,
+          extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
+        }
       },
       {
         toast: 'Linked Daz scene',
