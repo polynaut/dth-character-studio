@@ -180,7 +180,9 @@ export function SceneFooter({
                     aria-label={`Open ${nameOf(path)} in Daz`}
                     title={altHeld ? `Show ${nameOf(path)} in Explorer` : `Open ${nameOf(path)} in Daz`}
                     onClick={(e) => actionsRef.current?.open(path, e)}
-                    className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md border bg-card/70 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-daz-green focus-visible:ring-2 focus-visible:ring-ring"
+                    // Ghost button: the bare icon is always visible (no fill/border);
+                    // a subtle accent fill + colour appear only on hover/focus.
+                    className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-daz-green focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {altHeld ? <FolderOpen className="size-3.5" /> : <ExternalLink className="size-3.5" />}
                   </button>
