@@ -8,6 +8,7 @@ import {
   groomBadge,
   groomPillClass,
 } from '#/components/character/groom-kind.tsx'
+import { labelsKey } from '#/lib/preserve-diff.ts'
 import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
@@ -129,19 +130,17 @@ export function GroomFields({
   const listed = nodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
 
   // Hair "overrides" when THIS non-primary scene's list DIFFERS from the primary
-  // scene's — compared as a SET (order-independent), the same test the other
-  // per-scene fields use. The primary (`character.scenePath`) is the base: reset
-  // copies its list back so the two match and the mark goes quiet again. (An empty
-  // list against a primary that has hair still differs — a deliberately bald outfit
-  // scene reads as overridden too.)
+  // scene's — compared as a MULTISET (order-independent, multiplicity-aware), the
+  // same test the other per-scene fields use. The primary (`character.scenePath`) is
+  // the base: reset copies its list back so the two match and the mark goes quiet
+  // again. (An empty list against a primary that has hair still differs — a
+  // deliberately bald outfit scene reads as overridden too.)
   const primaryNodes =
     character.groomScenes.find((g) => g.scenePath === character.scenePath)?.nodes ?? []
   const primaryListed = primaryNodes
     .map((groom) => groom.nodeLabel.trim())
     .filter((label) => label !== '')
-  const primarySet = new Set(primaryListed)
-  const hairDiffersFromPrimary =
-    listed.length !== primaryListed.length || listed.some((label) => !primarySet.has(label))
+  const hairDiffersFromPrimary = labelsKey(listed) !== labelsKey(primaryListed)
   const hairOverridden = overrideEligible && hairDiffersFromPrimary
   const candidates = wearables
     // Top-level followers only: an item fitted to another wearable (hair base on

@@ -1,6 +1,7 @@
 import { cn, Input, KeyedListEditor, Label, NumberField, OverrideMark, overrideLabelClass } from '@dth/ui'
 import { MorphIndexProvider } from '#/components/rom/morph-index-provider.tsx'
 import { MorphNameCell } from '#/components/rom/morph-name-cell.tsx'
+import { preserveMorphsKey, preserveNodesKey } from '#/lib/preserve-diff.ts'
 
 import type { Character, SceneOverride } from '@dth/rom'
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
@@ -72,13 +73,14 @@ export function PreserveFields({
   // fields), green once the whole list differs from the base — a row changed, or one
   // was added/removed. Reset reverts the list to the primary scene's; the per-row
   // green border still marks which rows differ.
+  // Whole-list divergence is compared as a MULTISET (via the shared preserve-diff
+  // keys), the SAME test `writePreserve` uses to arm the gate — so the reset handle
+  // shows exactly when the override is armed, including the duplicate-key case a set
+  // compare would miss (base [Head,Neck] → [Head,Head]).
   const morphsOverridden =
-    !!ov &&
-    (morphs.length !== character.preserveMorphs.length || morphs.some((_, i) => morphOverridden(i)))
+    !!ov && preserveMorphsKey(morphs) !== preserveMorphsKey(character.preserveMorphs)
   const nodesOverridden =
-    !!ov &&
-    (nodes.length !== character.preserveNodeTransforms.length ||
-      nodes.some((_, i) => nodeOverridden(i)))
+    !!ov && preserveNodesKey(nodes) !== preserveNodesKey(character.preserveNodeTransforms)
   const resetMorphs = () => setMorphs(character.preserveMorphs)
   const resetNodes = () => setNodes(character.preserveNodeTransforms)
 

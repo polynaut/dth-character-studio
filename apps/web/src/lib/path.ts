@@ -30,6 +30,19 @@ export function normalizePathLower(path: string): string {
 }
 
 /**
+ * The extra-scene list with `primary` removed (case-/separator-insensitively). A
+ * scene is linked to a character at most once, so when a path becomes the PRIMARY it
+ * must drop out of the extras. Without this, relinking the primary to an
+ * already-linked scene leaves it in BOTH lists — the scene then shows as two cards
+ * and its duplicated path collides the scene-footer's per-path React `key` and
+ * `view-transition-name`.
+ */
+export function extrasWithoutPrimary(extraScenes: Array<string>, primary: string): Array<string> {
+  const key = normalizePathLower(primary)
+  return extraScenes.filter((scene) => normalizePathLower(scene) !== key)
+}
+
+/**
  * The parent directory of a path, {@link normalizePath}-normalized ('/'-joined,
  * runs collapsed, no trailing separator) — THE one copy of the
  * `normalizePath(p).replace(/\/[^/]*$/, '')` idiom that used to be inlined
