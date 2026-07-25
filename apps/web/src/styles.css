@@ -173,12 +173,13 @@ a {
 }
 
 @layer base {
-  /* Always reserve the root scrollbar's gutter so switching between a tall page (has a
-     scrollbar — the character detail form) and a short one (Notes / Attachments, which
-     may not) never shifts the layout sideways. */
-  html {
-    scrollbar-gutter: stable;
-  }
+  /* NB: no `scrollbar-gutter: stable` here. Reserving the gutter kept the layout
+     from shifting between a tall page (character form → scrollbar) and a short one
+     (Notes/Attachments → none), but it also left a scrollbar-width strip on the
+     right that the viewport-fixed docked footers (`inset-x-0`) can't cover — so a
+     short page showed the dock stopping short of the edge. Letting the gutter
+     collapse when there's no scrollbar lets the docks reach the true edge; the cost
+     is a ~1-scrollbar sideways nudge when a tab has no scrollbar. */
   * {
     @apply border-border outline-ring/50;
   }
