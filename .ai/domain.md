@@ -105,7 +105,10 @@ offsets byte-identically — if a generation change moves them, the change is wr
   (`api/generate.ts`) resolves per-scene `romPaths`/`presetFrames` over each merged override
   (the catalog lookup + native `.duf` measurement can't run in the pure core) and threads the
   maps in. The runtime scene-lookup (`sceneConfigLookupSnippet`) is unchanged: it swaps the
-  open scene's delta onto the base config by scene name, falling back to primary.
+  open scene's delta onto the base config by scene name, falling back to primary. That merge is
+  SET-ONLY, so a scene that disables a base-enabled preset block leaves the base's block keys
+  (`gpArtDirection`/`gpRomPath`/…) stale on the config — safe only because the runtime gates every
+  block read behind its `bIncludeX`, which the delta carries; see `gotchas.md` before touching either.
 
 ## The DTH runtime is studio-owned
 
