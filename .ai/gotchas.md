@@ -26,6 +26,23 @@ current code before relying on details, but assume the *lesson* still holds.
   `FACGROUP` has no label column at all) — an empty bones label is a VALID state
   for GEN custom groups. Only JCM/PHY groups require a driver bone, and
   `romValidationErrors` enforces exactly that split.
+- **Per-scene override deltas merge SET-ONLY at runtime — disabling a preset block
+  for a scene leaves the base's block keys stale on the config, and only the
+  runtime's `bIncludeX` gate stops them leaking.** `buildSceneConfigMap` (`dsa.ts`)
+  emits a scene's config as a whitelist-DIFF; the generated `sceneConfigLookupSnippet`
+  applies it with `config[k] = delta[k]` — it can SET a key, never delete one. So a
+  scene that turns a base-enabled preset OFF emits `bIncludeGP:false` while the base's
+  `gpArtDirection`/`gpRomPath`/`presetFrames.gp` ride through unchanged. That is only
+  safe because `DthWorkflow.dsa` dispatches each block builder under its flag
+  (`if(options.bIncludeGP){ ApplyGP9(…) }`) and reads the block's `gpArtDirection`/
+  `gpRomPath` INSIDE that builder — a stale key is never read while its `bIncludeX` is
+  false. Two rules keep it that way: keep every block-scoped read behind its
+  `bIncludeX` in the runtime, and keep all five `bIncludeJCM/FAC/DK/GP/Physics` in
+  `SCENE_CONFIG_DIFF_KEYS` (they carry the OFF into the delta, which neutralizes the
+  stale keys). A future runtime that reads a block field WITHOUT its `bIncludeX` gate
+  would silently apply the base's value to a scene that disabled that block. Pinned by
+  `scene-override.test.ts` "disabling a preset GEN for a scene now emits
+  bIncludeGP:false".
 
 ## Daz Studio integration (measured behavior)
 
