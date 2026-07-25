@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MutableRefObject } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import type { MouseEvent as ReactMouseEvent, MutableRefObject } from 'react'
+import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, Plus, X } from 'lucide-react'
 
-import { Button, cn } from '@dth/ui'
+import { Button, cn, useModifierHeld } from '@dth/ui'
 
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { SceneLabel } from '#/components/character/scene-label.tsx'
@@ -21,6 +21,9 @@ const primaryTag = <PrimaryBadge dense />
 export interface SceneDockActions {
   /** Pick + link another Daz scene (same flow as the up-page "Add scene"). */
   add: () => void
+  /** Open a scene in Daz (plain click) or reveal it in Explorer (Alt+click) — the
+   *  field's onOpen owns the "Daz already running" warning. */
+  open: (scenePath: string, e: ReactMouseEvent) => void
   /** Unlink a scene from the character (opens the field's confirm dialog). */
   remove: (scenePath: string) => void
 }
@@ -57,6 +60,9 @@ export function SceneFooter({
    *  "Add scene" button and the per-card unlink render disabled/absent. */
   actionsRef?: MutableRefObject<SceneDockActions | null>
 }) {
+  // Alt held → the per-card open icon previews its alternate action (reveal in
+  // Explorer), same convention as the up-page scene cards and the Unreal dock.
+  const altHeld = useModifierHeld('Alt')
   // Subtle edge-fade on the rail: fade whichever side still has scrolled-off
   // scenes, so a long list hints that it scrolls — and nothing fades when they fit.
   const railRef = useRef<HTMLDivElement>(null)
@@ -159,8 +165,26 @@ export function SceneFooter({
                     accentBar
                     size="lg"
                     subline={isPrimary ? primaryTag : undefined}
+                    // Reserve right space so the name never slides under the open
+                    // icon overlaid on the card's right edge.
+                    className="pr-11"
                   />
                 </button>
+                {/* Open-in-Daz icon overlaid on the card's right edge (a SIBLING of
+                    the select button, so it isn't a button nested in one). Plain
+                    click opens in Daz; Alt+click reveals in Explorer — the field's
+                    onOpen owns both plus the "Daz already running" warning. */}
+                {actionsRef && (
+                  <button
+                    type="button"
+                    aria-label={`Open ${nameOf(path)} in Daz`}
+                    title={altHeld ? `Show ${nameOf(path)} in Explorer` : `Open ${nameOf(path)} in Daz`}
+                    onClick={(e) => actionsRef.current?.open(path, e)}
+                    className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md border bg-card/70 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-daz-green focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {altHeld ? <FolderOpen className="size-3.5" /> : <ExternalLink className="size-3.5" />}
+                  </button>
+                )}
                 {/* The primary can't be unlinked (it's also the avatar source), so
                     only extras get the ✕ — same recipe as the Unreal-dock card. */}
                 {!isPrimary && actionsRef && (

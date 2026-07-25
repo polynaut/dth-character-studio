@@ -510,6 +510,7 @@ export function DazSceneField({
     if (!dockActionsRef) return
     dockActionsRef.current = {
       add: () => void onAddPick(),
+      open: (scenePath, e) => void onOpen(scenePath, e),
       remove: (scenePath: string) => askRemove(scenePath),
     }
     return () => {
