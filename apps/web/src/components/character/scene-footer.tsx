@@ -1,39 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+import type { MouseEvent as ReactMouseEvent, MutableRefObject } from 'react'
+import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, Plus, X } from 'lucide-react'
 
-import { cn } from '@dth/ui'
+import { Button, cn, useModifierHeld } from '@dth/ui'
 
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { SceneLabel } from '#/components/character/scene-label.tsx'
 
 const stemOf = (p: string) => p.replace(/\\/g, '/').split('/').pop()?.replace(/\.duf$/i, '') ?? ''
 
-/**
- * A stable, CSS-ident-safe `view-transition-name` for a scene. Scene paths aren't
- * valid idents (backslashes, colons, spaces), so hash the path to a short token —
- * the same scene keeps the same name whether it's the prominent pill or a rail one,
- * which is what lets the browser morph it between the two slots on selection.
- */
-const vtName = (path: string) => {
-  let h = 0
-  for (let i = 0; i < path.length; i++) h = (Math.imul(31, h) + path.charCodeAt(i)) | 0
-  return `scene-${(h >>> 0).toString(36)}`
-}
-
-/** The "primary" role badge shown on the primary scene's footer pill (compact variant). */
+/** The "primary" role badge shown on the primary scene's footer card (compact variant). */
 const primaryTag = <PrimaryBadge dense />
 
 /**
- * A footer/status bar — the same idea as the project page's Unreal-projects bar —
- * that keeps the Daz scene you're editing on screen once the Daz-scenes cards have
- * scrolled out of view. The SELECTED scene sits prominent on the left; after a
- * divider, every OTHER linked scene follows in a horizontally-scrollable rail (with
- * a subtle edge-fade on whichever side has more scenes), so you can switch scene
- * mid-scroll — clicking a pill selects it (same as its card) and swaps it into the
- * prominent slot. Always shown while scrolled (even for a single-scene character —
- * then it just names the primary). `show` is owned by the editor; the bar slides up
- * on scroll-down and is inert while hidden. The page keeps bottom padding so the
- * last section can scroll clear of it.
+ * The scene-dock's per-card actions, OWNED by `DazSceneField` (which holds the
+ * pick/copy/unlink flows and their modals) and shared with the dock through a ref
+ * it populates — so the dock drives the same flows without duplicating them. The
+ * ref is null until the field has mounted and populated it.
+ */
+export interface SceneDockActions {
+  /** Pick + link another Daz scene (same flow as the up-page "Add scene"). */
+  add: () => void
+  /** Open a scene in Daz (plain click) or reveal it in Explorer (Alt+click) — the
+   *  field's onOpen owns the "Daz already running" warning. */
+  open: (scenePath: string, e: ReactMouseEvent) => void
+  /** Unlink a scene from the character (opens the field's confirm dialog). */
+  remove: (scenePath: string) => void
+}
+
+/**
+ * A docked "Daz scenes" DOCK — the same layout language as the project page's
+ * Unreal-projects dock — that keeps the scenes you're editing on screen once the
+ * Daz-scenes cards have scrolled out of view. A left column names the section and
+ * carries an "Add scene" shortcut; then every linked scene follows as a card in a
+ * horizontally-scrollable rail (subtle edge-fade on whichever side still has
+ * scrolled-off scenes), with ‹ › arrows to page it. The SELECTED scene is ringed
+ * green; clicking any card selects it (same as its full card up the page). Always
+ * shown while scrolled (even for a single-scene character). `show` is owned by the
+ * editor; the dock slides up on scroll-down and is inert while hidden. The page
+ * keeps bottom padding so the last section can scroll clear of it.
  */
 export function SceneFooter({
   show,
@@ -41,18 +46,24 @@ export function SceneFooter({
   primary,
   selected,
   onSelect,
+  actionsRef,
 }: {
   show: boolean
   /** Every linked scene path (the primary first, then extras). */
   scenes: Array<string>
   /** The primary scene's path (`character.scenePath`) — gets the "primary" tag. */
   primary: string
-  /** The currently selected scene's path (`effectiveScene`) — shown prominent. */
+  /** The currently selected scene's path (`effectiveScene`) — ringed green. */
   selected: string
   onSelect: (scenePath: string) => void
+  /** Per-card actions (add / unlink), populated by `DazSceneField`. Omitted → the
+   *  "Add scene" button and the per-card unlink render disabled/absent. */
+  actionsRef?: MutableRefObject<SceneDockActions | null>
 }) {
-  const others = scenes.filter((p) => p !== selected)
-  // Subtle edge-fade on the others rail: fade whichever side still has scrolled-off
+  // Alt held → the per-card open icon previews its alternate action (reveal in
+  // Explorer), same convention as the up-page scene cards and the Unreal dock.
+  const altHeld = useModifierHeld('Alt')
+  // Subtle edge-fade on the rail: fade whichever side still has scrolled-off
   // scenes, so a long list hints that it scrolls — and nothing fades when they fit.
   const railRef = useRef<HTMLDivElement>(null)
   const [fade, setFade] = useState({ left: false, right: false })
@@ -66,37 +77,20 @@ export function SceneFooter({
       })
     update()
     el.addEventListener('scroll', update, { passive: true })
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
+    // jsdom (component tests) has no ResizeObserver — guard so this stays inert there.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    ro?.observe(el)
     return () => {
       el.removeEventListener('scroll', update)
-      ro.disconnect()
+      ro?.disconnect()
     }
-  }, [others.length])
-
-  // Selecting a pill reorders the rail (the clicked scene swaps into the prominent
-  // slot; the rest shift to fill in). Wrap the state change in a view transition so
-  // each pill — which carries a stable `view-transition-name` — slides from its old
-  // slot to its new one instead of snapping. `flushSync` makes React apply the
-  // selection synchronously inside the transition callback so the browser captures
-  // the "after" layout. Falls back to a plain select when unsupported or the user
-  // prefers reduced motion.
-  const selectScene = (path: string) => {
-    if (
-      path === selected ||
-      typeof document.startViewTransition !== 'function' ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      onSelect(path)
-      return
-    }
-    document.startViewTransition(() => flushSync(() => onSelect(path)))
-  }
+  }, [scenes.length])
 
   if (scenes.length === 0) return null
   // Show the scene's original filename (its .duf stem), same as the Daz-scene cards.
   const nameOf = (p: string) => stemOf(p)
   const railMask = `linear-gradient(to right, ${fade.left ? 'transparent' : '#000'}, #000 22px, #000 calc(100% - 22px), ${fade.right ? 'transparent' : '#000'})`
+  const pageRail = (dir: -1 | 1) => railRef.current?.scrollBy({ left: dir * 260, behavior: 'smooth' })
 
   return (
     <div
@@ -107,65 +101,139 @@ export function SceneFooter({
       // aria-hidden subtree. inert removes them from focus + the a11y tree.
       inert={!show}
       className={cn(
-        'fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur transition-transform duration-200 ease-out',
+        'footer-3d fixed inset-x-0 bottom-0 z-20 backdrop-blur transition-transform duration-200 ease-out',
         show ? 'translate-y-0' : 'pointer-events-none translate-y-full',
       )}
     >
-      {/* Match the Unreal-projects footer's height so both docked bars line up. That
-          bar puts min-h + border-t on ONE div; here the border-t is on the fixed
-          wrapper above, so the inner min-h is 70px (+1px border = 71px total). A
-          `size="lg"` pill is ~54px, like the Unreal card. */}
-      <div className="flex min-h-[70px] items-center gap-3 px-8 py-1.5">
-        {/* The selected scene, prominent — a green ring, never dimmed. The radius
-            MUST match the SceneLabel pill's (`Tag` uses `rounded`) so the ring hugs
-            its silhouette instead of bulging past its corners. No ring offset
-            (`ring-offset-0`) so the ring sits flush on the pill edge. */}
-        <span
-          style={{ viewTransitionName: vtName(selected), viewTransitionClass: 'scene-pill' }}
-          className="shrink-0 rounded ring-2 ring-daz-green ring-offset-0"
-        >
-          <SceneLabel
-            scenePath={selected}
-            name={nameOf(selected)}
-            accentBar
-            size="lg"
-            subline={selected === primary ? primaryTag : undefined}
-          />
-        </span>
+      {/* min-h matches the Unreal-projects dock so both docked bars line up. Here
+          footer-3d (and so the 1px top border) is on the fixed wrapper, so the
+          inner min-h is 70px (+1px border = 71px total). A `size="lg"` scene card
+          is ~54px, like the Unreal card. */}
+      <div className="flex min-h-[70px] items-center gap-3 px-6">
+        {/* Left column: the section title with a compact "Add scene" shortcut
+            stacked underneath — the same recipe as the Unreal dock's left column. */}
+        <div className="mr-1 flex shrink-0 flex-col gap-1">
+          <span className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+            Daz scenes
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-fit gap-1 px-2 text-xs"
+            disabled={!actionsRef}
+            onClick={() => actionsRef?.current?.add()}
+          >
+            <Plus className="size-3.5" /> Add scene
+          </Button>
+        </div>
 
-        {others.length > 0 && (
-          <>
-            {/* The selected pill's 2px ring (ring-offset-0) bleeds into the gap on the
-                divider's left, so without this it sits ~2px nearer the pill than the
-                rail. ml-0.5 adds that 2px back so the divider looks evenly spaced. */}
-            <span className="ml-0.5 h-8 w-px shrink-0 bg-border" aria-hidden />
-            {/* Every other scene — a horizontally-scrollable rail (fits any number).
-                Click one to switch; it swaps into the prominent slot. */}
-            <div
-              ref={railRef}
-              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:thin]"
-              style={{ maskImage: railMask, WebkitMaskImage: railMask }}
-            >
-              {others.map((path) => (
+        {/* Divider between the title column and the scenes rail. */}
+        <span className="h-9 w-px shrink-0 bg-border" aria-hidden />
+
+        {/* Every linked scene as a card in a horizontally-scrollable rail (fits any
+            number). The SELECTED one is ringed green; clicking a card selects it.
+            `overflow-x-auto` clips descendants to the padding box (and forces
+            overflow-y to auto), so the padding here is what keeps the selection
+            RING and the hover-✕ — both sitting just outside a card's edges — from
+            being clipped: `px-1.5` for the first/last card's ring, `py-2` for the
+            ✕ above the card. */}
+        <div
+          ref={railRef}
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-1.5 py-2 [scrollbar-width:thin]"
+          style={{ maskImage: railMask, WebkitMaskImage: railMask }}
+        >
+          {scenes.map((path) => {
+            const isSelected = path === selected
+            const isPrimary = path === primary
+            return (
+              // A wrapper (not a button) so the unlink ✕ is a SIBLING of the select
+              // button, never a button nested in a button. The green ring / dim goes
+              // on the wrapper so it still hugs the SceneLabel pill's radius.
+              <div
+                key={path}
+                className={cn(
+                  'group/scene relative shrink-0 rounded transition-opacity',
+                  isSelected
+                    ? 'ring-2 ring-daz-green ring-offset-0'
+                    : 'opacity-65 hover:opacity-100 focus-within:opacity-100',
+                )}
+              >
                 <button
-                  key={path}
                   type="button"
-                  style={{ viewTransitionName: vtName(path), viewTransitionClass: 'scene-pill' }}
-                  onClick={() => selectScene(path)}
-                  title={`Switch to ${nameOf(path)}`}
-                  className="shrink-0 rounded opacity-65 transition-opacity outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onSelect(path)}
+                  title={isSelected ? nameOf(path) : `Switch to ${nameOf(path)}`}
+                  className="block rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <SceneLabel
                     scenePath={path}
                     name={nameOf(path)}
                     accentBar
                     size="lg"
-                    subline={path === primary ? primaryTag : undefined}
+                    subline={isPrimary ? primaryTag : undefined}
+                    // Reserve right space so the name never slides under the open
+                    // icon overlaid on the card's right edge.
+                    className="pr-11"
                   />
                 </button>
-              ))}
-            </div>
-          </>
+                {/* Open-in-Daz icon overlaid on the card's right edge (a SIBLING of
+                    the select button, so it isn't a button nested in one). Plain
+                    click opens in Daz; Alt+click reveals in Explorer — the field's
+                    onOpen owns both plus the "Daz already running" warning. */}
+                {actionsRef && (
+                  <button
+                    type="button"
+                    aria-label={`Open ${nameOf(path)} in Daz`}
+                    title={altHeld ? `Show ${nameOf(path)} in Explorer` : `Open ${nameOf(path)} in Daz`}
+                    onClick={(e) => actionsRef.current?.open(path, e)}
+                    // Ghost button: the bare icon is always visible (no fill/border);
+                    // a subtle accent fill + colour appear only on hover/focus.
+                    className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-daz-green focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {altHeld ? <FolderOpen className="size-3.5" /> : <ExternalLink className="size-3.5" />}
+                  </button>
+                )}
+                {/* The primary can't be unlinked (it's also the avatar source), so
+                    only extras get the ✕ — same recipe as the Unreal-dock card. */}
+                {!isPrimary && actionsRef && (
+                  <button
+                    type="button"
+                    aria-label={`Unlink ${nameOf(path)}`}
+                    title="Unlink from character (the file is kept)"
+                    onClick={() => actionsRef.current?.remove(path)}
+                    className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 transition-[opacity,color] group-hover/scene:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Rail pager — only shown when the rail actually overflows (so a lone
+            card doesn't strand ‹ › over empty space); each arrow disables at its
+            end. `fade` already tracks the scrolled-off sides. */}
+        {(fade.left || fade.right) && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label="Scroll scenes left"
+              disabled={!fade.left}
+              onClick={() => pageRail(-1)}
+              className="flex size-8 items-center justify-center rounded-md border text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Scroll scenes right"
+              disabled={!fade.right}
+              onClick={() => pageRail(1)}
+              className="flex size-8 items-center justify-center rounded-md border text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
         )}
       </div>
     </div>

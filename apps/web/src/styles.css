@@ -173,12 +173,13 @@ a {
 }
 
 @layer base {
-  /* Always reserve the root scrollbar's gutter so switching between a tall page (has a
-     scrollbar — the character detail form) and a short one (Notes / Attachments, which
-     may not) never shifts the layout sideways. */
-  html {
-    scrollbar-gutter: stable;
-  }
+  /* NB: no `scrollbar-gutter: stable` here. Reserving the gutter kept the layout
+     from shifting between a tall page (character form → scrollbar) and a short one
+     (Notes/Attachments → none), but it also left a scrollbar-width strip on the
+     right that the viewport-fixed docked footers (`inset-x-0`) can't cover — so a
+     short page showed the dock stopping short of the edge. Letting the gutter
+     collapse when there's no scrollbar lets the docks reach the true edge; the cost
+     is a ~1-scrollbar sideways nudge when a tab has no scrollbar. */
   * {
     @apply border-border outline-ring/50;
   }
@@ -473,16 +474,18 @@ a {
   }
 }
 
-/* The linked-project "Unreal card" in the project footer bar: smaller than the
-   Daz/Houdini cards but the same visual language — a Unreal-cyan LEFT ACCENT BAR
-   (drawn in the component) over a faint cyan tint / border that brighten on
-   hover. Not selectable. */
+/* The linked-project "Unreal card" in the project footer bar: same visual
+   language as the Daz/Houdini cards — a Unreal-cyan LEFT ACCENT BAR (drawn in the
+   component) over a cyan tint / border that brighten on hover. Not selectable.
+   The tint runs stronger than the Daz/Houdini cards' because this card sits on
+   the footer dock's own cool-blue gradient, where a faint cyan would wash out to
+   "just the accent bar". */
 @utility unreal-card {
-  background-color: color-mix(in oklab, var(--unreal-blue) 6%, var(--card));
-  border-color: color-mix(in oklab, var(--unreal-blue) 26%, var(--border));
+  background-color: color-mix(in oklab, var(--unreal-blue) 16%, var(--card));
+  border-color: color-mix(in oklab, var(--unreal-blue) 45%, var(--border));
   &:hover {
-    background-color: color-mix(in oklab, var(--unreal-blue) 11%, var(--card));
-    border-color: color-mix(in oklab, var(--unreal-blue) 55%, var(--border));
+    background-color: color-mix(in oklab, var(--unreal-blue) 24%, var(--card));
+    border-color: color-mix(in oklab, var(--unreal-blue) 65%, var(--border));
   }
 }
 
@@ -539,6 +542,31 @@ a {
       -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
     }
   }
+}
+
+/* The docked footer DOCKS (the character page's scene bar + the project page's
+   Unreal-projects bar) share a subtle RAISED 3D look so each reads as a panel
+   floating in front of the page rather than a flat strip:
+   - a lit TOP BORDER + a 1px cool inset highlight lip right under it (the raised
+     edge catching light),
+   - a cool-blue vertical GRADIENT running the FULL height — a two-stop ease
+     (richer just under the top edge, a gentle mid, out by the bottom) over a
+     translucent BG, so the host's `backdrop-blur` still shows through the ~10%
+     transparency and it reads as a smooth dome, not a hard band,
+   - a LIGHT drop shadow cast UPWARD over the content scrolling behind it.
+   Keep the base translucent — an opaque fill would kill the blur. */
+@utility footer-3d {
+  border-top: 1px solid color-mix(in oklab, var(--foreground) 12%, var(--border));
+  background-color: color-mix(in oklab, var(--background) 90%, transparent);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in oklab, #9cc4ff 9%, transparent) 0%,
+    color-mix(in oklab, #9cc4ff 3%, transparent) 45%,
+    transparent 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(184, 208, 255, 0.08),
+    0 -3px 12px -8px rgba(0, 0, 0, 0.38);
 }
 
 /* A tinted, drop-shadowed layer sitting OVER the header scene-label's thumbnail
