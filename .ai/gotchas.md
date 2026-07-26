@@ -278,6 +278,24 @@ current code before relying on details, but assume the *lesson* still holds.
   instead (author `\\u2028` so the file receives the escape sequence as text), or do the
   replace with a `String.fromCharCode`-based Node script. A printable delimiter like
   `|` (illegal in Windows paths) is a safe cache-key separator — never a NUL.
+- **An `overflow-x-auto` rail clips its descendants to the PADDING box** (and
+  forces `overflow-y` to `auto`). Anything a child draws OUTSIDE its own border —
+  a Tailwind `ring` (box-shadow) or a negative-offset overlay like a hover-✕ — is
+  cut off at the rail's first/last item, and can spawn a stray vertical scrollbar.
+  Reserve rail padding equal to the overshoot: the docked scene/Unreal docks use
+  `px-1.5 py-2` so the selected card's ring and the corner ✕ stay inside the clip
+  region (`scene-footer.tsx` / `unreal-projects-field.tsx`). Playwright's overlay
+  scrollbars hide the vertical half of this — assert the visible geometry (ring
+  edge vs rail box, `scrollHeight <= clientHeight`), not just element presence.
+- **`scrollbar-gutter: stable` on the root stops a viewport-fixed `inset-x-0` bar
+  from reaching the window edge.** The reserved gutter sits outside the fixed
+  element's containing block, so on a scrollbar-LESS page a docked footer lands a
+  scrollbar-width short (measured 1265 vs a 1280 viewport), leaving an empty strip
+  the bar can't cover. Dropped `stable` so the docks reach the edge — the accepted
+  trade-off is the ~1-scrollbar sideways nudge between a tall tab and a short one
+  that the reservation used to hide. `width: 100vw` "fixes" the gap in Playwright's
+  overlay-scrollbar harness but re-introduces the classic 100vw horizontal-scroll
+  bug under real (Windows/WebView2) scrollbars — measure both states before trusting a fix.
 
 ## Releases
 
