@@ -296,6 +296,16 @@ current code before relying on details, but assume the *lesson* still holds.
   that the reservation used to hide. `width: 100vw` "fixes" the gap in Playwright's
   overlay-scrollbar harness but re-introduces the classic 100vw horizontal-scroll
   bug under real (Windows/WebView2) scrollbars — measure both states before trusting a fix.
+- **A CSS `scale`/`transform: scale()` rasterises the element at its LAYOUT size,
+  then GPU-upscales that texture** — so an image shown via an up-scale is soft /
+  aliased even from a high-res source. The header avatar rested at `scale: 1.55`
+  (204px laid out → a 204px texture stretched to ~316px). Fix: lay the element out
+  at the painted size (316px) and rest at `scale: 1` so the browser resamples the
+  768px source straight to size; animate the zoom FROM 1 (see `editor-header.tsx`
+  + `dth-avatar-zoom`). Two traps when sizing an `<img>` up: Tailwind preflight's
+  `img { max-width: 100% }` silently CAPS an explicit width back to the container
+  (needs `max-w-none`), and a `%` width on the replaced `<img>` was ignored
+  outright — use fixed px. Verify with computed `getBoundingClientRect`, not the eye.
 
 ## Releases
 

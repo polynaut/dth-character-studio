@@ -198,11 +198,17 @@ export function EditorHeader({
             <Avatar
               image={character.image}
               name={character.name}
-              // A square image the zoom over-scans to fill the wrapper (see the
-              // avatar-scroll-pan/zoom keyframes) — simpler than sizing it to the
-              // wrapper's changing 3:4 → landscape aspect.
-              className="avatar-scroll-pan aspect-square w-full object-top"
-              fallbackClassName="text-6xl"
+              // A square image LAID OUT at the rest over-scan size (316px = the
+              // wrapper's 204px content box × the old 1.55 rest scale, centred with
+              // the -56px margins) so it fills the wrapper at scale 1 — no GPU
+              // up-scaling of a small texture, so the resting portrait stays crisp.
+              // The zoom keyframes push in from there (see avatar-scroll-pan/zoom).
+              // Fixed px, not %, because a replaced <img>'s percentage width was
+              // silently ignored here and % resolves against the bordered content box.
+              // `max-w-none` defeats Tailwind preflight's `img { max-width: 100% }`,
+              // which would otherwise cap the 316px width back to the wrapper.
+              className="avatar-scroll-pan h-[316px] w-[316px] max-w-none -ml-[56px] -mt-[56px] object-top"
+              fallbackClassName="text-8xl"
             />
           </div>
           {/* Hover affordance — the avatar is editable in every state now (a

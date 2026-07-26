@@ -240,18 +240,20 @@ a {
     transform: translateY(15%);
   }
 }
-/* The zoom makes the square image over-scan the 3:4 (rest) / landscape (collapsed)
-   wrapper so an opaque avatar always fills it (a square in the 3:4 rest box needs
-   >=1.33x just to cover its height). Rests at 1.55 and pushes IN to 1.88 as the
-   header collapses, so the face reads larger in the small pinned tile. `scale`
-   (not `transform`) composes with the pan's translateY above; transform-origin
-   center keeps it centered. */
+/* The zoom pushes the square image IN as the header collapses so the face reads
+   larger in the small pinned tile. The image is now LAID OUT at the rest
+   over-scan size (155% of the wrapper — see editor-header) so the resting frame
+   needs NO scale-up: it rests at scale 1 (the browser resamples the 768px source
+   straight to the painted size — crisp, no GPU up-scaling of a small texture)
+   and eases to 1.213 collapsed (= the old 1.88/1.55 ratio, so the collapsed frame
+   is pixel-identical, just far less blurry). `scale` (not `transform`) composes
+   with the pan's translateY above; transform-origin center keeps it centered. */
 @keyframes dth-avatar-zoom {
   from {
-    scale: 1.55;
+    scale: 1;
   }
   to {
-    scale: 1.88;
+    scale: 1.213;
   }
 }
 @supports (animation-timeline: scroll()) {
@@ -264,12 +266,11 @@ a {
        wrapper. When the timeline IS active, the animation (fill both) overrides these
        from scroll 0, so this is a no-op there. */
     transform: translateY(11%);
-    scale: 1.55;
-    /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value until the
-       shrink starts (100px, matching .avatar-scroll-shrink's range) then eases in
-       lockstep with the height — so at the gentler 1.4 it never dips below frame
-       coverage while the wrapper is still full-height. The portrait rests zoomed
-       in and eases out as the header collapses into sticky mode. */
+    scale: 1;
+    /* Both track the scroll 1:1 (linear). The zoom HOLDS its rest value (1) until
+       the shrink starts (100px, matching .avatar-scroll-shrink's range) then eases
+       in lockstep with the height. The portrait rests at its natural (laid-out)
+       size and pushes in as the header collapses into sticky mode. */
     animation:
       dth-avatar-pan linear both,
       dth-avatar-zoom linear both;
