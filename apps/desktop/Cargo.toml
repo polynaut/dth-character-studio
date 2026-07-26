@@ -96,3 +96,12 @@ windows-sys = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Threading",
 ] }
+
+# Dev-only: a standalone spike evaluating `tiny-skia` for high-quality
+# anti-aliased VECTOR rendering (paths/curves/strokes → PNG) — see
+# `examples/tiny_skia_demo.rs`. It's an example target, so tiny-skia links only
+# into that example, NEVER the shipped app. Pure Rust; its PNG stack is the same
+# miniz_oxide/fdeflate as `image`, so it leaves the brotli/alloc-stdlib pins above
+# untouched.
+[dev-dependencies]
+tiny-skia = "0.11"
