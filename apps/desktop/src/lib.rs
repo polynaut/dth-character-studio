@@ -14,6 +14,7 @@ mod housekeeping;
 mod install;
 mod poses;
 mod report;
+pub mod superres;
 #[cfg(test)]
 mod testutil;
 mod uninstall;
