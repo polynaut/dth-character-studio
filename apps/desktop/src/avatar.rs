@@ -1,69 +1,57 @@
-//! Avatar image upscaling.
+//! Avatar image enlargement.
 //!
 //! Daz scene thumbnails (`.tip.png`) are only 256×256, and a small cropped upload
 //! lands at 256×256 too — magnified into the character-header portrait they look
-//! soft. We upscale anything below 768² to 768² with **xBRZ**, an edge-directed
-//! magnifier that suits the flat-shaded Daz figures far better than a plain
-//! resample (which adds no real detail — see the investigation in the PR).
+//! soft. We enlarge anything below 768² to 768² with a **Lanczos3 photo
+//! enlargement + a light unsharp mask**.
 //!
-//! xBRZ (the `xbrz-rs` crate) is **GPL-3.0-only** — linking it makes this crate,
-//! and therefore the distributed desktop application, GPL-3.0. The pure-TypeScript
-//! libraries (`@dth/rom`, `@dth/ui`) and the web app remain MIT. See
-//! `apps/desktop/LICENSE`.
+//! Previously this used **xBRZ**, but that's a *pixel-art* magnifier — on the
+//! photo-real Daz renders it invented blocky, hard edges. A photo-oriented
+//! resample keeps the shading smooth, and the paint-time downscale to the display
+//! size (see {@link downscale_avatar_png}) then anti-aliases the edges cleanly.
+//!
+//! NOTE: `xbrz-rs` (GPL-3.0-only) is no longer CALLED but is still a Cargo
+//! dependency, so the desktop app stays GPL for now — dropping it would relicense
+//! it back to MIT (a separate decision; see `apps/desktop/LICENSE`).
 
 use std::io::Cursor;
 use std::path::Path;
 
-use image::{ImageFormat, RgbaImage};
+use image::ImageFormat;
 use tauri::ipc::Response;
 
-/// The square side length small avatars are upscaled up to. 768 (not 512) so a
-/// 256px tip becomes an exact xBRZ ×3, and the source comfortably exceeds the
-/// header portrait's painted size on HiDPI displays.
+/// The square side length small avatars are enlarged up to. 768 gives the
+/// paint-time downscale (see {@link downscale_avatar_png}) plenty of source to
+/// resample from at any HiDPI display size.
 const TARGET: u32 = 768;
 
-/// Upscale the avatar PNG at `path` IN PLACE to a {@link TARGET}px square when it's
-/// smaller, using xBRZ (an integer magnification) followed by a Lanczos3 down-step
-/// to land exactly on TARGET. A no-op returning `false` when the image is already
-/// at least TARGET on both sides, so it's safe (and cheap) to call after every
-/// avatar write. Avatars are square, so the common case is an exact 256→768 (×3);
-/// a non-square or oddly-sized source is handled by the same integer-then-downscale
-/// path.
+/// Enlarge the avatar PNG at `path` IN PLACE to a {@link TARGET}px square when it's
+/// smaller. A no-op returning `false` when the image is already at least TARGET on
+/// both sides, so it's safe (and cheap) to call after every avatar write.
 ///
 /// Failures return an error string; the caller (writeAvatarBytes) treats any
-/// failure as "keep the original image", so a bad upscale never blocks setting an
-/// avatar.
+/// failure as "keep the original image", so a bad enlargement never blocks setting
+/// an avatar.
 #[tauri::command]
 pub fn upscale_avatar_file(path: String) -> Result<bool, String> {
     upscale_png_to_square(Path::new(&path), TARGET)
 }
 
 /// The testable core of {@link upscale_avatar_file}: decode the PNG at `p`, and if
-/// either side is below `target`, xBRZ-magnify by the smallest integer factor that
-/// reaches `target`, Lanczos-downscale to exactly `target`², and overwrite the
-/// file. Returns whether it upscaled.
+/// either side is below `target`, Lanczos3-enlarge to `target`², sharpen lightly,
+/// and overwrite the file. Returns whether it enlarged.
 fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     let decoded = image::open(p).map_err(|e| format!("decode {}: {e}", p.display()))?;
     let rgba = decoded.to_rgba8();
-    let (w, h) = (rgba.width(), rgba.height());
-    if w >= target && h >= target {
+    if rgba.width() >= target && rgba.height() >= target {
         return Ok(false);
     }
-    let min_side = w.min(h).max(1);
-    // xBRZ magnifies by an INTEGER factor only (2..=6). Take the smallest that
-    // reaches `target`, then Lanczos-downscale the (possibly larger) result to
-    // exactly target². For the 256px tip this is an exact ×3 (→768), so the
-    // resize below is an identity.
-    let factor = target.div_ceil(min_side).clamp(2, 6);
-    let up = xbrz::scale_rgba(rgba.as_raw(), w as usize, h as usize, factor as usize);
-    let upscaled = RgbaImage::from_raw(w * factor, h * factor, up)
-        .ok_or_else(|| "xbrz returned an unexpected buffer size".to_string())?;
-    let out = image::imageops::resize(
-        &upscaled,
-        target,
-        target,
-        image::imageops::FilterType::Lanczos3,
-    );
+    // Photo enlargement: Lanczos3 keeps the Daz render's smooth shading (no xBRZ
+    // pixel-art blocking), then a LIGHT unsharp mask restores the edge definition a
+    // plain enlargement loses — without inventing hard edges. Both tunable; the
+    // unsharp `sigma`/`threshold` are the knobs if it reads too soft or too crunchy.
+    let up = image::imageops::resize(&rgba, target, target, image::imageops::FilterType::Lanczos3);
+    let out = image::imageops::unsharpen(&up, 1.5, 3);
     out.save_with_format(p, ImageFormat::Png)
         .map_err(|e| format!("write {}: {e}", p.display()))?;
     Ok(true)
