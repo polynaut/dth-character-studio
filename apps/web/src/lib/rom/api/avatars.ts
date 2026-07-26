@@ -283,6 +283,34 @@ export async function resolveImageSrc(image: string): Promise<string> {
   }
 }
 
+const variantSrcCache = new Map<string, string>()
+
+/**
+ * Like {@link resolveImageSrc}, but the stored avatar is first Lanczos3-downscaled
+ * (in Rust) to `sizePx`² — the exact pixels the header paints it (its CSS px × the
+ * screen DPR) — so the webview paints it 1:1 with no aliasing-prone GPU resampling
+ * of a bigger texture. The Lanczos low-pass anti-aliases the xBRZ'd master's hard
+ * edges. Falls back to the full image in a plain browser (no native downscale), for
+ * an external/empty ref, or on any failure.
+ */
+export async function resolveImageSrcAtSize(image: string, sizePx: number): Promise<string> {
+  if (!image || sizePx <= 0 || isExternalImage(image) || !isTauri()) return resolveImageSrc(image)
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return ''
+  const key = `${projectDir}|${image}@${sizePx}`
+  const cached = variantSrcCache.get(key)
+  if (cached) return cached
+  try {
+    const path = joinPath(storage.metaImagesDir(projectDir), image)
+    const buf = await invoke<ArrayBuffer>('downscale_avatar_png', { path, size: sizePx })
+    const url = imageDataUrl(new Uint8Array(buf), image)
+    variantSrcCache.set(key, url)
+    return url
+  } catch {
+    return resolveImageSrc(image)
+  }
+}
+
 /**
  * Upscale a character's STORED avatar to 768² IN PLACE if it's a local image
  * still below that — the migration path for avatars written before the

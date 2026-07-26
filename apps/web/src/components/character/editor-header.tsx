@@ -209,6 +209,10 @@ export function EditorHeader({
               // which would otherwise cap the 316px width back to the wrapper.
               className="avatar-scroll-pan h-[316px] w-[316px] max-w-none -ml-[56px] -mt-[56px] object-top"
               fallbackClassName="text-8xl"
+              // Serve the avatar pre-downscaled (Rust Lanczos3) to the painted
+              // 316px × screen DPR, so it paints 1:1 — anti-aliased, no GPU
+              // resampling of the 768px master.
+              renderPx={316}
             />
           </div>
           {/* Hover affordance — the avatar is editable in every state now (a

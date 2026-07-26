@@ -121,6 +121,7 @@ pub fn run() {
             assets::install_daz_assets,
             assets::list_daz_assets,
             avatar::upscale_avatar_file,
+            avatar::downscale_avatar_png,
             dedup::dedup_daz_assets,
             uninstall::default_daz_uninstall_folders,
             uninstall::uninstall_daz,

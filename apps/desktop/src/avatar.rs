@@ -11,9 +11,11 @@
 //! libraries (`@dth/rom`, `@dth/ui`) and the web app remain MIT. See
 //! `apps/desktop/LICENSE`.
 
+use std::io::Cursor;
 use std::path::Path;
 
 use image::{ImageFormat, RgbaImage};
+use tauri::ipc::Response;
 
 /// The square side length small avatars are upscaled up to. 768 (not 512) so a
 /// 256px tip becomes an exact xBRZ ×3, and the source comfortably exceeds the
@@ -67,6 +69,37 @@ fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Return the avatar PNG at `path` Lanczos3-downscaled to `size`² PNG bytes — the
+/// exact size the header paints it (its CSS px × the screen DPR), so the webview
+/// can paint it 1:1 with NO resampling of a bigger texture (the source of the
+/// aliased/soft edges). Lanczos3 is a proper low-pass, so the xBRZ'd master's hard
+/// edges come out anti-aliased. A source already ≤ `size` on both sides is
+/// returned unchanged (never upscaled — xBRZ did any upscaling on write). Raw
+/// bytes (an ArrayBuffer to the webview), not a JSON number array.
+#[tauri::command]
+pub fn downscale_avatar_png(path: String, size: u32) -> Result<Response, String> {
+    Ok(Response::new(downscale_png_bytes(Path::new(&path), size)?))
+}
+
+/// The testable core of {@link downscale_avatar_png}.
+fn downscale_png_bytes(p: &Path, size: u32) -> Result<Vec<u8>, String> {
+    let decoded = image::open(p).map_err(|e| format!("decode {}: {e}", p.display()))?;
+    if size == 0 || (decoded.width() <= size && decoded.height() <= size) {
+        return std::fs::read(p).map_err(|e| format!("read {}: {e}", p.display()));
+    }
+    let out = image::imageops::resize(
+        &decoded.to_rgba8(),
+        size,
+        size,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let mut buf = Vec::new();
+    image::DynamicImage::ImageRgba8(out)
+        .write_to(&mut Cursor::new(&mut buf), ImageFormat::Png)
+        .map_err(|e| format!("encode {}: {e}", p.display()))?;
+    Ok(buf)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,6 +132,22 @@ mod tests {
 
         let out = image::open(&path).unwrap();
         assert_eq!((out.width(), out.height()), (768, 768));
+    }
+
+    #[test]
+    fn downscale_lanczos_hits_the_target_size_and_leaves_small_sources_untouched() {
+        let dir = std::env::temp_dir().join("dth-avatar-downscale");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = write_png(&dir, "master.png", 768);
+
+        // 768 → 632 (the @2× of a 316px header) yields a valid 632² PNG.
+        let bytes = downscale_png_bytes(&path, 632).unwrap();
+        let out = image::load_from_memory(&bytes).unwrap();
+        assert_eq!((out.width(), out.height()), (632, 632));
+
+        // A source already ≤ target is returned byte-identical (never upscaled).
+        let raw = std::fs::read(&path).unwrap();
+        assert_eq!(downscale_png_bytes(&path, 1024).unwrap(), raw);
     }
 
     #[test]
