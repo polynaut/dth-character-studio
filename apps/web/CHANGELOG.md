@@ -1,5 +1,33 @@
 # @dth/web
 
+## 0.45.6
+
+### Patch Changes
+
+- [#518](https://github.com/polynaut/dth-character-studio/pull/518) [`bc55b6a`](https://github.com/polynaut/dth-character-studio/commit/bc55b6a4ed9870edb8875f6f031d9abde23d3bbb) Thanks [@polynaut](https://github.com/polynaut)! - Fix two per-scene override editor bugs:
+
+  - **Preserve lists no longer silently drop an edit.** Editing a preserve morph / node-transform row on an outfit scene so the list ends up with a duplicate entry (e.g. renaming one node to match another) used to read as "same as the primary" — the override disarmed, the typed row snapped back, and the scene generated with the base list. The "differs from the primary" test now compares as a multiset (order still doesn't matter), so a real divergence always arms the override and keeps its reset handle.
+  - **Relinking the primary Daz scene onto an already-linked outfit scene no longer duplicates it.** The scene is now dropped from the extras when it becomes the primary, so it can't appear as both a primary and an extra card (which also broke the scene footer's selection animation).
+
+  Also: the docked scene footer's rail buttons leave the tab order while it's hidden (they were focusable off-screen), and the hair panel's per-scene "overridden" mark uses the same multiset comparison.
+
+- [#516](https://github.com/polynaut/dth-character-studio/pull/516) [`6a72e4e`](https://github.com/polynaut/dth-character-studio/commit/6a72e4e6a27fb1edb9a522a66f4df408ecf4b518) Thanks [@polynaut](https://github.com/polynaut)! - Redesign the two docked footers as matching "docks": a raised 3D look (cool-blue
+  full-height gradient over the translucent blur, a lit top edge, and a light
+  upward shadow) plus a shared layout — a left section label + Add shortcut, a
+  horizontally-scrollable card rail, and ‹ › pager arrows that only appear when the
+  rail overflows (each disables at its end). The character page's scene footer
+  adopts the project page's Unreal-projects-dock layout (its scenes now sit in the
+  rail, the selected one ringed green with the PRIMARY badge) and gains the same
+  controls: "Add scene" links a scene and each extra card has a hover-✕ to unlink,
+  driving the up-page field's own pick/copy/confirm flows.
+
+  The root no longer reserves the scrollbar gutter, so on a page with no scrollbar
+  a dock reaches the window edge instead of stopping a scrollbar-width short.
+
+- Updated dependencies [[`bc55b6a`](https://github.com/polynaut/dth-character-studio/commit/bc55b6a4ed9870edb8875f6f031d9abde23d3bbb)]:
+  - @dth/rom@0.45.6
+  - @dth/ui@0.45.6
+
 ## 0.45.5
 
 ### Patch Changes
