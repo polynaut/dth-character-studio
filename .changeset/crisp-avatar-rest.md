@@ -10,4 +10,7 @@ GPU-upscaled that texture — it's now laid out at the painted size and rests at
 and the 768px master is now served **pre-downscaled** to the exact painted size ×
 the screen DPR via a Rust `image`-crate **Lanczos3** pass (`downscale_avatar_png`),
 so the webview paints it 1:1 with no aliasing-prone GPU resampling — the Lanczos
-low-pass anti-aliases the xBRZ'd master's hard edges.
+low-pass anti-aliases the xBRZ'd master's hard edges. Avatars are also now
+flattened onto the tile background (`#565963`, the only colour they're shown on)
+BEFORE upscaling, so the tip's transparent edge is a smooth figure→bg gradient
+rather than a discontinuity that magnifiers jag — re-set an avatar to re-apply.

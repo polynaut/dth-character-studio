@@ -14,13 +14,35 @@
 use std::io::Cursor;
 use std::path::Path;
 
-use image::{ImageFormat, RgbaImage};
+use image::{ImageFormat, Rgba, RgbaImage};
 use tauri::ipc::Response;
 
 /// The square side length small avatars are upscaled up to. 768 (not 512) so a
 /// 256px tip becomes an exact xBRZ ×3, and the source comfortably exceeds the
 /// header portrait's painted size on HiDPI displays.
 const TARGET: u32 = 768;
+
+/// The avatar tile's background — `#565963`, used by BOTH the header wrapper and
+/// the shared `Portrait` (list cards, dialog, …). The avatar is only ever shown on
+/// this colour, so baking it in is invisible.
+const TILE_BG: [u8; 3] = [0x56, 0x59, 0x63];
+
+/// Composite `src` over {@link TILE_BG} into an opaque image. A tip's hard
+/// transparent edge is a discontinuity every magnifier turns into jaggies;
+/// flattening onto the exact background it'll be shown on FIRST makes that edge a
+/// smooth figure→bg gradient the magnifier handles cleanly. Alpha is dropped (set
+/// opaque) — fine, since the avatar always sits on the tile.
+fn flatten_on_tile_bg(src: &RgbaImage) -> RgbaImage {
+    let [br, bg, bb] = TILE_BG;
+    let mut out = RgbaImage::new(src.width(), src.height());
+    for (x, y, px) in src.enumerate_pixels() {
+        let [r, g, b, a] = px.0;
+        let a = a as u16;
+        let mix = |c: u8, k: u8| ((c as u16 * a + k as u16 * (255 - a)) / 255) as u8;
+        out.put_pixel(x, y, Rgba([mix(r, br), mix(g, bg), mix(b, bb), 255]));
+    }
+    out
+}
 
 /// Upscale the avatar PNG at `path` IN PLACE to a {@link TARGET}px square when it's
 /// smaller, using xBRZ (an integer magnification) followed by a Lanczos3 down-step
@@ -49,13 +71,17 @@ fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     if w >= target && h >= target {
         return Ok(false);
     }
+    // Flatten onto the tile bg BEFORE magnifying — the tip's transparent edge is a
+    // discontinuity magnifiers jag (see flatten_on_tile_bg). Marginal for xBRZ (it's
+    // edge-directed) but the right base for the alpha-blind AI path.
+    let flat = flatten_on_tile_bg(&rgba);
     let min_side = w.min(h).max(1);
     // xBRZ magnifies by an INTEGER factor only (2..=6). Take the smallest that
     // reaches `target`, then Lanczos-downscale the (possibly larger) result to
     // exactly target². For the 256px tip this is an exact ×3 (→768), so the
     // resize below is an identity.
     let factor = target.div_ceil(min_side).clamp(2, 6);
-    let up = xbrz::scale_rgba(rgba.as_raw(), w as usize, h as usize, factor as usize);
+    let up = xbrz::scale_rgba(flat.as_raw(), w as usize, h as usize, factor as usize);
     let upscaled = RgbaImage::from_raw(w * factor, h * factor, up)
         .ok_or_else(|| "xbrz returned an unexpected buffer size".to_string())?;
     let out = image::imageops::resize(
