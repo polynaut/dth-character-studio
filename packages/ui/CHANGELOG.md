@@ -1,5 +1,7 @@
 # @dth/ui
 
+## 0.45.6
+
 ## 0.45.5
 
 ### Patch Changes
