@@ -92,7 +92,9 @@ test('project window: character editor measures, edits and saves both artifacts'
     .getByRole('switch')
     .click()
   await expect
-    .poll(() => commandCalls(page, 'pose_asset_frames'))
+    // Generous timeout (default 5s): the toggle → debounced re-measure chain is
+    // quick locally but has missed the default window on cold CI runners.
+    .poll(() => commandCalls(page, 'pose_asset_frames'), { timeout: 15_000 })
     .toContainEqual({ paths: expect.arrayContaining([DUF.phys]) })
 
   // Save → persists the JSON and regenerates BOTH artifacts in one step.
