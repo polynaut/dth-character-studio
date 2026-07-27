@@ -286,6 +286,11 @@ describe('SceneValidationTable', () => {
     )
     expect(screen.getByText('31 frames of animation')).toBeTruthy()
     expect(screen.getByText('Add anyway — test label')).toBeTruthy()
+    // The failed row explains itself on hover; passing rows carry no tooltip.
+    expect(screen.getByText('31 frames of animation').closest('tr')?.title).toContain(
+      'fills the animation timeline',
+    )
+    expect(screen.getByText('1 character').closest('tr')?.getAttribute('title')).toBeNull()
   })
 
   it('renders "checking…" while loading (no premature fail, no switch)', () => {

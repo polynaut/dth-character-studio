@@ -204,12 +204,12 @@ a {
   from {
     height: 277px;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
-    border-color: #5c5e69;
+    border-color: #2d2d2d;
   }
   to {
     height: 120px;
     box-shadow: 2px 6px 8px 0 rgb(0 0 0 / 0.75);
-    border-color: #666873;
+    border-color: #303030;
   }
 }
 @supports (animation-timeline: scroll()) {
@@ -218,7 +218,9 @@ a {
        on a short page the scroll timeline is inactive and the animation drops out, so
        without this the wrapper would lose its border colour and shadow. The animation
        overrides both from scroll 0 when the timeline is active. */
-    border: 2px solid #5c5e69;
+    /* Border shades sit just above the #262626 tile (they tracked the old
+       #565963 before) — the same values the shrink keyframes rest at / settle to. */
+    border: 2px solid #2d2d2d;
     box-shadow: 0px 6px 8px 0 rgb(0 0 0 / 0.35);
     animation: dth-avatar-shrink linear both;
     animation-timeline: scroll(root block);

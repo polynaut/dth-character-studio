@@ -106,7 +106,10 @@ export function PreserveFields({
               )}
             >
               Preserve morphs after ROM loading
-              <OverrideMark overridden={morphsOverridden} onReset={resetMorphs} />
+              {/* Handle only in override context — nothing to override on the primary. */}
+              {overrideEligible && (
+                <OverrideMark overridden={morphsOverridden} onReset={resetMorphs} />
+              )}
             </Label>
             <KeyedListEditor
               items={morphs}
@@ -158,7 +161,9 @@ export function PreserveFields({
               )}
             >
               Preserve node transforms
-              <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
+              {overrideEligible && (
+                <OverrideMark overridden={nodesOverridden} onReset={resetNodes} />
+              )}
             </Label>
             <KeyedListEditor
               items={nodes}
