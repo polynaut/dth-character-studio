@@ -472,7 +472,15 @@ function ProjectCharactersPage() {
                 {/* The Input is wrapped in a div (path prefix + input), so Field's
                     automatic label wiring can't reach it — controlId points the
                     label (and the error line's id) at the Input explicitly. */}
-                <Field label="Character name" error={nameError} controlId="create-character-name">
+                <Field
+                  label="Character name"
+                  // Only pass a REAL error: Field's '' reservation keeps a
+                  // 20px empty line under the input, breaking this panel's
+                  // uniform space-y rhythm between the three rows. The small
+                  // shift when an error appears is fine here.
+                  error={nameError || undefined}
+                  controlId="create-character-name"
+                >
                   {/* The folder is created from the name, so it carries the
                       project-path prefix. */}
                   <div className="flex items-center gap-2">
@@ -481,9 +489,9 @@ function ProjectCharactersPage() {
                     </span>
                     <Input
                       id="create-character-name"
-                      // Field renders the error line as `${controlId}-error`;
-                      // the slot is always present here (error is '' when valid).
-                      aria-describedby="create-character-name-error"
+                      // Field renders the error line as `${controlId}-error`
+                      // (present only while invalid — see the error prop above).
+                      aria-describedby={nameError ? 'create-character-name-error' : undefined}
                       className="min-w-0 flex-1"
                       placeholder="Aria_G9"
                       value={name}
