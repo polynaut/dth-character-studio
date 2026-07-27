@@ -1,5 +1,6 @@
 import { romTimelineLength } from '@dth/rom'
 
+import type { ReactNode } from 'react'
 import type { RomSection, TimelineSegment } from '@dth/rom'
 
 // Preset blocks get fixed hues; each custom section a stable hue of its own, so
@@ -36,7 +37,15 @@ function colorFor(seg: TimelineSegment): string {
  * frame-alignment invariant tangible and surfaces config mistakes (a section
  * that lands where you didn't expect, or a suspiciously long/short block).
  */
-export function RomTimeline({ segments }: { segments: Array<TimelineSegment> }) {
+export function RomTimeline({
+  segments,
+  action,
+}: {
+  segments: Array<TimelineSegment>
+  /** Optional control rendered at the panel's bottom right (end of the legend
+   *  row) — e.g. the ROM editor's "Fill from character" button. */
+  action?: ReactNode
+}) {
   const total = romTimelineLength(segments)
   if (total === 0) return null
   return (
@@ -69,6 +78,7 @@ export function RomTimeline({ segments }: { segments: Array<TimelineSegment> }) 
             </span>
           </span>
         ))}
+        {action != null && <span className="ml-auto self-end">{action}</span>}
       </div>
     </div>
   )

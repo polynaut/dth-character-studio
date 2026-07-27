@@ -1,6 +1,7 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 
-import { InfoPopup } from '@dth/ui'
+import { Button, InfoPopup } from '@dth/ui'
+import { FillFromCharacterDialog } from '#/components/character/fill-from-character-dialog.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
@@ -53,6 +54,10 @@ export const RomEditorSection = memo(function RomEditorSection({
     (sections: Character['sections']) => patch({ sections }),
     [patch],
   )
+  // The timeline panel's "Fill from character" wizard — replaces picked BASE
+  // sections in the draft, so it's only offered on the primary scene (a
+  // non-primary scene edits per-scene overrides, not the base ROM).
+  const [fillOpen, setFillOpen] = useState(false)
   const onJcmMorphModsChange = useCallback(
     (jcmMorphMods: Character['jcmMorphMods']) => patch({ jcmMorphMods }),
     [patch],
@@ -121,8 +126,29 @@ export const RomEditorSection = memo(function RomEditorSection({
       </div>
       {timelineSegments && (
         <div className="mb-4 rounded-lg border bg-card p-3">
-          <RomTimeline segments={timelineSegments} />
+          <RomTimeline
+            segments={timelineSegments}
+            action={
+              overrideEligible ? undefined : (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  title="Fill ROM sections from another character"
+                  onClick={() => setFillOpen(true)}
+                >
+                  Fill
+                </Button>
+              )
+            }
+          />
         </div>
+      )}
+      {fillOpen && (
+        <FillFromCharacterDialog
+          character={character}
+          onFill={onSectionsChange}
+          onClose={() => setFillOpen(false)}
+        />
       )}
       <RomSections
         sections={character.sections}
