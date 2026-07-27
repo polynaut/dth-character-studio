@@ -85,7 +85,14 @@ offsets byte-identically — if a generation change moves them, the change is wr
   RomSectionConfig}` (the scene OWNS the whole config, dropping its sparse entries);
   `applySceneOverride` uses that config verbatim. Every config control (mode Select, preset
   picker, art-direction editor, JCM path, Add group / Import) is live on a non-primary scene
-  and routes through it — so a scene can override anything in the ROM. Per-field green comes
+  and routes through it — so a scene can override anything in the ROM, with ONE exception:
+  **bone-count sections** (`BONE_COUNT_SECTIONS` in `rom-sections.tsx`, currently GEN — the
+  geografts add bones) can never be overridden per scene, because every scene must produce
+  the primary scene's skeleton. On a non-primary scene the section is fully read-only (the
+  body's disabled `<fieldset>` + a disabled enable Switch are the enforcement; the writers
+  `patchSectionForScene`/`onSectionEnabledChange` no-op as backstop) and the title wears an
+  amber `TriangleAlert` with the why; a stale override predating the lock still shows the
+  green mark so its reset stays reachable. Per-field green comes
   from a merged-vs-base diff (art-direction frames, preset assets, custom path); the section
   title's `OverrideMark` reset drops all of the section's override layers.
   A section's **enable/disable** stays a lightweight overlay (`sceneOverride.sectionEnabled`,

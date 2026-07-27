@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { ChevronRight, FolderOpen, Plus } from 'lucide-react'
+import { ChevronRight, FolderOpen, Plus, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
@@ -99,6 +99,14 @@ interface RomSectionsProps {
   locked?: boolean
   onChange: (sections: RomSectionsModel) => void
 }
+
+/** Sections whose setup changes the figure's BONE COUNT (the GEN geografts add
+ *  bones). The whole pipeline exports ONE skeleton per character, so every Daz
+ *  scene must produce the primary scene's bones — a per-scene override here
+ *  would desync the scenes' artifacts. On a non-primary scene these sections
+ *  are read-only (the primary's setup applies) and the title wears an amber
+ *  warning instead of the override mark. */
+const BONE_COUNT_SECTIONS: ReadonlyArray<RomSection> = ['GEN']
 
 /** Shared empty-additions fallback — a stable identity (see overrideCtl). */
 const EMPTY_POSES: Array<RomPose> = []
@@ -346,6 +354,10 @@ export const RomSections = memo(function RomSections({
       })
       return
     }
+    // Bone-count sections can't diverge per scene (BONE_COUNT_SECTIONS). Their
+    // controls are disabled on a non-primary scene; this is the backstop for any
+    // stray edit path.
+    if (BONE_COUNT_SECTIONS.includes(section)) return
     if (od.sectionOverrides.some((s) => s.section === section)) {
       emit({
         ...od,
@@ -385,6 +397,10 @@ export const RomSections = memo(function RomSections({
     const od = overrideDataRef.current
     const emit = onOverrideChangeRef.current
     if (!od || !emit) return
+    // Per-scene on/off changes the frame layout AND (for GEN) the bone set the
+    // scene's artifacts expect — locked for bone-count sections (backstop; the
+    // switch itself is disabled).
+    if (BONE_COUNT_SECTIONS.includes(section)) return
     // An OWNED section keeps `enabled` in its own config (the overlay was dropped on
     // escalation), so its toggle patches the owned config — NOT the overlay, whose
     // base-relative drop rule can't express the owned resting value (that mismatch is
@@ -514,6 +530,11 @@ export const RomSections = memo(function RomSections({
         // RET has no independent existence: the retargeting poses live inside
         // the JCM base ROM, so its state is derived from the JCM section.
         const tiedToJcm = section === 'RET'
+        // A bone-count section on a non-primary scene: overriding is forbidden
+        // (see BONE_COUNT_SECTIONS) — the whole section is read-only, the primary
+        // scene's setup applies, and the title carries the amber warning.
+        const overrideForbidden = !!overrideData && BONE_COUNT_SECTIONS.includes(section)
+        const sectionLocked = locked || overrideForbidden
         // The effective on/off state reads the MERGED sections, so a section a scene
         // has toggled shows (and the wrapper dims) for the override, not the base.
         const effectiveEnabled = tiedToJcm
@@ -553,11 +574,6 @@ export const RomSections = memo(function RomSections({
         // section escalation. Base pose / group ids attribute the sparse `poses` and
         // `additions` back to their section; upsertPose already drops a per-row copy
         // that matches its base, so every entry counted here is a real divergence.
-        // Every part of a section is overridable per scene now (enable, mode, preset
-        // asset, art direction, rows, JCM mods), so the mark shows on EVERY section on a
-        // non-primary scene (never RET, which follows JCM) — the resting "can override"
-        // hint like the other fields, going green once the section diverges in any way.
-        const showSectionMark = !!overrideData && !tiedToJcm
         const sectionPoseIds = new Set(config.groups.flatMap((g) => g.poses.map((p) => p.id)))
         const sectionGroupIds = new Set([
           ...config.groups.map((g) => g.id),
@@ -571,6 +587,15 @@ export const RomSections = memo(function RomSections({
           jcmOverridden ||
           (overrideData?.poses.some((p) => sectionPoseIds.has(p.id)) ?? false) ||
           (overrideData?.additions.some((a) => sectionGroupIds.has(a.groupId)) ?? false)
+        // Every part of a section is overridable per scene now (enable, mode, preset
+        // asset, art direction, rows, JCM mods), so the mark shows on EVERY section on a
+        // non-primary scene (never RET, which follows JCM) — the resting "can override"
+        // hint like the other fields, going green once the section diverges in any way.
+        // A bone-count section never shows the resting hint (it CAN'T be overridden);
+        // if override data predating the lock still diverges it, the green mark shows
+        // anyway so the reset stays reachable.
+        const showSectionMark =
+          !!overrideData && !tiedToJcm && (!overrideForbidden || sectionOverridden)
         // Head-area text colour. A section carrying a scene override turns its whole
         // title row Daz-green (the override accent, matching the field labels + mark);
         // otherwise it dims to muted in the locked/override view, or keeps the default
@@ -662,6 +687,18 @@ export const RomSections = memo(function RomSections({
                   }}
                 />
               )}
+              {/* The bone-count lock: an amber warning where the override mark would
+                  sit, with the "why" on its tooltip. Shown for BONE_COUNT_SECTIONS on
+                  a non-primary scene — the one place a section is NOT overridable. */}
+              {overrideForbidden && (
+                <span
+                  className="inline-flex size-6 shrink-0 -translate-y-px items-center justify-center"
+                  title={`${SECTION_LABELS[section]} can't be overridden per Daz scene: it changes the figure's bone count, and every scene must produce the primary scene's skeleton. The primary scene's setup applies here too.`}
+                  aria-label={`${SECTION_LABELS[section]} can't be overridden per Daz scene`}
+                >
+                  <TriangleAlert className="size-4 text-amber-500" aria-hidden />
+                </span>
+              )}
               {/* The section summary now floats right on its own (was inside the button)
                   so the override mark can hug the title. ml-auto pushes it + the Switch
                   to the right edge. */}
@@ -685,18 +722,22 @@ export const RomSections = memo(function RomSections({
                 // the override green like every other overridden boolean on the form
                 // (a green track when on, a light-green knob when off-but-overridden).
                 variant={enabledOverridden ? 'green' : 'default'}
-                disabled={tiedToJcm || locked}
+                disabled={tiedToJcm || locked || overrideForbidden}
                 title={
                   tiedToJcm
                     ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
-                    : overrideData
-                      ? // On a non-primary scene the toggle is a per-scene override —
-                        // same hint the other overridable fields' mark carries, not a
-                        // verbose per-scene enable/disable line.
-                        'Can be overridden per Daz scene'
-                      : // Primary scene: the on/off label next to it already says it —
-                        // no redundant native tooltip on the switch.
-                        undefined
+                    : overrideForbidden
+                      ? // Bone-count section on a non-primary scene: the on/off state is
+                        // the primary's, period (the title's amber warning says why).
+                        "Can't be overridden per Daz scene — this section changes the figure's bone count"
+                      : overrideData
+                        ? // On a non-primary scene the toggle is a per-scene override —
+                          // same hint the other overridable fields' mark carries, not a
+                          // verbose per-scene enable/disable line.
+                          'Can be overridden per Daz scene'
+                        : // Primary scene: the on/off label next to it already says it —
+                          // no redundant native tooltip on the switch.
+                          undefined
                 }
                 onCheckedChange={(enabled) => {
                   // On a non-primary scene the toggle is a per-scene override: flip the
@@ -732,13 +773,15 @@ export const RomSections = memo(function RomSections({
               // whole wrapper already dims (above); for a disabled OVERRIDE the wrapper
               // stays full (so the green title / label / toggle read active) and we dim
               // just the content here instead — the section IS off, its content is inert,
-              // but it stays editable so the user can decide what to keep. `locked` (the
-              // vestigial unarmed-override gate) still hard-disables + dims when set.
+              // but it stays editable so the user can decide what to keep. `sectionLocked`
+              // (the vestigial unarmed-override gate, plus the bone-count lock on a
+              // non-primary scene) hard-disables + dims: the fieldset's `disabled` is the
+              // actual read-only enforcement for everything inside.
               <fieldset
-                disabled={locked}
+                disabled={sectionLocked}
                 className={cn(
                   'space-y-3 border-t px-4 py-4',
-                  (locked || (!effectiveEnabled && sectionOverridden)) && 'opacity-60',
+                  (sectionLocked || (!effectiveEnabled && sectionOverridden)) && 'opacity-60',
                 )}
               >
                 {modes.length > 1 && (
@@ -851,7 +894,7 @@ export const RomSections = memo(function RomSections({
                       failedFrames={failedFrames}
                       removable={false}
                       override={editorOverride}
-                      locked={locked}
+                      locked={sectionLocked}
                       onGroupsChange={onSectionGroupsChange}
                     />
                     {/* CSV import — on a non-primary scene it imports into the scene's own
@@ -870,7 +913,7 @@ export const RomSections = memo(function RomSections({
                       failedFrames={failedFrames}
                       removable
                       override={editorOverride}
-                      locked={locked}
+                      locked={sectionLocked}
                       onGroupsChange={onSectionGroupsChange}
                     />
                     {/* Add group / Import edit whatever the editor owns — the base on the

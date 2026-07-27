@@ -709,6 +709,128 @@ describe('scene override mode', () => {
     expect(applySceneOverride(base, latest!).FBM.enabled).toBe(true)
   })
 
+  // A base with a custom GEN section (one pose) — the bone-count lock's target.
+  function baseWithCustomGen(): RomSectionsModel {
+    const sections = defaultSections()
+    sections.GEN = {
+      ...sections.GEN,
+      enabled: true,
+      mode: 'custom',
+      groups: [
+        {
+          id: 'gen-g1',
+          label: 'hip',
+          suffix: 'centre',
+          method: 'individual',
+          calculateFrom: 'default',
+          poses: [
+            {
+              id: 'gen-p1',
+              name: 'Spread',
+              boneScaleRef: false,
+              morphs: [{ id: 'gen-m1', node: 'GoldenPalace_G9', prop: 'GP_Spread', value: 1 }],
+            },
+          ],
+        },
+      ],
+    }
+    return sections
+  }
+
+  it('GEN (bone-count section) is locked on a non-primary scene: amber warning, dead toggle, read-only body', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<EnableHarness base={baseWithCustomGen()} onLatest={(next) => (latest = next)} />)
+
+    // The amber warning sits in the GEN title and carries the "why" tooltip.
+    const warning = screen.getByLabelText("Genitalia can't be overridden per Daz scene")
+    expect(warning.title).toContain('bone count')
+    // No resting "can override" cube for GEN — it can't be overridden…
+    const header = screen.getByText('Genitalia').closest('div') as HTMLElement
+    expect(within(header).queryByTitle('Can be overridden per Daz scene')).toBeNull()
+    // …and its enable toggle is disabled; clicking it stores nothing (backstop).
+    const toggle = within(header).getByRole('switch') as HTMLButtonElement
+    expect(toggle.disabled).toBe(true)
+    fireEvent.click(toggle)
+    expect(latest).toBeNull()
+
+    // The body is a disabled fieldset — the read-only enforcement for everything inside.
+    fireEvent.click(screen.getByText('Genitalia'))
+    const section = screen.getByText('Genitalia').closest('.rounded-lg') as HTMLElement
+    expect(section.querySelector('fieldset')?.disabled).toBe(true)
+  })
+
+  it('a structural GEN edit never escalates — the patchSectionForScene backstop', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    render(<EnableHarness base={baseWithCustomGen()} onLatest={(next) => (latest = next)} />)
+    fireEvent.click(screen.getByText('Genitalia'))
+    // jsdom still dispatches to fieldset-disabled controls (a real browser doesn't) —
+    // which is exactly what exercises the writer-level guard.
+    fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
+    fireEvent.click(screen.getByText('Add after'))
+    expect(latest).toBeNull()
+  })
+
+  it('a stale GEN override (data predating the lock) still shows the green mark and resets', () => {
+    let latest: import('@dth/rom').SceneOverride | null = null
+    function StaleGenHarness() {
+      const base = baseWithCustomGen()
+      const [override, setOverride] = useState(
+        sceneOverrideSchema.parse({
+          scenePath: 'X:/scenes/Beach.duf',
+          enabled: true,
+          sectionOverrides: [{ section: 'GEN', config: { ...base.GEN, enabled: false } }],
+        }),
+      )
+      return (
+        <RomSections
+          sections={base}
+          genesis="G9"
+          gender="female"
+          skinning="dqs"
+          catalog={{ folder: '', assets: [], error: null }}
+          presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+          override={{
+            data: override,
+            onChange: (next) => {
+              setOverride(next)
+              latest = next
+            },
+          }}
+          onChange={() => {}}
+        />
+      )
+    }
+    render(<StaleGenHarness />)
+    // Both tells at once: the amber "not allowed" warning AND the green reset (the
+    // stale divergence must stay escapable).
+    expect(screen.getByLabelText("Genitalia can't be overridden per Daz scene")).toBeTruthy()
+    fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
+    expect(latest!.sectionOverrides).toHaveLength(0)
+  })
+
+  it('the bone-count lock only applies on a non-primary scene — the primary edits GEN freely', () => {
+    let next: RomSectionsModel | null = null
+    render(
+      <RomSections
+        sections={baseWithCustomGen()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        onChange={(s) => {
+          next = s
+        }}
+      />,
+    )
+    expect(screen.queryByLabelText("Genitalia can't be overridden per Daz scene")).toBeNull()
+    const header = screen.getByText('Genitalia').closest('div') as HTMLElement
+    const toggle = within(header).getByRole('switch') as HTMLButtonElement
+    expect(toggle.disabled).toBe(false)
+    fireEvent.click(toggle)
+    expect(next!.GEN.enabled).toBe(false)
+  })
+
   it('disabling a section enabled THEN customized on a base-off section actually turns it off (mirror)', () => {
     // Mirror of the above: base FBM off → enable for scene → customize (escalate) →
     // disable ⇒ the section must go off, not keep generating the frames the user cut.
