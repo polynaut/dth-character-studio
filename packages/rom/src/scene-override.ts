@@ -9,51 +9,45 @@ import type { Character, RomPose, RomSections, SceneOverride } from './types'
  * generate.ts (`generateSceneOverride`).
  */
 
+/** Whether a record's ROM panel is armed: any section carries an override
+ *  entry. THE gate the editor, generation and the active-override filter share
+ *  (presence-based since schema v24 — there is no stored boolean). */
+export function sceneRomArmed(override: Pick<SceneOverride, 'rom'>): boolean {
+  return Object.keys(override.rom).length > 0
+}
+
 /**
- * The sections a scene override actually compiles to. Two layers:
+ * The sections a scene record actually compiles to. Per SECTION (schema v24 —
+ * each section's whole divergence lives at its one `rom` key):
  *
- * - A **whole-section override** (`sectionOverrides`) replaces that section's groups
- *   verbatim — used once a structural edit (reorder / insert / add / remove) makes the
- *   section differ in order or count, which the sparse layer can't represent.
- * - Otherwise the **sparse** layer: every base row stays at its position (replaced rows
- *   substitute CONTENT only, by pose id) and the override's added rows are appended at
- *   their group's end — so the base frames keep their numbers and the additions
- *   continue after them.
+ * - `owned` set → the stored config replaces the base section verbatim — used
+ *   once a structural edit (reorder / insert / add / remove) or a non-row
+ *   config edit makes the section differ in a way the sparse layer can't hold.
+ * - else the **sparse** layer: every base row stays at its position (`replaced`
+ *   substitutes CONTENT only, by pose id) and `added` rows append at their
+ *   group's end — base frames keep their numbers, additions continue after.
+ * - `enabled` overlays the on/off state LAST, over base or owned config.
  *
- * Orphaned entries (a replaced pose or a target group that no longer exists in the
- * base) are ignored. Both the editor's frame display and the generation consume THIS,
- * so what the override grid shows is what the scene's script + CSV get.
+ * Orphaned entries (a replaced pose or a target group that no longer exists in
+ * the base) are ignored. Both the editor's frame display and the generation
+ * consume THIS, so what the override grid shows is what the scene's script +
+ * CSV get.
  */
 export function applySceneOverride(
   sections: RomSections,
-  override: Pick<SceneOverride, 'poses' | 'additions'> & {
-    sectionOverrides?: SceneOverride['sectionOverrides']
-    sectionEnabled?: SceneOverride['sectionEnabled']
-  },
+  override: Pick<SceneOverride, 'rom'>,
 ): RomSections {
-  const replaced = new Map(override.poses.map((pose) => [pose.id, pose]))
-  const additions = new Map(override.additions.map((entry) => [entry.groupId, entry.poses]))
-  // Whole-section OWNERSHIP: the stored full config REPLACES the base section (mode,
-  // preset assets, art direction, groups, custom path). Used once the scene diverges
-  // in a way the sparse poses/additions can't hold (a structural row edit, or any
-  // non-row config edit); the sparse entries for an owned section no longer apply.
-  const ownedConfig = new Map(
-    (override.sectionOverrides ?? []).map((entry) => [entry.section, entry.config]),
-  )
-  // Per-scene enable/disable: a lightweight overlay that flips `enabled` LAST, on top
-  // of whichever config (base or owned) applies — so a plain toggle doesn't "own"/
-  // freeze the section, and an owned section can still be toggled independently.
-  const enabledFor = new Map(
-    (override.sectionEnabled ?? []).map((entry) => [entry.section, entry.enabled]),
-  )
   const next = { ...sections }
   for (const section of ROM_SECTIONS) {
+    const entry = override.rom[section]
+    if (!entry) continue
     const base = sections[section]
-    const owned = ownedConfig.get(section)
     let merged
-    if (owned) {
-      merged = owned
+    if (entry.owned) {
+      merged = entry.owned
     } else {
+      const replaced = new Map(entry.replaced.map((pose) => [pose.id, pose]))
+      const additions = new Map(entry.added.map((add) => [add.groupId, add.poses]))
       let groups = base.groups.map((group) => ({
         ...group,
         poses: [
@@ -78,7 +72,7 @@ export function applySceneOverride(
       }
       merged = { ...base, groups }
     }
-    const enabled = enabledFor.get(section) ?? merged.enabled
+    const enabled = entry.enabled ?? merged.enabled
     next[section] = enabled === merged.enabled ? merged : { ...merged, enabled }
   }
   return next
@@ -97,27 +91,26 @@ export function sceneOverrideSlug(scenePath: string): string {
 }
 
 /**
- * The overrides that feed generation: at least one panel gate armed (ROM section
- * `enabled`, `identity`, `preserve`, or `jcm`) AND still pointing at a linked EXTRA
- * scene (an override for an unlinked scene stays stored but inert; the primary scene
- * is by definition the base). THE single gate — the one character script's per-scene
- * config map, stale-artifact cleanup and save validation all ask here, so they can't
- * disagree. Use {@link sceneOverrideBuildsRom} to narrow to the subset that also
- * needs its own PoseAsset CSV.
+ * The records that feed generation: at least one panel armed (a `rom` entry, or
+ * a present `identity`/`preserve`/`jcm` block) AND still pointing at a linked
+ * EXTRA scene (a record for an unlinked scene stays stored but inert; the
+ * primary scene is by definition the base). THE single gate — the one character
+ * script's per-scene config map, stale-artifact cleanup and save validation all
+ * ask here, so they can't disagree. Use {@link sceneOverrideBuildsRom} to
+ * narrow to the subset that also needs its own PoseAsset CSV.
  *
- * NB no `groom.enabled` term: hair is per scene by presence (it rides `groomScenes`,
- * not this override) and nothing ever arms that gate — including it here only implied
- * a hair-only scene could activate an (empty) override, which it can't.
+ * NB `hair` never arms: it rides the groom map by presence, and a hair-only
+ * record (e.g. the primary scene's) must not activate an empty override.
  */
 export function activeSceneOverrides(
   character: Pick<Character, 'extraScenes' | 'sceneOverrides'>,
 ): Array<SceneOverride> {
   return character.sceneOverrides.filter(
     (override) =>
-      (override.enabled ||
-        override.identity.enabled ||
-        override.preserve.enabled ||
-        override.jcm.enabled) &&
+      (sceneRomArmed(override) ||
+        override.identity !== undefined ||
+        override.preserve !== undefined ||
+        override.jcm !== undefined) &&
       character.extraScenes.includes(override.scenePath),
   )
 }
@@ -158,7 +151,7 @@ export function sceneOverrideBuildsRom(
   character: Pick<Character, 'sections'>,
   override: SceneOverride,
 ): boolean {
-  if (!override.enabled) return false
+  if (!sceneRomArmed(override)) return false
   const merged = applySceneOverride(character.sections, override)
   return sectionsCsvSignature(merged) !== sectionsCsvSignature(character.sections)
 }
@@ -172,14 +165,14 @@ export function sceneOverrideBuildsRom(
  *
  * The identity dials and preserve lists do NOT merge here: they ride as run-time
  * config DELTAS computed straight from the override in `buildSceneConfigMap`
- * (dsa.ts). The groom gate has no generation effect (hair lives per scene in
- * `groomScenes`).
+ * (dsa.ts). `hair` has no per-character generation effect (the groom map is
+ * built per scene from the records directly).
  */
 export function mergeSceneOverride(character: Character, override: SceneOverride): Character {
   let merged = character
-  if (override.enabled)
+  if (sceneRomArmed(override))
     merged = { ...merged, sections: applySceneOverride(character.sections, override) }
-  if (override.jcm.enabled) merged = { ...merged, jcmMorphMods: override.jcm.mods }
+  if (override.jcm !== undefined) merged = { ...merged, jcmMorphMods: override.jcm }
   return merged
 }
 
