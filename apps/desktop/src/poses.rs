@@ -162,10 +162,11 @@ pub(crate) struct SceneWearables {
     /// the add-scene dialog's "exactly one character" check. `figure` above
     /// stays its first entry for the create dialog.
     figures: Vec<SceneFigure>,
-    /// Timeline frames the scene's animation keys occupy (max key time × 30 fps
-    /// + 1): 0 = no keys at all, 1 = only rest-pose keys at frame 0. Anything
-    /// above 1 means the timeline is already filled — the add-scene dialog
-    /// flags it, since the generated ROM script fills the timeline itself.
+    /// Timeline frames the scene's animation keys occupy (max key time × 30
+    /// fps, plus 1): 0 = no keys at all, 1 = only rest-pose keys at frame 0.
+    /// Anything above 1 means the timeline is already filled — the add-scene
+    /// dialog flags it, since the generated ROM script fills the timeline
+    /// itself.
     animation_frames: u32,
     /// Empty on success; otherwise why the scene couldn't be read.
     error: String,
