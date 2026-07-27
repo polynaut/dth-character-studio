@@ -53,7 +53,10 @@ export function Modal({
           // The body is free-form; callers put their description right in it.
           aria-describedby={undefined}
           className={cn(
-            'fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border bg-background p-5 shadow-lg outline-none',
+            // max-w-xl (not -md): the dialogs regularly carry full file paths,
+            // path chips and validation tables — at 28rem those wrapped/cramped.
+            // Callers can still narrow/widen via className (tailwind-merge).
+            'fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border bg-background p-5 shadow-lg outline-none',
             className,
           )}
         >
