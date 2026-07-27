@@ -663,7 +663,11 @@ mod tests {
         std::io::Write::write_all(&mut w, b"ok").unwrap();
         w.start_file(
             "data/locked.dsf",
-            zip::write::SimpleFileOptions::default().with_deprecated_encryption(b"pw"),
+            // zip 8: the ZipCrypto option builder is fallible now (it validates
+            // the configuration) — unwrap keeps this fixture-writer terse.
+            zip::write::SimpleFileOptions::default()
+                .with_deprecated_encryption(b"pw")
+                .unwrap(),
         )
         .unwrap();
         std::io::Write::write_all(&mut w, b"secret").unwrap();
