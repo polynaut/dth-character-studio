@@ -59,6 +59,10 @@ function UnrealCard({
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
   const shownPath = displayPath(uprojectPath)
+  // The chip DISPLAYS without the constant ".uproject" suffix (every linked
+  // file has it — it spends chip budget saying nothing); copying still yields
+  // the full path, extension included.
+  const chipText = middleTruncatePath(shownPath.replace(/\.uproject$/i, ''), 36)
   const OpenIcon = altHeld ? FolderOpen : ExternalLink
   // Ctrl/Cmd held turns the click into a force-overwrite (see `ctrlHeld` above),
   // so the label reads "Reinstall" to match what the button will actually do.
@@ -79,9 +83,9 @@ function UnrealCard({
           <PathCode
             path={shownPath}
             variant="secondary"
-            className="block w-64 overflow-hidden text-xs whitespace-nowrap"
+            className="block w-72 overflow-hidden text-xs whitespace-nowrap"
           >
-            {middleTruncatePath(shownPath, 34)}
+            {chipText}
           </PathCode>
         </span>
         <button

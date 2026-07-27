@@ -14,5 +14,5 @@ while a non-primary scene is selected — with the primary selected there is
 nothing to override. The Unreal project cards were reworked too: the card
 body is inert (only the explicit open/install buttons act), the folder line
 is now a real path chip (click = copy, Alt+click = Explorer), and the path
-middle-ellipsizes to a fixed width so the drive and the .uproject name both
-stay readable and every card lines up.
+middle-ellipsizes to a fixed width — ".uproject" stripped from the display —
+so the drive and the project name both stay readable and every card lines up.
