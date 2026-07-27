@@ -95,13 +95,15 @@ export function avatarsToPrune(
 
 /**
  * The PRISTINE-SOURCE sibling of a stored master: `<name>.<ext>` →
- * `<name>.src.<ext>`. Written when an UPLOAD's master gets upscaled in place —
- * the upscale replaces the user's original and nothing else holds a copy — so
- * the master can always be re-derived by the CURRENT pipeline. Scene avatars
- * store no sibling: their pristine 256² tip always sits beside the linked/copied
- * scene. `.src` names deliberately do NOT parse as avatars
- * ({@link parseAvatarName} needs digits before the extension), so they never
- * show up in the gallery or the master-retention logic.
+ * `<name>.src.<ext>`. Written whenever a master gets upscaled in place (the
+ * only case where the stored bytes stop being the original). For an UPLOAD it's
+ * the only copy of the user's original; for a SCENE avatar it's the avatar-sync
+ * STALENESS REFERENCE — the upscaled master can never byte-equal the scene's
+ * tip, so sync compares the tip against these ingested bytes instead (see
+ * api/characters.ts). Both double as the Ctrl+Refresh rebuild source. `.src`
+ * names deliberately do NOT parse as avatars ({@link parseAvatarName} needs
+ * digits before the extension), so they never show up in the gallery or the
+ * master-retention logic.
  */
 export function avatarSourceName(masterName: string): string {
   return masterName.replace(/\.([a-z0-9]+)$/i, '.src.$1')
