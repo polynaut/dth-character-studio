@@ -162,7 +162,7 @@ export function FillFromCharacterDialog({
             </div>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="ghost" className="mr-auto" onClick={onClose}>
               Cancel
             </Button>
             <Button disabled={!source} onClick={next}>

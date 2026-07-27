@@ -145,6 +145,11 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
 in `apps/web/src/styles.css` — kit-only utility classes break without it.
 Export only what the app consumes (`packages/ui/src/index.ts` is the sole entry).
 
+Modal footers: the Cancel button is always `variant="ghost"` and LEFT-aligned —
+first child of the `flex justify-end gap-2` footer row with `className="mr-auto"`;
+the affirmative/primary action sits right. Inline (non-modal) cancels — path
+chips, the Tools danger-zone confirm strip — keep their own styling.
+
 ## Writing conventions
 
 - Generated `.dsa`/CSV output changes must be intentional: the rom tests pin
