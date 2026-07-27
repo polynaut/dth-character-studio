@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { PaintBucket } from 'lucide-react'
+
 import { Button, Modal } from '@dth/ui'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
 import { fillSectionsFrom, filledSections, sectionContentSummary } from '#/lib/fill-sections.ts'
@@ -207,7 +209,7 @@ export function FillFromCharacterDialog({
               Back
             </Button>
             <Button disabled={checked.size === 0} onClick={fill}>
-              Fill from character
+              <PaintBucket /> Fill from character
             </Button>
           </div>
         </>

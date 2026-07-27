@@ -1,5 +1,7 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 
+import { PaintBucket } from 'lucide-react'
+
 import { Button, InfoPopup } from '@dth/ui'
 import { FillFromCharacterDialog } from '#/components/character/fill-from-character-dialog.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
@@ -136,7 +138,7 @@ export const RomEditorSection = memo(function RomEditorSection({
                   title="Fill ROM sections from another character"
                   onClick={() => setFillOpen(true)}
                 >
-                  Fill
+                  <PaintBucket /> Fill
                 </Button>
               )
             }
