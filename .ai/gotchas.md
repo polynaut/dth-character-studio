@@ -58,6 +58,19 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
   re-running the character's ROM script is enough — no app rebuild needed.
+- **"Clean" scene `.duf`s carry stray animation keys** (measured 2026-07-27 on the
+  Ita_G9_GP doc assets): the JM Nipple product leaves 5 two-key channels on its
+  graft's BONES (keys at frames 0 + 7; four value-flat, one actually changing) in
+  every scene it's used in — while the Daz timeline shows nothing and
+  `studio_scene_settings.animation_range` stays at its default. So a scene's
+  timeline emptiness can NOT be judged from `scene.animations` max key time alone;
+  `duf_scene` (poses.rs) counts only value-CHANGING channels on non-wearable node
+  chains (a wearable's bones chain up through the conformed root before reaching
+  the figure). The `animation_range` is stored in SECONDS and its default varies
+  ([0,1] and [0,1.43] both observed on untouched scenes) — useless as a signal.
+  The ROM runtime is immune to leftover RANGE (it `setTotalFrames`-resets), but
+  leftover wearable keys do ride the export silently — tolerated, the whole doc
+  pipeline was built on such scenes.
 
 ## Desktop / Tauri
 

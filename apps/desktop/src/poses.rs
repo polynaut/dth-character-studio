@@ -162,11 +162,12 @@ pub(crate) struct SceneWearables {
     /// the add-scene dialog's "exactly one character" check. `figure` above
     /// stays its first entry for the create dialog.
     figures: Vec<SceneFigure>,
-    /// Timeline frames the scene's animation keys occupy (max key time × 30
-    /// fps, plus 1): 0 = no keys at all, 1 = only rest-pose keys at frame 0.
-    /// Anything above 1 means the timeline is already filled — the add-scene
-    /// dialog flags it, since the generated ROM script fills the timeline
-    /// itself.
+    /// Timeline frames occupied by REAL animation — value-CHANGING keys on the
+    /// character's own (non-wearable) nodes; the stray keys products leave on
+    /// their wearables' bones don't count (see duf_scene). Max counted key
+    /// time × 30 fps, plus 1; 0 when nothing qualifies. Anything above 1 means
+    /// the timeline is genuinely filled — the add-scene/create dialogs flag
+    /// it, since the generated ROM script fills the timeline itself.
     animation_frames: u32,
     /// Empty on success; otherwise why the scene couldn't be read.
     error: String,
@@ -176,6 +177,50 @@ pub(crate) struct SceneWearables {
 /// base figure among the scene nodes.
 fn looks_like_figure(s: &str) -> bool {
     s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("genesis"))
+}
+
+/// Percent-decode a DSON ref ("#Left%20Nipple%201" → "Left Nipple 1"), leading
+/// '#' stripped. DSON node/parent refs and animation-url node prefixes are
+/// URL-encoded; scene node `id`s are not.
+fn decode_ref(s: &str) -> String {
+    let s = s.strip_prefix('#').unwrap_or(s);
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Is the node (or ANY ancestor on its parent chain) a conformed wearable?
+/// Products routinely leave stray animation keys on their wearables' bones —
+/// e.g. nipple-graft bones keyed at frames 0 and 7 in an otherwise untouched
+/// scene — and a wearable's bones chain up THROUGH the wearable root before
+/// reaching the figure it's fitted to. An unknown id resolves to false at the
+/// call site's discretion (the caller counts it — fail-loud).
+fn wearable_owned(
+    id: &str,
+    nodes: &std::collections::HashMap<String, (Option<String>, bool)>,
+) -> bool {
+    let mut cur = id.to_string();
+    // Guarded walk: a corrupt file could carry a parent cycle.
+    for _ in 0..100 {
+        match nodes.get(&cur) {
+            Some((_, true)) => return true,
+            Some((Some(parent), false)) => cur = parent.clone(),
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// Everything one scene parse yields — see `scene_wearables` for the fields'
@@ -234,9 +279,25 @@ fn duf_scene(path: &Path) -> Result<SceneRead, String> {
             Some(SceneFigure { id: id.to_string(), label: label.to_string() })
         })
         .collect();
-    // Timeline occupancy — same math as `duf_frame_count`, but tolerant: a scene
-    // without animations/keys is simply 0, never an error (most scenes carry only
-    // rest-pose keys at t = 0, which read as 1 frame).
+    // Timeline occupancy — same frame math as `duf_frame_count`, but tolerant
+    // (no animations is simply 0, never an error) and filtered down to REAL
+    // animation. Two kinds of stray keys are the norm in untouched scenes and
+    // must not count (measured on real scenes — a "clean" scene carried nipple-
+    // graft keys at frames 0+7 from its wearable product):
+    //   1. a channel whose keys never change value (keys, but no animation),
+    //   2. a channel on a fitted wearable's node chain (product leftovers —
+    //      the character's own timeline is what the check is about).
+    // Unresolvable node refs COUNT (fail-loud): only a positively identified
+    // wearable channel is excused.
+    let node_map: std::collections::HashMap<String, (Option<String>, bool)> = nodes
+        .iter()
+        .filter_map(|node| {
+            let id = node.get("id").and_then(|v| v.as_str())?;
+            let parent = node.get("parent").and_then(|v| v.as_str()).map(decode_ref);
+            let conformed = node.get("conform_target").is_some();
+            Some((id.to_string(), (parent, conformed)))
+        })
+        .collect();
     let mut max_t = f64::NEG_INFINITY;
     if let Some(animations) = json
         .get("scene")
@@ -244,12 +305,28 @@ fn duf_scene(path: &Path) -> Result<SceneRead, String> {
         .and_then(|a| a.as_array())
     {
         for anim in animations {
-            if let Some(keys) = anim.get("keys").and_then(|k| k.as_array()) {
-                for key in keys {
-                    if let Some(t) = key.get(0).and_then(|v| v.as_f64()) {
-                        if t > max_t {
-                            max_t = t;
-                        }
+            let Some(keys) = anim.get("keys").and_then(|k| k.as_array()) else {
+                continue;
+            };
+            // (1) Value-flat channels aren't animation.
+            let first = keys.first().and_then(|k| k.get(1));
+            if !keys.iter().skip(1).any(|k| k.get(1) != first) {
+                continue;
+            }
+            // (2) The animation url's node prefix ("Left%20Nipple%201:/data/…")
+            // names the keyed node — skip channels owned by a fitted wearable.
+            let on_wearable = anim
+                .get("url")
+                .and_then(|v| v.as_str())
+                .and_then(|u| u.split_once(':'))
+                .is_some_and(|(prefix, _)| wearable_owned(&decode_ref(prefix), &node_map));
+            if on_wearable {
+                continue;
+            }
+            for key in keys {
+                if let Some(t) = key.get(0).and_then(|v| v.as_f64()) {
+                    if t > max_t {
+                        max_t = t;
                     }
                 }
             }
@@ -408,14 +485,60 @@ mod tests {
         assert_eq!(result.figure.expect("first figure").id, "Genesis9");
         // Highest key at 0.5 s × 30 fps + 1 = 16 frames — a filled timeline.
         assert_eq!(result.animation_frames, 16);
-        // Rest-pose keys only (t = 0) read as a single frame — an EMPTY timeline.
+        // A single rest-pose key (t = 0) never changes value → not animation.
         let rest = dir.join("rest.duf");
         let rest_json = br##"{"scene":{
             "nodes":[{"id":"Genesis9","label":"Genesis 9"}],
             "animations":[{"keys":[[0,0.2]]}]
         }}"##;
         fs::write(&rest, gzip(rest_json)).unwrap();
-        assert_eq!(scene_wearables(rest.to_string_lossy().to_string()).animation_frames, 1);
+        assert_eq!(scene_wearables(rest.to_string_lossy().to_string()).animation_frames, 0);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stray_product_keys_do_not_count_as_a_filled_timeline() {
+        // Modeled on a real "clean" scene (JM Nipple): the wearable's bones carry
+        // keys at frames 0+7 — one channel even changes value — and one figure
+        // channel holds a value-flat key pair. NONE of that is user animation:
+        //   - value-flat channels are keys, not animation,
+        //   - a value-changing channel on a fitted wearable's bone chain (bone →
+        //     … → wearable root [conform_target] → figure) is product junk.
+        // A value-changing key on the FIGURE's own bone still counts.
+        let dir = unique_temp_dir("scene_stray");
+        fs::create_dir_all(&dir).unwrap();
+        let junk = dir.join("junk.duf");
+        let junk_json = br##"{"scene":{
+            "nodes":[
+                {"id":"Genesis9","label":"Genesis 9"},
+                {"id":"hip","label":"Hip","parent":"#Genesis9"},
+                {"id":"Nippi_504","label":"JM Nipple","parent":"#Genesis9","conform_target":"#Genesis9"},
+                {"id":"l_pectoral-3","label":"Left Pectoral","parent":"#Nippi_504"},
+                {"id":"Left Nipple 1","label":"Left Nipple 1","parent":"#l_pectoral-3"}
+            ],
+            "animations":[
+                {"url":"Left%20Nipple%201:/data/JM/Nippi.dsf#Left%20Nipple%201?rotation/y/value","keys":[[0,0],[0.2333333,-20.47903]]},
+                {"url":"Genesis9:/data/DAZ%203D/G9.dsf#Genesis9?translation/y/value","keys":[[0,0],[0.2333333,0]]}
+            ]
+        }}"##;
+        fs::write(&junk, gzip(junk_json)).unwrap();
+        let result = scene_wearables(junk.to_string_lossy().to_string());
+        assert_eq!(result.error, "");
+        assert_eq!(result.animation_frames, 0, "stray wearable/flat keys must not count");
+        // The SAME value-changing keys on the figure's own bone DO count.
+        let real = dir.join("real.duf");
+        let real_json = br##"{"scene":{
+            "nodes":[
+                {"id":"Genesis9","label":"Genesis 9"},
+                {"id":"hip","label":"Hip","parent":"#Genesis9"}
+            ],
+            "animations":[
+                {"url":"hip:/data/DAZ%203D/G9.dsf#hip?rotation/y/value","keys":[[0,0],[0.2333333,-20.5]]}
+            ]
+        }}"##;
+        fs::write(&real, gzip(real_json)).unwrap();
+        // 0.2333 s × 30 fps ≈ frame 7, +1 → 8 frames.
+        assert_eq!(scene_wearables(real.to_string_lossy().to_string()).animation_frames, 8);
         let _ = fs::remove_dir_all(&dir);
     }
 
