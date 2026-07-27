@@ -91,8 +91,10 @@ export function Portrait({
 }) {
   const resolvedSrc = usePortraitSrc({ image, scenePath })
   const src = srcOverride ?? resolvedSrc
+  // Border matches the main header avatar's rest border (#2d2d2d, see
+  // .avatar-scroll-shrink) — one border language for every avatar tile.
   return (
-    <div className={cn('overflow-hidden border-2 border-[#262626] bg-[#262626]', className)}>
+    <div className={cn('overflow-hidden border-2 border-[#2d2d2d] bg-[#262626]', className)}>
       {src ? (
         <img
           src={src}

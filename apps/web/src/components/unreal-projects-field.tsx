@@ -59,11 +59,10 @@ function UnrealCard({
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
   const shownPath = displayPath(uprojectPath)
-  // The chip DISPLAYS without the constant ".uproject" suffix (every linked
-  // file has it — it spends chip budget saying nothing); copying still yields
-  // the full path, extension included. When truncation kicks in, the shown
-  // start caps at 8 chars ("D:\Unrea…") so the budget goes to the file name.
-  const chipText = middleTruncatePath(shownPath.replace(/\.uproject$/i, ''), 40, 8)
+  // The chip shows the full file name (extension included); when the 40-char
+  // budget forces truncation, the shown start caps at 8 chars ("D:\Unrea…") so
+  // the budget goes to the file name. Natural width — the chip hugs its text.
+  const chipText = middleTruncatePath(shownPath, 40, 8)
   const OpenIcon = altHeld ? FolderOpen : ExternalLink
   // Ctrl/Cmd held turns the click into a force-overwrite (see `ctrlHeld` above),
   // so the label reads "Reinstall" to match what the button will actually do.
@@ -78,13 +77,12 @@ function UnrealCard({
               a merely LONG one may widen the card, by design. */}
           <span className="block max-w-96 truncate text-sm font-medium">{displayName}</span>
           {/* A real path chip: click copies the full path, Alt+click reveals it
-              in Explorer. Fixed width + a matching character budget (monospace),
-              middle-ellipsized so the drive/start AND the .uproject name always
-              read — and every card comes out the same width. */}
+              in Explorer. Middle-ellipsized to a character budget so the drive
+              AND the .uproject name always read. */}
           <PathCode
             path={shownPath}
             variant="secondary"
-            className="block w-72 overflow-hidden text-[11px] leading-4 whitespace-nowrap"
+            className="text-[11px] leading-4 whitespace-nowrap"
           >
             {chipText}
           </PathCode>
