@@ -158,9 +158,11 @@ export const sceneWearablesSchema = z.object({
   /** EVERY figure-like root node — the add-scene dialog's "exactly one
    *  character" check; `figure` above is its first entry. */
   figures: z.array(sceneFigureSchema),
-  /** Timeline frames the scene's animation keys occupy: 0 = no keys, 1 = only
-   *  rest-pose keys at frame 0, above 1 = an already-filled timeline (the
-   *  add-scene dialog flags it — the ROM script fills the timeline itself). */
+  /** Timeline frames occupied by REAL animation — value-changing keys on the
+   *  character's own (non-wearable) nodes; stray product keys on wearables'
+   *  bones don't count (see poses.rs `duf_scene`). Above 1 = a genuinely
+   *  filled timeline (the add-scene/create dialogs flag it — the ROM script
+   *  fills the timeline itself). */
   animationFrames: z.number(),
   error: z.string(),
 })
