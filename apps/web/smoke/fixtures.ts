@@ -205,6 +205,10 @@ export interface SeedOptions {
   dimManifestsFolder?: string
   /** What the native picker returns — a path to simulate a pick, else cancelled. */
   dialogPath?: string
+  /** The demo scene also carries a Golden Palace geograft item, so a scene read
+   *  derives Gender ♀ female (the documented behavior) instead of Unknown.
+   *  Screenshot-only — the smoke suite keeps the graft-less scene. */
+  sceneGpGeograft?: boolean
   /** Seed a per-scene product-scan CSV into the demo character's scan folder so
    *  the Products tab renders a populated "Matched products" table. */
   productScan?: boolean
@@ -350,7 +354,12 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     // warning must never appear in guide shots — it's not a documented state).
     sceneWearables: opts.demo
       ? {
-          [P.scene]: [{ id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' }],
+          [P.scene]: [
+            { id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' },
+            ...(opts.sceneGpGeograft
+              ? [{ id: 'GoldenPalace_G9', label: 'Golden Palace', conformTarget: '#Genesis9' }]
+              : []),
+          ],
           ...(opts.extraScene
             ? {
                 [P.scene2]: [
