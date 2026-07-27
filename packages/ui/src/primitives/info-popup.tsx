@@ -61,16 +61,28 @@ function overflowPadding() {
  * Links are intercepted: an in-app path (`/settings`) navigates via the router,
  * while an external URL/scheme (`https://…`, `mailto:…`) opens in the OS browser.
  */
+/** Trigger chip sizes: 'xs' is the 24px label-adjacent default; 'sm' / 'md'
+ *  match the kit Button heights (h-8 / h-9), for an "i" sitting next to a
+ *  button so the two read as one row. */
+const TRIGGER_SIZE = {
+  xs: 'size-6',
+  sm: 'size-8',
+  md: 'size-9',
+} as const
+
 export function InfoPopup({
   children,
   label = 'More information',
   className,
+  size = 'xs',
 }: {
   children: React.ReactNode
   /** Accessible name for the trigger button. */
   label?: string
   /** Extra classes for the trigger button. */
   className?: string
+  /** Trigger chip size — see {@link TRIGGER_SIZE}. */
+  size?: keyof typeof TRIGGER_SIZE
 }) {
   const [open, setOpen] = React.useState(false)
   const [pinned, setPinned] = React.useState(false)
@@ -181,12 +193,19 @@ export function InfoPopup({
           // hover feedback). When PINNED (clicked) it presses in — a near-black fill
           // with a black inset shadow (+ a subtle light bottom bevel) so a pinned popup
           // reads as an active, recessed toggle.
-          'relative inline-flex size-6 cursor-pointer items-center justify-center rounded-md bg-white/5 text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-inset hover:ring-black/50 data-[pinned]:bg-[#0b0c0e] data-[pinned]:text-foreground data-[pinned]:shadow-[inset_0_1.5px_3px_rgb(0_0_0/0.85),inset_0_-1px_1px_rgb(255_255_255/0.05)] data-[pinned]:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'relative inline-flex cursor-pointer items-center justify-center rounded-md bg-white/5 text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-inset hover:ring-black/50 data-[pinned]:bg-[#0b0c0e] data-[pinned]:text-foreground data-[pinned]:shadow-[inset_0_1.5px_3px_rgb(0_0_0/0.85),inset_0_-1px_1px_rgb(255_255_255/0.05)] data-[pinned]:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          TRIGGER_SIZE[size],
           className,
         )}
         {...getReferenceProps({ onClick: onTriggerClick })}
       >
-        <span aria-hidden="true" className="font-serif text-sm font-bold italic leading-none">
+        <span
+          aria-hidden="true"
+          className={cn(
+            'font-serif font-bold italic leading-none',
+            size === 'xs' ? 'text-sm' : 'text-base',
+          )}
+        >
           i
         </span>
       </button>
