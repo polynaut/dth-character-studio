@@ -76,14 +76,21 @@ export function displayPath(path: string): string {
 /**
  * Middle-ellipsis a DISPLAY path down to at most `max` characters: the path's
  * start stays visible and the file name at the end always survives whole
- * (truncated from its own start only when it alone exceeds the budget). Meant
- * for fixed-width monospace chips (e.g. the Unreal cards), where a constant
- * character budget makes every chip the same width.
+ * (truncated from its own start only when it alone exceeds the budget). A path
+ * that FITS is returned untouched; once truncation kicks in, `maxHead` caps
+ * the shown start (e.g. 8 → "D:\Unrea…\Name"), keeping the budget for the
+ * file name. Meant for fixed-width monospace chips (e.g. the Unreal cards),
+ * where a constant character budget makes every chip the same width.
  */
-export function middleTruncatePath(path: string, max: number): string {
+export function middleTruncatePath(
+  path: string,
+  max: number,
+  maxHead: number = Number.POSITIVE_INFINITY,
+): string {
   if (path.length <= max) return path
   const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
   const tail = cut >= 0 ? path.slice(cut) : path
   if (tail.length >= max - 1) return `…${tail.slice(-(max - 1))}`
-  return `${path.slice(0, max - 1 - tail.length)}…${tail}`
+  const head = Math.min(max - 1 - tail.length, maxHead)
+  return `${path.slice(0, head)}…${tail}`
 }

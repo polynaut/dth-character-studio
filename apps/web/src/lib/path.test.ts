@@ -27,6 +27,13 @@ describe('middleTruncatePath', () => {
       '/home/user/proj…/Game.uproject',
     )
   })
+
+  it('caps the shown start at maxHead once truncation kicks in (full name gets the budget)', () => {
+    const path = 'D:\\Unreal Projects\\Thick_Raider_FOUNDRY\\Thick_Raider_FOUNDRY'
+    expect(middleTruncatePath(path, 40, 8)).toBe('D:\\Unrea…\\Thick_Raider_FOUNDRY')
+    // A path that FITS is untouched — the cap only applies to truncated output.
+    expect(middleTruncatePath('D:\\UE\\Game', 40, 8)).toBe('D:\\UE\\Game')
+  })
 })
 
 describe('extrasWithoutPrimary', () => {
