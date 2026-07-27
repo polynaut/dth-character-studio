@@ -47,6 +47,8 @@ export interface SceneCheckRow {
   /** State text next to the icon (e.g. "G9", "2 characters", "—"). */
   value: string
   state: SceneCheckState
+  /** What the check demands and why — shown as the row's tooltip when it FAILS. */
+  why: string
 }
 
 const GEOGRAFT_LABELS = { gp: 'Golden Palace', dk: 'Dicktator' } as const
@@ -150,6 +152,9 @@ function generationRow(
   return {
     key: 'generation',
     label: 'Same generation',
+    why:
+      'Every scene of a character must use the same Genesis figure — the ROM and its artifacts ' +
+      "are generated for the character's generation and can't apply to another skeleton.",
     ...(!readable(scan)
       ? { value: '—', state: 'unchecked' as const }
       : !detected
@@ -175,6 +180,9 @@ function figuresRow(scan: SceneWearables | null): SceneCheckRow {
   return {
     key: 'figures',
     label: 'One character',
+    why:
+      'The studio generates one character per definition — the scene must hold exactly ONE ' +
+      'Genesis figure. Hair, clothing and props are fine.',
     ...(!readable(scan)
       ? { value: '—', state: 'unchecked' as const }
       : count === 1
@@ -192,6 +200,10 @@ function timelineRow(scan: SceneWearables | null): SceneCheckRow {
   return {
     key: 'timeline',
     label: 'Empty timeline',
+    why:
+      'The generated ROM script fills the animation timeline itself — existing animation on ' +
+      'the character would blend into the exported ROM frames. Save the scene without ' +
+      'animation, then pick it again.',
     ...(!readable(scan)
       ? { value: '—', state: 'unchecked' as const }
       : scan.animationFrames <= 1
@@ -217,6 +229,11 @@ function geograftRow(
   return {
     key: 'geograft',
     label: 'Same geograft (GP/DK)',
+    why:
+      'The GP/DK geografts add bones, and every scene must produce the primary scene’s ' +
+      'skeleton. Gender can’t be read from a G9 scene directly — the geograft compare is ' +
+      'its closest proxy. Different hair, clothing and props are exactly what extra scenes ' +
+      'are for.',
     ...(mine === null
       ? { value: '—', state: 'unchecked' as const }
       : reference === null

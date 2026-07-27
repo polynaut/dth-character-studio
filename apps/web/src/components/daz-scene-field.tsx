@@ -517,7 +517,6 @@ export function DazSceneField({
       force={forceAdd}
       onForceChange={setForceAdd}
       forceLabel="Add anyway — a failed check usually means the scene's ROM won't match"
-      footnote="The scene must contain the same character — gender can't be checked directly, the geograft compare is its closest proxy. Different hair, clothing and props are exactly what extra scenes are for."
     />
   )
   const addBlockedTitle = addChecking

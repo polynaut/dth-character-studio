@@ -94,10 +94,14 @@ export function IdentitySection({
         <div className="group/ovr">
           <Label className={cn('mb-1', overrideLabelClass(facsOv, overrideEligible))}>
             FACS detail strength
-            <OverrideMark
-              overridden={facsOv}
-              onReset={() => writeIdentity({ facsDetailStrength: base.facsDetailStrength })}
-            />
+            {/* The override handle only exists in override context — with the
+                primary scene selected there is nothing to override, so no cube. */}
+            {overrideEligible && (
+              <OverrideMark
+                overridden={facsOv}
+                onReset={() => writeIdentity({ facsDetailStrength: base.facsDetailStrength })}
+              />
+            )}
           </Label>
           <NumberField
             className={cn(
@@ -113,10 +117,12 @@ export function IdentitySection({
         <div className="group/ovr">
           <Label className={cn('mb-1', overrideLabelClass(flexOv, overrideEligible))}>
             Flexion strength
-            <OverrideMark
-              overridden={flexOv}
-              onReset={() => writeIdentity({ flexionStrength: base.flexionStrength })}
-            />
+            {overrideEligible && (
+              <OverrideMark
+                overridden={flexOv}
+                onReset={() => writeIdentity({ flexionStrength: base.flexionStrength })}
+              />
+            )}
           </Label>
           <NumberField
             className={cn(
@@ -143,10 +149,12 @@ export function IdentitySection({
               ROM build, so DTH's Lacrimal Fluid material lines up without the manual
               Surfaces-tab step.
             </InfoPopup>
-            <OverrideMark
-              overridden={tearOv}
-              onReset={() => writeIdentity({ applyUE5TearUV: base.applyUE5TearUV })}
-            />
+            {overrideEligible && (
+              <OverrideMark
+                overridden={tearOv}
+                onReset={() => writeIdentity({ applyUE5TearUV: base.applyUE5TearUV })}
+              />
+            )}
           </span>
         </div>
       </fieldset>

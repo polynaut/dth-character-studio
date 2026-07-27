@@ -186,12 +186,15 @@ export function GroomFields({
         </InfoPopup>
         {/* The glyph marks hair like the other Daz-scene fields: it goes green once
             THIS non-primary scene's hair differs from the primary scene's, and reset
-            copies the primary's list back (making them match). */}
-        <OverrideMark
-          overridden={hairOverridden}
-          onReset={() => setNodes(primaryNodes.map((n) => ({ nodeLabel: n.nodeLabel })))}
-          resetTitle="Reset to the primary scene's hair"
-        />
+            copies the primary's list back (making them match). Only rendered in
+            override context — the primary scene has nothing to override. */}
+        {overrideEligible && (
+          <OverrideMark
+            overridden={hairOverridden}
+            onReset={() => setNodes(primaryNodes.map((n) => ({ nodeLabel: n.nodeLabel })))}
+            resetTitle="Reset to the primary scene's hair"
+          />
+        )}
       </div>
       {exporterTooOld && (
         <p className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">

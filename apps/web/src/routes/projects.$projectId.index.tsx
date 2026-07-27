@@ -73,7 +73,7 @@ function ScenePreview({ scenePath }: { scenePath: string }) {
     <img
       src={src}
       alt=""
-      className="aspect-[130/227] w-32 rounded-lg bg-[#565963] object-cover object-top"
+      className="aspect-[130/227] w-32 rounded-lg bg-[#262626] object-cover object-top"
     />
   )
 }
@@ -518,19 +518,6 @@ function ProjectCharactersPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  {/* No manual Gender field: it's DERIVED from the scene (the
-                      figure id for gendered generations, the GP/DK geograft for
-                      G9 — see `genderForScan`), like the Genitalia section. It
-                      still scopes the prefill list, so show it read-only. */}
-                  <Field label="Gender" className="shrink-0" controlId="create-gender-display">
-                    <p
-                      id="create-gender-display"
-                      className="flex h-9 items-center text-sm text-muted-foreground"
-                      title="Read from the scene (its figure / GP-DK geograft) — no manual choice needed"
-                    >
-                      {gender === 'female' ? 'Female' : 'Male'}
-                    </p>
-                  </Field>
                   <Field
                     label={
                       <span className="flex items-center gap-1">
@@ -570,6 +557,20 @@ function ProjectCharactersPage() {
                     </Select>
                   </Field>
                 </div>
+
+                {/* Row 3: the DERIVED gender on its own line — read-only (the
+                    figure id for gendered generations, the GP/DK geograft for
+                    G9 — see `genderForScan`), so it doesn't sit between the two
+                    real selects pretending to be one. */}
+                <Field label="Gender" controlId="create-gender-display">
+                  <p
+                    id="create-gender-display"
+                    className="text-sm text-muted-foreground"
+                    title="Read from the scene (its figure / GP-DK geograft) — no manual choice needed"
+                  >
+                    {gender === 'female' ? 'Female' : 'Male'} — read from the scene
+                  </p>
+                </Field>
               </div>
             </div>
 
@@ -579,7 +580,6 @@ function ProjectCharactersPage() {
               force={createForce}
               onForceChange={setCreateForce}
               forceLabel="Create anyway — a failed check usually means a broken ROM"
-              footnote="Genesis, gender and the Genitalia section are read from the scene automatically. The scene must hold exactly one character with an empty animation timeline — the generated ROM script fills the timeline itself."
             />
 
             {error && <p className="text-sm text-destructive">{error}</p>}
