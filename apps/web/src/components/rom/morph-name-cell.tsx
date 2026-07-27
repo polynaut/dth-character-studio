@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 
-import { cellInputClass } from './cells.tsx'
+import { cellInputClass, menuActiveOptionClass, menuSurfaceClass } from './cells.tsx'
 import { MorphIndexContext } from './contexts.ts'
 import type { IndexedMorphEntry } from './contexts.ts'
 
@@ -172,7 +172,7 @@ export function MorphNameCell({
           id={listboxId}
           role="listbox"
           aria-label="Morph suggestions"
-          className="absolute top-full left-0 z-30 mt-1 max-h-72 w-[30rem] max-w-[80vw] overflow-y-auto rounded-md border bg-popover text-popover-foreground p-1 shadow-lg"
+          className={`absolute top-full left-0 z-30 mt-1 max-h-72 w-[30rem] max-w-[80vw] overflow-y-auto p-1 ${menuSurfaceClass}`}
         >
           {matches.map((e, i) => {
             const hitInternal = e.nameLower.includes(q)
@@ -188,7 +188,7 @@ export function MorphNameCell({
                   optionRefs.current[i] = node
                 }}
                 className={`flex w-full flex-col gap-0.5 rounded-sm px-2 py-1 text-left text-sm ${
-                  i === activeIndex ? 'bg-accent text-accent-foreground' : ''
+                  i === activeIndex ? menuActiveOptionClass : ''
                 }`}
                 onMouseEnter={() => setActive(i)}
                 // mousedown fires BEFORE the input's blur — a plain onClick would

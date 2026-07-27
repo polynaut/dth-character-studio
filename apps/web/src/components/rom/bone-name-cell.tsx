@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 import type { BoneIndexEntry } from '#/lib/rom/api.ts'
 
-import { cellInputClass } from './cells.tsx'
+import { cellInputClass, menuActiveOptionClass, menuSurfaceClass } from './cells.tsx'
 
 /** A bone-index entry with its search keys pre-lowercased once, so the
  *  per-keystroke filter doesn't re-lowercase on every character typed. */
@@ -171,7 +171,7 @@ export function BoneNameCell({
           id={listboxId}
           role="listbox"
           aria-label="Bone suggestions"
-          className="absolute top-full left-0 z-30 mt-1 max-h-72 w-[22rem] max-w-[80vw] overflow-y-auto rounded-md border bg-popover text-popover-foreground p-1 shadow-lg"
+          className={`absolute top-full left-0 z-30 mt-1 max-h-72 w-[22rem] max-w-[80vw] overflow-y-auto p-1 ${menuSurfaceClass}`}
         >
           {matches.map((b, i) => (
             <button
@@ -185,7 +185,7 @@ export function BoneNameCell({
                 optionRefs.current[i] = node
               }}
               className={`flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm ${
-                i === activeIndex ? 'bg-accent text-accent-foreground' : ''
+                i === activeIndex ? menuActiveOptionClass : ''
               }`}
               onMouseEnter={() => setActive(i)}
               // mousedown fires BEFORE the input's blur — a plain onClick would
