@@ -34,7 +34,7 @@
 **Genesis** is set at creation. **Gender** is read from the primary scene — the
 figure id on the gendered generations, the **GP/DK geograft** on the
 gender-neutral G9 (Golden Palace → female, Dicktator → male) — and shown
-read-only; relinking the primary scene re-derives it. The same read drives the
+read-only — set when the primary scene is linked at creation. The same read drives the
 [GEN section](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace---dicktator--the-genitalia-gen-section). All four generations are
 selectable; the deeply validated path is **G9** (and G8.1 on the old pipeline) —
 for the others, DTH ships a subset of pose assets and the studio offers whatever
@@ -159,8 +159,8 @@ where every section lands before anything runs.
 **GEN** is the genital geograft's range of motion. You don't choose the product —
 and you don't even enable the section: it turns itself **on exactly when the
 primary scene contains a Golden Palace / Dicktator geograft** (detected when the
-scene is linked — the toggle is not hand-operable, and relinking the primary
-re-detects). The graft found is also what derives the character's **Gender**.
+scene is linked at creation — the toggle is not hand-operable). The graft found
+is also what derives the character's **Gender**.
 Our example is a G9 Female with Golden Palace, so her GEN section covers Golden
 Palace.
 
