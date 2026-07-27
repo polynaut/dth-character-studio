@@ -9,7 +9,12 @@ import {
   groomPillClass,
 } from '#/components/character/groom-kind.tsx'
 import { labelsKey } from '#/lib/preserve-diff.ts'
-import { MIN_GROOM_EXPORTER_VERSION, exporterSupportsGroomHide } from '@dth/rom'
+import {
+  MIN_GROOM_EXPORTER_VERSION,
+  exporterSupportsGroomHide,
+  sceneOverrideSchema,
+  sceneRecordEmpty,
+} from '@dth/rom'
 
 import * as api from '#/lib/rom/api.ts'
 
@@ -28,9 +33,9 @@ function refKey(ref: string): string {
 
 /**
  * The hair (groom) block of the character editor's identity card. Hair is stored
- * PER SCENE (`groomScenes`) — a scene's listed items ARE its hair, none listed
- * means none (empty scenes are dropped at generation); generation bakes each scene's
- * own list. It carries the Daz-scene cube glyph like the other overridable fields,
+ * PER SCENE (the scene record's `hair` list) — a scene's listed items ARE its
+ * hair, none listed means none (empty lists drop their record when nothing else
+ * lives on it); generation bakes each scene's own list. It carries the Daz-scene cube glyph like the other overridable fields,
  * and marks as overridden the same way they do: the glyph goes green once THIS
  * non-primary scene's hair DIFFERS from the primary scene's (compared as a set), and
  * its reset copies the primary's list back. This edits the SELECTED scene card's
@@ -76,7 +81,7 @@ export function GroomFields({
 
   // Groom exclusion is hide-only: an Exporter Plugin below MIN_GROOM_EXPORTER_VERSION
   // doesn't unparent the hidden items, so the hair would leak into the FBX.
-  const hasGroom = character.groomScenes.some((g) => g.nodes.length > 0)
+  const hasGroom = character.sceneOverrides.some((o) => o.hair.length > 0)
 
   // Read the installed plugin version only when this character actually lists hair.
   useEffect(() => {
@@ -116,15 +121,19 @@ export function GroomFields({
     })
   }, [selectedScene])
 
-  const entry = character.groomScenes.find((g) => g.scenePath === selectedScene)
-  const nodes = entry?.nodes ?? []
-  const setNodes = (next: Array<{ nodeLabel: string }>) =>
-    patch({
-      groomScenes: [
-        ...character.groomScenes.filter((g) => g.scenePath !== selectedScene),
-        ...(next.length > 0 ? [{ scenePath: selectedScene, nodes: next }] : []),
-      ],
-    })
+  const nodes = character.sceneOverrides.find((o) => o.scenePath === selectedScene)?.hair ?? []
+  // Hair rides the scene's record: replace its `hair` list, minting the record
+  // when the scene has none yet and dropping it again when nothing else lives on
+  // it (an empty record means exactly what no record means).
+  const setNodes = (next: Array<{ nodeLabel: string }>) => {
+    const existing = character.sceneOverrides.find((o) => o.scenePath === selectedScene)
+    const record = {
+      ...(existing ?? sceneOverrideSchema.parse({ scenePath: selectedScene })),
+      hair: next,
+    }
+    const others = character.sceneOverrides.filter((o) => o.scenePath !== selectedScene)
+    patch({ sceneOverrides: sceneRecordEmpty(record) ? others : [...others, record] })
+  }
 
   const ids = new Set(wearables.map((wearable) => wearable.id))
   const listed = nodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
@@ -136,7 +145,7 @@ export function GroomFields({
   // again. (An empty list against a primary that has hair still differs — a
   // deliberately bald outfit scene reads as overridden too.)
   const primaryNodes =
-    character.groomScenes.find((g) => g.scenePath === character.scenePath)?.nodes ?? []
+    character.sceneOverrides.find((o) => o.scenePath === character.scenePath)?.hair ?? []
   const primaryListed = primaryNodes
     .map((groom) => groom.nodeLabel.trim())
     .filter((label) => label !== '')

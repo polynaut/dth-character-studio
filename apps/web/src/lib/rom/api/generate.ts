@@ -16,6 +16,7 @@ import {
   poseAssetFileName,
   resolveRomPaths,
   sceneOverrideSlug,
+  sceneRomArmed,
 } from '@dth/rom'
 import * as storage from '../storage'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
@@ -276,7 +277,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   const sceneRomPaths: Record<string, RomPaths> = {}
   const sceneFrames: Record<string, PresetFrames> = {}
   for (const override of activeSceneOverrides(versioned)) {
-    if (!override.enabled) continue
+    if (!sceneRomArmed(override)) continue
     const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
     if (!key) continue
     const merged = mergeSceneOverride(versioned, override)

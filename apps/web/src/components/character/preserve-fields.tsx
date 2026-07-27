@@ -23,8 +23,8 @@ const MORPH_FIELD_CLASS =
  * overridden: ONE mark in the label (like the other fields) that goes green with a
  * reset reverting the list to the primary. A green border still marks each differing
  * row. Rows are matched to the base by their natural identity (morph name / node
- * label), so reordering never mismarks them. `writePreserve` derives the
- * `preserve.enabled` gate from "the list differs".
+ * label), so reordering never mismarks them. `writePreserve` keeps the
+ * `preserve` block present exactly while a list differs (presence = armed).
  */
 export function PreserveFields({
   character,
@@ -41,17 +41,14 @@ export function PreserveFields({
   sceneOverride: SceneOverride | undefined
   /** Implicit-override writer for the preserve lists (from useSceneSelection). */
   writePreserve: (next: {
-    morphs?: SceneOverride['preserve']['morphs']
-    nodeTransforms?: SceneOverride['preserve']['nodeTransforms']
+    morphs?: NonNullable<SceneOverride['preserve']>['morphs']
+    nodeTransforms?: NonNullable<SceneOverride['preserve']>['nodeTransforms']
   }) => void
   /** The scanned morph index — powers the Morph-name autocomplete, same as ROM. */
   morphIndex: Array<MorphIndexEntry>
 }) {
-  // The active preserve override (only when armed for this non-primary scene).
-  const ov =
-    overrideEligible && sceneOverride && sceneOverride.preserve.enabled
-      ? sceneOverride.preserve
-      : undefined
+  // The active preserve override — armed by PRESENCE for this non-primary scene.
+  const ov = overrideEligible ? sceneOverride?.preserve : undefined
   const morphs = ov ? ov.morphs : character.preserveMorphs
   const nodes = ov ? ov.nodeTransforms : character.preserveNodeTransforms
   const setMorphs = (next: Character['preserveMorphs']) =>

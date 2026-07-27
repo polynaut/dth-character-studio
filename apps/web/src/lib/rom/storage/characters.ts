@@ -62,7 +62,8 @@ export function repointCharacterPaths(
     extraScenes: character.extraScenes.map(repoint),
     houdiniProjects: character.houdiniProjects.map(repoint),
     imageScene: repoint(character.imageScene),
-    groomScenes: character.groomScenes.map((g) => ({ ...g, scenePath: repoint(g.scenePath) })),
+    // ONE per-scene keyed structure since schema v24 — hair rides the record,
+    // so repointing the record's scenePath carries it (no second map to sync).
     sceneOverrides: character.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),
     // A custom base-ROM `.duf` (JCM custom mode) copied into the character
     // folder travels with it too — omitting it broke the custom ROM on every

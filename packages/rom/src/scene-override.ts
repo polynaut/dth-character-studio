@@ -16,6 +16,20 @@ export function sceneRomArmed(override: Pick<SceneOverride, 'rom'>): boolean {
   return Object.keys(override.rom).length > 0
 }
 
+/** A record carrying nothing at all — no ROM entry, no hair, no armed panel.
+ *  The editor's writers drop such records instead of storing them: an empty
+ *  record means exactly what NO record means, and pruning is what keeps the
+ *  character JSON free of dead per-scene stubs (the point of schema v24). */
+export function sceneRecordEmpty(override: SceneOverride): boolean {
+  return (
+    !sceneRomArmed(override) &&
+    override.hair.length === 0 &&
+    override.identity === undefined &&
+    override.preserve === undefined &&
+    override.jcm === undefined
+  )
+}
+
 /**
  * The sections a scene record actually compiles to. Per SECTION (schema v24 —
  * each section's whole divergence lives at its one `rom` key):
