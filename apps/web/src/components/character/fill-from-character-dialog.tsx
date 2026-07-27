@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { PaintBucket } from 'lucide-react'
 
-import { Button, Modal } from '@dth/ui'
+import { Button, cn, Modal } from '@dth/ui'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
 import { fillSectionsFrom, filledSections, sectionContentSummary } from '#/lib/fill-sections.ts'
 import { SECTION_LABELS } from '@dth/rom'
@@ -105,6 +105,11 @@ export function FillFromCharacterDialog({
       open
       onClose={onClose}
       title={step === 'pick' ? 'Fill ROM from character' : `Fill from “${source?.name ?? ''}”`}
+      // A flex column whose LIST is the only scroller (overflow-hidden replaces
+      // the shell's own overflow-y-auto via tailwind-merge), so the title, intro
+      // and footer buttons stay pinned while a big character list scrolls. With
+      // many candidates the dialog also widens.
+      className={cn('flex flex-col overflow-hidden', candidates.length > 8 && 'max-w-3xl')}
     >
       {step === 'pick' ? (
         <>
@@ -122,7 +127,7 @@ export function FillFromCharacterDialog({
             </p>
           )}
           {candidates.length > 0 && (
-            <div className="max-h-80 space-y-3 overflow-y-auto">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
               {groups.map((group) => (
                 <div key={group.projectId}>
                   <p className="mb-1 text-xs font-medium text-muted-foreground">
@@ -179,7 +184,7 @@ export function FillFromCharacterDialog({
             “{source?.name}”’s. Unchecked sections stay untouched — and nothing is saved until you
             save the character.
           </p>
-          <ul className="space-y-1">
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
             {offered.map((section) => (
               <li key={section}>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
