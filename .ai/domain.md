@@ -70,20 +70,29 @@ offsets byte-identically — if a generation change moves them, the change is wr
   slugs across scenes are refused at save. The legacy per-scene scripts are swept
   on the next save/refresh.
 - **Per-scene ROM overrides are implicit — arm on edit, disarm on revert, escalate on
-  restructure.** With a non-primary scene selected the ROM grid edits into a
-  `SceneOverride` (no toggle). A **value** edit of a base row upserts its override copy
-  (green row); editing it back to the base *content* drops the copy again
-  (`rom-sections.tsx` `overrideCtl.upsertPose` compares against the base pose with
-  `romPoseEqual` from `@dth/rom` and drops instead of storing) — mirroring the identity/
-  preserve writers (`use-scene-selection.ts`), which likewise derive `enabled` from
-  "differs from base". Appended rows live in `additions` (auto-track later base edits).
+  restructure.** Since schema v24 a `SceneOverride` record holds ONE section-keyed
+  `rom` map — `rom[SECTION] = {enabled?, owned?, replaced[], added[]}` — plus `hair`
+  and the presence-armed `identity`/`preserve`/`jcm` blocks; every stored boolean
+  gate is gone (a block/entry EXISTING is the arming — `sceneRomArmed`), and both
+  layers self-prune: an entry left carrying nothing drops from `rom`
+  (`updateRomEntry`, `rom-sections.tsx`), a record left carrying nothing drops from
+  `sceneOverrides` (`sceneRecordEmpty`). With a non-primary scene selected the ROM
+  grid edits into that record (no toggle). A **value** edit of a base row upserts
+  its override copy into its section's `replaced` (green row; the controller derives
+  the section from the base pose/group-id maps — the group editors stay
+  section-blind); editing it back to the base *content* drops the copy again
+  (`overrideCtl.upsertPose` compares with `romPoseEqual` and drops instead of
+  storing) — mirroring the identity/preserve writers (`use-scene-selection.ts`),
+  which keep their block present exactly while a value differs from the base.
+  Appended rows live in the entry's `added` (auto-track later base edits).
   ANY other section edit the sparse layer can't hold — a **structural** row change
   (reorder / insert-between / delete a frame / add a group) OR a **config** change (mode,
   preset asset, GEN art direction, custom JCM path) — ESCALATES the section: the ONE
   writer `patchSectionForScene` (`rom-sections.tsx`) snapshots the merged section config +
-  applies the patch into `sceneOverride.sectionOverrides` as `{section, config:
-  RomSectionConfig}` (the scene OWNS the whole config, dropping its sparse entries);
-  `applySceneOverride` uses that config verbatim. Every config control (mode Select, preset
+  applies the patch into the entry's `owned` (the scene OWNS the whole config), clearing
+  `replaced`/`added` AND the `enabled` overlay at the same key — dead sparse layers
+  structurally can't linger under an owned section; `applySceneOverride` uses the owned
+  config verbatim. Every config control (mode Select, preset
   picker, art-direction editor, JCM path, Add group / Import) is live on a non-primary scene
   and routes through it — so a scene can override anything in the ROM, with ONE exception:
   a **scene-gated section's enable state** (`SCENE_GATED_SECTIONS` in `rom-sections.tsx`,
@@ -91,20 +100,22 @@ offsets byte-identically — if a generation change moves them, the change is wr
   derived by `primarySceneDerivation` at character create / primary relink (the geografts
   add bones and all scenes share one skeleton, which the add-scene validation enforces) —
   so its toggle is permanently disabled everywhere (`onSectionEnabledChange` no-ops as the
-  backstop; a per-scene `sectionEnabled` overlay is refused). The section's CONTENT stays
+  backstop; a per-scene enable overlay is refused). The section's CONTENT stays
   per-scene-overridable like any other section's (e.g. a different GEN art direction per
-  outfit scene); a stale enable-override from before the gating still shows the green mark
-  so its reset stays reachable. Per-field green comes
+  outfit scene). Per-field green comes
   from a merged-vs-base diff (art-direction frames, preset assets, custom path); the section
-  title's `OverrideMark` reset drops all of the section's override layers.
-  A section's **enable/disable** stays a lightweight overlay (`sceneOverride.sectionEnabled`,
-  `{section, enabled}[]`): `applySceneOverride` flips `enabled` on top of whichever config
-  (base or owned) applies, so a plain toggle doesn't "own"/freeze the section. The **JCM
-  "Modify frames"** grid is overridable too (`sceneOverride.jcm = {enabled, mods}`, a full
-  replacement like `preserve`). `onOverrideChange` (`rom-editor-section.tsx`) derives the ROM
-  gate from "has any rows / sectionOverride / sectionEnabled / jcm"; `sceneOverrideBuildsRom`
-  is now STRUCTURAL (merged-vs-base frame-layout signature), so an art-direction- or jcm-only
+  title's `OverrideMark` reset deletes the section's whole `rom` entry (all layers live at
+  that one key), plus the `jcm` block for JCM. A section's **enable/disable** stays a
+  lightweight overlay (the entry's `enabled`, stored only while it differs from the base):
+  `applySceneOverride` flips `enabled` LAST over whichever config (base or owned) applies,
+  so a plain toggle doesn't "own"/freeze the section. The **JCM "Modify frames"** grid is
+  overridable too (`sceneOverride.jcm = mods[]`, present iff it differs from the base — a
+  full replacement like `preserve`). `sceneOverrideBuildsRom`
+  is STRUCTURAL (merged-vs-base frame-layout signature), so an art-direction- or jcm-only
   override rides the base CSV. NB the grid value is a Daz **percentage** (`valueToPct`).
+  **Hair** rides the record too (`hair: [{nodeLabel}]` — the pre-v24 character-level
+  `groomScenes` map folded in; the primary scene may carry a hair-only record), and never
+  arms the override (`activeSceneOverrides` ignores it).
 
   **Generation** (`dsa.ts`): one `buildCharacterConfig(character, romPaths, frames, …)` builds
   the full `dthCharacterConfig`; `buildSceneConfigMap` emits each scene's delta as the
