@@ -568,8 +568,10 @@ test('project-unreal-footer', async ({ page }) => {
 
 test('character-create-panel', async ({ page }) => {
   // The picker returns the demo scene, so choosing it fills the create form
-  // (scene preview, name, Genesis/Gender, ROM prefill) instead of staying empty.
-  await openProject(page, { dialogPath: P.scene })
+  // (scene preview, name, Genesis, the Fill-from-character button) instead of
+  // staying empty. The GP geograft makes the Gender row read ♀ female — the
+  // documented scene derivation, not the mock's Unknown fallback.
+  await openProject(page, { dialogPath: P.scene, sceneGpGeograft: true })
   await page.getByRole('button', { name: 'Add', exact: true }).first().click()
   await page.getByRole('button', { name: /Choose Daz scene/ }).click()
   await page.getByText('Character name').waitFor()

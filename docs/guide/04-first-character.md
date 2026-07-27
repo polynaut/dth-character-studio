@@ -18,8 +18,11 @@
    check explains itself on hover and blocks **Create** behind a *Create
    anyway* switch.
 3. Name it (the name becomes its folder in the project).
-4. **ROM prefill** — start **Empty** for a first character, or prefill from any
-   of your own characters (across projects) to copy a working ROM definition.
+4. **Fill from character** (optional) — a first character starts empty; from the
+   second on, the wizard copies a working ROM definition from any of your
+   characters across projects: pick the source, then check which of its filled
+   sections to copy (Retargeting always rides with JCM), plus optionally its
+   *Modify JCM frames* rules and preserve lists.
 5. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
@@ -508,6 +511,21 @@ After a ROM run in Daz had problems (a missing morph, a failed preset), a
 frame with its reason. Clicking an entry **jumps to and highlights the pose row**
 (failed rows are also tinted red in the tables). **Dismiss** clears it; a clean
 run clears it automatically.
+
+</td></tr></table>
+</details>
+
+<details>
+<summary><strong>Filling the ROM from another character</strong></summary>
+<table><tr><td>
+
+**Operations → Fill from character** opens a two-step wizard: pick a source
+character from any of your projects (same generation and gender), then check
+which of its filled ROM sections to copy — plus, optionally, its *Modify JCM
+frames* rules and preserve lists. The checked sections **replace** this
+character's current config in the editor draft; nothing lands on disk until you
+save. GEN keeps this character's own scene-derived Golden Palace / Dicktator
+setup, and Retargeting always rides with JCM.
 
 </td></tr></table>
 </details>

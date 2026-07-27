@@ -50,7 +50,7 @@ documentation for the Houdini → Unreal leg.
 ---
 
 **That's it — first character, first ROM, both sides in sync.** From the second
-character on, the loop is just: *Add character → prefill from the first → adjust
+character on, the loop is just: *Add character → Fill from character → adjust
 morphs → Save → run the script.*
 
 [← Build the ROM in Daz](./05-rom-in-daz.md) · [Guide overview](./README.md)
