@@ -1,5 +1,16 @@
 # @dth/web
 
+## 0.46.1
+
+### Patch Changes
+
+- [#534](https://github.com/polynaut/dth-character-studio/pull/534) [`bb9210c`](https://github.com/polynaut/dth-character-studio/commit/bb9210c7e20d47a99de586593617884ab21992c2) Thanks [@polynaut](https://github.com/polynaut)! - The Unreal project card's buttons swapped places: the install-DTH-content
+  button sits inside, the open-in-Unreal button at the very right edge of the
+  card — the primary action lands where the card ends.
+- Updated dependencies []:
+  - @dth/rom@0.46.1
+  - @dth/ui@0.46.1
+
 ## 0.46.0
 
 ### Minor Changes
