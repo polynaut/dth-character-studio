@@ -111,12 +111,12 @@ export function ScanCsvPickerDialog({
           ))}
         </ul>
       )}
-      <div className="flex justify-between gap-2">
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" className="mr-auto" onClick={onClose}>
+          Cancel
+        </Button>
         <Button variant="outline" onClick={onBrowse}>
           <FolderOpen /> Browse…
-        </Button>
-        <Button variant="outline" onClick={onClose}>
-          Cancel
         </Button>
       </div>
     </Modal>

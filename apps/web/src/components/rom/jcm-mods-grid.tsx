@@ -151,12 +151,16 @@ export function JcmModsGrid({
   mods,
   onChange,
   boneIndex,
+  onClear,
 }: {
   mods: Array<JcmMorphMod>
   onChange: (mods: Array<JcmMorphMod>) => void
   /** Scanned bones for this generation — enables the bone-name autocomplete when
    *  a Scan_Morphs_<Genesis> run has produced an index. */
   boneIndex?: Array<BoneIndexEntry>
+  /** Requests clearing ALL rules — the host owns the confirm dialog (and what
+   *  "all" means on a non-primary scene). Renders the Clear button when set. */
+  onClear?: () => void
 }) {
   const [openGrid, setOpenGrid] = useState(false)
   // Pre-lowercase the bone list once here, shared across every rule's cell.
@@ -361,13 +365,26 @@ export function JcmModsGrid({
               </div>
             </div>
           ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onChange([...mods, { id: newId(), boneLabel: '', axis: 'XRotate', drives: [] }])}
-          >
-            <Plus /> Add rule
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onChange([...mods, { id: newId(), boneLabel: '', axis: 'XRotate', drives: [] }])}
+            >
+              <Plus /> Add rule
+            </Button>
+            {onClear && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                disabled={mods.length === 0}
+                onClick={onClear}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </div>

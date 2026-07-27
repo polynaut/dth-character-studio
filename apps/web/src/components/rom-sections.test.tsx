@@ -900,4 +900,66 @@ describe('Modify JCM frames (jcmMorphMods grid)', () => {
     expect(typeof mods[1].id).toBe('string')
     expect(mods[1].id).not.toBe('')
   })
+
+  it('Clear empties the rule list, gated behind the confirm modal', () => {
+    let mods: Array<import('@dth/rom').JcmMorphMod> = [
+      { id: 'rule-0', boneLabel: 'Left Thigh Bend', axis: 'XRotate', drives: [] },
+    ]
+    render(
+      <RomSections
+        sections={defaultSections()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 0, dk: 0, phys: 0 }}
+        jcmMorphMods={mods}
+        onJcmMorphModsChange={(next) => {
+          mods = next
+        }}
+        onChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByText('Joint Corrective'))
+    fireEvent.click(screen.getByText('Modify JCM frames'))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    // The modal gates the clear — nothing happened yet.
+    expect(mods).toHaveLength(1)
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Clear all rules?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear' }))
+    expect(mods).toEqual([])
+  })
+})
+
+describe('Clear a custom section', () => {
+  it('empties the whole custom definition, gated behind the confirm modal', () => {
+    let next: RomSectionsModel | null = null
+    render(
+      <RomSections
+        sections={sectionsWithMultiMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        onChange={(s) => {
+          next = s
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    // The modal gates the clear — nothing happened yet; Cancel keeps everything.
+    expect(next).toBeNull()
+    let dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Clear Full Body?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(next).toBeNull()
+    // Confirmed clear drops every group and frame of the section.
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear' }))
+    expect(next!.FBM.groups).toEqual([])
+  })
 })

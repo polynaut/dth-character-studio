@@ -21,13 +21,13 @@ import {
   resolvePresetFrames,
 } from '#/lib/rom/api.ts'
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
-import { DeleteCharacterSection } from '#/components/character/delete-character-section.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
 import { RomEditorSection } from '#/components/character/rom-editor-section.tsx'
+import { CharacterOperationsSection } from '#/components/character/operations-section.tsx'
 import { RomRunLogReport } from '#/components/character/rom-run-log-report.tsx'
 import { SceneFooter, type SceneDockActions } from '#/components/character/scene-footer.tsx'
 import { ScriptsSection } from '#/components/character/scripts-section.tsx'
@@ -555,9 +555,10 @@ function CharacterPage() {
 
       <ScriptsSection character={character} scriptsPath={scriptsPath} />
 
-      <DeleteCharacterSection
+      <CharacterOperationsSection
         projectId={projectId}
         character={character}
+        patch={patch}
         dazSubdir={project?.dazSubdir ?? 'daz3d'}
         houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
         bypassUnsavedGuard={draft.unsavedGuard.bypass}

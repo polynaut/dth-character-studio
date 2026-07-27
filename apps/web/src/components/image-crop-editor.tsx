@@ -161,18 +161,16 @@ export function ImageCropEditor({
           />
         </label>
       )}
-      <div className="flex w-full items-center justify-between gap-2">
+      <div className="flex w-full items-center justify-end gap-2">
+        <Button variant="ghost" className="mr-auto" onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
         <span className="text-xs text-muted-foreground">
           Saved as {output}×{output}
         </span>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={applyCrop} disabled={busy}>
-            {busy ? 'Saving…' : 'Use this crop'}
-          </Button>
-        </div>
+        <Button onClick={applyCrop} disabled={busy}>
+          {busy ? 'Saving…' : 'Use this crop'}
+        </Button>
       </div>
     </div>
   )
