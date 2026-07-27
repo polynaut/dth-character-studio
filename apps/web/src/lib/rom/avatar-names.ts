@@ -69,6 +69,9 @@ export function uploadsNewestFirst(fileNames: Array<string>, id: string): Array<
  * rest — but NEVER `activeKeep` (the just-written / currently-referenced file),
  * and never files this scheme doesn't recognize (legacy names are left intact
  * rather than risk deleting a still-referenced avatar we can't classify).
+ * `.src` siblings (see {@link avatarSourceName}) don't parse as avatars, so
+ * they're invisible here — they're pruned in tandem with their master instead
+ * (see api/avatars.ts), keeping the store bounded.
  */
 export function avatarsToPrune(
   fileNames: Array<string>,
@@ -88,4 +91,36 @@ export function avatarsToPrune(
       .forEach((e) => keep.add(e.name))
   }
   return mine.map((e) => e.name).filter((name) => !keep.has(name))
+}
+
+/**
+ * The PRISTINE-SOURCE sibling of a stored master: `<name>.<ext>` →
+ * `<name>.src.<ext>`. Written when an UPLOAD's master gets upscaled in place —
+ * the upscale replaces the user's original and nothing else holds a copy — so
+ * the master can always be re-derived by the CURRENT pipeline. Scene avatars
+ * store no sibling: their pristine 256² tip always sits beside the linked/copied
+ * scene. `.src` names deliberately do NOT parse as avatars
+ * ({@link parseAvatarName} needs digits before the extension), so they never
+ * show up in the gallery or the master-retention logic.
+ */
+export function avatarSourceName(masterName: string): string {
+  return masterName.replace(/\.([a-z0-9]+)$/i, '.src.$1')
+}
+
+/** The master a `.src` sibling belongs to (`<name>.src.<ext>` → `<name>.<ext>`),
+ *  or null when `fileName` isn't a source sibling. */
+export function avatarSourceMaster(fileName: string): string | null {
+  const m = /^(.+)\.src\.([a-z0-9]+)$/i.exec(fileName)
+  return m ? `${m[1]}.${m[2]}` : null
+}
+
+/** The `.src` siblings to DELETE: every source file whose master is no longer in
+ *  `fileNames` (pruned by {@link avatarsToPrune}, or gone earlier). Keeps each
+ *  source exactly as long as its master lives. */
+export function orphanedAvatarSources(fileNames: Array<string>): Array<string> {
+  const present = new Set(fileNames)
+  return fileNames.filter((name) => {
+    const master = avatarSourceMaster(name)
+    return master !== null && !present.has(master)
+  })
 }

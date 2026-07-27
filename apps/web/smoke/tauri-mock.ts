@@ -72,6 +72,15 @@ export function installTauriMock(seed: TauriMockSeed): void {
   }
   /** The base64 payload of a binary entry stored as a data:URL, else undefined. */
   const dataUrlB64 = (content: string) => /^data:[^,]*;base64,(.*)$/s.exec(content)?.[1]
+  /** A stored file as raw bytes: a binary entry (seeded/written as a
+   *  `data:…;base64,…` URL, e.g. a scene `.tip.png`) returns its real decoded
+   *  bytes — text-encoding binary would corrupt it; text is UTF-8 encoded. */
+  const readBytes = (p: string): ArrayBuffer => {
+    const content = mustRead(p)
+    const b64 = dataUrlB64(content)
+    if (b64) return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer
+    return new TextEncoder().encode(content).buffer
+  }
   /** Immediate children of a dir, from the file map + explicit mkdirs. */
   const listDir = (p: string) => {
     if (!isDir(p)) throw new Error(`[tauri-mock] no such directory: ${p}`)
@@ -135,16 +144,9 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'plugin:fs|exists':
         return isFile(norm(args.path)) || isDir(norm(args.path))
       case 'plugin:fs|read_text_file':
-      case 'plugin:fs|read_file': {
+      case 'plugin:fs|read_file':
         // The wrapper expects BYTES (ArrayBuffer / number[]) and decodes itself.
-        const content = mustRead(norm(args.path))
-        // A file seeded as a `data:…;base64,…` URL (e.g. a scene `.tip.png`
-        // thumbnail) returns its real decoded bytes — text-encoding binary would
-        // corrupt it.
-        const b64 = dataUrlB64(content)
-        if (b64) return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer
-        return new TextEncoder().encode(content).buffer
-      }
+        return readBytes(norm(args.path))
       case 'plugin:fs|write_text_file':
       case 'plugin:fs|write_file': {
         // The payload arrives as raw bytes. Text stays a plain string in the
@@ -246,6 +248,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // written (`false` = "nothing upscaled"). Keeps avatar-set flows off the
         // unhandled-command guard.
         return false
+      case 'downscale_avatar_png':
+        // Ditto: return the stored avatar bytes unchanged (the real command's own
+        // "source already ≤ size" path). The header's exact-size variant then
+        // just equals the full image.
+        return readBytes(norm(args.path))
       case 'probe_locked_files':
         return seed.lockedFiles ?? []
       case 'open_project_window': // opens a separate OS window on the desktop —

@@ -6,7 +6,9 @@ import * as storage from '../storage'
 import {
   avatarFileName,
   avatarIdOf,
+  avatarSourceName,
   avatarsToPrune,
+  orphanedAvatarSources,
   parseAvatarName,
   uploadsNewestFirst,
 } from '../avatar-names'
@@ -71,14 +73,30 @@ export async function writeAvatarBytes(
   // like the fs writes above.
   if (isTauri()) {
     try {
-      await invoke('upscale_avatar_file', { path: filePath })
+      const upscaled = await invoke<boolean>('upscale_avatar_file', { path: filePath })
+      // An UPLOAD's upscale REPLACED the pristine bytes and nothing else holds a
+      // copy — keep them as a `.src` sibling so the master can always be
+      // re-derived by the current pipeline (Ctrl + Refresh assets, or a future
+      // better upscaler). Scene avatars need none: their pristine 256² tip
+      // always sits beside the linked/copied scene (the .duf travels with its
+      // sidecars). A no-op upscale (source ≥768²) needs none either: the stored
+      // master IS the original.
+      if (upscaled === true && kind === 'up') {
+        await writeFile(joinPath(dir, avatarSourceName(fileName)), bytes)
+      }
     } catch (e) {
       console.warn('avatar upscale failed; keeping the original image', e)
     }
   }
   const entries = (await readDir(dir)).filter((e) => e.isFile).map((e) => e.name)
+  const pruned = avatarsToPrune(entries, id, fileName)
+  // Prune `.src` siblings in tandem with their master: sources of just-pruned or
+  // already-gone masters go too, so the store stays bounded (retention rides the
+  // master's own retention — see avatar-names).
+  const prunedSet = new Set(pruned)
+  const orphanedSources = orphanedAvatarSources(entries.filter((e) => !prunedSet.has(e)))
   await Promise.all(
-    avatarsToPrune(entries, id, fileName).map((name) => remove(joinPath(dir, name))),
+    [...pruned, ...orphanedSources].map((name) => remove(joinPath(dir, name))),
   )
   return fileName
 }
@@ -243,11 +261,13 @@ function imageDataUrl(bytes: Uint8Array, fileName: string): string {
 // avatar replacement accreted another one for the whole session.
 const imageSrcCache = new Map<string, string>()
 
-/** Drop every cached avatar data URL. Used after Refresh assets upscales avatars
- *  IN PLACE (same filename, new bytes): the cache is keyed by filename, so without
- *  this it would keep serving the pre-upscale 256² URL until the next reload. */
+/** Drop every cached avatar data URL — the full-image cache AND the per-size
+ *  variant cache. Used after Refresh assets rewrites avatars IN PLACE (same
+ *  filename, new bytes): both caches are keyed by filename, so without this they
+ *  would keep serving the pre-rewrite bytes until the next reload. */
 export function clearImageSrcCache(): void {
   imageSrcCache.clear()
+  variantSrcCache.clear()
 }
 
 /** Drop the cached data URLs of a character's SUPERSEDED avatars: every entry
@@ -283,6 +303,34 @@ export async function resolveImageSrc(image: string): Promise<string> {
   }
 }
 
+const variantSrcCache = new Map<string, string>()
+
+/**
+ * Like {@link resolveImageSrc}, but the stored avatar is first Lanczos3-downscaled
+ * (in Rust) to `sizePx`² — the exact pixels the header paints it (its CSS px × the
+ * screen DPR) — so the webview paints it 1:1 with no aliasing-prone GPU resampling
+ * of a bigger texture. The Lanczos low-pass anti-aliases the xBRZ'd master's hard
+ * edges. Falls back to the full image in a plain browser (no native downscale), for
+ * an external/empty ref, or on any failure.
+ */
+export async function resolveImageSrcAtSize(image: string, sizePx: number): Promise<string> {
+  if (!image || sizePx <= 0 || isExternalImage(image) || !isTauri()) return resolveImageSrc(image)
+  const projectDir = await getActiveProjectDir()
+  if (!projectDir) return ''
+  const key = `${projectDir}|${image}@${sizePx}`
+  const cached = variantSrcCache.get(key)
+  if (cached) return cached
+  try {
+    const path = joinPath(storage.metaImagesDir(projectDir), image)
+    const buf = await invoke<ArrayBuffer>('downscale_avatar_png', { path, size: sizePx })
+    const url = imageDataUrl(new Uint8Array(buf), image)
+    variantSrcCache.set(key, url)
+    return url
+  } catch {
+    return resolveImageSrc(image)
+  }
+}
+
 /**
  * Upscale a character's STORED avatar to 768² IN PLACE if it's a local image
  * still below that — the migration path for avatars written before the
@@ -297,6 +345,67 @@ export async function upscaleStoredAvatar(projectDir: string, image: string): Pr
   try {
     const path = joinPath(storage.metaImagesDir(projectDir), image)
     return (await invoke<boolean>('upscale_avatar_file', { path })) === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Re-derive a character's avatar master from its PRISTINE source: overwrite the
+ * stored master IN PLACE (same filename — no character re-save, every stored
+ * reference stays valid) with the original small bytes, then re-run the native
+ * upscale (flatten onto the tile bg → xBRZ → 768²). The Ctrl+Refresh-assets path
+ * for masters written by an OLDER pipeline: an upscaled master is a no-op to
+ * `upscale_avatar_file`, so rebuilding from the source is the only way old
+ * masters pick up pipeline improvements.
+ *
+ * The pristine source per kind: an UPLOAD reads its stored `.src` sibling (the
+ * only copy — the in-place upscale replaced the original). A SCENE avatar reads
+ * its scene's 256² tip, which always sits beside the linked/copied scene (the
+ * .duf travels with its sidecars — no duplicate is stored): the recorded
+ * `imageScene`'s tip, or for a LEGACY `sc` avatar without one (the auto-sync
+ * can't back-fill it — its byte-compare can never match a tip against an
+ * upscaled master) the first linked scene with a tip, primary first.
+ * Best-effort: false when there's no source; a failed upscale RESTORES the
+ * previous master (never leaves a raw 256² behind).
+ */
+export async function rebuildAvatarMaster(
+  projectDir: string,
+  character: { image: string; imageScene: string; scenePath: string; extraScenes: Array<string> },
+): Promise<boolean> {
+  const { image, imageScene } = character
+  if (!image || isExternalImage(image) || !isTauri()) return false
+  try {
+    const kind = parseAvatarName(image)?.kind
+    const dir = storage.metaImagesDir(projectDir)
+    const path = joinPath(dir, image)
+    if (!(await exists(path))) return false
+    let source = ''
+    if (kind === 'up') {
+      const srcPath = joinPath(dir, avatarSourceName(image))
+      if (await exists(srcPath)) source = srcPath
+    } else if (kind === 'sc') {
+      if (imageScene) {
+        // A recorded source whose tip is gone means the scene itself moved/broke —
+        // don't guess another scene (that would silently change the avatar).
+        source = await findTipImage(imageScene)
+      } else {
+        for (const scene of [character.scenePath, ...character.extraScenes]) {
+          if (scene && (source = await findTipImage(scene))) break
+        }
+      }
+    }
+    if (!source) return false
+    const previous = await readFile(path)
+    await writeFile(path, await readFile(source))
+    try {
+      await invoke('upscale_avatar_file', { path })
+    } catch (e) {
+      await writeFile(path, previous)
+      console.warn('avatar rebuild failed; restored the previous master', e)
+      return false
+    }
+    return true
   } catch {
     return false
   }

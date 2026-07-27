@@ -296,6 +296,28 @@ current code before relying on details, but assume the *lesson* still holds.
   that the reservation used to hide. `width: 100vw` "fixes" the gap in Playwright's
   overlay-scrollbar harness but re-introduces the classic 100vw horizontal-scroll
   bug under real (Windows/WebView2) scrollbars — measure both states before trusting a fix.
+- **A CSS `scale`/`transform: scale()` rasterises the element at its LAYOUT size,
+  then GPU-upscales that texture** — so an image shown via an up-scale is soft /
+  aliased even from a high-res source. The header avatar rested at `scale: 1.55`
+  (204px laid out → a 204px texture stretched to ~316px). Fix: lay the element out
+  at the painted size (316px) and rest at `scale: 1` so the browser resamples the
+  768px source straight to size; animate the zoom FROM 1 (see `editor-header.tsx`
+  + `dth-avatar-zoom`). Two traps when sizing an `<img>` up: Tailwind preflight's
+  `img { max-width: 100% }` silently CAPS an explicit width back to the container
+  (needs `max-w-none`), and a `%` width on the replaced `<img>` was ignored
+  outright — use fixed px. Verify with computed `getBoundingClientRect`, not the eye.
+- **Hand the webview a large image to shrink and its edges ALIAS, not just soften.**
+  The header avatar (a 256px Daz tip xBRZ-upscaled to a 768px master with hard
+  edges) looked jagged when the browser scaled 768 down to the ~208px painted size
+  in the composited scroll layer — the GPU path doesn't low-pass hard edges. The fix
+  is to pre-resize server-side to the EXACT painted size × the screen DPR with a real
+  low-pass and paint 1:1: a Rust `image`-crate **Lanczos3** pass (`downscale_avatar_png`
+  in `avatar.rs`) returning raw PNG bytes (`tauri::ipc::Response` → an ArrayBuffer, not
+  a JSON number array), resolved by `resolveImageSrcAtSize` and requested via
+  `Avatar renderPx`. A canvas `imageSmoothingQuality:'high'` pass is NOT good enough
+  here — it came out mushy; Lanczos was the one that read crisp. Diagnostic tell: if a
+  static side-by-side shows the browser downsample ≈ a hand pass, the defect is
+  aliasing (missing low-pass), not the resample quality.
 
 ## Releases
 
