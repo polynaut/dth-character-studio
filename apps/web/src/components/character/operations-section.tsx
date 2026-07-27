@@ -82,7 +82,7 @@ export function CharacterOperationsSection({
         </p>
         <div className="flex flex-wrap gap-3">
           <Button variant="outline" onClick={() => setFillOpen(true)} disabled={deleting}>
-            <PaintBucket /> Fill
+            <PaintBucket /> Fill from character
           </Button>
           <Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={deleting}>
             <Trash2 /> Delete

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { FolderOpen, PaintBucket, UserPlus, X } from 'lucide-react'
 
-import { Button, EditableTitle, Field, InfoPopup, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
+import { Button, EditableTitle, Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
@@ -490,7 +490,7 @@ function ProjectCharactersPage() {
                   </div>
                 </Field>
 
-                {/* Row 2: Genesis, Gender and ROM prefill together. */}
+                {/* Row 2: Genesis and the ROM-prefill Fill button. */}
                 <div className="flex flex-wrap items-start gap-3">
                   {/* Radix Select.Root renders no DOM and drops `id` — the label
                       wires to the trigger button via controlId (same below). */}
@@ -513,57 +513,36 @@ function ProjectCharactersPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field
-                    label={
-                      <span className="flex items-center gap-1">
-                        ROM prefill
-                        {/* -my-1.5 keeps the 24px "i" from inflating the label line,
-                            so this control stays bottom-aligned with Genesis/Gender. */}
-                        <InfoPopup label="ROM prefill — more information" className="-my-1.5">
-                          Copy ROM sections from an existing {genesis} {gender} character in any
-                          project — the same Fill wizard as the character editor's timeline.
-                        </InfoPopup>
-                      </span>
-                    }
-                    className="min-w-[12rem] flex-1"
-                    controlId="create-rom-prefill"
-                  >
-                    {/* h-9 matches the Genesis select trigger, keeping the row's
-                        controls bottom-aligned. */}
-                    <div className="flex h-9 items-center gap-2">
-                      <Button
-                        id="create-rom-prefill"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setFillOpen(true)}
-                      >
-                        <PaintBucket /> Fill…
-                      </Button>
-                      {prefill ? (
-                        <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
-                          <span className="truncate">
-                            {prefill.sections.length} section
-                            {prefill.sections.length === 1 ? '' : 's'}
-                            {(() => {
-                              const n = Object.values(prefill.extras).filter(Boolean).length
-                              return n > 0 ? ` + ${n} extra${n === 1 ? '' : 's'}` : ''
-                            })()}{' '}
-                            from “{prefill.fromName}”
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label="Reset the ROM prefill"
-                            onClick={() => setPrefill(null)}
-                          >
-                            <X />
-                          </Button>
+                  {/* The ROM prefill: just the Fill-wizard button (self-explanatory
+                      once its dialog opens — no label/info/empty-state). `self-end`
+                      bottom-aligns it with the labelled Genesis select; a staged
+                      fill shows beside it with a reset. */}
+                  <div className="flex h-9 min-w-0 items-center gap-2 self-end">
+                    <Button variant="outline" size="sm" onClick={() => setFillOpen(true)}>
+                      <PaintBucket /> Fill from character
+                    </Button>
+                    {prefill && (
+                      <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                        <span className="truncate">
+                          {prefill.sections.length} section
+                          {prefill.sections.length === 1 ? '' : 's'}
+                          {(() => {
+                            const n = Object.values(prefill.extras).filter(Boolean).length
+                            return n > 0 ? ` + ${n} extra${n === 1 ? '' : 's'}` : ''
+                          })()}{' '}
+                          from “{prefill.fromName}”
                         </span>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">Empty</span>
-                      )}
-                    </div>
-                  </Field>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="Reset the ROM prefill"
+                          onClick={() => setPrefill(null)}
+                        >
+                          <X />
+                        </Button>
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Row 3: the DERIVED gender on its own line — read-only (the
