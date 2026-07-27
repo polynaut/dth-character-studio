@@ -22,7 +22,8 @@ import {
   relinkScene,
   sceneWearables,
 } from '#/lib/rom/api.ts'
-import { sceneCompatFailed, sceneCompatRows, SceneValidationTable } from '#/components/scene-compat.tsx'
+import { SceneValidationTable } from '#/components/scene-compat.tsx'
+import { primarySceneDerivation, sceneCompatFailed, sceneCompatRows } from '#/lib/scene-compat.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 
@@ -402,10 +403,33 @@ export function DazSceneField({
         // (relinking the primary onto an existing outfit scene), drop it from the
         // extras so it isn't both — else it shows as two cards and collides the
         // footer's per-path key + view-transition-name.
-        return {
+        const patch: Partial<Character> = {
           scenePath: finalScene,
           extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
         }
+        // The primary scene DRIVES the scene-derived fields (one rule, shared
+        // with createCharacter): the GEN section's enabled state follows the
+        // scene's GP/DK geograft, and the gender is read from the figure id /
+        // geograft — neither is user-editable anymore, so choosing a primary
+        // re-derives both. Unreadable scene → keep the stored values.
+        const scan = await sceneWearables({ data: { scenePath: finalScene } })
+        const derived = primarySceneDerivation(scan, character)
+        if (derived.gender) {
+          patch.gender = derived.gender
+          toast.info(`Gender set to ${derived.gender} — read from the scene.`)
+        }
+        if (derived.sections) {
+          patch.sections = derived.sections
+          const genEnabled = derived.sections.GEN.enabled
+          if (genEnabled !== character.sections.GEN.enabled) {
+            toast.info(
+              genEnabled
+                ? 'Genitalia section enabled — the scene contains a GP/DK geograft.'
+                : 'Genitalia section disabled — no GP/DK geograft in the scene.',
+            )
+          }
+        }
+        return patch
       },
       {
         toast: 'Linked Daz scene',
@@ -492,6 +516,8 @@ export function DazSceneField({
       loading={addChecking}
       force={forceAdd}
       onForceChange={setForceAdd}
+      forceLabel="Add anyway — a failed check usually means the scene's ROM won't match"
+      footnote="The scene must contain the same character — gender can't be checked directly, the geograft compare is its closest proxy. Different hair, clothing and props are exactly what extra scenes are for."
     />
   )
   const addBlockedTitle = addChecking

@@ -81,17 +81,19 @@ test('project window: character editor measures, edits and saves both artifacts'
   await expect(page.getByRole('button', { name: 'Discard' })).toHaveCSS('height', '44px')
   await page.getByRole('tab', { name: 'Character' }).click()
 
-  // Toggle the GEN section on → the editor must re-measure, now including the
-  // Golden Palace ROM (female character). This exercises presetFramesSignature
-  // → resolvePresetFrames → the native measurement end-to-end.
+  // Toggle the PHY section on → the editor must re-measure, now including the
+  // Physics ROM block. This exercises presetFramesSignature
+  // → resolvePresetFrames → the native measurement end-to-end. (GEN's toggle
+  // is no longer user-operable — it follows the primary scene's geograft — so
+  // PHY is the preset block a user can still flip by hand.)
   await page
     .locator('div.rounded-lg.border')
-    .filter({ has: page.getByText('GEN', { exact: true }) })
+    .filter({ has: page.getByText('PHY', { exact: true }) })
     .getByRole('switch')
     .click()
   await expect
     .poll(() => commandCalls(page, 'pose_asset_frames'))
-    .toContainEqual({ paths: expect.arrayContaining([DUF.gp]) })
+    .toContainEqual({ paths: expect.arrayContaining([DUF.phys]) })
 
   // Save → persists the JSON and regenerates BOTH artifacts in one step.
   await page.getByRole('button', { name: 'Save', exact: true }).click()
@@ -107,9 +109,9 @@ test('project window: character editor measures, edits and saves both artifacts'
   expect(dsa).toMatch(/DTH-Runtime: v\d+/)
   expect(written).toContain(`${P.dazLib}/Scripts/DTH-Character-Studio/.DthUtils.dsa`)
   // Frame alignment reaches the artifacts: the script's config carries the
-  // MEASURED preset block lengths (base ROM + the just-enabled Golden Palace).
+  // MEASURED preset block lengths (base ROM + the just-enabled Physics block).
   expect(dsa).toMatch(new RegExp(`"base":\\s*${FRAMES.base}`))
-  expect(dsa).toMatch(new RegExp(`"gp":\\s*${FRAMES.gp}`))
+  expect(dsa).toMatch(new RegExp(`"phys":\\s*${FRAMES.phys}`))
   // The definition's provenance was re-stamped by the save.
   const definition = await fileContent(page, `${P.charFolder}/Kira.json`)
   expect(JSON.parse(definition!).generatedDthVersion).toBe('2.4.3')
