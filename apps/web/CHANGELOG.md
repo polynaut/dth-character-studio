@@ -1,5 +1,60 @@
 # @dth/web
 
+## 0.46.0
+
+### Minor Changes
+
+- [#528](https://github.com/polynaut/dth-character-studio/pull/528) [`fbc31d5`](https://github.com/polynaut/dth-character-studio/commit/fbc31d558100b01a51a259552136c1f529b80ba2) Thanks [@polynaut](https://github.com/polynaut)! - Sections that change the figure's bone count (GEN — the geografts add bones)
+  can no longer be overridden per Daz scene: every scene must produce the primary
+  scene's skeleton, or the scenes' Daz/Houdini artifacts desync. On a non-primary
+  scene the section is now fully read-only (disabled toggle + body) and its title
+  wears an amber warning triangle whose tooltip explains why; the primary scene's
+  setup applies to every scene. Override data stored before this rule still shows
+  the green section mark so it can be reset.
+
+- [#531](https://github.com/polynaut/dth-character-studio/pull/531) [`b442708`](https://github.com/polynaut/dth-character-studio/commit/b4427089e67f55034b6628fa0005fcf009a707c4) Thanks [@polynaut](https://github.com/polynaut)! - The Genitalia ROM section and the character's gender are now driven by what's
+  actually in the primary Daz scene, not by hand. When a primary scene is chosen
+  (character create, or relinking the primary), the studio reads it once: GEN
+  auto-enables exactly when the scene carries a Golden Palace / Dicktator
+  geograft (its toggle is permanently disabled — a scene without the graft can't
+  run genital frames, and one with it always should), gender derives from the
+  figure id (gendered generations, G3 included) or the geograft (the neutral G9:
+  DK → male, GP → female), and a both-grafts G9 scene selects the GP+DK preset
+  assets explicitly. The manual Gender fields are gone — the create dialog shows
+  the derived value read-only, and the Identity row is display-only.
+
+  The per-scene GEN lock from the previous release is relaxed to enable-only:
+  GEN's on/off can't be overridden per scene (all scenes share one skeleton),
+  but its CONTENT is a normal per-scene override surface again — e.g. a
+  different art direction for a specific outfit scene. The create-character
+  dialog also gained the Validation table (one character, empty timeline) with a
+  "Create anyway" escape, mirroring the add-scene dialog.
+
+### Patch Changes
+
+- [#529](https://github.com/polynaut/dth-character-studio/pull/529) [`fd47e9e`](https://github.com/polynaut/dth-character-studio/commit/fd47e9e62b929323f3a115d1c2ae3f2b1eb76cd9) Thanks [@polynaut](https://github.com/polynaut)! - The morph-name and bone-name autocomplete menus are actually visible now: the
+  old popover surface was barely lighter than the page and the menus open right
+  on top of same-colored table rows. The listbox now sits on a raised (white-mix)
+  surface with a light edge and a deeper shadow, and the active row uses a white
+  lift instead of the accent color (which would have been darker than the new
+  surface).
+
+- [#526](https://github.com/polynaut/dth-character-studio/pull/526) [`f7dcf7b`](https://github.com/polynaut/dth-character-studio/commit/f7dcf7bda1cafd3389d1b57ab30e7b77b7a7cea9) Thanks [@polynaut](https://github.com/polynaut)! - Avatar auto-sync no longer rewrites the avatar on every editor open/refocus.
+  Sync decided "stale" by comparing the scene tip against the stored avatar — but
+  the stored avatar is the upscaled master since upscale-on-write, which can never
+  byte-equal a 256² tip, so every sync re-copied + re-upscaled + re-saved. Every
+  upscaled avatar now stores its pristine source as a `.src` sibling (scene tips
+  too, not just uploads) and sync compares against that; legacy avatars without
+  one rewrite once more and settle.
+
+- [#525](https://github.com/polynaut/dth-character-studio/pull/525) [`f275ea2`](https://github.com/polynaut/dth-character-studio/commit/f275ea22381ac598ba6586d58995f02aa8d31bdf) Thanks [@polynaut](https://github.com/polynaut)! - The character editor's identity sidebar is a step narrower at the xl breakpoint
+  (28rem, was 32rem), so two Daz-scene cards fit side by side instead of wrapping
+  on ~1280px-wide windows.
+
+- Updated dependencies [[`965d543`](https://github.com/polynaut/dth-character-studio/commit/965d54307971fced26285579f696b2e65c2ca3c3)]:
+  - @dth/ui@0.46.0
+  - @dth/rom@0.46.0
+
 ## 0.45.7
 
 ### Patch Changes
