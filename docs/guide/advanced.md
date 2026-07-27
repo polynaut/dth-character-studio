@@ -21,10 +21,14 @@ the character, link every scene to the one definition — the ROM setup, morphs 
 generated files stay shared, and the per-scene bits (hair, overrides) attach to
 the scene they belong to.
 
-**Add scene** (or dropping a `.duf` on the cards) links another scene; a dialog
-asks whether to **copy it into the character's scenes folder** or leave it in
-place. The **primary** scene — the one the character was created from — can't be
-unlinked; extras can. Every card has **Open in Daz**.
+**Add scene** (or dropping a `.duf` on the cards) links another scene. The add
+dialog **validates** it first — same Genesis generation, one character, empty
+timeline, and the **same GP/DK geograft as the primary** (every scene must
+produce the primary's skeleton; a failed check explains itself on hover and
+blocks the add behind an *Add anyway* switch) — then asks whether to **copy it
+into the character's scenes folder** or leave it in place. The **primary**
+scene — the one the character was created from — can't be unlinked; extras can.
+Every card has **Open in Daz**.
 
 <p align="center">
   <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with its per-scene hair list below" src="screenshots/character-daz-scenes.png" />
@@ -91,12 +95,15 @@ non-primary scene you just **edit the field, and a value that differs from the
 primary becomes that scene's override.**
 
 Each overridable field — and each ROM **section title** — carries a small **cube
-glyph**. A plain cube means "can be overridden on this scene"; once you override it
-the cube grows a **green dot** and the field (or the whole section) turns green (a
-toggle flipped *off* as an override keeps a light-green knob). Hover or
-keyboard-focus the cube for a **reset** button that drops it back to the primary
-scene's value. On the primary scene there is nothing to override, so the cubes stay
-dotless.
+glyph** while a non-primary scene is selected. A plain cube means "can be
+overridden on this scene"; once you override it the cube grows a **green dot** and
+the field (or the whole section) turns green (a toggle flipped *off* as an
+override keeps a light-green knob). Hover or keyboard-focus the cube for a
+**reset** button that drops it back to the primary scene's value. On the primary
+scene there is nothing to override, so the cubes don't show at all. The one thing
+no scene can override is the **GEN section's on/off state** — it follows the
+primary scene's GP/DK geograft everywhere (its *content*, art direction included,
+overrides like any other section's).
 
 #### ROM overrides
 

@@ -87,16 +87,8 @@ function UnrealCard({
             {chipText}
           </PathCode>
         </span>
-        <button
-          type="button"
-          onClick={onOpen}
-          data-alt-reveal=""
-          aria-label={`Open ${displayName} in Unreal Engine`}
-          title={altHeld ? 'Show in Explorer' : 'Open in Unreal Engine'}
-          className="shrink-0 rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-unreal-blue"
-        >
-          <OpenIcon className="size-4" />
-        </button>
+        {/* Install first, OPEN at the very right — the primary action sits at
+            the card's edge. */}
         <button
           type="button"
           onClick={onInstall}
@@ -114,6 +106,16 @@ function UnrealCard({
           )}
         >
           <HardDriveDownload className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpen}
+          data-alt-reveal=""
+          aria-label={`Open ${displayName} in Unreal Engine`}
+          title={altHeld ? 'Show in Explorer' : 'Open in Unreal Engine'}
+          className="shrink-0 rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-unreal-blue"
+        >
+          <OpenIcon className="size-4" />
         </button>
       </div>
       {/* Unreal-cyan left accent bar — painted over the card's left edge, rounded

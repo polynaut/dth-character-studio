@@ -9,33 +9,38 @@
 </p>
 
 1. In the project window press **Add character** (or drop a `.duf` anywhere).   
-3. **Choose Daz scene…** — the character's scene file.
-   **It must not contain an animation** — just the character itself.
-4. Name it (the name becomes its folder in the project), confirm **Genesis** (G9)
-   and **Gender**.
-5. **ROM prefill** — start **Empty** for a first character, or prefill from any
+2. **Choose Daz scene…** — the character's scene file. The studio reads it and
+   fills the rest in: **Genesis** (auto-detected, still overridable) and
+   **Gender** (from the figure — on the gender-neutral G9, from the **GP/DK
+   geograft**; there's nothing to pick by hand). A **Validation** table checks
+   the scene holds exactly **one character** with an **empty animation
+   timeline** — the generated ROM script fills the timeline itself. A failed
+   check explains itself on hover and blocks **Create** behind a *Create
+   anyway* switch.
+3. Name it (the name becomes its folder in the project).
+4. **ROM prefill** — start **Empty** for a first character, or prefill from any
    of your own characters (across projects) to copy a working ROM definition.
-
-6. Press **Create**. The scene is copied into the character's folder — your
+5. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
 ## Character settings
 
 <p align="center">
-  <img width="900" alt="character page top — Genesis/Gender, Genesis 9 specific, linked Daz scene + Houdini project" src="screenshots/character-settings.png" />
+  <img width="900" alt="character page top — primary Daz scene, hair items, Genesis 9 dials, derived Gender, linked Houdini project" src="screenshots/character-settings.png" />
   <br>
-  <sub><em>The top of the character page: Genesis/Gender, the Genesis 9 box, the primary Daz scene, hair items, and the linked Houdini project.</em></sub>
+  <sub><em>The top of the character page: the primary Daz scene, hair items, the Genesis 9 dials, the derived Gender, and the linked Houdini project.</em></sub>
 </p>
 
-The **Genesis** and **Gender** selects can be changed after creation — gender is
-what decides the [GEN section's](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace---dicktator--the-genitalia-gen-section) product (**Golden Palace**
-for a female character, **Dicktator** for a male). All four generations are
+**Genesis** is set at creation. **Gender** is read from the primary scene — the
+figure id on the gendered generations, the **GP/DK geograft** on the
+gender-neutral G9 (Golden Palace → female, Dicktator → male) — and shown
+read-only; relinking the primary scene re-derives it. The same read drives the
+[GEN section](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace---dicktator--the-genitalia-gen-section). All four generations are
 selectable; the deeply validated path is **G9** (and G8.1 on the old pipeline) —
 for the others, DTH ships a subset of pose assets and the studio offers whatever
 the active release actually provides.
 
-G9 characters also get a **Genesis 9 specific** box next to the Genesis/Gender
-fields:
+G9 characters also get the **Genesis 9 specific** dials in the sidebar:
 
 - **Set UE5 tear UV** — a toggle. When on, the generated ROM script switches the
   **Genesis 9 Tear** figure's shader **UV Set** to **UE5** during the build — so
@@ -54,8 +59,11 @@ fields:
 <table><tr><td>
 
 - **Daz scenes** — the character's scene, plus any number of extra scenes
-  (outfit/look variants): **drop a `.duf`** on the card to add one; a dialog asks
-  whether to **copy it into the character's folder** (optionally under a
+  (outfit/look variants): **drop a `.duf`** on the card to add one. The add
+  dialog **validates** the scene first — same Genesis generation, one character,
+  empty timeline, and the **same GP/DK geograft as the primary** (every scene
+  must produce the primary's skeleton; a failed check explains itself on hover) —
+  and asks whether to **copy it into the character's folder** (optionally under a
   subfolder) or leave it where it is. The original scene can't be unlinked;
   extras can be removed. **Scenes subfolder** moves the whole scenes folder. Each
   scene has **Open in Daz** — if Daz Studio is already running with a scene
@@ -149,11 +157,14 @@ where every section lands before anything runs.
 
 
 **GEN** is the genital geograft's range of motion. You don't choose the product —
-the character's **Gender** (set when you created it) decides: a **female**
-character uses **Golden Palace**, a **male** character uses **Dicktator**. Our
-example is a G9 Female, so her GEN section covers Golden Palace.
+and you don't even enable the section: it turns itself **on exactly when the
+primary scene contains a Golden Palace / Dicktator geograft** (detected when the
+scene is linked — the toggle is not hand-operable, and relinking the primary
+re-detects). The graft found is also what derives the character's **Gender**.
+Our example is a G9 Female with Golden Palace, so her GEN section covers Golden
+Palace.
 
-Enable GEN on **Preset** and the studio drops the DTH release's stock GP/DK ROM
+With GEN in **Preset** mode the studio drops the DTH release's stock GP/DK ROM
 block into the fixed GEN slot (after EXP, before PHY), frame-aligned like every
 other section. But the preset only supplies the *motion* — the **look is yours to
 art-direct**. The section lists the block's **Art direction** frames; go through
