@@ -1,5 +1,18 @@
 # @dth/web
 
+## 0.46.2
+
+### Patch Changes
+
+- [#536](https://github.com/polynaut/dth-character-studio/pull/536) [`7e0f89a`](https://github.com/polynaut/dth-character-studio/commit/7e0f89a18867f114a4ec475f5da84e05df6e02ff) Thanks [@polynaut](https://github.com/polynaut)! - Gender is baked at character creation and never changes again: the
+  missing-primary relink flow no longer re-derives it (it still re-derives the
+  GEN section from the new scene's geograft), and the Gender tooltip/guide say
+  "set at creation" instead of suggesting a relink path that doesn't exist for
+  a healthy character.
+- Updated dependencies []:
+  - @dth/rom@0.46.2
+  - @dth/ui@0.46.2
+
 ## 0.46.1
 
 ### Patch Changes
