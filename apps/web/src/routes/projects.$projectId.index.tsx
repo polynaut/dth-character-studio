@@ -187,6 +187,10 @@ function ProjectCharactersPage() {
   const createRows = sceneCreateRows(scenePath.trim() ? sceneScan : null)
   const createChecking = scenePath.trim() !== '' && sceneScan === null
   const createBlocked = createChecking || (sceneCompatFailed(createRows) && !createForce)
+  // What the Gender row DISPLAYS: only what the picked scene proves (null =
+  // no scene / scan pending / undecidable → "Unknown"). The `gender` state
+  // keeps its best-effort value for the create input regardless.
+  const detectedGender = scenePath.trim() && sceneScan ? genderForScan(sceneScan) : null
   function applyScene(picked: string) {
     setScenePath(picked)
     // Prefill the name from the scene's filename (the folder is created from it).
@@ -518,7 +522,8 @@ function ProjectCharactersPage() {
                       bottom-aligns it with the labelled Genesis select; a staged
                       fill shows beside it with a reset. */}
                   <div className="flex h-9 min-w-0 items-center gap-2 self-end">
-                    <Button variant="outline" size="sm" onClick={() => setFillOpen(true)}>
+                    {/* Default size (h-9) — same height as the Genesis select. */}
+                    <Button variant="outline" onClick={() => setFillOpen(true)}>
                       <PaintBucket /> Fill from character
                     </Button>
                     {prefill && (
@@ -548,14 +553,20 @@ function ProjectCharactersPage() {
                 {/* Row 3: the DERIVED gender on its own line — read-only (the
                     figure id for gendered generations, the GP/DK geograft for
                     G9 — see `genderForScan`), so it doesn't sit between the two
-                    real selects pretending to be one. */}
+                    real selects pretending to be one. Shown only as far as the
+                    SCENE proves it — an unreadable/undecided scene displays
+                    Unknown (the create input still falls back to `gender`). */}
                 <Field label="Gender" controlId="create-gender-display">
                   <p
                     id="create-gender-display"
                     className="text-sm text-muted-foreground"
                     title="Read from the scene (its figure / GP-DK geograft) — no manual choice needed"
                   >
-                    {gender === 'female' ? 'Female' : 'Male'} — read from the scene
+                    {detectedGender === 'female'
+                      ? '♀ Female'
+                      : detectedGender === 'male'
+                        ? '♂ Male'
+                        : '? Unknown'}
                   </p>
                 </Field>
               </div>
