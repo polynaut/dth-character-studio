@@ -14,16 +14,21 @@ import {
   unrealDthContentPresent,
 } from '#/lib/rom/api.ts'
 import { pickUprojectPath } from '#/lib/desktop.ts'
-import { displayPath, normalizePath } from '#/lib/path.ts'
+import { PathCode } from '#/components/path-code.tsx'
+import { displayPath, middleTruncatePath, normalizePath } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
 
 /**
- * A linked Unreal project card in the footer bar: the U mark, name + folder —
- * clicking opens the `.uproject` (OS association → Unreal). The tiny install
- * button bootstraps the project with the ACTIVE DTH release's Unreal content
+ * A linked Unreal project card in the footer bar: the U mark, name + a REAL
+ * path chip (click = copy, Alt+click = Explorer). The card body itself is
+ * inert — only the explicit buttons act: the open button launches the
+ * `.uproject` (OS association → Unreal), and the tiny install button
+ * bootstraps the project with the ACTIVE DTH release's Unreal content
  * (`Content/DazToHue`): dimmed once present; Ctrl+click overwrites anyway
  * (e.g. after switching the release in Settings). The hover ✕ only unlinks.
+ * The chip middle-truncates to a fixed budget + width so every card lines up
+ * (only a long project NAME may widen one).
  */
 function UnrealCard({
   uprojectPath,
@@ -53,7 +58,7 @@ function UnrealCard({
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
-  const dir = displayPath(uprojectPath).replace(/[\\/][^\\/]*$/, '')
+  const shownPath = displayPath(uprojectPath)
   const OpenIcon = altHeld ? FolderOpen : ExternalLink
   // Ctrl/Cmd held turns the click into a force-overwrite (see `ctrlHeld` above),
   // so the label reads "Reinstall" to match what the button will actually do.
@@ -61,19 +66,33 @@ function UnrealCard({
   return (
     <div className="group/card relative">
       <div className="unreal-card flex items-center gap-3 rounded-lg border px-3 py-2 pl-4 transition-colors">
+        {/* Inert body — clicking the card is a no-op; only the buttons act. */}
+        <img src={unrealLogo} alt="" aria-hidden className="size-9 shrink-0 object-contain" />
+        <span className="min-w-0">
+          {/* max-w cap so an absurd project name still truncates eventually —
+              a merely LONG one may widen the card, by design. */}
+          <span className="block max-w-96 truncate text-sm font-medium">{displayName}</span>
+          {/* A real path chip: click copies the full path, Alt+click reveals it
+              in Explorer. Fixed width + a matching character budget (monospace),
+              middle-ellipsized so the drive/start AND the .uproject name always
+              read — and every card comes out the same width. */}
+          <PathCode
+            path={shownPath}
+            variant="secondary"
+            className="block w-64 overflow-hidden text-xs whitespace-nowrap"
+          >
+            {middleTruncatePath(shownPath, 34)}
+          </PathCode>
+        </span>
         <button
           type="button"
           onClick={onOpen}
           data-alt-reveal=""
-          title="Open in Unreal Engine"
-          className="flex min-w-0 items-center gap-3 text-left"
+          aria-label={`Open ${displayName} in Unreal Engine`}
+          title={altHeld ? 'Show in Explorer' : 'Open in Unreal Engine'}
+          className="shrink-0 rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-unreal-blue"
         >
-          <img src={unrealLogo} alt="" aria-hidden className="size-9 shrink-0 object-contain" />
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-medium">{displayName}</span>
-            <span className="block max-w-72 truncate text-xs text-muted-foreground">{dir}</span>
-          </span>
-          <OpenIcon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover/card:text-unreal-blue" />
+          <OpenIcon className="size-4" />
         </button>
         <button
           type="button"

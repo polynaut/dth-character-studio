@@ -11,4 +11,8 @@ why), the create dialog's read-only Gender moved to its own row so it no
 longer sits between two real selects looking like a broken one, and the
 override handles (the small cube) on the editor's field labels only render
 while a non-primary scene is selected — with the primary selected there is
-nothing to override.
+nothing to override. The Unreal project cards were reworked too: the card
+body is inert (only the explicit open/install buttons act), the folder line
+is now a real path chip (click = copy, Alt+click = Explorer), and the path
+middle-ellipsizes to a fixed width so the drive and the .uproject name both
+stay readable and every card lines up.

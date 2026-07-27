@@ -72,3 +72,18 @@ export function displayPath(path: string): string {
   if (!path) return path
   return path.replace(/[/\\]/g, pathSeparator())
 }
+
+/**
+ * Middle-ellipsis a DISPLAY path down to at most `max` characters: the path's
+ * start stays visible and the file name at the end always survives whole
+ * (truncated from its own start only when it alone exceeds the budget). Meant
+ * for fixed-width monospace chips (e.g. the Unreal cards), where a constant
+ * character budget makes every chip the same width.
+ */
+export function middleTruncatePath(path: string, max: number): string {
+  if (path.length <= max) return path
+  const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
+  const tail = cut >= 0 ? path.slice(cut) : path
+  if (tail.length >= max - 1) return `…${tail.slice(-(max - 1))}`
+  return `${path.slice(0, max - 1 - tail.length)}…${tail}`
+}
