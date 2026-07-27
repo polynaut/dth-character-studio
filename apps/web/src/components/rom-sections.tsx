@@ -780,14 +780,21 @@ export const RomSections = memo(function RomSections({
               // The BODY dims when the section is off: for a plain disabled section the
               // whole wrapper already dims (above); for a disabled OVERRIDE the wrapper
               // stays full (so the green title / label / toggle read active) and we dim
-              // just the content here instead — the section IS off, its content is inert,
-              // but it stays editable so the user can decide what to keep. `locked` (the
-              // vestigial unarmed-override gate) still hard-disables + dims when set.
+              // just the content here instead. A disabled section's content is READ-ONLY:
+              // the native fieldset disable kills every edit control inside — fields,
+              // checkboxes, selects, add/remove buttons AND the pose drag handles (a
+              // disabled button fires no pointer events and takes no focus, so dnd-kit
+              // never starts) — and the cursor reads forbidden throughout. The enable
+              // toggle lives in the HEADER, outside this fieldset, so turning the
+              // section back on (where allowed) is always reachable. `locked` (the
+              // vestigial unarmed-override gate) behaves the same way.
               <fieldset
-                disabled={locked}
+                disabled={locked || !effectiveEnabled}
                 className={cn(
                   'space-y-3 border-t px-4 py-4',
                   (locked || (!effectiveEnabled && sectionOverridden)) && 'opacity-60',
+                  (locked || !effectiveEnabled) &&
+                    'cursor-not-allowed [&_*]:cursor-not-allowed',
                 )}
               >
                 {modes.length > 1 && (
