@@ -266,12 +266,13 @@ describe('per-generation preset availability', () => {
         }}
       />,
     )
-    // Toggle each section via its own header (the primary-scene switch carries no
-    // title now, so anchor on the section label instead).
-    const gen = screen.getByText('Genitalia').closest('div') as HTMLElement
-    fireEvent.click(within(gen).getByRole('switch'))
-    expect(next!.GEN.enabled).toBe(true)
-    expect(next!.GEN.mode).toBe('custom') // no GP/DK for G8.1 — preset not offered
+    // Toggle each section via its own header. PHY (preset-first like GEN, and
+    // still hand-toggled — GEN's switch is scene-gated now): no PHY asset for
+    // G8.1, so enabling lands on the custom morph list.
+    const phy = screen.getByText('Physics').closest('div') as HTMLElement
+    fireEvent.click(within(phy).getByRole('switch'))
+    expect(next!.PHY.enabled).toBe(true)
+    expect(next!.PHY.mode).toBe('custom') // no Physics preset for G8.1 — not offered
 
     // FAC exists for G8.1 (FAC-variant JCM base): enabling keeps preset mode.
     const exp = screen.getByText('Expressions').closest('div') as HTMLElement
@@ -737,40 +738,35 @@ describe('scene override mode', () => {
     return sections
   }
 
-  it('GEN (bone-count section) is locked on a non-primary scene: amber warning, dead toggle, read-only body', () => {
+  it('GEN keeps a dead (scene-gated) toggle on a non-primary scene — but its content IS overridable', () => {
     let latest: import('@dth/rom').SceneOverride | null = null
     render(<EnableHarness base={baseWithCustomGen()} onLatest={(next) => (latest = next)} />)
 
-    // The amber warning sits in the GEN title and carries the "why" tooltip.
-    const warning = screen.getByLabelText("Genitalia can't be overridden per Daz scene")
-    expect(warning.title).toContain('bone count')
-    // No resting "can override" cube for GEN — it can't be overridden…
+    // The enable toggle is disabled (it follows the primary scene's geograft on
+    // every scene); clicking it stores nothing (backstop).
     const header = screen.getByText('Genitalia').closest('div') as HTMLElement
-    expect(within(header).queryByTitle('Can be overridden per Daz scene')).toBeNull()
-    // …and its enable toggle is disabled; clicking it stores nothing (backstop).
     const toggle = within(header).getByRole('switch') as HTMLButtonElement
     expect(toggle.disabled).toBe(true)
+    expect(toggle.title).toContain('geograft')
     fireEvent.click(toggle)
     expect(latest).toBeNull()
 
-    // The body is a disabled fieldset — the read-only enforcement for everything inside.
+    // The CONTENT is a normal per-scene override surface: the body is NOT a
+    // disabled fieldset, and a structural edit escalates the section to a
+    // scene override — e.g. a different art direction / frame set per outfit.
     fireEvent.click(screen.getByText('Genitalia'))
     const section = screen.getByText('Genitalia').closest('.rounded-lg') as HTMLElement
-    expect(section.querySelector('fieldset')?.disabled).toBe(true)
-  })
-
-  it('a structural GEN edit never escalates — the patchSectionForScene backstop', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
-    render(<EnableHarness base={baseWithCustomGen()} onLatest={(next) => (latest = next)} />)
-    fireEvent.click(screen.getByText('Genitalia'))
-    // jsdom still dispatches to fieldset-disabled controls (a real browser doesn't) —
-    // which is exactly what exercises the writer-level guard.
+    expect(section.querySelector('fieldset')?.disabled).toBe(false)
     fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
     fireEvent.click(screen.getByText('Add after'))
-    expect(latest).toBeNull()
+    expect(latest!.sectionOverrides).toHaveLength(1)
+    expect(latest!.sectionOverrides[0].section).toBe('GEN')
+    // A per-scene enable flip is still refused: the escalated config keeps the
+    // base's enabled state and no sectionEnabled overlay was stored.
+    expect(latest!.sectionEnabled).toHaveLength(0)
   })
 
-  it('a stale GEN override (data predating the lock) still shows the green mark and resets', () => {
+  it('a stale GEN enable-override (pre-gating data) still shows the green mark and resets', () => {
     let latest: import('@dth/rom').SceneOverride | null = null
     function StaleGenHarness() {
       const base = baseWithCustomGen()
@@ -801,14 +797,12 @@ describe('scene override mode', () => {
       )
     }
     render(<StaleGenHarness />)
-    // Both tells at once: the amber "not allowed" warning AND the green reset (the
-    // stale divergence must stay escapable).
-    expect(screen.getByLabelText("Genitalia can't be overridden per Daz scene")).toBeTruthy()
+    // The stale divergence must stay escapable: the green section reset drops it.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
     expect(latest!.sectionOverrides).toHaveLength(0)
   })
 
-  it('the bone-count lock only applies on a non-primary scene — the primary edits GEN freely', () => {
+  it("GEN's toggle is scene-gated on the PRIMARY scene too — auto state, never hand-toggled", () => {
     let next: RomSectionsModel | null = null
     render(
       <RomSections
@@ -823,12 +817,15 @@ describe('scene override mode', () => {
         }}
       />,
     )
-    expect(screen.queryByLabelText("Genitalia can't be overridden per Daz scene")).toBeNull()
     const header = screen.getByText('Genitalia').closest('div') as HTMLElement
     const toggle = within(header).getByRole('switch') as HTMLButtonElement
-    expect(toggle.disabled).toBe(false)
+    expect(toggle.disabled).toBe(true)
+    // The tooltip explains where the state comes from.
+    expect(toggle.title).toContain('geograft')
+    // Clicking (dispatched events reach disabled controls in jsdom) stores
+    // nothing — the enabled state only ever comes from primarySceneDerivation.
     fireEvent.click(toggle)
-    expect(next!.GEN.enabled).toBe(false)
+    expect(next).toBeNull()
   })
 
   it('disabling a section enabled THEN customized on a base-off section actually turns it off (mirror)', () => {
