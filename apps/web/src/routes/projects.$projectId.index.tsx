@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
-import { FolderOpen, UserPlus } from 'lucide-react'
+import { FolderOpen, PaintBucket, UserPlus, X } from 'lucide-react'
 
 import { Button, EditableTitle, Field, InfoPopup, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
@@ -22,12 +22,12 @@ import {
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
 import { useSelection } from '#/lib/use-selection.ts'
 import { toast } from 'sonner'
+import { FillFromCharacterDialog } from '#/components/character/fill-from-character-dialog.tsx'
 import {
   characterKeepFolders,
   copyDazScene,
   createCharacter,
   deleteCharacter,
-  fetchAllCharacters,
   fetchCharactersWithProblems,
   fetchProject,
   generateCharacterFiles,
@@ -47,10 +47,10 @@ import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
 import { genderForScan, sceneCompatFailed, sceneCreateRows } from '#/lib/scene-compat.ts'
 
-import { characterSkinning, countPoses, genesisFromFigureNode } from '@dth/rom'
+import { characterSkinning, countPoses, defaultSections, genesisFromFigureNode } from '@dth/rom'
 
-import type { CharacterWithProject, SceneWearables } from '#/lib/rom/api.ts'
-import type { Gender, GenesisVersion } from '@dth/rom'
+import type { SceneWearables } from '#/lib/rom/api.ts'
+import type { Gender, GenesisVersion, RomSection } from '@dth/rom'
 
 /** Live preview of the picked Daz scene's tip thumbnail (read as a data URL). */
 function ScenePreview({ scenePath }: { scenePath: string }) {
@@ -112,13 +112,20 @@ function ProjectCharactersPage() {
   const [name, setName] = useState('')
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
   const [gender, setGender] = useState<Gender>('female')
-  // 'empty' | an existing character's id (copy its ROM definitions).
-  const [prefill, setPrefill] = useState<string>('empty')
-  // Cross-project ROM-prefill candidates. Loaded lazily the first time the
-  // prefill picker opens (null until then) — fetching them walks every recent
-  // project's library, which must never block opening the project page.
-  const [allCharacters, setAllCharacters] = useState<Array<CharacterWithProject> | null>(null)
-  const [prefillLoading, setPrefillLoading] = useState(false)
+  // ROM prefill staged by the Fill wizard (null = start empty): the source
+  // character and the sections picked from it — createCharacter applies it.
+  const [prefill, setPrefill] = useState<{
+    fromId: string
+    fromName: string
+    sections: Array<RomSection>
+  } | null>(null)
+  const [fillOpen, setFillOpen] = useState(false)
+  // The wizard's target while creating: the picked genesis/gender over the
+  // stock defaults — no character id exists yet, so nothing is excluded.
+  const fillTarget = useMemo(
+    () => ({ id: '', genesis, gender, sections: defaultSections() }),
+    [genesis, gender],
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // Bumped on every scene pick so a slow scan of an earlier scene can't clobber
@@ -175,29 +182,15 @@ function ProjectCharactersPage() {
   const createRows = sceneCreateRows(scenePath.trim() ? sceneScan : null)
   const createChecking = scenePath.trim() !== '' && sceneScan === null
   const createBlocked = createChecking || (sceneCompatFailed(createRows) && !createForce)
-  // ROM-prefill candidates: characters from every project that match the chosen
-  // G + gender (filtered for ROM compatibility; labelled with their project).
-  const prefillChars = (allCharacters ?? []).filter(
-    (c) => c.genesis === genesis && c.gender === gender,
-  )
-
-  // First open of the prefill picker kicks off the cross-project fetch; later
-  // opens reuse the loaded list (a failed fetch just leaves the picker empty).
-  function loadPrefillCandidates() {
-    if (allCharacters !== null || prefillLoading) return
-    setPrefillLoading(true)
-    fetchAllCharacters()
-      .then(setAllCharacters)
-      .catch(() => setAllCharacters([]))
-      .finally(() => setPrefillLoading(false))
-  }
-
   function applyScene(picked: string) {
     setScenePath(picked)
     // Prefill the name from the scene's filename (the folder is created from it).
     setName(sceneBaseName(picked))
     setSceneScan(null)
     setCreateForce(false)
+    // A new scene can change the detected genesis/gender — a staged ROM
+    // prefill from the previous identity would no longer be compatible.
+    setPrefill(null)
     // Read what's actually IN the scene: the Validation rows, the Genesis
     // auto-select (the figure node's id — still user-editable) and the DERIVED
     // gender (figure id for the gendered generations, GP/DK geograft for the
@@ -212,10 +205,7 @@ function ProjectCharactersPage() {
       setSceneScan(scan)
       const figure = scan.figures[0] ?? null
       const detected = figure ? genesisFromFigureNode(figure.id) : null
-      if (detected) {
-        setGenesis(detected.genesis)
-        setPrefill('empty')
-      }
+      if (detected) setGenesis(detected.genesis)
       const derivedGender = genderForScan(scan)
       if (derivedGender) setGender(derivedGender)
     })
@@ -231,7 +221,7 @@ function ProjectCharactersPage() {
     setError('')
     setScenePath('')
     setName('')
-    setPrefill('empty')
+    setPrefill(null)
     setSceneScan(null)
     setCreateForce(false)
     setPanelTab('character')
@@ -280,8 +270,6 @@ function ProjectCharactersPage() {
 
   /** Create the character; when `copyScene`, also copy the scene + its thumbnails. */
   async function doCreate(copyScene: boolean) {
-    // ROM prefill is 'empty', or an existing character's id to copy.
-    const fromChar = prefill !== 'empty'
     setBusy(true)
     setError('')
     try {
@@ -293,7 +281,8 @@ function ProjectCharactersPage() {
           gender,
           scenePath: scenePath.trim(),
           relFolder: nameTrimmed,
-          prefillFromId: fromChar ? prefill : undefined,
+          prefillFromId: prefill?.fromId,
+          prefillSections: prefill?.sections,
         },
       })
       if (copyScene) {
@@ -325,7 +314,7 @@ function ProjectCharactersPage() {
       setCopyPrompt(false)
       setScenePath('')
       setName('')
-      setPrefill('empty')
+      setPrefill(null)
       setSceneScan(null)
       setCreateForce(false)
       setPanelOpen(false)
@@ -504,7 +493,7 @@ function ProjectCharactersPage() {
                       value={genesis}
                       onValueChange={(v) => {
                         setGenesis(v as GenesisVersion)
-                        setPrefill('empty')
+                        setPrefill(null)
                       }}
                     >
                       <SelectTrigger id="create-genesis" className="w-24">
@@ -525,36 +514,44 @@ function ProjectCharactersPage() {
                         {/* -my-1.5 keeps the 24px "i" from inflating the label line,
                             so this control stays bottom-aligned with Genesis/Gender. */}
                         <InfoPopup label="ROM prefill — more information" className="-my-1.5">
-                          Copy the ROM definitions from an existing {genesis} {gender} character
-                          in any project.
+                          Copy ROM sections from an existing {genesis} {gender} character in any
+                          project — the same Fill wizard as the character editor's timeline.
                         </InfoPopup>
                       </span>
                     }
                     className="min-w-[12rem] flex-1"
                     controlId="create-rom-prefill"
                   >
-                    <Select
-                      value={prefill}
-                      onValueChange={setPrefill}
-                      onOpenChange={(isOpen) => isOpen && loadPrefillCandidates()}
-                    >
-                      <SelectTrigger id="create-rom-prefill">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="empty">Empty</SelectItem>
-                        {prefillLoading && (
-                          <SelectItem value="__loading" disabled>
-                            Loading characters…
-                          </SelectItem>
-                        )}
-                        {prefillChars.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.projectName} - {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* h-9 matches the Genesis select trigger, keeping the row's
+                        controls bottom-aligned. */}
+                    <div className="flex h-9 items-center gap-2">
+                      <Button
+                        id="create-rom-prefill"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFillOpen(true)}
+                      >
+                        <PaintBucket /> Fill…
+                      </Button>
+                      {prefill ? (
+                        <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                          <span className="truncate">
+                            {prefill.sections.length} section
+                            {prefill.sections.length === 1 ? '' : 's'} from “{prefill.fromName}”
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Reset the ROM prefill"
+                            onClick={() => setPrefill(null)}
+                          >
+                            <X />
+                          </Button>
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Empty</span>
+                      )}
+                    </div>
                   </Field>
                 </div>
 
@@ -812,6 +809,15 @@ function ProjectCharactersPage() {
         )}
       </Tabs>
 
+      {fillOpen && (
+        <FillFromCharacterDialog
+          target={fillTarget}
+          onFill={(_sections, source) =>
+            setPrefill({ fromId: source.id, fromName: source.name, sections: source.picked })
+          }
+          onClose={() => setFillOpen(false)}
+        />
+      )}
       {copyPrompt && (
         <SceneCopyDialog
           title="Copy Daz scene files?"

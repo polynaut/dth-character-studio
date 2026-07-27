@@ -147,7 +147,7 @@ export const RomEditorSection = memo(function RomEditorSection({
       )}
       {fillOpen && (
         <FillFromCharacterDialog
-          character={character}
+          target={character}
           onFill={onSectionsChange}
           onClose={() => setFillOpen(false)}
         />

@@ -8,25 +8,39 @@ import { fillSectionsFrom, filledSections, sectionContentSummary } from '#/lib/f
 import { SECTION_LABELS } from '@dth/rom'
 
 import type { CharacterWithProject } from '#/lib/rom/api.ts'
-import type { Character, RomSection } from '@dth/rom'
+import type { Gender, GenesisVersion, RomSection, RomSections } from '@dth/rom'
+
+/** What the wizard fills: the compatibility identity that filters candidates,
+ *  and the current sections the picked ones replace. The ROM editor passes its
+ *  draft character; the create panel passes the picked genesis/gender over the
+ *  default sections, with an empty `id` (no character exists to exclude yet). */
+export interface FillTarget {
+  id: string
+  genesis: GenesisVersion
+  gender: Gender
+  sections: RomSections
+}
 
 /**
- * The timeline panel's "Fill" wizard: step 1 picks a source character from
- * every known project (the recents list — same candidate pool as the create
- * dialog's ROM prefill, filtered to the target's generation + gender), step 2
- * picks which of the source's filled ROM sections to copy. Confirming REPLACES
- * the picked sections of the target's draft with the source's config
+ * The ROM "Fill" wizard: step 1 picks a source character from every known
+ * project (the recents list, filtered to the target's generation + gender),
+ * step 2 picks which of the source's filled ROM sections to copy. Confirming
+ * REPLACES the picked sections of the target with the source's config
  * (`fillSectionsFrom` — GEN keeps the target's scene-derived geograft
- * plumbing); the change lands in the editor draft, so Save still decides.
+ * plumbing) and reports which source/sections were picked, so the create
+ * panel can stage the same fill for `createCharacter`. Nothing is persisted
+ * here — the caller decides (editor draft Save / the create action).
  */
 export function FillFromCharacterDialog({
-  character,
+  target,
   onFill,
   onClose,
 }: {
-  /** The target (the editor's draft) — filters candidates and receives the fill. */
-  character: Character
-  onFill: (sections: Character['sections']) => void
+  target: FillTarget
+  onFill: (
+    sections: RomSections,
+    source: { id: string; name: string; picked: Array<RomSection> },
+  ) => void
   onClose: () => void
 }) {
   // null = the cross-project walk is still loading (it visits every recent
@@ -53,14 +67,13 @@ export function FillFromCharacterDialog({
     () =>
       (all ?? [])
         .filter(
-          (c) =>
-            c.id !== character.id && c.genesis === character.genesis && c.gender === character.gender,
+          (c) => c.id !== target.id && c.genesis === target.genesis && c.gender === target.gender,
         )
         .sort(
           (a, b) =>
             a.projectName.localeCompare(b.projectName) || a.name.localeCompare(b.name),
         ),
-    [all, character.id, character.genesis, character.gender],
+    [all, target.id, target.genesis, target.gender],
   )
   const source = candidates.find((c) => c.id === sourceId)
   const offered = source ? filledSections(source.sections) : []
@@ -81,13 +94,12 @@ export function FillFromCharacterDialog({
 
   function fill() {
     if (!source || checked.size === 0) return
-    onFill(
-      fillSectionsFrom(
-        character.sections,
-        source.sections,
-        offered.filter((section) => checked.has(section)),
-      ),
-    )
+    const picked = offered.filter((section) => checked.has(section))
+    onFill(fillSectionsFrom(target.sections, source.sections, picked), {
+      id: source.id,
+      name: source.name,
+      picked,
+    })
     onClose()
   }
 
@@ -116,14 +128,14 @@ export function FillFromCharacterDialog({
           <p className="text-sm text-muted-foreground">
             Copy ROM sections from an existing character in any of your projects. Only{' '}
             <strong>
-              {character.genesis} {character.gender}
+              {target.genesis} {target.gender}
             </strong>{' '}
             characters are listed — ROM definitions don’t transfer across generations or genders.
           </p>
           {all === null && <p className="text-sm text-muted-foreground">Loading characters…</p>}
           {all !== null && candidates.length === 0 && (
             <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-              No other {character.genesis} {character.gender} characters found in your projects.
+              No other {target.genesis} {target.gender} characters found in your projects.
             </p>
           )}
           {candidates.length > 0 && (

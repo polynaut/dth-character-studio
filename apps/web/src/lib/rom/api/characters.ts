@@ -13,7 +13,9 @@ import {
   genesisVersionSchema,
   newId,
   posesFromDazCsv,
+  romSectionSchema,
 } from '@dth/rom'
+import { fillSectionsFrom, filledSections } from '#/lib/fill-sections.ts'
 import { normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
 import {
   cacheCharacterLocation,
@@ -111,28 +113,13 @@ const createInput = z.object({
   scenePath: z.string().optional(),
   /** Subfolder relative to the project root; '' stores in the project root. */
   relFolder: z.string().optional(),
-  /** Copy the ROM definitions from this existing character (in the same project). */
+  /** Copy ROM sections from this existing character (any project) — the Fill
+   *  wizard's pick. */
   prefillFromId: z.string().optional(),
+  /** Which of the source's sections to copy (the wizard's checkboxes);
+   *  omitted = all of its filled sections. */
+  prefillSections: z.array(romSectionSchema).optional(),
 })
-
-/** ROM-definition fields copied when prefilling from another
- *  character — everything that shapes the ROM, minus identity / provenance. */
-function romFields(src: Character): Partial<Character> {
-  return {
-    sections: src.sections,
-    facsDetailStrength: src.facsDetailStrength,
-    flexionStrength: src.flexionStrength,
-    applyUE5TearUV: src.applyUE5TearUV,
-    preserveMorphs: src.preserveMorphs,
-    preserveNodeTransforms: src.preserveNodeTransforms,
-    groomScenes: src.groomScenes,
-    jcmMorphMods: src.jcmMorphMods,
-    // Like groomScenes: per-scene data whose scene paths point at the SOURCE
-    // character's scenes — inert until those scenes are linked here too (the
-    // pose ids they reference come along inside the copied sections).
-    sceneOverrides: src.sceneOverrides,
-  }
-}
 
 export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
   const input = createInput.parse(data)
@@ -140,12 +127,37 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   const lib = charsRoot(project)
   const now = new Date().toISOString()
   const id = newId()
-  // ROM prefill: copied from an existing character (any project).
-  let prefill: Partial<Character> = {}
+  // The stock defaults enable FAC in preset mode — only valid when the DTH
+  // release ships a FAC-variant base ROM for this generation (it doesn't for
+  // G8/G3). Start FAC disabled there; enabling it in the editor offers the
+  // custom morph list. A prefilled FAC below replaces its default wholesale
+  // (the wizard offers a same-generation character, already consistent).
+  let sections = defaultSections()
+  const catalog = await fetchPoseAssets()
+  const facAvailable =
+    catalog.error !== null ||
+    catalog.assets.length === 0 || // catalog unknown — don't restrict
+    catalog.assets.some(
+      (a) =>
+        (a.genesis === null || a.genesis === input.genesis) &&
+        a.section === 'JCM' &&
+        a.includesFac,
+    )
+  if (!facAvailable) {
+    sections.FAC.enabled = false
+    sections.FAC.mode = 'custom'
+  }
+  // ROM prefill (the Fill wizard): the picked sections replace their defaults
+  // with the source character's config (the source may live in any project).
+  // fillSectionsFrom keeps GEN's plumbing at the defaults — the primary-scene
+  // derivation below decides its enabled state / GP-DK selection from the
+  // actual scene, never from the source character.
   if (input.prefillFromId) {
-    // The source may live in any project (prefill lists characters globally).
     const source = await storage.findCharacterAcrossProjects(input.prefillFromId)
-    if (source) prefill = romFields(source)
+    if (source) {
+      const picked = input.prefillSections ?? filledSections(source.sections)
+      sections = fillSectionsFrom(sections, source.sections, picked)
+    }
   }
   const base: Record<string, unknown> = {
     id,
@@ -154,30 +166,7 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     gender: input.gender,
     createdAt: now,
     updatedAt: now,
-    ...prefill,
-  }
-  // The stock defaults enable FAC in preset mode — only valid when the DTH
-  // release ships a FAC-variant base ROM for this generation (it doesn't for
-  // G8/G3). Start FAC disabled there; enabling it in the editor offers the
-  // custom morph list. Prefills copy a same-generation character, so they
-  // are already consistent and stay untouched.
-  if (!('sections' in prefill)) {
-    const catalog = await fetchPoseAssets()
-    const facAvailable =
-      catalog.error !== null ||
-      catalog.assets.length === 0 || // catalog unknown — don't restrict
-      catalog.assets.some(
-        (a) =>
-          (a.genesis === null || a.genesis === input.genesis) &&
-          a.section === 'JCM' &&
-          a.includesFac,
-      )
-    if (!facAvailable) {
-      const sections = defaultSections()
-      sections.FAC.enabled = false
-      sections.FAC.mode = 'custom'
-      base.sections = sections
-    }
+    sections,
   }
   // The picked scene's tip thumbnail becomes the avatar, and we record the scene
   // path as read-only provenance shown in the editor.
@@ -193,7 +182,7 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     const derived = primarySceneDerivation(scan, {
       genesis: input.genesis,
       gender: input.gender,
-      sections: (base.sections as Character['sections'] | undefined) ?? defaultSections(),
+      sections,
     })
     if (derived.gender) base.gender = derived.gender
     if (derived.sections) base.sections = derived.sections
