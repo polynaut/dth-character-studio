@@ -290,12 +290,6 @@ export function FillFromCharacterDialog({
                     {source ? sectionContentSummary(source.sections[section]) : ''}
                   </span>
                 </label>
-                {section === 'GEN' && (
-                  <p className="mt-0.5 px-3 text-xs text-muted-foreground">
-                    Copies the art direction / custom frames only — the Golden Palace / Dicktator
-                    setup stays this character’s own (it follows the primary scene’s geograft).
-                  </p>
-                )}
               </li>
             ))}
           </ul>
