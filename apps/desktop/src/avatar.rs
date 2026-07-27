@@ -45,12 +45,11 @@ fn flatten_on_tile_bg(src: &RgbaImage) -> RgbaImage {
 }
 
 /// Upscale the avatar PNG at `path` IN PLACE to a {@link TARGET}px square when it's
-/// smaller, using xBRZ (an integer magnification) followed by a Lanczos3 down-step
-/// to land exactly on TARGET. A no-op returning `false` when the image is already
-/// at least TARGET on both sides, so it's safe (and cheap) to call after every
-/// avatar write. Avatars are square, so the common case is an exact 256→768 (×3);
-/// a non-square or oddly-sized source is handled by the same integer-then-downscale
-/// path.
+/// smaller: xBRZ (an integer magnification) overshooting ~2×, then a Lanczos3
+/// down-step onto TARGET — a supersample, so xBRZ's hard stair-step edges land
+/// anti-aliased (the common 256px tip runs ×6 → 1536 → 768). A no-op returning
+/// `false` when the image is already at least TARGET on both sides, so it's safe
+/// (and cheap) to call after every avatar write.
 ///
 /// Failures return an error string; the caller (writeAvatarBytes) treats any
 /// failure as "keep the original image", so a bad upscale never blocks setting an
@@ -61,9 +60,9 @@ pub fn upscale_avatar_file(path: String) -> Result<bool, String> {
 }
 
 /// The testable core of {@link upscale_avatar_file}: decode the PNG at `p`, and if
-/// either side is below `target`, xBRZ-magnify by the smallest integer factor that
-/// reaches `target`, Lanczos-downscale to exactly `target`², and overwrite the
-/// file. Returns whether it upscaled.
+/// either side is below `target`, xBRZ-magnify past ~2× `target`,
+/// Lanczos-downscale to exactly `target`², and overwrite the file. Returns
+/// whether it upscaled.
 fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     let decoded = image::open(p).map_err(|e| format!("decode {}: {e}", p.display()))?;
     let rgba = decoded.to_rgba8();
@@ -76,11 +75,14 @@ fn upscale_png_to_square(p: &Path, target: u32) -> Result<bool, String> {
     // edge-directed) but the right base for the alpha-blind AI path.
     let flat = flatten_on_tile_bg(&rgba);
     let min_side = w.min(h).max(1);
-    // xBRZ magnifies by an INTEGER factor only (2..=6). Take the smallest that
-    // reaches `target`, then Lanczos-downscale the (possibly larger) result to
-    // exactly target². For the 256px tip this is an exact ×3 (→768), so the
-    // resize below is an identity.
-    let factor = target.div_ceil(min_side).clamp(2, 6);
+    // xBRZ magnifies by an INTEGER factor only (2..=6). Take the factor that
+    // OVERSHOOTS `target` by ~2× (capped at xBRZ's max), so the Lanczos
+    // down-step below is a real ~2× supersample instead of an identity — xBRZ
+    // draws its curves at finer granularity and the downscale averages its hard
+    // stair-step edges into proper anti-aliasing. For the 256px tip: ×6 → 1536 →
+    // 768 (measured clearly smoother than the old exact ×3, at ~4× one-time
+    // cost; see the PR).
+    let factor = (target * 2).div_ceil(min_side).clamp(2, 6);
     let up = xbrz::scale_rgba(flat.as_raw(), w as usize, h as usize, factor as usize);
     let upscaled = RgbaImage::from_raw(w * factor, h * factor, up)
         .ok_or_else(|| "xbrz returned an unexpected buffer size".to_string())?;

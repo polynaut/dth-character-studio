@@ -13,7 +13,10 @@ so the webview paints it 1:1 with no aliasing-prone GPU resampling — the Lancz
 low-pass anti-aliases the xBRZ'd master's hard edges. Avatars are also now
 flattened onto the tile background (`#565963`, the only colour they're shown on)
 BEFORE upscaling, so the tip's transparent edge is a smooth figure→bg gradient
-rather than a discontinuity that magnifiers jag. Masters can now be re-derived
+rather than a discontinuity that magnifiers jag; and the xBRZ step now
+**supersamples** — it magnifies ~2× past the master size and lands on 768 via the
+Lanczos down-step (256 tip: ×6 → 1536 → 768), so xBRZ's hard stair-step edges are
+averaged into proper anti-aliasing instead of being stored as-is. Masters can now be re-derived
 from their pristine 256² source at any time via **Ctrl + Refresh assets** (Tools):
 a scene avatar reads its scene's `.tip.png` (a Daz scene is always its
 .duf + .duf.png + .tip.png triple, so the tip is guaranteed at the scene's path);
