@@ -161,15 +161,17 @@ export function IdentitySection({
 
       {/* Gender — read-only, derived from the primary Daz scene (the figure id
           for the gendered generations, the GP/DK geograft for the neutral G9 —
-          `primarySceneDerivation`). Its only real jobs are picking the GP-vs-DK
-          ROM blocks and the gendered figure node, both of which the scene
-          answers better than a manual field ever did; relinking the primary
-          scene re-derives it. Genesis is creation-only, not shown here. */}
+          `primarySceneDerivation`, run when the primary is linked). Its only
+          real jobs are picking the GP-vs-DK ROM blocks and the gendered figure
+          node, both of which the scene answers better than a manual field ever
+          did. NB there is no re-derive trigger for a HEALTHY character (the
+          relink flow only exists for a missing primary) — the derivation
+          happens at creation. Genesis is creation-only, not shown here. */}
       <div>
         <Label className="mb-1">Gender</Label>
         <p
           className="text-sm text-muted-foreground"
-          title="Read from the primary Daz scene (its figure / GP-DK geograft) — relink the primary scene to re-derive it"
+          title="Read from the primary Daz scene (its figure / GP-DK geograft) when the scene is linked"
         >
           {character.gender === 'female' ? 'Female' : 'Male'}
           <span className="ml-1.5 text-xs">— read from the primary scene</span>
