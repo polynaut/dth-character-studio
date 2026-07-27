@@ -340,18 +340,29 @@ export async function upscaleStoredAvatar(projectDir: string, image: string): Pr
  * for masters written BEFORE flatten-first: an upscaled master is a no-op to
  * `upscale_avatar_file`, so the only way to re-apply the current pipeline is to
  * rebuild from the source tip — which still sits next to the scene. Scene-derived
- * avatars only (`imageScene`); uploads have no external source (their stored file
- * IS the original). Best-effort: false when there's nothing to rebuild; a failed
- * upscale RESTORES the previous master (never leaves a raw 256² behind).
+ * avatars only; uploads have no external source (their stored file IS the
+ * original). The source scene is `imageScene` when recorded; a LEGACY `sc` avatar
+ * from before that field was recorded (and the auto-sync can't back-fill it — its
+ * byte-compare can never match a tip against an upscaled master) falls back to
+ * the first linked scene with a tip, primary first. Best-effort: false when
+ * there's nothing to rebuild; a failed upscale RESTORES the previous master
+ * (never leaves a raw 256² behind).
  */
 export async function rebuildSceneAvatar(
   projectDir: string,
-  character: { image: string; imageScene: string },
+  character: { image: string; imageScene: string; scenePath: string; extraScenes: Array<string> },
 ): Promise<boolean> {
   const { image, imageScene } = character
-  if (!image || !imageScene || isExternalImage(image) || !isTauri()) return false
+  if (!image || isExternalImage(image) || !isTauri()) return false
   try {
-    const tipPath = await findTipImage(imageScene)
+    let tipPath = ''
+    if (imageScene) {
+      tipPath = await findTipImage(imageScene)
+    } else if (parseAvatarName(image)?.kind === 'sc') {
+      for (const scene of [character.scenePath, ...character.extraScenes]) {
+        if (scene && (tipPath = await findTipImage(scene))) break
+      }
+    }
     if (!tipPath) return false
     const path = joinPath(storage.metaImagesDir(projectDir), image)
     if (!(await exists(path))) return false
