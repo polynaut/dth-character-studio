@@ -33,6 +33,7 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
+import { avatarSourceName } from '../avatar-names'
 import { assertMovable } from './move'
 import { isExternalImage } from '../image'
 
@@ -650,10 +651,23 @@ async function doSyncAvatarWithScene(
     return null
   }
   const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  // The bytes to compare TIPS against: the `.src` sibling (the pristine tip as
+  // ingested — written by upscale-on-write) when present, else the stored master.
+  // The master is upscaled IN PLACE, so it can never byte-equal a 256² tip — a
+  // master-only compare made every sync see "stale" and rewrite the avatar on
+  // each editor open/refocus. A LEGACY avatar without a `.src` still compares
+  // against its master and rewrites ONCE — that write stores the `.src`, so the
+  // churn self-terminates.
   const readAvatar = async (): Promise<Uint8Array | null> => {
     if (!character.image || isExternalImage(character.image)) return null
+    const dir = storage.metaImagesDir(projectDir)
     try {
-      return await readFile(joinPath(storage.metaImagesDir(projectDir), character.image))
+      return await readFile(joinPath(dir, avatarSourceName(character.image)))
+    } catch {
+      // no `.src` (pre-fix write, or the master was never upscale-rewritten)
+    }
+    try {
+      return await readFile(joinPath(dir, character.image))
     } catch {
       return null
     }

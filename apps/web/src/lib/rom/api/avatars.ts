@@ -74,14 +74,16 @@ export async function writeAvatarBytes(
   if (isTauri()) {
     try {
       const upscaled = await invoke<boolean>('upscale_avatar_file', { path: filePath })
-      // An UPLOAD's upscale REPLACED the pristine bytes and nothing else holds a
-      // copy — keep them as a `.src` sibling so the master can always be
-      // re-derived by the current pipeline (Ctrl + Refresh assets, or a future
-      // better upscaler). Scene avatars need none: their pristine 256² tip
-      // always sits beside the linked/copied scene (the .duf travels with its
-      // sidecars). A no-op upscale (source ≥768²) needs none either: the stored
-      // master IS the original.
-      if (upscaled === true && kind === 'up') {
+      // The upscale REPLACED the pristine bytes — keep them as a `.src` sibling.
+      // For an UPLOAD it's the only copy of the user's original; for a SCENE
+      // avatar it's the avatar-sync STALENESS REFERENCE: sync decides "did the
+      // scene's tip change?" by byte-compare, and the upscaled master can never
+      // byte-equal a tip — comparing against the ingested tip's own bytes is the
+      // only exact check (without it every sync saw "stale" and rewrote the
+      // avatar on each editor open/refocus). Both kinds double as the rebuild
+      // source (Ctrl + Refresh assets). A no-op upscale (source ≥768²) needs
+      // none: the stored master IS the original.
+      if (upscaled === true) {
         await writeFile(joinPath(dir, avatarSourceName(fileName)), bytes)
       }
     } catch (e) {
@@ -359,13 +361,14 @@ export async function upscaleStoredAvatar(projectDir: string, image: string): Pr
  * `upscale_avatar_file`, so rebuilding from the source is the only way old
  * masters pick up pipeline improvements.
  *
- * The pristine source per kind: an UPLOAD reads its stored `.src` sibling (the
- * only copy — the in-place upscale replaced the original). A SCENE avatar reads
- * its scene's 256² tip, which always sits beside the linked/copied scene (the
- * .duf travels with its sidecars — no duplicate is stored): the recorded
- * `imageScene`'s tip, or for a LEGACY `sc` avatar without one (the auto-sync
- * can't back-fill it — its byte-compare can never match a tip against an
- * upscaled master) the first linked scene with a tip, primary first.
+ * The pristine source: the `.src` sibling stored beside the master (both kinds
+ * carry one since the sync-staleness fix — for an upload it's the only copy of
+ * the original, for a scene avatar it's the ingested tip). A SCENE avatar
+ * without one (legacy) falls back to its scene's 256² tip, which always sits
+ * beside the linked/copied scene (the .duf travels with its sidecars): the
+ * recorded `imageScene`'s tip, else — for an avatar from before that field —
+ * the first linked scene with a tip, primary first. A tip-based rebuild WRITES
+ * the `.src` it was missing, so the avatar-sync byte-compare works from then on.
  * Best-effort: false when there's no source; a failed upscale RESTORES the
  * previous master (never leaves a raw 256² behind).
  */
@@ -376,15 +379,12 @@ export async function rebuildAvatarMaster(
   const { image, imageScene } = character
   if (!image || isExternalImage(image) || !isTauri()) return false
   try {
-    const kind = parseAvatarName(image)?.kind
     const dir = storage.metaImagesDir(projectDir)
     const path = joinPath(dir, image)
     if (!(await exists(path))) return false
-    let source = ''
-    if (kind === 'up') {
-      const srcPath = joinPath(dir, avatarSourceName(image))
-      if (await exists(srcPath)) source = srcPath
-    } else if (kind === 'sc') {
+    const srcPath = joinPath(dir, avatarSourceName(image))
+    let source = (await exists(srcPath)) ? srcPath : ''
+    if (!source && parseAvatarName(image)?.kind === 'sc') {
       if (imageScene) {
         // A recorded source whose tip is gone means the scene itself moved/broke —
         // don't guess another scene (that would silently change the avatar).
@@ -396,8 +396,9 @@ export async function rebuildAvatarMaster(
       }
     }
     if (!source) return false
+    const pristine = await readFile(source)
     const previous = await readFile(path)
-    await writeFile(path, await readFile(source))
+    await writeFile(path, pristine)
     try {
       await invoke('upscale_avatar_file', { path })
     } catch (e) {
@@ -405,6 +406,9 @@ export async function rebuildAvatarMaster(
       console.warn('avatar rebuild failed; restored the previous master', e)
       return false
     }
+    // Self-heal: a rebuild that reached for the scene's tip stores it as the
+    // `.src`, so sync's byte-compare (and future rebuilds) work without the scene.
+    if (source !== srcPath) await writeFile(srcPath, pristine)
     return true
   } catch {
     return false
