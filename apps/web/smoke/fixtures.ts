@@ -53,6 +53,13 @@ const HERE = dirname(fileURLToPath(import.meta.url))
  *  URL. Serves double duty: the primary scene's tip thumbnail AND the bytes
  *  behind the stored avatar snapshot ({@link AVATAR_FILE}). */
 const AVATAR = `data:image/png;base64,${readFileSync(joinNodePath(HERE, 'kira-avatar.png')).toString('base64')}`
+/** The STORED avatar master — kira-avatar.png pushed through the real upscale
+ *  pipeline once (flatten onto the tile bg → xBRZ ×6 → Lanczos 768; see
+ *  apps/desktop/src/avatar.rs). The browser harness can't run the Rust upscale,
+ *  so the fixture bakes its output — the header screenshots then show exactly
+ *  what the app stores, not a raw 256² magnified. Regenerate after pipeline
+ *  changes by re-running that pipeline over kira-avatar.png. */
+const AVATAR_MASTER = `data:image/png;base64,${readFileSync(joinNodePath(HERE, 'kira-avatar-master.png')).toString('base64')}`
 /** The character's STORED avatar reference: a snapshot of the primary scene's
  *  tip (`<id>--sc-<ts>`), the realistic state once a primary scene is linked —
  *  the app derives the avatar from that scene. Being an `sc` name makes
@@ -303,9 +310,10 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     [P.scene]: 'duf-fixture',
     [`${P.scene}.tip.png`]: AVATAR,
     // The stored avatar snapshot the character references — the app resolves it
-    // from the project's hidden meta images (resolveImageSrc). Same bytes as the
-    // primary scene's tip, since in the real app the snapshot IS that render.
-    [`${P.project}/.dcsmeta/images/${AVATAR_FILE}`]: AVATAR,
+    // from the project's hidden meta images (resolveImageSrc). The 768² MASTER
+    // derived from the primary scene's tip, exactly what the real app stores
+    // (upscale-on-write); the tip seeds above stay the raw 256², as on disk.
+    [`${P.project}/.dcsmeta/images/${AVATAR_FILE}`]: AVATAR_MASTER,
     ...(opts.extraScene ? { [P.scene2]: 'duf-fixture', [`${P.scene2}.tip.png`]: AVATAR_SUMMERTIDE } : {}),
     [P.houdini]: 'hip-fixture',
     // A release root is marked by copyright.txt; the version parses from the
@@ -337,14 +345,20 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
   return {
     files,
     dialogPath: opts.dialogPath,
-    // The demo scene reports its hair item as a wearable so the groom pill resolves.
+    // Each scene reports ITS OWN hair item as a wearable, so every scene's groom
+    // pill resolves and no scene sees the other's hair as "unlisted" (the amber
+    // warning must never appear in guide shots — it's not a documented state).
     sceneWearables: opts.demo
-      ? [
-          { id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' },
+      ? {
+          [P.scene]: [{ id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' }],
           ...(opts.extraScene
-            ? [{ id: 'nova-ponytail-hair', label: HAIR_ITEM_2, conformTarget: '#Genesis9' }]
-            : []),
-        ]
+            ? {
+                [P.scene2]: [
+                  { id: 'nova-ponytail-hair', label: HAIR_ITEM_2, conformTarget: '#Genesis9' },
+                ],
+              }
+            : {}),
+        }
       : undefined,
     // …and its base figure, so the create dialog auto-selects G9 from the scene.
     sceneFigure: opts.demo ? { id: 'Genesis9', label: 'Genesis 9' } : null,
