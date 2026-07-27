@@ -34,7 +34,7 @@
 **Genesis** is set at creation. **Gender** is read from the primary scene — the
 figure id on the gendered generations, the **GP/DK geograft** on the
 gender-neutral G9 (Golden Palace → female, Dicktator → male) — and shown
-read-only — set when the primary scene is linked at creation. The same read drives the
+read-only — **baked at creation** from the scene, and never changes again. The same read drives the
 [GEN section](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace---dicktator--the-genitalia-gen-section). All four generations are
 selectable; the deeply validated path is **G9** (and G8.1 on the old pipeline) —
 for the others, DTH ships a subset of pose assets and the studio offers whatever
