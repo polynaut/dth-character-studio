@@ -95,11 +95,11 @@ export function AssetForm({
       </div>
       {scenePath && (
         <>
-          {/* Avatar left, name right — mirroring the Character tab's layout;
-              description and the copy options follow full-width below. */}
+          {/* Avatar left; name + the copy options stack beside it (no card) —
+              the description follows full-width below the row. */}
           <div className="flex flex-wrap items-start gap-4">
             <ScenePreview scenePath={scenePath} />
-            <div className="min-w-[20rem] flex-1">
+            <div className="min-w-[20rem] flex-1 space-y-3">
               <Field label="Name">
                 <Input
                   value={name}
@@ -107,6 +107,32 @@ export function AssetForm({
                   placeholder="Attachment name"
                 />
               </Field>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  Copy into the{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">.assets</code> folder
+                </span>
+                <Switch checked={copy} onCheckedChange={setCopy} />
+              </label>
+              {copy ? (
+                <>
+                  <Field label="Subfolder (optional)">
+                    <Input
+                      value={subfolder}
+                      onChange={(e) => setSubfolder(e.target.value)}
+                      placeholder="e.g. bases"
+                    />
+                  </Field>
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>Delete the original after copying</span>
+                    <Switch checked={deleteOriginal} onCheckedChange={setDeleteOriginal} />
+                  </label>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Linked in place — the scene stays where it is; this entry just points to it.
+                </p>
+              )}
             </div>
           </div>
           <Field label="Description (optional)">
@@ -117,34 +143,6 @@ export function AssetForm({
               rows={3}
             />
           </Field>
-          <div className="space-y-3">
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>
-                Copy into the <code className="rounded bg-muted px-1 py-0.5 text-xs">.assets</code>{' '}
-                folder
-              </span>
-              <Switch checked={copy} onCheckedChange={setCopy} />
-            </label>
-            {copy ? (
-              <>
-                <Field label="Subfolder (optional)">
-                  <Input
-                    value={subfolder}
-                    onChange={(e) => setSubfolder(e.target.value)}
-                    placeholder="e.g. bases"
-                  />
-                </Field>
-                <label className="flex items-center justify-between gap-3 text-sm">
-                  <span>Delete the original after copying</span>
-                  <Switch checked={deleteOriginal} onCheckedChange={setDeleteOriginal} />
-                </label>
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Linked in place — the scene stays where it is; this entry just points to it.
-              </p>
-            )}
-          </div>
           <div className="flex justify-end">
             <Button onClick={() => void onCreate()} disabled={busy || !name.trim()}>
               {busy ? 'Adding…' : 'Add attachment'}
