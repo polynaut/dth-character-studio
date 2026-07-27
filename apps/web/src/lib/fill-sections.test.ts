@@ -48,16 +48,28 @@ describe('sectionFilled', () => {
 })
 
 describe('filledSections', () => {
-  it('lists the filled sections in canonical ROM order', () => {
+  it('lists the filled sections in canonical ROM order — RET derived from JCM', () => {
     const sections: RomSections = {
       ...defaultSections(),
+      // Stored RET flag is IGNORED: RET counts as filled because JCM is an
+      // enabled preset (the retargeting poses live inside the JCM base ROM).
       RET: config({ enabled: false }),
       JCM: config({ enabled: true, mode: 'preset' }),
       FAC: config({ enabled: false }),
       FBM: config({ enabled: true, groups: [group('g1', [pose('p1')])] }),
       MISC: config({ enabled: true }), // enabled but empty — not offered
     }
-    expect(filledSections(sections)).toEqual(['JCM', 'FBM'])
+    expect(filledSections(sections)).toEqual(['RET', 'JCM', 'FBM'])
+  })
+
+  it('no enabled JCM preset, no RET — regardless of the stored RET flag', () => {
+    const sections: RomSections = {
+      ...defaultSections(),
+      RET: config({ enabled: true, mode: 'preset' }),
+      JCM: config({ enabled: true, customAssetPath: 'X:/roms/base.duf' }), // custom mode
+      FAC: config({ enabled: false }),
+    }
+    expect(filledSections(sections)).toEqual(['JCM'])
   })
 })
 

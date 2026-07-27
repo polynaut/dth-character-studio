@@ -26,9 +26,16 @@ export function sectionFilled(config: RomSectionConfig): boolean {
 }
 
 /** The source's filled sections, in canonical ROM order — the wizard's
- *  checkbox list. */
+ *  checkbox list. RET has no independent existence (the retargeting poses
+ *  live inside the JCM base ROM — the ROM editor derives its enable state
+ *  the same way), so it counts as filled exactly when JCM is an enabled
+ *  preset, ignoring its own stored flag. */
 export function filledSections(sections: RomSections): Array<RomSection> {
-  return ROM_SECTIONS.filter((section) => sectionFilled(sections[section]))
+  return ROM_SECTIONS.filter((section) =>
+    section === 'RET'
+      ? sections.JCM.enabled && sections.JCM.mode === 'preset'
+      : sectionFilled(sections[section]),
+  )
 }
 
 /** Short content summary for a wizard checkbox row, e.g. "preset ROM · 2

@@ -119,10 +119,12 @@ export function FillFromCharacterDialog({
   function next() {
     if (!source) return
     // Every offered section starts checked — the user deselects what to keep.
-    // The two preserve lists start UNCHECKED: they're the most target-specific
-    // tuning (which morphs/nodes to hold depends on this character's own
-    // setup), so copying them is a deliberate opt-in.
-    setChecked(new Set(filledSections(source.sections)))
+    // RET is never in the set: it has no checkbox of its own (it rides with
+    // JCM, exactly like the editor's tied enable toggle). The two preserve
+    // lists start UNCHECKED: they're the most target-specific tuning (which
+    // morphs/nodes to hold depends on this character's own setup), so copying
+    // them is a deliberate opt-in.
+    setChecked(new Set(filledSections(source.sections).filter((section) => section !== 'RET')))
     setExtras(
       new Set(
         offeredExtras(source).filter(
@@ -134,6 +136,7 @@ export function FillFromCharacterDialog({
   }
 
   function toggle(section: RomSection, on: boolean) {
+    if (section === 'RET') return // rides with JCM (backstop — the checkbox is disabled)
     const set = new Set(checked)
     if (on) set.add(section)
     else set.delete(section)
@@ -149,7 +152,11 @@ export function FillFromCharacterDialog({
 
   function fill() {
     if (!source || (checked.size === 0 && extras.size === 0)) return
-    const picked = offered.filter((section) => checked.has(section))
+    // RET copies exactly when JCM does — the same derivation the editor and
+    // generation apply (the retargeting poses are part of the JCM base ROM).
+    const picked = offered.filter((section) =>
+      section === 'RET' ? checked.has('JCM') : checked.has(section),
+    )
     const patch: Partial<Character> & { sections: RomSections } = {
       sections: fillSectionsFrom(target.sections, source.sections, picked),
     }
@@ -264,23 +271,44 @@ export function FillFromCharacterDialog({
             save the character.
           </p>
           <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-            {offered.map((section) => (
-              <li key={section}>
-                <label className="flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={checked.has(section)}
-                    onChange={(e) => toggle(section, e.target.checked)}
-                  />
-                  <span className="font-medium">{SECTION_LABELS[section]}</span>
-                  <span className="text-xs text-muted-foreground">{section}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                    {source ? sectionContentSummary(source.sections[section]) : ''}
-                  </span>
-                </label>
-              </li>
-            ))}
+            {offered.map((section) => {
+              // RET mirrors the editor's tied enable toggle: its checkbox
+              // follows the JCM one and is never operable on its own.
+              const tiedToJcm = section === 'RET'
+              return (
+                <li key={section}>
+                  <label
+                    className={`flex items-center gap-2.5 rounded-md border px-3 py-2 text-sm ${
+                      tiedToJcm
+                        ? 'cursor-default'
+                        : 'cursor-pointer hover:bg-accent hover:text-accent-foreground'
+                    }`}
+                    title={
+                      tiedToJcm
+                        ? 'The retargeting poses are part of the JCM base ROM — copied together with the JCM section'
+                        : undefined
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      disabled={tiedToJcm}
+                      checked={tiedToJcm ? checked.has('JCM') : checked.has(section)}
+                      onChange={(e) => toggle(section, e.target.checked)}
+                    />
+                    <span className="font-medium">{SECTION_LABELS[section]}</span>
+                    <span className="text-xs text-muted-foreground">{section}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                      {tiedToJcm
+                        ? 'with JCM'
+                        : source
+                          ? sectionContentSummary(source.sections[section])
+                          : ''}
+                    </span>
+                  </label>
+                </li>
+              )
+            })}
           </ul>
           {extrasAvailable.length > 0 && source && (
             <div>

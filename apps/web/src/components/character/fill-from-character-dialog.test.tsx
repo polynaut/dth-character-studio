@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(cleanup)
@@ -111,5 +111,30 @@ describe('FillFromCharacterDialog', () => {
     expect(patch!.facsDetailStrength).toBeUndefined()
     expect(patch!.preserveMorphs).toBeUndefined()
     expect(patch!.sections!.EXP.groups).toHaveLength(1)
+  })
+
+  it('RET rides with JCM: its checkbox mirrors JCM and both drop together', async () => {
+    vi.mocked(fetchAllCharacters).mockResolvedValue([sourceCharacter()])
+    let picked: { picked: Array<string> } | null = null
+    render(
+      <FillFromCharacterDialog
+        target={target}
+        onFill={(_p, source) => {
+          picked = source
+        }}
+        onClose={() => {}}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('radio'))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    const ret = within(screen.getByText('Retargeting').closest('label')!).getByRole('checkbox')
+    expect(ret).toHaveProperty('disabled', true)
+    expect(ret).toHaveProperty('checked', true)
+    // Unchecking Joint Corrective flips the mirrored RET checkbox too…
+    fireEvent.click(screen.getByText('Joint Corrective'))
+    expect(ret).toHaveProperty('checked', false)
+    // …and the fill copies neither.
+    fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
+    expect(picked!.picked).toEqual(['FAC', 'EXP'])
   })
 })
