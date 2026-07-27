@@ -113,11 +113,15 @@ async function measureFrames(paths: Array<string>): Promise<Map<string, Measured
  *  `error` — suggestions degrade, the editor never breaks. */
 export async function sceneWearables({ data }: { data: unknown }) {
   const input = z.object({ scenePath: z.string().min(1) }).parse(data)
-  if (!isTauri()) return { items: [], figure: null, error: 'not running in the desktop app' }
+  if (!isTauri())
+    return empty('not running in the desktop app')
   try {
     return sceneWearablesSchema.parse(await invoke('scene_wearables', { path: input.scenePath }))
   } catch (error) {
-    return { items: [], figure: null, error: error instanceof Error ? error.message : String(error) }
+    return empty(error instanceof Error ? error.message : String(error))
+  }
+  function empty(error: string): z.infer<typeof sceneWearablesSchema> {
+    return { items: [], figure: null, figures: [], animationFrames: 0, error }
   }
 }
 

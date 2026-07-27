@@ -278,10 +278,13 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // Groom suggestions: THIS scene's seeded wearables (so a listed hair item
         // resolves instead of flashing "not found" — and another scene's hair
         // never leaks in as "unlisted"), else empty. `figure` feeds the create
-        // dialog's Genesis auto-select. Best-effort — never errors.
+        // dialog's Genesis auto-select; `figures`/`animationFrames` the add-scene
+        // validation (one figure, empty timeline — all checks pass by default).
         return {
           items: seed.sceneWearables?.[norm(args.path)] ?? [],
           figure: seed.sceneFigure ?? null,
+          figures: seed.sceneFigure ? [seed.sceneFigure] : [],
+          animationFrames: 1,
           error: '',
         }
       case 'housekeeping_sweep':

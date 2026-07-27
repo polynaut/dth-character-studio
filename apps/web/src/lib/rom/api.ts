@@ -122,6 +122,7 @@ export type {
   StaleTargets,
   TooNewDefinition,
 } from './api/generate'
+export type { SceneWearables } from './api/native-types'
 
 // --- install: app settings + the Tools-page install features ----------------
 export {
