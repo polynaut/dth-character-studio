@@ -105,9 +105,9 @@ const G9_BOTH_GEN_ASSETS = ['GP9 - Golden Palace.duf', 'DK9 - Dicktator.duf']
  * GEN section's enabled state (+ the explicit GP+DK preset selection for a
  * both-grafts G9 scene) and the gender. Returns ONLY the fields the scan can
  * decide AND that differ from `character` — an unreadable scan decides
- * nothing, and an empty patch means nothing changed. ONE rule, applied
- * everywhere a primary scene is chosen (`createCharacter`, the editor's
- * primary link/relink).
+ * nothing, and an empty patch means nothing changed. `createCharacter` applies
+ * BOTH fields; the editor's missing-primary relink applies only `sections` —
+ * gender is BAKED at creation and never changes again.
  */
 export function primarySceneDerivation(
   scan: SceneWearables,

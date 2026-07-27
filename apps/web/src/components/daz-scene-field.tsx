@@ -407,17 +407,13 @@ export function DazSceneField({
           scenePath: finalScene,
           extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
         }
-        // The primary scene DRIVES the scene-derived fields (one rule, shared
-        // with createCharacter): the GEN section's enabled state follows the
-        // scene's GP/DK geograft, and the gender is read from the figure id /
-        // geograft — neither is user-editable anymore, so choosing a primary
-        // re-derives both. Unreadable scene → keep the stored values.
+        // Relinking (only reachable for a MISSING primary) re-derives the GEN
+        // section from the new scene's GP/DK geograft — same rule as creation
+        // (`primarySceneDerivation`). GENDER is deliberately NOT touched: it is
+        // baked at character creation and never changes again. Unreadable
+        // scene → keep the stored values.
         const scan = await sceneWearables({ data: { scenePath: finalScene } })
         const derived = primarySceneDerivation(scan, character)
-        if (derived.gender) {
-          patch.gender = derived.gender
-          toast.info(`Gender set to ${derived.gender} — read from the scene.`)
-        }
         if (derived.sections) {
           patch.sections = derived.sections
           const genEnabled = derived.sections.GEN.enabled
