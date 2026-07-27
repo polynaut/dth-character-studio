@@ -22,10 +22,13 @@ use tauri::ipc::Response;
 /// header portrait's painted size on HiDPI displays.
 const TARGET: u32 = 768;
 
-/// The avatar tile's background — `#565963`, used by BOTH the header wrapper and
-/// the shared `Portrait` (list cards, dialog, …). The avatar is only ever shown on
-/// this colour, so baking it in is invisible.
-const TILE_BG: [u8; 3] = [0x56, 0x59, 0x63];
+/// The avatar tile's background — `#262626`, used by BOTH the header wrapper and
+/// the shared `Portrait` (list cards, dialog, …). Daz renders the `.tip.png`
+/// previews against a dark viewport, so a dark tile matches what the thumbnail
+/// was lit for (the old `#565963` washed them out). The avatar is only ever
+/// shown on this colour, so baking it in is invisible. Changing it requires a
+/// master rebuild (Ctrl+Refresh assets) — stored masters are flattened onto it.
+const TILE_BG: [u8; 3] = [0x26, 0x26, 0x26];
 
 /// Composite `src` over {@link TILE_BG} into an opaque image. A tip's hard
 /// transparent edge is a discontinuity every magnifier turns into jaggies;
