@@ -1,5 +1,53 @@
 # @dth/desktop
 
+## 0.46.0
+
+### Minor Changes
+
+- [#530](https://github.com/polynaut/dth-character-studio/pull/530) [`d8f1d6a`](https://github.com/polynaut/dth-character-studio/commit/d8f1d6a78b244b79b906b682c0ed7b1514c4dd52) Thanks [@polynaut](https://github.com/polynaut)! - Adding another Daz scene to a character now pauses on a Validation table
+  (styled like the Refresh-assets version table) that checks the picked scene
+  before it links: same Genesis generation as the character, exactly one
+  character in the scene, an empty animation timeline (the generated ROM script
+  fills the timeline itself), and the same genital geograft (Golden Palace /
+  Dicktator) as the primary scene — the closest checkable proxy for "same
+  gender". Different hair, clothing and props stay untouched: outfit variants
+  are what extra scenes are for. A failed check blocks the add behind an
+  explicit "Add anyway" switch; a scene the studio can't read degrades to
+  "unchecked" and never blocks. The native `scene_wearables` read now also
+  reports every figure root and the timeline occupancy to power the checks, and
+  a scene already inside the character folder gets the same dialog (it used to
+  link silently).
+
+### Patch Changes
+
+- [#533](https://github.com/polynaut/dth-character-studio/pull/533) [`965d543`](https://github.com/polynaut/dth-character-studio/commit/965d54307971fced26285579f696b2e65c2ca3c3) Thanks [@polynaut](https://github.com/polynaut)! - Dialog polish: all modals are roomier (the shared Modal default grew from
+  28rem to 36rem — full file paths and the Validation table no longer wrap or
+  cramp), the Validation table's permanent hint paragraph is gone — a FAILED
+  check row now explains itself on hover instead (what the check demands and
+  why), the create dialog's read-only Gender moved to its own row so it no
+  longer sits between two real selects looking like a broken one, and the
+  override handles (the small cube) on the editor's field labels only render
+  while a non-primary scene is selected — with the primary selected there is
+  nothing to override. The Unreal project cards were reworked too: the card
+  body is inert (only the explicit open/install buttons act), and the path
+  line is now a real path chip (click = copy, Alt+click = Explorer) that
+  middle-ellipsizes long paths — at most 8 leading characters once truncation
+  kicks in, so the full .uproject file name keeps the budget. The avatar tile
+  background darkened from [#565963](https://github.com/polynaut/dth-character-studio/issues/565963) to [#262626](https://github.com/polynaut/dth-character-studio/issues/262626) (Daz renders the .tip.png
+  previews against a dark viewport — the light tile washed them out), the
+  header shrink animation's border shades follow, and every small avatar
+  preview now wears the same #2d2d2d border as the main header avatar.
+  Existing avatar masters are flattened onto the OLD colour — run Tools →
+  Refresh assets with Ctrl held once to re-derive them onto the new tile.
+
+- [#532](https://github.com/polynaut/dth-character-studio/pull/532) [`320341d`](https://github.com/polynaut/dth-character-studio/commit/320341d283e2a285e3cb57657079f1f7b8ffdecf) Thanks [@polynaut](https://github.com/polynaut)! - The "Empty timeline" scene check no longer trips over stray product keys.
+  Wearables routinely leave a few animation keys on their own bones (e.g. the JM
+  Nipple graft keys frames 0–7 in every scene it's used in), which read as "8
+  frames of animation" on a scene whose timeline is actually untouched. The
+  native scene read now counts only channels that really change value AND don't
+  belong to a fitted wearable's node chain — real hand-animation on the
+  character still fails the check.
+
 ## 0.45.7
 
 ### Patch Changes
