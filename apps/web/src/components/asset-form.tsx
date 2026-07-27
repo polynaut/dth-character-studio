@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -13,26 +13,29 @@ function sceneStem(path: string): string {
 }
 
 /**
- * The "Asset" tab of a create panel: add a Daz scene as a reusable asset (a base
- * to build characters on), stored in `projectId`'s folder. The scene is copied into
- * the project's `.assets` folder (optionally under a subfolder) or linked in place.
- * Calls `onCreated` after a successful add.
+ * The "Attachment" tab of a create panel: add a Daz scene as a reusable asset
+ * (a base to build characters on), stored in `projectId`'s folder. The scene is
+ * copied into the project's `.assets` folder (optionally under a subfolder) or
+ * linked in place. Calls `onCreated` after a successful add.
  *
- * `initialScenePath` seeds the picked scene + name (e.g. when a `.duf` was dropped
- * onto the page and the panel opened straight on this tab). Remount the form with a
- * `key` tied to that path so a fresh drop re-seeds it.
+ * The picked scene is CONTROLLED: it's the create panel's shared scene state,
+ * so a scene chosen on the Character tab is already selected here and a pick
+ * made here syncs back (the panel's `onScenePathChange` runs the Character
+ * tab's full scene derivation). Only the attachment name/description/copy
+ * options are the form's own.
  */
 export function AssetForm({
   projectId,
-  initialScenePath = '',
+  scenePath,
+  onScenePathChange,
   onCreated,
 }: {
   projectId: string
-  initialScenePath?: string
+  scenePath: string
+  onScenePathChange: (path: string) => void
   onCreated: () => void
 }) {
-  const [scenePath, setScenePath] = useState(initialScenePath)
-  const [name, setName] = useState(initialScenePath ? sceneStem(initialScenePath) : '')
+  const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [copy, setCopy] = useState(true)
   const [subfolder, setSubfolder] = useState('')
@@ -40,11 +43,15 @@ export function AssetForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  // Seed the attachment name from the scene whenever one arrives (mount with a
+  // Character-tab pick included) — but never overwrite a name the user typed.
+  useEffect(() => {
+    if (scenePath) setName((current) => (current.trim() ? current : sceneStem(scenePath)))
+  }, [scenePath])
+
   async function pick() {
     const picked = await pickDufPath('Choose a Daz scene')
-    if (!picked) return
-    setScenePath(picked)
-    if (!name.trim()) setName(sceneStem(picked))
+    if (picked) onScenePathChange(picked)
   }
 
   async function onCreate() {

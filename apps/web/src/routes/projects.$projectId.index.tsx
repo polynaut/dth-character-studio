@@ -613,6 +613,11 @@ function ProjectCharactersPage() {
             <TabsContent value="asset">
               <AssetForm
                 projectId={projectId}
+                // The panel's ONE scene selection, shared with the Character tab
+                // — a pick here re-runs the character derivation (name, scan,
+                // genesis/gender) so switching back shows the same scene.
+                scenePath={scenePath.trim()}
+                onScenePathChange={applyScene}
                 onCreated={() => {
                   setPanelOpen(false)
                   setAssetRefresh((k) => k + 1)
