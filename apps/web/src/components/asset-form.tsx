@@ -3,9 +3,11 @@ import { FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, Field, Input, Switch, Textarea } from '@dth/ui'
-import { Portrait } from '#/components/portrait.tsx'
+import { PathCode } from '#/components/path-code.tsx'
+import { ScenePreview } from '#/components/scene-preview.tsx'
 import { createAsset } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
+import { displayPath } from '#/lib/path.ts'
 
 /** Scene file name without folder or `.duf`, e.g. "X:\…\Kira.duf" → "Kira". */
 function sceneStem(path: string): string {
@@ -84,22 +86,29 @@ export function AssetForm({
         Add a Daz scene as a reusable <strong>attachment</strong> — a starting point to build
         characters on. Stored in this project.
       </p>
-      <Button variant="outline" onClick={() => void pick()}>
-        <FolderOpen /> {scenePath ? 'Choose a different scene…' : 'Choose Daz scene…'}
-      </Button>
+      {/* The same choose-row as the Character tab: button + copyable path chip. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" className="shrink-0" onClick={() => void pick()}>
+          <FolderOpen /> {scenePath ? 'Choose another…' : 'Choose Daz scene…'}
+        </Button>
+        {scenePath && <PathCode path={displayPath(scenePath)} className="flex h-9 items-center" />}
+      </div>
       {scenePath && (
         <>
-          <div className="flex justify-center">
-            <Portrait
-              scenePath={scenePath}
-              name={name || '?'}
-              className="aspect-[3/4] w-28 rounded-md"
-              fallbackClassName="text-4xl"
-            />
+          {/* Avatar left, name right — mirroring the Character tab's layout;
+              the remaining fields follow full-width below the row. */}
+          <div className="flex flex-wrap items-start gap-4">
+            <ScenePreview scenePath={scenePath} />
+            <div className="min-w-[20rem] flex-1">
+              <Field label="Name">
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Attachment name"
+                />
+              </Field>
+            </div>
           </div>
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Attachment name" />
-          </Field>
           <Field label="Description (optional)">
             <Textarea
               value={description}

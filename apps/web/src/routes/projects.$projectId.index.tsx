@@ -4,6 +4,7 @@ import { FolderOpen, PaintBucket, UserPlus, X } from 'lucide-react'
 
 import { Button, EditableTitle, Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
+import { ScenePreview } from '#/components/scene-preview.tsx'
 import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { AssetsGrid } from '#/components/assets-grid.tsx'
@@ -35,7 +36,6 @@ import {
   fetchProject,
   generateCharacterFiles,
   renameProject,
-  resolveScenePreview,
   saveCharacter,
   sceneWearables,
   setActiveProjectDir,
@@ -54,32 +54,6 @@ import { characterSkinning, countPoses, defaultSections, genesisFromFigureNode }
 
 import type { SceneWearables } from '#/lib/rom/api.ts'
 import type { Gender, GenesisVersion, RomSection } from '@dth/rom'
-
-/** Live preview of the picked Daz scene's tip thumbnail (read as a data URL). */
-function ScenePreview({ scenePath }: { scenePath: string }) {
-  const [src, setSrc] = useState('')
-  useEffect(() => {
-    let active = true
-    if (!scenePath.trim()) {
-      setSrc('')
-      return
-    }
-    resolveScenePreview(scenePath.trim())
-      .then((s) => active && setSrc(s))
-      .catch(() => active && setSrc(''))
-    return () => {
-      active = false
-    }
-  }, [scenePath])
-  if (!src) return null
-  return (
-    <img
-      src={src}
-      alt=""
-      className="aspect-[130/227] w-32 rounded-lg bg-[#262626] object-cover object-top"
-    />
-  )
-}
 
 export const Route = createFileRoute('/projects/$projectId/')({
   loader: async ({ params, preload }) => {
