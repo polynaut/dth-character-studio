@@ -13,4 +13,6 @@ so the webview paints it 1:1 with no aliasing-prone GPU resampling — the Lancz
 low-pass anti-aliases the xBRZ'd master's hard edges. Avatars are also now
 flattened onto the tile background (`#565963`, the only colour they're shown on)
 BEFORE upscaling, so the tip's transparent edge is a smooth figure→bg gradient
-rather than a discontinuity that magnifiers jag — re-set an avatar to re-apply.
+rather than a discontinuity that magnifiers jag. Existing masters pick this up via
+**Ctrl + Refresh assets** (Tools), which re-derives scene-sourced avatar masters
+from their scenes' pristine tips — or just re-set an avatar.

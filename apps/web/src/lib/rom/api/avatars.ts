@@ -243,11 +243,13 @@ function imageDataUrl(bytes: Uint8Array, fileName: string): string {
 // avatar replacement accreted another one for the whole session.
 const imageSrcCache = new Map<string, string>()
 
-/** Drop every cached avatar data URL. Used after Refresh assets upscales avatars
- *  IN PLACE (same filename, new bytes): the cache is keyed by filename, so without
- *  this it would keep serving the pre-upscale 256² URL until the next reload. */
+/** Drop every cached avatar data URL — the full-image cache AND the per-size
+ *  variant cache. Used after Refresh assets rewrites avatars IN PLACE (same
+ *  filename, new bytes): both caches are keyed by filename, so without this they
+ *  would keep serving the pre-rewrite bytes until the next reload. */
 export function clearImageSrcCache(): void {
   imageSrcCache.clear()
+  variantSrcCache.clear()
 }
 
 /** Drop the cached data URLs of a character's SUPERSEDED avatars: every entry
@@ -325,6 +327,44 @@ export async function upscaleStoredAvatar(projectDir: string, image: string): Pr
   try {
     const path = joinPath(storage.metaImagesDir(projectDir), image)
     return (await invoke<boolean>('upscale_avatar_file', { path })) === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Re-derive a character's SCENE avatar from its source scene's tip: overwrite the
+ * stored master IN PLACE (same filename — no character re-save, every stored
+ * reference stays valid) with the pristine 256² tip, then re-run the native
+ * upscale (flatten onto the tile bg → xBRZ → 768²). The Ctrl+Refresh-assets path
+ * for masters written BEFORE flatten-first: an upscaled master is a no-op to
+ * `upscale_avatar_file`, so the only way to re-apply the current pipeline is to
+ * rebuild from the source tip — which still sits next to the scene. Scene-derived
+ * avatars only (`imageScene`); uploads have no external source (their stored file
+ * IS the original). Best-effort: false when there's nothing to rebuild; a failed
+ * upscale RESTORES the previous master (never leaves a raw 256² behind).
+ */
+export async function rebuildSceneAvatar(
+  projectDir: string,
+  character: { image: string; imageScene: string },
+): Promise<boolean> {
+  const { image, imageScene } = character
+  if (!image || !imageScene || isExternalImage(image) || !isTauri()) return false
+  try {
+    const tipPath = await findTipImage(imageScene)
+    if (!tipPath) return false
+    const path = joinPath(storage.metaImagesDir(projectDir), image)
+    if (!(await exists(path))) return false
+    const previous = await readFile(path)
+    await writeFile(path, await readFile(tipPath))
+    try {
+      await invoke('upscale_avatar_file', { path })
+    } catch (e) {
+      await writeFile(path, previous)
+      console.warn('avatar rebuild failed; restored the previous master', e)
+      return false
+    }
+    return true
   } catch {
     return false
   }

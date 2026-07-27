@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CircleAlert, RefreshCw, RotateCcw, TriangleAlert } from 'lucide-react'
 
-import { Button, InfoPopup } from '@dth/ui'
+import { Button, InfoPopup, useModifierHeld } from '@dth/ui'
 import { CHARACTER_SCHEMA_VERSION } from '@dth/rom'
 import { detectAssetVersions, refreshAllAssets } from '#/lib/rom/api.ts'
 import { RefreshDetection } from '#/components/tools/refresh-detection.tsx'
@@ -29,6 +29,11 @@ export function RefreshAssetsTab() {
   const [resetting, setResetting] = useState(false)
   const [summary, setSummary] = useState<RefreshSummary | null>(null)
   const working = refreshing || resetting
+  // Power-user: holding Ctrl turns Refresh into "Refresh + rebuild avatars" —
+  // scene-sourced avatar masters are re-derived from their scenes' pristine tips,
+  // so masters written by an older upscale pipeline pick up the current one
+  // (mirrors the Ctrl force-save affordance in the character header).
+  const ctrlHeld = useModifierHeld('Control')
 
   async function reload() {
     setLoading(true)
@@ -44,7 +49,7 @@ export function RefreshAssetsTab() {
     void reload()
   }, [])
 
-  function reportSummary(result: RefreshSummary) {
+  function reportSummary(result: RefreshSummary, rebuiltAvatars: boolean) {
     if (result.runtime && !result.runtime.ok) {
       toast.error(`Runtime refresh failed: ${result.runtime.detail ?? ''}`)
       return
@@ -82,7 +87,12 @@ export function RefreshAssetsTab() {
     if (result.counts.scripts > 0)
       lines.push(`Re-generated Daz scripts for ${n(result.counts.scripts, 'character')}`)
     if (result.counts.csv > 0) lines.push(`Re-generated ${n(result.counts.csv, 'PoseAsset CSV')}`)
-    if (result.counts.avatars > 0) lines.push(`Upscaled ${n(result.counts.avatars, 'avatar')} to 768px`)
+    if (result.counts.avatars > 0)
+      lines.push(
+        rebuiltAvatars
+          ? `Rebuilt ${n(result.counts.avatars, 'avatar master')} from scene thumbnails`
+          : `Upscaled ${n(result.counts.avatars, 'avatar')} to 768px`,
+      )
     if (result.runtime?.ok) lines.push('Re-installed the DTH runtime files')
     toast.success(`Refreshed ${n(result.regenerated, 'character')}`, {
       description: lines.length ? (
@@ -95,14 +105,14 @@ export function RefreshAssetsTab() {
     })
   }
 
-  async function run(opts: { resetTooNew?: boolean } = {}) {
+  async function run(opts: { resetTooNew?: boolean; rebuildAvatars?: boolean } = {}) {
     const setBusy = opts.resetTooNew ? setResetting : setRefreshing
     setBusy(true)
     setSummary(null)
     try {
       const result = await refreshAllAssets(opts)
       setSummary(result)
-      reportSummary(result)
+      reportSummary(result, opts.rebuildAvatars === true)
       await reload() // re-detect so the version table reflects the regeneration
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -127,7 +137,8 @@ export function RefreshAssetsTab() {
             Re-generates the Daz scripts and PoseAsset CSVs so all generated files match the current
             version — run this after updating the studio or switching DTH release. It always covers
             every known (recent) project, no matter which window it runs from. Character definitions
-            aren't changed.
+            aren't changed. Hold <kbd>Ctrl</kbd> to also rebuild scene-sourced avatar masters from
+            their scenes' thumbnails, re-applying the current upscale pipeline.
           </InfoPopup>
         </h2>
         {/* The action sits up top so it's visible at a glance, above the table; it's
@@ -135,12 +146,17 @@ export function RefreshAssetsTab() {
         <Button
           size="lg"
           variant="outline"
-          onClick={() => void run()}
+          onClick={() => void run({ rebuildAvatars: ctrlHeld })}
           disabled={working}
+          title={
+            ctrlHeld
+              ? 'Also re-derives scene-sourced avatar masters from their scenes’ thumbnails (Ctrl)'
+              : undefined
+          }
           className={`h-11 px-6 text-base ${needsRefresh ? 'refresh-pulse' : ''}`}
         >
           <RefreshCw className={`size-5 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Refreshing…' : 'Refresh assets'}
+          {refreshing ? 'Refreshing…' : ctrlHeld ? 'Refresh + rebuild avatars' : 'Refresh assets'}
         </Button>
 
         {/* Definitions saved by a NEWER build than this one — the one recoverable
