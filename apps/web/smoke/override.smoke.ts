@@ -65,11 +65,14 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   // The KiraBeach delta is keyed by the open scene's normalized (lowercased) path.
   expect(romDsa).toContain(extraScene.toLowerCase())
 
-  // The persisted definition carries the override entry.
+  // The persisted definition carries the override record — its replaced row
+  // section-keyed on the `rom` map (schema v24; presence IS the arming). The
+  // primary scene's hair-only record rides alongside in the same list.
   const definition = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!)
-  expect(definition.sceneOverrides).toHaveLength(1)
-  expect(definition.sceneOverrides[0]).toMatchObject({ scenePath: extraScene, enabled: true })
-  expect(definition.sceneOverrides[0].poses).toHaveLength(1)
+  const stored = definition.sceneOverrides.find(
+    (o: { scenePath: string }) => o.scenePath === extraScene,
+  )
+  expect(stored.rom.FBM.replaced).toHaveLength(1)
 
   // The completeness guard: every native call the flow made was one this mock
   // (and therefore the map it encodes) knows about.
@@ -78,8 +81,9 @@ test('project window: a scene override saves scene-specific artifacts', async ({
 
 // Arm-on-edit's inverse: editing a base ROM row back to the base content DISARMS
 // the override — the row un-greens (its per-frame reset control disappears) and
-// saving produces no scene-specific artifacts. Regression for an override that
-// stayed armed after a toggle round-trip (e.g. bone scale on then off again).
+// the record prunes itself entirely (schema v24), leaving the draft equal to the
+// saved definition: nothing to save. Regression for an override that stayed
+// armed after a toggle round-trip (e.g. bone scale on then off again).
 test('project window: editing a base row back to the base disarms the override', async ({
   page,
 }) => {
@@ -111,17 +115,17 @@ test('project window: editing a base row back to the base disarms the override',
   await value.press('Enter')
   await expect(reset).toHaveCount(0)
 
-  // Save → no scene-suffixed CSV, and the stored override is disarmed (gate off).
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByText(/Saved “Kira”/)).toBeVisible()
+  // The override entry pruned itself the moment it carried nothing (v24: no
+  // disarmed stub is stored), so the draft equals the saved definition again —
+  // there is literally NOTHING to save: the save bar (and its Save button)
+  // leaves the page, no scene CSV is minted, and the on-disk definition never
+  // gains a record for this scene.
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
   const written = await filesWritten(page)
-  expect(written).toContain(`${P.charFolder}/Kira_pose_asset.csv`)
   expect(written).not.toContain(`${P.charFolder}/Kira_KiraBeach_pose_asset.csv`)
   const definition = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!)
-  const stored = definition.sceneOverrides.find((o: { scenePath: string }) => o.scenePath === extraScene)
-  // The entry may persist (other panels can share it) but its ROM gate is off with no rows.
-  if (stored) {
-    expect(stored.enabled).toBe(false)
-    expect(stored.poses).toEqual([])
-  }
+  const stored = definition.sceneOverrides.find(
+    (o: { scenePath: string }) => o.scenePath === extraScene,
+  )
+  expect(stored).toBeUndefined()
 })

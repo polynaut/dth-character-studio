@@ -244,14 +244,15 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           preserveMorphs: PRESERVE_MORPHS,
           preserveNodeTransforms: PRESERVE_NODES,
           // A linked Houdini project + the "Hair items live in the Daz scenes"
-          // feature: the primary scene lists one hair item (groomMode defaults to
-          // 'scene', so the toggle is on).
+          // feature: hair lives on each scene's per-scene record (schema v24 —
+          // the primary scene carries a hair-only record; hair never arms the
+          // ROM/panel overrides on its own).
           houdiniProjects: [P.houdini],
-          groomScenes: [
-            { scenePath: P.scene, nodes: [{ nodeLabel: HAIR_ITEM }] },
+          sceneOverrides: [
+            { scenePath: P.scene, hair: [{ nodeLabel: HAIR_ITEM }] },
             // The outfit scene carries its own style — hair lists are per scene.
             ...(opts.extraScene
-              ? [{ scenePath: P.scene2, nodes: [{ nodeLabel: HAIR_ITEM_2 }] }]
+              ? [{ scenePath: P.scene2, hair: [{ nodeLabel: HAIR_ITEM_2 }] }]
               : []),
           ],
           ...(opts.extraScene ? { extraScenes: [P.scene2] } : {}),
