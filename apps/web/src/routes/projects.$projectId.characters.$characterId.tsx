@@ -472,7 +472,10 @@ function CharacterPage() {
               </>
             )}
           </div>
-          <div className="shrink-0 lg:w-[27rem] xl:w-[32rem]">
+          {/* 28rem, not wider: two w-80 scene cards + gap need ~652px, and at the
+              xl breakpoint (1280) the panel leaves ~1176px — a 32rem sidebar
+              squeezed the cards column to 624px and wrapped the cards. */}
+          <div className="shrink-0 lg:w-[27rem] xl:w-[28rem]">
             <IdentitySection
               character={character}
               patch={patch}

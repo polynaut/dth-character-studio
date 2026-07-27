@@ -449,10 +449,12 @@ test('character-daz-scenes', async ({ page }) => {
   await openCharacterOnOutfitScene(page)
   // The Daz scenes block: both cards (outfit selected) + its per-scene hair
   // list. The hair picker (an unnamed combobox) is the page's last combobox.
+  // `.first()`: the docked scene bar (#516) carries an identical "Daz scenes"
+  // label later in the DOM — the panel heading is the first match.
   await shootStrip(
     page,
     join(OUT, 'character-daz-scenes.png'),
-    page.getByText('Daz scenes', { exact: true }),
+    page.getByText('Daz scenes', { exact: true }).first(),
     page.getByRole('combobox').last(),
   )
 })
