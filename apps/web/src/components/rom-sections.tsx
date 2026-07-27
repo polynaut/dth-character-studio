@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
-import { Button, cn, Input, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { Button, cn, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
 import { ScanCsvPickerDialog } from '#/components/scan-csv-picker-dialog.tsx'
 import {
@@ -166,6 +166,11 @@ export const RomSections = memo(function RomSections({
     section: RomSection
     poses: Awaited<ReturnType<typeof importPosesFromCsv>>
   } | null>(null)
+  // A pending "Clear" request awaiting its confirm modal: a custom section's
+  // whole definition, or (`rules`) the JCM "Modify frames" rule list.
+  const [clearRequest, setClearRequest] = useState<{ section: RomSection; rules?: boolean } | null>(
+    null,
+  )
 
 
   // Scene-override mode: everything frame-related displays the MERGED sections
@@ -426,6 +431,21 @@ export const RomSections = memo(function RomSections({
     const same = JSON.stringify(mods) === JSON.stringify(jcmMorphModsRef.current ?? [])
     emit({ ...od, jcm: { enabled: !same, mods } })
   }, [])
+
+  // Execute a confirmed Clear (the modal at the bottom): `rules` empties the JCM
+  // "Modify frames" list, a section clear empties its groups — both through the
+  // same per-scene writers as row edits, so on a non-primary scene the clear
+  // escalates and the scene owns the emptied definition.
+  function onClearConfirmed() {
+    if (!clearRequest) return
+    if (clearRequest.rules) {
+      if (overrideData) onJcmModsForScene([])
+      else onJcmMorphModsChange?.([])
+    } else {
+      onSectionGroupsChange(clearRequest.section, [])
+    }
+    setClearRequest(null)
+  }
 
   // Bulk-import a DAZ morph CSV into a section: the picker dialog lists the
   // Scan_Frames scans (plus Browse for hand-curated files); a full scene scan
@@ -885,8 +905,17 @@ export const RomSections = memo(function RomSections({
                     />
                     {/* CSV import — on a non-primary scene it imports into the scene's own
                         section (escalates), same as adding frames. */}
-                    <div className="my-4">
+                    <div className="my-4 flex gap-2">
                       <ImportCsvButton onImport={() => setPickerSection(section)} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        disabled={!editorGroups.some((group) => group.poses.length > 0)}
+                        onClick={() => setClearRequest({ section })}
+                      >
+                        Clear
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -927,6 +956,15 @@ export const RomSections = memo(function RomSections({
                         <Plus /> Add group
                       </Button>
                       <ImportCsvButton onImport={() => setPickerSection(section)} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        disabled={editorGroups.length === 0}
+                        onClick={() => setClearRequest({ section })}
+                      >
+                        Clear
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -941,6 +979,7 @@ export const RomSections = memo(function RomSections({
                       mods={overrideData?.jcm.enabled ? overrideData.jcm.mods : jcmMorphMods}
                       onChange={overrideData ? onJcmModsForScene : onJcmMorphModsChange}
                       boneIndex={boneIndex}
+                      onClear={() => setClearRequest({ section, rules: true })}
                     />
                   </div>
                 )}
@@ -964,6 +1003,32 @@ export const RomSections = memo(function RomSections({
           onConfirm={applyCsvImport}
           onClose={() => setPendingCsv(null)}
         />
+      )}
+      {clearRequest && (
+        <Modal
+          open
+          onClose={() => setClearRequest(null)}
+          title={
+            clearRequest.rules
+              ? 'Clear all rules?'
+              : `Clear ${SECTION_LABELS[clearRequest.section]}?`
+          }
+        >
+          <p className="text-sm text-muted-foreground">
+            {clearRequest.rules
+              ? 'This removes every “Modify JCM frames” rule with all its morph drives.'
+              : `This removes the entire custom definition of the ${SECTION_LABELS[clearRequest.section]} section — every group and frame.`}{' '}
+            Nothing is saved until you save the character.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" className="mr-auto" onClick={() => setClearRequest(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onClearConfirmed}>
+              Clear
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
     </FigureNodeContext.Provider>

@@ -14,7 +14,7 @@ export function ImportCsvButton({ onImport }: { onImport: () => void }) {
       <Button variant="outline" size="sm" onClick={onImport}>
         <Upload /> Import from CSV
       </Button>
-      <InfoPopup label="Import from CSV — how to produce the CSV">
+      <InfoPopup size="sm" label="Import from CSV — how to produce the CSV">
         Import a DAZ morph CSV — each row becomes a pose. Produce it with{' '}
         <strong>Scan_Frames</strong> (installed with the studio's other scripts under{' '}
         <code>Scripts&nbsp;›&nbsp;DTH-Character-Studio</code>): select your character's root node
