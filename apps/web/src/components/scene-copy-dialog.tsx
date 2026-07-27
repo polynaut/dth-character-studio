@@ -29,6 +29,9 @@ export function SceneCopyDialog({
   busy,
   error,
   copyLabel,
+  validation,
+  confirmDisabled = false,
+  confirmDisabledTitle,
   onCopy,
   onLink,
   onClose,
@@ -52,6 +55,14 @@ export function SceneCopyDialog({
   busy: boolean
   error?: ReactNode
   copyLabel: string
+  /** Extra block between the file chip and the subfolder — the Add-scene flow
+   *  slots its Validation table here. */
+  validation?: ReactNode
+  /** Disables BOTH confirm actions (Copy & Link in place) — the Add-scene flow
+   *  gates them on its validation (checks failed / still running). */
+  confirmDisabled?: boolean
+  /** Native tooltip on the disabled confirm actions saying why. */
+  confirmDisabledTitle?: string
   onCopy: () => void
   onLink: () => void
   onClose: () => void
@@ -65,6 +76,7 @@ export function SceneCopyDialog({
             <PathCode path={displayPath(filePath)} className="flex h-9 items-center" />
           </div>
         ) : null}
+        {validation}
         <div>
           <Label className="mb-1 block">Subfolder</Label>
           <div className="flex items-center gap-1">
@@ -104,13 +116,23 @@ export function SceneCopyDialog({
           </Button>
           <Button
             variant="outline"
-            disabled={busy || deleteOriginal}
-            title={deleteOriginal ? 'Disabled while “Delete original” is on' : undefined}
+            disabled={busy || deleteOriginal || confirmDisabled}
+            title={
+              confirmDisabled
+                ? confirmDisabledTitle
+                : deleteOriginal
+                  ? 'Disabled while “Delete original” is on'
+                  : undefined
+            }
             onClick={onLink}
           >
             Link in place
           </Button>
-          <Button disabled={busy} onClick={onCopy}>
+          <Button
+            disabled={busy || confirmDisabled}
+            title={confirmDisabled ? confirmDisabledTitle : undefined}
+            onClick={onCopy}
+          >
             {busy ? (deleteOriginal ? 'Moving…' : 'Copying…') : copyLabel}
           </Button>
         </div>

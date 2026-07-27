@@ -147,13 +147,21 @@ export const sceneFigureSchema = z.object({
   label: z.string(),
 })
 
-/** Result of reading a scene's conformed items + base figure (mirrors Rust
- *  `SceneWearables`). Never a hard error: an unreadable scene comes back empty
- *  with the reason in `error`, so callers degrade instead of breaking. `figure`
- *  is null when the scene has no recognizable figure. */
+/** Result of reading a scene's conformed items + figure roots + timeline
+ *  occupancy (mirrors Rust `SceneWearables`). Never a hard error: an unreadable
+ *  scene comes back empty with the reason in `error`, so callers degrade
+ *  instead of breaking. `figure` is null when the scene has no recognizable
+ *  figure. */
 export const sceneWearablesSchema = z.object({
   items: z.array(sceneWearableSchema),
   figure: sceneFigureSchema.nullable(),
+  /** EVERY figure-like root node — the add-scene dialog's "exactly one
+   *  character" check; `figure` above is its first entry. */
+  figures: z.array(sceneFigureSchema),
+  /** Timeline frames the scene's animation keys occupy: 0 = no keys, 1 = only
+   *  rest-pose keys at frame 0, above 1 = an already-filled timeline (the
+   *  add-scene dialog flags it — the ROM script fills the timeline itself). */
+  animationFrames: z.number(),
   error: z.string(),
 })
 

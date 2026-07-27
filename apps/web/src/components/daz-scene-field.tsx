@@ -4,6 +4,7 @@ import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
+import { PathCode } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
@@ -19,11 +20,13 @@ import {
   openScene,
   revealPath,
   relinkScene,
+  sceneWearables,
 } from '#/lib/rom/api.ts'
+import { sceneCompatFailed, sceneCompatRows, SceneValidationTable } from '#/components/scene-compat.tsx'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 
-import type { CharacterLocation } from '#/lib/rom/api.ts'
+import type { CharacterLocation, SceneWearables } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
 import type { Character } from '@dth/rom'
 
@@ -156,10 +159,20 @@ export function DazSceneField({
   // A picked scene outside the project pauses here awaiting the copy decision.
   const [pending, setPending] = useState('')
   const [subfolder, setSubfolder] = useState(() => defaultSubdir)
-  // A picked *additional* scene awaiting its copy decision — separate from the
+  // A picked *additional* scene awaiting its add dialog — separate from the
   // primary link flow. Its subfolder nests inside the existing scenes folder.
   const [pendingAdd, setPendingAdd] = useState('')
   const [addSubfolder, setAddSubfolder] = useState('')
+  // The add dialog's validation reads: the picked scene + the primary scene (the
+  // geograft reference) — null while the reads are in flight. `forceAdd` is the
+  // "Add anyway" escape past failed checks.
+  const [addScan, setAddScan] = useState<{
+    scene: SceneWearables
+    primary: SceneWearables | null
+  } | null>(null)
+  const [forceAdd, setForceAdd] = useState(false)
+  // Supersede stale reads (repick before the previous read resolved).
+  const addScanId = useRef(0)
   // When on, the source scene is deleted after copying (a move). Off by default;
   // mutually exclusive with "Link in place" (which keeps the original in place).
   const [deleteOriginal, setDeleteOriginal] = useState(false)
@@ -286,16 +299,32 @@ export function DazSceneField({
     setBusy(false)
   }
 
+  // Open the add dialog for a picked/dropped scene and kick off its validation
+  // reads. The dialog ALWAYS opens now — an in-folder scene just skips the copy
+  // controls — so the compatibility checks are seen before anything links.
+  function startAdd(picked: string) {
+    setAddSubfolder('')
+    setDeleteOriginal(false)
+    setForceAdd(false)
+    setAddScan(null)
+    setPendingAdd(picked)
+    const scanId = (addScanId.current += 1)
+    const primary = character.scenePath
+    void Promise.all([
+      sceneWearables({ data: { scenePath: picked } }),
+      primary
+        ? sceneWearables({ data: { scenePath: primary } })
+        : Promise.resolve<SceneWearables | null>(null),
+    ]).then(([scene, primaryScan]) => {
+      if (scanId !== addScanId.current) return
+      setAddScan({ scene, primary: primaryScan })
+    })
+  }
+
   async function onAddPick() {
     const picked = await pickDufPath('Select another Daz scene (.duf)')
     if (!picked) return
-    if (!insideCharFolder(picked)) {
-      setAddSubfolder('')
-      setDeleteOriginal(false)
-      setPendingAdd(picked)
-      return
-    }
-    await applyAdd(picked, false)
+    startAdd(picked)
   }
 
   async function applyAdd(scene: string, copyInto: boolean) {
@@ -401,13 +430,7 @@ export function DazSceneField({
       }
       void applyLink(scene, false)
     } else {
-      if (!insideCharFolder(scene)) {
-        setAddSubfolder('')
-        setDeleteOriginal(false)
-        setPendingAdd(scene)
-        return
-      }
-      void applyAdd(scene, false)
+      startAdd(scene)
     }
   }
 
@@ -451,6 +474,29 @@ export function DazSceneField({
     }
     setBusy(false)
   }
+
+  // Add-dialog validation (see scene-compat.tsx): the checks evaluate over the
+  // two scene reads; a definite failure gates the confirm actions behind the
+  // "Add anyway" switch, and so does reads-still-in-flight (they resolve in
+  // well under a second — a slow network share shows "checking…").
+  const addRows = sceneCompatRows({
+    scan: addScan?.scene ?? null,
+    primaryScan: addScan?.primary ?? null,
+    character,
+  })
+  const addChecking = pendingAdd !== '' && addScan === null
+  const addBlocked = addChecking || (sceneCompatFailed(addRows) && !forceAdd)
+  const addValidation = (
+    <SceneValidationTable
+      rows={addRows}
+      loading={addChecking}
+      force={forceAdd}
+      onForceChange={setForceAdd}
+    />
+  )
+  const addBlockedTitle = addChecking
+    ? 'Checking the scene…'
+    : 'A validation check failed — see the table above (or flip “Add anyway”)'
 
   // Two-tone path chip for the scenes' folder (the primary scene's directory):
   // everything through the CHARACTER folder is dimmed — we're already inside the
@@ -678,24 +724,56 @@ export function DazSceneField({
         </Modal>
       )}
 
-      {pendingAdd && (
-        <SceneCopyDialog
-          title="Add Daz scene to the character?"
-          description="The selected scene lives outside the character folder. Copy it into the character folder?"
-          filePath={pendingAdd}
-          prefix={displayPath(`${baseDazRel}/`)}
-          subfolder={addSubfolder}
-          onSubfolderChange={setAddSubfolder}
-          deleteOriginal={deleteOriginal}
-          onDeleteOriginalChange={setDeleteOriginal}
-          busy={busy}
-          error={error}
-          copyLabel="Copy & add"
-          onCopy={() => void applyAdd(pendingAdd, true)}
-          onLink={() => void applyAdd(pendingAdd, false)}
-          onClose={() => setPendingAdd('')}
-        />
-      )}
+      {pendingAdd &&
+        (insideCharFolder(pendingAdd) ? (
+          // Already inside the character folder — no copy decision, but the add
+          // still pauses on the validation checks before it links.
+          <Modal
+            open
+            onClose={() => setPendingAdd('')}
+            title="Add Daz scene to the character?"
+            dismissible={!busy}
+          >
+            <div>
+              <Label className="mb-1 block">Selected file</Label>
+              <PathCode path={displayPath(pendingAdd)} className="flex h-9 items-center" />
+            </div>
+            {addValidation}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" className="mr-auto" disabled={busy} onClick={() => setPendingAdd('')}>
+                Cancel
+              </Button>
+              <Button
+                disabled={busy || addBlocked}
+                title={addBlocked ? addBlockedTitle : undefined}
+                onClick={() => void applyAdd(pendingAdd, false)}
+              >
+                {busy ? 'Adding…' : 'Add scene'}
+              </Button>
+            </div>
+          </Modal>
+        ) : (
+          <SceneCopyDialog
+            title="Add Daz scene to the character?"
+            description="The selected scene lives outside the character folder. Copy it into the character folder?"
+            filePath={pendingAdd}
+            prefix={displayPath(`${baseDazRel}/`)}
+            subfolder={addSubfolder}
+            onSubfolderChange={setAddSubfolder}
+            deleteOriginal={deleteOriginal}
+            onDeleteOriginalChange={setDeleteOriginal}
+            busy={busy}
+            error={error}
+            copyLabel="Copy & add"
+            validation={addValidation}
+            confirmDisabled={addBlocked}
+            confirmDisabledTitle={addBlockedTitle}
+            onCopy={() => void applyAdd(pendingAdd, true)}
+            onLink={() => void applyAdd(pendingAdd, false)}
+            onClose={() => setPendingAdd('')}
+          />
+        ))}
 
       {pendingRemove && (
         <RemoveAssetDialog
