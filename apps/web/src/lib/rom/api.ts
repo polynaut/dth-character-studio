@@ -71,6 +71,7 @@ export {
   listCharacterUploads,
   readAvatarSourceFile,
   resolveImageSrc,
+  resolveImageSrcAtSize,
   resolveScenePreview,
   setAvatarFromScene,
   uploadCroppedAvatar,

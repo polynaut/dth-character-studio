@@ -4,7 +4,10 @@ import {
   AVATAR_UPLOAD_HISTORY,
   avatarFileName,
   avatarIdOf,
+  avatarSourceMaster,
+  avatarSourceName,
   avatarsToPrune,
+  orphanedAvatarSources,
   parseAvatarName,
   uploadsNewestFirst,
 } from './avatar-names.ts'
@@ -90,5 +93,36 @@ describe('avatarsToPrune', () => {
   it('leaves other characters and unrecognized files untouched', () => {
     const files = ['Kira--up-1.png', 'Other--up-1.png', 'legacy-9.png', 'notes.md']
     expect(avatarsToPrune(files, 'Kira', 'Kira--up-1.png')).toEqual([])
+  })
+})
+
+describe('.src pristine-source siblings', () => {
+  it('round-trips master → source name → master', () => {
+    const master = 'Kira--sc-1712345678901.png'
+    const src = avatarSourceName(master)
+    expect(src).toBe('Kira--sc-1712345678901.src.png')
+    expect(avatarSourceMaster(src)).toBe(master)
+    expect(avatarSourceMaster(master)).toBeNull() // a master is not a source
+  })
+
+  it('source names are INVISIBLE to the avatar scheme (gallery, retention)', () => {
+    const src = 'Kira--up-1712345678901.src.png'
+    expect(parseAvatarName(src)).toBeNull()
+    expect(uploadsNewestFirst([src], 'Kira')).toEqual([])
+    expect(avatarsToPrune([src], 'Kira', 'x')).toEqual([])
+  })
+
+  it('orphanedAvatarSources drops sources whose master is gone, keeps live ones', () => {
+    const files = [
+      'Kira--sc-20.png',
+      'Kira--sc-20.src.png', // master present → keep
+      'Kira--sc-10.src.png', // master pruned → orphan
+      'Kira--up-5.src.png', // master long gone → orphan
+      'notes.md',
+    ]
+    expect(orphanedAvatarSources(files).sort()).toEqual([
+      'Kira--sc-10.src.png',
+      'Kira--up-5.src.png',
+    ])
   })
 })
