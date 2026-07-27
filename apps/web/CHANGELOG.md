@@ -1,5 +1,47 @@
 # @dth/web
 
+## 0.47.0
+
+### Minor Changes
+
+- [#539](https://github.com/polynaut/dth-character-studio/pull/539) [`b8bef8e`](https://github.com/polynaut/dth-character-studio/commit/b8bef8e50751aa458ba61cc18062d8e97acdbd83) Thanks [@polynaut](https://github.com/polynaut)! - Every custom morph list gets a Clear button (ghost, right of Add group /
+  Import from CSV / Add rule): confirmed via a modal, it removes the section's
+  entire custom definition — all groups and frames, or every "Modify JCM
+  frames" rule. On a non-primary scene the clear escalates like any structural
+  edit, so the scene owns the emptied section.
+
+- [#539](https://github.com/polynaut/dth-character-studio/pull/539) [`b8bef8e`](https://github.com/polynaut/dth-character-studio/commit/b8bef8e50751aa458ba61cc18062d8e97acdbd83) Thanks [@polynaut](https://github.com/polynaut)! - The character editor's Operations card gains a "Fill" button (beside
+  Delete): a two-step wizard that copies ROM sections from any character in
+  any known project. Step 1 picks the
+  source character (same generation + gender, like the create dialog's ROM
+  prefill), step 2 picks which of its filled sections to copy — the checked
+  sections replace the current config in the editor draft. GEN keeps the
+  target's scene-derived geograft setup (enabled state + GP/DK selection);
+  only its art direction / custom frames copy over.
+
+  The create-character panel's "ROM prefill" dropdown is replaced by the same
+  Fill wizard: pick the source and its sections, create applies them onto the
+  new character's defaults. Step 2 also offers "Also copy" extras: the
+  Modify-JCM-frames rules (pre-checked), plus the preserve-morph and
+  preserve-node-transform lists as separate checkboxes (offered when the
+  source has them, unchecked by default). Hair scenes and
+  scene overrides no longer copy on prefill: both are keyed by the source's
+  own scene paths and sat inert on the new character.
+
+### Patch Changes
+
+- [#539](https://github.com/polynaut/dth-character-studio/pull/539) [`b8bef8e`](https://github.com/polynaut/dth-character-studio/commit/b8bef8e50751aa458ba61cc18062d8e97acdbd83) Thanks [@polynaut](https://github.com/polynaut)! - InfoPopup gains a `size` option ('xs' default, 'sm'/'md' matching the kit
+  Button heights) so an "i" beside a button can match its height — used by
+  "Import from CSV".
+
+- [#539](https://github.com/polynaut/dth-character-studio/pull/539) [`b8bef8e`](https://github.com/polynaut/dth-character-studio/commit/b8bef8e50751aa458ba61cc18062d8e97acdbd83) Thanks [@polynaut](https://github.com/polynaut)! - Modal dialogs now place their Cancel button consistently: always ghost-styled
+  and left-aligned, with the affirmative action on the right (remove-asset,
+  bulk-delete, CSV import, scan picker, image crop, folder-move, app confirm and
+  the new Fill wizard).
+- Updated dependencies [[`b8bef8e`](https://github.com/polynaut/dth-character-studio/commit/b8bef8e50751aa458ba61cc18062d8e97acdbd83), [`b8bef8e`](https://github.com/polynaut/dth-character-studio/commit/b8bef8e50751aa458ba61cc18062d8e97acdbd83)]:
+  - @dth/ui@0.47.0
+  - @dth/rom@0.47.0
+
 ## 0.46.2
 
 ### Patch Changes
