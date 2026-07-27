@@ -18,7 +18,7 @@ import {
   sceneOverrideSlug,
 } from '@dth/rom'
 import * as storage from '../storage'
-import { clearImageSrcCache, rebuildSceneAvatar, upscaleStoredAvatar } from './avatars'
+import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
@@ -742,17 +742,17 @@ async function refreshAllAssetsInner(refreshOpts: {
   // upscales anything under 768² to 768² IN PLACE; idempotent, native-only,
   // best-effort. Clearing the data-URL cache after makes the UI pick up the new
   // bytes — the filename is unchanged, so nothing re-resolves on its own.
-  // With `rebuildAvatars` (Ctrl+Refresh), scene-sourced masters are first
-  // re-derived from their scene's pristine 256² tip — an already-768² master is a
-  // no-op to the plain upscale, so rebuilding is the only way old masters pick up
-  // pipeline improvements (e.g. flatten-first). Non-scene avatars fall through to
-  // the plain upscale as before.
+  // With `rebuildAvatars` (Ctrl+Refresh), masters are first re-derived from
+  // their pristine source (the stored `.src` sibling, else the source scene's
+  // tip) — an already-768² master is a no-op to the plain upscale, so rebuilding
+  // is the only way old masters pick up pipeline improvements (e.g.
+  // flatten-first). Avatars without a source fall through to the plain upscale.
   if (isTauri() && gathered.length > 0) {
     const touched = await mapWithConcurrency(
       gathered,
       AVATAR_UPSCALE_CONCURRENCY,
       async (g) =>
-        (refreshOpts.rebuildAvatars && (await rebuildSceneAvatar(g.project.path, g.character))) ||
+        (refreshOpts.rebuildAvatars && (await rebuildAvatarMaster(g.project.path, g.character))) ||
         upscaleStoredAvatar(g.project.path, g.character.image),
     )
     counts.avatars = touched.filter(Boolean).length

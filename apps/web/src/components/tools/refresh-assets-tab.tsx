@@ -90,7 +90,7 @@ export function RefreshAssetsTab() {
     if (result.counts.avatars > 0)
       lines.push(
         rebuiltAvatars
-          ? `Rebuilt ${n(result.counts.avatars, 'avatar master')} from scene thumbnails`
+          ? `Rebuilt ${n(result.counts.avatars, 'avatar master')} from their stored originals`
           : `Upscaled ${n(result.counts.avatars, 'avatar')} to 768px`,
       )
     if (result.runtime?.ok) lines.push('Re-installed the DTH runtime files')
@@ -137,8 +137,8 @@ export function RefreshAssetsTab() {
             Re-generates the Daz scripts and PoseAsset CSVs so all generated files match the current
             version — run this after updating the studio or switching DTH release. It always covers
             every known (recent) project, no matter which window it runs from. Character definitions
-            aren't changed. Hold <kbd>Ctrl</kbd> to also rebuild scene-sourced avatar masters from
-            their scenes' thumbnails, re-applying the current upscale pipeline.
+            aren't changed. Hold <kbd>Ctrl</kbd> to also rebuild avatar masters from their stored
+            originals (or their scenes' thumbnails), re-applying the current upscale pipeline.
           </InfoPopup>
         </h2>
         {/* The action sits up top so it's visible at a glance, above the table; it's
@@ -150,7 +150,7 @@ export function RefreshAssetsTab() {
           disabled={working}
           title={
             ctrlHeld
-              ? 'Also re-derives scene-sourced avatar masters from their scenes’ thumbnails (Ctrl)'
+              ? 'Also re-derives avatar masters from their stored originals (Ctrl)'
               : undefined
           }
           className={`h-11 px-6 text-base ${needsRefresh ? 'refresh-pulse' : ''}`}
