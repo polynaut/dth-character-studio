@@ -42,16 +42,19 @@ export function RomTimeline({
   action,
 }: {
   segments: Array<TimelineSegment>
-  /** Optional control rendered at the panel's bottom right (end of the legend
-   *  row) — e.g. the ROM editor's "Fill from character" button. */
+  /** Optional control rendered beside the "Animation timeline" title — e.g.
+   *  the ROM editor's "Fill from character" button. */
   action?: ReactNode
 }) {
   const total = romTimelineLength(segments)
   if (total === 0) return null
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium text-muted-foreground">Animation timeline</span>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Animation timeline</span>
+          {action}
+        </span>
         <span className="text-xs tabular-nums text-muted-foreground">
           {total} frame{total === 1 ? '' : 's'}
         </span>
@@ -78,7 +81,6 @@ export function RomTimeline({
             </span>
           </span>
         ))}
-        {action != null && <span className="ml-auto self-end">{action}</span>}
       </div>
     </div>
   )
