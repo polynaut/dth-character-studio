@@ -22,7 +22,10 @@ import {
 import { usePersistentState } from '#/lib/use-persistent-state.ts'
 import { useSelection } from '#/lib/use-selection.ts'
 import { toast } from 'sonner'
-import { FillFromCharacterDialog } from '#/components/character/fill-from-character-dialog.tsx'
+import {
+  FillFromCharacterDialog,
+  type FillExtra,
+} from '#/components/character/fill-from-character-dialog.tsx'
 import {
   characterKeepFolders,
   copyDazScene,
@@ -113,11 +116,13 @@ function ProjectCharactersPage() {
   const [genesis, setGenesis] = useState<GenesisVersion>('G9')
   const [gender, setGender] = useState<Gender>('female')
   // ROM prefill staged by the Fill wizard (null = start empty): the source
-  // character and the sections picked from it — createCharacter applies it.
+  // character, the sections picked from it and the "Also copy" extras —
+  // createCharacter applies them.
   const [prefill, setPrefill] = useState<{
     fromId: string
     fromName: string
     sections: Array<RomSection>
+    extras: Record<FillExtra, boolean>
   } | null>(null)
   const [fillOpen, setFillOpen] = useState(false)
   // The wizard's target while creating: the picked genesis/gender over the
@@ -283,6 +288,7 @@ function ProjectCharactersPage() {
           relFolder: nameTrimmed,
           prefillFromId: prefill?.fromId,
           prefillSections: prefill?.sections,
+          prefillExtras: prefill?.extras,
         },
       })
       if (copyScene) {
@@ -537,7 +543,12 @@ function ProjectCharactersPage() {
                         <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
                           <span className="truncate">
                             {prefill.sections.length} section
-                            {prefill.sections.length === 1 ? '' : 's'} from “{prefill.fromName}”
+                            {prefill.sections.length === 1 ? '' : 's'}
+                            {(() => {
+                              const n = Object.values(prefill.extras).filter(Boolean).length
+                              return n > 0 ? ` + ${n} extra${n === 1 ? '' : 's'}` : ''
+                            })()}{' '}
+                            from “{prefill.fromName}”
                           </span>
                           <Button
                             variant="ghost"
@@ -812,8 +823,13 @@ function ProjectCharactersPage() {
       {fillOpen && (
         <FillFromCharacterDialog
           target={fillTarget}
-          onFill={(_sections, source) =>
-            setPrefill({ fromId: source.id, fromName: source.name, sections: source.picked })
+          onFill={(_patch, source) =>
+            setPrefill({
+              fromId: source.id,
+              fromName: source.name,
+              sections: source.picked,
+              extras: source.extras,
+            })
           }
           onClose={() => setFillOpen(false)}
         />

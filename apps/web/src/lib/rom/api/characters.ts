@@ -119,6 +119,15 @@ const createInput = z.object({
   /** Which of the source's sections to copy (the wizard's checkboxes);
    *  omitted = all of its filled sections. */
   prefillSections: z.array(romSectionSchema).optional(),
+  /** The wizard's "Also copy" extras — wholesale copies of the source's
+   *  non-section ROM tuning. Omitted = none. */
+  prefillExtras: z
+    .object({
+      jcmRules: z.boolean().default(false),
+      strengths: z.boolean().default(false),
+      preserve: z.boolean().default(false),
+    })
+    .optional(),
 })
 
 export async function createCharacter({ data }: { data: unknown }): Promise<Character> {
@@ -151,12 +160,25 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   // with the source character's config (the source may live in any project).
   // fillSectionsFrom keeps GEN's plumbing at the defaults — the primary-scene
   // derivation below decides its enabled state / GP-DK selection from the
-  // actual scene, never from the source character.
+  // actual scene, never from the source character. The "Also copy" extras are
+  // wholesale copies of the source's non-section ROM tuning.
+  const prefillExtras: Partial<Character> = {}
   if (input.prefillFromId) {
     const source = await storage.findCharacterAcrossProjects(input.prefillFromId)
     if (source) {
       const picked = input.prefillSections ?? filledSections(source.sections)
       sections = fillSectionsFrom(sections, source.sections, picked)
+      const want = input.prefillExtras
+      if (want?.jcmRules) prefillExtras.jcmMorphMods = source.jcmMorphMods
+      if (want?.strengths) {
+        prefillExtras.facsDetailStrength = source.facsDetailStrength
+        prefillExtras.flexionStrength = source.flexionStrength
+        prefillExtras.applyUE5TearUV = source.applyUE5TearUV
+      }
+      if (want?.preserve) {
+        prefillExtras.preserveMorphs = source.preserveMorphs
+        prefillExtras.preserveNodeTransforms = source.preserveNodeTransforms
+      }
     }
   }
   const base: Record<string, unknown> = {
@@ -167,6 +189,7 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     createdAt: now,
     updatedAt: now,
     sections,
+    ...prefillExtras,
   }
   // The picked scene's tip thumbnail becomes the avatar, and we record the scene
   // path as read-only provenance shown in the editor.

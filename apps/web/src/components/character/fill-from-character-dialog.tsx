@@ -5,10 +5,10 @@ import { PaintBucket } from 'lucide-react'
 import { Button, cn, Modal } from '@dth/ui'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
 import { fillSectionsFrom, filledSections, sectionContentSummary } from '#/lib/fill-sections.ts'
-import { SECTION_LABELS } from '@dth/rom'
+import { GENERATIONS, SECTION_LABELS } from '@dth/rom'
 
 import type { CharacterWithProject } from '#/lib/rom/api.ts'
-import type { Gender, GenesisVersion, RomSection, RomSections } from '@dth/rom'
+import type { Character, Gender, GenesisVersion, RomSection, RomSections } from '@dth/rom'
 
 /** What the wizard fills: the compatibility identity that filters candidates,
  *  and the current sections the picked ones replace. The ROM editor passes its
@@ -21,13 +21,58 @@ export interface FillTarget {
   sections: RomSections
 }
 
+/** The non-section extras the wizard can also copy — the ROM tuning that lives
+ *  beside `sections` on the character and is PORTABLE (unlike groom scenes and
+ *  scene overrides, which are keyed by the source's own scene paths and would
+ *  sit inert on the target). Each is a wholesale replacement when checked. */
+const EXTRA_LABELS = {
+  jcmRules: 'Modify JCM frames',
+  strengths: 'Strength dials',
+  preserve: 'Preserve after ROM loading',
+} as const
+export type FillExtra = keyof typeof EXTRA_LABELS
+
+/** Which extras the source has anything to offer for (target-gated: the
+ *  strength dials only exist on Genesis 9 figures, and stock values 1/1/off
+ *  would copy as a no-op). */
+function offeredExtras(source: Character, genesis: GenesisVersion): Array<FillExtra> {
+  const out: Array<FillExtra> = []
+  if (source.jcmMorphMods.length > 0) out.push('jcmRules')
+  if (
+    GENERATIONS[genesis].hasStrengthDials &&
+    (source.facsDetailStrength !== 1 || source.flexionStrength !== 1 || source.applyUE5TearUV)
+  )
+    out.push('strengths')
+  if (source.preserveMorphs.length > 0 || source.preserveNodeTransforms.length > 0)
+    out.push('preserve')
+  return out
+}
+
+function extraSummary(extra: FillExtra, source: Character): string {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  if (extra === 'jcmRules') return plural(source.jcmMorphMods.length, 'rule')
+  if (extra === 'strengths') {
+    const parts: Array<string> = []
+    if (source.facsDetailStrength !== 1) parts.push(`FACS detail ${source.facsDetailStrength}`)
+    if (source.flexionStrength !== 1) parts.push(`flexion ${source.flexionStrength}`)
+    if (source.applyUE5TearUV) parts.push('UE5 tear UV')
+    return parts.join(' · ')
+  }
+  const parts: Array<string> = []
+  if (source.preserveMorphs.length > 0) parts.push(plural(source.preserveMorphs.length, 'morph'))
+  if (source.preserveNodeTransforms.length > 0)
+    parts.push(plural(source.preserveNodeTransforms.length, 'node transform'))
+  return parts.join(' · ')
+}
+
 /**
  * The ROM "Fill" wizard: step 1 picks a source character from every known
  * project (the recents list, filtered to the target's generation + gender),
- * step 2 picks which of the source's filled ROM sections to copy. Confirming
- * REPLACES the picked sections of the target with the source's config
- * (`fillSectionsFrom` — GEN keeps the target's scene-derived geograft
- * plumbing) and reports which source/sections were picked, so the create
+ * step 2 picks which of the source's filled ROM sections to copy — plus the
+ * "Also copy" extras ({@link EXTRA_LABELS}). Confirming REPLACES the picked
+ * sections of the target with the source's config (`fillSectionsFrom` — GEN
+ * keeps the target's scene-derived geograft plumbing), adds the checked
+ * extras to the patch wholesale, and reports what was picked so the create
  * panel can stage the same fill for `createCharacter`. Nothing is persisted
  * here — the caller decides (editor draft Save / the create action).
  */
@@ -38,8 +83,13 @@ export function FillFromCharacterDialog({
 }: {
   target: FillTarget
   onFill: (
-    sections: RomSections,
-    source: { id: string; name: string; picked: Array<RomSection> },
+    patch: Partial<Character> & { sections: RomSections },
+    source: {
+      id: string
+      name: string
+      picked: Array<RomSection>
+      extras: Record<FillExtra, boolean>
+    },
   ) => void
   onClose: () => void
 }) {
@@ -49,6 +99,7 @@ export function FillFromCharacterDialog({
   const [sourceId, setSourceId] = useState('')
   const [step, setStep] = useState<'pick' | 'sections'>('pick')
   const [checked, setChecked] = useState<ReadonlySet<RomSection>>(new Set())
+  const [extras, setExtras] = useState<ReadonlySet<FillExtra>>(new Set())
 
   useEffect(() => {
     let active = true
@@ -77,11 +128,13 @@ export function FillFromCharacterDialog({
   )
   const source = candidates.find((c) => c.id === sourceId)
   const offered = source ? filledSections(source.sections) : []
+  const extrasAvailable = source ? offeredExtras(source, target.genesis) : []
 
   function next() {
     if (!source) return
-    // Every filled section starts checked — the user deselects what to keep.
+    // Everything offered starts checked — the user deselects what to keep.
     setChecked(new Set(filledSections(source.sections)))
+    setExtras(new Set(offeredExtras(source, target.genesis)))
     setStep('sections')
   }
 
@@ -92,13 +145,38 @@ export function FillFromCharacterDialog({
     setChecked(set)
   }
 
+  function toggleExtra(extra: FillExtra, on: boolean) {
+    const set = new Set(extras)
+    if (on) set.add(extra)
+    else set.delete(extra)
+    setExtras(set)
+  }
+
   function fill() {
-    if (!source || checked.size === 0) return
+    if (!source || (checked.size === 0 && extras.size === 0)) return
     const picked = offered.filter((section) => checked.has(section))
-    onFill(fillSectionsFrom(target.sections, source.sections, picked), {
+    const patch: Partial<Character> & { sections: RomSections } = {
+      sections: fillSectionsFrom(target.sections, source.sections, picked),
+    }
+    if (extras.has('jcmRules')) patch.jcmMorphMods = structuredClone(source.jcmMorphMods)
+    if (extras.has('strengths')) {
+      patch.facsDetailStrength = source.facsDetailStrength
+      patch.flexionStrength = source.flexionStrength
+      patch.applyUE5TearUV = source.applyUE5TearUV
+    }
+    if (extras.has('preserve')) {
+      patch.preserveMorphs = structuredClone(source.preserveMorphs)
+      patch.preserveNodeTransforms = structuredClone(source.preserveNodeTransforms)
+    }
+    onFill(patch, {
       id: source.id,
       name: source.name,
       picked,
+      extras: {
+        jcmRules: extras.has('jcmRules'),
+        strengths: extras.has('strengths'),
+        preserve: extras.has('preserve'),
+      },
     })
     onClose()
   }
@@ -221,11 +299,34 @@ export function FillFromCharacterDialog({
               </li>
             ))}
           </ul>
+          {extrasAvailable.length > 0 && source && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Also copy</p>
+              <ul className="space-y-1">
+                {extrasAvailable.map((extra) => (
+                  <li key={extra}>
+                    <label className="flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={extras.has(extra)}
+                        onChange={(e) => toggleExtra(extra, e.target.checked)}
+                      />
+                      <span className="font-medium">{EXTRA_LABELS[extra]}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                        {extraSummary(extra, source)}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="flex justify-between gap-2">
             <Button variant="outline" onClick={() => setStep('pick')}>
               Back
             </Button>
-            <Button disabled={checked.size === 0} onClick={fill}>
+            <Button disabled={checked.size === 0 && extras.size === 0} onClick={fill}>
               <PaintBucket /> Fill from character
             </Button>
           </div>

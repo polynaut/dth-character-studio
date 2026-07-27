@@ -148,7 +148,9 @@ export const RomEditorSection = memo(function RomEditorSection({
       {fillOpen && (
         <FillFromCharacterDialog
           target={character}
-          onFill={onSectionsChange}
+          // The wizard's patch is sections + any checked "Also copy" extras
+          // (JCM rules, strength dials, preserve lists) — all draft fields.
+          onFill={patch}
           onClose={() => setFillOpen(false)}
         />
       )}

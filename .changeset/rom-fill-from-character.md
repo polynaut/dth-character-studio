@@ -12,6 +12,8 @@ only its art direction / custom frames copy over.
 
 The create-character panel's "ROM prefill" dropdown is replaced by the same
 Fill wizard: pick the source and its sections, create applies them onto the
-new character's defaults. Prefill now copies exactly the picked ROM
-sections — no longer the source's preserve lists, hair scenes, JCM rules or
-strength dials (scene-tied data that pointed at the source's scenes anyway).
+new character's defaults. Step 2 also offers opt-in "Also copy" extras —
+the Modify-JCM-frames rules, the G9 strength dials and the preserve-after-
+ROM lists (each pre-checked when the source has them). Hair scenes and
+scene overrides no longer copy on prefill: both are keyed by the source's
+own scene paths and sat inert on the new character.
