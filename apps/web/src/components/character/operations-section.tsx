@@ -1,28 +1,34 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Trash2 } from 'lucide-react'
+import { PaintBucket, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
+import { FillFromCharacterDialog } from '#/components/character/fill-from-character-dialog.tsx'
 import { Button } from '@dth/ui'
 import { characterKeepFolders, deleteCharacter } from '#/lib/rom/api.ts'
 
 import type { Character } from '@dth/rom'
 
 /**
- * The editor's Operations card (delete) plus its confirm dialog: the dialog's
- * "keep Daz/Houdini folder" toggles, the on-disk probe gating the Houdini one,
- * and the delete → navigate-home flow.
+ * The editor's Operations card — the character-level actions and their
+ * dialogs: FILL (the Fill wizard copies ROM sections + extras from another
+ * character into the draft; Save decides) and DELETE (the confirm dialog's
+ * "keep Daz/Houdini folder" toggles, the on-disk probe gating the Houdini
+ * one, and the delete → navigate-home flow).
  */
-export function DeleteCharacterSection({
+export function CharacterOperationsSection({
   projectId,
   character,
+  patch,
   dazSubdir,
   houdiniSubdir,
   bypassUnsavedGuard,
 }: {
   projectId: string
   character: Character
+  /** The draft writer — receives the Fill wizard's patch. */
+  patch: (p: Partial<Character>) => void
   /** The project's subfolder names, for the keep-folder labels. */
   dazSubdir: string
   houdiniSubdir: string
@@ -31,6 +37,7 @@ export function DeleteCharacterSection({
   bypassUnsavedGuard: () => void
 }) {
   const router = useRouter()
+  const [fillOpen, setFillOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -71,14 +78,27 @@ export function DeleteCharacterSection({
       <section className="mt-8 rounded-lg border border-destructive/30 bg-card p-5">
         <h2 className="mb-1 text-xl font-semibold">Operations</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Delete this character from the project.
+          Fill the ROM setup from another character, or delete this character from the project.
         </p>
         <div className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={() => setFillOpen(true)} disabled={deleting}>
+            <PaintBucket /> Fill
+          </Button>
           <Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={deleting}>
             <Trash2 /> Delete
           </Button>
         </div>
       </section>
+
+      {fillOpen && (
+        <FillFromCharacterDialog
+          target={character}
+          // Sections + any checked "Also copy" extras — all draft fields; the
+          // editor's Save persists (or discards) them like any other edit.
+          onFill={patch}
+          onClose={() => setFillOpen(false)}
+        />
+      )}
 
       {deleteOpen && (
         <BulkDeleteDialog

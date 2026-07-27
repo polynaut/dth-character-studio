@@ -2,8 +2,9 @@
 "@dth/web": minor
 ---
 
-The animation timeline panel gains a "Fill" button: a two-step wizard that
-copies ROM sections from any character in any known project. Step 1 picks the
+The character editor's Operations card gains a "Fill" button (beside
+Delete): a two-step wizard that copies ROM sections from any character in
+any known project. Step 1 picks the
 source character (same generation + gender, like the create dialog's ROM
 prefill), step 2 picks which of its filled sections to copy — the checked
 sections replace the current config in the editor draft. GEN keeps the
