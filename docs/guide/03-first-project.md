@@ -68,8 +68,10 @@ this studio project feeds. Link one or more `.uproject` files with the button or
 by dropping them onto the bar — links only: the files stay where they are, and
 unlinking never deletes anything.
 
-- **Click a card** to open that project in Unreal Engine — **Alt+click** shows it
-  in Explorer instead.
+- **The open button** on a card launches that project in Unreal Engine —
+  **Alt+click** it to show the project in Explorer instead. The card's **path
+  chip** works like every path chip: click copies the full `.uproject` path,
+  Alt+click reveals it. The rest of the card is inert — no accidental launches.
 - **The small install button** on each card bootstraps the Unreal project with
   DTH: it copies the linked DTH release's *Unreal Engine Content* into the
   project's `Content/DazToHue` — a fresh Unreal project is DTH-ready in one

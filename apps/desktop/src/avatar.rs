@@ -192,4 +192,22 @@ mod tests {
         assert!(!changed, "an image already >= target must be a no-op");
         assert_eq!(std::fs::read(&path).unwrap(), before, "the file must be byte-identical");
     }
+
+    /// Regenerates the smoke fixture `apps/web/smoke/kira-avatar-master.png` —
+    /// the stored 768² avatar master the browser harness can't derive itself
+    /// (no Rust there; fixtures.ts serves this file as the character's stored
+    /// avatar). Run explicitly after ANY pipeline change (TILE_BG, scaler):
+    /// `cargo test regenerate_smoke_avatar_master -- --ignored`
+    /// then re-run `pnpm --filter @dth/web screenshots`.
+    #[test]
+    #[ignore = "fixture regeneration — run explicitly after avatar-pipeline changes"]
+    fn regenerate_smoke_avatar_master() {
+        let smoke = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("web").join("smoke");
+        let tip = smoke.join("kira-avatar.png");
+        let master = smoke.join("kira-avatar-master.png");
+        assert!(tip.exists(), "pristine tip fixture missing: {}", tip.display());
+        std::fs::copy(&tip, &master).unwrap();
+        let changed = upscale_png_to_square(&master, TARGET).unwrap();
+        assert!(changed, "the 256² tip must have been upscaled into the master");
+    }
 }

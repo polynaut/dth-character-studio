@@ -102,11 +102,14 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 ## Tab 2 — Refresh assets
 
 Re-generates the Daz scripts and PoseAsset CSVs so every generated file matches the
-**current** studio/runtime version. Run it after **updating the app** or
-**switching DTH release**. It always covers **every known (recent) project**, no
-matter which window you run it from. **Your character definitions are never
-changed** — only their generated output. Problems per character are listed inline;
-the button pulses orange when a refresh is due.
+**current** studio/runtime version — and first migrates definitions saved by an
+older studio to the newest schema (your ROM content is preserved). Run it after
+**updating the app** or **switching DTH release**. It always covers **every known
+(recent) project**, no matter which window you run it from. Problems per character
+are listed inline; the button pulses orange when a refresh is due.
+**Ctrl+click Refresh** to also rebuild every character's stored **avatar** from
+its pristine source — needed once after an update that changes the avatar
+pipeline (e.g. the tile background).
 
 <p align="center">
   <img width="900" alt="Refresh assets tab" src="screenshots/tools-refresh.png" />
