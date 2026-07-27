@@ -166,6 +166,14 @@ Two scopes now:
 - **Don't rewrite users' downloaded Daz assets.** The dedup/install features may only *move* redundant
   copies (quarantine) or choose which version installs — never edit the contents of a downloaded asset.
 
+## Communication
+
+- Always close a response with a `TL;DR:` line (1-3 sentences). Detail and long
+  answers are fine — the TL;DR exists so the reader can skim first and read the
+  rest only if needed. It goes last, after everything else, and states the
+  outcome and anything still open. Skip it only for one-line answers, where it
+  would just repeat the response.
+
 ## Key docs
 
 - **`.ai/` — agent deep-dive docs. Read the relevant one BEFORE scanning source:**
