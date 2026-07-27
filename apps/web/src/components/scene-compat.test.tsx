@@ -5,12 +5,17 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 afterEach(cleanup)
 
+import { SceneValidationTable } from './scene-compat'
 import {
+  genderForScan,
+  genEnabledForScan,
   geograftKinds,
+  primarySceneDerivation,
   sceneCompatFailed,
   sceneCompatRows,
-  SceneValidationTable,
-} from './scene-compat'
+  sceneCreateRows,
+} from '#/lib/scene-compat.ts'
+import { defaultSections } from '@dth/rom'
 
 import type { SceneWearables } from '#/lib/rom/api.ts'
 
@@ -31,6 +36,8 @@ function scan(over: Partial<SceneWearables> = {}): SceneWearables {
 }
 
 const g9female = { genesis: 'G9', gender: 'female' } as const
+const GP = wearable('GoldenPalace_G9', 'Golden Palace')
+const DK = wearable('DicktatorG9', 'Dicktator')
 
 function states(rows: ReturnType<typeof sceneCompatRows>) {
   return Object.fromEntries(rows.map((row) => [row.key, row.state]))
@@ -38,9 +45,7 @@ function states(rows: ReturnType<typeof sceneCompatRows>) {
 
 describe('geograftKinds', () => {
   it('detects GP/DK across id/label/separator variants, ignoring everything else', () => {
-    expect(geograftKinds({ items: [wearable('GoldenPalace_G9', 'Golden Palace')] })).toEqual(
-      new Set(['gp']),
-    )
+    expect(geograftKinds({ items: [GP] })).toEqual(new Set(['gp']))
     // G8-era id without the suffix, and a label-only hit ("Golden Palace Shell").
     expect(geograftKinds({ items: [wearable('shell_1', 'Golden Palace Shell')] })).toEqual(
       new Set(['gp']),
@@ -56,7 +61,79 @@ describe('geograftKinds', () => {
   })
 })
 
-describe('sceneCompatRows', () => {
+describe('scene-driven derivation (GEN gate + gender)', () => {
+  it('genEnabledForScan: on with a geograft, off without, null when unreadable', () => {
+    expect(genEnabledForScan(scan({ items: [GP] }))).toBe(true)
+    expect(genEnabledForScan(scan())).toBe(false)
+    expect(genEnabledForScan(scan({ error: 'boom' }))).toBeNull()
+  })
+
+  it('genderForScan: gendered figure id first, then the geograft, else null', () => {
+    // The gendered generations answer directly from the figure id (G3 included).
+    expect(
+      genderForScan(scan({ figures: [{ id: 'Genesis8Male', label: 'Genesis 8 Male' }] })),
+    ).toBe('male')
+    expect(
+      genderForScan(scan({ figures: [{ id: 'Genesis3Female', label: 'Genesis 3 Female' }] })),
+    ).toBe('female')
+    // The neutral G9 figure answers via the geograft.
+    expect(genderForScan(scan({ items: [DK] }))).toBe('male')
+    expect(genderForScan(scan({ items: [GP] }))).toBe('female')
+    expect(genderForScan(scan({ items: [GP, DK] }))).toBe('female')
+    // A bare neutral figure (or an unreadable scene) decides nothing.
+    expect(genderForScan(scan())).toBeNull()
+    expect(genderForScan(scan({ error: 'boom', items: [DK] }))).toBeNull()
+  })
+
+  it('primarySceneDerivation patches GEN.enabled + gender only when they change', () => {
+    const sections = defaultSections() // GEN disabled
+    // A GP scene on a female character: GEN turns on, gender already matches.
+    const gp = primarySceneDerivation(scan({ items: [GP] }), {
+      genesis: 'G9',
+      gender: 'female',
+      sections,
+    })
+    expect(gp.gender).toBeUndefined()
+    expect(gp.sections?.GEN.enabled).toBe(true)
+    // A DK scene on that female character flips the gender too.
+    const dk = primarySceneDerivation(scan({ items: [DK] }), {
+      genesis: 'G9',
+      gender: 'female',
+      sections,
+    })
+    expect(dk.gender).toBe('male')
+    expect(dk.sections?.GEN.enabled).toBe(true)
+    // No geograft + gender already right → nothing to patch.
+    expect(
+      primarySceneDerivation(scan(), { genesis: 'G9', gender: 'female', sections }),
+    ).toEqual({})
+    // Unreadable scene decides nothing.
+    expect(
+      primarySceneDerivation(scan({ error: 'boom', items: [GP] }), {
+        genesis: 'G9',
+        gender: 'male',
+        sections,
+      }),
+    ).toEqual({})
+  })
+
+  it('a BOTH-grafts G9 scene selects the two GEN preset assets explicitly', () => {
+    // The gender-based "auto" default (empty presetAssets) would include only
+    // one block — a GP+DK scene needs both spelled out.
+    const derived = primarySceneDerivation(scan({ items: [GP, DK] }), {
+      genesis: 'G9',
+      gender: 'female',
+      sections: defaultSections(),
+    })
+    expect(derived.sections?.GEN.enabled).toBe(true)
+    expect(derived.sections?.GEN.presetAssets).toEqual([
+      'GP9 - Golden Palace.duf',
+      'DK9 - Dicktator.duf',
+    ])
+  })
+})
+
+describe('sceneCompatRows (add-scene checks)', () => {
   it('passes every check for a matching bare scene', () => {
     const rows = sceneCompatRows({ scan: scan(), primaryScan: scan(), character: g9female })
     expect(states(rows)).toEqual({
@@ -125,8 +202,8 @@ describe('sceneCompatRows', () => {
   })
 
   it('compares the geograft SET against the primary scene', () => {
-    const gp = scan({ items: [wearable('GoldenPalace_G9', 'Golden Palace')] })
-    const dk = scan({ items: [wearable('DicktatorG9', 'Dicktator')] })
+    const gp = scan({ items: [GP] })
+    const dk = scan({ items: [DK] })
     const bare = scan()
 
     expect(states(sceneCompatRows({ scan: gp, primaryScan: gp, character: g9female })).geograft).toBe('ok')
@@ -162,11 +239,32 @@ describe('sceneCompatRows', () => {
   })
 })
 
+describe('sceneCreateRows (create-dialog checks)', () => {
+  it('is the character-independent subset: one character + empty timeline', () => {
+    const rows = sceneCreateRows(scan())
+    expect(rows.map((row) => row.key)).toEqual(['figures', 'timeline'])
+    expect(states(rows)).toEqual({ figures: 'ok', timeline: 'ok' })
+
+    const bad = sceneCreateRows(scan({ figures: [], animationFrames: 31 }))
+    expect(states(bad)).toEqual({ figures: 'fail', timeline: 'fail' })
+    expect(sceneCompatFailed(bad)).toBe(true)
+
+    // Loading / unreadable → unchecked, never blocking.
+    expect(states(sceneCreateRows(null))).toEqual({ figures: 'unchecked', timeline: 'unchecked' })
+  })
+})
+
 describe('SceneValidationTable', () => {
-  it('shows the checks, and the Add-anyway switch only once one fails', () => {
+  it('shows the checks, and the escape switch (with its label) only once one fails', () => {
     const okRows = sceneCompatRows({ scan: scan(), primaryScan: scan(), character: g9female })
     const { rerender } = render(
-      <SceneValidationTable rows={okRows} loading={false} force={false} onForceChange={() => {}} />,
+      <SceneValidationTable
+        rows={okRows}
+        loading={false}
+        force={false}
+        onForceChange={() => {}}
+        forceLabel="Add anyway — test label"
+      />,
     )
     expect(screen.getByText('Validation')).toBeTruthy()
     expect(screen.getByText('Same generation')).toBeTruthy()
@@ -178,20 +276,34 @@ describe('SceneValidationTable', () => {
       character: g9female,
     })
     rerender(
-      <SceneValidationTable rows={failRows} loading={false} force={false} onForceChange={() => {}} />,
+      <SceneValidationTable
+        rows={failRows}
+        loading={false}
+        force={false}
+        onForceChange={() => {}}
+        forceLabel="Add anyway — test label"
+      />,
     )
     expect(screen.getByText('31 frames of animation')).toBeTruthy()
-    expect(screen.getByText(/Add anyway/)).toBeTruthy()
+    expect(screen.getByText('Add anyway — test label')).toBeTruthy()
   })
 
   it('renders "checking…" while loading (no premature fail, no switch)', () => {
     const rows = sceneCompatRows({ scan: null, primaryScan: null, character: g9female })
-    render(<SceneValidationTable rows={rows} loading force={false} onForceChange={() => {}} />)
+    render(
+      <SceneValidationTable
+        rows={rows}
+        loading
+        force={false}
+        onForceChange={() => {}}
+        forceLabel="Add anyway"
+      />,
+    )
     expect(screen.getAllByText('checking…')).toHaveLength(4)
     expect(screen.queryByText(/Add anyway/)).toBeNull()
   })
 
-  it('the Add-anyway switch reports through onForceChange', () => {
+  it('the escape switch reports through onForceChange', () => {
     function Harness() {
       const [force, setForce] = useState(false)
       const rows = sceneCompatRows({
@@ -200,7 +312,13 @@ describe('SceneValidationTable', () => {
         character: g9female,
       })
       return (
-        <SceneValidationTable rows={rows} loading={false} force={force} onForceChange={setForce} />
+        <SceneValidationTable
+          rows={rows}
+          loading={false}
+          force={force}
+          onForceChange={setForce}
+          forceLabel="Create anyway"
+        />
       )
     }
     render(<Harness />)

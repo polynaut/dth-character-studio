@@ -33,6 +33,8 @@ import {
   resolveProject,
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
+import { sceneWearables } from './generate'
+import { primarySceneDerivation } from '#/lib/scene-compat.ts'
 import { avatarSourceName } from '../avatar-names'
 import { assertMovable } from './move'
 import { isExternalImage } from '../image'
@@ -181,6 +183,20 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   // path as read-only provenance shown in the editor.
   if (input.scenePath) {
     base.scenePath = input.scenePath
+    // The primary scene DRIVES the scene-derived fields (one rule, shared with
+    // the editor's relink flow): the GEN section's enabled state follows the
+    // scene's GP/DK geograft (the editor's GEN toggle is not user-operable),
+    // and the gender is read from the figure id / geograft — overriding the
+    // dialog's best-effort value AND a ROM prefill (the new character's own
+    // scene decides). An unreadable scene (browser mode) decides nothing.
+    const scan = await sceneWearables({ data: { scenePath: input.scenePath } })
+    const derived = primarySceneDerivation(scan, {
+      genesis: input.genesis,
+      gender: input.gender,
+      sections: (base.sections as Character['sections'] | undefined) ?? defaultSections(),
+    })
+    if (derived.gender) base.gender = derived.gender
+    if (derived.sections) base.sections = derived.sections
     const image = await copyTipImage(id, input.scenePath)
     if (image) {
       base.image = image

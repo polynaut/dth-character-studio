@@ -42,12 +42,14 @@ import { useFileDrop } from '#/lib/file-drop.ts'
 import { displayPath, normalizePathLower, pathSeparator } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
+import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
+import { genderForScan, sceneCompatFailed, sceneCreateRows } from '#/lib/scene-compat.ts'
 
 import { characterSkinning, countPoses, genesisFromFigureNode } from '@dth/rom'
 
-import type { CharacterWithProject } from '#/lib/rom/api.ts'
+import type { CharacterWithProject, SceneWearables } from '#/lib/rom/api.ts'
 import type { Gender, GenesisVersion } from '@dth/rom'
 
 /** Live preview of the picked Daz scene's tip thumbnail (read as a data URL). */
@@ -122,6 +124,12 @@ function ProjectCharactersPage() {
   // Bumped on every scene pick so a slow scan of an earlier scene can't clobber
   // the Genesis/gender the latest pick auto-selected (see `applyScene`).
   const sceneScanId = useRef(0)
+  // The picked scene's read: feeds the create Validation rows (one character,
+  // empty timeline), the Genesis auto-select and the DERIVED gender (figure id
+  // / GP-DK geograft — there is no manual Gender field anymore). null while
+  // the read is in flight; `createForce` is the "Create anyway" escape.
+  const [sceneScan, setSceneScan] = useState<SceneWearables | null>(null)
+  const [createForce, setCreateForce] = useState(false)
   // The create-character form lives in a slide-in side panel now. The panel and the
   // listing each carry a tab — "characters" (the existing flow) vs "assets" (reusable
   // Daz scenes scoped to this project). `assetRefresh` reloads the grid after an add.
@@ -161,6 +169,12 @@ function ProjectCharactersPage() {
   const nameTrimmed = name.trim()
   const nameError = /\.json$/i.test(nameTrimmed) ? 'A character name can’t end in “.json”.' : ''
   const canCreate = Boolean(nameTrimmed) && !nameError
+  // Create-dialog validation (see lib/scene-compat.ts): the checks that need no
+  // existing character — one character in the scene, empty timeline. A definite
+  // fail (or the read still in flight) gates Create behind "Create anyway".
+  const createRows = sceneCreateRows(scenePath.trim() ? sceneScan : null)
+  const createChecking = scenePath.trim() !== '' && sceneScan === null
+  const createBlocked = createChecking || (sceneCompatFailed(createRows) && !createForce)
   // ROM-prefill candidates: characters from every project that match the chosen
   // G + gender (filtered for ROM compatibility; labelled with their project).
   const prefillChars = (allCharacters ?? []).filter(
@@ -182,19 +196,28 @@ function ProjectCharactersPage() {
     setScenePath(picked)
     // Prefill the name from the scene's filename (the folder is created from it).
     setName(sceneBaseName(picked))
-    // Auto-select Genesis + gender from what's actually IN the scene: the base
-    // figure node's id (Genesis9 / Genesis8_1Female / …) names both. Best-effort
-    // and async — outside the desktop app, or when the scene has no recognizable
-    // figure, the current selection stands. Either field remains user-editable.
+    setSceneScan(null)
+    setCreateForce(false)
+    // Read what's actually IN the scene: the Validation rows, the Genesis
+    // auto-select (the figure node's id — still user-editable) and the DERIVED
+    // gender (figure id for the gendered generations, GP/DK geograft for the
+    // neutral G9 — `genderForScan`). Best-effort and async — outside the
+    // desktop app the current values stand. `createCharacter` re-derives the
+    // scene-driven fields authoritatively; setting them here keeps the prefill
+    // filter and the create input in step with what will be created.
     const scanId = (sceneScanId.current += 1)
-    void sceneWearables({ data: { scenePath: picked } }).then(({ figure }) => {
+    void sceneWearables({ data: { scenePath: picked } }).then((scan) => {
       // Drop a scan the user has already superseded by picking another scene.
-      if (scanId !== sceneScanId.current || !figure) return
-      const detected = genesisFromFigureNode(figure.id)
-      if (!detected) return
-      setGenesis(detected.genesis)
-      if (detected.gender) setGender(detected.gender)
-      setPrefill('empty')
+      if (scanId !== sceneScanId.current) return
+      setSceneScan(scan)
+      const figure = scan.figures[0] ?? null
+      const detected = figure ? genesisFromFigureNode(figure.id) : null
+      if (detected) {
+        setGenesis(detected.genesis)
+        setPrefill('empty')
+      }
+      const derivedGender = genderForScan(scan)
+      if (derivedGender) setGender(derivedGender)
     })
   }
 
@@ -209,6 +232,8 @@ function ProjectCharactersPage() {
     setScenePath('')
     setName('')
     setPrefill('empty')
+    setSceneScan(null)
+    setCreateForce(false)
     setPanelTab('character')
     setPanelOpen(true)
   }
@@ -240,7 +265,8 @@ function ProjectCharactersPage() {
   async function onCreate() {
     // Guard `busy` too: the Create button is disabled while creating, but the
     // Enter-key handler isn't, so a fast double-Enter could race two creates.
-    if (busy || !scenePath.trim() || !canCreate) return
+    // `createBlocked` guards the Enter path against failed/running validation.
+    if (busy || !scenePath.trim() || !canCreate || createBlocked) return
     // Scene outside the project → ask whether to copy it into the character folder.
     if (!sceneInsideProject()) {
       setCopyBase(project.dazSubdir)
@@ -300,6 +326,8 @@ function ProjectCharactersPage() {
       setScenePath('')
       setName('')
       setPrefill('empty')
+      setSceneScan(null)
+      setCreateForce(false)
       setPanelOpen(false)
       await router.invalidate()
       toast.success(`Created “${character.name}”`)
@@ -421,12 +449,10 @@ function ProjectCharactersPage() {
           )}
           <TabsContent value="character">
             <div className="space-y-4">
+        {/* The old bold "no animation" warning is gone — the live Validation
+            table below now checks exactly that (and "one character"). */}
         <p className="text-sm text-muted-foreground">
           Choose its Daz scene (.duf) — or drop one anywhere on the page.
-          <br />
-          <strong className="font-semibold text-foreground">
-            It must not contain an existing animation — only the character itself.
-          </strong>
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
@@ -492,22 +518,18 @@ function ProjectCharactersPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Gender" className="shrink-0" controlId="create-gender">
-                    <Select
-                      value={gender}
-                      onValueChange={(v) => {
-                        setGender(v as Gender)
-                        setPrefill('empty')
-                      }}
+                  {/* No manual Gender field: it's DERIVED from the scene (the
+                      figure id for gendered generations, the GP/DK geograft for
+                      G9 — see `genderForScan`), like the Genitalia section. It
+                      still scopes the prefill list, so show it read-only. */}
+                  <Field label="Gender" className="shrink-0" controlId="create-gender-display">
+                    <p
+                      id="create-gender-display"
+                      className="flex h-9 items-center text-sm text-muted-foreground"
+                      title="Read from the scene (its figure / GP-DK geograft) — no manual choice needed"
                     >
-                      <SelectTrigger id="create-gender" className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="male">Male</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      {gender === 'female' ? 'Female' : 'Male'}
+                    </p>
                   </Field>
                   <Field
                     label={
@@ -551,10 +573,29 @@ function ProjectCharactersPage() {
               </div>
             </div>
 
+            <SceneValidationTable
+              rows={createRows}
+              loading={createChecking}
+              force={createForce}
+              onForceChange={setCreateForce}
+              forceLabel="Create anyway — a failed check usually means a broken ROM"
+              footnote="Genesis, gender and the Genitalia section are read from the scene automatically. The scene must hold exactly one character with an empty animation timeline — the generated ROM script fills the timeline itself."
+            />
+
             {error && <p className="text-sm text-destructive">{error}</p>}
 
             <div className="flex justify-end">
-              <Button onClick={onCreate} disabled={busy || !canCreate}>
+              <Button
+                onClick={onCreate}
+                disabled={busy || !canCreate || createBlocked}
+                title={
+                  createBlocked
+                    ? createChecking
+                      ? 'Checking the scene…'
+                      : 'A validation check failed — see the table above (or flip “Create anyway”)'
+                    : undefined
+                }
+              >
                 <UserPlus /> Create
               </Button>
             </div>

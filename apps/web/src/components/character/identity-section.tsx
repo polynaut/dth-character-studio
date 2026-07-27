@@ -3,11 +3,6 @@ import {
   Label,
   NumberField,
   OverrideMark,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Switch,
   cn,
   overrideLabelClass,
@@ -26,7 +21,8 @@ import type { ReactNode } from 'react'
  * primary and it becomes a per-scene override: a green border + a green dot in its
  * label that swaps to a reset button on hover. `writeIdentity` stores the value and
  * derives the `identity.enabled` gate from "any dial differs". Genesis is set once
- * at creation (not shown here); Gender is character-level and never per-scene.
+ * at creation (not shown here); Gender is character-level, never per-scene, and
+ * READ-ONLY — derived from the primary scene (`primarySceneDerivation`).
  */
 export function IdentitySection({
   character,
@@ -155,23 +151,21 @@ export function IdentitySection({
         </div>
       </fieldset>
 
-      {/* Gender — its own row at the bottom. Character-level ("global"): it's the
-          same on every scene, so it stays editable no matter which scene is
-          selected (never disabled). Genesis is creation-only, not shown here. */}
+      {/* Gender — read-only, derived from the primary Daz scene (the figure id
+          for the gendered generations, the GP/DK geograft for the neutral G9 —
+          `primarySceneDerivation`). Its only real jobs are picking the GP-vs-DK
+          ROM blocks and the gendered figure node, both of which the scene
+          answers better than a manual field ever did; relinking the primary
+          scene re-derives it. Genesis is creation-only, not shown here. */}
       <div>
         <Label className="mb-1">Gender</Label>
-        <Select
-          value={character.gender}
-          onValueChange={(v) => patch({ gender: v as Character['gender'] })}
+        <p
+          className="text-sm text-muted-foreground"
+          title="Read from the primary Daz scene (its figure / GP-DK geograft) — relink the primary scene to re-derive it"
         >
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="female">Female</SelectItem>
-            <SelectItem value="male">Male</SelectItem>
-          </SelectContent>
-        </Select>
+          {character.gender === 'female' ? 'Female' : 'Male'}
+          <span className="ml-1.5 text-xs">— read from the primary scene</span>
+        </p>
       </div>
     </div>
   )
