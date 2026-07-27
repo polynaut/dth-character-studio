@@ -139,7 +139,7 @@ pub(crate) struct SceneWearable {
     conform_target: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SceneFigure {
@@ -158,6 +158,15 @@ pub(crate) struct SceneWearables {
     /// The base figure node, when the scene has a recognizable one — the create
     /// dialog's Genesis/gender auto-select source. `None` (→ `null`) otherwise.
     figure: Option<SceneFigure>,
+    /// EVERY figure-like root node (see `looks_like_figure`, non-conformed) —
+    /// the add-scene dialog's "exactly one character" check. `figure` above
+    /// stays its first entry for the create dialog.
+    figures: Vec<SceneFigure>,
+    /// Timeline frames the scene's animation keys occupy (max key time × 30 fps
+    /// + 1): 0 = no keys at all, 1 = only rest-pose keys at frame 0. Anything
+    /// above 1 means the timeline is already filled — the add-scene dialog
+    /// flags it, since the generated ROM script fills the timeline itself.
+    animation_frames: u32,
     /// Empty on success; otherwise why the scene couldn't be read.
     error: String,
 }
@@ -168,12 +177,20 @@ fn looks_like_figure(s: &str) -> bool {
     s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("genesis"))
 }
 
-/// The conformed wearables of a scene `.duf` AND its base figure node, in one
-/// parse. The figure is the first NON-conformed node whose id/name looks like a
-/// Genesis figure — wearables named "Genesis…" always carry a `conform_target`,
-/// so this can't mistake one for the figure, and it finds a bare figure (a scene
-/// with no followers) all the same.
-fn duf_scene(path: &Path) -> Result<(Vec<SceneWearable>, Option<SceneFigure>), String> {
+/// Everything one scene parse yields — see `scene_wearables` for the fields'
+/// consumers.
+struct SceneRead {
+    items: Vec<SceneWearable>,
+    figures: Vec<SceneFigure>,
+    animation_frames: u32,
+}
+
+/// The conformed wearables of a scene `.duf`, its figure root nodes AND its
+/// timeline occupancy, in one parse. A figure is a NON-conformed node whose
+/// id/name looks like a Genesis figure — wearables named "Genesis…" always
+/// carry a `conform_target`, so this can't mistake one for a figure, and it
+/// finds a bare figure (a scene with no followers) all the same.
+fn duf_scene(path: &Path) -> Result<SceneRead, String> {
     let json = read_duf_json(path, SCENE_INFLATE_FLOOR)?;
     let nodes = json
         .get("scene")
@@ -197,34 +214,79 @@ fn duf_scene(path: &Path) -> Result<(Vec<SceneWearable>, Option<SceneFigure>), S
             })
         })
         .collect();
-    let figure = nodes.iter().find_map(|node| {
-        if node.get("conform_target").is_some() {
-            return None;
+    let figures = nodes
+        .iter()
+        .filter_map(|node| {
+            if node.get("conform_target").is_some() {
+                return None;
+            }
+            let id = node.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            let name = node.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+            if !looks_like_figure(id) && !looks_like_figure(name) {
+                return None;
+            }
+            let label = node
+                .get("label")
+                .and_then(|v| v.as_str())
+                .or_else(|| node.get("name").and_then(|v| v.as_str()))
+                .unwrap_or(id);
+            Some(SceneFigure { id: id.to_string(), label: label.to_string() })
+        })
+        .collect();
+    // Timeline occupancy — same math as `duf_frame_count`, but tolerant: a scene
+    // without animations/keys is simply 0, never an error (most scenes carry only
+    // rest-pose keys at t = 0, which read as 1 frame).
+    let mut max_t = f64::NEG_INFINITY;
+    if let Some(animations) = json
+        .get("scene")
+        .and_then(|s| s.get("animations"))
+        .and_then(|a| a.as_array())
+    {
+        for anim in animations {
+            if let Some(keys) = anim.get("keys").and_then(|k| k.as_array()) {
+                for key in keys {
+                    if let Some(t) = key.get(0).and_then(|v| v.as_f64()) {
+                        if t > max_t {
+                            max_t = t;
+                        }
+                    }
+                }
+            }
         }
-        let id = node.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-        let name = node.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-        if !looks_like_figure(id) && !looks_like_figure(name) {
-            return None;
-        }
-        let label = node
-            .get("label")
-            .and_then(|v| v.as_str())
-            .or_else(|| node.get("name").and_then(|v| v.as_str()))
-            .unwrap_or(id);
-        Some(SceneFigure { id: id.to_string(), label: label.to_string() })
-    });
-    Ok((items, figure))
+    }
+    let animation_frames = if max_t.is_finite() {
+        // Saturate like duf_frame_count: a corrupt/hostile key time must not
+        // overflow the `+ 1`.
+        ((max_t * DTH_FPS).round() as u32).saturating_add(1)
+    } else {
+        0
+    };
+    Ok(SceneRead { items, figures, animation_frames })
 }
 
-/// The fitted (conformed) items of a scene `.duf` and its base figure node — the
-/// groom-suggestion source (items) and the create dialog's Genesis auto-select
-/// source (figure). Never throws: an unreadable scene returns an empty list +
-/// no figure with the reason in `error`, so callers degrade instead of breaking.
+/// The fitted (conformed) items of a scene `.duf`, its figure roots and its
+/// timeline occupancy — the groom-suggestion source (items), the create dialog's
+/// Genesis auto-select source (figure) and the add-scene dialog's validation
+/// source (figures / animationFrames / the geograft-bearing items). Never
+/// throws: an unreadable scene returns empty with the reason in `error`, so
+/// callers degrade instead of breaking.
 #[tauri::command(async)]
 pub fn scene_wearables(path: String) -> SceneWearables {
     match duf_scene(Path::new(&path)) {
-        Ok((items, figure)) => SceneWearables { items, figure, error: String::new() },
-        Err(error) => SceneWearables { items: Vec::new(), figure: None, error },
+        Ok(read) => SceneWearables {
+            items: read.items,
+            figure: read.figures.first().cloned(),
+            figures: read.figures,
+            animation_frames: read.animation_frames,
+            error: String::new(),
+        },
+        Err(error) => SceneWearables {
+            items: Vec::new(),
+            figure: None,
+            figures: Vec::new(),
+            animation_frames: 0,
+            error,
+        },
     }
 }
 
@@ -307,11 +369,52 @@ mod tests {
         let figure = result.figure.expect("figure detected");
         assert_eq!(figure.id, "Genesis9");
         assert_eq!(figure.label, "Genesis 9");
+        // Exactly one figure root, and no animation keys at all.
+        assert_eq!(result.figures.len(), 1);
+        assert_eq!(result.animation_frames, 0);
         // An unreadable path degrades to an empty list + no figure + error.
         let missing = scene_wearables(dir.join("nope.duf").to_string_lossy().to_string());
         assert!(missing.items.is_empty());
         assert!(missing.figure.is_none());
+        assert!(missing.figures.is_empty());
+        assert_eq!(missing.animation_frames, 0);
         assert!(missing.error.contains("nope.duf"), "error: {}", missing.error);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scene_wearables_counts_figures_and_measures_the_timeline() {
+        // The add-scene validation source: TWO Genesis roots (a second character
+        // in the scene) and animation keys past t = 0 (a filled timeline). The
+        // conformed eyelashes must NOT count as a figure despite the Genesis id.
+        let dir = unique_temp_dir("scene_multi");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("two.duf");
+        let json = br##"{"scene":{
+            "nodes":[
+                {"id":"Genesis9","label":"Genesis 9"},
+                {"id":"Genesis9Eyelashes","label":"Genesis 9 Eyelashes","conform_target":"#Genesis9"},
+                {"id":"Genesis9-1","label":"Genesis 9 (2)"}
+            ],
+            "animations":[{"keys":[[0,0],[0.5,1]]}]
+        }}"##;
+        fs::write(&path, gzip(json)).unwrap();
+        let result = scene_wearables(path.to_string_lossy().to_string());
+        assert_eq!(result.error, "");
+        let ids: Vec<_> = result.figures.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(ids, vec!["Genesis9", "Genesis9-1"]);
+        // `figure` stays the FIRST root (the create dialog's contract).
+        assert_eq!(result.figure.expect("first figure").id, "Genesis9");
+        // Highest key at 0.5 s × 30 fps + 1 = 16 frames — a filled timeline.
+        assert_eq!(result.animation_frames, 16);
+        // Rest-pose keys only (t = 0) read as a single frame — an EMPTY timeline.
+        let rest = dir.join("rest.duf");
+        let rest_json = br##"{"scene":{
+            "nodes":[{"id":"Genesis9","label":"Genesis 9"}],
+            "animations":[{"keys":[[0,0.2]]}]
+        }}"##;
+        fs::write(&rest, gzip(rest_json)).unwrap();
+        assert_eq!(scene_wearables(rest.to_string_lossy().to_string()).animation_frames, 1);
         let _ = fs::remove_dir_all(&dir);
     }
 

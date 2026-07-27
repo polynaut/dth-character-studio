@@ -20,5 +20,12 @@
     "id": "Genesis9",
     "label": "Genesis 9"
   },
+  "figures": [
+    {
+      "id": "Genesis9",
+      "label": "Genesis 9"
+    }
+  ],
+  "animationFrames": 1,
   "error": ""
 }
