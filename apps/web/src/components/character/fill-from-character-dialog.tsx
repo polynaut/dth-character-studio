@@ -5,7 +5,7 @@ import { PaintBucket } from 'lucide-react'
 import { Button, cn, Modal } from '@dth/ui'
 import { fetchAllCharacters } from '#/lib/rom/api.ts'
 import { fillSectionsFrom, filledSections, sectionContentSummary } from '#/lib/fill-sections.ts'
-import { GENERATIONS, SECTION_LABELS } from '@dth/rom'
+import { SECTION_LABELS } from '@dth/rom'
 
 import type { CharacterWithProject } from '#/lib/rom/api.ts'
 import type { Character, Gender, GenesisVersion, RomSection, RomSections } from '@dth/rom'
@@ -27,42 +27,28 @@ export interface FillTarget {
  *  sit inert on the target). Each is a wholesale replacement when checked. */
 const EXTRA_LABELS = {
   jcmRules: 'Modify JCM frames',
-  strengths: 'Strength dials',
-  preserve: 'Preserve after ROM loading',
+  preserveMorphs: 'Preserve morphs',
+  preserveNodeTransforms: 'Preserve node transforms',
 } as const
 export type FillExtra = keyof typeof EXTRA_LABELS
 
-/** Which extras the source has anything to offer for (target-gated: the
- *  strength dials only exist on Genesis 9 figures, and stock values 1/1/off
- *  would copy as a no-op). */
-function offeredExtras(source: Character, genesis: GenesisVersion): Array<FillExtra> {
+/** Which extras the source has anything to offer for. The two preserve lists
+ *  are offered separately, mirroring the Advanced-options editor. (The G9
+ *  strength dials are deliberately NOT an extra — two visible values the user
+ *  copies by hand when wanted.) */
+function offeredExtras(source: Character): Array<FillExtra> {
   const out: Array<FillExtra> = []
   if (source.jcmMorphMods.length > 0) out.push('jcmRules')
-  if (
-    GENERATIONS[genesis].hasStrengthDials &&
-    (source.facsDetailStrength !== 1 || source.flexionStrength !== 1 || source.applyUE5TearUV)
-  )
-    out.push('strengths')
-  if (source.preserveMorphs.length > 0 || source.preserveNodeTransforms.length > 0)
-    out.push('preserve')
+  if (source.preserveMorphs.length > 0) out.push('preserveMorphs')
+  if (source.preserveNodeTransforms.length > 0) out.push('preserveNodeTransforms')
   return out
 }
 
 function extraSummary(extra: FillExtra, source: Character): string {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
   if (extra === 'jcmRules') return plural(source.jcmMorphMods.length, 'rule')
-  if (extra === 'strengths') {
-    const parts: Array<string> = []
-    if (source.facsDetailStrength !== 1) parts.push(`FACS detail ${source.facsDetailStrength}`)
-    if (source.flexionStrength !== 1) parts.push(`flexion ${source.flexionStrength}`)
-    if (source.applyUE5TearUV) parts.push('UE5 tear UV')
-    return parts.join(' · ')
-  }
-  const parts: Array<string> = []
-  if (source.preserveMorphs.length > 0) parts.push(plural(source.preserveMorphs.length, 'morph'))
-  if (source.preserveNodeTransforms.length > 0)
-    parts.push(plural(source.preserveNodeTransforms.length, 'node transform'))
-  return parts.join(' · ')
+  if (extra === 'preserveMorphs') return plural(source.preserveMorphs.length, 'morph')
+  return plural(source.preserveNodeTransforms.length, 'node transform')
 }
 
 /**
@@ -128,13 +114,22 @@ export function FillFromCharacterDialog({
   )
   const source = candidates.find((c) => c.id === sourceId)
   const offered = source ? filledSections(source.sections) : []
-  const extrasAvailable = source ? offeredExtras(source, target.genesis) : []
+  const extrasAvailable = source ? offeredExtras(source) : []
 
   function next() {
     if (!source) return
-    // Everything offered starts checked — the user deselects what to keep.
+    // Every offered section starts checked — the user deselects what to keep.
+    // The two preserve lists start UNCHECKED: they're the most target-specific
+    // tuning (which morphs/nodes to hold depends on this character's own
+    // setup), so copying them is a deliberate opt-in.
     setChecked(new Set(filledSections(source.sections)))
-    setExtras(new Set(offeredExtras(source, target.genesis)))
+    setExtras(
+      new Set(
+        offeredExtras(source).filter(
+          (extra) => extra !== 'preserveMorphs' && extra !== 'preserveNodeTransforms',
+        ),
+      ),
+    )
     setStep('sections')
   }
 
@@ -159,23 +154,17 @@ export function FillFromCharacterDialog({
       sections: fillSectionsFrom(target.sections, source.sections, picked),
     }
     if (extras.has('jcmRules')) patch.jcmMorphMods = structuredClone(source.jcmMorphMods)
-    if (extras.has('strengths')) {
-      patch.facsDetailStrength = source.facsDetailStrength
-      patch.flexionStrength = source.flexionStrength
-      patch.applyUE5TearUV = source.applyUE5TearUV
-    }
-    if (extras.has('preserve')) {
-      patch.preserveMorphs = structuredClone(source.preserveMorphs)
+    if (extras.has('preserveMorphs')) patch.preserveMorphs = structuredClone(source.preserveMorphs)
+    if (extras.has('preserveNodeTransforms'))
       patch.preserveNodeTransforms = structuredClone(source.preserveNodeTransforms)
-    }
     onFill(patch, {
       id: source.id,
       name: source.name,
       picked,
       extras: {
         jcmRules: extras.has('jcmRules'),
-        strengths: extras.has('strengths'),
-        preserve: extras.has('preserve'),
+        preserveMorphs: extras.has('preserveMorphs'),
+        preserveNodeTransforms: extras.has('preserveNodeTransforms'),
       },
     })
     onClose()

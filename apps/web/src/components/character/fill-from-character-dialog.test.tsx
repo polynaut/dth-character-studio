@@ -63,24 +63,30 @@ describe('FillFromCharacterDialog', () => {
     fireEvent.click(screen.getByRole('radio'))
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
-    // Step 2: the filled sections and all three offered extras, pre-checked.
+    // Step 2: the filled sections; JCM rules pre-checked, the preserve list
+    // offered but starting UNCHECKED (its node-transform sibling isn't offered
+    // at all — the source has none). The strength dials are never an extra.
     expect(screen.getByText('Expressions')).toBeTruthy()
     expect(screen.getByText('Modify JCM frames')).toBeTruthy()
-    expect(screen.getByText('Strength dials')).toBeTruthy()
-    expect(screen.getByText('Preserve after ROM loading')).toBeTruthy()
+    expect(screen.queryByText('Strength dials')).toBeNull()
+    expect(screen.getByText('Preserve morphs')).toBeTruthy()
+    expect(screen.queryByText('Preserve node transforms')).toBeNull()
 
+    // Opt the preserve-morph list in, then fill.
+    fireEvent.click(screen.getByText('Preserve morphs'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
     expect(patch!.sections.EXP.groups[0].poses[0].name).toBe('Smile')
     expect(patch!.jcmMorphMods).toHaveLength(1)
-    expect(patch!.facsDetailStrength).toBe(0.8)
+    expect(patch!.facsDetailStrength).toBeUndefined()
     expect(patch!.preserveMorphs).toEqual([{ name: 'BreastsGone', keepValue: 1 }])
+    expect(patch!.preserveNodeTransforms).toBeUndefined()
     // RET/JCM/FAC are enabled preset sections in the stock defaults, so the
     // source offers them as filled alongside its custom EXP.
     expect(picked).toMatchObject({
       id: 'src-1',
       name: 'Kira',
       picked: ['RET', 'JCM', 'FAC', 'EXP'],
-      extras: { jcmRules: true, strengths: true, preserve: true },
+      extras: { jcmRules: true, preserveMorphs: true, preserveNodeTransforms: false },
     })
   })
 
@@ -98,9 +104,8 @@ describe('FillFromCharacterDialog', () => {
     )
     fireEvent.click(await screen.findByRole('radio'))
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    for (const label of ['Modify JCM frames', 'Strength dials', 'Preserve after ROM loading']) {
-      fireEvent.click(screen.getByText(label))
-    }
+    // Uncheck the pre-checked JCM rules (the preserve list already starts off).
+    fireEvent.click(screen.getByText('Modify JCM frames'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
     expect(patch!.jcmMorphMods).toBeUndefined()
     expect(patch!.facsDetailStrength).toBeUndefined()
