@@ -345,14 +345,20 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
   return {
     files,
     dialogPath: opts.dialogPath,
-    // The demo scene reports its hair item as a wearable so the groom pill resolves.
+    // Each scene reports ITS OWN hair item as a wearable, so every scene's groom
+    // pill resolves and no scene sees the other's hair as "unlisted" (the amber
+    // warning must never appear in guide shots — it's not a documented state).
     sceneWearables: opts.demo
-      ? [
-          { id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' },
+      ? {
+          [P.scene]: [{ id: 'cht-sevenly-hair', label: HAIR_ITEM, conformTarget: '#Genesis9' }],
           ...(opts.extraScene
-            ? [{ id: 'nova-ponytail-hair', label: HAIR_ITEM_2, conformTarget: '#Genesis9' }]
-            : []),
-        ]
+            ? {
+                [P.scene2]: [
+                  { id: 'nova-ponytail-hair', label: HAIR_ITEM_2, conformTarget: '#Genesis9' },
+                ],
+              }
+            : {}),
+        }
       : undefined,
     // …and its base figure, so the create dialog auto-selects G9 from the scene.
     sceneFigure: opts.demo ? { id: 'Genesis9', label: 'Genesis 9' } : null,

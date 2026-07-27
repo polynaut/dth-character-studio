@@ -34,9 +34,12 @@ export interface TauriMockSeed {
   /** Files `probe_locked_files` reports as locked (open in Daz/Houdini) — drives
    *  the "close those apps" move dialog. Default: nothing locked. */
   lockedFiles?: Array<string>
-  /** Conformed items a scene's `.duf` reports (`scene_wearables`) — the groom
-   *  picker's suggestions; a listed hair item resolves against these. */
-  sceneWearables?: Array<{ id: string; label: string; conformTarget: string }>
+  /** Conformed items a scene's `.duf` reports (`scene_wearables`), PER scene
+   *  path — the groom picker's suggestions; a listed hair item resolves against
+   *  its own scene's entry. Per-scene on purpose: a flat list served for every
+   *  scene made each scene "carry" the other's hair, tripping the unlisted-hair
+   *  warning in every multi-scene state. */
+  sceneWearables?: Record<string, Array<{ id: string; label: string; conformTarget: string }>>
   /** The base figure node a scene reports (`scene_wearables`) — the create
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
@@ -272,10 +275,15 @@ export function installTauriMock(seed: TauriMockSeed): void {
             : { path, frames, error: '' }
         })
       case 'scene_wearables':
-        // Groom suggestions: the seeded wearables (so a listed hair item resolves
-        // instead of flashing "not found"), else empty. `figure` feeds the create
+        // Groom suggestions: THIS scene's seeded wearables (so a listed hair item
+        // resolves instead of flashing "not found" — and another scene's hair
+        // never leaks in as "unlisted"), else empty. `figure` feeds the create
         // dialog's Genesis auto-select. Best-effort — never errors.
-        return { items: seed.sceneWearables ?? [], figure: seed.sceneFigure ?? null, error: '' }
+        return {
+          items: seed.sceneWearables?.[norm(args.path)] ?? [],
+          figure: seed.sceneFigure ?? null,
+          error: '',
+        }
       case 'housekeeping_sweep':
         return { filesDeleted: 0, bytesFreed: 0 }
       case 'unc_for_path':
