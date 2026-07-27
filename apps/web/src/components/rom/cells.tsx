@@ -8,6 +8,19 @@ export const cellInputClass =
 export const headerSelectClass =
   'rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus:border-ring'
 
+// The autocomplete listbox surface (morph/bone name cells). The theme's
+// --popover is barely lighter than the app background, and these menus open
+// right on top of same-colored table rows — so the surface is raised well above
+// the popover token (a white mix), with a light edge + deep shadow, or the open
+// menu is genuinely hard to spot. Layout (positioning, width) stays per cell.
+export const menuSurfaceClass =
+  'rounded-md border border-white/10 bg-[color-mix(in_oklab,var(--color-popover)_88%,white)] text-popover-foreground shadow-xl shadow-black/40'
+
+// The active (keyboard/hover) option row on that raised surface — the theme's
+// --accent is DARKER than the surface, so the usual bg-accent highlight would
+// read inverted here; a white overlay lifts instead.
+export const menuActiveOptionClass = 'bg-white/10 text-accent-foreground'
+
 export function TextCell({
   value,
   onCommit,
