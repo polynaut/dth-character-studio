@@ -230,8 +230,16 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     id: 'value',
     // Mirror the NumberCell geometry (w-20 box, right-aligned digits, pr-5 "%"
     // gutter) so the title sits flush over the numbers instead of floating at
-    // the column's left edge.
-    header: () => <span className="block w-20 pr-5 text-right">Value</span>,
+    // the column's left edge. The "i" pulls back over the % gutter (-ml-4) so
+    // it sits the usual 4px after the word, not after the gutter.
+    header: () => (
+      <span className="flex items-center">
+        <span className="block w-20 pr-5 text-right">Value</span>
+        <InfoPopup label="Value — more information" className="-my-1 -ml-4">
+          The value the pose dials the morph to.
+        </InfoPopup>
+      </span>
+    ),
     cell: ({ getValue, row, table }) => {
       const meta = table.options.meta as PoseTableMeta
       // Multi-morph rows edit values in the expansion; a single morph does too
@@ -448,22 +456,33 @@ export function SortablePoseRow({
             <td className="px-1 py-1">
               <span className="pl-6">#</span>
             </td>
-            <td className="py-1 pr-1 pl-8" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
-              Node
+            {/* The "i" chips here carry NO -my-1: the sub-header is the SHORT
+                text-xs row, so the 24px chip is what sets its height — collapsing
+                the chips' margins would clip them against the row edges instead. */}
+            <td className="py-1 pr-1 pl-8">
+              <span className="flex items-center gap-1">
+                Node
+                <InfoPopup label="Node — more information">
+                  The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …).
+                </InfoPopup>
+              </span>
             </td>
             {/* Every sub-column indents pl-8, like Node — the expansion reads
                 as one right-shifted block under the main row. */}
             <td className="py-1 pr-1 pl-8" title="The parameter's internal name in Daz Studio">
               Parameter name
             </td>
-            <td className="py-1 pr-1 pl-8" title="The value the pose dials the morph to">
+            <td className="py-1 pr-1 pl-8">
               {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
-                  flush over the digits — the same trick the main grid's Value header uses. */}
-              <span className="block w-20 pr-5 text-right">Value</span>
+                  flush over the digits — the same trick the main grid's Value header
+                  uses, "i" pulled back over the % gutter (-ml-4) too. */}
+              <span className="flex items-center">
+                <span className="block w-20 pr-5 text-right">Value</span>
+                <InfoPopup label="Value — more information" className="-ml-4">
+                  The value the pose dials the morph to.
+                </InfoPopup>
+              </span>
             </td>
-            {/* No -my-1 here: the sub-header row is the SHORT text-xs row, so the
-                24px chip is what sets its height — collapsing the chip's margins
-                would clip it against the row edges instead. */}
             <td className="py-1 pr-1 pl-8 text-center">
               <span className="flex items-center justify-center gap-1">
                 Base
@@ -473,11 +492,13 @@ export function SortablePoseRow({
                 </InfoPopup>
               </span>
             </td>
-            <td
-              className="py-1 pr-1 pl-8 text-left"
-              title="Resolve the base from the morph's current scene value at apply time"
-            >
-              Auto
+            <td className="py-1 pr-1 pl-8 text-left">
+              <span className="flex items-center gap-1">
+                Auto
+                <InfoPopup label="Auto — more information">
+                  Resolve the base from the morph's current scene value at apply time.
+                </InfoPopup>
+              </span>
             </td>
             <td />
           </tr>
