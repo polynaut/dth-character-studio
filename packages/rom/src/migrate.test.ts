@@ -905,3 +905,18 @@ describe('schema v19 — stable ids on pose + art-direction morph rows (additive
 //       expect(migrateCharacterData(structuredClone(once))).toEqual(once)
 //     })
 //   })
+
+// v25 added `exportHairAssets` (run the hair export right after the main export
+// in the carrying script) — additive with a false default, so there is no
+// migrate step; zod fills it when reading an older definition.
+describe('characterSchema — v25 exportHairAssets (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('fills exportHairAssets with false for a v24-shaped definition', () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 24 }).exportHairAssets).toBe(false)
+  })
+
+  it('round-trips a stored true', () => {
+    expect(characterSchema.parse({ ...base, exportHairAssets: true }).exportHairAssets).toBe(true)
+  })
+})

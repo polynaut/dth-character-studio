@@ -1642,7 +1642,7 @@ describe('groom items (hair kept out of the export)', () => {
     )
     // Per-item: loops the open scene's hair list, exporting each on its own as
     // "<Name>_Hair_<item>" (the 2-arg call crashes Daz — false is mandatory).
-    expect(script.content).toContain('for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++)')
+    expect(script.content).toContain('for (var dthHxI = 0; dthHxI < dthGroomLabels.length; dthHxI++)')
     expect(script.content).toContain('var dthHairName = "Electra_Hair_" + dthHairSlug(dthKeepLabel)')
     expect(script.content).toContain('doExportAlembicGroomPoses(dthExportDir, dthHairName, false)')
     expect(script.content).not.toContain('"Electra_groom"')
@@ -1775,5 +1775,60 @@ describe('wrong-scene guard (dthSceneLinkError)', () => {
     const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
     expect(content).toContain('var dthLinkedScenes = []')
     expect(content).toContain('if (dthLinkedScenes.length == 0) return ""')
+  })
+})
+
+describe('exportHairAssets — the hair pass rides the main export', () => {
+  // Forward-slash paths on purpose (the normalization is covered elsewhere).
+  const HAIR_SCENE = {
+    scenePath: 'D:/P/Kira/daz3d/Kira.duf',
+    sceneOverrides: [
+      { scenePath: 'D:/P/Kira/daz3d/Kira.duf', hair: [{ nodeLabel: 'CHT Sevenly Hair' }] },
+    ],
+  }
+
+  it('combined script: the per-item groom export follows the main export', () => {
+    const character = makeCharacter({
+      ...HAIR_SCENE,
+      exportPath: 'X:/exports',
+      exportHairAssets: true,
+    })
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    expect(content).toContain('doExportAlembicGroomPoses(dthExportDir, dthHairName, false)')
+    // Its OWN figure resolution — the block also runs where dthFig doesn't exist.
+    expect(content).toContain('var dthHairFig = Scene.getPrimarySelection()')
+    // After the main export call, inside the same script.
+    expect(content.indexOf('dthExportAction.doExport(')).toBeLessThan(
+      content.indexOf('doExportAlembicGroomPoses'),
+    )
+  })
+
+  it('split mode: the standalone Export_ script carries the pass instead', () => {
+    const character = makeCharacter({
+      ...HAIR_SCENE,
+      exportPath: 'X:/exports',
+      exportWithRomScript: false,
+      exportHairAssets: true,
+    })
+    expect(toExportScriptDsa(character, FRAMES).content).toContain('doExportAlembicGroomPoses')
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain(
+      'doExportAlembicGroomPoses',
+    )
+  })
+
+  it('off by default — no groom pass in either carrier (the standalone Export_Hair still has it)', () => {
+    const character = makeCharacter({ ...HAIR_SCENE, exportPath: 'X:/exports' })
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain(
+      'doExportAlembicGroomPoses',
+    )
+    expect(toExportScriptDsa(character, FRAMES).content).not.toContain('doExportAlembicGroomPoses')
+    expect(toGroomExportScriptDsa(character).content).toContain('doExportAlembicGroomPoses')
+  })
+
+  it('no hair lists → nothing to export, the pass is not emitted', () => {
+    const character = makeCharacter({ exportPath: 'X:/exports', exportHairAssets: true })
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain(
+      'doExportAlembicGroomPoses',
+    )
   })
 })
