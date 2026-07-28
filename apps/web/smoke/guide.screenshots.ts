@@ -160,7 +160,13 @@ async function shootStrip(page: Page, path: string, topEl: Locator, bottomEl?: L
   )
   const pad = 20
   const y = Math.max(0, topBox.top - pad)
-  const height = Math.max(1, bottom - y + pad)
+  const height = bottom - y + pad
+  // `frame` already fails loudly for a broken TOP locator; a bottom anchor that
+  // resolves to the wrong element (above the top, or hidden) must fail the same
+  // way — a degenerate strip once shipped as a 2px sliver without any test red.
+  if (height < 40) {
+    throw new Error(`screenshot "${path}": strip collapsed to ${height}px — stale bottom anchor?`)
+  }
   await page.screenshot({ path, clip: { x: 0, y, width: VW, height } })
 }
 
@@ -454,15 +460,17 @@ async function openCharacterOnOutfitScene(page: Page) {
 
 test('character-daz-scenes', async ({ page }) => {
   await openCharacterOnOutfitScene(page)
-  // The Daz scenes block: both cards (outfit selected) + its per-scene hair
-  // list. The hair picker (an unnamed combobox) is the page's last combobox.
-  // `.first()`: the docked scene bar (#516) carries an identical "Daz scenes"
-  // label later in the DOM — the panel heading is the first match.
+  // The Daz scenes block: both cards (outfit selected) with the per-scene
+  // column (hair items, FACS/flexion, tear UV) beside them. `#daz-scenes` — the
+  // title Label carries an InfoPopup, so an exact text match would skip it and
+  // land on the docked scene bar's label instead. Bottom: the panel's "Add
+  // scene" button (the docked bar's twin is aria-hidden while the cards are on
+  // screen, so the role query sees only this one).
   await shootStrip(
     page,
     join(OUT, 'character-daz-scenes.png'),
-    page.getByText('Daz scenes', { exact: true }).first(),
-    page.getByRole('combobox').last(),
+    page.locator('#daz-scenes'),
+    page.getByRole('button', { name: 'Add scene', exact: true }),
   )
 })
 

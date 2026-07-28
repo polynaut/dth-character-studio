@@ -25,15 +25,15 @@ scenes folder or left in place. The **primary** scene can't be unlinked;
 extras can. Every card has **Open in Daz**.
 
 <p align="center">
-  <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with its per-scene hair list below" src="screenshots/character-daz-scenes.png" />
+  <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with the per-scene hair items beside them" src="screenshots/character-daz-scenes.png" />
   <br>
-  <sub><em>Two linked scenes: the primary and a selected outfit scene — the hair list below belongs to the selected card.</em></sub>
+  <sub><em>Two linked scenes: the primary and a selected outfit scene — the hair items beside the cards belong to the selected one.</em></sub>
 </p>
 
 ### The selected scene
 
 Clicking a card **selects** that scene, and the per-scene features follow the
-selection: the **hair items** list below the cards edits the *selected*
+selection: the **hair items** list beside the cards edits the *selected*
 scene's list, and editing an overridable field overrides it for the selected
 scene. Scroll the cards off-screen and a **docked scene bar** slides up along
 the bottom — the selected scene on the left with a green ring, the others in a
