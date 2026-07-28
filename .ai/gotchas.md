@@ -265,6 +265,18 @@ current code before relying on details, but assume the *lesson* still holds.
   `stopImmediatePropagation` with no `preventDefault` and no action — or it
   falls through and closes the surrounding dialog mid-composition (Radix checks
   only `event.key`).
+- **The click that re-focuses the app window must never backdrop-dismiss an
+  overlay** — with a dialog open and the native window unfocused, the user's
+  click back into the app often lands on the backdrop. Both kit overlays route
+  `onPointerDownOutside` through `packages/ui/src/refocus-click.ts` (a
+  blur/focus/pointerdown state machine — identity-marks the first pointerdown
+  after a window blur if it lands within 400 ms of the `focus` event, or before
+  it); any new dismissable overlay must do the same. Measured Radix detail:
+  modal `Dialog` DEFERS the outside dismiss to the *click* after the
+  pointerdown (`deferPointerDownOutside`), but `detail.originalEvent` is still
+  the pointerdown — so the identity guard works for both, and a jsdom test must
+  fire `pointerDown` **and** `click` to dismiss a Dialog (SidePanel's bare
+  `DismissableLayer` dismisses on pointerdown alone).
 - **floating-ui's `useFocus` must stay enabled while an InfoPopup is pinned**
   (its escape-key handler arms the block-focus guard that stops the
   return-focus from re-peeking the popup) — but that also leaves its reference
