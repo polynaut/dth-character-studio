@@ -954,11 +954,14 @@ describe('disabled section content is read-only', () => {
     )
     fireEvent.click(screen.getByText('Full Body'))
     // The fieldset disable is THE read-only mechanism: it kills every native
-    // control inside (fields, checkboxes, add/remove buttons, the dnd handle
-    // buttons) in a real browser — here we pin the attribute + the cursor.
+    // control inside (fields, checkboxes, add/remove buttons) in a real
+    // browser — here we pin the attribute + the cursor. Disabled buttons still
+    // RECEIVE pointer events in Chromium, so dnd-kit's drag handles need the
+    // explicit pointer-events kill or a disabled section stays reorderable.
     const fieldset = container.querySelector('fieldset')!
     expect(fieldset.disabled).toBe(true)
     expect(fieldset.className).toContain('cursor-not-allowed')
+    expect(fieldset.className).toContain('[&_button]:pointer-events-none')
     // The enable switch must NOT be caught by it — it lives in the header.
     expect(fieldset.querySelector('[role="switch"]')).toBeNull()
 
@@ -966,6 +969,35 @@ describe('disabled section content is read-only', () => {
     fireEvent.click(screen.getByText('Joint Corrective'))
     const fieldsets = Array.from(container.querySelectorAll('fieldset'))
     expect(fieldsets.some((f) => !f.disabled)).toBe(true)
+  })
+})
+
+describe('section header click target', () => {
+  it('the whole header row toggles the accordion — the summary text does not', () => {
+    render(
+      <RomSections
+        sections={sectionsWithMultiMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        onChange={() => {}}
+      />,
+    )
+    // Click the header ROW itself (the title button's parent, so the event
+    // target is the row, not the button) — the section opens.
+    const header = screen.getByText('Full Body').closest('div')!
+    fireEvent.click(header)
+    expect(screen.getByText('Import from CSV')).toBeTruthy()
+    // The summary text hugs the enable switch — clicking it must NOT flip the
+    // accordion back (data-accordion-ignore).
+    fireEvent.click(screen.getByText(/custom · 1 group/))
+    expect(screen.getByText('Import from CSV')).toBeTruthy()
+    // The title button still works as the accessible control (its own click
+    // toggles; the row handler defers to it instead of double-firing).
+    fireEvent.click(screen.getByText('Full Body'))
+    expect(screen.queryByText('Import from CSV')).toBeNull()
   })
 })
 
