@@ -155,12 +155,75 @@ export function characterScriptName(character: Character, sceneSlug?: string): s
 export const ROM_RUN_LOG_FILE = 'dth_rom_run_log.json'
 
 /**
+ * The per-item hair (groom) export loop — the heart of the Export_Hair flow,
+ * shared verbatim by the standalone `Export_Hair_…` script and the inline
+ * "export hair assets too" pass (`exportHairAssets`) inside the export block.
+ * For every label in `dthGroomLabels` it hides every OTHER wearable (the item
+ * stays fitted), selects the figure, runs the exporter's documented
+ * `doExportAlembicGroomPoses(path, name, false)` (a 2-arg call crashes Daz —
+ * ALWAYS pass false) and restores the exact flags. Expects `dthGroomLabels` and
+ * `dthExportDir` in scope; the figure / exporter-action / hide-tree variable
+ * NAMES are parameterised so each host script keeps its own. Base indent 0;
+ * `dthHx…` locals so it can sit inside blocks that already used the generic
+ * loop names.
+ */
+function hairExportLoopSnippet(
+  character: Character,
+  v: { fig: string; action: string; hideTree: string; hidden: string },
+): string {
+  return `// Filename-safe slug for a hair item label (same rule as characterSlug).
+function dthHairSlug(s) {
+    var out = "";
+    for (var dthSi = 0; dthSi < s.length; dthSi++) {
+        var dthC = s.charAt(dthSi);
+        if ((dthC >= "A" && dthC <= "Z") || (dthC >= "a" && dthC <= "z") || (dthC >= "0" && dthC <= "9") || dthC == "_") out += dthC;
+    }
+    return out || "Hair";
+}
+// Export EACH hair item ON ITS OWN: keep only that item (+ the Genesis
+// body-part figures) fitted, HIDE every other wearable INCLUDING the other
+// hair items (plugin 2.0+ skips hidden nodes), export as "<Name>_Hair_<item>",
+// restore the exact flags — repeat per item.
+for (var dthHxI = 0; dthHxI < dthGroomLabels.length; dthHxI++) {
+    var dthKeepLabel = dthGroomLabels[dthHxI];
+    ${v.hidden} = [];
+    for (var dthHxN = 0; dthHxN < Scene.getNumNodes(); dthHxN++) {
+        var dthHxNode = Scene.getNode(dthHxN);
+        if (!dthHxNode || typeof dthHxNode.getFollowTarget != "function") continue;
+        var dthHxT = dthHxNode.getFollowTarget();
+        if (!dthHxT || String(dthHxT.getLabel()) != String(${v.fig}.getLabel())) continue;
+        var dthHxLabel = String(dthHxNode.getLabel());
+        // Keep the body-part figures (eyes/mouth/tear ride with the body)
+        // and THIS hair item; hide everything else.
+        if (dthHxLabel.indexOf("Genesis") == 0 || dthHxLabel == dthKeepLabel) continue;
+        ${v.hideTree}(dthHxNode);
+    }
+    Scene.selectAllNodes(false);
+    ${v.fig}.select(true);
+    Scene.setPrimarySelection(${v.fig});
+    try {
+        var dthHairName = ${dazJson(`${characterSlug(character)}_Hair_`)} + dthHairSlug(dthKeepLabel);
+        ${v.action}.doExportAlembicGroomPoses(dthExportDir, dthHairName, false);
+        print("Hair exported: " + dthKeepLabel + " -> " + dthHairName);
+    } finally {
+        for (var dthHxR = 0; dthHxR < ${v.hidden}.length; dthHxR++) {
+            try { ${v.hidden}[dthHxR].setVisible(true); } catch (eR) {}
+        }
+    }
+}
+print("Hair items exported: " + dthGroomLabels.length);
+`
+}
+
+/**
  * The DTH-Exporter run + PoseAsset-CSV delivery, as a Daz Script block. Pure
  * native Daz API (no DTH runtime needed), so it works both appended to the ROM
  * script and as the body of a standalone Export script. Empty when no export dir
  * is set. The CSV copy is included only when the source folder is known
  * (charFolderAbs); the export nests under the open scene's name when
- * `exportSceneSubfolders` is on (resolved at run time).
+ * `exportSceneSubfolders` is on (resolved at run time). With `exportHairAssets`
+ * on, the Export_Hair per-item pass runs right after the main export (same
+ * action, same resolved dir) — in BOTH carriers, since both call this builder.
  */
 function buildExportBlock(
   character: Character,
@@ -221,6 +284,21 @@ ${csvNameBlock}
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
   const indentBlock = indentLines
+  // "Export hair assets too": the Export_Hair per-item pass appended after the
+  // main export, inside the groom bracket (it needs this scene's labels). The
+  // figure resolves under its OWN name — the standalone Export_ script already
+  // declares `dthFig`, and this block must work in both carriers.
+  const hairPassBlock = character.exportHairAssets
+    ? `        // Export hair assets too (exportHairAssets): the Export_Hair pass, right
+        // after the main export — same action, same (scene-resolved) export dir.
+${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig').trimEnd()))}
+        if (!dthHairFig) {
+            print("No ${character.genesis} figure found - hair export skipped.");
+        } else {
+${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'dthHairFig', action: 'dthExportAction', hideTree: 'dthGroomHideTree', hidden: 'dthGroomHidden' }).trimEnd())))}
+        }
+`
+    : ''
   const exportBody =
     Object.keys(groomMap).length === 0
       ? exportCore
@@ -265,7 +343,7 @@ ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
             }
             print("Hair nodes shown again: " + dthGroomHidden.length);
         }
-    }
+${hairPassBlock}    }
     }
 `
   return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
@@ -766,48 +844,8 @@ ${groomSceneLookupSnippet(groomMap)}
         MessageBox.information("The open scene has no hair list in DTH Character Studio - nothing to export. Open one of the character's scenes with hair items defined.", "DTH Character Studio", "&OK");
     } else {
         var dthExportDir = ${dazJson(exportDir)};
-${sceneSubfolderBlock}        // Filename-safe slug for a hair item label (same rule as characterSlug).
-        function dthHairSlug(s) {
-            var out = "";
-            for (var dthSi = 0; dthSi < s.length; dthSi++) {
-                var dthC = s.charAt(dthSi);
-                if ((dthC >= "A" && dthC <= "Z") || (dthC >= "a" && dthC <= "z") || (dthC >= "0" && dthC <= "9") || dthC == "_") out += dthC;
-            }
-            return out || "Hair";
-        }
-${indentLines(hideTreeSnippet('dthHideTree', 'dthHidden'))}
-        // Export EACH hair item ON ITS OWN: keep only that item (+ the Genesis
-        // body-part figures) fitted, HIDE every other wearable INCLUDING the other
-        // hair items (plugin 2.0+ skips hidden nodes), export as "<Name>_Hair_<item>",
-        // restore the exact flags — repeat per item.
-        for (var dthGi = 0; dthGi < dthGroomLabels.length; dthGi++) {
-            var dthKeepLabel = dthGroomLabels[dthGi];
-            dthHidden = [];
-            for (var dthI = 0; dthI < Scene.getNumNodes(); dthI++) {
-                var dthN = Scene.getNode(dthI);
-                if (!dthN || typeof dthN.getFollowTarget != "function") continue;
-                var dthT = dthN.getFollowTarget();
-                if (!dthT || String(dthT.getLabel()) != String(dthFig.getLabel())) continue;
-                var dthLabel = String(dthN.getLabel());
-                // Keep the body-part figures (eyes/mouth/tear ride with the body)
-                // and THIS hair item; hide everything else.
-                if (dthLabel.indexOf("Genesis") == 0 || dthLabel == dthKeepLabel) continue;
-                dthHideTree(dthN);
-            }
-            Scene.selectAllNodes(false);
-            dthFig.select(true);
-            Scene.setPrimarySelection(dthFig);
-            try {
-                var dthHairName = ${dazJson(`${characterSlug(character)}_Hair_`)} + dthHairSlug(dthKeepLabel);
-                dthAction.doExportAlembicGroomPoses(dthExportDir, dthHairName, false);
-                print("Hair exported: " + dthKeepLabel + " -> " + dthHairName);
-            } finally {
-                for (var dthR = 0; dthR < dthHidden.length; dthR++) {
-                    try { dthHidden[dthR].setVisible(true); } catch (eR) {}
-                }
-            }
-        }
-        print("Hair items exported: " + dthGroomLabels.length);
+${sceneSubfolderBlock}${indentLines(hideTreeSnippet('dthHideTree', 'dthHidden'))}
+${indentLines(indentLines(hairExportLoopSnippet(character, { fig: 'dthFig', action: 'dthAction', hideTree: 'dthHideTree', hidden: 'dthHidden' }).trimEnd()))}
     }
 }
 `

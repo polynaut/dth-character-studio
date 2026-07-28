@@ -58,7 +58,7 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    (plus a **reference-skeleton FBX** for each **Bone scale** frame, under a
    `Reference Skeletons` subfolder — the CSV already points at each one).
 
-Two switches tune this:
+Three switches tune this:
 
 - **Generate subfolders based on Daz scenes** — nests each export under a
   folder named after the scene open in Daz when the script runs, so
@@ -70,6 +70,12 @@ Two switches tune this:
   splits into its own **`Export_<Name>_G9.dsa`** beside the ROM script — run it
   after the ROM script in the same Daz session; handy for re-exporting
   (another scene, or after a failed export) without rebuilding the ROM.
+- **Export hair assets too** — right after the main export, each of the open
+  scene's [hair items](./advanced.md#hair-items--per-scene-kept-out-of-the-export)
+  is exported on its own (`<Name>_Hair_<item>_grooms.abc` — the same per-item
+  pass as the standalone `Export_Hair_…` script), into the same export folder.
+  Works in both modes: with the combined ROM script and with the split
+  `Export_…` script. Scenes without a hair list skip the pass.
 
 &nbsp;
 

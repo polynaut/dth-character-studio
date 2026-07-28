@@ -878,8 +878,11 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       hair-only record). Migration step converts everything; sparse entries
  *       that were dead (orphaned ids, disarmed panels' stored payloads) are
  *       dropped rather than carried as unreachable data.
+ *  25 — added `exportHairAssets` (run the hair/groom export right after the
+ *       main export inside the carrying script; additive with a false default —
+ *       no migration step).
  */
-export const CHARACTER_SCHEMA_VERSION = 24
+export const CHARACTER_SCHEMA_VERSION = 25
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1338,6 +1341,15 @@ export const characterSchema = z.object({
    * export path.
    */
   exportWithRomScript: z.boolean().default(true),
+  /**
+   * When `exportPath` is set, also run the hair (groom) export right after the
+   * main DTH export — the Export_Hair per-item alembic pass, inlined into
+   * whichever script carries the export (the combined ROM script, or the split
+   * `Export_…` script). Only scenes with a hair list export grooms; the
+   * standalone `Export_Hair_…` script keeps being generated regardless. No
+   * effect without an export path.
+   */
+  exportHairAssets: z.boolean().default(false),
   /**
    * The DTH release the PoseAsset CSV was last generated for (e.g. "2.4.3"); ''
    * when never generated, or generated with no DTH release configured. The CSV is
