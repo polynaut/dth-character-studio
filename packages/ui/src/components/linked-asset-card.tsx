@@ -168,10 +168,12 @@ export function LinkedAssetCard({
           <Button
             variant="ghost"
             size="icon-sm"
-            // Solid hover fill (the adornment recipe): the ghost accent tint
-            // muddies on the tinted card surfaces. The dark: pair is required —
-            // ghost's own dark:hover:bg-accent/50 would win the cascade.
-            className="group/del pointer-events-auto opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:bg-[#333] dark:hover:bg-[#333]"
+            // The adornment recipe (the chip pencil's style, size aside):
+            // ghost at rest, solid #333 + white/20 edge + shadow on hover —
+            // the ghost accent tint muddied on the tinted card surfaces. The
+            // dark: pair is required — ghost's own dark:hover:bg-accent/50
+            // would win the cascade.
+            className="group/del pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
             title={removeTitle}
             aria-label={removeTitle}
             onClick={onRemove}
@@ -192,7 +194,7 @@ export function LinkedAssetCard({
             title={openTitle}
             aria-label={openTitle}
             onClick={onOpen}
-            className="pointer-events-auto hover:bg-[#333] dark:hover:bg-[#333]"
+            className="pointer-events-auto border border-transparent hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
           >
             <CornerIcon
               className={cn('size-3.5 text-muted-foreground transition-colors', accentClass)}

@@ -117,9 +117,10 @@ export function PathCode({
       </code>
       <span
         aria-hidden
-        // Solid #333 + white/20 edge — the shared adornment recipe (the edit
-        // pencil's hover box matches), independent of the surface below.
-        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border border-white/20 bg-[#333] p-1 shadow-sm group-hover/path:flex"
+        // Solid #333 + white/20 edge at a FIXED size-5 — the shared adornment
+        // recipe, byte-identical to the edit pencil's box (20×20), independent
+        // of the surface below.
+        className="pointer-events-none absolute -top-2 -right-2 hidden size-5 items-center justify-center rounded border border-white/20 bg-[#333] shadow-sm group-hover/path:flex"
       >
         {copied ? (
           <Check className="size-3 text-primary" />
