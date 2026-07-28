@@ -582,11 +582,22 @@ test('project-unreal-footer', async ({ page }) => {
 })
 
 test('character-create-panel', async ({ page }) => {
-  // The picker returns the demo scene, so choosing it fills the create form
-  // (scene preview, name, Genesis, the Fill-from-character button) instead of
-  // staying empty. The GP geograft makes the Gender row read ♀ female — the
-  // documented scene derivation, not the mock's Unknown fallback.
-  await openProject(page, { dialogPath: P.scene, sceneGpGeograft: true })
+  // The picker returns a FRESH scene — NOT one of Kira's linked ones: the
+  // duplicate-scene guard flags those "already linked to Kira", and the docs
+  // shot must show a clean create with every check green. KiraSummertide's
+  // files exist here WITHOUT being linked (no extraScene), and its read
+  // carries the GP geograft so the Gender badge reads ♀ — the documented
+  // scene derivation, not the mock's Unknown fallback.
+  const seed = buildSeed({ demo: true, activeProjectFile: P.dcsp, dialogPath: P.scene2 })
+  seed.files[P.scene2] = 'duf-fixture'
+  seed.files[`${P.scene2}.tip.png`] = seed.files[`${P.scene}.tip.png`]
+  seed.sceneWearables = {
+    ...(seed.sceneWearables ?? {}),
+    [P.scene2]: [{ id: 'GoldenPalace_G9', label: 'Golden Palace', conformTarget: '#Genesis9' }],
+  }
+  await prime(page, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).waitFor()
   await page.getByRole('button', { name: 'Add', exact: true }).first().click()
   await page.getByRole('button', { name: /Choose Daz scene/ }).click()
   await page.getByText('Character name').waitFor()
