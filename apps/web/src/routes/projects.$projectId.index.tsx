@@ -261,7 +261,9 @@ function ProjectCharactersPage() {
     // Enter-key handler isn't, so a fast double-Enter could race two creates.
     // `createBlocked` guards the Enter path against failed/running validation.
     // Enter defaults to the primary action: copy an outside scene in.
-    if (busy || !scenePath.trim() || !canCreate || createBlocked) return
+    // No scene picked is a VALID create (scene-less character — the folder is
+    // seeded and the editor stays locked until the primary scene is linked).
+    if (busy || !canCreate || createBlocked) return
     await doCreate(copyScene)
   }
 
@@ -447,7 +449,8 @@ function ProjectCharactersPage() {
         {/* The old bold "no animation" warning is gone — the live Validation
             table below now checks exactly that (and "one character"). */}
         <p className="text-sm text-muted-foreground">
-          Choose its Daz scene (.duf) — or drop one anywhere on the page.
+          Choose its Daz scene (.duf) — or drop one anywhere on the page. No scene yet? Create
+          the character without one: its folder is set up for you to save the scene into.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" className="shrink-0" onClick={onPickScene}>
@@ -459,13 +462,16 @@ function ProjectCharactersPage() {
           )}
         </div>
 
-        {scenePath.trim() && (
-          <>
+        {/* The form renders with OR without a picked scene — a scene-less create
+            seeds the character folder (the user saves their scene into it later
+            and links it on the character page, which stays locked until then). */}
+        <>
             <div className="flex flex-wrap items-start gap-4">
               {/* The DERIVED gender rides on the preview as a badge (tooltip =
                   the text): the figure id for gendered generations, the GP/DK
                   geograft for G9 — see `genderForScan`. Read-only, and only as
                   far as the SCENE proves it — undecided shows "?". */}
+              {scenePath.trim() !== '' && (
               <ScenePreview
                 scenePath={scenePath}
                 badge={
@@ -483,6 +489,7 @@ function ProjectCharactersPage() {
                   </span>
                 }
               />
+              )}
               <div className="min-w-[20rem] flex-1 space-y-4">
                 {/* Row 1: character name on its own line. */}
                 {/* The Input is wrapped in a div (path prefix + input), so Field's
@@ -589,14 +596,24 @@ function ProjectCharactersPage() {
               </div>
             </div>
 
-            <SceneValidationTable
-              rows={createRows}
-              loading={createChecking}
-              force={createForce}
-              onForceChange={setCreateForce}
-              forceLabel="Create anyway — a failed check usually means a broken ROM"
-              projectId={projectId}
-            />
+            {scenePath.trim() !== '' && (
+              <SceneValidationTable
+                rows={createRows}
+                loading={createChecking}
+                force={createForce}
+                onForceChange={setCreateForce}
+                forceLabel="Create anyway — a failed check usually means a broken ROM"
+                projectId={projectId}
+              />
+            )}
+
+            {scenePath.trim() === '' && (
+              <p className="text-sm text-muted-foreground">
+                Without a scene the character starts locked: save your Daz scene into its{' '}
+                <code>{project.dazSubdir || 'daz3d'}</code> folder, then link it on the
+                character page to unlock the editor.
+              </p>
+            )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -640,11 +657,12 @@ function ProjectCharactersPage() {
                     : 'Creating…'
                   : sceneOutside
                     ? 'Copy & Create'
-                    : 'Create'}
+                    : scenePath.trim()
+                      ? 'Create'
+                      : 'Create without scene'}
               </Button>
             </div>
           </>
-        )}
             </div>
           </TabsContent>
           {assetsEnabled && (

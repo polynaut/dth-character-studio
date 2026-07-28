@@ -37,6 +37,8 @@ import {
 } from '#/lib/scene-compat.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
+import { detectedHairLabels } from '#/lib/groom-detect.ts'
+import { genesisFromFigureNode, sceneOverrideSchema } from '@dth/rom'
 
 import type { CharacterLocation, SceneWearables } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -453,6 +455,10 @@ export function DazSceneField({
   async function applyLink(scene: string, copyInto: boolean) {
     setBusy(true)
     setError('')
+    // The very FIRST primary link (a character created without a scene — the
+    // locked editor) completes what creation couldn't derive; a RELINK (only
+    // reachable for a MISSING primary) is narrower — see below.
+    const firstLink = !character.scenePath
     // Copy inside the patch producer (see applyAdd); relinkScene is the persist
     // step — it saves the character itself and derives the avatar alongside.
     const saved = await persistPatch(
@@ -475,10 +481,12 @@ export function DazSceneField({
           scenePath: finalScene,
           extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
         }
-        // Relinking (only reachable for a MISSING primary) re-derives the GEN
-        // section from the new scene's GP/DK geograft — same rule as creation
-        // (`primarySceneDerivation`). GENDER is deliberately NOT touched: it is
-        // baked at character creation and never changes again. Unreadable
+        // Both link flavors re-derive the GEN section from the new scene's GP/DK
+        // geograft — same rule as creation (`primarySceneDerivation`). On a
+        // RELINK, gender is deliberately NOT touched: it was derived from a real
+        // scene once and never changes again. The FIRST link is that derivation:
+        // creation had no scene, so the scene now decides gender, genesis and
+        // the pre-selected hair exactly like a scene-ful create. Unreadable
         // scene → keep the stored values.
         const scan = await sceneWearables({ data: { scenePath: finalScene } })
         const derived = primarySceneDerivation(scan, character)
@@ -491,6 +499,28 @@ export function DazSceneField({
                 ? 'Genitalia section enabled — the scene contains a GP/DK geograft.'
                 : 'Genitalia section disabled — no GP/DK geograft in the scene.',
             )
+          }
+        }
+        if (firstLink) {
+          if (derived.gender) patch.gender = derived.gender
+          const figure = scan.error === '' ? (scan.figures[0] ?? null) : null
+          const detected = figure ? genesisFromFigureNode(figure.id) : null
+          if (detected && detected.genesis !== character.genesis) {
+            patch.genesis = detected.genesis
+            toast.info(`Genesis set to ${detected.genesis} — read from the linked scene.`)
+          }
+          // Pre-select the scene's detected hair (same heuristic as creation)
+          // so the export excludes it from day one — trim in the editor if the
+          // guess overshoots.
+          const hair = scan.error === '' ? detectedHairLabels(scan.items) : []
+          if (hair.length > 0 && !character.sceneOverrides.some((o) => o.scenePath === finalScene)) {
+            patch.sceneOverrides = [
+              ...character.sceneOverrides,
+              {
+                ...sceneOverrideSchema.parse({ scenePath: finalScene }),
+                hair: hair.map((nodeLabel) => ({ nodeLabel })),
+              },
+            ]
           }
         }
         return patch
@@ -903,17 +933,30 @@ export function DazSceneField({
           </>
         )
       ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={busy}
-            onClick={() => void onPick()}
-          >
-            <Link2 /> {busy ? 'Linking…' : 'Link Daz scene'}
-          </Button>
-          <span className="text-xs text-muted-foreground">No scene linked.</span>
+        // Scene-less character (created without a scene): the editor is locked
+        // and THIS is the page's one live control. It shows exactly where to
+        // save the scene (the subfolder seeded at creation) and links it — the
+        // page unlocks the moment the primary lands.
+        <div className="space-y-3 rounded-lg border border-dashed p-4 py-6 text-sm text-muted-foreground">
+          <p>
+            No Daz scene yet. Save your scene (.duf) from Daz Studio into this character&apos;s
+            scenes folder, then link it here — or drop the file anywhere on this panel:
+          </p>
+          <DirPathChip
+            dir={displayPath(`${charFolder}/${cleanSub(defaultSubdir)}`)}
+            roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
+          />
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={busy}
+              onClick={() => void onPick()}
+            >
+              <Link2 /> {busy ? 'Linking…' : 'Link Daz scene'}
+            </Button>
+          </div>
         </div>
       )}
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}

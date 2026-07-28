@@ -177,16 +177,19 @@ export function IdentitySection({
             {/* Reconstructs what decided it at creation (`genderForScan`): the
                 gendered generations' figure id tells directly; the neutral G9
                 figure's gender came from the GP/DK geograft, whose presence the
-                GEN section's enabled state still records. */}
+                GEN section's enabled state still records. A scene-less
+                character has nothing detected yet — the first link derives it. */}
             <span className="ml-1.5 text-xs">
               —{' '}
-              {character.genesis !== 'G9'
-                ? `detected ${character.genesis} ${character.gender}`
-                : character.sections.GEN.enabled
-                  ? character.gender === 'female'
-                    ? 'detected Golden Palace'
-                    : 'detected Dicktator'
-                  : 'no gendered figure or GP/DK geograft in the scene'}
+              {!character.scenePath
+                ? 'no scene linked yet — derived when the primary scene is linked'
+                : character.genesis !== 'G9'
+                  ? `detected ${character.genesis} ${character.gender}`
+                  : character.sections.GEN.enabled
+                    ? character.gender === 'female'
+                      ? 'detected Golden Palace'
+                      : 'detected Dicktator'
+                    : 'no gendered figure or GP/DK geograft in the scene'}
             </span>
           </span>
         </p>

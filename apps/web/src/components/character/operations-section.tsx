@@ -24,11 +24,15 @@ export function CharacterOperationsSection({
   dazSubdir,
   houdiniSubdir,
   bypassUnsavedGuard,
+  fillDisabled = false,
 }: {
   projectId: string
   character: Character
   /** The draft writer — receives the Fill wizard's patch. */
   patch: (p: Partial<Character>) => void
+  /** Scene-less character (locked editor): Fill is pointless before the primary
+   *  scene decides the identity — Delete stays available. */
+  fillDisabled?: boolean
   /** The project's subfolder names, for the keep-folder labels. */
   dazSubdir: string
   houdiniSubdir: string
@@ -81,7 +85,12 @@ export function CharacterOperationsSection({
           Fill the ROM setup from another character, or delete this character from the project.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => setFillOpen(true)} disabled={deleting}>
+          <Button
+            variant="outline"
+            onClick={() => setFillOpen(true)}
+            disabled={deleting || fillDisabled}
+            title={fillDisabled ? 'Link the primary Daz scene first' : undefined}
+          >
             <PaintBucket /> Fill from character
           </Button>
           <Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={deleting}>

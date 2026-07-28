@@ -136,6 +136,7 @@ function status(patch: Partial<api.CharacterAssetStatus> = {}): api.CharacterAss
     schemaVersion: CHARACTER_SCHEMA_VERSION,
     runtimeVersion: RUNTIME_VERSION,
     generatedDthVersion: APP.dthRelease,
+    hasScene: true,
     ...patch,
   }
 }
@@ -184,6 +185,24 @@ describe('characterStaleTargets / isCharacterStale', () => {
         hasDthRelease: false,
       }).csv,
     ).toBe(false)
+  })
+
+  it('a scene-less character never flags runtime/csv — it generates nothing yet', () => {
+    // No script, no CSV provenance — exactly the state a sceneless create leaves.
+    const sceneless = status({ hasScene: false, runtimeVersion: null, generatedDthVersion: '' })
+    expect(api.characterStaleTargets(sceneless, APP, BOTH)).toEqual({
+      schema: false,
+      runtime: false,
+      csv: false,
+    })
+    // Its definition schema still counts (a re-save migration needs no scene).
+    expect(
+      api.characterStaleTargets(
+        status({ hasScene: false, schemaVersion: CHARACTER_SCHEMA_VERSION - 1 }),
+        APP,
+        BOTH,
+      ).schema,
+    ).toBe(true)
   })
 
   it('isCharacterStale is the OR of the three targets', () => {
