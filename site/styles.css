@@ -737,6 +737,13 @@ a:hover {
   border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
 }
 
+/* No divider between the hero and the first section — the teaser window
+   floating in makes its own entrance. (Not :first-of-type — the hero itself
+   is a <section>, so that would match the hero.) */
+.hero + .section {
+  border-top: 0;
+}
+
 .section h2 {
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   font-weight: 800;
@@ -794,15 +801,34 @@ a:hover {
   height: auto;
 }
 
-/* 3D entrance: the window starts tilted back and flattens as it scrolls
-   toward mid-viewport — scroll-driven, so it runs on the compositor with no
-   JS. Browsers without animation-timeline just show the flat framed window. */
+/* 3D entrance + parallax: the window starts tilted back and flattens as it
+   scrolls toward mid-viewport, while the shot INSIDE drifts a touch slower
+   than the window (classic depth cue). Both are scroll-driven CSS running on
+   the compositor — no JS. The image starts pulled up 44px and gives back at
+   most 38px across the window's whole traversal, so the sliding shot can
+   never open a gap under the titlebar. Browsers without animation-timeline
+   just show the flat, static framed window. */
 @supports (animation-timeline: view()) {
   .section-teaser {
     transform-origin: 50% 100%;
+    view-timeline: --teaser;
     animation: teaser-flatten linear both;
     animation-timeline: view();
     animation-range: entry 0% cover 45%;
+  }
+
+  .section-teaser img {
+    margin-top: -44px;
+    animation: teaser-parallax linear both;
+    animation-timeline: --teaser;
+    animation-range: cover 0% cover 100%;
+  }
+
+  /* The pulled-up image would otherwise paint OVER the titlebar (it comes
+     later in paint order) — keep the bar on top. */
+  .section-teaser::before {
+    position: relative;
+    z-index: 1;
   }
 }
 
@@ -816,9 +842,24 @@ a:hover {
   }
 }
 
+@keyframes teaser-parallax {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(38px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .section-teaser {
+  .section-teaser,
+  .section-teaser img {
     animation: none;
+  }
+
+  .section-teaser img {
+    margin-top: 0;
   }
 }
 
