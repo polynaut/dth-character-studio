@@ -57,11 +57,11 @@ describe('FillFromCharacterDialog', () => {
         onClose={() => {}}
       />,
     )
-    // Only the gender-compatible candidate is listed.
-    expect(await screen.findAllByRole('radio')).toHaveLength(1)
+    // Only the gender-compatible candidate is listed; clicking its row button
+    // advances straight to step 2 (no radio + Next round-trip).
+    expect(await screen.findByRole('button', { name: 'Kira' })).toBeTruthy()
     expect(screen.queryByText('Bob')).toBeNull()
-    fireEvent.click(screen.getByRole('radio'))
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Kira' }))
 
     // Step 2: the filled sections; JCM rules pre-checked, the preserve list
     // offered but starting UNCHECKED (its node-transform sibling isn't offered
@@ -102,8 +102,7 @@ describe('FillFromCharacterDialog', () => {
         onClose={() => {}}
       />,
     )
-    fireEvent.click(await screen.findByRole('radio'))
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Kira' }))
     // Uncheck the pre-checked JCM rules (the preserve list already starts off).
     fireEvent.click(screen.getByText('Modify JCM frames'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
@@ -125,8 +124,7 @@ describe('FillFromCharacterDialog', () => {
         onClose={() => {}}
       />,
     )
-    fireEvent.click(await screen.findByRole('radio'))
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Kira' }))
     const ret = within(screen.getByText('Retargeting').closest('label')!).getByRole('checkbox')
     expect(ret).toHaveProperty('disabled', true)
     expect(ret).toHaveProperty('checked', true)
