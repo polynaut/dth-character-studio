@@ -83,13 +83,15 @@ export function PathCode({
     >
       {onEdit && (
         // No title tooltip (the pencil speaks for itself). A GHOST at rest —
-        // just the muted glyph — that grows the copy-hint badge's box on hover
-        // (border + fill + shadow, p-1, size-3 icon; the transparent border
-        // reserves the box so nothing shifts).
+        // just the muted glyph — that grows a copy-hint-style box on hover
+        // (border + fill + shadow; the transparent border reserves the box so
+        // nothing shifts). FIXED size-5 (not padding-driven): the chip's code
+        // box is ~20px, and a taller button would stretch every editable chip
+        // 2px past the pencil-less ones.
         <button
           type="button"
           aria-label="Edit path"
-          className="mr-1 inline-flex shrink-0 items-center justify-center self-center rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground hover:shadow-sm"
+          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground hover:shadow-sm"
           // The chip's own click copies — editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()
