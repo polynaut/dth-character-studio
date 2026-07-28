@@ -13,6 +13,7 @@ import { sanitizePoseName } from '@dth/rom'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { RomPose } from '@dth/rom'
 
+import { GuideLink } from '#/components/guide-link.tsx'
 import { NumberCell, OptionalNumberCell, TextCell } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
 
@@ -193,13 +194,15 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     id: 'prop',
     header: () => (
       <span className="flex items-center gap-1">
-        Morph name
-        <InfoPopup label="Morph name — more information" className="-my-1">
-          <strong>Must exactly match the morph's internal name in Daz Studio</strong>{' '}
+        Parameter name
+        <InfoPopup label="Parameter name — more information" className="-my-1">
+          <strong>Must exactly match the parameter's internal name in Daz Studio</strong>{' '}
           (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
-          dials it; a mismatch fails on that frame. See the guide for how to look the
-          internal name up in Daz, or import the exact names from a{' '}
-          <code>Scan_Frames</code> CSV.
+          dials it; a mismatch fails on that frame. Import the exact names from a{' '}
+          <code>Scan_Frames</code> CSV, or{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#finding-a-morph39s-internal-daz-name">
+            look the internal name up — open the guide
+          </GuideLink>
         </InfoPopup>
       </span>
     ),
@@ -433,9 +436,11 @@ export function SortablePoseRow({
       {expanded && (
         // The multi-morph editor renders as REAL table rows sharing the parent grid's
         // columns, so its sub-columns line up under the main ones: drag→(blank),
-        // Frame→#, Name→Node, Morph name→Property, Value→Value, Bone scale→Base,
+        // Frame→#, Name→Node, Parameter name→Parameter name, Value→Value, Bone scale→Base,
         // morphs→Auto, actions→(remove). (A colSpan block with its own widths couldn't
-        // align to the auto-sized table columns.)
+        // align to the auto-sized table columns.) The Parameter name / Value
+        // fields render for a single morph too — the panel is where more
+        // morphs get added, so the full row must be editable in place.
         <>
           <tr className={`text-xs font-medium text-muted-foreground ${morphRowBg}`}>
             <td />
@@ -445,8 +450,8 @@ export function SortablePoseRow({
             <td className="py-1 pr-1 pl-8" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
               Node
             </td>
-            <td className="px-1 py-1" title="The internal property name of the Daz morph">
-              Property
+            <td className="px-1 py-1" title="The parameter's internal name in Daz Studio">
+              Parameter name
             </td>
             <td className="px-1 py-1" title="The value the pose dials the morph to">
               {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
