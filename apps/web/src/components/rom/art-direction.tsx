@@ -19,6 +19,7 @@ import type {
   RomSections as RomSectionsModel,
 } from '@dth/rom'
 
+import { GuideLink } from '#/components/guide-link.tsx'
 import { NumberCell, TextCell } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
 
@@ -83,9 +84,10 @@ export function ArtDirectionEditor({
       <p className="flex w-fit items-center gap-1 text-sm font-medium">
         Art direction
         <InfoPopup label="Art direction — more information" className="-translate-y-px">
-          Morph values stamped onto frames inside the pre-made ROM after loading — generated as a
-          per-character art direction JSON. Frames marked <em>required</em> ship empty in the
-          preset: without morphs here their generated morph does nothing.
+          Morph values stamped onto frames inside the pre-made ROM after loading.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace--dicktator--the-genitalia-gen-section">
+            Open guide
+          </GuideLink>
         </InfoPopup>
       </p>
       {activeRoms.map(([rom, label]) => {
