@@ -46,6 +46,12 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Daz Studio integration (measured behavior)
 
+- **The DS6 Constant-keyframe workaround is dead — don't reintroduce it.** Runtime
+  v17 stamped every ROM key CONSTANT on DS6 (a workaround for DS6 drifting Linear
+  ROM keys). Rolled back in runtime v35: it didn't actually fix the drift and
+  broke the DK9 ROM; mrpdean removed the same workaround from the DTH release
+  (July 2026). Keys are LINEAR everywhere again, and the runtime no longer
+  version-detects DS6 for interpolation.
 - **A failed script `include()`/load logs nothing** in Daz Studio. Diagnose with a
   minimal probe `.dsa` that logs before/after the suspect statement.
 - **`include()` must be top-level** in DS6 — a legacy include inside a function

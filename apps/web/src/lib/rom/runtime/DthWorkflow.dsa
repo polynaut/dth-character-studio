@@ -185,8 +185,8 @@ function ApplyDTHWorkflow(options){
 	}
 
 	/** ****************************************************************/
-	// Final pass over ALL keyed morphs (Linear on DS4, Constant on DS6 — see
-	// setLinearInterp). The mouth node is included: its FAC keys are morph
+	// Final pass over ALL keyed morphs (Linear everywhere — see setLinearInterp).
+	// The mouth node is included: its FAC keys are morph
 	// modifiers on the MOUTH object, which a root-only pass never touches.
 	print("Setting key interpolation");
 	setLinearInterp(oNodeMouth ? [oNodeRoot, oNodeMouth] : [oNodeRoot]);
@@ -223,8 +223,8 @@ function CreateFrameDatas(options, startFrame){
 function ApplyInitialValues(options, oNodeRoot){
 	//var oContentMgr = App.getContentMgr();
 	// Set the default interpolation off the bat, so hopefully it doesn't need to
-	// be set later — Linear on DS4, Constant on DS6 (see setLinearInterp).
-	Scene.setDefaultKeyInterpolationType(DTH_IS_DAZ6 ? DzProperty.Constant : DzProperty.Linear);
+	// be set later — Linear everywhere (see setLinearInterp).
+	Scene.setDefaultKeyInterpolationType(DzProperty.Linear);
 	if( options["FACsDetailStrength"] > 0 ) {
 		setPropertyByName(oNodeRoot, "facs_ctrl_FACSDetailStrength", options["FACsDetailStrength"], 0) }
 	if( options["FlexionStrength"] > 0 ) {
