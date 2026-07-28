@@ -6,22 +6,19 @@ import { PathCode } from '#/components/path-code.tsx'
 import { displayPath } from '#/lib/path.ts'
 
 /**
- * The "this Daz scene lives outside — copy it in?" modal, shared by the create
- * flow and the editor's Add-scene flow so they stay identical. A subfolder field
- * (optionally prefixed with a fixed scenes-folder chip), a "Delete original after
- * copying" toggle (which disables "Link in place", since you can't keep the
- * original and delete it), and the two actions. Built on the Modal primitive
- * (focus trap + dialog semantics; Esc/backdrop close, ignored while a copy/move
- * is in flight).
+ * The "this Daz scene lives outside — copy it in?" modal of the editor's
+ * Add-scene flow (creating a character decides copy-vs-link right in its
+ * panel — no modal detour there). A subfolder field (prefixed with the fixed
+ * scenes-folder chip), a "Delete original after copying" toggle (which
+ * disables "Link in place", since you can't keep the original and delete it),
+ * and the two actions. Built on the Modal primitive (focus trap + dialog
+ * semantics; Esc/backdrop close, ignored while a copy/move is in flight).
  */
 export function SceneCopyDialog({
   title,
   description,
   filePath,
   prefix,
-  baseValue,
-  onBaseChange,
-  separator,
   subfolder,
   onSubfolderChange,
   deleteOriginal,
@@ -43,11 +40,6 @@ export function SceneCopyDialog({
   filePath?: string
   /** A fixed, read-only scenes-folder chip (e.g. "daz3d\") before the subfolder. */
   prefix?: string
-  /** An editable scenes-folder base instead of `prefix`: pass `onBaseChange` (and
-   *  `separator`) to render it as an input + OS separator before the subfolder. */
-  baseValue?: string
-  onBaseChange?: (value: string) => void
-  separator?: string
   subfolder: string
   onSubfolderChange: (value: string) => void
   deleteOriginal: boolean
@@ -80,19 +72,7 @@ export function SceneCopyDialog({
         <div>
           <Label className="mb-1 block">Subfolder</Label>
           <div className="flex items-center gap-1">
-            {onBaseChange ? (
-              <>
-                <Input
-                  className="w-32 shrink-0"
-                  value={baseValue ?? ''}
-                  placeholder="daz3d"
-                  onChange={(e) => onBaseChange(e.target.value)}
-                />
-                <span className="flex h-9 shrink-0 items-center px-0.5 font-mono text-sm text-muted-foreground">
-                  {separator}
-                </span>
-              </>
-            ) : prefix ? (
+            {prefix ? (
               <span className="flex h-9 shrink-0 items-center rounded-md border bg-muted px-2.5 font-mono text-xs text-muted-foreground">
                 {prefix}
               </span>

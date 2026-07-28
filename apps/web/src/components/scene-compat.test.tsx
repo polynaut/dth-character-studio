@@ -172,6 +172,9 @@ describe('sceneCompatRows (add-scene checks)', () => {
     const rows = sceneCompatRows({ scan: two, primaryScan: scan(), character: g9female })
     expect(states(rows).figures).toBe('fail')
     expect(rows[1].value).toBe('2 characters')
+    // A passing check needs no "1 character" echo — the label says it all.
+    const ok = sceneCompatRows({ scan: scan(), primaryScan: scan(), character: g9female })
+    expect(ok[1].value).toBe('')
 
     const none = sceneCompatRows({
       scan: scan({ figures: [] }),
@@ -210,7 +213,7 @@ describe('sceneCompatRows (add-scene checks)', () => {
     expect(states(sceneCompatRows({ scan: bare, primaryScan: bare, character: g9female })).geograft).toBe('ok')
     const mismatch = sceneCompatRows({ scan: dk, primaryScan: gp, character: g9female })
     expect(states(mismatch).geograft).toBe('fail')
-    expect(mismatch[3].value).toBe('Dicktator — the primary scene has Golden Palace')
+    expect(mismatch[3].value).toBe('Dicktator, but the primary scene has Golden Palace')
     expect(states(sceneCompatRows({ scan: gp, primaryScan: bare, character: g9female })).geograft).toBe('fail')
   })
 
@@ -286,11 +289,13 @@ describe('SceneValidationTable', () => {
     )
     expect(screen.getByText('31 frames of animation')).toBeTruthy()
     expect(screen.getByText('Add anyway — test label')).toBeTruthy()
-    // The failed row explains itself on hover; passing rows carry no tooltip.
-    expect(screen.getByText('31 frames of animation').closest('tr')?.title).toContain(
+    // The failed row explains itself on hover; passing rows carry no tooltip
+    // and no detail — the label + check icon say it all.
+    expect(screen.getByText('31 frames of animation').closest('li')?.title).toContain(
       'fills the animation timeline',
     )
-    expect(screen.getByText('1 character').closest('tr')?.getAttribute('title')).toBeNull()
+    expect(screen.queryByText('1 character')).toBeNull()
+    expect(screen.getByText('One character').closest('li')?.getAttribute('title')).toBeNull()
   })
 
   it('renders "checking…" while loading (no premature fail, no switch)', () => {

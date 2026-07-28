@@ -44,7 +44,9 @@ export type SceneCheckState = 'ok' | 'fail' | 'unchecked'
 export interface SceneCheckRow {
   key: string
   label: string
-  /** State text next to the icon (e.g. "G9", "2 characters", "—"). */
+  /** Detail appended after the label (e.g. "G9", "2 characters"). Empty when
+   *  the label + state icon already say it all — a passing "One character"
+   *  needs no "1 character" echo. */
   value: string
   state: SceneCheckState
   /** What the check demands and why — shown as the row's tooltip when it FAILS. */
@@ -156,17 +158,17 @@ function generationRow(
       'Every scene of a character must use the same Genesis figure — the ROM and its artifacts ' +
       "are generated for the character's generation and can't apply to another skeleton.",
     ...(!readable(scan)
-      ? { value: '—', state: 'unchecked' as const }
+      ? { value: '', state: 'unchecked' as const }
       : !detected
         ? { value: 'no Genesis figure found', state: 'unchecked' as const }
         : detected.genesis !== character.genesis
           ? {
-              value: `${detected.genesis} — the character is ${character.genesis}`,
+              value: `${detected.genesis}, but the character is ${character.genesis}`,
               state: 'fail' as const,
             }
           : detected.gender && detected.gender !== character.gender
             ? {
-                value: `${detected.genesis} ${detected.gender} — the character is ${character.gender}`,
+                value: `${detected.genesis} ${detected.gender}, but the character is ${character.gender}`,
                 state: 'fail' as const,
               }
             : { value: detected.genesis, state: 'ok' as const }),
@@ -184,9 +186,9 @@ function figuresRow(scan: SceneWearables | null): SceneCheckRow {
       'The studio generates one character per definition — the scene must hold exactly ONE ' +
       'Genesis figure. Hair, clothing and props are fine.',
     ...(!readable(scan)
-      ? { value: '—', state: 'unchecked' as const }
+      ? { value: '', state: 'unchecked' as const }
       : count === 1
-        ? { value: '1 character', state: 'ok' as const }
+        ? { value: '', state: 'ok' as const }
         : count === 0
           ? { value: 'no Genesis figure found', state: 'fail' as const }
           : { value: `${count} characters`, state: 'fail' as const }),
@@ -205,9 +207,9 @@ function timelineRow(scan: SceneWearables | null): SceneCheckRow {
       'the character would blend into the exported ROM frames. Save the scene without ' +
       'animation, then pick it again.',
     ...(!readable(scan)
-      ? { value: '—', state: 'unchecked' as const }
+      ? { value: '', state: 'unchecked' as const }
       : scan.animationFrames <= 1
-        ? { value: 'empty', state: 'ok' as const }
+        ? { value: '', state: 'ok' as const }
         : { value: `${scan.animationFrames} frames of animation`, state: 'fail' as const }),
   }
 }
@@ -235,13 +237,13 @@ function geograftRow(
       'its closest proxy. Different hair, clothing and props are exactly what extra scenes ' +
       'are for.',
     ...(mine === null
-      ? { value: '—', state: 'unchecked' as const }
+      ? { value: '', state: 'unchecked' as const }
       : reference === null
         ? { value: "couldn't read the primary scene", state: 'unchecked' as const }
         : sameGrafts
-          ? { value: `${geograftName(mine)} — same as the primary scene`, state: 'ok' as const }
+          ? { value: geograftName(mine), state: 'ok' as const }
           : {
-              value: `${geograftName(mine)} — the primary scene has ${geograftName(reference)}`,
+              value: `${geograftName(mine)}, but the primary scene has ${geograftName(reference)}`,
               state: 'fail' as const,
             }),
   }
