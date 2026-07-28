@@ -391,15 +391,18 @@ export function MultiSelect({
   )
 }
 
-/** The option label with the matched part of the query set in bold. */
+/** The option label with the matched part of the query set in bold. Always ONE
+ *  element: the row is a `justify-between` flex container, and a bare fragment's
+ *  pieces became separate flex items — "Bixie Cut" matched on "bi" rendered as
+ *  "Bi" and "xie Cut" pushed apart across the row. */
 function MatchedOption({ option, query }: { option: string; query: string }) {
   const at = query === '' ? -1 : option.toLowerCase().indexOf(query.toLowerCase())
-  if (at < 0) return option
+  if (at < 0) return <span className="min-w-0">{option}</span>
   return (
-    <>
+    <span className="min-w-0">
       {option.slice(0, at)}
       <strong className="font-semibold">{option.slice(at, at + query.length)}</strong>
       {option.slice(at + query.length)}
-    </>
+    </span>
   )
 }

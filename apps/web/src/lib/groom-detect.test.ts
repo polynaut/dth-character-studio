@@ -56,4 +56,26 @@ describe('detectedHairLabels', () => {
   it('returns nothing for a hairless scene', () => {
     expect(detectedHairLabels([w('crop-top', 'MM Crop Top')])).toEqual([])
   })
+
+  it('knows the HAIRSTYLE vocabulary — "Bixie Cut" is hair without the word "hair"', () => {
+    // The real miss: OOT's Bixie Cut read as clothing, so the wand skipped it.
+    const items = [
+      w('bixie-main', 'Bixie Cut Main'),
+      w('bixie-stray', 'Bixie Cut Stray'),
+      w('updo', 'Nadira Updo'),
+      w('crop-top', 'Invicta Couture LS Crop Top'),
+    ]
+    expect(detectedHairLabels(items)).toEqual(['Bixie Cut Main', 'Bixie Cut Stray', 'Nadira Updo'])
+  })
+
+  it('the risky words stay OUT — "cut"/"fringe"/"weave" alone are not hair', () => {
+    // Measured against real product names: laser-cut outfits, fringe jackets,
+    // fabric weaves. Only the style vocabulary (bixie/pixie/updo/…) counts.
+    const items = [
+      w('dress', 'Laser Cut Dress'),
+      w('jacket', 'Fringe Jacket'),
+      w('top', 'Basket Weave Top'),
+    ]
+    expect(detectedHairLabels(items)).toEqual([])
+  })
 })

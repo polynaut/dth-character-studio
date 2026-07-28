@@ -47,6 +47,21 @@ describe('MultiSelect', () => {
     expect(onChange).toHaveBeenCalledWith(['Apple', 'Banana'])
   })
 
+  it('a matched label stays ONE flex child — the highlight must not split it', () => {
+    // Regression: MatchedOption returned a bare fragment, so inside the row's
+    // `justify-between` flex container "Bixie Cut" matched on "bi" rendered as
+    // "Bi" and "xie Cut" pushed to opposite ends of the row.
+    const { getByRole, getAllByRole } = render(
+      <MultiSelect values={[]} options={['Bixie Cut Main']} onChange={vi.fn()} />,
+    )
+    fireEvent.change(getByRole('combobox'), { target: { value: 'bi' } })
+    const strong = getAllByRole('option')[0].querySelector('strong')
+    expect(strong?.textContent).toBe('Bi')
+    // The bold part's parent is the label wrapper, NOT the justify-between row.
+    expect(strong?.parentElement?.className).not.toContain('justify-between')
+    expect(strong?.parentElement?.textContent).toBe('Bixie Cut Main')
+  })
+
   it('wires the ARIA combobox pattern: listbox id + active descendant', () => {
     const { getByRole, getAllByRole } = render(
       <MultiSelect values={[]} options={OPTIONS} onChange={vi.fn()} />,
