@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
@@ -139,6 +139,22 @@ function sameBoneIndex(a: Array<BoneIndexEntry>, b: Array<BoneIndexEntry>): bool
 }
 
 /**
+ * Dims + hard-locks its children while the character has no primary Daz scene:
+ * `inert` blocks focus, clicks and selection natively (no per-control disabling
+ * needed), the opacity signals it. Everything but the Daz-scenes panel (the way
+ * to link the scene), Notes and Delete sits inside one of these until the scene
+ * that drives generation exists.
+ */
+function SceneLock({ locked, children }: { locked: boolean; children: ReactNode }) {
+  if (!locked) return <>{children}</>
+  return (
+    <div inert data-scene-lock className="opacity-45">
+      {children}
+    </div>
+  )
+}
+
+/**
  * Keys the editor by the character id so it remounts on an editor→editor
  * navigation (e.g. Clone jumping to the new copy). Without this, only the URL
  * param changes — the same `CharacterPage` instance stays mounted and its draft
@@ -186,6 +202,12 @@ function CharacterPage() {
     },
   })
   const { character, patch } = draft
+  // A character created WITHOUT a Daz scene starts locked: every section except
+  // the Daz-scenes panel (the way out), Notes and Operations' Delete is inert
+  // until the primary scene is linked — nothing here is meaningful before the
+  // scene that drives generation exists. Reactive on the draft, so linking
+  // unlocks the page in place.
+  const sceneLinked = Boolean(character.scenePath)
 
   // Preset ROM block lengths, re-measured from the .duf assets whenever the
   // preset/custom selections change (kept from the last good measure during a
@@ -441,6 +463,17 @@ function CharacterPage() {
       )}
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
+      {!sceneLinked && (
+        <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <span aria-hidden className="text-amber-500">
+            ⚠
+          </span>
+          <span>
+            No primary Daz scene linked yet — the editor is locked. Save your scene into the
+            character&apos;s scenes folder and link it below to unlock everything.
+          </span>
+        </div>
+      )}
       <section className="mb-8 rounded-lg border bg-card p-5 pt-7">
         {/* Wide scenes column beside a narrow identity sidebar. */}
         <div className="flex flex-col gap-8 lg:flex-row lg:gap-10">
@@ -464,12 +497,14 @@ function CharacterPage() {
                   onSelectScene={sceneSel.selectScene}
                   dockActionsRef={sceneDockActions}
                 />
-                <HoudiniProjectsField
-                  character={character}
-                  location={location}
-                  persistPatch={draft.persistPatch}
-                  houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
-                />
+                <SceneLock locked={!sceneLinked}>
+                  <HoudiniProjectsField
+                    character={character}
+                    location={location}
+                    persistPatch={draft.persistPatch}
+                    houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
+                  />
+                </SceneLock>
               </>
             )}
           </div>
@@ -477,22 +512,24 @@ function CharacterPage() {
               xl breakpoint (1280) the panel leaves ~1176px — a 32rem sidebar
               squeezed the cards column to 624px and wrapped the cards. */}
           <div className="shrink-0 lg:w-[27rem] xl:w-[28rem]">
-            <IdentitySection
-              character={character}
-              patch={patch}
-              overrideEligible={sceneSel.overrideEligible}
-              sceneOverride={sceneSel.sceneOverride}
-              writeIdentity={sceneSel.writeIdentity}
-              hairSlot={
-                <GroomFields
-                  character={character}
-                  patch={patch}
-                  selectedScene={sceneSel.effectiveScene}
-                  dazInstallFolder={settings.dazInstallFolder}
-                  overrideEligible={sceneSel.overrideEligible}
-                />
-              }
-            />
+            <SceneLock locked={!sceneLinked}>
+              <IdentitySection
+                character={character}
+                patch={patch}
+                overrideEligible={sceneSel.overrideEligible}
+                sceneOverride={sceneSel.sceneOverride}
+                writeIdentity={sceneSel.writeIdentity}
+                hairSlot={
+                  <GroomFields
+                    character={character}
+                    patch={patch}
+                    selectedScene={sceneSel.effectiveScene}
+                    dazInstallFolder={settings.dazInstallFolder}
+                    overrideEligible={sceneSel.overrideEligible}
+                  />
+                }
+              />
+            </SceneLock>
           </div>
         </div>
       </section>
@@ -500,18 +537,21 @@ function CharacterPage() {
 
       {project?.dazProductsEnabled && (
         <div className={onProductsTab ? undefined : 'hidden'}>
-          <CharacterProductsTab
-            projectId={projectId}
-            character={character}
-            productScan={productScan}
-            dimManifestsFolder={settings.dimManifestsFolder}
-            scriptsPath={scriptsPath}
-            persistPatch={draft.persistPatch}
-          />
+          <SceneLock locked={!sceneLinked}>
+            <CharacterProductsTab
+              projectId={projectId}
+              character={character}
+              productScan={productScan}
+              dimManifestsFolder={settings.dimManifestsFolder}
+              scriptsPath={scriptsPath}
+              persistPatch={draft.persistPatch}
+            />
+          </SceneLock>
         </div>
       )}
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
+      <SceneLock locked={!sceneLinked}>
       <ExportSettingsSection
         character={character}
         saving={draft.saving}
@@ -556,7 +596,10 @@ function CharacterPage() {
       </section>
 
       <ScriptsSection character={character} scriptsPath={scriptsPath} />
+      </SceneLock>
 
+      {/* NOT inside the lock: Delete must stay reachable for an abandoned
+          scene-less character; only Fill is disabled. */}
       <CharacterOperationsSection
         projectId={projectId}
         character={character}
@@ -564,6 +607,7 @@ function CharacterPage() {
         dazSubdir={project?.dazSubdir ?? 'daz3d'}
         houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
         bypassUnsavedGuard={draft.unsavedGuard.bypass}
+        fillDisabled={!sceneLinked}
       />
       </div>
       </div>
@@ -571,7 +615,7 @@ function CharacterPage() {
       {/* Docked scene status bar — outside contain-editor-body so its `fixed`
           positioning is relative to the viewport, not the contained subtree. */}
       <SceneFooter
-        show={activeTab === 'character' && !scenesOnScreen}
+        show={sceneLinked && activeTab === 'character' && !scenesOnScreen}
         scenes={sceneSel.linkedScenes}
         primary={character.scenePath}
         selected={sceneSel.effectiveScene}

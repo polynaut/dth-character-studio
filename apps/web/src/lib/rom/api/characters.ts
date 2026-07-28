@@ -251,6 +251,18 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
       // a missing seed folder shouldn't fail character creation
     }
   }
+  // A scene-LESS create (the user will save their scene from Daz afterwards)
+  // seeds the Daz-scenes subfolder too — the whole point is giving them the
+  // right folder to save into. With a scene, the folder materializes when the
+  // scene is copied in (or stays wherever a linked-in-place scene lives).
+  if (!input.scenePath && location.relFolder) {
+    try {
+      const dazSub = normalizeRelFolder(project.dazSubdir)
+      if (dazSub) await mkdir(joinPath(location.folderAbs, dazSub), { recursive: true })
+    } catch {
+      // a missing seed folder shouldn't fail character creation
+    }
+  }
   return created
 }
 
