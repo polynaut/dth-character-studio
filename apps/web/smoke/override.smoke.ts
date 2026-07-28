@@ -30,9 +30,13 @@ test('project window: a scene override saves scene-specific artifacts', async ({
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
   // Selecting a non-primary scene puts the ROM grid in override mode — no toggle,
-  // no checkbox. The footer's selected (green-ringed) pill names the scene by its
-  // .duf filename stem.
-  await page.getByText('KiraBeach', { exact: true }).first().click()
+  // no checkbox. Click the card's SELECT cover button over the avatar strip: the
+  // visible title is the inline-RENAME button now, and the card's center holds
+  // the z-10 path chip — both sit above the cover and would swallow the click.
+  // The footer's selected (green-ringed) pill names the scene by its stem.
+  await page
+    .getByRole('button', { name: 'KiraBeach', exact: true })
+    .click({ position: { x: 40, y: 52 } })
   await expect(
     page.locator('div.fixed.inset-x-0.bottom-0 .ring-daz-green'),
     'footer names the selected scene',
@@ -98,7 +102,10 @@ test('project window: editing a base row back to the base disarms the override',
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
 
-  await page.getByText('KiraBeach', { exact: true }).first().click()
+  // The SELECT cover button, clicked over the avatar strip (see above).
+  await page
+    .getByRole('button', { name: 'KiraBeach', exact: true })
+    .click({ position: { x: 40, y: 52 } })
   await page.getByRole('button', { name: /FBM Full Body/ }).click()
 
   // Arm: change the first frame's value. Values edit as Daz percentages, so base
