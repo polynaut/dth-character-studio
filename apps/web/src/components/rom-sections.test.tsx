@@ -972,6 +972,35 @@ describe('disabled section content is read-only', () => {
   })
 })
 
+describe('section header click target', () => {
+  it('the whole header row toggles the accordion — the summary text does not', () => {
+    render(
+      <RomSections
+        sections={sectionsWithMultiMorphPose()}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        onChange={() => {}}
+      />,
+    )
+    // Click the header ROW itself (the title button's parent, so the event
+    // target is the row, not the button) — the section opens.
+    const header = screen.getByText('Full Body').closest('div')!
+    fireEvent.click(header)
+    expect(screen.getByText('Import from CSV')).toBeTruthy()
+    // The summary text hugs the enable switch — clicking it must NOT flip the
+    // accordion back (data-accordion-ignore).
+    fireEvent.click(screen.getByText(/custom · 1 group/))
+    expect(screen.getByText('Import from CSV')).toBeTruthy()
+    // The title button still works as the accessible control (its own click
+    // toggles; the row handler defers to it instead of double-firing).
+    fireEvent.click(screen.getByText('Full Body'))
+    expect(screen.queryByText('Import from CSV')).toBeNull()
+  })
+})
+
 describe('Clear a custom section', () => {
   it('empties the whole custom definition, gated behind the confirm modal', () => {
     let next: RomSectionsModel | null = null

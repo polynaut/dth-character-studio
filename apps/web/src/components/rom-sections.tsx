@@ -705,8 +705,21 @@ export const RomSections = memo(function RomSections({
                 containment doesn't create), and no ancestor up to the page scroller
                 has overflow. */}
             <div
-              className="sticky z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
+              className="sticky z-[5] flex cursor-pointer items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
               style={{ top: 'calc(var(--sticky-header-h, 128px) + var(--override-bar-h, 0px))' }}
+              // The WHOLE header row toggles the accordion, not just the title
+              // button — except the interactive children (the accordion button
+              // handles itself, the Switch and OverrideMark do their own thing)
+              // and the summary text beside the Switch (`data-accordion-ignore`):
+              // it hugs the toggle, so a slight miss there must not flip the
+              // accordion under the pointer. The real <button> below stays the
+              // accessible control (focus, Enter/Space, aria-expanded) — this
+              // handler only enlarges the pointer target.
+              onClick={(e) => {
+                if ((e.target as Element).closest('button, [role="switch"], [data-accordion-ignore]'))
+                  return
+                setOpen((o) => ({ ...o, [section]: !isOpen }))
+              }}
             >
               {/* A real accordion BUTTON (was a click-only div): the core editing
                   surface must be focusable and Enter/Space-operable, and announce
@@ -764,7 +777,8 @@ export const RomSections = memo(function RomSections({
                   so the override mark can hug the title. ml-auto pushes it + the Switch
                   to the right edge. */}
               <span
-                className={`ml-auto text-xs ${sectionOverridden ? 'text-daz-green' : 'text-muted-foreground'}`}
+                data-accordion-ignore
+                className={`ml-auto cursor-default text-xs ${sectionOverridden ? 'text-daz-green' : 'text-muted-foreground'}`}
               >
                 {tiedToJcm
                   ? effectiveEnabled
