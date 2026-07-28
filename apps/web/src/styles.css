@@ -507,46 +507,6 @@ a {
   }
 }
 
-/* macOS-vibrancy glass for the character header. A plain `backdrop-blur` ends in
-   a HARD line — sharp content below meets blurred content above — which reads as
-   a seam and looks nothing like Apple's title-bar glass, whose blur and tint
-   ramp smoothly to zero at the edge. The fix (joshwcomeau.com/css/backdrop-filter):
-   draw the effect on an absolutely-positioned `::before` that extends PAST the
-   header's bottom, and mask it with a vertical gradient so both the blur and the
-   translucent tint feather out. `saturate(180%)` is the classic Apple vibrancy
-   boost — colours behind the glass stay vivid instead of washing grey. The host
-   must be positioned (the sticky header already is); the `::before` sits at
-   z-index -1, behind the header's own content. Falls back to an opaque fill
-   where backdrop-filter is unsupported. */
-/* Plain, opaque header background by default (Windows / WebView2 and anything
-   else). The vibrancy glass below is macOS-only. */
-@utility liquid-glass-header {
-  background-color: var(--background);
-}
-
-/* macOS: a saturated backdrop blur that FEATHERS at its lower edge (no hard
-   seam), echoing the native title bar. Scoped to `.os-macos` (set in main.tsx) —
-   the same blur on Windows/WebView2 reads muddy rather than glassy, so those
-   keep the plain bg above. */
-.os-macos .liquid-glass-header {
-  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    background-color: transparent;
-
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0 0 -28px 0;
-      z-index: -1;
-      pointer-events: none;
-      background-color: color-mix(in oklab, var(--background) 62%, transparent);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
-      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
-    }
-  }
-}
-
 /* The docked footer DOCKS (the character page's scene bar + the project page's
    Unreal-projects bar) share a subtle RAISED 3D look so each reads as a panel
    floating in front of the page rather than a flat strip:
