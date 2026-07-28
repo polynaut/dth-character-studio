@@ -2,12 +2,8 @@ import { useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
 import { Button, InfoPopup, MultiSelect, OverrideMark, cn, overrideLabelClass, useRefetchOnFocus } from '@dth/ui'
-import {
-  BODY_FOLLOWER,
-  HAIRISH,
-  groomBadge,
-  groomPillClass,
-} from '#/components/character/groom-kind.tsx'
+import { groomBadge, groomPillClass } from '#/components/character/groom-kind.tsx'
+import { detectedHairLabels, groomCandidates } from '#/lib/groom-detect.ts'
 import { labelsKey } from '#/lib/preserve-diff.ts'
 import {
   MIN_GROOM_EXPORTER_VERSION,
@@ -20,16 +16,6 @@ import * as api from '#/lib/rom/api.ts'
 
 import type { Character } from '@dth/rom'
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
-
-/** Decode a DSON ref ("#Black%20Tie%20Cap_1529") to the node id it points at. */
-function refKey(ref: string): string {
-  const raw = ref.replace(/^#/, '')
-  try {
-    return decodeURIComponent(raw)
-  } catch {
-    return raw
-  }
-}
 
 /**
  * The hair (groom) block of the character editor's identity card. Hair is stored
@@ -135,7 +121,6 @@ export function GroomFields({
     patch({ sceneOverrides: sceneRecordEmpty(record) ? others : [...others, record] })
   }
 
-  const ids = new Set(wearables.map((wearable) => wearable.id))
   const listed = nodes.map((groom) => groom.nodeLabel.trim()).filter((label) => label !== '')
 
   // Hair "overrides" when THIS non-primary scene's list DIFFERS from the primary
@@ -151,20 +136,9 @@ export function GroomFields({
     .filter((label) => label !== '')
   const hairDiffersFromPrimary = labelsKey(listed) !== labelsKey(primaryListed)
   const hairOverridden = overrideEligible && hairDiffersFromPrimary
-  const candidates = wearables
-    // Top-level followers only: an item fitted to another wearable (hair base on
-    // its cap) rides along with its parent and needs no own entry.
-    .filter((wearable) => !ids.has(refKey(wearable.conformTarget)))
-    .filter((wearable) => !BODY_FOLLOWER.test(wearable.label))
-    .filter(
-      (wearable, index, arr) => arr.findIndex((other) => other.label === wearable.label) === index,
-    )
-    .sort(
-      (a, b) =>
-        Number(HAIRISH.test(b.label)) - Number(HAIRISH.test(a.label)) ||
-        a.label.localeCompare(b.label),
-    )
-    .map((wearable) => wearable.label)
+  // Top-level followers only, body followers dropped, hair-ish first — the
+  // shared heuristic (groom-detect), same one creation pre-selects from.
+  const candidates = groomCandidates(wearables)
   const knownLabels = new Set(wearables.map((wearable) => wearable.label))
   const missing = scanned ? listed.filter((label) => !knownLabels.has(label)) : []
   const sceneName = selectedScene.split(/[\\/]/).pop()?.replace(/\.duf$/i, '') ?? ''
@@ -173,7 +147,7 @@ export function GroomFields({
   // Detected hair the scene's list doesn't cover would ride into the ROM export.
   // Flagged on an outfit (non-primary) scene, where the brought-along hair most
   // often isn't listed yet.
-  const detectedHair = candidates.filter((label) => HAIRISH.test(label))
+  const detectedHair = detectedHairLabels(wearables)
   const listedSet = new Set(listed)
   const unlistedHair = scanned ? detectedHair.filter((label) => !listedSet.has(label)) : []
   const hairMismatch = overrideEligible && unlistedHair.length > 0
