@@ -27,8 +27,13 @@ function updateRotation() {
   const img = overlay.querySelector('img')
   if (!overlay.classList.contains('open') || !img || !img.naturalWidth) return
   const portraitPhone = window.innerWidth <= 640 && window.innerHeight > window.innerWidth
+  // Rotation is for the APP screenshots only (2560px @2x captures, wide by
+  // construction) — they genuinely need the screen's long axis. The Daz-side
+  // photos are modest-sized and read fine in portrait; an aspect check alone
+  // rotated them too, which just forced sideways reading for no gain.
+  const appShot = /\/screenshots\//.test(img.src)
   const wide = img.naturalWidth > img.naturalHeight * 1.2
-  overlay.classList.toggle('rotated', portraitPhone && wide)
+  overlay.classList.toggle('rotated', portraitPhone && appShot && wide)
 }
 window.addEventListener('resize', updateRotation)
 
