@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { Button } from './button.tsx'
 import { cn } from '../cn.ts'
+import { isRefocusPointerDown } from '../refocus-click.ts'
 
 /**
  * The kit's ONE modal shell — Radix Dialog wired with the semantics every
@@ -52,6 +53,11 @@ export function Modal({
         <Dialog.Content
           // The body is free-form; callers put their description right in it.
           aria-describedby={undefined}
+          // The click that re-focuses the app window is just bringing it to
+          // the front — never a backdrop dismiss (see refocus-click.ts).
+          onPointerDownOutside={(e) => {
+            if (isRefocusPointerDown(e.detail.originalEvent)) e.preventDefault()
+          }}
           className={cn(
             // max-w-xl (not -md): the dialogs regularly carry full file paths,
             // path chips and validation tables — at 28rem those wrapped/cramped.

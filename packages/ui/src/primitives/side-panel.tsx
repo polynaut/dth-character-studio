@@ -5,25 +5,10 @@ import { DismissableLayer, FocusScope } from 'radix-ui/internal'
 
 import { Button } from './button.tsx'
 import { cn } from '../cn.ts'
+import { isRefocusPointerDown } from '../refocus-click.ts'
 
 /** How long the slide / fade runs — keep in sync with the `duration-300` classes. */
 const ANIM_MS = 300
-
-/**
- * Backdrop clicks that arrive right after the window gained OS focus are
- * swallowed: when a file drop from Explorer opens the drawer while Explorer
- * keeps focus, the user's next click into the app is just bringing the window
- * to the front — closing the drawer on it would undo the drop they just made.
- * (The window's focus event fires before the click is delivered, so "has focus
- * right now" is always true by click time — recency is the reliable signal.)
- */
-const FOCUS_CLICK_GRACE_MS = 400
-let lastWindowFocusAt = 0
-if (typeof window !== 'undefined') {
-  window.addEventListener('focus', () => {
-    lastWindowFocusAt = Date.now()
-  })
-}
 
 /**
  * A full-height overlay panel that slides in from the right (a "drawer"). The
@@ -121,8 +106,11 @@ export function SidePanel({
       >
         <DismissableLayer.Root
           asChild
+          // The click that re-focuses the app window (or follows a file drop
+          // from a still-focused Explorer) is just bringing the window to the
+          // front — never a dismiss (see refocus-click.ts).
           onPointerDownOutside={(e) => {
-            if (Date.now() - lastWindowFocusAt < FOCUS_CLICK_GRACE_MS) e.preventDefault()
+            if (isRefocusPointerDown(e.detail.originalEvent)) e.preventDefault()
           }}
           // Focus leaving must not dismiss (mirrors Radix Dialog's modal
           // content) — the trap above snaps focus back anyway.
