@@ -7,13 +7,16 @@ afterEach(cleanup)
 
 import { SceneValidationTable } from './scene-compat'
 import {
+  charactersLinkedScenes,
   genderForScan,
   genEnabledForScan,
   geograftKinds,
   primarySceneDerivation,
   sceneCompatFailed,
+  sceneCompatHardFailed,
   sceneCompatRows,
   sceneCreateRows,
+  sceneNotLinkedRow,
 } from '#/lib/scene-compat.ts'
 import { defaultSections } from '@dth/rom'
 
@@ -257,6 +260,36 @@ describe('sceneCreateRows (create-dialog checks)', () => {
   })
 })
 
+describe('sceneNotLinkedRow (scene already belongs to a character)', () => {
+  const owners = charactersLinkedScenes([
+    { name: 'Kira', scenePath: 'X:/p/Kira/daz3d/Kira.duf', extraScenes: ['X:/p/Kira/daz3d/Beach.duf'] },
+    { name: 'Matt', scenePath: 'X:/p/Matt/Matt.duf', extraScenes: [] },
+  ])
+
+  it('flattens every linked scene (primary + extras) with its owner', () => {
+    expect(owners).toEqual([
+      { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira' },
+      { path: 'X:/p/Kira/daz3d/Beach.duf', character: 'Kira' },
+      { path: 'X:/p/Matt/Matt.duf', character: 'Matt' },
+    ])
+  })
+
+  it('a linked scene is a HARD fail naming the owner — case/slash-insensitively', () => {
+    const row = sceneNotLinkedRow('x:\\p\\kira\\daz3d\\BEACH.duf', owners)
+    expect(row.state).toBe('fail')
+    expect(row.hard).toBe(true)
+    expect(row.value).toContain('Kira')
+    expect(sceneCompatHardFailed([row])).toBe(true)
+  })
+
+  it('an unclaimed scene passes; a loading owner list stays unchecked', () => {
+    expect(sceneNotLinkedRow('X:/p/other/New.duf', owners).state).toBe('ok')
+    const pending = sceneNotLinkedRow('X:/p/other/New.duf', null)
+    expect(pending.state).toBe('unchecked')
+    expect(sceneCompatHardFailed([pending])).toBe(false)
+  })
+})
+
 describe('SceneValidationTable', () => {
   it('shows the checks, and the escape switch (with its label) only once one fails', () => {
     const okRows = sceneCompatRows({ scan: scan(), primaryScan: scan(), character: g9female })
@@ -310,6 +343,26 @@ describe('SceneValidationTable', () => {
       />,
     )
     expect(screen.getAllByText('checking…')).toHaveLength(4)
+    expect(screen.queryByText(/Add anyway/)).toBeNull()
+  })
+
+  it('a failed HARD row shows red but hides the escape switch (no escape exists)', () => {
+    const rows = [
+      ...sceneCompatRows({ scan: scan(), primaryScan: scan(), character: g9female }),
+      sceneNotLinkedRow('X:/p/Kira/daz3d/Kira.duf', [
+        { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira' },
+      ]),
+    ]
+    render(
+      <SceneValidationTable
+        rows={rows}
+        loading={false}
+        force={false}
+        onForceChange={() => {}}
+        forceLabel="Add anyway — test label"
+      />,
+    )
+    expect(screen.getByText('already linked to “Kira”')).toBeTruthy()
     expect(screen.queryByText(/Add anyway/)).toBeNull()
   })
 

@@ -2,7 +2,7 @@ import { CircleCheck, CircleDashed, TriangleAlert } from 'lucide-react'
 
 import { Label, Switch } from '@dth/ui'
 
-import { sceneCompatFailed } from '#/lib/scene-compat.ts'
+import { sceneCompatFailed, sceneCompatHardFailed } from '#/lib/scene-compat.ts'
 
 import type { SceneCheckRow, SceneCheckState } from '#/lib/scene-compat.ts'
 
@@ -33,6 +33,9 @@ export function SceneValidationTable({
   forceLabel: string
 }) {
   const failed = !loading && sceneCompatFailed(rows)
+  // A failed HARD check (scene already linked) has no escape — the "anyway"
+  // switch would flip without unblocking anything, so it isn't shown.
+  const hardFailed = !loading && sceneCompatHardFailed(rows)
   const rowClass = (state: SceneCheckState) =>
     state === 'ok'
       ? 'text-emerald-600 dark:text-emerald-500'
@@ -73,7 +76,7 @@ export function SceneValidationTable({
           )
         })}
       </ul>
-      {failed && (
+      {failed && !hardFailed && (
         <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
           <Switch checked={force} onCheckedChange={onForceChange} />
           {forceLabel}

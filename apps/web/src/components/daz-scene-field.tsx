@@ -18,6 +18,7 @@ import {
   copyDazScene,
   dazStudioRunning,
   deleteFiles,
+  fetchCharactersWithProblems,
   moveCharacterScenesFolder,
   openScene,
   renameDazScene,
@@ -26,7 +27,14 @@ import {
   sceneWearables,
 } from '#/lib/rom/api.ts'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
-import { primarySceneDerivation, sceneCompatFailed, sceneCompatRows } from '#/lib/scene-compat.ts'
+import {
+  charactersLinkedScenes,
+  primarySceneDerivation,
+  sceneCompatFailed,
+  sceneCompatHardFailed,
+  sceneCompatRows,
+  sceneNotLinkedRow,
+} from '#/lib/scene-compat.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 
@@ -200,6 +208,11 @@ export function DazSceneField({
     scene: SceneWearables
     primary: SceneWearables | null
   } | null>(null)
+  // Every scene the PROJECT's characters link (fetched when the add dialog
+  // opens; null while loading) — feeds the "Not already linked" HARD check.
+  const [addOwners, setAddOwners] = useState<Array<{ path: string; character: string }> | null>(
+    null,
+  )
   const [forceAdd, setForceAdd] = useState(false)
   // Supersede stale reads (repick before the previous read resolved).
   const addScanId = useRef(0)
@@ -346,6 +359,7 @@ export function DazSceneField({
     setDeleteOriginal(false)
     setForceAdd(false)
     setAddScan(null)
+    setAddOwners(null)
     setPendingAdd(picked)
     const scanId = (addScanId.current += 1)
     const primary = character.scenePath
@@ -358,6 +372,20 @@ export function DazSceneField({
       if (scanId !== addScanId.current) return
       setAddScan({ scene, primary: primaryScan })
     })
+    // The "Not already linked" check's reference: the OTHER characters' linked
+    // scenes from a fresh library walk (this character's own come from the
+    // live draft at render time). A failed walk just leaves the row unchecked.
+    void fetchCharactersWithProblems({ data: { projectId } })
+      .then(({ characters }) => {
+        if (scanId !== addScanId.current) return
+        setAddOwners(charactersLinkedScenes(characters.filter((c) => c.id !== character.id)))
+      })
+      // A failed walk must not leave the dialog on "checking…" forever — an
+      // empty reference just means the cross-character check can't verify
+      // (this character's own scenes still come from the live draft).
+      .catch(() => {
+        if (scanId === addScanId.current) setAddOwners([])
+      })
   }
 
   async function onAddPick() {
@@ -537,13 +565,30 @@ export function DazSceneField({
   // two scene reads; a definite failure gates the confirm actions behind the
   // "Add anyway" switch, and so does reads-still-in-flight (they resolve in
   // well under a second — a slow network share shows "checking…").
-  const addRows = sceneCompatRows({
-    scan: addScan?.scene ?? null,
-    primaryScan: addScan?.primary ?? null,
-    character,
-  })
-  const addChecking = pendingAdd !== '' && addScan === null
-  const addBlocked = addChecking || (sceneCompatFailed(addRows) && !forceAdd)
+  const addRows = [
+    ...sceneCompatRows({
+      scan: addScan?.scene ?? null,
+      primaryScan: addScan?.primary ?? null,
+      character,
+    }),
+    // The picked scene must not already belong to a character — the other
+    // characters' scenes come from the dialog-open walk (addOwners), this
+    // character's own from the live draft. A hit is a HARD fail (no escape).
+    ...(pendingAdd
+      ? [
+          sceneNotLinkedRow(
+            pendingAdd,
+            addOwners === null
+              ? null
+              : [...addOwners, ...linkedScenes.map((path) => ({ path, character: character.name }))],
+          ),
+        ]
+      : []),
+  ]
+  const addChecking = pendingAdd !== '' && (addScan === null || addOwners === null)
+  const addHardBlocked = sceneCompatHardFailed(addRows)
+  const addBlocked =
+    addChecking || addHardBlocked || (sceneCompatFailed(addRows) && !forceAdd)
   const addValidation = (
     <SceneValidationTable
       rows={addRows}
@@ -555,7 +600,9 @@ export function DazSceneField({
   )
   const addBlockedTitle = addChecking
     ? 'Checking the scene…'
-    : 'A validation check failed — see the table above (or flip “Add anyway”)'
+    : addHardBlocked
+      ? 'This scene already belongs to a character — pick a different scene'
+      : 'A validation check failed — see the table above (or flip “Add anyway”)'
 
   // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
   // folder is dimmed — we're already inside the character here, so only the

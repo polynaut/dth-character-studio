@@ -51,6 +51,9 @@ export interface SceneCheckRow {
   state: SceneCheckState
   /** What the check demands and why — shown as the row's tooltip when it FAILS. */
   why: string
+  /** A failed HARD check can't be escaped by the "Add/Create anyway" switch —
+   *  the confirm stays blocked (e.g. the scene already belongs to a character). */
+  hard?: boolean
 }
 
 const GEOGRAFT_LABELS = { gp: 'Golden Palace', dk: 'Dicktator' } as const
@@ -279,4 +282,56 @@ export function sceneCreateRows(scan: SceneWearables | null): Array<SceneCheckRo
  *  (behind the "Add/Create anyway" escape). `unchecked` rows never block. */
 export function sceneCompatFailed(rows: Array<SceneCheckRow>): boolean {
   return rows.some((row) => row.state === 'fail')
+}
+
+/** A failed HARD check — blocks the confirm with NO escape (the "anyway"
+ *  switch doesn't apply; the validation table hides it). */
+export function sceneCompatHardFailed(rows: Array<SceneCheckRow>): boolean {
+  return rows.some((row) => row.hard && row.state === 'fail')
+}
+
+/** One linked scene file → the character that owns it. */
+export interface LinkedSceneOwner {
+  path: string
+  character: string
+}
+
+/** Every scene the given characters link (primary + extras), each mapped to its
+ *  owning character's name — the input to {@link sceneNotLinkedRow}. */
+export function charactersLinkedScenes(
+  characters: Array<Pick<Character, 'name' | 'scenePath' | 'extraScenes'>>,
+): Array<LinkedSceneOwner> {
+  return characters.flatMap((c) =>
+    [c.scenePath, ...c.extraScenes]
+      .filter(Boolean)
+      .map((path) => ({ path, character: c.name })),
+  )
+}
+
+/** The picked scene must not already belong to a character (this project's
+ *  primaries + extras — including the target character itself in the add flow).
+ *  A hit is a HARD fail with no "anyway" escape: one scene file backing two
+ *  characters would have their generated ROMs overwrite each other. `owners`
+ *  null = the character list is still loading. */
+export function sceneNotLinkedRow(
+  scenePath: string,
+  owners: Array<LinkedSceneOwner> | null,
+): SceneCheckRow {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const hit = owners?.find((o) => norm(o.path) === norm(scenePath))
+  return {
+    key: 'notLinked',
+    label: 'Not already linked',
+    hard: true,
+    why:
+      'A scene file belongs to at most ONE character — its generated ROM script and ' +
+      'timeline are per-character, so sharing the file would have two characters ' +
+      'overwrite each other. Pick a different scene, or unlink it from that ' +
+      'character first (a copy of the file is fine).',
+    ...(owners === null
+      ? { value: '', state: 'unchecked' as const }
+      : hit
+        ? { value: `already linked to “${hit.character}”`, state: 'fail' as const }
+        : { value: '', state: 'ok' as const }),
+  }
 }

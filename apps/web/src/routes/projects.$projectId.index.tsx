@@ -47,7 +47,14 @@ import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
-import { genderForScan, sceneCompatFailed, sceneCreateRows } from '#/lib/scene-compat.ts'
+import {
+  charactersLinkedScenes,
+  genderForScan,
+  sceneCompatFailed,
+  sceneCompatHardFailed,
+  sceneCreateRows,
+  sceneNotLinkedRow,
+} from '#/lib/scene-compat.ts'
 
 import { characterSkinning, countPoses, defaultSections, genesisFromFigureNode } from '@dth/rom'
 
@@ -153,12 +160,24 @@ function ProjectCharactersPage() {
   // Create-dialog validation (see lib/scene-compat.ts): the checks that need no
   // existing character — one character in the scene, empty timeline. A definite
   // fail (or the read still in flight) gates Create behind "Create anyway".
-  const createRows = sceneCreateRows(scenePath.trim() ? sceneScan : null)
+  const createRows = [
+    ...sceneCreateRows(scenePath.trim() ? sceneScan : null),
+    // The picked scene must not already belong to a character of this project —
+    // a HARD fail with no "Create anyway" escape. The loader's character list
+    // is always at hand here.
+    ...(scenePath.trim()
+      ? [sceneNotLinkedRow(scenePath.trim(), charactersLinkedScenes(characters))]
+      : []),
+  ]
   const createChecking = scenePath.trim() !== '' && sceneScan === null
-  const createBlocked = createChecking || (sceneCompatFailed(createRows) && !createForce)
+  const createHardBlocked = sceneCompatHardFailed(createRows)
+  const createBlocked =
+    createChecking || createHardBlocked || (sceneCompatFailed(createRows) && !createForce)
   const createBlockedTitle = createChecking
     ? 'Checking the scene…'
-    : 'A validation check failed — see the list above (or flip “Create anyway”)'
+    : createHardBlocked
+      ? 'This scene already belongs to a character — pick a different scene'
+      : 'A validation check failed — see the list above (or flip “Create anyway”)'
   // What the Gender row DISPLAYS: only what the picked scene proves (null =
   // no scene / scan pending / undecidable → "Unknown"). The `gender` state
   // keeps its best-effort value for the create input regardless.
