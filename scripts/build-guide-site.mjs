@@ -280,11 +280,14 @@ const shell = (md, content) => `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#232323" />
     <title>${escapeHtml(pageTitle(md))} · DTH Character Studio</title>
     <link rel="icon" href="../assets/logo-192.png" />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="../guide.css" />
     <script src="../guide.js" defer></script>
+    <script src="../search.js" defer></script>
   </head>
   <body class="guide-body">
     <header class="topbar shown">
@@ -441,7 +444,10 @@ const HEADING_START_RE = /^<h([1-6]) id="([^"]+)">([\s\S]*?)<a class="anchor"[\s
 
 /** One rendered page → its search entries. A section starts at each id'd
  *  heading (every heading gets one in renderPage) and runs to the next one;
- *  accordion content inside a section counts as its body text. */
+ *  accordion content inside a section counts as its body text. ACCORDIONS
+ *  additionally index as their own entries — their titles are anchorable
+ *  section titles in their own right, and folded into a parent body they
+ *  were effectively unfindable. */
 function indexPage(md, html) {
   const entries = []
   // No .slice(1) to drop a pre-heading preamble: a zero-width split yields NO
@@ -462,6 +468,19 @@ function indexPage(md, html) {
       id: m[2],
       heading: decodeEntities(stripTags(m[3])).trim(),
       text: decodeEntities(stripTags(body)).replace(/\s+/g, ' ').trim(),
+    })
+  }
+  // Level 6 = below every heading in the scorer's level bonus; the client
+  // renders and deep-links it exactly like any other section entry.
+  for (const d of html.matchAll(/<details id="([^"]+)"><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)) {
+    const summary = d[2].replace(/<a class="details-anchor"[^>]*>#<\/a>/g, '')
+    entries.push({
+      page: htmlName(md),
+      title: pageTitle(md),
+      level: 6,
+      id: d[1],
+      heading: decodeEntities(stripTags(summary)).trim(),
+      text: decodeEntities(stripTags(d[3])).replace(/\s+/g, ' ').trim(),
     })
   }
   return entries
