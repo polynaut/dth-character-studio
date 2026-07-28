@@ -1,4 +1,5 @@
 import { Button, InfoPopup } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { FolderField } from '#/components/install-controls.tsx'
 import { DedupReportList } from '#/components/tools/dedup-report-list.tsx'
 
@@ -42,15 +43,12 @@ export function DedupSection({
         <h2 className="flex w-fit items-center gap-1 font-semibold">
           Deduplicate
           <InfoPopup label="Deduplicate — more information">
-            Finds <strong>duplicate assets</strong> (a folder and its identical .zip, or the
-            same product at two versions) and <strong>conflicting shared files</strong> — the
-            same file shipped by two different products at different sizes (e.g. the G8 and G9
-            versions of a product sharing textures), which makes both perpetually show “to
-            copy”. <strong>Apply</strong> only <strong>quarantines</strong> the redundant
-            duplicate copies (a move — reversible). Shared-file conflicts are{' '}
-            <strong>never rewritten</strong> — that would edit an author's downloaded asset;
-            instead you <strong>Accept</strong> them, which tells the scan/install they're
-            legitimately shared (whatever's installed stays).
+            Finds <strong>duplicate assets</strong> and <strong>conflicting shared files</strong>{' '}
+            in your downloads — Apply only <strong>quarantines</strong> redundant copies (a
+            reversible move, nothing is rewritten).{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#deduplicate">
+              Open guide
+            </GuideLink>
           </InfoPopup>
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
