@@ -45,6 +45,34 @@ describe('SidePanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('swallows the backdrop click that re-focuses the window; the next one dismisses', async () => {
+    const { onClose } = renderPanel()
+    // Radix arms its outside-pointerdown listener a tick after mount.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    window.dispatchEvent(new Event('blur'))
+    window.dispatchEvent(new Event('focus'))
+    fireEvent.pointerDown(document.body)
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.pointerDown(document.body)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('an outside click well after an Alt-Tab refocus still dismisses', async () => {
+    vi.useFakeTimers()
+    try {
+      const { onClose } = renderPanel()
+      vi.advanceTimersByTime(1)
+      window.dispatchEvent(new Event('blur'))
+      // Re-focused without a click (Alt-Tab); the click follows past the grace.
+      window.dispatchEvent(new Event('focus'))
+      vi.advanceTimersByTime(500)
+      fireEvent.pointerDown(document.body)
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('restores focus to the opener once fully closed', async () => {
     const opener = document.createElement('button')
     document.body.appendChild(opener)
