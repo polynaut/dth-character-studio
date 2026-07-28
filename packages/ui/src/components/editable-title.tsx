@@ -74,12 +74,14 @@ export function EditableTitle({
         // and editing shifts nothing. -mx-2 offsets the h-padding to keep the
         // text in the same place.
         // The input sizes itself to the text (field-sizing) so a long name isn't
-        // cropped at the start the moment the caret lands at its end — capped by
-        // the container (max-w-full), floored so an emptied field stays grabbable.
-        // pr-10 compensates what border-box carves out of the auto width (the
-        // horizontal padding + caret) — without it the tail still clips ~30px.
-        // Engines without field-sizing keep the old fixed width.
-        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none supports-[field-sizing:content]:w-auto supports-[field-sizing:content]:min-w-48 supports-[field-sizing:content]:pr-10 supports-[field-sizing:content]:[field-sizing:content] focus:ring-primary"
+        // cropped at the start the moment the caret lands at its end, with pr-10
+        // slack for what border-box carves out of the auto width. The cap is
+        // viewport-based, NOT max-w-full: the character header wraps the title
+        // in a box that measures narrower than the name (the static h1 extends
+        // freely past it — only a %-capped input clipped, ~30px on real names).
+        // Floored so an emptied field stays grabbable. Engines without
+        // field-sizing keep the old fixed width.
+        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none supports-[field-sizing:content]:w-auto supports-[field-sizing:content]:min-w-48 supports-[field-sizing:content]:max-w-[min(80vw,64rem)] supports-[field-sizing:content]:pr-10 supports-[field-sizing:content]:[field-sizing:content] focus:ring-primary"
       />
     )
   }
