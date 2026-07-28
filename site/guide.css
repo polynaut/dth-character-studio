@@ -133,14 +133,27 @@
 
 .guide-lightbox .lightbox-inner {
   flex: none;
+  max-width: 100%;
   margin-inline: auto;
 }
 
 .guide-lightbox img {
   display: inline-block;
+  /* Never wider than the overlay's content box (its padding = the margin-x):
+     on a phone the full-size screenshot used to overflow into a sideways
+     scroll — now it fits the viewport and only scrolls vertically. */
+  max-width: 100%;
+  height: auto;
   border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
   border-radius: var(--radius);
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.55);
+}
+
+/* Tighter margin-x on small screens — 32px each side eats a fifth of a phone. */
+@media (max-width: 640px) {
+  .guide-lightbox {
+    padding: 16px;
+  }
 }
 
 .guide-lightbox .lightbox-caption {
