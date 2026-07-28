@@ -14,34 +14,13 @@ import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
- * Scroll-to-top with our own rAF animation: `scrollTo({behavior:'smooth'})`
- * executes silently INSTANT in the WebView2 build (Chromium keys native smooth
- * scrolling off assorted Windows animation/visual-effects settings — measured
- * as a hard jump on a machine with reduced motion OFF). Ease-out cubic,
- * duration scaled to the distance; a wheel/touch from the user cancels it
- * instead of fighting them.
+ * Scroll-to-top via the NATIVE `behavior:'smooth'`. A hand-rolled rAF ease was
+ * tried and reverted: its ease-out tail reads as lag. Native smooth animates
+ * only where the webview supports/enables it (assorted Windows animation
+ * settings can make it instant) — accepted trade-off.
  */
 function smoothScrollTop() {
-  const start = window.scrollY
-  if (start === 0) return
-  const duration = Math.min(700, 300 + start / 8)
-  const t0 = performance.now()
-  let raf = 0
-  const cancel = () => cancelAnimationFrame(raf)
-  window.addEventListener('wheel', cancel, { once: true, passive: true })
-  window.addEventListener('touchstart', cancel, { once: true, passive: true })
-  const ease = (t: number) => 1 - (1 - t) ** 3
-  const step = (now: number) => {
-    const t = Math.min(1, (now - t0) / duration)
-    window.scrollTo(0, Math.round(start * (1 - ease(t))))
-    if (t < 1) {
-      raf = requestAnimationFrame(step)
-    } else {
-      window.removeEventListener('wheel', cancel)
-      window.removeEventListener('touchstart', cancel)
-    }
-  }
-  raf = requestAnimationFrame(step)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 /**
@@ -268,8 +247,10 @@ export function EditorHeader({
             {/* Override EditableTitle's hardcoded text-3xl for this header only
                 (arbitrary variant reaches its inner h1 + edit input). Matches the
                 dth-title-text scroll animation's `from` so there's no jump; the
-                -translate-y-[3px] is a small optical nudge kept from that layout. */}
-            <span className="-translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
+                -translate-y-[3px] is a small optical nudge kept from that layout.
+                `title-edit-scroll` puts the edit input on the same scroll-shrink
+                timeline as the h1 (styles.css). */}
+            <span className="title-edit-scroll -translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
               <EditableTitle
                 name={character.name}
                 ariaLabel="Character name"
