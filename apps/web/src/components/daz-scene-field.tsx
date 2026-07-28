@@ -554,21 +554,14 @@ export function DazSceneField({
     />
   )
 
-  /** Where a scene lives: shown relative to the character folder (e.g.
-   *  `.\daz3d\Outfit_B`) for an in-folder scene, as the full folder for one
-   *  linked in place — copying always yields the full folder path. The primary
-   *  card always shows its chip; an extra scene right beside the primary stays
-   *  chip-less — the primary's chip names that folder already. In-folder chips
-   *  are EDIT-TO-MOVE (the shared FolderMoveChip): the primary's edit moves
-   *  the whole scenes folder, an extra's moves just that scene; a scene linked
-   *  in place outside stays a plain read-only chip. */
+  /** Where a scene lives — EVERY card shows its chip: relative to the
+   *  character folder (e.g. `.\daz3d\Outfit_B`) for an in-folder scene, the
+   *  full folder for one linked in place; copying always yields the full
+   *  folder path. In-folder chips are EDIT-TO-MOVE (the shared
+   *  FolderMoveChip): the primary's edit moves the whole scenes folder, an
+   *  extra's moves just that scene; a linked-in-place chip stays read-only. */
   function sceneLocationChip(scene: string, opts: { primary?: boolean } = {}): ReactNode {
     const dir = parentDir(scene)
-    if (
-      !opts.primary &&
-      normalizePath(dir).toLowerCase() === normalizePath(sceneDirAbs).toLowerCase()
-    )
-      return null
     const inside = insideCharFolder(scene)
     const rel = inside ? normalizePath(dir).slice(charFolder.length + 1) : ''
     const shown = displayPath(inside ? `./${rel}` : dir)
