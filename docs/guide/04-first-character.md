@@ -17,8 +17,10 @@
 4. **Fill from character** *(optional)* — copies a working ROM definition from
    any existing character across your projects: pick the source and check
    which sections to copy.
-5. Press **Create**. The scene is copied into the character's folder — your
-   original stays where it is.
+5. Press **Copy & Create** — the scene is copied into the character's folder
+   and your original stays where it is (the toggle beside it turns the copy
+   into a move). **Link & Create** leaves the scene where it is instead; a
+   scene already inside the project shows a plain **Create**.
 
 ## Character settings
 
