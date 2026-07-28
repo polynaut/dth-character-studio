@@ -31,9 +31,9 @@ export function FormHeader({
   useStickyHeaderInset(headerRef)
   return (
     // -mx-8/px-8 span the page's p-8 gutter so scrolling content can't peek
-    // past the header's background at the edges. Liquid-glass background (same
-    // as the character header): content frosts through a translucent fill +
-    // backdrop blur, with an opaque fallback where backdrop-filter is absent.
+    // past the header's background at the edges. Content frosts through a
+    // translucent fill + backdrop blur, with an opaque fallback where
+    // backdrop-filter is absent.
     <header
       ref={headerRef}
       // z-40: above inline info popups (z-30), below modal dialogs (z-50) — the
