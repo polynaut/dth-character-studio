@@ -754,7 +754,10 @@ describe('scene override mode', () => {
     const header = screen.getByText('Genitalia').closest('div') as HTMLElement
     const toggle = within(header).getByRole('switch') as HTMLButtonElement
     expect(toggle.disabled).toBe(true)
-    expect(toggle.title).toContain('geograft')
+    // The enable rules live in the "i" popup on the section title now (the
+    // disabled Switch carries no tooltip).
+    expect(within(header).getByLabelText('Genitalia — more information')).toBeTruthy()
+    expect(toggle.title).toBe('')
     fireEvent.click(toggle)
     expect(latest).toBeNull()
 
@@ -826,8 +829,8 @@ describe('scene override mode', () => {
     const header = screen.getByText('Genitalia').closest('div') as HTMLElement
     const toggle = within(header).getByRole('switch') as HTMLButtonElement
     expect(toggle.disabled).toBe(true)
-    // The tooltip explains where the state comes from.
-    expect(toggle.title).toContain('geograft')
+    // The "i" popup on the section title explains where the state comes from.
+    expect(within(header).getByLabelText('Genitalia — more information')).toBeTruthy()
     // Clicking (dispatched events reach disabled controls in jsdom) stores
     // nothing — the enabled state only ever comes from primarySceneDerivation.
     fireEvent.click(toggle)

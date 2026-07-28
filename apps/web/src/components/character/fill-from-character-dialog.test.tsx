@@ -72,7 +72,9 @@ describe('FillFromCharacterDialog', () => {
     expect(screen.getByText('Preserve morphs')).toBeTruthy()
     expect(screen.queryByText('Preserve node transforms')).toBeNull()
 
-    // Opt the preserve-morph list in, then fill.
+    // JCM starts UNCHECKED (copying the base ROM config is an opt-in) — check
+    // it here so the fill covers all four. Opt the preserve-morph list in too.
+    fireEvent.click(screen.getByText('Joint Corrective'))
     fireEvent.click(screen.getByText('Preserve morphs'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
     expect(patch!.sections.EXP.groups[0].poses[0].name).toBe('Smile')
@@ -127,8 +129,11 @@ describe('FillFromCharacterDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Kira' }))
     const ret = within(screen.getByText('Retargeting').closest('label')!).getByRole('checkbox')
     expect(ret).toHaveProperty('disabled', true)
+    // JCM starts unchecked, so the mirrored RET does too…
+    expect(ret).toHaveProperty('checked', false)
+    // …checking Joint Corrective flips the mirrored RET checkbox with it…
+    fireEvent.click(screen.getByText('Joint Corrective'))
     expect(ret).toHaveProperty('checked', true)
-    // Unchecking Joint Corrective flips the mirrored RET checkbox too…
     fireEvent.click(screen.getByText('Joint Corrective'))
     expect(ret).toHaveProperty('checked', false)
     // …and the fill copies neither.

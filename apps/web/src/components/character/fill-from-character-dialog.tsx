@@ -121,13 +121,18 @@ export function FillFromCharacterDialog({
   // selects it and advances (no radio + Next round-trip).
   function pick(c: CharacterWithProject) {
     setSourceId(c.id)
-    // Every offered section starts checked — the user deselects what to keep.
-    // RET is never in the set: it has no checkbox of its own (it rides with
-    // JCM, exactly like the editor's tied enable toggle). The two preserve
-    // lists start UNCHECKED: they're the most target-specific tuning (which
-    // morphs/nodes to hold depends on this character's own setup), so copying
-    // them is a deliberate opt-in.
-    setChecked(new Set(filledSections(c.sections).filter((section) => section !== 'RET')))
+    // Every offered section starts checked — the user deselects what to keep —
+    // EXCEPT JCM: it's usually the stock preset base, so copying it is an
+    // opt-in (and RET mirrors it). RET is never in the set: it has no checkbox
+    // of its own (it rides with JCM, exactly like the editor's tied enable
+    // toggle). The two preserve lists start UNCHECKED: they're the most
+    // target-specific tuning (which morphs/nodes to hold depends on this
+    // character's own setup), so copying them is a deliberate opt-in.
+    setChecked(
+      new Set(
+        filledSections(c.sections).filter((section) => section !== 'RET' && section !== 'JCM'),
+      ),
+    )
     setExtras(
       new Set(
         offeredExtras(c).filter(
@@ -193,7 +198,13 @@ export function FillFromCharacterDialog({
     <Modal
       open
       onClose={onClose}
-      title={step === 'pick' ? 'Fill ROM from character' : `Fill from “${source?.name ?? ''}”`}
+      // Step 2 names the source WITH its project ("Playground - Kira") — the
+      // step-1 project grouping is gone from view by then.
+      title={
+        step === 'pick'
+          ? 'Fill ROM from character'
+          : `Fill from “${source ? `${source.projectName} - ${source.name}` : ''}”`
+      }
       // A flex column whose LIST is the only scroller (overflow-hidden replaces
       // the shell's own overflow-y-auto via tailwind-merge), so the title, intro
       // and footer buttons stay pinned while a big character list scrolls. With
