@@ -285,6 +285,7 @@ const shell = (md, content) => `<!doctype html>
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="../guide.css" />
     <script src="../guide.js" defer></script>
+    <script src="../search.js" defer></script>
   </head>
   <body class="guide-body">
     <header class="topbar shown">
