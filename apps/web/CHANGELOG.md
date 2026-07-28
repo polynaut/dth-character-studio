@@ -1,5 +1,38 @@
 # @dth/web
 
+## 0.48.0
+
+### Minor Changes
+
+- [#549](https://github.com/polynaut/dth-character-studio/pull/549) [`b60ab13`](https://github.com/polynaut/dth-character-studio/commit/b60ab13dae66a17f115112183c4da05091ee3a4f) Thanks [@polynaut](https://github.com/polynaut)! - The character JSON's per-scene data is restructured (schema v24, migrated
+  automatically on read): the four parallel ROM override arrays became one
+  section-keyed `rom` record whose escalation clears the sparse layers at the
+  same key; the per-scene panels (identity, preserve, JCM rules) are
+  presence-armed — a block existing IS the override, stored booleans are gone;
+  and the character-level `groomScenes` map folded into the scene records as
+  `hair`, so one structure repoints on folder moves. Empty entries and records
+  self-prune, and the migration drops data that was already dead (orphaned row
+  ids, disarmed panels' stored payloads). Generated artifacts are unchanged —
+  the runtime consumes the compiled merge, not the stored shape.
+
+### Patch Changes
+
+- [#550](https://github.com/polynaut/dth-character-studio/pull/550) [`60ece3d`](https://github.com/polynaut/dth-character-studio/commit/60ece3d7177a7de1b12b05edb86a4161ece76e4c) Thanks [@polynaut](https://github.com/polynaut)! - Pose rows in a disabled ROM section can no longer be drag-reordered: Chromium
+  still delivers pointer events to disabled buttons, so the drag handles slipped
+  through the read-only fieldset — they're pointer-dead in that state now.
+
+- [#546](https://github.com/polynaut/dth-character-studio/pull/546) [`3b26c95`](https://github.com/polynaut/dth-character-studio/commit/3b26c9573852d7346b4998ededa9ac55f9447b07) Thanks [@polynaut](https://github.com/polynaut)! - A disabled ROM section's content is read-only now: every edit control inside
+  (fields, checkboxes, selects, add/remove buttons and the pose drag handles)
+  is dead and the cursor reads forbidden — enable the section to edit it. The
+  enable toggle sits in the section header and stays operable.
+
+- [#550](https://github.com/polynaut/dth-character-studio/pull/550) [`60ece3d`](https://github.com/polynaut/dth-character-studio/commit/60ece3d7177a7de1b12b05edb86a4161ece76e4c) Thanks [@polynaut](https://github.com/polynaut)! - A ROM section's whole header row toggles its accordion now, not just the
+  title and chevron — except the enable switch and the summary text beside it,
+  where a slight miss must not flip the section under the pointer.
+- Updated dependencies [[`b60ab13`](https://github.com/polynaut/dth-character-studio/commit/b60ab13dae66a17f115112183c4da05091ee3a4f)]:
+  - @dth/rom@0.48.0
+  - @dth/ui@0.48.0
+
 ## 0.47.0
 
 ### Minor Changes
