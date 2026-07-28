@@ -461,11 +461,14 @@ export function SortablePoseRow({
                   flush over the digits — the same trick the main grid's Value header uses. */}
               <span className="block w-20 pr-5 text-right">Value</span>
             </td>
-            <td
-              className="py-1 pr-1 pl-8 text-center"
-              title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
-            >
-              Base
+            <td className="py-1 pr-1 pl-8 text-center">
+              <span className="flex items-center justify-center gap-1">
+                Base
+                <InfoPopup label="Base — more information" className="-my-1">
+                  The value the sawtooth returns to on the frames around the pose (default 0) —
+                  for morphs already dialed in as part of the base shape.
+                </InfoPopup>
+              </span>
             </td>
             <td
               className="py-1 pr-1 pl-8 text-left"
