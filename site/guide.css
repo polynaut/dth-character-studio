@@ -207,9 +207,17 @@
   margin: 28px 0 8px;
   font-size: 1.12rem;
   color: var(--fg-bright);
-  /* An h3 lives INSIDE a section, so its h2 is docked under the topbar (≈84px)
-     when you jump to it — clear that too (same offset as accordions), else the
-     stuck h2 covers the h3 the hash meant to reveal. */
+}
+
+/* h3–h6 live INSIDE a section, so their h2 is docked under the topbar (≈84px)
+   when you jump to one — clear that too (same offset as accordions), else the
+   stuck h2 covers the heading the hash meant to reveal. EVERY id'd heading
+   level needs this: an h4 without it scrolls clean under the fixed chrome and
+   the visitor lands "somewhere random" (measured on #rom-overrides). */
+.guide-content h3,
+.guide-content h4,
+.guide-content h5,
+.guide-content h6 {
   scroll-margin-top: calc(var(--topbar-h) + 88px);
 }
 
