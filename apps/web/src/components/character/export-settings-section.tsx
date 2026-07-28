@@ -72,7 +72,8 @@ export function ExportSettingsSection({
       <h2 className="mb-4 flex w-fit items-center gap-1 text-xl font-semibold">
         Export directory
         <InfoPopup label="Export directory — more information">
-          <GuideLink href={EXPORT_GUIDE_URL}>How the export directory works — open the guide</GuideLink>
+          How the export directory works —{' '}
+          <GuideLink href={EXPORT_GUIDE_URL}>open the guide</GuideLink>
         </InfoPopup>
       </h2>
       <div className="flex flex-wrap items-center gap-3">
