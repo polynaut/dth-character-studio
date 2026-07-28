@@ -147,17 +147,29 @@ export function EditorHeader({
       >
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
-            scroll-timeline as the header collapse) once that one is gone. */}
+            scroll-timeline as the header collapse) once that one is gone —
+            joined by a "Scroll Up" that jumps back to the page top, a step
+            darker so Back stays the primary action. */}
         {/* top-5 matches the avatar's mt-5, so the link tops align; left aligns
             with the title beside the avatar (208px box + gap-5). */}
-        <div className="absolute top-5 left-[228px] z-20">
+        <div className="backlink-scroll absolute top-5 left-[228px] z-20 flex items-center gap-2">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
-            className="backlink-scroll flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
+            className="flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
           >
             <ArrowLeft className="size-4" /> Back
           </Link>
+          <span aria-hidden className="text-sm text-muted-foreground/60">
+            |
+          </span>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="flex cursor-pointer items-center gap-1 text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          >
+            Scroll Up
+          </button>
         </div>
         {/* Top-centered, its own standalone element. The full-width wrapper
             centers it via flexbox (robust regardless of the containing block);
