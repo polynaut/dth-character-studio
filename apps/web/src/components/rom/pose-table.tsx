@@ -449,24 +449,24 @@ export function SortablePoseRow({
             <td className="py-1 pr-1 pl-8" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
               Node
             </td>
-            <td className="px-1 py-1" title="The parameter's internal name in Daz Studio">
+            {/* Every sub-column indents pl-8, like Node — the expansion reads
+                as one right-shifted block under the main row. */}
+            <td className="py-1 pr-1 pl-8" title="The parameter's internal name in Daz Studio">
               Parameter name
             </td>
-            <td className="px-1 py-1" title="The value the pose dials the morph to">
+            <td className="py-1 pr-1 pl-8" title="The value the pose dials the morph to">
               {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
                   flush over the digits — the same trick the main grid's Value header uses. */}
               <span className="block w-20 pr-5 text-right">Value</span>
             </td>
-            {/* Base sits CENTERED like the main Bone scale column above it;
-                Auto starts LEFT like the "morphs" toggle's text. */}
             <td
-              className="px-1 py-1 text-center"
+              className="py-1 pr-1 pl-8 text-center"
               title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
             >
               Base
             </td>
             <td
-              className="py-1 pr-1 pl-3 text-left"
+              className="py-1 pr-1 pl-8 text-left"
               title="Resolve the base from the morph's current scene value at apply time"
             >
               Auto
@@ -488,7 +488,7 @@ export function SortablePoseRow({
                   onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
                 />
               </td>
-              <td className="px-1 py-0.5">
+              <td className="py-0.5 pr-1 pl-8">
                 <MorphNameCell
                   value={morph.prop}
                   placeholder="body_bs_BodyTone"
@@ -498,13 +498,13 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="px-1 py-0.5">
+              <td className="py-0.5 pr-1 pl-8">
                 <NumberCell
                   value={morph.value}
                   onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
                 />
               </td>
-              <td className="px-1 py-0.5">
+              <td className="py-0.5 pr-1 pl-8">
                 <div className="flex justify-center">
                   <OptionalNumberCell
                     value={morph.base}
@@ -514,7 +514,7 @@ export function SortablePoseRow({
                   />
                 </div>
               </td>
-              <td className="py-0.5 pr-1 pl-3">
+              <td className="py-0.5 pr-1 pl-8">
                 <div className="flex h-full items-center justify-start pl-1">
                   <input
                     type="checkbox"
