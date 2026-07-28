@@ -1,6 +1,7 @@
 import { Download } from 'lucide-react'
 
-import { Button } from '@dth/ui'
+import { Button, InfoPopup } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 
 import type { InstallReport } from '#/lib/rom/api.ts'
@@ -34,28 +35,35 @@ export function CustomMorphsSection({
   return (
     <section className="space-y-4 rounded-lg border bg-card p-5">
       <div>
-        <h2 className="font-semibold">Custom morphs</h2>
+        <h2 className="flex w-fit items-center gap-1 font-semibold">
+          Custom morphs
+          <InfoPopup label="Custom morphs — more information">
+            Copies your Transfer-Shape-Utility morphs into your personal library's{' '}
+            <code>data/Daz&nbsp;3D</code>.{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#custom-morphs--daz-presets">
+              Open guide
+            </GuideLink>
+          </InfoPopup>
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Morphs you made with Daz's Transfer Shape Utility. Merge-only — adds new files,
           never overwrites your edits.
         </p>
       </div>
+      {/* No "i" popups on the folder fields — the section popup above links the
+          guide, which explains both. */}
       <FolderField
         label="Morphs source"
         value={source}
         placeholder="D:\…\_morphs"
-        help={<>Your custom-morphs source folder.</>}
+        help={null}
         onChange={onSourceChange}
       />
       <FolderField
         label="Morphs destination"
         value={dest}
         placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library\data\Daz 3D"
-        help={
-          <>
-            Your personal library's <span className="font-mono">data/Daz 3D</span> folder.
-          </>
-        }
+        help={null}
         onChange={onDestChange}
       />
       <div className="flex gap-2">
