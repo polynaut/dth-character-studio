@@ -13,6 +13,7 @@ documentation, not archaeology.
 | [domain.md](domain.md) | you touch generation, frames, sections, the PoseAsset CSV, the DTH runtime, or anything Daz/Houdini-semantic. |
 | [conventions.md](conventions.md) | you change the character schema, the FFI surface, settings, versioning — the rituals live here. |
 | [testing.md](testing.md) | you write or run tests: the four layers, what pins what, the screenshot suite. |
+| [docs-site.md](docs-site.md) | you touch "the docs page": the public Pages site — `site/`, `docs/guide/`, the guide build/deploy, previews, guide search. |
 | [release.md](release.md) | you ship: the release train, the signing gate, publish troubleshooting. |
 | [gotchas.md](gotchas.md) | before debugging anything weird — measured Daz/Tauri/build facts that code alone won't tell you. |
 
