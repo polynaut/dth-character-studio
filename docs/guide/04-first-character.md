@@ -200,8 +200,8 @@ Each pose row has two name fields with very different jobs:
   and later **Unreal Engine**. Letters, numbers and underscores **only** —
   Houdini rejects anything else. The group's Left/Right suffix is appended
   automatically.
-- **Morph name** — must **exactly match the morph's internal name in Daz
-  Studio** (not its display label), or that frame fails in the ROM run.
+- **Parameter name** — must **exactly match the parameter's internal name in
+  Daz Studio** (not its display label), or that frame fails in the ROM run.
 
 A pose row can also drive its one output from **several Daz morphs at once** —
 expand its **morphs** toggle.
@@ -216,8 +216,8 @@ Every entry in that expanded list carries its own:
 
 - **Node** — the scene node the morph lives on (`Genesis9`, `GoldenPalace_G9`,
   a bone, …); autocomplete fills it in when you pick a suggestion.
-- **Property** — the morph's internal Daz name (same rule as the single Morph
-  name).
+- **Parameter name** — the morph's internal Daz name (same rule as the main
+  row's Parameter name).
 - **Value** — what this morph is dialed to at the pose's frame.
 - **Base** *(optional)* — the value the morph **returns to** on the frames
   around the pose (default `0`). Set it for a morph that's part of the
@@ -311,11 +311,12 @@ before or after it.
 
 ### Finding a morph's internal Daz name
 
-The internal name usually differs from the slider's label (label *Body Tone* →
-internal `body_bs_BodyTone`). The comfortable way is the studio's
-**autocomplete** — after a one-time scan per Genesis generation, every Morph
-name field suggests matches as you type. The manual route via *Parameter
-Settings* (right screenshot) still works for a single name.
+The **Parameter name** the studio asks for is the parameter's internal name,
+which usually differs from the slider's label (label *Body Tone* → internal
+`body_bs_BodyTone`). The comfortable way is the studio's **autocomplete** —
+after a one-time scan per Genesis generation, every Parameter name field
+suggests matches as you type. The manual route via *Parameter Settings*
+(right screenshot) still works for a single name.
 
 <p align="center">
   <img width="440" align="top" alt="A morph's internal Daz name" src="https://github.com/user-attachments/assets/9ca14a2a-f871-4a10-80dc-7713942dac49" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img width="355" align="top" alt="Looking up a morph's internal name in Daz" src="https://github.com/user-attachments/assets/703690ca-78a1-4a45-9c9a-c7d91be49a86" />
@@ -360,15 +361,15 @@ The scan indexes **everything dialable** the figure carries — classic morphs
 Installed new morph products later? Just run it again. Either way the studio
 picks the index up by itself the next time its window gains focus.
 
-From then on, every **Morph name** field autocompletes after two typed
+From then on, every **Parameter name** field autocompletes after two typed
 characters — searchable by **internal name** *or* **Daz UI label** — and
 picking a suggestion fills in the exact internal name **and** the right node:
 no more mismatched node/morph pairs.
 
   <p align="center">
-    <img width="508" alt="Morph name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />
+    <img width="508" alt="Parameter name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />
     <br>
-    <sub><em>Each Morph name field autocompletes from the scanned index.</em></sub>
+    <sub><em>Each Parameter name field autocompletes from the scanned index.</em></sub>
   </p>
 
 </td></tr></table>

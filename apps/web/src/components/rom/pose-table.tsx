@@ -198,10 +198,9 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         <InfoPopup label="Parameter name — more information" className="-my-1">
           <strong>Must exactly match the parameter's internal name in Daz Studio</strong>{' '}
           (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
-          dials it; a mismatch fails on that frame. Import the exact names from a{' '}
-          <code>Scan_Frames</code> CSV, or{' '}
+          dials it.{' '}
           <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#finding-a-morph39s-internal-daz-name">
-            look the internal name up — open the guide
+            open guide
           </GuideLink>
         </InfoPopup>
       </span>
@@ -458,14 +457,16 @@ export function SortablePoseRow({
                   flush over the digits — the same trick the main grid's Value header uses. */}
               <span className="block w-20 pr-5 text-right">Value</span>
             </td>
+            {/* Base sits CENTERED like the main Bone scale column above it;
+                Auto starts LEFT like the "morphs" toggle's text. */}
             <td
-              className="px-1 py-1 text-right"
+              className="px-1 py-1 text-center"
               title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
             >
               Base
             </td>
             <td
-              className="px-1 py-1 text-center"
+              className="py-1 pr-1 pl-3 text-left"
               title="Resolve the base from the morph's current scene value at apply time"
             >
               Auto
@@ -503,16 +504,18 @@ export function SortablePoseRow({
                   onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
                 />
               </td>
-              <td className="px-1 py-0.5 text-right">
-                <OptionalNumberCell
-                  value={morph.base}
-                  placeholder="0"
-                  disabled={morph.autoBase === true}
-                  onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
-                />
-              </td>
               <td className="px-1 py-0.5">
-                <div className="flex h-full items-center justify-center">
+                <div className="flex justify-center">
+                  <OptionalNumberCell
+                    value={morph.base}
+                    placeholder="0"
+                    disabled={morph.autoBase === true}
+                    onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
+                  />
+                </div>
+              </td>
+              <td className="py-0.5 pr-1 pl-3">
+                <div className="flex h-full items-center justify-start pl-1">
                   <input
                     type="checkbox"
                     className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}
