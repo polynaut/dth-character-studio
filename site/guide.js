@@ -1,6 +1,8 @@
 // Guide lightbox: the article shows app screenshots at ~66% of their native
 // size (the text column) — clicking one opens it at 100% in an overlay. Click
 // anywhere or press Escape to close; tall images scroll inside the overlay.
+// On a portrait phone a WIDE image rotates 90° (the video-player recipe) —
+// see updateRotation below.
 
 const overlay = document.createElement('div')
 overlay.className = 'guide-lightbox'
@@ -9,10 +11,26 @@ overlay.setAttribute('aria-label', 'Screenshot at full size')
 document.body.appendChild(overlay)
 
 function close() {
-  overlay.classList.remove('open')
+  overlay.classList.remove('open', 'rotated')
   overlay.replaceChildren()
   document.body.style.overflow = ''
 }
+
+// Rotation-LOCKED phones never flip the browser to landscape, so turning the
+// phone left with the overlay open used to show a tiny sideways-cropped image.
+// Instead: a wide image in a portrait PHONE viewport rotates 90° (caption
+// included, `.rotated`) to use the screen's long axis — turn the phone left
+// and it reads upright, exactly like a fullscreen video. Re-judged on every
+// resize, so with auto-rotate ON the viewport itself goes landscape and the
+// class simply never applies (nor on desktop/tablet widths).
+function updateRotation() {
+  const img = overlay.querySelector('img')
+  if (!overlay.classList.contains('open') || !img || !img.naturalWidth) return
+  const portraitPhone = window.innerWidth <= 640 && window.innerHeight > window.innerWidth
+  const wide = img.naturalWidth > img.naturalHeight * 1.2
+  overlay.classList.toggle('rotated', portraitPhone && wide)
+}
+window.addEventListener('resize', updateRotation)
 
 document.addEventListener('click', (e) => {
   if (overlay.classList.contains('open')) {
@@ -24,10 +42,12 @@ document.addEventListener('click', (e) => {
   const full = document.createElement('img')
   full.src = img.currentSrc || img.src
   full.alt = img.alt
-  // App screenshots are 2560px @2x → 100% = 1280 CSS px (viewport-capped);
-  // other images (external photos) open at their natural size instead.
-  if (/\/screenshots\//.test(full.src)) full.style.width = 'min(1280px, 96vw)'
-  else full.style.maxWidth = '96vw'
+  // App screenshots are 2560px @2x → 100% = 1280 CSS px; other images
+  // (external photos) open at their natural size. Both stay capped by the
+  // stylesheet's max-width against the overlay's CONTENT box — a vw-based
+  // inline cap here used to ignore the overlay padding, so on phones the
+  // image sat flush against the right edge.
+  if (/\/screenshots\//.test(full.src)) full.style.width = 'min(1280px, 100%)'
   // Inner wrapper with margin:auto — centers vertically AND stays scrollable
   // when the image is taller than the viewport (auto margins collapse to 0).
   const inner = document.createElement('div')
@@ -45,6 +65,9 @@ document.addEventListener('click', (e) => {
   overlay.replaceChildren(inner)
   overlay.classList.add('open')
   document.body.style.overflow = 'hidden'
+  // Judge rotation now (cached image) and again once the natural size is known.
+  updateRotation()
+  full.addEventListener('load', updateRotation)
 })
 
 document.addEventListener('keydown', (e) => {
