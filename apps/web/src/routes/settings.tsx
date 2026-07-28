@@ -24,6 +24,7 @@ import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath } from '#/lib/path.ts'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
 import { HousekeepingSection } from '#/components/settings/housekeeping-section.tsx'
@@ -1084,7 +1085,10 @@ function SettingsPage() {
                   <InfoPopup label="Enable attachments — more information" className="-translate-y-px">
                     Adds an <strong>Attachments</strong> tab for reusable Daz scenes (bases to build
                     characters on), stored in this project. Off by default — the project then has
-                    characters only.
+                    characters only.{' '}
+                    <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/attachments.html#add-an-attachment">
+                      Open guide
+                    </GuideLink>
                   </InfoPopup>
                 </span>
                 <Switch
