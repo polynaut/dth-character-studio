@@ -794,6 +794,34 @@ a:hover {
   height: auto;
 }
 
+/* 3D entrance: the window starts tilted back and flattens as it scrolls
+   toward mid-viewport — scroll-driven, so it runs on the compositor with no
+   JS. Browsers without animation-timeline just show the flat framed window. */
+@supports (animation-timeline: view()) {
+  .section-teaser {
+    transform-origin: 50% 100%;
+    animation: teaser-flatten linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+}
+
+@keyframes teaser-flatten {
+  from {
+    transform: perspective(1400px) rotateX(9deg) scale(0.97);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-teaser {
+    animation: none;
+  }
+}
+
 /* Pull the heading up into the teaser's faded zone so title and image blend. */
 .section-teaser + h2 {
   position: relative;
