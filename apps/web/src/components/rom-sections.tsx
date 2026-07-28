@@ -840,11 +840,14 @@ export const RomSections = memo(function RomSections({
               // stays full (so the green title / label / toggle read active) and we dim
               // just the content here instead. A disabled section's content is READ-ONLY:
               // the native fieldset disable kills every edit control inside — fields,
-              // checkboxes, selects, add/remove buttons AND the pose drag handles (a
-              // disabled button fires no pointer events and takes no focus, so dnd-kit
-              // never starts) — and the cursor reads forbidden throughout. The enable
-              // toggle lives in the HEADER, outside this fieldset, so turning the
-              // section back on (where allowed) is always reachable. `locked` (the
+              // checkboxes, selects, add/remove buttons — and the cursor reads forbidden
+              // throughout. Disabled buttons still RECEIVE pointer events in Chromium
+              // (only click/activation is suppressed), so dnd-kit's pose drag handles
+              // would happily start a reorder from a disabled section — the explicit
+              // `[&_button]:pointer-events-none` closes that hole (the forbidden cursor
+              // survives: a pointer-events-none element takes its ancestor's cursor).
+              // The enable toggle lives in the HEADER, outside this fieldset, so turning
+              // the section back on (where allowed) is always reachable. `locked` (the
               // vestigial unarmed-override gate) behaves the same way.
               <fieldset
                 disabled={locked || !effectiveEnabled}
@@ -852,7 +855,7 @@ export const RomSections = memo(function RomSections({
                   'space-y-3 border-t px-4 py-4',
                   (locked || (!effectiveEnabled && sectionOverridden)) && 'opacity-60',
                   (locked || !effectiveEnabled) &&
-                    'cursor-not-allowed [&_*]:cursor-not-allowed',
+                    'cursor-not-allowed [&_*]:cursor-not-allowed [&_button]:pointer-events-none',
                 )}
               >
                 {modes.length > 1 && (

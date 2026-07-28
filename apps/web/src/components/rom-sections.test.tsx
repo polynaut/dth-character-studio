@@ -954,11 +954,14 @@ describe('disabled section content is read-only', () => {
     )
     fireEvent.click(screen.getByText('Full Body'))
     // The fieldset disable is THE read-only mechanism: it kills every native
-    // control inside (fields, checkboxes, add/remove buttons, the dnd handle
-    // buttons) in a real browser — here we pin the attribute + the cursor.
+    // control inside (fields, checkboxes, add/remove buttons) in a real
+    // browser — here we pin the attribute + the cursor. Disabled buttons still
+    // RECEIVE pointer events in Chromium, so dnd-kit's drag handles need the
+    // explicit pointer-events kill or a disabled section stays reorderable.
     const fieldset = container.querySelector('fieldset')!
     expect(fieldset.disabled).toBe(true)
     expect(fieldset.className).toContain('cursor-not-allowed')
+    expect(fieldset.className).toContain('[&_button]:pointer-events-none')
     // The enable switch must NOT be caught by it — it lives in the header.
     expect(fieldset.querySelector('[role="switch"]')).toBeNull()
 
