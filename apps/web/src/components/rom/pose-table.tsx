@@ -13,6 +13,7 @@ import { sanitizePoseName } from '@dth/rom'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { RomPose } from '@dth/rom'
 
+import { GuideLink } from '#/components/guide-link.tsx'
 import { NumberCell, OptionalNumberCell, TextCell } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
 
@@ -145,8 +146,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         <InfoPopup label="Name — more information" className="-my-1">
           The generated morph's name in <strong>Houdini</strong> and later{' '}
           <strong>Unreal Engine</strong> — the one value that travels the whole pipeline.
-          Letters, numbers and underscores only — Houdini accepts nothing else. The
-          group's Left/Right suffix is appended for you (<code>_l</code>/<code>_r</code>).
+          Letters, numbers and underscores only.
         </InfoPopup>
       </span>
     ),
@@ -193,53 +193,65 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     id: 'prop',
     header: () => (
       <span className="flex items-center gap-1">
-        Morph name
-        <InfoPopup label="Morph name — more information" className="-my-1">
-          <strong>Must exactly match the morph's internal name in Daz Studio</strong>{' '}
+        Parameter name
+        <InfoPopup label="Parameter name — more information" className="-my-1">
+          <strong>Must exactly match the parameter's internal name in Daz Studio</strong>{' '}
           (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
-          dials it; a mismatch fails on that frame. See the guide for how to look the
-          internal name up in Daz, or import the exact names from a{' '}
-          <code>Scan_Frames</code> CSV.
+          dials it.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#finding-a-morph39s-internal-daz-name">
+            Open guide
+          </GuideLink>
         </InfoPopup>
       </span>
     ),
-    cell: ({ getValue, row, table }) =>
-      row.original.morphs.length > 1 ? (
-        <span className="px-2 text-sm text-muted-foreground italic">
-          {row.original.morphs.length} morphs combined
-        </span>
-      ) : (
+    cell: ({ getValue, row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      if (row.original.morphs.length > 1)
+        return (
+          <span className="px-2 text-sm text-muted-foreground italic">
+            {row.original.morphs.length} morphs combined
+          </span>
+        )
+      // While EXPANDED, the single morph edits in the panel below — rendering
+      // the same input twice would need the two kept in sync live.
+      if (meta.expandedIds.has(row.original.id)) return null
+      return (
         <MorphNameCell
           value={getValue()}
           placeholder="body_bs_BodyTone"
-          onCommit={(prop) =>
-            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, { prop })
-          }
+          onCommit={(prop) => meta.updateMorphAt(row.index, 0, { prop })}
           // Picking from the index also selects the node the morph lives on.
-          onPick={(e) =>
-            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, {
-              prop: e.name,
-              node: e.node,
-            })
-          }
+          onPick={(e) => meta.updateMorphAt(row.index, 0, { prop: e.name, node: e.node })}
         />
-      ),
+      )
+    },
   }),
   columnHelper.accessor((pose) => pose.morphs[0]?.value ?? 1, {
     id: 'value',
     // Mirror the NumberCell geometry (w-20 box, right-aligned digits, pr-5 "%"
     // gutter) so the title sits flush over the numbers instead of floating at
-    // the column's left edge.
-    header: () => <span className="block w-20 pr-5 text-right">Value</span>,
-    cell: ({ getValue, row, table }) =>
-      row.original.morphs.length > 1 ? null : (
+    // the column's left edge. The "i" pulls back over the % gutter (-ml-4) so
+    // it sits the usual 4px after the word, not after the gutter.
+    header: () => (
+      <span className="flex items-center">
+        <span className="block w-20 pr-5 text-right">Value</span>
+        <InfoPopup label="Value — more information" className="-my-1 -ml-4">
+          The value the pose dials the morph to.
+        </InfoPopup>
+      </span>
+    ),
+    cell: ({ getValue, row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      // Multi-morph rows edit values in the expansion; a single morph does too
+      // WHILE expanded (same one-input-at-a-time rule as Parameter name).
+      if (row.original.morphs.length > 1 || meta.expandedIds.has(row.original.id)) return null
+      return (
         <NumberCell
           value={getValue()}
-          onCommit={(value) =>
-            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, { value })
-          }
+          onCommit={(value) => meta.updateMorphAt(row.index, 0, { value })}
         />
-      ),
+      )
+    },
   }),
   columnHelper.accessor('boneScaleRef', {
     id: 'boneScaleRef',
@@ -250,12 +262,12 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
       <span className="flex items-center justify-center gap-1">
         Bone scale
         <InfoPopup label="Bone scale — more information">
-          Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length,
-          Proportion Height). Unreal can't drive bone scale from a morph alone, so when an
-          export directory is set the DTH Exporter writes a per-frame{' '}
-          <strong>reference-skeleton FBX</strong> for the frame and the studio fills its path
-          into the PoseAsset CSV automatically. With no export directory it's simply a no-op —
-          nothing exports, so you handle the reference skeletons yourself.
+          Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length) —
+          its <strong>reference-skeleton FBX</strong> then exports and wires up
+          automatically.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#bone-scale--morphs-that-scale-bones-reference-skeletons">
+            Open guide
+          </GuideLink>
         </InfoPopup>
       </span>
     ),
@@ -433,37 +445,54 @@ export function SortablePoseRow({
       {expanded && (
         // The multi-morph editor renders as REAL table rows sharing the parent grid's
         // columns, so its sub-columns line up under the main ones: drag→(blank),
-        // Frame→#, Name→Node, Morph name→Property, Value→Value, Bone scale→Base,
+        // Frame→#, Name→Node, Parameter name→Parameter name, Value→Value, Bone scale→Base,
         // morphs→Auto, actions→(remove). (A colSpan block with its own widths couldn't
-        // align to the auto-sized table columns.)
+        // align to the auto-sized table columns.) The Parameter name / Value
+        // fields render for a single morph too — the panel is where more
+        // morphs get added, so the full row must be editable in place.
         <>
           <tr className={`text-xs font-medium text-muted-foreground ${morphRowBg}`}>
             <td />
             <td className="px-1 py-1">
               <span className="pl-6">#</span>
             </td>
-            <td className="py-1 pr-1 pl-8" title="The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …)">
-              Node
+            {/* The "i" chips here carry NO -my-1: the sub-header is the SHORT
+                text-xs row, so the 24px chip is what sets its height — collapsing
+                the chips' margins would clip them against the row edges instead. */}
+            <td className="py-1 pr-1 pl-8">
+              <span className="flex items-center gap-1">
+                Node
+                <InfoPopup label="Node — more information">
+                  The scene node the morph lives on (Genesis9, GoldenPalace_G9, a bone, …).
+                </InfoPopup>
+              </span>
             </td>
-            <td className="px-1 py-1" title="The internal property name of the Daz morph">
-              Property
-            </td>
-            <td className="px-1 py-1" title="The value the pose dials the morph to">
+            {/* Every sub-column indents pl-8, like Node — the expansion reads
+                as one right-shifted block under the main row. Parameter name and
+                Value carry no info of their own: the main grid's identically-named
+                headers already explain them. */}
+            <td className="py-1 pr-1 pl-8">Parameter name</td>
+            <td className="py-1 pr-1 pl-8">
               {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
                   flush over the digits — the same trick the main grid's Value header uses. */}
               <span className="block w-20 pr-5 text-right">Value</span>
             </td>
-            <td
-              className="px-1 py-1 text-right"
-              title="The value the sawtooth returns to on the frames around the pose (default 0) — for morphs already dialed in as part of the base shape"
-            >
-              Base
+            <td className="py-1 pr-1 pl-8 text-center">
+              <span className="flex items-center justify-center gap-1">
+                Base
+                <InfoPopup label="Base — more information">
+                  The value the sawtooth returns to on the frames around the pose (default 0) —
+                  for morphs already dialed in as part of the base shape.
+                </InfoPopup>
+              </span>
             </td>
-            <td
-              className="px-1 py-1 text-center"
-              title="Resolve the base from the morph's current scene value at apply time"
-            >
-              Auto
+            <td className="py-1 pr-1 pl-8 text-left">
+              <span className="flex items-center gap-1">
+                Auto
+                <InfoPopup label="Auto — more information">
+                  Resolve the base from the morph's current scene value at apply time.
+                </InfoPopup>
+              </span>
             </td>
             <td />
           </tr>
@@ -482,7 +511,7 @@ export function SortablePoseRow({
                   onCommit={(node) => meta.updateMorphAt(row.index, morphIndex, { node })}
                 />
               </td>
-              <td className="px-1 py-0.5">
+              <td className="py-0.5 pr-1 pl-8">
                 <MorphNameCell
                   value={morph.prop}
                   placeholder="body_bs_BodyTone"
@@ -492,22 +521,24 @@ export function SortablePoseRow({
                   }
                 />
               </td>
-              <td className="px-1 py-0.5">
+              <td className="py-0.5 pr-1 pl-8">
                 <NumberCell
                   value={morph.value}
                   onCommit={(value) => meta.updateMorphAt(row.index, morphIndex, { value })}
                 />
               </td>
-              <td className="px-1 py-0.5 text-right">
-                <OptionalNumberCell
-                  value={morph.base}
-                  placeholder="0"
-                  disabled={morph.autoBase === true}
-                  onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
-                />
+              <td className="py-0.5 pr-1 pl-8">
+                <div className="flex justify-center">
+                  <OptionalNumberCell
+                    value={morph.base}
+                    placeholder="0"
+                    disabled={morph.autoBase === true}
+                    onCommit={(base) => meta.updateMorphAt(row.index, morphIndex, { base })}
+                  />
+                </div>
               </td>
-              <td className="px-1 py-0.5">
-                <div className="flex h-full items-center justify-center">
+              <td className="py-0.5 pr-1 pl-8">
+                <div className="flex h-full items-center justify-start pl-1">
                   <input
                     type="checkbox"
                     className={`size-3.5 ${overridden ? 'accent-daz-green' : 'accent-primary'}`}

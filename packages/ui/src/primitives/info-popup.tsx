@@ -225,7 +225,7 @@ export function InfoPopup({
               // z-30: below the sticky page header (z-40, so a popup that reaches
               // into the header is covered, not floating over it) and below modal
               // dialogs (z-50); still above page content via its body portal.
-              className="z-30 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+              className="z-30 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
               {...getFloatingProps({ onClick: onContentClick })}
             >
               {children}

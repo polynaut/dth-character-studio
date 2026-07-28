@@ -162,11 +162,33 @@ export function IdentitySection({
       <div>
         <Label className="mb-1">Gender</Label>
         <p
-          className="text-sm text-muted-foreground"
+          className="flex items-center gap-2 text-sm text-muted-foreground"
           title="Read from the Daz scene at character creation (its figure / GP-DK geograft) — fixed from then on"
         >
-          {character.gender === 'female' ? 'Female' : 'Male'}
-          <span className="ml-1.5 text-xs">— set at creation from the scene</span>
+          {/* The same ♀/♂ badge the create panel's scene preview wears. */}
+          <span
+            aria-hidden
+            className="flex size-6 shrink-0 items-center justify-center rounded-full border bg-background/85 text-sm font-semibold"
+          >
+            {character.gender === 'female' ? '♀' : '♂'}
+          </span>
+          <span>
+            {character.gender === 'female' ? 'Female' : 'Male'}
+            {/* Reconstructs what decided it at creation (`genderForScan`): the
+                gendered generations' figure id tells directly; the neutral G9
+                figure's gender came from the GP/DK geograft, whose presence the
+                GEN section's enabled state still records. */}
+            <span className="ml-1.5 text-xs">
+              —{' '}
+              {character.genesis !== 'G9'
+                ? `detected ${character.genesis} ${character.gender}`
+                : character.sections.GEN.enabled
+                  ? character.gender === 'female'
+                    ? 'detected Golden Palace'
+                    : 'detected Dicktator'
+                  : 'no gendered figure or GP/DK geograft in the scene'}
+            </span>
+          </span>
         </p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { Upload } from 'lucide-react'
 
 import { Button, InfoPopup } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 
 /**
  * "Import from CSV" plus an info popup explaining where the CSV comes from: the
@@ -15,11 +16,11 @@ export function ImportCsvButton({ onImport }: { onImport: () => void }) {
         <Upload /> Import from CSV
       </Button>
       <InfoPopup size="sm" label="Import from CSV — how to produce the CSV">
-        Import a DAZ morph CSV — each row becomes a pose. Produce it with{' '}
-        <strong>Scan_Frames</strong> (installed with the studio's other scripts under{' '}
-        <code>Scripts&nbsp;›&nbsp;DTH-Character-Studio</code>): select your character's root node
-        in Daz Studio, run the script, and the scan shows up here automatically — one CSV per
-        scene. You can also browse to a CSV you curated yourself.
+        Import a DAZ morph CSV — each row becomes a pose; produce it with the bundled{' '}
+        <strong>Scan_Frames</strong> script in Daz Studio.{' '}
+        <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#recommended-scan-your-morphs-once-then-autocomplete--scanmorphsgenesisdsa">
+          Open guide
+        </GuideLink>
       </InfoPopup>
     </span>
   )

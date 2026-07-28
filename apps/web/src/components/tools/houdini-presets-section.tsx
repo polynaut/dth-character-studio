@@ -38,11 +38,12 @@ export function HoudiniPresetsSection({
           <span className="font-mono">houdini.env</span> (SHARED_PRESETS + HOUDINI_PATH).
         </p>
       </div>
+      {/* No "i" popup — the placeholder and the section subtitle say it all. */}
       <FolderField
         label="Houdini presets source"
         value={source}
         placeholder="D:\…\houdini\my_presets"
-        help={<>Your Houdini presets source folder.</>}
+        help={null}
         onChange={onSourceChange}
       />
       <div className="flex gap-2">

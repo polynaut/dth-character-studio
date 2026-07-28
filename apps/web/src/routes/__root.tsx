@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect } from 'react'
-import { Outlet, createRootRoute, useNavigate } from '@tanstack/react-router'
+import { Outlet, createRootRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { Check, Info, X } from 'lucide-react'
@@ -13,6 +13,7 @@ import {
   fetchSettings,
 } from '#/lib/rom/api.ts'
 import { checkForUpdates } from '#/lib/updater.ts'
+import { trackNavOrigin } from '#/lib/nav-origin.ts'
 import { onMenu, openExternal } from '#/lib/desktop.ts'
 import { ConfirmProvider } from '#/lib/use-confirm.tsx'
 import { UpdatePromptHost } from '#/components/update-prompt.tsx'
@@ -56,6 +57,11 @@ function RootErrorComponent({ error }: ErrorComponentProps) {
 
 function RootComponent() {
   const navigate = useNavigate()
+  const router = useRouter()
+
+  // Record the last non-utility page so Tools/Settings/About "Back" can hard-link
+  // to it (see lib/nav-origin.ts).
+  useEffect(() => trackNavOrigin(router), [router])
 
   // Alt over a reveal target must not arm the native menu bar (Alt+click is
   // the "show in Explorer" hotkey there) — bare Alt elsewhere still does.

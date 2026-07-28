@@ -81,12 +81,16 @@ export function HoudiniProjectsField({
   character,
   location,
   persistPatch,
+  houdiniSubdir = '',
 }: {
   character: Character
   location: CharacterLocation
   /** The draft hook's immediate-persist primitive — link/unlink go through it
    *  so validation, single-flight and regeneration are never skipped. */
   persistPatch: PersistCharacterPatch
+  /** The project's Houdini subfolder (seeded at creation) — shown as the
+   *  folder chip while no project is linked yet. */
+  houdiniSubdir?: string
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -107,12 +111,16 @@ export function HoudiniProjectsField({
   // everything through the CHARACTER folder is dimmed — only the actual
   // subfolder ("\houdini") reads bright, matching the Daz scenes chip. A
   // project outside the character folder falls back to the project root.
-  const projectDirChip = (
+  // With NO project linked yet, the chip shows the character's seeded Houdini
+  // folder instead — the place a new project belongs.
+  const emptyStateDir = houdiniSubdir ? displayPath(`${charFolder}/${houdiniSubdir}`) : ''
+  const chipDir = hasProjects ? displayDirOf(projects[0] ?? '') : emptyStateDir
+  const projectDirChip = chipDir ? (
     <DirPathChip
-      dir={displayDirOf(projects[0] ?? '')}
+      dir={chipDir}
       roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
     />
-  )
+  ) : null
 
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the project in Houdini.
@@ -184,7 +192,7 @@ export function HoudiniProjectsField({
           copy would break. Drag <code>.hip</code> files here or use the button.
         </InfoPopup>
       </Label>
-      {hasProjects && <p className="mb-2 text-xs">{projectDirChip}</p>}
+      {projectDirChip && <p className="mb-2 text-xs">{projectDirChip}</p>}
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
           {projects.map((hip) => (

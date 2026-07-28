@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
-import { Button, cn, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
+import { Button, cn, InfoPopup, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
 import { CsvImportDialog } from '#/components/csv-import-dialog.tsx'
 import { ScanCsvPickerDialog } from '#/components/scan-csv-picker-dialog.tsx'
 import {
@@ -747,6 +747,17 @@ export const RomSections = memo(function RomSections({
                   </span>
                 )}
               </button>
+              {/* The scene-gated (GEN) enable rules — an always-visible "i" beside
+                  the title instead of tooltips hidden on the disabled Switch. A
+                  SIBLING of the accordion button (nested buttons are invalid), and
+                  the header's row-click handler already ignores buttons. */}
+              {enableGated && (
+                <InfoPopup label={`${SECTION_LABELS[section]} — more information`} className="-my-1">
+                  Enabled automatically when the primary Daz scene contains a Golden Palace /
+                  Dicktator geograft. Every scene must contain the same geograft (GP/DK) as the
+                  primary scene — the content can still be overridden per scene.
+                </InfoPopup>
+              )}
               {/* Per-scene section override marker — sits at the END of the section
                   TITLE (right after the label), and is a SIBLING of the accordion
                   button (never nested: a button inside a button is invalid HTML). It
@@ -801,20 +812,16 @@ export const RomSections = memo(function RomSections({
                 title={
                   tiedToJcm
                     ? 'The retargeting poses are part of the JCM base ROM — controlled by the JCM section'
-                    : enableGated
-                      ? // Scene-gated: the on/off state follows the primary scene's
-                        // geograft on every scene — only the content is editable.
-                        overrideData
-                        ? "Follows the primary scene's GP/DK geograft — the on/off state applies to every scene (the content can still be overridden per scene)"
-                        : 'Enabled automatically when the primary Daz scene contains a Golden Palace / Dicktator geograft — detected when the scene is linked'
-                      : overrideData
-                        ? // On a non-primary scene the toggle is a per-scene override —
-                          // same hint the other overridable fields' mark carries, not a
-                          // verbose per-scene enable/disable line.
-                          'Can be overridden per Daz scene'
-                        : // Primary scene: the on/off label next to it already says it —
-                          // no redundant native tooltip on the switch.
-                          undefined
+                    : // Scene-gated (GEN): the enable rules live in the "i" popup on
+                      // the section title now — no tooltip on the disabled Switch.
+                      !enableGated && overrideData
+                      ? // On a non-primary scene the toggle is a per-scene override —
+                        // same hint the other overridable fields' mark carries, not a
+                        // verbose per-scene enable/disable line.
+                        'Can be overridden per Daz scene'
+                      : // Primary scene: the on/off label next to it already says it —
+                        // no redundant native tooltip on the switch.
+                        undefined
                 }
                 onCheckedChange={(enabled) => {
                   // Scene-gated sections never toggle by hand (backstop — the

@@ -14,6 +14,16 @@ import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
+ * Scroll-to-top via the NATIVE `behavior:'smooth'`. A hand-rolled rAF ease was
+ * tried and reverted: its ease-out tail reads as lag. Native smooth animates
+ * only where the webview supports/enables it (assorted Windows animation
+ * settings can make it instant) — accepted trade-off.
+ */
+function smoothScrollTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+/**
  * Discard + Save, in their own component ON PURPOSE: `useModifierHeld` flips
  * state on every Ctrl press/release, and as long as its consumer sat at the
  * page top level each flip re-rendered the whole editor (every open pose
@@ -147,17 +157,29 @@ export function EditorHeader({
       >
         {/* Back stays reachable while scrolled: the page's own Back link lives
             above this sticky header, so a second one fades in here (same
-            scroll-timeline as the header collapse) once that one is gone. */}
+            scroll-timeline as the header collapse) once that one is gone —
+            joined by a "Scroll Up" that jumps back to the page top, a step
+            darker so Back stays the primary action. */}
         {/* top-5 matches the avatar's mt-5, so the link tops align; left aligns
             with the title beside the avatar (208px box + gap-5). */}
-        <div className="absolute top-5 left-[228px] z-20">
+        <div className="backlink-scroll absolute top-5 left-[228px] z-20 flex items-center gap-2">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
-            className="backlink-scroll flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
+            className="flex items-center gap-1 text-sm text-muted-foreground! no-underline hover:text-foreground!"
           >
             <ArrowLeft className="size-4" /> Back
           </Link>
+          <span aria-hidden className="text-sm text-muted-foreground/60">
+            |
+          </span>
+          <button
+            type="button"
+            onClick={smoothScrollTop}
+            className="flex cursor-pointer items-center gap-1 text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          >
+            Scroll Up
+          </button>
         </div>
         {/* Top-centered, its own standalone element. The full-width wrapper
             centers it via flexbox (robust regardless of the containing block);
@@ -168,7 +190,7 @@ export function EditorHeader({
           <div className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center">
             <button
               type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              onClick={smoothScrollTop}
               title="Scroll to the run report"
               className="runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
             >
@@ -225,8 +247,10 @@ export function EditorHeader({
             {/* Override EditableTitle's hardcoded text-3xl for this header only
                 (arbitrary variant reaches its inner h1 + edit input). Matches the
                 dth-title-text scroll animation's `from` so there's no jump; the
-                -translate-y-[3px] is a small optical nudge kept from that layout. */}
-            <span className="-translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
+                -translate-y-[3px] is a small optical nudge kept from that layout.
+                `title-edit-scroll` puts the edit input on the same scroll-shrink
+                timeline as the h1 (styles.css). */}
+            <span className="title-edit-scroll -translate-y-[3px] [&_h1]:text-[3.25rem] [&_input]:text-[3.25rem]">
               <EditableTitle
                 name={character.name}
                 ariaLabel="Character name"
@@ -236,11 +260,14 @@ export function EditorHeader({
             </span>
           </div>
           <p className="title-subtitle text-muted-foreground">
-            {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-            {countPoses(character.sections)} custom ROM frames
+            {character.gender === 'female' ? '♀' : '♂'} {character.genesis} ·{' '}
+            {characterSkinning(character).toUpperCase()} · {countPoses(character.sections)} custom
+            ROM frames
           </p>
           {folderChip && (
-            <p className="mt-1.5 text-xs">
+            // A div, not a <p> — FolderMoveChip's floating panel is a div,
+            // invalid inside a paragraph (hydration warning).
+            <div className="mt-1.5 text-xs">
               {folderMove ? (
                 <FolderMoveChip
                   dir={folderChip.dir}
@@ -252,7 +279,7 @@ export function EditorHeader({
               ) : (
                 <DirPathChip dir={folderChip.dir} roots={[folderChip.root]} />
               )}
-            </p>
+            </div>
           )}
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the

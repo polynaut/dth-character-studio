@@ -600,13 +600,25 @@ export async function moveCharacterScenesFolder({
   const { projectId, character: raw, newSubdir } = moveScenesFolderInput.parse(data)
   const character = characterSchema.parse(raw)
   const root = await charactersRoot(projectId)
+  const project = await resolveProject(projectId)
   const loc = await locateCharacter(root, character.id)
   if (!character.scenePath || !loc) throw new Error('No Daz scene linked.')
   const charFolder = normalizePath(loc.folderAbs)
-  const oldDir = parentDir(character.scenePath)
-  if (!normalizePathLower(oldDir).startsWith(normalizePathLower(charFolder) + '/')) {
+  const primaryDir = parentDir(character.scenePath)
+  if (!normalizePathLower(primaryDir).startsWith(normalizePathLower(charFolder) + '/')) {
     throw new Error('The scenes folder lives outside the character folder.')
   }
+  // The moved folder is the scenes ROOT, not the primary's own directory —
+  // the primary may sit in a SUBFOLDER of the root (same derivation as the
+  // scenes field: the project's subdir when the primary lives under it, else
+  // the primary's folder).
+  const primaryRel = primaryDir.slice(charFolder.length + 1)
+  const defRel = normalizeRelFolder(project.dazSubdir)
+  const underDefault =
+    defRel !== '' &&
+    (primaryRel.toLowerCase() === defRel.toLowerCase() ||
+      primaryRel.toLowerCase().startsWith(`${defRel.toLowerCase()}/`))
+  const oldDir = `${charFolder}/${underDefault ? primaryRel.slice(0, defRel.length) : primaryRel}`
   const rel = normalizeRelFolder(newSubdir) // separators, no '..' / absolute / illegal chars
   if (!rel) throw new Error('Enter a subfolder name.')
   const newDir = `${charFolder}/${rel}`
@@ -624,7 +636,6 @@ export async function moveCharacterScenesFolder({
   }
   // Same-subfolder no-op still SAVES: a persist step must return what is
   // actually on disk (persistPatch settles the baseline to it).
-  const project = await resolveProject(projectId)
   const saved = await storage.saveCharacter(project, next, root)
   cacheCharacterLocation(root, saved.character.id, saved.location)
   return saved.character

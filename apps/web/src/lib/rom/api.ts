@@ -87,6 +87,7 @@ export {
   fileExists,
   listAssets,
   openScene,
+  renameDazScene,
   revealPath,
   relinkScene,
 } from './api/attachments'

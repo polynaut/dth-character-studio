@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, FlipHorizontal2, Plus, Trash2 } from 'lucide-react'
 
 import { Button, InfoPopup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 
 import { cellInputClass, pctToValue, valueToPct } from './cells.tsx'
 import { MorphNameCell } from './morph-name-cell.tsx'
@@ -205,13 +206,11 @@ export function JcmModsGrid({
           <span className="font-medium">Modify JCM frames</span>
         </button>
         <InfoPopup label="Modify JCM frames — more information" className="-my-1">
-          Drive <strong>additional morphs</strong> along the pre-defined JCM poses: a rule
-          watches one bone's rotation axis across the JCM ROM and sets its morphs
-          proportionally to the keyed angle — the angle range maps linearly onto the value
-          range. The <strong>direction</strong> a drive corrects is read from its angle
-          range's sign (e.g. <em>Angle to</em> −115 = the negative bend), so a rule can hold
-          drives for both bend directions at once. Example: add a custom calf-flex morph on
-          top of the shipped knee-bend poses.
+          Drive <strong>additional morphs</strong> along the pre-defined JCM poses — e.g. a
+          custom calf-flex morph on top of the shipped knee-bend poses.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#modify-jcm-frames">
+            Open guide
+          </GuideLink>
         </InfoPopup>
         {mods.length > 0 && (
           <span className="text-xs text-muted-foreground">

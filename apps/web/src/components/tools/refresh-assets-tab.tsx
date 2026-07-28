@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CircleAlert, RefreshCw, RotateCcw, TriangleAlert } from 'lucide-react'
 
 import { Button, InfoPopup, useModifierHeld } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { CHARACTER_SCHEMA_VERSION } from '@dth/rom'
 import { detectAssetVersions, refreshAllAssets } from '#/lib/rom/api.ts'
 import { RefreshDetection } from '#/components/tools/refresh-detection.tsx'
@@ -134,11 +135,11 @@ export function RefreshAssetsTab() {
         <h2 className="flex w-fit items-center gap-1 font-semibold">
           Refresh assets
           <InfoPopup label="Refresh assets — more information">
-            Re-generates the Daz scripts and PoseAsset CSVs so all generated files match the current
-            version — run this after updating the studio or switching DTH release. It always covers
-            every known (recent) project, no matter which window it runs from. Character definitions
-            aren't changed. Hold <kbd>Ctrl</kbd> to also rebuild avatar masters from their stored
-            originals (or their scenes' thumbnails), re-applying the current upscale pipeline.
+            Re-generates every project's Daz scripts and PoseAsset CSVs to the current version —
+            character definitions aren't changed.{' '}
+            <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/tools.html#tab-2--refresh-assets">
+              Open guide
+            </GuideLink>
           </InfoPopup>
         </h2>
         {/* The action sits up top so it's visible at a glance, above the table; it's
@@ -153,7 +154,9 @@ export function RefreshAssetsTab() {
               ? 'Also re-derives avatar masters from their stored originals (Ctrl)'
               : undefined
           }
-          className={`h-11 px-6 text-base ${needsRefresh ? 'refresh-pulse' : ''}`}
+          // my-3 on top of the container's space-y-3: the enlarged action gets
+          // extra air above and below so it doesn't crowd the title/table.
+          className={`my-3 h-11 px-6 text-base ${needsRefresh ? 'refresh-pulse' : ''}`}
         >
           <RefreshCw className={`size-5 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Refreshing…' : ctrlHeld ? 'Refresh + rebuild avatars' : 'Refresh assets'}

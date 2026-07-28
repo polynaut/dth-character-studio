@@ -107,6 +107,23 @@ and the button pulses orange when a refresh is due. **Ctrl+click Refresh** also
 rebuilds every character's stored **avatar** from its pristine source — needed
 once after an update that changes the avatar pipeline.
 
+The detection table compares three versions, Local (your files) vs App (what
+this studio generates):
+
+- **DTH Version** governs the Houdini **PoseAsset CSV** — the only artifact
+  tied to the DTH release. It's pinned to the release's CSV *era*, so a
+  non-breaking release update (e.g. 2.4.3 → 2.4.4) stays current; only a
+  release that changes the CSV format marks it out of date, and the CSV is
+  then regenerated.
+- **Character Schema Version** governs the **character definition** (its
+  `.json`). A newer version means the stored shape changed: the definition is
+  migrated and re-saved — and, since a migration can change generated output,
+  its Daz scripts and PoseAsset CSV are regenerated too.
+- **Script Runtime Version** governs the generated **Daz scripts** (the ROM /
+  Export `.dsa`) and the shared **DTH runtime files**. A newer version means
+  the runtime's call API changed, so the runtime files are reinstalled and
+  every character's scripts regenerated.
+
 <p align="center">
   <img width="900" alt="Refresh assets tab" src="screenshots/tools-refresh.png" />
   <br>

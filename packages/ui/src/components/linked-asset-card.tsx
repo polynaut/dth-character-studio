@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from 'react'
 
 import { cn } from '../cn.ts'
 import { Button } from '../primitives/button.tsx'
+import { EditableTitle } from './editable-title.tsx'
 
 /**
  * A linked-asset card shell — the shared anatomy of the Daz-scene and Houdini
@@ -37,11 +38,16 @@ export function LinkedAssetCard({
   removeTitle = 'Remove',
   selected,
   onSelect,
+  onRename,
   openIconOnly = false,
 }: {
   title: string
   /** Thumbnail slot — the app's Portrait or a logo, sized by the caller. */
   media: ReactNode
+  /** Inline-rename the title (the header's EditableTitle interaction: click →
+   *  input, Enter/blur commits, Escape cancels). The title then sits ABOVE the
+   *  cover button — clicking it edits instead of selecting. */
+  onRename?: (next: string) => Promise<void> | void
   /** Brand mark floated bottom-left over the media. */
   badge?: ReactNode
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
@@ -93,9 +99,25 @@ export function LinkedAssetCard({
         {badge}
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
-        <div className="mt-3 truncate text-base font-medium">{title}</div>
-        {/* Sits just under the title (not pinned to the bottom). */}
-        {extra && <div className="mt-2">{extra}</div>}
+        {/* Top-aligned with the media's upper edge (no push-down). */}
+        {onRename ? (
+          <div className="relative z-10 min-w-0">
+            <EditableTitle
+              name={title}
+              onSave={onRename}
+              ariaLabel="Scene name"
+              as="div"
+              textClass="text-base font-medium"
+            />
+          </div>
+        ) : (
+          <div className="truncate text-base font-medium">{title}</div>
+        )}
+        {/* Sits just under the title (not pinned to the bottom). z-10 lifts it
+            above the cover button, so an INTERACTIVE extra (the scene cards'
+            edit-to-move path chip) receives its own clicks — nesting it inside
+            a card <button> would be invalid HTML (see the corner buttons). */}
+        {extra && <div className="relative z-10 mt-1 w-fit">{extra}</div>}
       </div>
     </>
   )
@@ -104,29 +126,31 @@ export function LinkedAssetCard({
     // `group` (the caller's `group-hover:` accentClass) live on the wrapper, so
     // the corner overlay button below accents on card hover too.
     <div className={cn('group group/card relative', width)}>
-      {inertBody ? (
-        // Inert body — no title tooltip (the name is already the heading) and no
-        // click; opening is reachable only through the corner button below.
-        <div className={bodyClass}>{bodyInner}</div>
-      ) : (
+      {/* The body is ALWAYS a plain div — select/open live on the transparent
+          cover button below, so interactive content inside the body (the extra
+          slot) stays valid HTML. The selected fill + ring stay keyed off this
+          element's data-selected (the card utility's CSS). */}
+      <div className={bodyClass} data-selected={showCheck ? 'true' : undefined}>
+        {bodyInner}
+      </div>
+      {!inertBody && (
+        // The card-wide action as a COVER: a transparent button stretched over
+        // the body (interactive children lift above it with z-10; the corner
+        // cluster and check are later siblings, naturally on top).
         <button
           type="button"
           onClick={onSelect ?? onOpen}
           data-alt-reveal=""
-          // The selected fill + ring live on the card utility, keyed off this
-          // attribute (so the whole appearance stays themeable in CSS).
-          data-selected={showCheck ? 'true' : undefined}
           // Selectable mode is a toggle button — the ring alone is invisible to
           // assistive tech, so the selection state must also be aria-pressed.
           aria-pressed={onSelect ? (selected ?? false) : undefined}
+          aria-label={title}
           // Selectable body: no tooltip — the name is already the heading, and the
           // body selects (it doesn't open, so `openTitle` would mislead). Only the
           // whole-card-opens default carries the "Open…" tooltip on the body.
           title={onSelect ? undefined : openTitle}
-          className={bodyClass}
-        >
-          {bodyInner}
-        </button>
+          className="absolute inset-0 rounded-lg"
+        />
       )}
 
       {/* Left accent bar — painted over the card's left edge (after the button so
@@ -163,7 +187,12 @@ export function LinkedAssetCard({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="group/del pointer-events-auto opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100"
+            // The adornment recipe (the chip pencil's style, size aside):
+            // ghost at rest, solid #333 + white/20 edge + shadow on hover —
+            // the ghost accent tint muddied on the tinted card surfaces. The
+            // dark: pair is required — ghost's own dark:hover:bg-accent/50
+            // would win the cascade.
+            className="group/del pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
             title={removeTitle}
             aria-label={removeTitle}
             onClick={onRemove}
@@ -184,7 +213,7 @@ export function LinkedAssetCard({
             title={openTitle}
             aria-label={openTitle}
             onClick={onOpen}
-            className="pointer-events-auto"
+            className="pointer-events-auto border border-transparent hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
           >
             <CornerIcon
               className={cn('size-3.5 text-muted-foreground transition-colors', accentClass)}

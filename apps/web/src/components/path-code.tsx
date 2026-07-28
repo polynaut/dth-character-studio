@@ -26,6 +26,13 @@ export function pathChipClass(variant: 'default' | 'secondary' = 'default'): str
     : 'rounded bg-muted px-1.5 py-0.5 text-foreground'
 }
 
+/** The TALL chip variant, for a chip sitting beside h-9 buttons: min-h (not a
+ *  fixed h-9) plus real padding, so a long path that wraps to a second line
+ *  grows the box with breathing room instead of pressing against its edges.
+ *  The paddings need `!` — the global unlayered `code` rule (styles.css) sets
+ *  `padding: 2px 6px` and beats layered utilities. */
+export const tallPathChipClass = 'flex min-h-9 items-center px-2.5! py-1.5!'
+
 export function PathCode({
   path,
   children,
@@ -82,11 +89,19 @@ export function PathCode({
       className="group/path relative inline-flex max-w-full cursor-pointer align-middle"
     >
       {onEdit && (
+        // No title tooltip (the pencil speaks for itself). A GHOST at rest —
+        // just the muted glyph — that grows a copy-hint-style box on hover
+        // (border + fill + shadow; the transparent border reserves the box so
+        // nothing shifts). FIXED size-5 (not padding-driven): the chip's code
+        // box is ~20px, and a taller button would stretch every editable chip
+        // 2px past the pencil-less ones.
         <button
           type="button"
-          title="Edit"
           aria-label="Edit path"
-          className="mr-1 inline-flex shrink-0 items-center self-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          // The hover box = EXACTLY the copy hint's (solid #333 + white/20
+          // edge, see below): one adornment family, unaffected by whatever
+          // surface the chip sits on (dark page or tinted card).
+          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-white/20 hover:bg-[#333] hover:text-foreground hover:shadow-sm"
           // The chip's own click copies — editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()
@@ -109,7 +124,10 @@ export function PathCode({
       </code>
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border bg-card p-1 shadow-sm group-hover/path:flex"
+        // Solid #333 + white/20 edge at a FIXED size-5 — the shared adornment
+        // recipe, byte-identical to the edit pencil's box (20×20), independent
+        // of the surface below.
+        className="pointer-events-none absolute -top-2 -right-2 hidden size-5 items-center justify-center rounded border border-white/20 bg-[#333] shadow-sm group-hover/path:flex"
       >
         {copied ? (
           <Check className="size-3 text-primary" />

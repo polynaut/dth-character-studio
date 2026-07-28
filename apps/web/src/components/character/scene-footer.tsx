@@ -105,11 +105,10 @@ export function SceneFooter({
         show ? 'translate-y-0' : 'pointer-events-none translate-y-full',
       )}
     >
-      {/* min-h matches the Unreal-projects dock so both docked bars line up. Here
-          footer-3d (and so the 1px top border) is on the fixed wrapper, so the
-          inner min-h is 70px (+1px border = 71px total). A `size="lg"` scene card
-          is ~54px, like the Unreal card. */}
-      <div className="flex min-h-[70px] items-center gap-3 px-6">
+      {/* min-h matches the Unreal-projects dock (80px total) so both docked
+          bars are the same height. Here footer-3d (and so the 1px top border)
+          is on the fixed wrapper, so the inner min-h is 79px. */}
+      <div className="flex min-h-[79px] items-center gap-3 px-6">
         {/* Left column: the section title with a compact "Add scene" shortcut
             stacked underneath — the same recipe as the Unreal dock's left column. */}
         <div className="mr-1 flex shrink-0 flex-col gap-1">

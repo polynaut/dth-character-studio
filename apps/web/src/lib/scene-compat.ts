@@ -51,6 +51,16 @@ export interface SceneCheckRow {
   state: SceneCheckState
   /** What the check demands and why — shown as the row's tooltip when it FAILS. */
   why: string
+  /** A failed HARD check can't be escaped by the "Add/Create anyway" switch —
+   *  the confirm stays blocked (e.g. the scene already belongs to a character). */
+  hard?: boolean
+  /** ONE short sentence shown INSTEAD of "label — value" when the row fails
+   *  (the two-part split read as disjoint fragments). */
+  problem?: string
+  /** The owning character of an "already linked" fail — the validation table
+   *  links its name straight to that character's page. */
+  ownerId?: string
+  ownerName?: string
 }
 
 const GEOGRAFT_LABELS = { gp: 'Golden Palace', dk: 'Dicktator' } as const
@@ -164,11 +174,13 @@ function generationRow(
         : detected.genesis !== character.genesis
           ? {
               value: `${detected.genesis}, but the character is ${character.genesis}`,
+              problem: `The scene is ${detected.genesis}, but the character is ${character.genesis}.`,
               state: 'fail' as const,
             }
           : detected.gender && detected.gender !== character.gender
             ? {
                 value: `${detected.genesis} ${detected.gender}, but the character is ${character.gender}`,
+                problem: `The scene's figure is ${detected.genesis} ${detected.gender}, but the character is ${character.gender}.`,
                 state: 'fail' as const,
               }
             : { value: detected.genesis, state: 'ok' as const }),
@@ -190,8 +202,16 @@ function figuresRow(scan: SceneWearables | null): SceneCheckRow {
       : count === 1
         ? { value: '', state: 'ok' as const }
         : count === 0
-          ? { value: 'no Genesis figure found', state: 'fail' as const }
-          : { value: `${count} characters`, state: 'fail' as const }),
+          ? {
+              value: 'no Genesis figure found',
+              problem: 'No Genesis figure found in the scene.',
+              state: 'fail' as const,
+            }
+          : {
+              value: `${count} characters`,
+              problem: `The scene holds ${count} characters — it must hold exactly one.`,
+              state: 'fail' as const,
+            }),
   }
 }
 
@@ -210,7 +230,11 @@ function timelineRow(scan: SceneWearables | null): SceneCheckRow {
       ? { value: '', state: 'unchecked' as const }
       : scan.animationFrames <= 1
         ? { value: '', state: 'ok' as const }
-        : { value: `${scan.animationFrames} frames of animation`, state: 'fail' as const }),
+        : {
+            value: `${scan.animationFrames} frames of animation`,
+            problem: `The scene carries ${scan.animationFrames} frames of animation — the generated ROM needs an empty timeline.`,
+            state: 'fail' as const,
+          }),
   }
 }
 
@@ -244,6 +268,7 @@ function geograftRow(
           ? { value: geograftName(mine), state: 'ok' as const }
           : {
               value: `${geograftName(mine)}, but the primary scene has ${geograftName(reference)}`,
+              problem: `The scene ${mine.size > 0 ? `carries ${geograftName(mine)}` : 'has no GP/DK geograft'}, but the primary scene has ${geograftName(reference)}.`,
               state: 'fail' as const,
             }),
   }
@@ -279,4 +304,63 @@ export function sceneCreateRows(scan: SceneWearables | null): Array<SceneCheckRo
  *  (behind the "Add/Create anyway" escape). `unchecked` rows never block. */
 export function sceneCompatFailed(rows: Array<SceneCheckRow>): boolean {
   return rows.some((row) => row.state === 'fail')
+}
+
+/** A failed HARD check — blocks the confirm with NO escape (the "anyway"
+ *  switch doesn't apply; the validation table hides it). */
+export function sceneCompatHardFailed(rows: Array<SceneCheckRow>): boolean {
+  return rows.some((row) => row.hard && row.state === 'fail')
+}
+
+/** One linked scene file → the character that owns it. */
+export interface LinkedSceneOwner {
+  path: string
+  character: string
+  characterId: string
+}
+
+/** Every scene the given characters link (primary + extras), each mapped to its
+ *  owning character — the input to {@link sceneNotLinkedRow}. */
+export function charactersLinkedScenes(
+  characters: Array<Pick<Character, 'id' | 'name' | 'scenePath' | 'extraScenes'>>,
+): Array<LinkedSceneOwner> {
+  return characters.flatMap((c) =>
+    [c.scenePath, ...c.extraScenes]
+      .filter(Boolean)
+      .map((path) => ({ path, character: c.name, characterId: c.id })),
+  )
+}
+
+/** The picked scene must not already belong to a character (this project's
+ *  primaries + extras — including the target character itself in the add flow).
+ *  A hit is a HARD fail with no "anyway" escape: one scene file backing two
+ *  characters would have their generated ROMs overwrite each other. `owners`
+ *  null = the character list is still loading. */
+export function sceneNotLinkedRow(
+  scenePath: string,
+  owners: Array<LinkedSceneOwner> | null,
+): SceneCheckRow {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const hit = owners?.find((o) => norm(o.path) === norm(scenePath))
+  return {
+    key: 'notLinked',
+    label: 'Not already linked',
+    hard: true,
+    why:
+      'A scene file belongs to at most ONE character — its generated ROM script and ' +
+      'timeline are per-character, so sharing the file would have two characters ' +
+      'overwrite each other. Pick a different scene, or unlink it from that ' +
+      'character first (a copy of the file is fine).',
+    ...(owners === null
+      ? { value: '', state: 'unchecked' as const }
+      : hit
+        ? {
+            value: `already linked to “${hit.character}”`,
+            problem: `This scene is already linked to “${hit.character}”.`,
+            ownerId: hit.characterId,
+            ownerName: hit.character,
+            state: 'fail' as const,
+          }
+        : { value: '', state: 'ok' as const }),
+  }
 }
