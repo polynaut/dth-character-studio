@@ -509,6 +509,44 @@
   text-align: right;
 }
 
+/* ------------------------------------------------------------- Topbar */
+
+/* Docs-style layout (à la octane.js/vitepress): brand + text nav together on
+   the LEFT (overriding the landing page's pushed-right nav), and one
+   right-aligned action cluster — search, a divider, the GitHub icon, the
+   Download CTA. Scoped to guide pages; the landing page keeps its layout. */
+.guide-body .topbar-nav {
+  margin-left: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.topbar-sep {
+  width: 1px;
+  height: 22px;
+  background: color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+.topbar-icon {
+  display: inline-flex;
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+
+.topbar-icon:hover {
+  color: var(--fg-bright);
+}
+
+.topbar-icon .gh-mark {
+  width: 20px;
+  height: 20px;
+}
+
 /* ------------------------------------------------------------- Search */
 
 /* Topbar trigger (baked into every guide page by build-guide-site.mjs);
@@ -684,15 +722,35 @@
 
 @media (max-width: 720px) {
   /* The text nav is hidden here (styles.css) — search shrinks to an icon-only
-     round button between the brand and the Download button. */
+     round button; the divider + GitHub icon go too (the footer keeps the GH
+     link), leaving brand · search · Download. Tighter padding/gaps so that
+     trio actually fits (the old topbar already clipped Download at 400px). */
   .topbar-search span,
-  .topbar-search kbd {
+  .topbar-search kbd,
+  .topbar-sep,
+  .topbar-icon {
     display: none;
   }
 
   .topbar-search {
     padding: 8px;
     border-radius: 50%;
+  }
+
+  .guide-body .topbar .container {
+    padding-inline: 16px;
+  }
+
+  .guide-body .topbar-inner,
+  .guide-body .topbar-actions {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Phone widths: the Download button stays, as its orange icon alone. */
+  .guide-body .topbar .btn-label {
+    display: none;
   }
 }
 
