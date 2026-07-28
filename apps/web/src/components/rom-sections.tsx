@@ -705,8 +705,21 @@ export const RomSections = memo(function RomSections({
                 containment doesn't create), and no ancestor up to the page scroller
                 has overflow. */}
             <div
-              className="sticky z-[5] flex items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
+              className="sticky z-[5] flex cursor-pointer items-center gap-3 rounded-t-lg bg-background px-4 py-3 select-none"
               style={{ top: 'calc(var(--sticky-header-h, 128px) + var(--override-bar-h, 0px))' }}
+              // The WHOLE header row toggles the accordion, not just the title
+              // button — except the interactive children (the accordion button
+              // handles itself, the Switch and OverrideMark do their own thing)
+              // and the summary text beside the Switch (`data-accordion-ignore`):
+              // it hugs the toggle, so a slight miss there must not flip the
+              // accordion under the pointer. The real <button> below stays the
+              // accessible control (focus, Enter/Space, aria-expanded) — this
+              // handler only enlarges the pointer target.
+              onClick={(e) => {
+                if ((e.target as Element).closest('button, [role="switch"], [data-accordion-ignore]'))
+                  return
+                setOpen((o) => ({ ...o, [section]: !isOpen }))
+              }}
             >
               {/* A real accordion BUTTON (was a click-only div): the core editing
                   surface must be focusable and Enter/Space-operable, and announce
@@ -764,7 +777,8 @@ export const RomSections = memo(function RomSections({
                   so the override mark can hug the title. ml-auto pushes it + the Switch
                   to the right edge. */}
               <span
-                className={`ml-auto text-xs ${sectionOverridden ? 'text-daz-green' : 'text-muted-foreground'}`}
+                data-accordion-ignore
+                className={`ml-auto cursor-default text-xs ${sectionOverridden ? 'text-daz-green' : 'text-muted-foreground'}`}
               >
                 {tiedToJcm
                   ? effectiveEnabled
@@ -840,11 +854,14 @@ export const RomSections = memo(function RomSections({
               // stays full (so the green title / label / toggle read active) and we dim
               // just the content here instead. A disabled section's content is READ-ONLY:
               // the native fieldset disable kills every edit control inside — fields,
-              // checkboxes, selects, add/remove buttons AND the pose drag handles (a
-              // disabled button fires no pointer events and takes no focus, so dnd-kit
-              // never starts) — and the cursor reads forbidden throughout. The enable
-              // toggle lives in the HEADER, outside this fieldset, so turning the
-              // section back on (where allowed) is always reachable. `locked` (the
+              // checkboxes, selects, add/remove buttons — and the cursor reads forbidden
+              // throughout. Disabled buttons still RECEIVE pointer events in Chromium
+              // (only click/activation is suppressed), so dnd-kit's pose drag handles
+              // would happily start a reorder from a disabled section — the explicit
+              // `[&_button]:pointer-events-none` closes that hole (the forbidden cursor
+              // survives: a pointer-events-none element takes its ancestor's cursor).
+              // The enable toggle lives in the HEADER, outside this fieldset, so turning
+              // the section back on (where allowed) is always reachable. `locked` (the
               // vestigial unarmed-override gate) behaves the same way.
               <fieldset
                 disabled={locked || !effectiveEnabled}
@@ -852,7 +869,7 @@ export const RomSections = memo(function RomSections({
                   'space-y-3 border-t px-4 py-4',
                   (locked || (!effectiveEnabled && sectionOverridden)) && 'opacity-60',
                   (locked || !effectiveEnabled) &&
-                    'cursor-not-allowed [&_*]:cursor-not-allowed',
+                    'cursor-not-allowed [&_*]:cursor-not-allowed [&_button]:pointer-events-none',
                 )}
               >
                 {modes.length > 1 && (

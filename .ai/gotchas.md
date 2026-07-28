@@ -168,6 +168,14 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Web app
 
+- **A `disabled` button still RECEIVES pointer events in Chromium** — only
+  click/activation is suppressed. So `fieldset[disabled]` does NOT stop
+  dnd-kit's `onPointerDown` drag handles: a read-only ROM section stayed
+  reorderable until the fieldset's read-only classes added
+  `[&_button]:pointer-events-none` (the forbidden cursor survives — a
+  pointer-events-none element takes its ancestor's cursor). Any future
+  pointer-listener control inside the read-only fieldset needs the same
+  treatment (`rom-sections.tsx`).
 - **`useReactTable`'s `data` must be referentially stable.** A derived rows array
   built inline in render (the override grid's merged `displayPoses`) fed the
   table a new identity every render and — once a row's content actually differed —
