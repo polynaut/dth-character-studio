@@ -1782,8 +1782,10 @@ describe('exportHairAssets — the hair pass rides the main export', () => {
   // Forward-slash paths on purpose (the normalization is covered elsewhere).
   const HAIR_SCENE = {
     scenePath: 'D:/P/Kira/daz3d/Kira.duf',
+    // A full (parsed-shape) record — `rom: {}` is required by the OUTPUT type
+    // even though zod would default it on parse.
     sceneOverrides: [
-      { scenePath: 'D:/P/Kira/daz3d/Kira.duf', hair: [{ nodeLabel: 'CHT Sevenly Hair' }] },
+      { scenePath: 'D:/P/Kira/daz3d/Kira.duf', rom: {}, hair: [{ nodeLabel: 'CHT Sevenly Hair' }] },
     ],
   }
 
