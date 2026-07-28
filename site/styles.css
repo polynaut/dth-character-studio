@@ -12,6 +12,9 @@
 }
 
 :root {
+  /* Dark-only — also switches the UA's scrollbars/form controls to their dark
+     variants (the guide pages had light scrollbars without this). */
+  color-scheme: dark;
   --bg: #232323;
   --bg-raised: #2e2e2e;
   --card: #2f2f2f;
