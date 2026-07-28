@@ -36,6 +36,8 @@ export function LinkedAssetCard({
   onOpen,
   onRemove,
   removeTitle = 'Remove',
+  onReplace,
+  replaceTitle = 'Replace',
   selected,
   onSelect,
   onRename,
@@ -69,6 +71,10 @@ export function LinkedAssetCard({
   /** When set, a hover 🗑 appears (unlink — never a file delete). */
   onRemove?: () => void
   removeTitle?: string
+  /** When set, a hover folder button appears (browse for a replacement asset)
+   *  — the primary Daz scene's swap flow uses it instead of a remove. */
+  onReplace?: () => void
+  replaceTitle?: string
   /** Selectable mode: highlights when `selected`; a card click SELECTS instead
    *  of opening — only the corner icon opens. Both optional (default = the
    *  classic whole-card-opens behavior). */
@@ -183,6 +189,19 @@ export function LinkedAssetCard({
           icon (non-selectable mode) fall through to the card button; each real
           button re-enables pointer events. */}
       <div className="pointer-events-none absolute right-2 bottom-2 flex items-center gap-0.5">
+        {onReplace && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            // Same adornment recipe as the remove button below.
+            className="group/repl pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
+            title={replaceTitle}
+            aria-label={replaceTitle}
+            onClick={onReplace}
+          >
+            <FolderOpen className="size-3.5 text-muted-foreground transition-colors group-hover/repl:text-foreground" />
+          </Button>
+        )}
         {onRemove && (
           <Button
             variant="ghost"

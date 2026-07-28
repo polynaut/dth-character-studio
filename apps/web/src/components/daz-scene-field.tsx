@@ -7,7 +7,7 @@ import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, Switch, useModifierHeld } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -54,6 +54,7 @@ function SceneCard({
   onOpen,
   onRename,
   onRemove,
+  onReplace,
   primary,
   selected,
   onSelect,
@@ -67,8 +68,11 @@ function SceneCard({
   onRename?: (next: string) => Promise<void> | void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
+  /** When set, a hover folder button browses for a REPLACEMENT scene — the
+   *  primary card's swap flow (the primary can't be unlinked, only replaced). */
+  onReplace?: () => void
   /** The character's original creation scene — gets a "primary" badge and is not
-   *  unlinkable (the caller omits onRemove). */
+   *  unlinkable (the caller omits onRemove and passes onReplace instead). */
   primary?: boolean
   /** Selectable mode (see LinkedAssetCard): card click selects, icon opens. */
   selected?: boolean
@@ -118,7 +122,7 @@ function SceneCard({
             {primary && (
               <PrimaryBadge
                 dense
-                title="The character's original scene — it can't be unlinked"
+                title="The character's primary scene — it can't be unlinked; the folder button replaces it with another scene"
               />
             )}
           </span>
@@ -134,6 +138,8 @@ function SceneCard({
       onRename={onRename}
       onRemove={onRemove}
       removeTitle="Unlink from character"
+      onReplace={onReplace}
+      replaceTitle="Replace with another Daz scene…"
       selected={selected}
       onSelect={onSelect}
     />
@@ -226,6 +232,12 @@ export function DazSceneField({
   // A scene pending the unlink confirm + whether to also delete it from disk.
   const [pendingRemove, setPendingRemove] = useState('')
   const [removeDeleteFile, setRemoveDeleteFile] = useState(false)
+  // The Add-scene dialog machinery doubles as the primary's REPLACE flow: same
+  // validation, same copy-vs-link decision — but the confirm swaps `scenePath`
+  // instead of appending an extra, and offers deleting the OLD primary's file
+  // (only when it is an in-folder copy; a linked-in-place original is kept).
+  const [replaceMode, setReplaceMode] = useState(false)
+  const [replaceDeleteOld, setReplaceDeleteOld] = useState(false)
   // Guards onOpen against a double-click launching Daz twice (a ref, so it takes
   // effect synchronously within the same tick — a state flag would lag a render).
   const openingRef = useRef(false)
@@ -358,12 +370,16 @@ export function DazSceneField({
   // Open the add dialog for a picked/dropped scene and kick off its validation
   // reads. The dialog ALWAYS opens now — an in-folder scene just skips the copy
   // controls — so the compatibility checks are seen before anything links.
-  function startAdd(picked: string) {
+  function startAdd(picked: string, replace = false) {
     setAddSubfolder('')
     setDeleteOriginal(false)
     setForceAdd(false)
     setAddScan(null)
     setAddOwners(null)
+    setReplaceMode(replace)
+    // Default to cleaning up an in-folder old primary (it is "ours" — a copy);
+    // a linked-in-place primary is the user's original and never deletable.
+    setReplaceDeleteOld(replace && insideCharFolder(character.scenePath))
     setPendingAdd(picked)
     const scanId = (addScanId.current += 1)
     const primary = character.scenePath
@@ -396,6 +412,95 @@ export function DazSceneField({
     const picked = await pickDufPath('Select another Daz scene (.duf)')
     if (!picked) return
     startAdd(picked)
+  }
+
+  async function onReplacePick() {
+    const picked = await pickDufPath('Select the NEW primary Daz scene (.duf)')
+    if (!picked) return
+    startAdd(picked, true)
+  }
+
+  /** Swap the primary for `scene` — the Add flow's copy/link mechanics, but the
+   *  patch REPLACES `scenePath` (extras stay), the new primary re-derives the
+   *  GEN section like a relink (gender stays baked), the persist runs through
+   *  relinkScene so the avatar follows, and the OLD primary's files go when the
+   *  user kept "Delete the old scene file" on (in-folder copies only). */
+  async function applyReplace(scene: string, copyInto: boolean) {
+    const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
+    const oldPrimary = character.scenePath
+    // Same up-front duplicate refusal as applyAdd — including the old primary
+    // itself: a same-named copy would overwrite the old file, and the delete
+    // below would then remove the just-copied replacement.
+    const dest = copyInto ? [charFolder, destSubfolder, sceneName].filter(Boolean).join('/') : scene
+    if (isAlreadyLinked(dest)) {
+      toast.error(`“${sceneName}” is already linked to this character.`)
+      return
+    }
+    setBusy(true)
+    setError('')
+    const saved = await persistPatch(
+      async () => {
+        const finalScene = copyInto
+          ? await copyDazScene({
+              data: {
+                projectId,
+                characterId: character.id,
+                scenePath: scene,
+                subfolder: destSubfolder,
+                deleteOriginal,
+              },
+            })
+          : scene
+        const patch: Partial<Character> = {
+          scenePath: finalScene,
+          extraScenes: extrasWithoutPrimary(character.extraScenes, finalScene),
+        }
+        // The NEW primary decides the GEN section — the same rule as a relink
+        // (`primarySceneDerivation`); gender stays baked, like every non-first
+        // link. Unreadable scene → keep the stored values.
+        const scan = await sceneWearables({ data: { scenePath: finalScene } })
+        const derived = primarySceneDerivation(scan, character)
+        if (derived.sections) {
+          patch.sections = derived.sections
+          const genEnabled = derived.sections.GEN.enabled
+          if (genEnabled !== character.sections.GEN.enabled) {
+            toast.info(
+              genEnabled
+                ? 'Genitalia section enabled — the scene contains a GP/DK geograft.'
+                : 'Genitalia section disabled — no GP/DK geograft in the scene.',
+            )
+          }
+        }
+        return patch
+      },
+      {
+        toast: 'Replaced the primary Daz scene',
+        // relinkScene persists AND re-derives the avatar from the new primary.
+        persist: (updated) =>
+          relinkScene({ data: { projectId, character: updated, scenePath: updated.scenePath } }),
+      },
+    )
+    if (saved) {
+      setPendingAdd('')
+      // Persist FIRST, delete after (the remove flow's order) — a failed save
+      // must never leave the character pointing at already-deleted files.
+      if (replaceDeleteOld && oldPrimary && insideCharFolder(oldPrimary)) {
+        try {
+          const noDuf = oldPrimary.replace(/\.duf$/i, '')
+          await deleteFiles({
+            data: {
+              paths: [oldPrimary, `${oldPrimary}.png`, `${oldPrimary}.tip.png`, `${noDuf}.tip.png`],
+            },
+          })
+        } catch (e) {
+          toast.warning(
+            `Replaced, but couldn't delete the old scene files: ${e instanceof Error ? e.message : String(e)}`,
+          )
+        }
+      }
+    }
+    setBusy(false)
   }
 
   async function applyAdd(scene: string, copyInto: boolean) {
@@ -634,7 +739,7 @@ export function DazSceneField({
       loading={addChecking}
       force={forceAdd}
       onForceChange={setForceAdd}
-      forceLabel="Add anyway — a failed check usually means the scene's ROM won't match"
+      forceLabel={`${replaceMode ? 'Replace' : 'Add'} anyway — a failed check usually means the scene's ROM won't match`}
       projectId={projectId}
       // A scene already linked to THIS character gets no owner link — it would
       // just point at the page the dialog is open on.
@@ -645,7 +750,22 @@ export function DazSceneField({
     ? 'Checking the scene…'
     : addHardBlocked
       ? 'This scene already belongs to a character — pick a different scene'
-      : 'A validation check failed — see the table above (or flip “Add anyway”)'
+      : `A validation check failed — see the table above (or flip “${replaceMode ? 'Replace' : 'Add'} anyway”)`
+  // The replace flow's old-file decision, slotted into both dialog variants: an
+  // in-folder old primary is "ours" (a copy) and defaults to cleanup; a
+  // linked-in-place one is the user's original and is only ever unlinked.
+  const replaceOldBlock = replaceMode ? (
+    insideCharFolder(character.scenePath) ? (
+      <label className="flex w-fit items-center gap-2 text-sm">
+        <Switch checked={replaceDeleteOld} onCheckedChange={setReplaceDeleteOld} disabled={busy} />
+        Delete the old primary scene file
+      </label>
+    ) : (
+      <p className="text-xs text-muted-foreground">
+        The old primary is linked in place — your original file is kept.
+      </p>
+    )
+  ) : null
 
   // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
   // folder is dimmed — we're already inside the character here, so only the
@@ -892,6 +1012,7 @@ export function DazSceneField({
                       ? (next) => renameLinkedScene(character.scenePath, next)
                       : undefined
                   }
+                  onReplace={busy ? undefined : () => void onReplacePick()}
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
@@ -998,7 +1119,9 @@ export function DazSceneField({
           <Modal
             open
             onClose={() => setPendingAdd('')}
-            title="Add Daz scene to the character?"
+            title={
+              replaceMode ? 'Replace the primary Daz scene?' : 'Add Daz scene to the character?'
+            }
             dismissible={!busy}
             className="max-w-3xl"
           >
@@ -1007,6 +1130,7 @@ export function DazSceneField({
               <PathCode path={displayPath(pendingAdd)} className={tallPathChipClass} />
             </div>
             {addValidation}
+            {replaceOldBlock}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" className="mr-auto" disabled={busy} onClick={() => setPendingAdd('')}>
@@ -1015,15 +1139,25 @@ export function DazSceneField({
               <Button
                 disabled={busy || addBlocked}
                 title={addBlocked ? addBlockedTitle : undefined}
-                onClick={() => void applyAdd(pendingAdd, false)}
+                onClick={() =>
+                  void (replaceMode ? applyReplace : applyAdd)(pendingAdd, false)
+                }
               >
-                {busy ? 'Adding…' : 'Add scene'}
+                {busy
+                  ? replaceMode
+                    ? 'Replacing…'
+                    : 'Adding…'
+                  : replaceMode
+                    ? 'Replace scene'
+                    : 'Add scene'}
               </Button>
             </div>
           </Modal>
         ) : (
           <SceneCopyDialog
-            title="Add Daz scene to the character?"
+            title={
+              replaceMode ? 'Replace the primary Daz scene?' : 'Add Daz scene to the character?'
+            }
             description="The selected scene lives outside the character folder. Copy it into the character folder?"
             className="max-w-3xl"
             filePath={pendingAdd}
@@ -1034,12 +1168,13 @@ export function DazSceneField({
             onDeleteOriginalChange={setDeleteOriginal}
             busy={busy}
             error={error}
-            copyLabel="Copy & add"
+            copyLabel={replaceMode ? 'Copy & replace' : 'Copy & add'}
             validation={addValidation}
+            extra={replaceOldBlock}
             confirmDisabled={addBlocked}
             confirmDisabledTitle={addBlockedTitle}
-            onCopy={() => void applyAdd(pendingAdd, true)}
-            onLink={() => void applyAdd(pendingAdd, false)}
+            onCopy={() => void (replaceMode ? applyReplace : applyAdd)(pendingAdd, true)}
+            onLink={() => void (replaceMode ? applyReplace : applyAdd)(pendingAdd, false)}
             onClose={() => setPendingAdd('')}
           />
         ))}

@@ -33,6 +33,7 @@ export function SceneCopyDialog({
   onLink,
   onClose,
   className,
+  extra,
 }: {
   title: string
   description: ReactNode
@@ -61,6 +62,9 @@ export function SceneCopyDialog({
   onClose: () => void
   /** Extra classes for the modal card (e.g. a wider max width). */
   className?: string
+  /** Extra block after the delete-original row — the replace-primary flow
+   *  slots its "Delete the old primary scene file" decision here. */
+  extra?: ReactNode
 }) {
   return (
     <Modal open onClose={onClose} title={title} dismissible={!busy} className={className}>
@@ -92,6 +96,7 @@ export function SceneCopyDialog({
           <Switch checked={deleteOriginal} onCheckedChange={onDeleteOriginalChange} />
           <span className="text-sm">Delete original after copying</span>
         </div>
+        {extra}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
