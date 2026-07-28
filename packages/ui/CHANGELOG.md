@@ -1,5 +1,11 @@
 # @dth/ui
 
+## 0.49.0
+
+### Patch Changes
+
+- [#568](https://github.com/polynaut/dth-character-studio/pull/568) [`6244016`](https://github.com/polynaut/dth-character-studio/commit/6244016df502ef936282a440caa06c4ac238e5e3) Thanks [@polynaut](https://github.com/polynaut)! - Clicking the app window to bring it back to the front no longer closes an open dialog or side panel when the click lands on the backdrop — the re-focusing click only focuses; the next click behaves normally.
+
 ## 0.48.3
 
 ## 0.48.2

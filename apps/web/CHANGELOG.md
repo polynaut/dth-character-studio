@@ -1,5 +1,19 @@
 # @dth/web
 
+## 0.49.0
+
+### Minor Changes
+
+- [#570](https://github.com/polynaut/dth-character-studio/pull/570) [`505f7dd`](https://github.com/polynaut/dth-character-studio/commit/505f7dd8b65d33db3b7e9d593f18e3cabd621732) Thanks [@polynaut](https://github.com/polynaut)! - Create a character **without a Daz scene**: the create panel's "Create without scene" sets up the character folder (scenes subfolder included) so you can save your new scene into it straight from Daz Studio. Until the primary scene is linked, the character page is locked — only the Daz scenes panel (showing the exact folder to save into), Notes and Delete stay live. The first link then derives Gender, Genesis, the Genitalia section and the pre-selected hair from the scene, exactly like a scene-ful create, and unlocks the editor in place.
+
+### Patch Changes
+
+- [#567](https://github.com/polynaut/dth-character-studio/pull/567) [`79179c6`](https://github.com/polynaut/dth-character-studio/commit/79179c6a32eb8312eeafdbb5bafb3391fb9801fd) Thanks [@polynaut](https://github.com/polynaut)! - Unlinking an Unreal project now pauses on a confirm dialog (same recipe as removing a Daz scene), and the docs-site lightbox fits the viewport on phones — capped to the screen width with a margin instead of overflowing into a sideways scroll.
+
+- Updated dependencies [[`6244016`](https://github.com/polynaut/dth-character-studio/commit/6244016df502ef936282a440caa06c4ac238e5e3)]:
+  - @dth/ui@0.49.0
+  - @dth/rom@0.49.0
+
 ## 0.48.3
 
 ### Patch Changes
