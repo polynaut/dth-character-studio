@@ -805,7 +805,7 @@ export const RomSections = memo(function RomSections({
                       ? // Scene-gated: the on/off state follows the primary scene's
                         // geograft on every scene — only the content is editable.
                         overrideData
-                        ? "Follows the primary scene's GP/DK geograft — the on/off state applies to every scene (the content can still be overridden per scene)"
+                        ? 'Every scene must contain the same geograft (GP/DK) as the primary scene — the content can still be overridden per scene'
                         : 'Enabled automatically when the primary Daz scene contains a Golden Palace / Dicktator geograft'
                       : overrideData
                         ? // On a non-primary scene the toggle is a per-scene override —
