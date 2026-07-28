@@ -93,7 +93,8 @@ export function LinkedAssetCard({
         {badge}
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
-        <div className="mt-3 truncate text-base font-medium">{title}</div>
+        {/* Top-aligned with the media's upper edge (no push-down). */}
+        <div className="truncate text-base font-medium">{title}</div>
         {/* Sits just under the title (not pinned to the bottom). z-10 lifts it
             above the cover button, so an INTERACTIVE extra (the scene cards'
             edit-to-move path chip) receives its own clicks — nesting it inside

@@ -88,17 +88,19 @@ function SceneCard({
       }
       extra={
         primary || pathChip ? (
-          // The chip is interactive (copy / Alt-reveal / edit-to-move) — the
-          // card's extra row sits ABOVE the cover button (LinkedAssetCard),
-          // so its clicks are its own and never select/open the card.
-          <span className="flex flex-wrap items-center gap-2">
+          // Stacked rows under the title: the path chip always second, the
+          // PRIMARY label alone on the third. The chip is interactive (copy /
+          // Alt-reveal / edit-to-move) — the card's extra block sits ABOVE the
+          // cover button (LinkedAssetCard), so its clicks are its own and
+          // never select/open the card.
+          <span className="flex flex-col items-start gap-1.5">
+            {pathChip}
             {primary && (
               <PrimaryBadge
                 dense
                 title="The character's original scene — it can't be unlinked"
               />
             )}
-            {pathChip}
           </span>
         ) : undefined
       }
