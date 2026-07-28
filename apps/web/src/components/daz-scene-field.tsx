@@ -582,14 +582,17 @@ export function DazSceneField({
     const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
     const scenesRootShown = sceneDirRel ? displayPath(`./${sceneDirRel}`) : ''
     const roots = [scenesRootShown, cut > 0 ? shown.slice(0, cut) : ''].filter(Boolean)
-    if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
+    // The PRIMARY scene is handled extra: its folder IS the scenes root, and
+    // the root is only movable via the section chip above the cards — its
+    // card chip stays read-only. Linked-in-place scenes are read-only too.
+    if (!inside || opts.primary)
+      return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
     // A non-primary scene under the scenes root edits only the part BEYOND it
-    // (the root shows as a fixed prefix chip; the primary's chip is where the
-    // root itself moves). An emptied input moves the scene back to the scenes
-    // root — the vacated subfolder is pruned by the move.
+    // (the root shows as a fixed prefix chip). An emptied input moves the
+    // scene back to the scenes root — the vacated subfolder is pruned by the
+    // move.
     const rootLower = sceneDirRel.toLowerCase()
     const underRoot =
-      !opts.primary &&
       sceneDirRel !== '' &&
       (rel.toLowerCase() === rootLower || rel.toLowerCase().startsWith(`${rootLower}/`))
     const beyond = underRoot ? rel.slice(sceneDirRel.length).replace(/^\//, '') : ''
@@ -603,12 +606,10 @@ export function DazSceneField({
         editLabel="Move to"
         inputWidthClass="w-36"
         onMove={(next) =>
-          opts.primary
-            ? moveScenesRoot(next)
-            : moveExtraScene(
-                scene,
-                underRoot ? [sceneDirRel, cleanSub(next)].filter(Boolean).join('/') : next,
-              )
+          moveExtraScene(
+            scene,
+            underRoot ? [sceneDirRel, cleanSub(next)].filter(Boolean).join('/') : next,
+          )
         }
         disabled={busy}
       />
