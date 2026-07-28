@@ -205,27 +205,27 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         </InfoPopup>
       </span>
     ),
-    cell: ({ getValue, row, table }) =>
-      row.original.morphs.length > 1 ? (
-        <span className="px-2 text-sm text-muted-foreground italic">
-          {row.original.morphs.length} morphs combined
-        </span>
-      ) : (
+    cell: ({ getValue, row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      if (row.original.morphs.length > 1)
+        return (
+          <span className="px-2 text-sm text-muted-foreground italic">
+            {row.original.morphs.length} morphs combined
+          </span>
+        )
+      // While EXPANDED, the single morph edits in the panel below — rendering
+      // the same input twice would need the two kept in sync live.
+      if (meta.expandedIds.has(row.original.id)) return null
+      return (
         <MorphNameCell
           value={getValue()}
           placeholder="body_bs_BodyTone"
-          onCommit={(prop) =>
-            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, { prop })
-          }
+          onCommit={(prop) => meta.updateMorphAt(row.index, 0, { prop })}
           // Picking from the index also selects the node the morph lives on.
-          onPick={(e) =>
-            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, {
-              prop: e.name,
-              node: e.node,
-            })
-          }
+          onPick={(e) => meta.updateMorphAt(row.index, 0, { prop: e.name, node: e.node })}
         />
-      ),
+      )
+    },
   }),
   columnHelper.accessor((pose) => pose.morphs[0]?.value ?? 1, {
     id: 'value',
@@ -233,15 +233,18 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
     // gutter) so the title sits flush over the numbers instead of floating at
     // the column's left edge.
     header: () => <span className="block w-20 pr-5 text-right">Value</span>,
-    cell: ({ getValue, row, table }) =>
-      row.original.morphs.length > 1 ? null : (
+    cell: ({ getValue, row, table }) => {
+      const meta = table.options.meta as PoseTableMeta
+      // Multi-morph rows edit values in the expansion; a single morph does too
+      // WHILE expanded (same one-input-at-a-time rule as Parameter name).
+      if (row.original.morphs.length > 1 || meta.expandedIds.has(row.original.id)) return null
+      return (
         <NumberCell
           value={getValue()}
-          onCommit={(value) =>
-            (table.options.meta as PoseTableMeta).updateMorphAt(row.index, 0, { value })
-          }
+          onCommit={(value) => meta.updateMorphAt(row.index, 0, { value })}
         />
-      ),
+      )
+    },
   }),
   columnHelper.accessor('boneScaleRef', {
     id: 'boneScaleRef',
