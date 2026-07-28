@@ -373,13 +373,6 @@
   opacity: 1;
 }
 
-/* The GitHub button the build injects after the intro on the guide's landing
-   page (build-guide-site.mjs, GH_BUTTON). */
-.guide-content .btn-gh {
-  margin-top: 18px;
-  color: var(--fg-bright);
-}
-
 .guide-content details[open] summary {
   border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
   /* Docks underneath the stuck chapter title (h2 box ≈ 84px tall) while the
