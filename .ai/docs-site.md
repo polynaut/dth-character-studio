@@ -66,3 +66,19 @@ runtime dependency:
   after such a split silently dropped every page's h1 entry. The extractor now
   keeps all chunks and lets the heading regex reject non-heading ones; the
   per-page ≥1-entry guard exists precisely to catch this class of drift.
+
+## Anchor landing & image layout shift
+
+Deep links (`page.html#section` — hand-shared or from search) used to land
+"randomly": the browser scrolls before the big screenshots load, then each
+finished image pushes the target down. Two-part fix, keep both halves intact:
+
+- **Build time**: `reserveImageSpace` in `build-guide-site.mjs` stamps every
+  local `<img>` (screenshots/clips/gifs) with `style="aspect-ratio: W / H"`,
+  reading dimensions straight from the file headers (PNG IHDR, GIF logical
+  screen, WebP VP8X/VP8/VP8L) — no image library. Boxes get their height at
+  first paint, so the native anchor scroll is already exact.
+- **Load time**: `revealHashTarget` in `site/guide.js` re-scrolls the visited
+  hash after `load` (and opens a targeted accordion) — needed because a few
+  guide images are EXTERNAL (GitHub user-attachments URLs) and can't be
+  measured at build time.

@@ -343,6 +343,45 @@ function stripMdFooterNav(md) {
   return lines.join('\n')
 }
 
+// ── Image space reservation ──────────────────────────────────────────────────
+// Anchor navigation (#section links, search results) scrolls BEFORE the big
+// screenshots have loaded — without known dimensions every finished image then
+// pushes the target further down, and the visitor lands somewhere random.
+// Local images' sizes are knowable at build time: stamp each with an
+// aspect-ratio style so its box height is reserved from first paint and the
+// native anchor scroll lands exactly. (External images can't be measured here —
+// guide.js re-anchors once more on `load` for pages carrying those.)
+
+/** Pixel dimensions from the file header — PNG (IHDR), GIF (logical screen),
+ *  WebP (VP8X extended / VP8 lossy / VP8L lossless). Null when unrecognized. */
+function imageDims(file) {
+  const buf = readFileSync(file)
+  if (/\.png$/i.test(file)) return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
+  if (/\.gif$/i.test(file)) return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) }
+  if (/\.webp$/i.test(file)) {
+    const fourCC = buf.toString('ascii', 12, 16)
+    if (fourCC === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) }
+    if (fourCC === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
+    if (fourCC === 'VP8L') {
+      const bits = buf.readUInt32LE(21)
+      return { w: 1 + (bits & 0x3fff), h: 1 + ((bits >> 14) & 0x3fff) }
+    }
+  }
+  return null
+}
+
+/** Stamp local `<img>` tags (screenshots/clips/gifs — the shipped assets) with
+ *  their natural aspect ratio. The attrs stay untouched: CSS already governs
+ *  display width, the ratio just gives the box its height before load. */
+const reserveImageSpace = (html) =>
+  html.replace(/<img\b[^>]*?>/g, (tag) => {
+    const src = /\bsrc="((?:screenshots|clips|gifs)\/[^"]+)"/.exec(tag)
+    if (!src || /\bstyle="/.test(tag)) return tag
+    const dims = imageDims(join(SRC, decodeURIComponent(src[1])))
+    if (!dims) return tag
+    return tag.replace(/^<img\b/, `<img style="aspect-ratio: ${dims.w} / ${dims.h}"`)
+  })
+
 // ── Search index ─────────────────────────────────────────────────────────────
 // The guide's client-side search (guide.js) runs on search-index.json: one
 // entry per heading section, cut from the SAME rendered HTML the pages ship
@@ -393,7 +432,7 @@ const searchIndex = []
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 for (const md of pages) {
-  let html = renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8')))
+  let html = reserveImageSpace(renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8'))))
   // Index before the GH-button injection — that's page chrome, not content.
   const pageEntries = indexPage(md, html)
   // Every page has at least its own H1 (titleOf enforces the "# " first line) —

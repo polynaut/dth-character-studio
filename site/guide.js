@@ -91,18 +91,24 @@ document.addEventListener('click', (e) => {
   details.scrollIntoView({ behavior: 'smooth', block: 'start' }) // rides the details' scroll-margin
 })
 
-function revealHashAccordion() {
+// Any hash target, not just accordions: local images reserve their space at
+// build time (aspect-ratio, build-guide-site.mjs), but the few EXTERNAL images
+// (GitHub user-attachments) can still shift layout while they load — this
+// re-anchors the visited hash once everything has sized. An accordion target
+// additionally gets opened.
+function revealHashTarget() {
   const id = decodeURIComponent(location.hash.slice(1))
-  const details = id ? document.getElementById(id)?.closest('details') : null
-  if (!details) return
-  details.open = true
-  details.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const target = id ? document.getElementById(id) : null
+  if (!target) return
+  const details = target.closest('details')
+  if (details) details.open = true
+  ;(details ?? target).scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
-window.addEventListener('hashchange', revealHashAccordion)
+window.addEventListener('hashchange', revealHashTarget)
 // After load, not DOMContentLoaded — images have sized by then, so the
 // scroll target doesn't drift while screenshots stream in.
-if (document.readyState === 'complete') revealHashAccordion()
-else window.addEventListener('load', revealHashAccordion)
+if (document.readyState === 'complete') revealHashTarget()
+else window.addEventListener('load', revealHashTarget)
 
 // ── Mobile: land on the new chapter's title ──────────────────────────────────
 // On a narrow viewport the sidebar stacks ABOVE the article (guide.css), so
