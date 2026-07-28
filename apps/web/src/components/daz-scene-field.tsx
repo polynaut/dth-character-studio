@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
-import { PathCode } from '#/components/path-code.tsx'
+import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
@@ -947,7 +947,7 @@ export function DazSceneField({
           >
             <div>
               <Label className="mb-1 block">Selected file</Label>
-              <PathCode path={displayPath(pendingAdd)} className="flex h-9 items-center" />
+              <PathCode path={displayPath(pendingAdd)} className={tallPathChipClass} />
             </div>
             {addValidation}
             {error && <p className="text-sm text-destructive">{error}</p>}

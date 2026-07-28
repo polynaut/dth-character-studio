@@ -3,7 +3,7 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { FolderOpen, FolderPlus, Trash2 } from 'lucide-react'
 
 import { Button, Input, SidePanel } from '@dth/ui'
-import { PathCode, pathChipClass } from '#/components/path-code.tsx'
+import { PathCode, pathChipClass, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { formatDate } from '#/components/overview-controls.tsx'
 import { createProject, fetchRecents, forgetRecent, isDirectory, openProject } from '#/lib/rom/api.ts'
@@ -230,7 +230,7 @@ function HomePage() {
             </Button>
             {path && (
               // Path chip (taller, to match the button height) for the picked folder.
-              <PathCode path={displayPath(path)} className="flex h-9 items-center" />
+              <PathCode path={displayPath(path)} className={tallPathChipClass} />
             )}
           </div>
           {path && (

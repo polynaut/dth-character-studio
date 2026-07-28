@@ -42,7 +42,7 @@ import {
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { displayPath, normalizePathLower } from '#/lib/path.ts'
-import { PathCode } from '#/components/path-code.tsx'
+import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
@@ -455,7 +455,7 @@ function ProjectCharactersPage() {
           </Button>
           {scenePath.trim() && (
             // Path chip (taller, to match the button height) for the picked scene.
-            <PathCode path={displayPath(scenePath)} className="flex h-9 items-center" />
+            <PathCode path={displayPath(scenePath)} className={tallPathChipClass} />
           )}
         </div>
 

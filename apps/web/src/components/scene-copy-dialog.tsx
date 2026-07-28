@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import { Button, Input, Label, Modal, Switch } from '@dth/ui'
 
-import { PathCode } from '#/components/path-code.tsx'
+import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { displayPath } from '#/lib/path.ts'
 
 /**
@@ -65,7 +65,7 @@ export function SceneCopyDialog({
         {filePath ? (
           <div>
             <Label className="mb-1 block">Selected file</Label>
-            <PathCode path={displayPath(filePath)} className="flex h-9 items-center" />
+            <PathCode path={displayPath(filePath)} className={tallPathChipClass} />
           </div>
         ) : null}
         {validation}

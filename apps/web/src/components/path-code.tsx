@@ -26,6 +26,13 @@ export function pathChipClass(variant: 'default' | 'secondary' = 'default'): str
     : 'rounded bg-muted px-1.5 py-0.5 text-foreground'
 }
 
+/** The TALL chip variant, for a chip sitting beside h-9 buttons: min-h (not a
+ *  fixed h-9) plus real padding, so a long path that wraps to a second line
+ *  grows the box with breathing room instead of pressing against its edges.
+ *  The paddings need `!` — the global unlayered `code` rule (styles.css) sets
+ *  `padding: 2px 6px` and beats layered utilities. */
+export const tallPathChipClass = 'flex min-h-9 items-center px-2.5! py-1.5!'
+
 export function PathCode({
   path,
   children,

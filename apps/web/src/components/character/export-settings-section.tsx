@@ -1,6 +1,6 @@
 import { FolderOpen, Trash2 } from 'lucide-react'
 
-import { PathCode } from '#/components/path-code.tsx'
+import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { Button, InfoPopup, Switch } from '@dth/ui'
 import { isDirectory } from '#/lib/rom/api.ts'
@@ -85,7 +85,7 @@ export function ExportSettingsSection({
             {/* Taller chip so it lines up with the h-9 buttons on either side. */}
             <PathCode
               path={displayPath(character.exportPath)}
-              className="flex h-9 items-center"
+              className={tallPathChipClass}
             />
             {/* Icon-only destructive button (gray border → red on hover) so Clear
                 reads as a real action next to Change… (matching that chip/button

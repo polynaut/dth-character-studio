@@ -27,7 +27,8 @@ if (typeof window !== 'undefined') {
 
 /**
  * A full-height overlay panel that slides in from the right (a "drawer"). The
- * backdrop fades in; the panel is `max-w-[50vw]` wide and scrolls its own body.
+ * backdrop fades in; the panel is `75vw` wide (capped at 1000px) and scrolls
+ * its own body.
  * Esc or a backdrop click closes it. Portaled to <body> so a CSS-contained
  * ancestor can't capture its fixed positioning.
  *
@@ -135,7 +136,7 @@ export function SidePanel({
             aria-labelledby={titleId}
             tabIndex={-1}
             className={cn(
-              'absolute inset-y-0 right-0 flex h-full w-full max-w-[50vw] flex-col border-l bg-background shadow-2xl transition-transform duration-300 ease-out outline-none',
+              'absolute inset-y-0 right-0 flex h-full w-[75vw] max-w-[1000px] flex-col border-l bg-background shadow-2xl transition-transform duration-300 ease-out outline-none',
               shown ? 'translate-x-0' : 'translate-x-full',
               className,
             )}
