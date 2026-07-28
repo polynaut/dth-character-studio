@@ -55,9 +55,11 @@ Docs-style client-side search over the whole guide — no external service, no
 runtime dependency:
 
 - **Index**: built by `build-guide-site.mjs` into `site/guide/search-index.json`
-  — one entry per heading section (`{page, title, level, id, heading, text}`),
-  cut from the same rendered HTML the pages ship with, so every entry
-  deep-links to a real anchor id. Adding a page/section needs no extra step.
+  — one entry per heading section AND per accordion (`<details>` titles are
+  anchorable section titles; folded into a parent body they were unfindable) —
+  `{page, title, level, id, heading, text}`, cut from the same rendered HTML
+  the pages ship with, so every entry deep-links to a real anchor id. Adding a
+  page/section/accordion needs no extra step.
 - **UI**: `site/guide.js` — topbar button (baked into the shell by the build
   script), Ctrl/⌘+K or `/` to open, ↑/↓ + Enter to navigate, Escape closes.
   Fetches the index once on first open. Scoring: query words AND-match;

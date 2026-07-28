@@ -12,6 +12,9 @@
 }
 
 :root {
+  /* Dark-only — also switches the UA's scrollbars/form controls to their dark
+     variants (the guide pages had light scrollbars without this). */
+  color-scheme: dark;
   --bg: #232323;
   --bg-raised: #2e2e2e;
   --card: #2f2f2f;
@@ -249,10 +252,12 @@ a:hover {
   color: var(--fg-bright);
 }
 
+/* Docs-style layout (à la octane.js): brand + text nav together on the LEFT,
+   one right-aligned action cluster (search pill, divider, GitHub icon, the
+   Download CTA) — shared by the landing page and every guide page. */
 .topbar-nav {
   display: flex;
   gap: 40px;
-  margin-left: auto;
 }
 
 .topbar-nav a {
@@ -282,6 +287,205 @@ a:hover {
   color: var(--fg-bright);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.topbar-sep {
+  width: 1px;
+  height: 22px;
+  background: color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+.topbar-icon {
+  display: inline-flex;
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+
+.topbar-icon:hover {
+  color: var(--fg-bright);
+}
+
+.topbar-icon .gh-mark {
+  width: 20px;
+  height: 20px;
+}
+
+/* ------------------------------------------------------------- Search */
+
+/* Topbar trigger; search.js (loaded by both pages) opens the modal below. */
+.topbar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 14px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-raised) 55%, transparent);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.topbar-search:hover {
+  color: var(--fg-bright);
+  border-color: var(--border);
+}
+
+.topbar-search kbd,
+.search-box kbd {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: 6px;
+  background: var(--bg);
+  font-family: var(--font);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* Inside the pill the hint chip rides along, stadium-shaped. */
+.topbar-search kbd {
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+/* Above the guide lightbox (200) — reachable via Ctrl+K while a screenshot is
+   open. */
+.guide-search {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: none;
+  padding: min(14vh, 140px) 16px 16px;
+  background: color-mix(in oklab, #000 62%, transparent);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.guide-search.open {
+  display: block;
+}
+
+.search-panel {
+  max-width: 620px;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.55);
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  color: var(--muted);
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  color: var(--fg-bright);
+  font-family: var(--font);
+  font-size: 1.05rem;
+}
+
+.search-box input::placeholder {
+  color: var(--muted);
+}
+
+/* Esc already clears the way out — the native clear ✕ would double up. */
+.search-box input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-close {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  max-height: min(56vh, 480px);
+  overflow: auto;
+}
+
+.search-results:empty {
+  padding: 0;
+}
+
+.search-results a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.search-results li.active a,
+.search-results a:hover {
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+.result-path {
+  color: var(--fg-bright);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.result-sep {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.result-excerpt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.search-results mark {
+  background: color-mix(in oklab, var(--primary) 24%, transparent);
+  color: var(--primary-soft);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.search-status {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.search-status[hidden] {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .topbar-nav {
     display: none;
@@ -289,6 +493,38 @@ a:hover {
 
   .topbar-inner {
     justify-content: space-between;
+  }
+
+  /* The text nav is gone — search shrinks to an icon-only round button; the
+     divider + GitHub icon go too (the footer keeps the GH link), leaving
+     brand · search · Download. Tighter padding/gaps so that trio actually
+     fits (the old topbar clipped Download at 400px). */
+  .topbar-search span,
+  .topbar-search kbd,
+  .topbar-sep,
+  .topbar-icon {
+    display: none;
+  }
+
+  .topbar-search {
+    padding: 8px;
+    border-radius: 50%;
+  }
+
+  .topbar .container {
+    padding-inline: 16px;
+  }
+
+  .topbar-inner,
+  .topbar-actions {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Phone widths: the Download button stays, as its orange icon alone. */
+  .topbar .btn-label {
+    display: none;
   }
 }
 
@@ -504,6 +740,13 @@ a:hover {
   border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
 }
 
+/* No divider between the hero and the first section — the teaser window
+   floating in makes its own entrance. (Not :first-of-type — the hero itself
+   is a <section>, so that would match the hero.) */
+.hero + .section {
+  border-top: 0;
+}
+
 .section h2 {
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   font-weight: 800;
@@ -515,17 +758,112 @@ a:hover {
    rides up into it. The mask keeps the upper half of the band fully opaque
    and fades out across the lower half, giving the heading a long ramp. */
 .section-teaser {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius);
   aspect-ratio: 2560 / 1130;
-  -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 50%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  /* Depth + a faint brand-colored ambience so the dark app separates from the
+     dark page. The mask also fades the glow toward the bottom — coherent with
+     the image's own fade. */
+  box-shadow:
+    0 30px 80px -24px rgb(0 0 0 / 0.6),
+    0 0 90px -24px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+/* Window titlebar (traffic dots) in the fully opaque zone — the band reads as
+   the app in a window, not background wallpaper. */
+.section-teaser::before {
+  content: '';
+  flex: none;
+  height: 38px;
+  background:
+    radial-gradient(circle 5.5px at 26px 50%, #f66057 98%, transparent),
+    radial-gradient(circle 5.5px at 48px 50%, #f4bd50 98%, transparent),
+    radial-gradient(circle 5.5px at 70px 50%, #61c454 98%, transparent),
+    linear-gradient(180deg, #383838, #2c2c2c);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+
+/* 1px ring on top of the shot, fading out with the mask like everything else. */
+.section-teaser::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .section-teaser img {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* 3D entrance + parallax: the window starts tilted back and flattens as it
+   scrolls toward mid-viewport, while the shot INSIDE drifts a touch slower
+   than the window (classic depth cue). Both are scroll-driven CSS running on
+   the compositor — no JS. The image starts pulled up 44px and gives back at
+   most 38px across the window's whole traversal, so the sliding shot can
+   never open a gap under the titlebar. Browsers without animation-timeline
+   just show the flat, static framed window. */
+@supports (animation-timeline: view()) {
+  .section-teaser {
+    transform-origin: 50% 100%;
+    view-timeline: --teaser;
+    animation: teaser-flatten linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+
+  .section-teaser img {
+    margin-top: -44px;
+    animation: teaser-parallax linear both;
+    animation-timeline: --teaser;
+    animation-range: cover 0% cover 100%;
+  }
+
+  /* The pulled-up image would otherwise paint OVER the titlebar (it comes
+     later in paint order) — keep the bar on top. */
+  .section-teaser::before {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@keyframes teaser-flatten {
+  from {
+    transform: perspective(1400px) rotateX(9deg) scale(0.97);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@keyframes teaser-parallax {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(38px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-teaser,
+  .section-teaser img {
+    animation: none;
+  }
+
+  .section-teaser img {
+    margin-top: 0;
+  }
 }
 
 /* Pull the heading up into the teaser's faded zone so title and image blend. */
@@ -535,10 +873,10 @@ a:hover {
 }
 
 /* The About teaser holds more of its shot before fading (the why teaser
-   starts its fade at 50%). */
+   starts its fade at 62%). */
 #about .section-teaser {
-  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 75%, transparent 100%);
 }
 
 .section h2 em {
