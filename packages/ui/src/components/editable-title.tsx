@@ -73,7 +73,13 @@ export function EditableTitle({
         // layout height; with py-0 the input box equals the <h1> line box exactly
         // and editing shifts nothing. -mx-2 offsets the h-padding to keep the
         // text in the same place.
-        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none focus:ring-primary"
+        // The input sizes itself to the text (field-sizing) so a long name isn't
+        // cropped at the start the moment the caret lands at its end — capped by
+        // the container (max-w-full), floored so an emptied field stays grabbable.
+        // pr-10 compensates what border-box carves out of the auto width (the
+        // horizontal padding + caret) — without it the tail still clips ~30px.
+        // Engines without field-sizing keep the old fixed width.
+        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none supports-[field-sizing:content]:w-auto supports-[field-sizing:content]:min-w-48 supports-[field-sizing:content]:pr-10 supports-[field-sizing:content]:[field-sizing:content] focus:ring-primary"
       />
     )
   }

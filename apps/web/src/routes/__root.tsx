@@ -3,6 +3,7 @@ import { useCallback, useEffect } from 'react'
 import { Outlet, createRootRoute, useNavigate } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { Check, Info, X } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
 
 import {
@@ -119,31 +120,66 @@ function RootComponent() {
   // app's toast — the kit itself has no sonner dependency.
   const onError = useCallback((message: string) => void toast.error(message), [])
 
+  // Dev-only: the smoke/screenshot harness fires demo toasts through the app's
+  // OWN sonner instance (a spec-side `import('sonner')` gets its own module
+  // copy, which the mounted <Toaster/> never sees). Never shipped.
+  if (import.meta.env.DEV) {
+    ;(window as unknown as { __dthToast?: typeof toast }).__dthToast = toast
+  }
+
   return (
     <UiConfigProvider value={{ onNavigate, onOpenExternal, onError }}>
       <ConfirmProvider>
         <Outlet />
       </ConfirmProvider>
+      {/* Dark severity toasts: app-surface card, a colored accent bar on the
+          left edge (with a soft glow of the same hue, via --glow), a solid
+          round severity icon, bold title over a muted description, and the
+          close X pinned to the RIGHT (sonner defaults it to the top-left).
+          Plain toast() (no severity) keeps a neutral edge. */}
       <Toaster
-        theme="light"
+        theme="dark"
         position="top-center"
         closeButton
-        // Light-orange toast with dark text and a dark-orange border — the app's
-        // brand orange (#fe5c01) family, kept legible on a light surface.
-        style={
-          {
-            '--normal-bg': '#ffe3cc',
-            '--normal-border': '#c2410c',
-            '--normal-text': '#2b1200',
-            '--border-radius': 'var(--radius)',
-          } as CSSProperties
-        }
+        style={{ '--border-radius': 'var(--radius)' } as CSSProperties}
+        icons={{
+          success: (
+            <span className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+              <Check className="size-4" strokeWidth={3.5} />
+            </span>
+          ),
+          warning: (
+            <span className="flex size-7 items-center justify-center rounded-full bg-amber-400 text-lg font-black text-amber-950">
+              !
+            </span>
+          ),
+          error: (
+            <span className="flex size-7 items-center justify-center rounded-full bg-red-500 text-white">
+              <X className="size-4" strokeWidth={3.5} />
+            </span>
+          ),
+          info: (
+            <span className="flex size-7 items-center justify-center rounded-full bg-sky-500 text-white">
+              <Info className="size-4" strokeWidth={3} />
+            </span>
+          ),
+        }}
         toastOptions={{
           classNames: {
-            description: '!text-[#7a4a2c]',
-            actionButton: '!bg-[#c2410c] !text-white',
-            cancelButton: '!bg-black/10 !text-[#2b1200]',
-            closeButton: '!border-[#c2410c]/40 !bg-[#ffd5b5] !text-[#2b1200] hover:!bg-[#ffc99e]',
+            toast:
+              '!items-center !gap-3 !rounded-lg !border !border-border !border-l-4 !bg-card !pr-10 !text-foreground !shadow-[0_10px_30px_rgb(0_0_0/0.45),-4px_0_14px_-6px_var(--glow,transparent)]',
+            title: '!text-[0.95rem] !font-semibold',
+            description: '!text-[0.85rem] !text-muted-foreground',
+            // No `default` key: sonner applies it to EVERY toast, so it would
+            // fight the per-type accent/glow below. Plain toast() stays neutral.
+            success: '!border-l-emerald-500 [--glow:#10b981]',
+            warning: '!border-l-amber-400 [--glow:#fbbf24]',
+            error: '!border-l-red-500 [--glow:#ef4444]',
+            info: '!border-l-sky-500 [--glow:#0ea5e9]',
+            actionButton: '!bg-primary !text-primary-foreground',
+            cancelButton: '!bg-secondary !text-secondary-foreground',
+            closeButton:
+              '!absolute !top-1/2 !right-2 !left-auto !size-7 !-translate-y-1/2 !transform-none !rounded-md !border-0 !bg-transparent !text-muted-foreground hover:!bg-accent hover:!text-foreground [&>svg]:!size-4',
           },
         }}
       />
