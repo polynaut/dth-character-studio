@@ -39,7 +39,7 @@ import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } 
 import { sceneWearables } from './generate'
 import { detectedHairLabels } from '#/lib/groom-detect.ts'
 import { primarySceneDerivation } from '#/lib/scene-compat.ts'
-import { avatarSourceName } from '../avatar-names'
+import { avatarSourceName, parseAvatarName } from '../avatar-names'
 import { assertMovable } from './move'
 import { isExternalImage } from '../image'
 
@@ -747,7 +747,15 @@ async function doSyncAvatarWithScene(
     return fields
   }
   let source = character.imageScene
-  if (source && !linked.includes(source)) return null
+  // NORMALIZED membership — an exact string compare silently killed the sync
+  // forever when the stored provenance and the scene list disagreed only on
+  // separators/case (folder moves and manual edits both produce that).
+  if (
+    source &&
+    !linked.some((scene) => normalizePathLower(scene) === normalizePathLower(source))
+  ) {
+    return null
+  }
   if (!source) {
     const avatar = await readAvatar()
     if (!avatar) return null
@@ -758,8 +766,15 @@ async function doSyncAvatarWithScene(
         break
       }
     }
-    if (!source) return null
-    return saveAvatarFields({ imageScene: source })
+    if (source) return saveAvatarFields({ imageScene: source })
+    // No linked scene's CURRENT tip matches — but a scene-snapshot avatar
+    // ('sc' kind) provably CAME from a scene once: its source tip was simply
+    // overwritten before provenance existed (Daz re-saves rewrite tips). Adopt
+    // the primary and fall through to the drift rewrite below — without this,
+    // such a character could never re-sync (the byte-match window is gone for
+    // good). An upload ('up'/legacy name) is never touched.
+    if (parseAvatarName(character.image)?.kind !== 'sc' || !character.scenePath) return null
+    source = character.scenePath
   }
   const tipPath = await findTipImage(source)
   if (!tipPath) return null
