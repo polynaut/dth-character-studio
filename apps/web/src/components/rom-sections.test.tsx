@@ -932,6 +932,38 @@ describe('Modify JCM frames (jcmMorphMods grid)', () => {
   })
 })
 
+describe('disabled section content is read-only', () => {
+  it('the body fieldset is natively disabled with a forbidden cursor; the enable toggle stays outside', () => {
+    const sections = sectionsWithMultiMorphPose()
+    sections.FBM.enabled = false
+    const { container } = render(
+      <RomSections
+        sections={sections}
+        genesis="G9"
+        gender="female"
+        skinning="dqs"
+        catalog={{ folder: '', assets: [], error: null }}
+        presetFrames={{ base: 328, gp: 104, dk: 54, phys: 43 }}
+        onChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByText('Full Body'))
+    // The fieldset disable is THE read-only mechanism: it kills every native
+    // control inside (fields, checkboxes, add/remove buttons, the dnd handle
+    // buttons) in a real browser — here we pin the attribute + the cursor.
+    const fieldset = container.querySelector('fieldset')!
+    expect(fieldset.disabled).toBe(true)
+    expect(fieldset.className).toContain('cursor-not-allowed')
+    // The enable switch must NOT be caught by it — it lives in the header.
+    expect(fieldset.querySelector('[role="switch"]')).toBeNull()
+
+    // An ENABLED section's body is not disabled.
+    fireEvent.click(screen.getByText('Joint Corrective'))
+    const fieldsets = Array.from(container.querySelectorAll('fieldset'))
+    expect(fieldsets.some((f) => !f.disabled)).toBe(true)
+  })
+})
+
 describe('Clear a custom section', () => {
   it('empties the whole custom definition, gated behind the confirm modal', () => {
     let next: RomSectionsModel | null = null
