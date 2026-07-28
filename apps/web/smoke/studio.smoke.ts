@@ -133,7 +133,8 @@ test('project window: inline rename moves the folder and regenerates the script'
 
   // Rename via the title: the heading is a real button (EditableTitle), which
   // opens an inline input; Enter commits → onRenameCharacter saves + regenerates.
-  await page.getByRole('button', { name: /Rename — Kira/ }).click()
+  // Exact: the linked scene's card carries its own "Rename — KiraDefault_G9_GP".
+  await page.getByRole('button', { name: 'Rename — Kira', exact: true }).click()
   const input = page.getByRole('textbox').first()
   await input.fill('Nova')
   await input.press('Enter')

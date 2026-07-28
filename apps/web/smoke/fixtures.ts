@@ -231,6 +231,11 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
     // CSV provenance matches the active release's era — keeps the startup
     // staleness probe from redirecting the whole window to /tools.
     generatedDthVersion: DTH_VERSION,
+    // ALWAYS linked (the scene file + tip are seeded unconditionally below): a
+    // scene-less character locks the whole editor now, which would freeze every
+    // smoke that edits ROM/identity. The sceneless state has its own spec
+    // (sceneless.smoke.ts) that strips this on purpose.
+    scenePath: P.scene,
     // `demo` (the docs screenshots) wants a realistic character — a linked
     // primary Daz scene (mandatory in the real create flow), the scene's avatar,
     // and a populated FBM ROM section (49 morphs). The smoke suite omits all of

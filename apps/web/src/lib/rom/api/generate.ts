@@ -238,6 +238,13 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     if (location) cacheCharacterLocation(lib, id, location)
   }
   if (!location || !character) throw new Error(`Character ${id} not found`)
+  // A scene-less character (created without a Daz scene; the editor is locked
+  // until the primary is linked) generates NOTHING — its artifacts would embed
+  // an empty scene. Every generation path funnels through here (save, create,
+  // Refresh assets), so this one guard keeps them all quiet.
+  if (!character.scenePath) {
+    return { outDir: location.folderAbs, files: [], scriptsDir: null, scriptsError: null }
+  }
   // Exact ROM paths from the active release's pose scan; {} when the folder is
   // unavailable — the script then falls back to DthOptions resolution. The
   // CURRENT-settings variant: another window may have switched the active DTH
@@ -647,6 +654,7 @@ async function refreshAllAssetsInner(refreshOpts: {
       schemaVersion: g.character.schemaVersion,
       runtimeVersion: runtimeVersions[i],
       generatedDthVersion: g.character.generatedDthVersion,
+      hasScene: Boolean(g.character.scenePath),
     }
     return { ...g, targets: characterStaleTargets(status, app, opts) }
   })
@@ -791,6 +799,10 @@ export interface CharacterAssetStatus {
    *  JSON's `generatedDthVersion`; '' when never generated). Staleness compares its
    *  CSV *era* (see {@link poseAssetCsvEra}), not the exact string. */
   generatedDthVersion: string
+  /** Whether a primary Daz scene is linked. A scene-less character (created
+   *  without a scene, editor locked) generates nothing, so its script/CSV can
+   *  never be stale — only its schema counts. */
+  hasScene: boolean
 }
 
 export interface AssetVersionReport {
@@ -842,8 +854,12 @@ export function characterStaleTargets(
 ): StaleTargets {
   return {
     schema: c.schemaVersion < app.schema,
-    runtime: opts.hasDazLibrary && (c.runtimeVersion === null || c.runtimeVersion < app.runtime),
+    runtime:
+      c.hasScene &&
+      opts.hasDazLibrary &&
+      (c.runtimeVersion === null || c.runtimeVersion < app.runtime),
     csv:
+      c.hasScene &&
       opts.hasDthRelease &&
       poseAssetCsvEra(c.generatedDthVersion) !== poseAssetCsvEra(app.dthRelease),
   }
@@ -902,6 +918,7 @@ export async function detectAssetVersions(): Promise<AssetVersionReport> {
     schemaVersion: g.character.schemaVersion,
     runtimeVersion: runtimeVersions[i],
     generatedDthVersion: g.character.generatedDthVersion,
+    hasScene: Boolean(g.character.scenePath),
   }))
 
   const staleCount = characters.filter((c) =>

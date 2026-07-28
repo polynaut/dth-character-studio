@@ -153,6 +153,9 @@ function seedCharacter(lib: string, folder: string, name: string): Character {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     sections,
+    // A primary scene must be linked — a scene-less character generates nothing
+    // (generateCharacterFiles short-circuits), so the sweep would never run.
+    scenePath: `${lib}/${folder}/${name}.duf`,
   })
   addDir(`${lib}/${folder}`)
   files.set(

@@ -256,7 +256,14 @@ export function useCharacterDraft(options: {
       // Refresh the loader for re-entry/navigation, but don't await it — the
       // buttons no longer depend on it, so it stays off the visible path.
       void router.invalidate()
-      notifyGenerated(`Saved “${saved.name}” — ${result.files.length} files`, result)
+      // A sceneless character generates nothing (files: []) — "0 files" would
+      // read like a failure, so the count only shows when something was written.
+      notifyGenerated(
+        result.files.length > 0
+          ? `Saved “${saved.name}” — ${result.files.length} files`
+          : `Saved “${saved.name}”`,
+        result,
+      )
     } catch (e) {
       setSaving(false)
       const message = e instanceof Error ? e.message : String(e)
