@@ -16,11 +16,19 @@ export function EditableTitle({
   onSave,
   onEditingChange,
   ariaLabel = 'Name',
+  as: As = 'h1',
+  textClass = 'text-3xl font-bold',
 }: {
   name: string
   onSave: (value: string) => Promise<void> | void
   onEditingChange?: (editing: boolean) => void
   ariaLabel?: string
+  /** Heading element for the display state — 'div' for non-heading contexts
+   *  (e.g. a card title). */
+  as?: 'h1' | 'div'
+  /** Font classes shared by the display text AND the edit input, so swapping
+   *  states never shifts layout (default = the page-title look). */
+  textClass?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
@@ -81,7 +89,7 @@ export function EditableTitle({
         // freely past it — only a %-capped input clipped, ~30px on real names).
         // Floored so an emptied field stays grabbable. Engines without
         // field-sizing keep the old fixed width.
-        className="-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 text-3xl font-bold ring-1 ring-border outline-none supports-[field-sizing:content]:w-auto supports-[field-sizing:content]:min-w-48 supports-[field-sizing:content]:max-w-[min(80vw,64rem)] supports-[field-sizing:content]:pr-10 supports-[field-sizing:content]:[field-sizing:content] focus:ring-primary"
+        className={`-mx-2 w-[26rem] max-w-full rounded-md bg-background px-2 py-0 ${textClass} ring-1 ring-border outline-none supports-[field-sizing:content]:w-auto supports-[field-sizing:content]:min-w-48 supports-[field-sizing:content]:max-w-[min(80vw,64rem)] supports-[field-sizing:content]:pr-10 supports-[field-sizing:content]:[field-sizing:content] focus:ring-primary`}
       />
     )
   }
@@ -96,7 +104,7 @@ export function EditableTitle({
       {/* A real button INSIDE the heading: role="button" on the <h1> itself
           erased the page's main heading from the accessibility tree (no
           heading-nav landmark). The button inherits the h1's font. */}
-      <h1 className="text-3xl font-bold">
+      <As className={textClass}>
         <button
           type="button"
           title="Rename"
@@ -106,7 +114,7 @@ export function EditableTitle({
         >
           {name}
         </button>
-      </h1>
+      </As>
       <span
         aria-hidden
         // Solid #333 + white/20 edge at size-5 — the app's shared adornment

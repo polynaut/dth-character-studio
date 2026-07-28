@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from 'react'
 
 import { cn } from '../cn.ts'
 import { Button } from '../primitives/button.tsx'
+import { EditableTitle } from './editable-title.tsx'
 
 /**
  * A linked-asset card shell — the shared anatomy of the Daz-scene and Houdini
@@ -37,11 +38,16 @@ export function LinkedAssetCard({
   removeTitle = 'Remove',
   selected,
   onSelect,
+  onRename,
   openIconOnly = false,
 }: {
   title: string
   /** Thumbnail slot — the app's Portrait or a logo, sized by the caller. */
   media: ReactNode
+  /** Inline-rename the title (the header's EditableTitle interaction: click →
+   *  input, Enter/blur commits, Escape cancels). The title then sits ABOVE the
+   *  cover button — clicking it edits instead of selecting. */
+  onRename?: (next: string) => Promise<void> | void
   /** Brand mark floated bottom-left over the media. */
   badge?: ReactNode
   /** Extra content pinned to the card's bottom-left (e.g. a "primary" tag). */
@@ -94,7 +100,19 @@ export function LinkedAssetCard({
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
         {/* Top-aligned with the media's upper edge (no push-down). */}
-        <div className="truncate text-base font-medium">{title}</div>
+        {onRename ? (
+          <div className="relative z-10 min-w-0">
+            <EditableTitle
+              name={title}
+              onSave={onRename}
+              ariaLabel="Scene name"
+              as="div"
+              textClass="text-base font-medium"
+            />
+          </div>
+        ) : (
+          <div className="truncate text-base font-medium">{title}</div>
+        )}
         {/* Sits just under the title (not pinned to the bottom). z-10 lifts it
             above the cover button, so an INTERACTIVE extra (the scene cards'
             edit-to-move path chip) receives its own clicks — nesting it inside

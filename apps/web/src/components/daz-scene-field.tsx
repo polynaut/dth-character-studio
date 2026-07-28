@@ -19,6 +19,7 @@ import {
   deleteFiles,
   moveCharacterScenesFolder,
   openScene,
+  renameDazScene,
   revealPath,
   relinkScene,
   sceneWearables,
@@ -40,6 +41,7 @@ function SceneCard({
   scenePath,
   name,
   onOpen,
+  onRename,
   onRemove,
   primary,
   selected,
@@ -49,6 +51,9 @@ function SceneCard({
   scenePath: string
   name: string
   onOpen: (e: React.MouseEvent) => void
+  /** Inline-rename the scene's files (in-folder scenes only — a linked-in-place
+   *  scene is the user's original, its name stays theirs). */
+  onRename?: (next: string) => Promise<void> | void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
   /** The character's original creation scene — gets a "primary" badge and is not
@@ -115,6 +120,7 @@ function SceneCard({
       barClass="bg-daz-green"
       checkClass="bg-daz-green"
       onOpen={onOpen}
+      onRename={onRename}
       onRemove={onRemove}
       removeTitle="Unlink from character"
       selected={selected}
@@ -676,28 +682,53 @@ export function DazSceneField({
           deleteOriginal: true,
         },
       })
-      const target = normalizePath(scene).toLowerCase()
-      const repoint = (p: string) => (normalizePath(p).toLowerCase() === target ? moved : p)
-      const isPrimary = normalizePath(character.scenePath).toLowerCase() === target
-      await persistPatch(
-        {
-          ...(isPrimary
-            ? {
-                scenePath: moved,
-                ...(character.imageScene && normalizePath(character.imageScene).toLowerCase() === target
-                  ? { imageScene: moved }
-                  : {}),
-              }
-            : { extraScenes: character.extraScenes.map(repoint) }),
-          sceneOverrides: character.sceneOverrides.map((o) => ({
-            ...o,
-            scenePath: repoint(o.scenePath),
-          })),
-        },
-        { toast: `Moved “${sceneName}”`, rethrow: true },
-      )
-      // Keep the selection on the moved card (its path just changed).
-      if (selectedScene === scene) onSelectScene?.(moved)
+      await repointLinkedScene(scene, moved, `Moved “${sceneName}”`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Persist a linked scene's NEW path everywhere it appears — scenePath (+
+   *  the avatar's imageScene) for the primary, extraScenes otherwise, and the
+   *  per-scene records either way. The persist regenerates the scripts, so
+   *  the generated `.dsa`/CSVs pick the new path/name up immediately. */
+  async function repointLinkedScene(scene: string, moved: string, toastMsg: string): Promise<void> {
+    const target = normalizePath(scene).toLowerCase()
+    const repoint = (p: string) => (normalizePath(p).toLowerCase() === target ? moved : p)
+    const isPrimary = normalizePath(character.scenePath).toLowerCase() === target
+    await persistPatch(
+      {
+        ...(isPrimary
+          ? {
+              scenePath: moved,
+              ...(character.imageScene && normalizePath(character.imageScene).toLowerCase() === target
+                ? { imageScene: moved }
+                : {}),
+            }
+          : { extraScenes: character.extraScenes.map(repoint) }),
+        sceneOverrides: character.sceneOverrides.map((o) => ({
+          ...o,
+          scenePath: repoint(o.scenePath),
+        })),
+      },
+      { toast: toastMsg, rethrow: true },
+    )
+    // Keep the selection on the moved/renamed card (its path just changed).
+    if (selectedScene === scene) onSelectScene?.(moved)
+  }
+
+  /** Rename a linked scene's FILES in place (`.duf` + both thumbnail
+   *  sidecars), then repoint — the card title's inline rename. */
+  async function renameLinkedScene(scene: string, nextName: string): Promise<void> {
+    const clean = nextName.trim()
+    if (!clean) return
+    const dest = `${parentDir(scene)}/${clean}.duf`
+    if (normalizePath(dest).toLowerCase() === normalizePath(scene).toLowerCase()) return
+    if (isAlreadyLinked(dest)) throw new Error(`“${clean}.duf” is already linked.`)
+    setBusy(true)
+    try {
+      const moved = await renameDazScene({ data: { scenePath: scene, newName: clean } })
+      await repointLinkedScene(scene, moved, `Renamed to “${clean}”`)
     } finally {
       setBusy(false)
     }
@@ -759,6 +790,11 @@ export function DazSceneField({
                   scenePath={character.scenePath}
                   name={character.name}
                   onOpen={(e) => void onOpen(character.scenePath, e)}
+                  onRename={
+                    insideCharFolder(character.scenePath)
+                      ? (next) => renameLinkedScene(character.scenePath, next)
+                      : undefined
+                  }
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
@@ -778,6 +814,9 @@ export function DazSceneField({
                   scenePath={scene}
                   name={character.name}
                   onOpen={(e) => void onOpen(scene, e)}
+                  onRename={
+                    insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
+                  }
                   onRemove={() => askRemove(scene)}
                   selected={selectedScene !== undefined ? selectedScene === scene : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}

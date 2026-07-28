@@ -1,4 +1,4 @@
-import { copyFile, exists, mkdir, readDir, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readDir, remove, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
@@ -88,6 +88,43 @@ async function pruneEmptyDirsUpTo(dir: string, boundary: string): Promise<void> 
     }
     current = current.slice(0, current.lastIndexOf('/'))
   }
+}
+
+const renameSceneInput = z.object({
+  /** Absolute path of the linked `.duf` to rename (stays in its folder). */
+  scenePath: z.string().min(1),
+  /** The new file name WITHOUT extension. */
+  newName: z.string().min(1),
+})
+
+/**
+ * Rename a Daz scene IN PLACE — the `.duf` plus its sidecar thumbnails
+ * (`<scene>.png`, `<scene>.tip.png` and the alternate `<base>.tip.png`) all
+ * follow the new name. Returns the renamed `.duf`'s absolute path. The caller
+ * repoints the character's paths (and its persist regenerates the scripts).
+ */
+export async function renameDazScene({ data }: { data: unknown }): Promise<string> {
+  const { scenePath, newName } = renameSceneInput.parse(data)
+  const clean = newName.trim()
+  if (!clean || /[\\/:*?"<>|]/.test(clean) || clean === '.' || clean === '..') {
+    throw new Error('Enter a plain file name (no slashes or special characters).')
+  }
+  const norm = scenePath.replaceAll('\\', '/')
+  const dir = norm.slice(0, norm.lastIndexOf('/'))
+  const newDuf = `${dir}/${clean}.duf`
+  if (newDuf.toLowerCase() === norm.toLowerCase()) return scenePath
+  if (await exists(newDuf)) throw new Error(`“${clean}.duf” already exists in that folder.`)
+  // The same sidecar family the copy handles — every one that exists follows.
+  const pairs: Array<[string, string]> = [
+    [scenePath, newDuf],
+    [`${scenePath}.png`, `${newDuf}.png`],
+    [`${scenePath}.tip.png`, `${newDuf}.tip.png`],
+    [`${sceneBase(scenePath)}.tip.png`, `${dir}/${clean}.tip.png`],
+  ]
+  for (const [src, dest] of pairs) {
+    if (await exists(src)) await rename(src, dest)
+  }
+  return newDuf
 }
 
 export async function copyDazScene({ data }: { data: unknown }): Promise<string> {
