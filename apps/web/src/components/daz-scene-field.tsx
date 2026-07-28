@@ -196,9 +196,6 @@ export function DazSceneField({
   // A scene pending the unlink confirm + whether to also delete it from disk.
   const [pendingRemove, setPendingRemove] = useState('')
   const [removeDeleteFile, setRemoveDeleteFile] = useState(false)
-  // Editing the scenes subfolder (the chip's pencil): null = not editing,
-  // otherwise the draft value relative to the character folder.
-  const [editDir, setEditDir] = useState<string | null>(null)
   // Guards onOpen against a double-click launching Daz twice (a ref, so it takes
   // effect synchronously within the same tick — a state flag would lag a render).
   const openingRef = useRef(false)
@@ -546,12 +543,19 @@ export function DazSceneField({
   const sceneDirRel = insideCharFolder(character.scenePath)
     ? sceneDirAbs.slice(charFolder.length + 1)
     : ''
-  const sceneDirChip = (
-    <DirPathChip
+  // Edit-to-move via the shared floating panel (FolderMoveChip) — same flow
+  // the primary card's chip drives; editable only for an in-folder scenes dir.
+  const sceneDirChip = sceneDirRel ? (
+    <FolderMoveChip
       dir={sceneDir}
       roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
-      onEdit={sceneDirRel && !busy ? () => setEditDir(displayPath(sceneDirRel)) : undefined}
+      editValue={displayPath(sceneDirRel)}
+      editLabel="Scenes subfolder"
+      onMove={moveScenesRoot}
+      disabled={busy}
     />
+  ) : (
+    <DirPathChip dir={sceneDir} roots={[displayPath(charFolder), displayPath(location.libraryFolder)]} />
   )
 
   /** Where a scene lives — EVERY card shows its chip: relative to the
@@ -655,19 +659,6 @@ export function DazSceneField({
     }
   }
 
-  async function onMoveScenesDir() {
-    if (editDir === null || !editDir.trim()) return
-    setError('')
-    try {
-      // The inline editor owns the error surface — a failed move/save shows
-      // next to the input (guard refusals still toast in the hook).
-      await moveScenesRoot(editDir)
-      setEditDir(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
   // Share the pick+link and unlink flows with the docked scene bar (SceneFooter):
   // it drives the SAME handlers — whose pick dialog / copy / confirm modals all
   // live in THIS field — instead of duplicating them. Reassigned every render so
@@ -713,43 +704,10 @@ export function DazSceneField({
         ) : (
           <>
             {/* Copyable path to the scenes' folder, above the cards. The chip's
-                pencil swaps it for an inline editor: the new subfolder (relative
-                to the character folder) physically moves the folder on disk and
-                repoints every linked scene. */}
-            {editDir === null ? (
-              <p className="mb-2 text-xs">{sceneDirChip}</p>
-            ) : (
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">Scenes subfolder:</span>
-                <Input
-                  value={editDir}
-                  autoFocus
-                  disabled={busy}
-                  className="h-7 w-64 font-mono text-xs"
-                  onChange={(e) => setEditDir(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void onMoveScenesDir()
-                    if (e.key === 'Escape') setEditDir(null)
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || !editDir.trim()}
-                  onClick={() => void onMoveScenesDir()}
-                >
-                  {busy ? 'Moving…' : 'Move'}
-                </Button>
-                <Button
-                  variant="ghost-destructive"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setEditDir(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
+                pencil opens the floating move editor: the new subfolder
+                (relative to the character folder) physically moves the folder
+                on disk and repoints every linked scene. */}
+            <p className="mb-2 text-xs">{sceneDirChip}</p>
             <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
               {ready ? (
                 <SceneCard
