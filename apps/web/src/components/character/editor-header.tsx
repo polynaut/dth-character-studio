@@ -14,6 +14,35 @@ import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
+ * Scroll-to-top with our own rAF animation: `scrollTo({behavior:'smooth'})` is
+ * silently INSTANT in WebView2 when Windows has animations off (reduced
+ * motion), which reads as a hard jump. Ease-out cubic, duration scaled to the
+ * distance; a wheel/touch from the user cancels it instead of fighting them.
+ */
+function smoothScrollTop() {
+  const start = window.scrollY
+  if (start === 0) return
+  const duration = Math.min(700, 300 + start / 8)
+  const t0 = performance.now()
+  let raf = 0
+  const cancel = () => cancelAnimationFrame(raf)
+  window.addEventListener('wheel', cancel, { once: true, passive: true })
+  window.addEventListener('touchstart', cancel, { once: true, passive: true })
+  const ease = (t: number) => 1 - (1 - t) ** 3
+  const step = (now: number) => {
+    const t = Math.min(1, (now - t0) / duration)
+    window.scrollTo(0, Math.round(start * (1 - ease(t))))
+    if (t < 1) {
+      raf = requestAnimationFrame(step)
+    } else {
+      window.removeEventListener('wheel', cancel)
+      window.removeEventListener('touchstart', cancel)
+    }
+  }
+  raf = requestAnimationFrame(step)
+}
+
+/**
  * Discard + Save, in their own component ON PURPOSE: `useModifierHeld` flips
  * state on every Ctrl press/release, and as long as its consumer sat at the
  * page top level each flip re-rendered the whole editor (every open pose
@@ -165,7 +194,7 @@ export function EditorHeader({
           </span>
           <button
             type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={smoothScrollTop}
             className="flex cursor-pointer items-center gap-1 text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground"
           >
             Scroll Up
@@ -180,7 +209,7 @@ export function EditorHeader({
           <div className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center">
             <button
               type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              onClick={smoothScrollTop}
               title="Scroll to the run report"
               className="runhint-scroll pointer-events-auto flex items-center gap-1.5 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/20"
             >
