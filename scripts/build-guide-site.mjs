@@ -1,5 +1,6 @@
 // Builds the getting-started guide into the Pages site: docs/guide/*.md →
-// site/guide/*.html (+ a copy of docs/guide/screenshots/).
+// site/guide/*.html (+ a copy of docs/guide/screenshots/ and the client-side
+// search's index, site/guide/search-index.json — see "Search index" below).
 //
 // docs/guide/ stays the single source of truth — same files GitHub renders,
 // same screenshot pipeline (`pnpm screenshots`), same coverage guard. This
@@ -294,6 +295,11 @@ const shell = (md, content) => `<!doctype html>
           <a href="../#features">Why?</a>
           <a href="index.html"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting started</a>
         </nav>
+        <button class="topbar-search" type="button" title="Search the guide (Ctrl+K)" aria-label="Search the guide" aria-keyshortcuts="Control+K">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Search</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <a class="btn btn-primary btn-compact" href="../">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download
@@ -333,13 +339,69 @@ function stripMdFooterNav(md) {
   return lines.join('\n')
 }
 
+// ── Search index ─────────────────────────────────────────────────────────────
+// The guide's client-side search (guide.js) runs on search-index.json: one
+// entry per heading section, cut from the SAME rendered HTML the pages ship
+// with, so every entry deep-links to an anchor id that actually exists.
+// Regenerated on every build — a new page or section needs no extra step.
+
+/** The handful of entities marked emits for text content, back to plain text
+ *  (`&amp;` last, so a literal `&amp;amp;` can't double-decode). */
+const decodeEntities = (s) =>
+  s
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
+
+const HEADING_START_RE = /^<h([1-6]) id="([^"]+)">([\s\S]*?)<a class="anchor"[\s\S]*?<\/h\1>/
+
+/** One rendered page → its search entries. A section starts at each id'd
+ *  heading (every heading gets one in renderPage) and runs to the next one;
+ *  accordion content inside a section counts as its body text. */
+function indexPage(md, html) {
+  const entries = []
+  // No .slice(1) to drop a pre-heading preamble: a zero-width split yields NO
+  // leading chunk when the html starts at a heading (which every page does —
+  // slicing here silently dropped all the h1 entries). The regex below
+  // rejects a non-heading first chunk anyway.
+  for (const chunk of html.split(/(?=<h[1-6] id=)/)) {
+    const m = HEADING_START_RE.exec(chunk)
+    if (!m) continue
+    const body = chunk
+      .slice(m[0].length)
+      // The accordion summaries' "#" anchor glyph is chrome, not content.
+      .replace(/<a class="details-anchor"[^>]*>#<\/a>/g, '')
+    entries.push({
+      page: htmlName(md),
+      title: pageTitle(md),
+      level: Number(m[1]),
+      id: m[2],
+      heading: decodeEntities(stripTags(m[3])).trim(),
+      text: decodeEntities(stripTags(body)).replace(/\s+/g, ' ').trim(),
+    })
+  }
+  return entries
+}
+
+const searchIndex = []
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 for (const md of pages) {
   let html = renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8')))
+  // Index before the GH-button injection — that's page chrome, not content.
+  const pageEntries = indexPage(md, html)
+  // Every page has at least its own H1 (titleOf enforces the "# " first line) —
+  // a page yielding nothing means indexPage no longer matches renderPage's
+  // heading markup. Fail the build rather than deploy unsearchable pages.
+  if (!pageEntries.length)
+    throw new Error(`${md}: no search entries extracted — indexPage vs renderPage markup drift`)
+  searchIndex.push(...pageEntries)
   if (md === 'README.md') html = html.replace('</p>', `</p>${GH_BUTTON}`)
   writeFileSync(join(OUT, htmlName(md)), shell(md, html))
 }
+writeFileSync(join(OUT, 'search-index.json'), JSON.stringify(searchIndex))
 cpSync(join(SRC, 'screenshots'), join(OUT, 'screenshots'), { recursive: true })
 if (existsSync(join(SRC, 'clips'))) cpSync(join(SRC, 'clips'), join(OUT, 'clips'), { recursive: true })
 if (existsSync(join(SRC, 'gifs'))) cpSync(join(SRC, 'gifs'), join(OUT, 'gifs'), { recursive: true })
@@ -359,4 +421,6 @@ if (outMissing.length)
     `built site is missing referenced assets (a copy step above is broken): ${outMissing.join(', ')}`,
   )
 
-console.log(`guide → site/guide: ${pages.length} pages + screenshots + clips + gifs`)
+console.log(
+  `guide → site/guide: ${pages.length} pages (+${searchIndex.length}-entry search index) + screenshots + clips + gifs`,
+)
