@@ -91,7 +91,7 @@ export function PathCode({
         <button
           type="button"
           aria-label="Edit path"
-          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground hover:shadow-sm"
+          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-card hover:text-foreground hover:shadow-sm"
           // The chip's own click copies — editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()

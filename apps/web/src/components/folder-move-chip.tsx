@@ -102,9 +102,10 @@ export function FolderMoveChip({
             value={draft}
             autoFocus
             disabled={busy}
-            // bg-muted: recessed against the panel's RAISED surface — the
-            // default input fill blends into it.
-            className={`h-7 ${inputWidthClass} bg-muted font-mono text-xs`}
+            // Recessed against the panel's RAISED surface. The dark: variant is
+            // required: Input's own dark:bg-input/50 is variant-scoped and
+            // would override a bare bg-muted in the cascade.
+            className={`h-7 ${inputWidthClass} bg-muted font-mono text-xs dark:bg-muted`}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void move()
