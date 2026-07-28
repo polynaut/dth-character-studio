@@ -260,8 +260,9 @@ export function EditorHeader({
             </span>
           </div>
           <p className="title-subtitle text-muted-foreground">
-            {character.genesis} · {characterSkinning(character).toUpperCase()} ·{' '}
-            {countPoses(character.sections)} custom ROM frames
+            {character.gender === 'female' ? '♀' : '♂'} {character.genesis} ·{' '}
+            {characterSkinning(character).toUpperCase()} · {countPoses(character.sections)} custom
+            ROM frames
           </p>
           {folderChip && (
             // A div, not a <p> — FolderMoveChip's floating panel is a div,
