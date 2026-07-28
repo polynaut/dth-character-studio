@@ -144,6 +144,137 @@ export const characterMigrations: Record<
     }
     return data
   },
+  // v24 — the scene-override restructure. The four parallel ROM layers (`poses`,
+  // `additions`, `sectionOverrides`, `sectionEnabled`) became ONE section-keyed
+  // `rom` record; the per-scene panels went PRESENCE-armed (`identity`/`preserve`/
+  // `jcm` blocks exist iff their old `enabled` was on); and the character-level
+  // `groomScenes` map folded into the records as `hair`. Entries that were DEAD
+  // under the old precedence — orphaned pose/group ids, sparse layers under an
+  // owned section, a disarmed override's rows, a disarmed panel's stored payload —
+  // are dropped, not carried: they never generated and the arm-on-edit UI could
+  // only resurrect them by rewriting them anyway.
+  24: (data) => {
+    const overrides: Array<Record<string, any>> = Array.isArray(data.sceneOverrides)
+      ? data.sceneOverrides
+      : []
+    // Attribution maps from the character's own sections: which section a base
+    // pose id / group id lives in (a flat `flat-<SECTION>` sentinel encodes its
+    // section itself).
+    const poseSection = new Map<string, string>()
+    const groupSection = new Map<string, string>()
+    const sections = data.sections
+    if (sections && typeof sections === 'object') {
+      for (const key of Object.keys(sections)) {
+        const groups = sections[key]?.groups
+        if (!Array.isArray(groups)) continue
+        for (const group of groups) {
+          if (!group || typeof group !== 'object') continue
+          if (typeof group.id === 'string') groupSection.set(group.id, key)
+          if (!Array.isArray(group.poses)) continue
+          for (const pose of group.poses) {
+            if (pose && typeof pose === 'object' && typeof pose.id === 'string')
+              poseSection.set(pose.id, key)
+          }
+        }
+      }
+    }
+    const flatSection = (groupId: string): string | undefined => {
+      const match = /^flat-(\w+)$/.exec(groupId)
+      return match && (ROM_SECTIONS as ReadonlyArray<string>).includes(match[1])
+        ? match[1]
+        : undefined
+    }
+    for (const override of overrides) {
+      if (!override || typeof override !== 'object') continue
+      if (override.rom === undefined) {
+        const rom: Record<string, any> = {}
+        const entry = (section: string) =>
+          (rom[section] ??= { replaced: [], added: [] } as Record<string, any>)
+        // The row layers only migrate when the old ROM gate was armed (absent =
+        // armed, per the v20 default) — a disarmed override's rows never
+        // generated.
+        if (override.enabled !== false) {
+          if (Array.isArray(override.sectionOverrides)) {
+            for (const so of override.sectionOverrides) {
+              if (so && typeof so === 'object' && typeof so.section === 'string' && so.config)
+                entry(so.section).owned = so.config
+            }
+          }
+          if (Array.isArray(override.poses)) {
+            for (const pose of override.poses) {
+              if (!pose || typeof pose !== 'object' || typeof pose.id !== 'string') continue
+              const section = poseSection.get(pose.id)
+              if (section && !rom[section]?.owned) entry(section).replaced.push(pose)
+            }
+          }
+          if (Array.isArray(override.additions)) {
+            for (const add of override.additions) {
+              if (!add || typeof add !== 'object' || typeof add.groupId !== 'string') continue
+              if (!Array.isArray(add.poses) || add.poses.length === 0) continue
+              const section = groupSection.get(add.groupId) ?? flatSection(add.groupId)
+              if (section && !rom[section]?.owned) entry(section).added.push(add)
+            }
+          }
+        }
+        // The enable overlay is independent of the row gate — a preset section
+        // can be toggled per scene without any rows stored.
+        if (Array.isArray(override.sectionEnabled)) {
+          for (const se of override.sectionEnabled) {
+            if (
+              se &&
+              typeof se === 'object' &&
+              typeof se.section === 'string' &&
+              typeof se.enabled === 'boolean'
+            )
+              entry(se.section).enabled = se.enabled
+          }
+        }
+        override.rom = rom
+      }
+      // Presence-armed panels: keep the payload iff the old gate was on. A block
+      // WITHOUT an `enabled` key is already the new shape — leave it.
+      if (override.identity && typeof override.identity === 'object' && 'enabled' in override.identity) {
+        const { enabled, ...rest } = override.identity
+        if (enabled) override.identity = rest
+        else delete override.identity
+      }
+      if (override.preserve && typeof override.preserve === 'object' && 'enabled' in override.preserve) {
+        const { enabled, ...rest } = override.preserve
+        if (enabled) override.preserve = rest
+        else delete override.preserve
+      }
+      if (override.jcm && typeof override.jcm === 'object' && !Array.isArray(override.jcm)) {
+        if (override.jcm.enabled && Array.isArray(override.jcm.mods)) override.jcm = override.jcm.mods
+        else delete override.jcm
+      }
+      delete override.groom
+      delete override.enabled
+      delete override.poses
+      delete override.additions
+      delete override.sectionOverrides
+      delete override.sectionEnabled
+    }
+    // groomScenes → per-scene `hair`, creating records for scenes that had hair
+    // but no override (the PRIMARY scene, typically).
+    if (Array.isArray(data.groomScenes)) {
+      for (const gs of data.groomScenes) {
+        if (!gs || typeof gs !== 'object' || typeof gs.scenePath !== 'string') continue
+        const nodes = Array.isArray(gs.nodes) ? gs.nodes : []
+        if (nodes.length === 0) continue
+        let record = overrides.find(
+          (o) => o && typeof o === 'object' && o.scenePath === gs.scenePath,
+        )
+        if (!record) {
+          record = { scenePath: gs.scenePath, rom: {} }
+          overrides.push(record)
+        }
+        if (record.hair === undefined) record.hair = nodes
+      }
+    }
+    delete data.groomScenes
+    data.sceneOverrides = overrides
+    return data
+  },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────
   //
   // Case A — rename / restructure an existing field:

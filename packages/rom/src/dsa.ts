@@ -277,18 +277,18 @@ ${sceneSubfolderBlock}${exportBody}} else {
 }
 
 /**
- * The character's per-SCENE groom lists as a lookup the generated script embeds:
+ * The character's per-SCENE hair lists as a lookup the generated script embeds:
  * normalized scene path (forward slashes, lowercased) → trimmed non-empty item
  * labels. Scenes without items are dropped — absence MEANS "this scene has no
- * groom to exclude". Hair is per-scene by presence: a scene's `groomScenes`
+ * groom to exclude". Hair is per-scene by presence: a scene record's `hair`
  * items ARE its hair (none listed → nothing excluded). THE single gate for the
  * export bracket.
  */
 function groomSceneMap(character: Character): Record<string, Array<string>> {
   const map: Record<string, Array<string>> = {}
-  for (const entry of character.groomScenes) {
-    const key = entry.scenePath.trim().replace(/\\/g, '/').toLowerCase()
-    const labels = entry.nodes.map((n) => n.nodeLabel.trim()).filter((label) => label !== '')
+  for (const record of character.sceneOverrides) {
+    const key = record.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    const labels = record.hair.map((n) => n.nodeLabel.trim()).filter((label) => label !== '')
     if (key !== '' && labels.length > 0) map[key] = labels
   }
   return map
@@ -356,21 +356,20 @@ function buildSceneConfigMap(
       if (JSON.stringify(value) !== JSON.stringify(baseConfig[k])) delta[k] = value
     }
     // Identity dials — not section-derived, emit explicitly (same G9 gate as the base).
-    if (override.identity.enabled) {
+    if (override.identity) {
       delta.FACsDetailStrength = g9Dials ? override.identity.facsDetailStrength : 0
       delta.FlexionStrength = g9Dials ? override.identity.flexionStrength : 0
       delta.bApplyUE5TearUV = character.genesis === 'G9' && override.identity.applyUE5TearUV
     }
     // Preserve lists — full replacement, ALWAYS both keys even empty, so an armed scene
     // that cleared a list overrides the base's (empty ⇒ preserve nothing) — delete-all.
-    if (override.preserve.enabled) {
+    if (override.preserve) {
       delta.preserveMorphs = override.preserve.morphs
       delta.preserveNodeTransforms = override.preserve.nodeTransforms
     }
     // JCM "Modify frames" — full replacement, emitted even empty (delete-all); excluded
     // from the section diff above so a cleared list still overrides the base's.
-    if (override.jcm.enabled)
-      delta.jcmMorphMods = override.jcm.mods.map(jcmMorphModForRuntime)
+    if (override.jcm) delta.jcmMorphMods = override.jcm.map(jcmMorphModForRuntime)
     if (Object.keys(delta).length > 0) map[key] = delta
   }
   return map

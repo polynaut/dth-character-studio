@@ -38,11 +38,7 @@ export function IdentitySection({
   overrideEligible: boolean
   sceneOverride: SceneOverride | undefined
   /** Implicit-override writer for the three G9 dials (from useSceneSelection). */
-  writeIdentity: (
-    next: Partial<
-      Pick<SceneOverride['identity'], 'facsDetailStrength' | 'flexionStrength' | 'applyUE5TearUV'>
-    >,
-  ) => void
+  writeIdentity: (next: Partial<NonNullable<SceneOverride['identity']>>) => void
   /** The Hair-items field, rendered as the first sidebar row. */
   hairSlot: ReactNode
 }) {
@@ -51,12 +47,9 @@ export function IdentitySection({
     flexionStrength: character.flexionStrength,
     applyUE5TearUV: character.applyUE5TearUV,
   }
-  // The active identity override (only when armed for this non-primary scene).
+  // The active identity override — armed by PRESENCE for this non-primary scene.
   // Untouched dials equal the base, so a dial "differs" iff the user changed it.
-  const ov =
-    overrideEligible && sceneOverride && sceneOverride.identity.enabled
-      ? sceneOverride.identity
-      : undefined
+  const ov = overrideEligible ? sceneOverride?.identity : undefined
   const facs = ov ? ov.facsDetailStrength : base.facsDetailStrength
   const flex = ov ? ov.flexionStrength : base.flexionStrength
   const tear = ov ? ov.applyUE5TearUV : base.applyUE5TearUV

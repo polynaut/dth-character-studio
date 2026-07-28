@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-import { sceneOverrideSchema } from '@dth/rom'
+import { sceneOverrideSchema, sceneRecordEmpty } from '@dth/rom'
 import type { Character, SceneOverride } from '@dth/rom'
 
 import { preserveMorphsKey, preserveNodesKey } from './preserve-diff.ts'
@@ -8,11 +8,14 @@ import { preserveMorphsKey, preserveNodesKey } from './preserve-diff.ts'
 /**
  * The character editor's page-local Daz-scene selection (the scene cards) and the
  * per-scene override writers that follow it. With a non-primary scene selected an
- * overridable field edits a per-scene override (stored on the character, keyed by
+ * overridable field edits a per-scene record (stored on the character, keyed by
  * scene path) instead of the base — implicitly: a value that DIFFERS from the base
- * is the override, so there are no arm/disarm toggles. Entering the character selects
- * the primary scene by default; unlinking the selected extra scene falls back to it
- * too (the stored path just stops matching).
+ * is the override, so there are no arm/disarm toggles. Panels are PRESENCE-armed
+ * (schema v24): a block existing on the record IS the override; writing a panel
+ * back to the base deletes its block, and a record left carrying nothing is
+ * dropped entirely ({@link sceneRecordEmpty}). Entering the character selects
+ * the primary scene by default; unlinking the selected extra scene falls back to
+ * it too (the stored path just stops matching).
  */
 export function useSceneSelection(character: Character, patch: (p: Partial<Character>) => void) {
   const [selectedScene, setSelectedScene] = useState('')
@@ -21,30 +24,36 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     ? selectedScene
     : character.scenePath || ''
   // A field is overridable only while an EXTRA (non-primary) scene is selected —
-  // the primary scene IS the base definition. The override entry lives on the
-  // character (per scene path) and follows the selection.
+  // the primary scene IS the base definition. The record lives on the character
+  // (per scene path) and follows the selection.
   const overrideEligible = effectiveScene !== '' && effectiveScene !== character.scenePath
   const sceneOverride: SceneOverride | undefined = character.sceneOverrides.find(
     (o) => o.scenePath === effectiveScene,
   )
 
+  /** Store `record` as the selected scene's record — replacing the existing one,
+   *  appending a new one, or (when it holds nothing anymore) dropping it. */
+  const writeRecord = useCallback(
+    (record: SceneOverride) => {
+      const others = character.sceneOverrides.filter((o) => o.scenePath !== effectiveScene)
+      patch({
+        sceneOverrides: sceneRecordEmpty(record) ? others : [...others, record],
+      })
+    },
+    [character.sceneOverrides, effectiveScene, patch],
+  )
+
   /**
-   * Write the Genesis-9 identity dials for the selected non-primary scene under the
-   * implicit-override model: a dial that differs from the base character IS an
-   * override, so `identity.enabled` (the gate generation reads) is derived from
-   * "any dial differs". Untouched dials stay equal to the base, so they never read
-   * as overridden. Passing a base value back in is how a field resets. No-op on the
-   * primary scene (there editing goes straight to the base via `patch`).
+   * Write the Genesis-9 identity dials for the selected non-primary scene under
+   * the implicit-override model: a dial that differs from the base character IS
+   * an override — the `identity` block exists exactly while some dial differs.
+   * Untouched dials stay equal to the base, so they never read as overridden,
+   * and passing a base value back in is how a field resets (the block — and an
+   * otherwise-empty record — disappear when the last dial returns to base).
+   * No-op on the primary scene (there editing goes straight to the base).
    */
   const writeIdentity = useCallback(
-    (
-      next: Partial<
-        Pick<
-          SceneOverride['identity'],
-          'facsDetailStrength' | 'flexionStrength' | 'applyUE5TearUV'
-        >
-      >,
-    ) => {
+    (next: Partial<NonNullable<SceneOverride['identity']>>) => {
       if (!overrideEligible) return
       const base = {
         facsDetailStrength: character.facsDetailStrength,
@@ -52,27 +61,13 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
         applyUE5TearUV: character.applyUE5TearUV,
       }
       const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
-      // Start from the base (inherited) unless an override is already active — so
-      // untouched dials compare equal to the base and never read as overridden even
-      // if the stored block carried stale defaults from another panel's arming.
-      const start =
-        existing && existing.identity.enabled ? existing.identity : { enabled: false, ...base }
-      const merged = { ...start, ...next }
-      const enabled =
+      const merged = { ...(existing?.identity ?? base), ...next }
+      const diverges =
         merged.facsDetailStrength !== base.facsDetailStrength ||
         merged.flexionStrength !== base.flexionStrength ||
         merged.applyUE5TearUV !== base.applyUE5TearUV
-      const identity = { ...merged, enabled }
-      patch({
-        sceneOverrides: existing
-          ? character.sceneOverrides.map((o) =>
-              o.scenePath === effectiveScene ? { ...o, identity } : o,
-            )
-          : [
-              ...character.sceneOverrides,
-              { ...sceneOverrideSchema.parse({ scenePath: effectiveScene }), identity },
-            ],
-      })
+      const record = existing ?? sceneOverrideSchema.parse({ scenePath: effectiveScene })
+      writeRecord({ ...record, identity: diverges ? merged : undefined })
     },
     [
       character.sceneOverrides,
@@ -81,47 +76,35 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
       character.applyUE5TearUV,
       effectiveScene,
       overrideEligible,
-      patch,
+      writeRecord,
     ],
   )
 
   /**
    * Write the per-scene preserve lists (morphs / node transforms) under the same
-   * implicit-override model. `preserve.enabled` (the gate generation reads) is
-   * derived from "the list differs from the base" — compared as a canonical
-   * MULTISET keyed by the natural identity (morph name+value / node label), so
-   * reordering never spuriously arms it, yet renaming a row to duplicate another
-   * base key still counts as a divergence (a plain Set misses that and would revert
-   * the edit). Untouched rows equal the base, so they never read as overridden.
-   * No-op on the primary scene (edits there go to the base).
+   * implicit-override model. The `preserve` block exists exactly while a list
+   * differs from the base — compared as a canonical MULTISET keyed by the natural
+   * identity (morph name+value / node label), so reordering never spuriously arms
+   * it, yet renaming a row to duplicate another base key still counts as a
+   * divergence (a plain Set misses that and would revert the edit). Untouched
+   * rows equal the base, so they never read as overridden. No-op on the primary
+   * scene (edits there go to the base).
    */
   const writePreserve = useCallback(
     (next: {
-      morphs?: SceneOverride['preserve']['morphs']
-      nodeTransforms?: SceneOverride['preserve']['nodeTransforms']
+      morphs?: NonNullable<SceneOverride['preserve']>['morphs']
+      nodeTransforms?: NonNullable<SceneOverride['preserve']>['nodeTransforms']
     }) => {
       if (!overrideEligible) return
       const baseMorphs = character.preserveMorphs
       const baseNodes = character.preserveNodeTransforms
       const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
-      const start =
-        existing && existing.preserve.enabled
-          ? existing.preserve
-          : { enabled: false, morphs: baseMorphs, nodeTransforms: baseNodes }
+      const start = existing?.preserve ?? { morphs: baseMorphs, nodeTransforms: baseNodes }
       const merged = { ...start, ...next }
       const morphsSame = preserveMorphsKey(merged.morphs) === preserveMorphsKey(baseMorphs)
       const nodesSame = preserveNodesKey(merged.nodeTransforms) === preserveNodesKey(baseNodes)
-      const preserve = { ...merged, enabled: !(morphsSame && nodesSame) }
-      patch({
-        sceneOverrides: existing
-          ? character.sceneOverrides.map((o) =>
-              o.scenePath === effectiveScene ? { ...o, preserve } : o,
-            )
-          : [
-              ...character.sceneOverrides,
-              { ...sceneOverrideSchema.parse({ scenePath: effectiveScene }), preserve },
-            ],
-      })
+      const record = existing ?? sceneOverrideSchema.parse({ scenePath: effectiveScene })
+      writeRecord({ ...record, preserve: morphsSame && nodesSame ? undefined : merged })
     },
     [
       character.sceneOverrides,
@@ -129,7 +112,7 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
       character.preserveNodeTransforms,
       effectiveScene,
       overrideEligible,
-      patch,
+      writeRecord,
     ],
   )
 
