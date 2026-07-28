@@ -19,6 +19,7 @@ import {
   saveProjectSettings,
   saveSettings,
 } from '#/lib/rom/api.ts'
+import { navOrigin } from '#/lib/nav-origin.ts'
 import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
@@ -102,11 +103,10 @@ function SettingsPage() {
   const router = useRouter()
   const confirm = useConfirm()
 
-  // Reachable from several places, so return to wherever we came from (falling
-  // back to the projects home if there's no history to pop) — like the About page.
+  // A HARD link to the page we entered the utility area from — never
+  // history.back(), which walks tab switches one entry at a time.
   function goBack() {
-    if (router.history.canGoBack()) router.history.back()
-    else void router.navigate({ to: '/' })
+    router.history.push(navOrigin())
   }
 
   const [settings, setSettings] = useState(initial)
