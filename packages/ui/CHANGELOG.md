@@ -1,5 +1,11 @@
 # @dth/ui
 
+## 0.48.2
+
+### Patch Changes
+
+- [#561](https://github.com/polynaut/dth-character-studio/pull/561) [`136c9f1`](https://github.com/polynaut/dth-character-studio/commit/136c9f1a5a174a07e204684c7968a2e1346c7672) Thanks [@polynaut](https://github.com/polynaut)! - LinkedAssetCard's select/open action moved from the body (which was a `<button>`) to a transparent cover button, so interactive content in the `extra` slot — like the scene cards' edit-to-move path chip — is no longer nested inside a button (invalid HTML). Behavior is unchanged; hover tints now key off the card group.
+
 ## 0.48.1
 
 ### Patch Changes
