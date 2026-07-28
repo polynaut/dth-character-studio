@@ -102,7 +102,9 @@ export function FolderMoveChip({
             value={draft}
             autoFocus
             disabled={busy}
-            className={`h-7 ${inputWidthClass} font-mono text-xs`}
+            // bg-muted: recessed against the panel's RAISED surface — the
+            // default input fill blends into it.
+            className={`h-7 ${inputWidthClass} bg-muted font-mono text-xs`}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void move()
