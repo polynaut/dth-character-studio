@@ -82,11 +82,12 @@ export function PathCode({
       className="group/path relative inline-flex max-w-full cursor-pointer align-middle"
     >
       {onEdit && (
+        // No title tooltip (the pencil speaks for itself); p-1 matches the
+        // copy-hint badge's box so the hover highlight reads the same size.
         <button
           type="button"
-          title="Edit"
           aria-label="Edit path"
-          className="mr-1 inline-flex shrink-0 items-center self-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="mr-1 inline-flex shrink-0 items-center self-center rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           // The chip's own click copies — editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()

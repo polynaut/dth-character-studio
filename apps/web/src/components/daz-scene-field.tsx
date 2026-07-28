@@ -4,6 +4,7 @@ import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
+import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
@@ -555,34 +556,45 @@ export function DazSceneField({
   /** Where a scene lives: shown relative to the character folder (e.g.
    *  `.\daz3d\Outfit_B`) for an in-folder scene, as the full folder for one
    *  linked in place — copying always yields the full folder path. The primary
-   *  card always shows its chip (`alwaysShow`); an extra scene right beside
-   *  the primary stays chip-less — the primary's chip names that folder
-   *  already. */
-  function sceneLocationChip(scene: string, alwaysShow = false): ReactNode {
+   *  card always shows its chip; an extra scene right beside the primary stays
+   *  chip-less — the primary's chip names that folder already. In-folder chips
+   *  are EDIT-TO-MOVE (the shared FolderMoveChip): the primary's edit moves
+   *  the whole scenes folder, an extra's moves just that scene; a scene linked
+   *  in place outside stays a plain read-only chip. */
+  function sceneLocationChip(scene: string, opts: { primary?: boolean } = {}): ReactNode {
     const dir = parentDir(scene)
-    if (!alwaysShow && normalizePath(dir).toLowerCase() === normalizePath(sceneDirAbs).toLowerCase())
-      return null
-    const shown = displayPath(
-      insideCharFolder(scene) ? `./${normalizePath(dir).slice(charFolder.length + 1)}` : dir,
+    if (
+      !opts.primary &&
+      normalizePath(dir).toLowerCase() === normalizePath(sceneDirAbs).toLowerCase()
     )
-    // The shared two-tone chip (same look + height as every small path chip):
-    // dim up to the last separator, the scene's own folder bright. Copying
-    // yields the FULL folder path, not the shown relative one.
+      return null
+    const inside = insideCharFolder(scene)
+    const rel = inside ? normalizePath(dir).slice(charFolder.length + 1) : ''
+    const shown = displayPath(inside ? `./${rel}` : dir)
+    // Two-tone (same look + height as every small path chip): dim up to the
+    // last separator, the scene's own folder bright.
     const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
+    const roots = [cut > 0 ? shown.slice(0, cut) : '']
+    if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
     return (
-      <DirPathChip
+      <FolderMoveChip
         dir={shown}
-        roots={[cut > 0 ? shown.slice(0, cut) : '']}
+        roots={roots}
         copyPath={displayPath(dir)}
+        editValue={displayPath(rel)}
+        editLabel="Move to"
+        inputWidthClass="w-36"
+        onMove={(next) => (opts.primary ? moveScenesRoot(next) : moveExtraScene(scene, next))}
+        disabled={busy}
       />
     )
   }
 
-  async function onMoveScenesDir() {
-    if (editDir === null || !editDir.trim()) return
-    const newSubdir = editDir
+  /** Move the WHOLE scenes folder to `newSubdir` (relative to the character
+   *  folder) — shared by the section chip's inline editor and the primary
+   *  card's chip. Throws on failure (each caller owns its error surface). */
+  async function moveScenesRoot(newSubdir: string): Promise<void> {
     setBusy(true)
-    setError('')
     try {
       // Through the draft's persist primitive, like every other persisting flow:
       // the single-flight `saving` flag is held for the whole move+save+generate
@@ -594,8 +606,6 @@ export function DazSceneField({
         {},
         {
           toast: 'Moved the Daz scenes folder',
-          // The inline editor owns the error surface — a failed move/save shows
-          // next to the input (guard refusals still toast in the hook).
           rethrow: true,
           persist: (updated) =>
             moveCharacterScenesFolder({ data: { projectId, character: updated, newSubdir } }),
@@ -607,12 +617,60 @@ export function DazSceneField({
         // draft; without this merge those kept scene paths would still point at
         // the old folder (and read as pending reverse-changes).
         onScenesFolderMoved(saved)
-        setEditDir(null)
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  /** Move ONE extra scene to `nextSub` (relative to the character folder) —
+   *  the card chip's editor. Copies + deletes the original (a move), then
+   *  persists the repointed extra-scene path and its per-scene record. */
+  async function moveExtraScene(scene: string, nextSub: string): Promise<void> {
+    const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    const dest = [charFolder, cleanSub(nextSub), sceneName].filter(Boolean).join('/')
+    if (normalizePath(dest).toLowerCase() === normalizePath(scene).toLowerCase()) return
+    if (isAlreadyLinked(dest)) throw new Error(`“${sceneName}” is already linked from there.`)
+    setBusy(true)
+    try {
+      const moved = await copyDazScene({
+        data: {
+          projectId,
+          characterId: character.id,
+          scenePath: scene,
+          subfolder: cleanSub(nextSub),
+          deleteOriginal: true,
+        },
+      })
+      const target = normalizePath(scene).toLowerCase()
+      const repoint = (p: string) => (normalizePath(p).toLowerCase() === target ? moved : p)
+      await persistPatch(
+        {
+          extraScenes: character.extraScenes.map(repoint),
+          sceneOverrides: character.sceneOverrides.map((o) => ({
+            ...o,
+            scenePath: repoint(o.scenePath),
+          })),
+        },
+        { toast: `Moved “${sceneName}”`, rethrow: true },
+      )
+      // Keep the selection on the moved card (its path just changed).
+      if (selectedScene === scene) onSelectScene?.(moved)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onMoveScenesDir() {
+    if (editDir === null || !editDir.trim()) return
+    setError('')
+    try {
+      // The inline editor owns the error surface — a failed move/save shows
+      // next to the input (guard refusals still toast in the hook).
+      await moveScenesRoot(editDir)
+      setEditDir(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -707,7 +765,7 @@ export function DazSceneField({
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
-                  pathChip={sceneLocationChip(character.scenePath, true)}
+                  pathChip={sceneLocationChip(character.scenePath, { primary: true })}
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">

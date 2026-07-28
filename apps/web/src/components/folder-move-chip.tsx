@@ -19,6 +19,7 @@ import { DirPathChip } from '#/components/dir-path-chip.tsx'
 export function FolderMoveChip({
   dir,
   roots,
+  copyPath,
   editValue,
   editLabel,
   inputWidthClass = 'w-64',
@@ -29,6 +30,8 @@ export function FolderMoveChip({
   dir: string
   /** Display-formatted candidate roots, most specific first (dimmed prefix). */
   roots: Array<string>
+  /** What a click copies when it differs from the displayed `dir` (see DirPathChip). */
+  copyPath?: string
   /** Seed for the edit input (what "moving" changes — a subfolder or a path). */
   editValue: string
   /** Small label before the input, e.g. "Folder" / "Project folder". */
@@ -47,7 +50,12 @@ export function FolderMoveChip({
 
   if (draft === null) {
     return (
-      <DirPathChip dir={dir} roots={roots} onEdit={disabled ? undefined : () => setDraft(editValue)} />
+      <DirPathChip
+        dir={dir}
+        roots={roots}
+        copyPath={copyPath}
+        onEdit={disabled ? undefined : () => setDraft(editValue)}
+      />
     )
   }
 

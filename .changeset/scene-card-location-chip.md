@@ -2,4 +2,4 @@
 '@dth/web': patch
 ---
 
-A non-primary Daz scene living in a subfolder (or linked in place) shows where it lives as a path chip under its card title — relative like `.\daz3d\Outfit_B` for in-folder scenes, the full folder for linked ones; click copies the full path, Alt+click reveals it. Scenes right beside the primary stay chip-less.
+Scene cards now show where each scene lives as a path chip under the title — the primary always (beside its now-dense PRIMARY label), an extra scene when it deviates (subfolder / linked in place); relative like `.\daz3d\Outfit_B`, full path on copy, Alt+click reveals. In-folder chips are edit-to-move: the primary's pencil moves the whole scenes folder, an extra's moves just that scene. The chip pencils lost their tooltip and match the copy-hint's hover size.
