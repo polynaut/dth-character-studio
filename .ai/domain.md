@@ -132,7 +132,7 @@ offsets byte-identically — if a generation change moves them, the change is wr
 
 ## The DTH runtime is studio-owned
 
-The `.dsa` runtime (currently `RUNTIME_VERSION = 32`, history in `types.ts`) lives
+The `.dsa` runtime (versioned by `RUNTIME_VERSION` in `types.ts`, history above it) lives
 in this repo and ships with the app — there is **no external script dependency**;
 only the `.duf` pose presets come from the DTH release. The runtime accepts
 **inline config only**: file-based config (extra JSONs, art-direction paths) aborts

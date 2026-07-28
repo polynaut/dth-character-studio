@@ -1091,8 +1091,15 @@ export const CHARACTER_SCHEMA_VERSION = 24
  *       feeding the new bone autocomplete in the "Modify JCM frames" editor. No
  *       change to any GENERATED script — bumped only so Refresh assets reinstalls
  *       the updated scanner. Re-run Scan_Morphs in Daz to populate the bone list.
+ *  35 — The v17 DS6 keyframe workaround is ROLLED BACK: every ROM morph key is
+ *       LINEAR again on DS4 AND DS6 (session default included), and the DS6
+ *       version detection is gone. Constant keys didn't actually solve DS6's
+ *       drift and introduced headaches with the DK9 ROM — mrpdean is rolling
+ *       the same workaround out of the next DTH release (July 2026), so the
+ *       studio returns to Linear in lockstep. Refresh assets (or re-save) to
+ *       reinstall the runtime; re-run the ROM script in Daz to re-key.
  */
-export const RUNTIME_VERSION = 34
+export const RUNTIME_VERSION = 35
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
