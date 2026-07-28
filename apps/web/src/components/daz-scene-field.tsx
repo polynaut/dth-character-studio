@@ -558,14 +558,16 @@ export function DazSceneField({
     const shown = displayPath(
       insideCharFolder(scene) ? `./${normalizePath(dir).slice(charFolder.length + 1)}` : dir,
     )
-    // Two-tone like the folder chips: the leading part dim, the scene's own
-    // folder (from its last separator) bright.
+    // The shared two-tone chip (same look + height as every small path chip):
+    // dim up to the last separator, the scene's own folder bright. Copying
+    // yields the FULL folder path, not the shown relative one.
     const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
     return (
-      <PathCode path={displayPath(dir)} className="text-[11px]">
-        {cut > 0 && <span className="text-muted-foreground/60">{shown.slice(0, cut)}</span>}
-        <span className="text-foreground/80">{shown.slice(Math.max(cut, 0))}</span>
-      </PathCode>
+      <DirPathChip
+        dir={shown}
+        roots={[cut > 0 ? shown.slice(0, cut) : '']}
+        copyPath={displayPath(dir)}
+      />
     )
   }
 

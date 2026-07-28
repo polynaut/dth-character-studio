@@ -19,6 +19,7 @@ export function displayDirOf(filePath: string): string {
 export function DirPathChip({
   dir,
   roots,
+  copyPath,
   onEdit,
   className,
 }: {
@@ -26,6 +27,9 @@ export function DirPathChip({
   dir: string
   /** Display-formatted candidate roots, most specific first. */
   roots: Array<string>
+  /** What a click copies, when it should differ from the displayed `dir` —
+   *  e.g. the scene cards show a RELATIVE dir but copy the full folder. */
+  copyPath?: string
   onEdit?: () => void
   /** Extra classes on the chip's `<code>` (e.g. `flex h-9 items-center` to
    *  match the fixed-height chips that sit beside `h-9` buttons). */
@@ -37,7 +41,7 @@ export function DirPathChip({
       .map((root) => (root && dirLower.startsWith(root.toLowerCase()) ? root.length : 0))
       .find((len) => len > 0) ?? 0
   return (
-    <PathCode path={dir} onEdit={onEdit} className={className}>
+    <PathCode path={copyPath ?? dir} onEdit={onEdit} className={className}>
       {rootLen > 0 && <span className="text-muted-foreground/60">{dir.slice(0, rootLen)}</span>}
       <span className="text-foreground/80">{dir.slice(rootLen)}</span>
     </PathCode>
