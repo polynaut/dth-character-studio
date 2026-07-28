@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 
 import { Button, Input } from '@dth/ui'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
+import { menuSurfaceClass } from '#/components/rom/cells.tsx'
 
 /**
  * A {@link DirPathChip} with an edit-to-move affordance — the shared UX behind
@@ -91,9 +92,11 @@ export function FolderMoveChip({
         onEdit={disabled ? undefined : () => setDraft(draft === null ? editValue : null)}
       />
       {draft !== null && (
-        // Floating one-line editor, styled like the autocomplete menu (same
-        // surface/border/shadow/z tier), anchored under the chip.
-        <div className="absolute top-full left-0 z-50 mt-1 flex w-max items-center gap-2 rounded-md border bg-popover p-2 text-popover-foreground shadow-md">
+        // Floating one-line editor on the SAME raised surface the autocomplete
+        // menus use (menuSurfaceClass), anchored under the chip.
+        <div
+          className={`absolute top-full left-0 z-50 mt-1 flex w-max items-center gap-2 p-2 ${menuSurfaceClass}`}
+        >
           <span className="text-xs whitespace-nowrap text-muted-foreground">{editLabel}:</span>
           <Input
             value={draft}
