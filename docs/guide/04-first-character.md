@@ -9,18 +9,14 @@
 </p>
 
 1. In the project window press **Add character** (or drop a `.duf` anywhere).
-2. **Choose Daz scene…** — pick the character's scene file. The studio reads it
-   and fills in **Genesis** (auto-detected, still overridable) and **Gender**
-   (derived from the figure — nothing to pick by hand). A **Validation** table
-   checks the scene holds exactly **one character** with an **empty animation
-   timeline** — the ROM script fills the timeline itself. A failed check
-   explains itself on hover; *Create anyway* lets you proceed regardless.
+2. **Choose Daz scene…** — pick the character's scene file. The studio reads
+   it, fills in **Genesis** and **Gender**, and validates that the scene holds
+   exactly **one character** with an **empty animation timeline** (the ROM
+   script fills the timeline itself). *Create anyway* overrides a failed check.
 3. Name it — the name becomes its folder in the project.
-4. **Fill from character** *(optional)* — from your second character on, this
-   copies a working ROM definition from any character across your projects:
-   pick the source and check which of its filled sections to copy (Retargeting
-   always rides with JCM; the *Modify JCM frames* rules and preserve lists are
-   optional extras).
+4. **Fill from character** *(optional)* — copies a working ROM definition from
+   any existing character across your projects: pick the source and check
+   which sections to copy.
 5. Press **Create**. The scene is copied into the character's folder — your
    original stays where it is.
 
@@ -32,26 +28,23 @@
   <sub><em>The top of the character page: the primary Daz scene, hair items, the Genesis 9 dials, the derived Gender, and the linked Houdini project.</em></sub>
 </p>
 
-**Genesis** is set at creation. **Gender** is read from the primary scene at
-creation and never changes (it's shown read-only). On the gendered generations
-it comes from the figure id; on the gender-neutral G9 from the **GP/DK
-geograft**: Golden Palace → female, Dicktator → male. The same detection drives
-the [GEN section](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace--dicktator--the-genitalia-gen-section).
+**Genesis** and **Gender** are set at creation; Gender never changes. On the
+gender-neutral G9 it comes from the **GP/DK geograft** — Golden Palace →
+female, Dicktator → male — the same detection that drives the
+[GEN section](https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#golden-palace--dicktator--the-genitalia-gen-section).
 All four generations are selectable, but the deeply validated path is **G9**
-(and G8.1 on the old pipeline) — for the others, the studio offers whatever
-pose assets the active DTH release actually ships.
+(and G8.1 on the old pipeline); for the others, the studio offers whatever
+pose assets the active DTH release ships.
 
 G9 characters also get the **Genesis 9 specific** dials in the sidebar:
 
-- **Set UE5 tear UV** — when on, the ROM script switches the **Genesis 9
-  Tear** figure's shader **UV Set** to **UE5** during the build, so DTH's
-  **Lacrimal Fluid** material lines up without the manual *Surfaces ▸ Genesis 9
-  Tear shader ▸ UV Set ▸ UE5* step. Only matters if you use that material;
-  off by default, and G9-only.
+- **Set UE5 tear UV** — the ROM script switches the **Genesis 9 Tear**
+  figure's **UV Set** to **UE5** during the build, so DTH's **Lacrimal Fluid**
+  material lines up without the manual Surfaces step. Only matters if you use
+  that material; off by default, and G9-only.
 - **FACS detail strength / Flexion strength** — the G9 dials **FACS Detail
   Strength** and **Flexion Automatic Strength**, applied at frame 0 as the ROM
-  builds. Daz-style percentages, like every morph value in the studio; leave
-  them at `100 %` unless your character needs the stock correctives dialed up
+  builds. Leave them at `100 %` unless the stock correctives need dialing up
   or down.
 
 <details>
@@ -59,15 +52,12 @@ G9 characters also get the **Genesis 9 specific** dials in the sidebar:
 <table><tr><td>
 
 - **Daz scenes** — the character's scene, plus any number of extra scenes
-  (outfit/look variants): **drop a `.duf`** on the card to add one. The add
-  dialog validates the scene first — same Genesis generation, one character,
-  empty timeline, and the **same GP/DK geograft as the primary**, so every
-  scene produces the primary's skeleton — then asks whether to **copy it into
-  the character's folder** (optionally under a subfolder) or leave it where it
-  is. The original scene can't be unlinked; extras can. **Scenes subfolder**
-  moves the whole scenes folder. Each scene has **Open in Daz** — when Daz is
-  already running with a scene loaded, the studio walks you through closing it
-  first.
+  (outfit/look variants): **drop a `.duf`** on the card to add one. Added
+  scenes pass the same checks as at creation — plus the **same GP/DK geograft
+  as the primary**, so every scene produces the primary's skeleton — and are
+  copied into the character's folder or left in place. The original scene
+  can't be unlinked; extras can. Each scene has **Open in Daz** — when Daz
+  already has a scene loaded, the studio walks you through closing it first.
 - **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
   Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
   its folder.
@@ -87,15 +77,13 @@ G9 characters also get the **Genesis 9 specific** dials in the sidebar:
 
 The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
 split export, `Export_…`) scripts install on Save:
-`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/` —
-"My DAZ 3D Library" comes from [Settings](./02-setup.md); the folder is created
-the first time a script is generated.
+`<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`
+("My DAZ 3D Library" comes from [Settings](./02-setup.md)).
 
 The **Export directory** section drives [direct export](./05-rom-in-daz.md#direct-export-optional-recommended):
-**Choose folder…** opens the picker (starting at the character's Houdini folder
-as guidance), **Clear** turns direct export off again. With no export directory
-the studio generates the ROM only — **Bone scale** flags are then no-ops until
-you set one.
+**Choose folder…** sets it, **Clear** turns direct export off again. With no
+export directory the studio generates the ROM only — **Bone scale** flags are
+then no-ops until you set one.
 
 <details>
 <summary><strong>Advanced options — preserve morphs &amp; node transforms</strong></summary>
@@ -120,10 +108,8 @@ it is needed for a working ROM:
   their orientation instead of being reset. Enter the **node's label** as it
   appears in Daz.
 
-On a **non-primary Daz scene** both lists are overridable: edit one and its
-label's cube goes green (with a reset back to the primary), and the rows that
-differ get a green border. An outfit scene can preserve different morphs or
-nodes than the primary — see
+On a **non-primary Daz scene** both lists are overridable, so an outfit scene
+can preserve different morphs or nodes than the primary — see
 [Advanced: per-scene overrides](./advanced.md#per-scene-overrides--edit-to-override).
 
 </td></tr></table>
@@ -141,10 +127,8 @@ A ROM is a fixed sequence of eight sections. Each can be **enabled or
 disabled**, and runs in **Preset** mode (the DTH release's stock pose assets)
 or **Custom** mode (your own poses and morphs).
 
-Above the sections, a colored **timeline bar** maps the whole ROM — one segment
-per block, widths proportional to frame counts, hover for the exact range. It
-re-renders as you edit, so you see where every section lands before anything
-runs.
+Above the sections, a colored **timeline bar** maps the whole ROM live as you
+edit — one segment per block, hover for its exact frame range.
 
 <details>
 <summary><strong>Golden Palace &amp; Dicktator — the genitalia (GEN) section</strong></summary>
@@ -169,8 +153,7 @@ direction** frames, and for each one you set the morph (or morphs) that give
 it the shape you want — node, morph name and value, like any custom morph.
 
 Frames flagged **required — empty in the preset ROM** do nothing until you set
-a morph there; frames you leave alone keep the preset default. Your choices are
-saved per character and stamped onto those frames as the ROM loads.
+a morph there; frames you leave alone keep the preset default.
 
 Two things worth knowing:
 
@@ -213,8 +196,8 @@ Each pose row has two name fields with very different jobs:
 
 - **Name** — *your* name for the generated morph; it travels to **Houdini**
   and later **Unreal Engine**. Letters, numbers and underscores **only** —
-  Houdini rejects anything else, and the field flags invalid characters. The
-  group's Left/Right suffix is appended automatically.
+  Houdini rejects anything else. The group's Left/Right suffix is appended
+  automatically.
 - **Morph name** — must **exactly match the morph's internal name in Daz
   Studio** (not its display label), or that frame fails in the ROM run.
 
@@ -290,8 +273,7 @@ type.
 Only **GEN** and **FBM** poses can be reference frames — the two categories
 DazToHue supports reference skeletons in. DTH's own
 [Guide To Creating Custom ROMs](https://docs.google.com/document/d/1e8B9uDSmiS-v5si0YLEnnAhcnhnfGl9m0RsgCE5EDWA/edit?tab=t.0)
-describes the feature in depth — including the manual memorize/restore workflow
-the studio replaces.
+describes the feature in depth.
 
 </td></tr></table>
 </details>
@@ -363,7 +345,7 @@ Run the one matching your generation, once per generation:
     <sub><em>Select the figure root and run the scan script.</em></sub>
   </p>
 
-3. A summary tells you how many morphs were found across how many nodes.
+3. A summary reports what was found.
 
   <p align="center">
     <img width="342" alt="Scan summary" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />
@@ -377,12 +359,9 @@ Installed new morph products later? Just run it again. Either way the studio
 picks the index up by itself the next time its window gains focus.
 
 From then on, every **Morph name** field autocompletes after two typed
-characters:
-
-- search by the **internal name** *or* the **Daz UI label** — each suggestion
-  shows both, tags which one matched, and names the node the morph lives on;
-- picking a suggestion fills in the exact internal name **and** selects the
-  right node on that ROM entry — no more mismatched node/morph pairs.
+characters — searchable by **internal name** *or* **Daz UI label** — and
+picking a suggestion fills in the exact internal name **and** the right node:
+no more mismatched node/morph pairs.
 
   <p align="center">
     <img width="508" alt="Morph name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />
@@ -419,8 +398,7 @@ additionally gets per-scene PoseAsset CSVs — see
 &nbsp;
 
 > [!TIP]
-> Change anything later — morphs, sections, export options — and simply Save
-> again; both sides stay in sync by construction.
+> Change anything later and simply Save again — both sides stay in sync.
 
 ## The rest of the character page
 
@@ -490,10 +468,11 @@ it; a clean run clears it automatically.
 
 **Operations → Fill from character** opens the same two-step wizard as at
 creation: pick a source character (same generation and gender) from any of
-your projects, then check which of its filled ROM sections to copy. The
-checked sections **replace** this character's current config in the editor
-draft; nothing lands on disk until you save. GEN keeps this character's own
-scene-derived Golden Palace / Dicktator setup.
+your projects, then check which of its filled ROM sections to copy
+(Retargeting always rides with JCM; the *Modify JCM frames* rules and preserve
+lists are optional extras). The checked sections **replace** this character's
+current config in the editor draft; nothing lands on disk until you save. GEN
+keeps this character's own scene-derived Golden Palace / Dicktator setup.
 
 </td></tr></table>
 </details>

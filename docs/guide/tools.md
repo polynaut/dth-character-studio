@@ -3,10 +3,8 @@
 The **Tools** page (top-right) is where you install and maintain *your own* Daz /
 Houdini content and keep the studio's generated files in sync. **Everything here
 is optional** — you never need it to define a character and generate its ROM.
-The [one-time setup](./02-setup.md) covered installing the DTH release + Exporter;
-Tools is for the extras beyond that.
-
-It has two tabs.
+The [one-time setup](./02-setup.md) covered installing the DTH release +
+Exporter; Tools is for the extras beyond that.
 
 <p align="center">
   <img width="900" alt="Tools page, two tabs" src="screenshots/tools-page.png" />

@@ -23,11 +23,11 @@ reports what it did when it finishes.
 &nbsp;
 
 > [!NOTE]
-> If anything couldn't be applied — a morph missing from the scene, a preset that
-> failed to load — the script says so in a dialog at the end, and the studio shows
-> the exact list the moment you switch back to it. The ROM's frame count is never
-> affected: a missing morph leaves its frames empty instead of shifting everything
-> after it.
+> If anything couldn't be applied — a missing morph, a failed preset — the
+> script says so in a dialog at the end, and the studio lists the exact
+> failures when you switch back to it. The ROM's frame count is never
+> affected: a missing morph leaves its frames empty instead of shifting
+> everything after it.
 
 &nbsp;
 

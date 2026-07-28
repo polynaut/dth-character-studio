@@ -15,10 +15,9 @@ extract the downloaded archives somewhere permanent first.
 </p>
 
 1. **DTH release(s) folder** — point it at the extracted DTH release, or at a
-   folder holding several release versions. With several versions detected, you
-   pick the **active** one in the dropdown. Adding another release later won't
-   change that selection — select the new version yourself and re-install the
-   files for Daz and Houdini.
+   folder holding several versions; then pick the **active** one in the
+   dropdown. A release added later must be selected (and installed) yourself —
+   the selection never changes on its own.
 2. **My DAZ 3D Library** — your Daz content library (where Daz Studio loads
    content from, e.g. `…\Documents\DAZ 3D\Studio\My Library`). Press
    **Install** below it to copy the release's Daz content into the library;

@@ -45,10 +45,10 @@ list:
   **Settings → Project** — the defaults are fine for a first run.
 
 - **Path chips** — the monospace path badges all over the app — **copy the
-  full path on click** (a check mark confirms it); **Alt+click opens the
-  location in Explorer** (for a file, its folder). Where a chip carries a
-  pencil, it edits the value in place. The same Alt+click works on every
-  linked card — Daz scenes, Houdini projects and Unreal projects.
+  full path on click**; **Alt+click opens the location in Explorer** (for a
+  file, its folder). Where a chip carries a pencil, it edits the value in
+  place. The same Alt+click works on every linked card — Daz scenes, Houdini
+  projects and Unreal projects.
 
   <p align="center">
     <img width="372" alt="Clicking a path chip copies the full path" src="clips/path-chip-copy.webp" />
