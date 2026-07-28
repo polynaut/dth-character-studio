@@ -22,7 +22,12 @@ validated first — same Genesis generation, one character, empty timeline, and
 the **same GP/DK geograft as the primary**, so every scene produces the
 primary's skeleton (*Add anyway* overrides) — then copied into the character's
 scenes folder or left in place. The **primary** scene can't be unlinked;
-extras can. Every card has **Open in Daz**.
+extras can. Every card has **Open in Daz**. The primary can be **replaced**
+instead: its card's folder button browses for a new scene, runs the same
+validation and copy-vs-link decision as Add scene, then swaps it in — the
+Genitalia section re-derives from the new scene's geograft, the avatar
+follows, and an old in-folder copy can be deleted right there (a
+linked-in-place original is always kept).
 
 <p align="center">
   <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with the per-scene hair items beside them" src="screenshots/character-daz-scenes.png" />
