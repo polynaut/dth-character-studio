@@ -176,6 +176,12 @@ and use your own asset!
 > The studio computes every frame number from this structure — you never type a
 > frame, and the Daz and Houdini outputs can't drift apart.
 
+> [!TIP]
+> Want to learn all about the ROM process itself — what the blocks do and why?
+> Read mrpdean's original
+> **[DazToHue documentation](https://docs.google.com/document/d/1bRkFg3vo-WRKuu-kpTGig7GEoIfg7fPNVViFQspmPzc/edit?tab=t.g940wfwgh8lb#heading=h.wlvdwavo6j7h)**
+> — the learning resource this studio builds on.
+
 ## Custom morphs
 
 For this example we add some **Full Body Morphs (FBM)**: switch the section to
