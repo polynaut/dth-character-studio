@@ -575,10 +575,13 @@ export function DazSceneField({
     const inside = insideCharFolder(scene)
     const rel = inside ? normalizePath(dir).slice(charFolder.length + 1) : ''
     const shown = displayPath(inside ? `./${rel}` : dir)
-    // Two-tone (same look + height as every small path chip): dim up to the
-    // last separator, the scene's own folder bright.
+    // Two-tone (same look + height as every small path chip): the part
+    // matching the character's scenes root (`.\daz3d`) is DIM — the primary's
+    // chip is all root, so all dim — and only what goes beyond it reads
+    // bright. Scenes elsewhere fall back to the last-separator split.
     const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
-    const roots = [cut > 0 ? shown.slice(0, cut) : '']
+    const scenesRootShown = sceneDirRel ? displayPath(`./${sceneDirRel}`) : ''
+    const roots = [scenesRootShown, cut > 0 ? shown.slice(0, cut) : ''].filter(Boolean)
     if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
     return (
       <FolderMoveChip
