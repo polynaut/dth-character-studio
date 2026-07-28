@@ -8,8 +8,13 @@ import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
  * authoritative.
  */
 
-/** Hair-ish labels — also floats these to the top of the groom suggestions. */
-export const HAIRISH = /hair|brow|lash|beard|wig|cap\b|pony|braid|bang|bun\b|fur/i
+/** Hair-ish labels — also floats these to the top of the groom suggestions.
+ *  Beyond the literal hair words, the common HAIRSTYLE vocabulary counts too
+ *  ("Bixie Cut", "Shag", "Updo"… name the style, never the word "hair").
+ *  Deliberately NOT here, measured against real product names: `cut` ("Laser
+ *  Cut" outfits), `fringe` (fringe jackets), `weave` (fabric weaves). */
+export const HAIRISH =
+  /hair|brow|lash|beard|wig|cap\b|pony|braid|bang|bun\b|fur|pixie|bixie|\bbob\b|shag|updo|curl|dread|afro|mohawk|tress|pigtail|twintail|topknot|chignon|cornrow|\blocs\b|mane\b/i
 /** Body followers + gen assets are never groom candidates. */
 export const BODY_FOLLOWER = /^genesis ?9|goldenpalace|dicktator/i
 
