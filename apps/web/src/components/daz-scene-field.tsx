@@ -227,12 +227,24 @@ export function DazSceneField({
     const target = normalizePath(p).toLowerCase()
     return linkedScenes.some((s) => normalizePath(s).toLowerCase() === target)
   }
+  const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
   const primaryDir = character.scenePath ? parentDir(character.scenePath) : ''
-  const baseDazRel =
+  const primaryDirRel =
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
       ? primaryDir.slice(charFolder.length + 1)
-      : defaultSubdir
-  const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
+      : ''
+  // The scenes ROOT (the character's "Daz scenes main folder"): the project's
+  // configured subdir when the primary sits under it — the primary itself may
+  // live in a SUBFOLDER of the root — else the primary's own folder (a
+  // renamed per-character root).
+  const defRel = cleanSub(defaultSubdir)
+  const rootMatchesDefault =
+    primaryDirRel !== '' &&
+    defRel !== '' &&
+    (primaryDirRel.toLowerCase() === defRel.toLowerCase() ||
+      primaryDirRel.toLowerCase().startsWith(`${defRel.toLowerCase()}/`))
+  const scenesRootRel = rootMatchesDefault ? primaryDirRel.slice(0, defRel.length) : primaryDirRel
+  const baseDazRel = scenesRootRel || defaultSubdir
 
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
@@ -538,19 +550,17 @@ export function DazSceneField({
     ? 'Checking the scene…'
     : 'A validation check failed — see the table above (or flip “Add anyway”)'
 
-  // Two-tone path chip for the scenes' folder (the primary scene's directory):
-  // everything through the CHARACTER folder is dimmed — we're already inside the
-  // character here, so only the actual scenes subfolder ("\daz3d") reads bright.
-  // A scene outside the character folder falls back to dimming the project root.
-  const sceneDir = displayDirOf(character.scenePath)
-  // The scenes subfolder relative to the character folder ('' when the scene is
-  // linked from outside it) — that's the editable part of the chip.
-  const sceneDirAbs = parentDir(character.scenePath)
-  const sceneDirRel = insideCharFolder(character.scenePath)
-    ? sceneDirAbs.slice(charFolder.length + 1)
-    : ''
-  // Edit-to-move via the shared floating panel (FolderMoveChip) — same flow
-  // the primary card's chip drives; editable only for an in-folder scenes dir.
+  // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
+  // folder is dimmed — we're already inside the character here, so only the
+  // scenes root ("\daz3d") reads bright. The root, NOT the primary's own
+  // folder — the primary may sit in a subfolder of it. A primary linked from
+  // outside the character folder falls back to its full directory.
+  const sceneDirRel = scenesRootRel
+  const sceneDir = sceneDirRel
+    ? displayPath(`${charFolder}/${sceneDirRel}`)
+    : displayDirOf(character.scenePath)
+  // Edit-to-move via the shared floating panel (FolderMoveChip) — moving the
+  // root physically moves the whole folder; editable only for an in-folder root.
   const sceneDirChip = sceneDirRel ? (
     <FolderMoveChip
       dir={sceneDir}
@@ -567,30 +577,26 @@ export function DazSceneField({
   /** Where a scene lives — EVERY card shows its chip: relative to the
    *  character folder (e.g. `.\daz3d\Outfit_B`) for an in-folder scene, the
    *  full folder for one linked in place; copying always yields the full
-   *  folder path. In-folder chips are EDIT-TO-MOVE (the shared
-   *  FolderMoveChip): the primary's edit moves the whole scenes folder, an
-   *  extra's moves just that scene; a linked-in-place chip stays read-only. */
-  function sceneLocationChip(scene: string, opts: { primary?: boolean } = {}): ReactNode {
+   *  folder path. In-folder chips are EDIT-TO-MOVE — the PRIMARY exactly like
+   *  any other scene: the scenes root shows as a fixed prefix, only the
+   *  subfolder beyond it is editable, and an EMPTY input means "directly in
+   *  the root". A linked-in-place chip stays read-only. */
+  function sceneLocationChip(scene: string): ReactNode {
     const dir = parentDir(scene)
     const inside = insideCharFolder(scene)
     const rel = inside ? normalizePath(dir).slice(charFolder.length + 1) : ''
     const shown = displayPath(inside ? `./${rel}` : dir)
     // Two-tone (same look + height as every small path chip): the part
-    // matching the character's scenes root (`.\daz3d`) is DIM — the primary's
+    // matching the scenes root (`.\daz3d`) is DIM — a root-dwelling scene's
     // chip is all root, so all dim — and only what goes beyond it reads
     // bright. Scenes elsewhere fall back to the last-separator split.
     const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
     const scenesRootShown = sceneDirRel ? displayPath(`./${sceneDirRel}`) : ''
     const roots = [scenesRootShown, cut > 0 ? shown.slice(0, cut) : ''].filter(Boolean)
-    // The PRIMARY scene is handled extra: its folder IS the scenes root, and
-    // the root is only movable via the section chip above the cards — its
-    // card chip stays read-only. Linked-in-place scenes are read-only too.
-    if (!inside || opts.primary)
-      return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
-    // A non-primary scene under the scenes root edits only the part BEYOND it
-    // (the root shows as a fixed prefix chip). An emptied input moves the
-    // scene back to the scenes root — the vacated subfolder is pruned by the
-    // move.
+    if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
+    // The scenes-root prefix stays fixed (the root itself moves via the
+    // section chip above the cards); an emptied input moves the scene back to
+    // the root, and the vacated subfolder is pruned by the move.
     const rootLower = sceneDirRel.toLowerCase()
     const underRoot =
       sceneDirRel !== '' &&
@@ -606,7 +612,7 @@ export function DazSceneField({
         editLabel="Move to"
         inputWidthClass="w-36"
         onMove={(next) =>
-          moveExtraScene(
+          moveLinkedScene(
             scene,
             underRoot ? [sceneDirRel, cleanSub(next)].filter(Boolean).join('/') : next,
           )
@@ -651,8 +657,10 @@ export function DazSceneField({
 
   /** Move ONE extra scene to `nextSub` (relative to the character folder) —
    *  the card chip's editor. Copies + deletes the original (a move), then
-   *  persists the repointed extra-scene path and its per-scene record. */
-  async function moveExtraScene(scene: string, nextSub: string): Promise<void> {
+   *  persists the repointed scene path and its per-scene record. The PRIMARY
+   *  moves exactly the same way — its `scenePath` (and the avatar's
+   *  `imageScene`, when it points at it) repoint instead of `extraScenes`. */
+  async function moveLinkedScene(scene: string, nextSub: string): Promise<void> {
     const sceneName = scene.split(/[\\/]/).pop() ?? scene
     const dest = [charFolder, cleanSub(nextSub), sceneName].filter(Boolean).join('/')
     if (normalizePath(dest).toLowerCase() === normalizePath(scene).toLowerCase()) return
@@ -670,9 +678,17 @@ export function DazSceneField({
       })
       const target = normalizePath(scene).toLowerCase()
       const repoint = (p: string) => (normalizePath(p).toLowerCase() === target ? moved : p)
+      const isPrimary = normalizePath(character.scenePath).toLowerCase() === target
       await persistPatch(
         {
-          extraScenes: character.extraScenes.map(repoint),
+          ...(isPrimary
+            ? {
+                scenePath: moved,
+                ...(character.imageScene && normalizePath(character.imageScene).toLowerCase() === target
+                  ? { imageScene: moved }
+                  : {}),
+              }
+            : { extraScenes: character.extraScenes.map(repoint) }),
           sceneOverrides: character.sceneOverrides.map((o) => ({
             ...o,
             scenePath: repoint(o.scenePath),
@@ -746,7 +762,7 @@ export function DazSceneField({
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
-                  pathChip={sceneLocationChip(character.scenePath, { primary: true })}
+                  pathChip={sceneLocationChip(character.scenePath)}
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">

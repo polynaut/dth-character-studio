@@ -468,6 +468,7 @@ function CharacterPage() {
                   character={character}
                   location={location}
                   persistPatch={draft.persistPatch}
+                  houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
                 />
               </>
             )}
