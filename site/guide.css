@@ -133,8 +133,11 @@
 
 .guide-lightbox .lightbox-inner {
   flex: none;
-  max-width: 100%;
-  margin-inline: auto;
+  /* Full width, NOT shrink-to-fit: the img's percentage max-width must resolve
+     against a DEFINITE box. Fit-content made that circular and the image
+     overflowed the wrapper to the right on phones (left margin, none right);
+     the overlay's text-align keeps the image centered instead. */
+  width: 100%;
 }
 
 .guide-lightbox img {
@@ -154,6 +157,53 @@
   .guide-lightbox {
     padding: 16px;
   }
+}
+
+/* Rotated ("turn your phone") mode: a rotation-LOCKED phone never flips the
+   browser to landscape, so a WIDE image in a portrait viewport rotates 90°
+   (image + caption together) to use the screen's long axis — the video-player
+   recipe. guide.js toggles the class from viewport + image geometry; with
+   auto-rotate on, the viewport itself goes landscape and it never applies. */
+.guide-lightbox.rotated {
+  padding: 0;
+  overflow: hidden;
+}
+
+.guide-lightbox.rotated::before,
+.guide-lightbox.rotated::after {
+  content: none;
+}
+
+.guide-lightbox.rotated .lightbox-inner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* The box is the viewport with its axes swapped, then turned upright. */
+  width: 100vh;
+  height: 100vw;
+  padding: 16px;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.guide-lightbox.rotated img {
+  /* !important: guide.js sets an inline width on app screenshots — forced
+     width + max-height would distort the aspect once rotated. */
+  width: auto !important;
+  max-width: 100%;
+  max-height: 100%;
+  /* Shrinkable flex item: image + caption must fit the box TOGETHER — with a
+     rigid image the caption pushed the pair off-center and clipped the edge. */
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.guide-lightbox.rotated .lightbox-caption {
+  flex: none;
+  margin: 10px 0 0;
 }
 
 .guide-lightbox .lightbox-caption {
