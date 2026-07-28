@@ -145,6 +145,28 @@ export function ExportSettingsSection({
           Run the export with the ROM script
         </span>
       </div>
+      <div className="mt-4 flex items-center gap-3">
+        <Switch
+          checked={character.exportHairAssets}
+          disabled={!character.exportPath || saving}
+          onCheckedChange={(exportHairAssets) =>
+            void persistPatch(
+              { exportHairAssets },
+              {
+                toast: exportHairAssets
+                  ? 'Hair assets export with the main export — script regenerated'
+                  : 'Hair export off — script regenerated',
+              },
+            )
+          }
+        />
+        <span
+          className={`text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
+          title="After the main export, each of the open scene's hair items is exported on its own (the Export_Hair pass) — in the combined ROM script and the split Export script alike"
+        >
+          Export hair assets too
+        </span>
+      </div>
     </section>
   )
 }

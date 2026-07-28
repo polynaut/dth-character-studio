@@ -180,19 +180,23 @@ export function dazJson(value: unknown, space?: number): string {
 }
 
 /**
- * Standalone-script snippet: resolve `dthFig` to the character's figure — the
- * selection's root when it matches the generation's source ASSET (rename-proof;
- * an unreadable asset URI keeps the tolerant old behavior), else the scene's
- * first matching root figure, auto-selected. `dthFig` is null only when the
- * scene has no such figure; the caller emits its own error UI for that.
+ * Standalone-script snippet: resolve `dthFig` (or `varName`) to the character's
+ * figure — the selection's root when it matches the generation's source ASSET
+ * (rename-proof; an unreadable asset URI keeps the tolerant old behavior), else
+ * the scene's first matching root figure, auto-selected. The variable is null
+ * only when the scene has no such figure; the caller emits its own error UI for
+ * that. `varName` lets a script that already resolved `dthFig` (the standalone
+ * Export_) coexist with a second resolution elsewhere (the ROM script's inline
+ * hair pass) — the snippet's helper names are fixed, so emit it at most ONCE
+ * per script.
  */
-export function figureAutoSelectSnippet(genesis: GenesisVersion): string {
+export function figureAutoSelectSnippet(genesis: GenesisVersion, varName = 'dthFig'): string {
   // The rename-proof figure identity lives in GENERATIONS (one table row per
   // generation) — mirrors the runtime's v28 auto-select, which only the ROM
   // script gets via the include.
   const files = dazJson(GENERATIONS[genesis].assetFiles)
-  return `var dthFig = Scene.getPrimarySelection();
-while (dthFig && dthFig.getNodeParent()) dthFig = dthFig.getNodeParent();
+  return `var ${varName} = Scene.getPrimarySelection();
+while (${varName} && ${varName}.getNodeParent()) ${varName} = ${varName}.getNodeParent();
 var dthAssetFiles = ${files};
 var dthAssetPath = function (oNode) {
     try {
@@ -214,8 +218,8 @@ var dthMatchesAsset = function (sPath) {
 };
 // The unreadable-asset tolerance applies ONLY to actual figures - a selected
 // non-figure (a prop, Environment Options, ...) must never be accepted.
-var dthFigIsFigure = dthFig && (dthFig.inherits("DzFigure") || dthFig.inherits("DzSkeleton"));
-var dthSelPath = dthFigIsFigure ? dthAssetPath(dthFig) : null;
+var dthFigIsFigure = ${varName} && (${varName}.inherits("DzFigure") || ${varName}.inherits("DzSkeleton"));
+var dthSelPath = dthFigIsFigure ? dthAssetPath(${varName}) : null;
 if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
     // No/non-figure/wrong-asset selection - find the scene's ${genesis} figure
     // by ASSET identity (labels are user-renamable; the source .dsf is not).
@@ -233,7 +237,7 @@ if (dthSelPath == null || (dthSelPath != "" && !dthMatchesAsset(dthSelPath))) {
         Scene.setPrimarySelection(dthFound);
     }
     // A wrong selection never survives - no match means fail loud downstream.
-    dthFig = dthFound;
+    ${varName} = dthFound;
 }
 `
 }
