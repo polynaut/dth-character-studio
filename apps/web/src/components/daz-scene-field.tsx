@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MutableRefObject, Ref } from 'react'
+import type { MutableRefObject, ReactNode, Ref } from 'react'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -43,6 +43,7 @@ function SceneCard({
   primary,
   selected,
   onSelect,
+  pathChip,
 }: {
   scenePath: string
   name: string
@@ -55,6 +56,9 @@ function SceneCard({
   /** Selectable mode (see LinkedAssetCard): card click selects, icon opens. */
   selected?: boolean
   onSelect?: () => void
+  /** Where the scene lives, shown under the title (a non-primary scene in a
+   *  subfolder / linked in place — see `sceneLocationChip`). */
+  pathChip?: ReactNode
 }) {
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The heading shows the scene name without its extension (e.g. ".duf").
@@ -84,6 +88,10 @@ function SceneCard({
       extra={
         primary ? (
           <PrimaryBadge title="The character's original scene — it can't be unlinked" />
+        ) : pathChip ? (
+          // The chip's own click copies / Alt-reveals — it must not bubble into
+          // the card (which would select it, or open the scene in Daz).
+          <span onClick={(e) => e.stopPropagation()}>{pathChip}</span>
         ) : undefined
       }
       altHeld={altHeld}
@@ -538,6 +546,29 @@ export function DazSceneField({
     />
   )
 
+  /** Where a NON-primary scene lives, when it deviates from the primary's
+   *  folder: shown relative to the character folder (e.g. `.\daz3d\Outfit_B`)
+   *  for an in-folder scene, as the full folder for one linked in place —
+   *  copying always yields the full folder path. A scene right beside the
+   *  primary stays chip-less: the section chip above the cards names that
+   *  folder already. */
+  function sceneLocationChip(scene: string): ReactNode {
+    const dir = parentDir(scene)
+    if (normalizePath(dir).toLowerCase() === normalizePath(sceneDirAbs).toLowerCase()) return null
+    const shown = displayPath(
+      insideCharFolder(scene) ? `./${normalizePath(dir).slice(charFolder.length + 1)}` : dir,
+    )
+    // Two-tone like the folder chips: the leading part dim, the scene's own
+    // folder (from its last separator) bright.
+    const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
+    return (
+      <PathCode path={displayPath(dir)} className="text-[11px]">
+        {cut > 0 && <span className="text-muted-foreground/60">{shown.slice(0, cut)}</span>}
+        <span className="text-foreground/80">{shown.slice(Math.max(cut, 0))}</span>
+      </PathCode>
+    )
+  }
+
   async function onMoveScenesDir() {
     if (editDir === null || !editDir.trim()) return
     const newSubdir = editDir
@@ -685,6 +716,7 @@ export function DazSceneField({
                   onRemove={() => askRemove(scene)}
                   selected={selectedScene !== undefined ? selectedScene === scene : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
+                  pathChip={sceneLocationChip(scene)}
                 />
               ))}
             </div>
