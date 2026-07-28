@@ -45,13 +45,18 @@ describe('UnrealProjectsBar mutations', () => {
     // which the bug lived: unlink A, then unlink B before the loader lands.
     render(<UnrealProjectsBar project={projectWith([A, B])} />)
 
+    // The ✕ pauses on the confirm dialog now — the write fires on its Unlink.
     fireEvent.click(screen.getByLabelText('Unlink A'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(setUnrealProjects).toHaveBeenCalledTimes(1))
     expect(setUnrealProjects.mock.calls[0][0].data.paths).toEqual([B])
+    // The dialog closes once the write lands.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Unlink' })).toBeNull())
 
     // The prop still lists [A, B] (no invalidate/rerender happened) — the next
     // write must build on the freshest list [B], not resurrect A.
     fireEvent.click(screen.getByLabelText('Unlink B'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(setUnrealProjects).toHaveBeenCalledTimes(2))
     expect(setUnrealProjects.mock.calls[1][0].data.paths).toEqual([])
   })
@@ -64,13 +69,15 @@ describe('UnrealProjectsBar mutations', () => {
     render(<UnrealProjectsBar project={projectWith([A, B])} />)
 
     fireEvent.click(screen.getByLabelText('Unlink A'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(setUnrealProjects).toHaveBeenCalledTimes(1))
 
-    // Every other mutating control is disabled while the write is pending.
+    // Every other mutating control is disabled while the write is pending. The
+    // busy dialog is modal (the background tree is aria-hidden), so the cards
+    // are reached by their labels, not by role.
     expect(screen.getByLabelText('Unlink B')).toHaveProperty('disabled', true)
     expect(screen.getByLabelText('Install DTH content into B')).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: /Linking…/ })).toHaveProperty('disabled', true)
-    // A disabled unlink can't fire — no interleaved second write.
+    // A disabled unlink can't even open its confirm — no interleaved write.
     fireEvent.click(screen.getByLabelText('Unlink B'))
     expect(setUnrealProjects).toHaveBeenCalledTimes(1)
 
