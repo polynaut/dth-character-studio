@@ -1,5 +1,23 @@
 # @dth/web
 
+## 0.50.0
+
+### Minor Changes
+
+- [#575](https://github.com/polynaut/dth-character-studio/pull/575) [`5a5cc24`](https://github.com/polynaut/dth-character-studio/commit/5a5cc24be180e4148b82e39fe6fb02502fca615e) Thanks [@polynaut](https://github.com/polynaut)! - New Export-directory toggle **"Export hair assets too"**: right after the main DTH export, each of the open scene's hair items is exported on its own (the Export_Hair per-item alembic pass) — in both modes, the combined ROM script and the split Export script. Scenes without a hair list skip the pass; the standalone Export_Hair script keeps being generated regardless.
+
+- [#578](https://github.com/polynaut/dth-character-studio/pull/578) [`016f1b7`](https://github.com/polynaut/dth-character-studio/commit/016f1b703350a166724fdd85189ce6fc6daacf90) Thanks [@polynaut](https://github.com/polynaut)! - The primary Daz scene card has a **browse-to-replace** button (folder icon) now: pick a new `.duf`, pass the same validation and copy-vs-link decision as Add scene, and it replaces the primary — the Genitalia section re-derives from the new scene's geograft, the avatar follows, and the old scene's files can be deleted in the same dialog when they were an in-folder copy (a linked-in-place original is always kept).
+
+### Patch Changes
+
+- [#577](https://github.com/polynaut/dth-character-studio/pull/577) [`5bbe4da`](https://github.com/polynaut/dth-character-studio/commit/5bbe4da17fbc2b2032c688ebbea7ea0854b6dc00) Thanks [@polynaut](https://github.com/polynaut)! - The header avatar re-syncs again after the primary scene is re-saved in Daz: a separator/case difference between the stored avatar provenance and the scene list no longer kills the sync silently, and a scene-snapshot avatar without provenance now adopts the primary scene when no linked scene's current tip byte-matches (its source tip was simply overwritten before provenance existed).
+
+- [#576](https://github.com/polynaut/dth-character-studio/pull/576) [`1d0da57`](https://github.com/polynaut/dth-character-studio/commit/1d0da57c5c8aa84768d470ed0bd99be91bdb74c7) Thanks [@polynaut](https://github.com/polynaut)! - Hair picker fixes: a search match no longer tears the option label apart ("Bi … xie Cut Main" — the bold highlight became separate flex items), and hair detection knows the hairstyle vocabulary (Bixie/Pixie Cut, Bob, Shag, Updo, Dreads, …) so items named after their style — never containing the word "hair" — classify as HAIR and get picked by the magic wand and creation pre-select.
+
+- Updated dependencies [[`5a5cc24`](https://github.com/polynaut/dth-character-studio/commit/5a5cc24be180e4148b82e39fe6fb02502fca615e), [`1d0da57`](https://github.com/polynaut/dth-character-studio/commit/1d0da57c5c8aa84768d470ed0bd99be91bdb74c7), [`016f1b7`](https://github.com/polynaut/dth-character-studio/commit/016f1b703350a166724fdd85189ce6fc6daacf90), [`3ee54fb`](https://github.com/polynaut/dth-character-studio/commit/3ee54fb1841200fa16f5893af807d23c6b40f46e)]:
+  - @dth/rom@0.50.0
+  - @dth/ui@0.50.0
+
 ## 0.49.0
 
 ### Minor Changes
