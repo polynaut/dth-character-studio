@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, FolderOpen, HardDriveDownload,
 import { toast } from 'sonner'
 
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Button, cn, useModifierHeld } from '@dth/ui'
+import { Button, RemoveAssetDialog, cn, useModifierHeld } from '@dth/ui'
 import unrealLogo from '#/assets/unreal-logo.svg'
 import {
   installUnrealDthContent,
@@ -18,6 +18,13 @@ import { PathCode } from '#/components/path-code.tsx'
 import { displayPath, middleTruncatePath, normalizePath } from '#/lib/path.ts'
 
 import type { ProjectInfo } from '#/lib/rom/api.ts'
+
+/** "D:\…\ThighGlutes.uproject" → "ThighGlutes" — the card title and the
+ *  unlink-confirm dialog name the project the same way. */
+function uprojectDisplayName(uprojectPath: string): string {
+  const fileName = uprojectPath.split(/[\\/]/).pop() ?? uprojectPath
+  return fileName.replace(/\.[^./\\]+$/, '')
+}
 
 /**
  * A linked Unreal project card in the footer bar: the U mark, name + a REAL
@@ -54,8 +61,7 @@ function UnrealCard({
   onInstall: (e: React.MouseEvent) => void
   onRemove: () => void
 }) {
-  const fileName = uprojectPath.split(/[\\/]/).pop() ?? uprojectPath
-  const displayName = fileName.replace(/\.[^./\\]+$/, '')
+  const displayName = uprojectDisplayName(uprojectPath)
   // Alt held → the open icon previews the alternate action (show in Explorer).
   const altHeld = useModifierHeld('Alt')
   const shownPath = displayPath(uprojectPath)
@@ -167,6 +173,9 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
   // which card's install is currently running.
   const [dthStatus, setDthStatus] = useState<Record<string, boolean | undefined>>({})
   const [installingPath, setInstallingPath] = useState('')
+  // The card whose hover-✕ was clicked — unlinking pauses on a confirm dialog
+  // (same recipe as removing a Daz scene / Houdini project from a character).
+  const [pendingRemove, setPendingRemove] = useState('')
   // Ctrl/Cmd held → installed cards' dimmed install buttons light up (re-install).
   const ctrlHeld = useModifierHeld('Control')
   const metaHeld = useModifierHeld('Meta')
@@ -369,12 +378,7 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
                     )
                   }}
                   onInstall={(e) => void installDth(path, e)}
-                  onRemove={() =>
-                    void save(
-                      latestPaths.current.filter((p) => p !== path),
-                      'Unlinked Unreal project',
-                    )
-                  }
+                  onRemove={() => setPendingRemove(path)}
                 />
               ))}
             </div>
@@ -406,6 +410,21 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
           </>
         )}
       </div>
+      {pendingRemove && (
+        <RemoveAssetDialog
+          title="Unlink Unreal project?"
+          description={`Unlink “${uprojectDisplayName(pendingRemove)}” from this project — the .uproject and all its files stay on disk.`}
+          showDeleteFile={false}
+          busy={busy}
+          onConfirm={() =>
+            void save(
+              latestPaths.current.filter((p) => p !== pendingRemove),
+              'Unlinked Unreal project',
+            ).then(() => setPendingRemove(''))
+          }
+          onClose={() => setPendingRemove('')}
+        />
+      )}
     </FileDropZone>
   )
 }
