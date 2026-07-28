@@ -70,18 +70,17 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 &nbsp;
 
 > [!NOTE]
-> **Per-scene by design.** The CSV is named after the open scene, so scanning an
-> outfit variant, a different look, etc. produces **separate** CSVs that don't
-> overwrite each other — run the script once per scene you want covered, and the
-> studio merges them, attributing each product to the scene(s) it appeared in.
+> **Per-scene by design** — each scene's scan writes its own CSV. Run the
+> script once per scene you want covered; the studio merges them, attributing
+> each product to the scene(s) it appeared in.
 
 &nbsp;
 
-Behind the scenes it matches assets strongest-first: the file the asset came from →
-its textures' folder → SKU → product keywords → known third-party products (e.g.
-Golden Palace) → Genesis base essentials, with a content-library fallback for manual
-installs that have no DIM manifest. Scans are stored under the app's data folder,
-keyed to the project + character, and **age out after 30 days** (and are removed when
+Matching tries the strongest signals first — the asset's own file, its
+textures, SKU, product keywords — falling back to a content-library match for
+manual installs without a DIM manifest (that's the **Match** column on the
+Products tab). Scans are stored under the app's data folder, keyed to
+project + character, and **age out after 30 days** (they're also removed when
 you delete the character) — see [Storage & housekeeping](./tools.md).
 
 ---
@@ -112,11 +111,9 @@ CSVs from disk.
 
 ## Gotchas
 
-- **Naming needs the DIM folder.** Without it, everything lists as unmatched (the
-  scan still works, just unnamed).
-- **Per-scene.** Cover every outfit/look by opening each scene and re-running.
-- **Stored ≠ scanned.** Storing snapshots the current scan onto the character; later
-  scans can drift until you re-store (the amber banner flags it).
-- The DIM folder is machine-wide — changing it affects every project.
+- No DIM folder → everything lists as unmatched (the scan still works, just
+  unnamed).
+- **Stored ≠ scanned** — storing snapshots the current scan; later scans can
+  drift until you re-store (the amber banner flags it).
 
 [← Guide overview](./README.md)

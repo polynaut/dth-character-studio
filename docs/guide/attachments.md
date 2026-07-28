@@ -7,10 +7,9 @@ inside a project alongside its characters. It's an **opt-in, per-project** featu
 &nbsp;
 
 > [!NOTE]
-> Think of it as a labelled shelf plus a one-click "open this in Daz" button, not a
-> character generator. Adding an attachment does **not** create or pre-fill a character
-> — the link to characters stays manual (open the scene in Daz, build your character
-> from it, save its `.duf`, then add a character pointing at that scene).
+> Think of it as a labelled shelf plus a one-click "open this in Daz" button,
+> not a character generator — adding an attachment does **not** create or
+> pre-fill a character.
 
 &nbsp;
 
@@ -72,12 +71,10 @@ attachment**.
 
 ## Use an attachment
 
-The only in-app action is **Open scene in Daz** — it opens the `.duf` in Daz Studio
-(Daz must be the registered handler). From there you work in Daz as usual: dial your
-character on top of the base, save a new `.duf`, and back in the studio **Add
-character** pointing at that saved scene. There is no automatic "make a character
-from this attachment" step by design — attachments are for organization and a fast
-launch.
+The only in-app action is **Open scene in Daz** — it opens the `.duf` in Daz
+Studio (Daz must be the registered handler). From there you work in Daz as
+usual: dial your character on top of the base, save a new `.duf`, and back in
+the studio **Add character** pointing at that saved scene.
 
 ---
 
@@ -94,10 +91,7 @@ only. Changing the project's characters subfolder never touches `.assets`.
 
 ## Good to know
 
-- Opt-in **per project**; re-enable it for each project that wants it.
 - `.duf` scenes only.
-- Linked attachments never have their source file deleted by the app; copied ones can
-  be fully removed (with an optional "keep the files on disk").
 - The adjacent **Enable Daz Products** switch is a separate feature — see
   [Daz product scanning](./product-scanning.md).
 

@@ -10,9 +10,9 @@ covers the network in depth; this page is just the hand-off.
 - Your character's **`<Name>_pose_asset.csv`** — in the export folder if you used
   direct export, otherwise in the character's folder in the project.
 - The exporter's **`<Name>.abc`** / **`<Name>.dth`** next to it.
-- For any **[Bone scale](./04-first-character.md)** frames, a **reference-skeleton
-  FBX** each (in a `Reference Skeletons` subfolder) — the PoseAsset CSV already
-  points at them by absolute path, so there's nothing extra to wire up.
+- For any **[Bone scale](./04-first-character.md)** frames, a
+  **reference-skeleton FBX** each — the CSV already points at them, nothing to
+  wire up.
 
 ## Hook it up
 
@@ -22,9 +22,8 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 > [!NOTE]
 > A scene whose [per-scene ROM overrides](./advanced.md#rom-overrides) change the
 > **frame layout** has its own **`<Name>_<Scene>_pose_asset.csv`** — point the
-> PoseAsset import at the CSV for the scene you exported (overrides that only change
-> run-time values — identity dials, preserve morphs, GEN art direction, JCM mods —
-> reuse the default CSV).
+> PoseAsset import at the CSV for the scene you exported (see
+> [What Save generates](./advanced.md#what-save-generates)).
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
@@ -37,10 +36,10 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 &nbsp;
 
 > [!NOTE]
-> That's the whole trick: the CSV was generated from the **same definition** as the
-> Daz script you just ran, so every frame Houdini expects is exactly where Daz put
-> it. Change the character in the studio later, Save, re-run the script, re-export —
-> both sides move together.
+> That's the whole trick: the CSV comes from the **same definition** as the Daz
+> script you just ran, so every frame Houdini expects is exactly where Daz put
+> it. Change the character later, Save, re-run, re-export — both sides move
+> together.
 
 &nbsp;
 

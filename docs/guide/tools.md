@@ -3,10 +3,8 @@
 The **Tools** page (top-right) is where you install and maintain *your own* Daz /
 Houdini content and keep the studio's generated files in sync. **Everything here
 is optional** — you never need it to define a character and generate its ROM.
-The [one-time setup](./02-setup.md) covered installing the DTH release + Exporter;
-Tools is for the extras beyond that.
-
-It has two tabs.
+The [one-time setup](./02-setup.md) covered installing the DTH release +
+Exporter; Tools is for the extras beyond that.
 
 <p align="center">
   <img width="900" alt="Tools page, two tabs" src="screenshots/tools-page.png" />
@@ -37,10 +35,9 @@ everywhere previews without writing.
 Point it at your **asset source folders** (e.g. per-Genesis download folders;
 `.zip`s are extracted). Each asset's content (`data` / `People` / `Runtime` /
 `Documentation`) installs into "My DAZ 3D Library", **skipping what's already
-there**. When two products ship the same file, the winner is picked automatically:
-**newer Genesis wins** (by folder name, e.g. `_genesis 9` over `_genesis 8`), then
-the **bigger file** — so only the winning copy installs. **Scan** lists what's
-found; **Install** copies only what changed.
+there**. When two products ship the same file, the winner is picked
+automatically — **newer Genesis wins** (by folder name), then the **bigger
+file**. **Scan** lists what's found; **Install** copies only what changed.
 
 <p align="center">
   <img width="900" alt="Daz assets install section" src="screenshots/tools-daz-assets.png" />
@@ -50,16 +47,16 @@ found; **Install** copies only what changed.
 
 ### Deduplicate
 
-Finds **duplicate assets** (a folder and its identical `.zip`, or the same product
-at two versions) and **conflicting shared files** (the same file shipped by two
-products at different sizes). **Scan** previews; nothing changes until you
-**Apply**. Apply only **quarantines** the redundant copies — it *moves* them to a
-**Quarantine folder** you set (reversible; pick one *outside* your asset sources —
-and empty it yourself in Explorer once you're sure you don't need the copies).
-Shared-file conflicts are **never rewritten** (that would edit an author's
-download) — you **Accept** them instead, which tells the scan they're legitimately
-shared. See also the [nested-zip handling](./tools.md) for store "wrapper"
-downloads (a zip inside a zip) — the scan looks inside them automatically.
+Finds **duplicate assets** (a folder and its identical `.zip`, or the same
+product at two versions) and **conflicting shared files** (the same file
+shipped by two products at different sizes). **Scan** previews; nothing changes
+until you **Apply**. Apply only **quarantines** the redundant copies — it
+*moves* them to a **Quarantine folder** you set, so it's reversible (pick one
+*outside* your asset sources, and empty it yourself in Explorer once you're
+sure). Shared-file conflicts are **never rewritten** — that would edit an
+author's download — you **Accept** them instead, which tells the scan they're
+legitimately shared. Store "wrapper" downloads (a zip inside a zip) are looked
+inside automatically.
 
 <p align="center">
   <img width="900" alt="Deduplicate section" src="screenshots/tools-deduplicate.png" />
@@ -101,15 +98,14 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 
 ## Tab 2 — Refresh assets
 
-Re-generates the Daz scripts and PoseAsset CSVs so every generated file matches the
-**current** studio/runtime version — and first migrates definitions saved by an
-older studio to the newest schema (your ROM content is preserved). Run it after
-**updating the app** or **switching DTH release**. It always covers **every known
-(recent) project**, no matter which window you run it from. Problems per character
-are listed inline; the button pulses orange when a refresh is due.
-**Ctrl+click Refresh** to also rebuild every character's stored **avatar** from
-its pristine source — needed once after an update that changes the avatar
-pipeline (e.g. the tile background).
+Re-generates the Daz scripts and PoseAsset CSVs so every generated file matches
+the **current** studio/runtime version, migrating definitions saved by an older
+studio first (your ROM content is preserved). Run it after **updating the app**
+or **switching DTH release**. It covers **every known (recent) project**, no
+matter which window you run it from; problems per character are listed inline,
+and the button pulses orange when a refresh is due. **Ctrl+click Refresh** also
+rebuilds every character's stored **avatar** from its pristine source — needed
+once after an update that changes the avatar pipeline.
 
 <p align="center">
   <img width="900" alt="Refresh assets tab" src="screenshots/tools-refresh.png" />
