@@ -1,3 +1,5 @@
+import { HAIRISH } from '#/lib/groom-detect.ts'
+
 import type { ReactNode } from 'react'
 
 /**
@@ -10,10 +12,6 @@ import type { ReactNode } from 'react'
  */
 export type GroomKind = 'hair' | 'clothing' | 'graft'
 
-/** Hair-ish labels — also floats these to the top of the groom suggestions. */
-export const HAIRISH = /hair|brow|lash|beard|wig|cap\b|pony|braid|bang|bun\b|fur/i
-/** Body followers + gen assets are never groom candidates. */
-export const BODY_FOLLOWER = /^genesis ?9|goldenpalace|dicktator/i
 /** Geografts (genitalia / anatomy grafts) — clothing-like conforms, but not hair. */
 const GRAFTISH = /graft|geo-?graft|golden ?palace|dicktator|genital|futalicious/i
 

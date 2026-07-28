@@ -278,8 +278,19 @@ function ProjectCharactersPage() {
             deleteOriginal,
           },
         })
+        // Repoint the per-scene records too (the pre-selected hair rides on the
+        // scene path) — the original path just stopped being a linked scene.
         character = await saveCharacter({
-          data: { projectId, character: { ...character, scenePath: movedScene } },
+          data: {
+            projectId,
+            character: {
+              ...character,
+              scenePath: movedScene,
+              sceneOverrides: character.sceneOverrides.map((o) =>
+                o.scenePath === scenePath.trim() ? { ...o, scenePath: movedScene } : o,
+              ),
+            },
+          },
         })
       }
       // Generate the initial files so they exist + match the UI right away — the
