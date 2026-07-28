@@ -94,8 +94,11 @@ export function LinkedAssetCard({
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
         <div className="mt-3 truncate text-base font-medium">{title}</div>
-        {/* Sits just under the title (not pinned to the bottom). */}
-        {extra && <div className="mt-2">{extra}</div>}
+        {/* Sits just under the title (not pinned to the bottom). z-10 lifts it
+            above the cover button, so an INTERACTIVE extra (the scene cards'
+            edit-to-move path chip) receives its own clicks — nesting it inside
+            a card <button> would be invalid HTML (see the corner buttons). */}
+        {extra && <div className="relative z-10 mt-2 w-fit">{extra}</div>}
       </div>
     </>
   )
@@ -104,29 +107,31 @@ export function LinkedAssetCard({
     // `group` (the caller's `group-hover:` accentClass) live on the wrapper, so
     // the corner overlay button below accents on card hover too.
     <div className={cn('group group/card relative', width)}>
-      {inertBody ? (
-        // Inert body — no title tooltip (the name is already the heading) and no
-        // click; opening is reachable only through the corner button below.
-        <div className={bodyClass}>{bodyInner}</div>
-      ) : (
+      {/* The body is ALWAYS a plain div — select/open live on the transparent
+          cover button below, so interactive content inside the body (the extra
+          slot) stays valid HTML. The selected fill + ring stay keyed off this
+          element's data-selected (the card utility's CSS). */}
+      <div className={bodyClass} data-selected={showCheck ? 'true' : undefined}>
+        {bodyInner}
+      </div>
+      {!inertBody && (
+        // The card-wide action as a COVER: a transparent button stretched over
+        // the body (interactive children lift above it with z-10; the corner
+        // cluster and check are later siblings, naturally on top).
         <button
           type="button"
           onClick={onSelect ?? onOpen}
           data-alt-reveal=""
-          // The selected fill + ring live on the card utility, keyed off this
-          // attribute (so the whole appearance stays themeable in CSS).
-          data-selected={showCheck ? 'true' : undefined}
           // Selectable mode is a toggle button — the ring alone is invisible to
           // assistive tech, so the selection state must also be aria-pressed.
           aria-pressed={onSelect ? (selected ?? false) : undefined}
+          aria-label={title}
           // Selectable body: no tooltip — the name is already the heading, and the
           // body selects (it doesn't open, so `openTitle` would mislead). Only the
           // whole-card-opens default carries the "Open…" tooltip on the body.
           title={onSelect ? undefined : openTitle}
-          className={bodyClass}
-        >
-          {bodyInner}
-        </button>
+          className="absolute inset-0 rounded-lg"
+        />
       )}
 
       {/* Left accent bar — painted over the card's left edge (after the button so

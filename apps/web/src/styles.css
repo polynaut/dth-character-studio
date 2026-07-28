@@ -454,7 +454,11 @@ a {
 @utility daz-card {
   background-color: color-mix(in oklab, var(--daz-green) 7%, var(--card));
   border-color: color-mix(in oklab, var(--daz-green) 26%, var(--border));
-  &:hover {
+  /* The card's action is a transparent COVER button (a sibling, see
+     LinkedAssetCard) — the body itself never hovers while the pointer sits on
+     the cover, so the hover tint also keys off the wrapper group. */
+  &:hover,
+  .group\/card:hover & {
     background-color: color-mix(in oklab, var(--daz-green) 12%, var(--card));
     border-color: color-mix(in oklab, var(--daz-green) 55%, var(--border));
   }

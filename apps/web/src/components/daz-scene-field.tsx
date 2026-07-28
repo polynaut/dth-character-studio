@@ -88,6 +88,9 @@ function SceneCard({
       }
       extra={
         primary || pathChip ? (
+          // The chip is interactive (copy / Alt-reveal / edit-to-move) — the
+          // card's extra row sits ABOVE the cover button (LinkedAssetCard),
+          // so its clicks are its own and never select/open the card.
           <span className="flex flex-wrap items-center gap-2">
             {primary && (
               <PrimaryBadge
@@ -95,9 +98,7 @@ function SceneCard({
                 title="The character's original scene — it can't be unlinked"
               />
             )}
-            {/* The chip's own click copies / Alt-reveals — it must not bubble
-                into the card (which would select it, or open the scene in Daz). */}
-            {pathChip && <span onClick={(e) => e.stopPropagation()}>{pathChip}</span>}
+            {pathChip}
           </span>
         ) : undefined
       }
