@@ -372,12 +372,6 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// The topbar hint shows the shortcut the visitor's OS actually uses.
-if (/mac/i.test(navigator.userAgentData?.platform || navigator.platform || '')) {
-  const hint = document.querySelector('.topbar-search kbd')
-  if (hint) hint.textContent = '⌘ K'
-}
-
 // ── Direct download ──────────────────────────────────────────────────────────
 // The topbar Download button starts the right installer immediately — same
 // mechanism as the landing page (see main.js), sharing its sessionStorage

@@ -512,14 +512,14 @@
 /* ------------------------------------------------------------- Search */
 
 /* Topbar trigger (baked into every guide page by build-guide-site.mjs);
-   guide.js opens the modal below and swaps the hint to "⌘ K" on a Mac. */
+   guide.js opens the modal below. */
 .topbar-search {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px;
+  padding: 7px 10px 7px 14px;
   border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-  border-radius: 10px;
+  border-radius: 999px;
   background: color-mix(in oklab, var(--bg-raised) 55%, transparent);
   color: var(--muted);
   font-family: var(--font);
@@ -545,6 +545,12 @@
   font-family: var(--font);
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+/* Inside the pill the hint chip rides along, stadium-shaped. */
+.topbar-search kbd {
+  border-radius: 999px;
+  padding: 1px 8px;
 }
 
 /* Above the lightbox (200) — reachable via Ctrl+K while a screenshot is open. */
