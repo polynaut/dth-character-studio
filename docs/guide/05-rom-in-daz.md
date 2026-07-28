@@ -31,6 +31,15 @@ reports what it did when it finishes.
 
 &nbsp;
 
+> [!NOTE]
+> The scripts check the **open scene** first: running a character's ROM,
+> export or scan script while some *other* scene is open (or an unsaved one)
+> does nothing — an error dialog names the open scene and the character's
+> linked scenes instead. No more silently building Kira's ROM into the wrong
+> scene.
+
+&nbsp;
+
 ## Direct export (optional, recommended)
 
 Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**

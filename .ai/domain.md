@@ -57,6 +57,12 @@ offsets byte-identically — if a generation change moves them, the change is wr
 - Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (one
   `<Name>_Hair_<item>_grooms.abc` per hair item of the open scene), `Scan_Products_…`
   (product scan).
+- **Every per-character script leads with the wrong-scene guard** (runtime v36,
+  `sceneGuardSnippet` in `dz-snippets.ts`): it embeds the character's linked
+  scene paths (normalized like every other scene lookup) and refuses to run —
+  error dialog; the ROM script also writes the run log — when the OPEN Daz scene
+  isn't one of them (or is unsaved). An empty list (legacy/sceneless definition)
+  skips the check.
 - **Scene overrides fold into the ONE ROM script** (runtime v32): it embeds a
   `dthSceneOverrides` map (normalized open-scene path → the few config fields that
   scene changes — a fresh `extraFrames` for a ROM override, the G9 dials for an

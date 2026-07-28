@@ -1478,9 +1478,13 @@ describe('exporter integration', () => {
     expect(content).toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
   })
 
-  it('does not read the scene name when exportSceneSubfolders is off', () => {
+  it('does not derive a scene subfolder when exportSceneSubfolders is off', () => {
+    // Not "never reads Scene.getFilename()": the wrong-scene guard reads it in
+    // every script now — only the SUBFOLDER derivation must be absent.
     const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
-    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain('Scene.getFilename()')
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    expect(content).not.toContain('completeBaseName()')
+    expect(content).not.toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
   })
 
   it('copies the PoseAsset CSV from the character folder into the resolved export dir', () => {
@@ -1728,5 +1732,48 @@ describe('toPoseAssetCsv — G8.1 template (pre-2.0 / CTL era)', () => {
 
   it('G9 on the pre-2.0 era is experimental too (its template carries CURVE rows)', () => {
     expect(toPoseAssetCsv(makeCharacter(), FRAMES, '').experimental).toBe(true)
+  })
+})
+
+describe('wrong-scene guard (dthSceneLinkError)', () => {
+  const SCENES = {
+    scenePath: 'D:\\DTH Projects\\Demo\\Kira\\daz3d\\KiraDefault_G9_GP.duf',
+    extraScenes: ['D:\\DTH Projects\\Demo\\Kira\\daz3d\\KiraBeach_G9_GP.duf'],
+  }
+  const SCAN_OPTS = { dimManifestPath: '', outputDir: 'C:/out', dazLibraryFolder: '' }
+
+  it('every per-character script embeds the guard with NORMALIZED linked scenes', () => {
+    const character = makeCharacter(SCENES)
+    const scripts = [
+      toCharacterScriptDsa(character, {}, FRAMES).content,
+      toExportScriptDsa(makeCharacter({ ...SCENES, exportPath: 'X:/exports' }), FRAMES).content,
+      toGroomExportScriptDsa(makeCharacter({ ...SCENES, exportPath: 'X:/exports' })).content,
+      toScanProductsScriptDsa(character, SCAN_OPTS).content,
+    ]
+    for (const content of scripts) {
+      // The keys match the runtime comparison: '/'-separated + lowercased.
+      expect(content).toContain('"d:/dth projects/demo/kira/daz3d/kiradefault_g9_gp.duf"')
+      expect(content).toContain('"d:/dth projects/demo/kira/daz3d/kirabeach_g9_gp.duf"')
+      // The guard is CONSULTED, not just defined — the abort branch exists.
+      expect(content).toContain('dthSceneLinkErr = dthSceneLinkError()')
+      expect(content).toContain('MessageBox.critical(dthSceneLinkErr')
+    }
+  })
+
+  it('the ROM script logs the aborted run so the studio reports it', () => {
+    const content = toCharacterScriptDsa(makeCharacter(SCENES), {}, FRAMES).content
+    expect(content).toContain('dthWriteFailureLog(dthSceneLinkErr)')
+    // The guard aborts BEFORE the build: its branch precedes the runtime call.
+    expect(content.indexOf('dthSceneLinkErr = dthSceneLinkError()')).toBeLessThan(
+      content.indexOf('ApplyDTHCharacter(dthCharacterConfig)'),
+    )
+  })
+
+  it('a definition without linked scenes cannot validate — the guard passes', () => {
+    // Legacy/sceneless definitions: an empty list makes dthSceneLinkError()
+    // return '' unconditionally, so the script still runs everywhere.
+    const content = toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content
+    expect(content).toContain('var dthLinkedScenes = []')
+    expect(content).toContain('if (dthLinkedScenes.length == 0) return ""')
   })
 })

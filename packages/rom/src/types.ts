@@ -1098,8 +1098,15 @@ export const CHARACTER_SCHEMA_VERSION = 24
  *       the same workaround out of the next DTH release (July 2026), so the
  *       studio returns to Linear in lockstep. Refresh assets (or re-save) to
  *       reinstall the runtime; re-run the ROM script in Daz to re-key.
+ *  36 — generated-script change only (runtime files untouched): every
+ *       per-character script (ROM_, Export_, Export_Hair_, Scan_Products_)
+ *       leads with the wrong-scene guard — it refuses to run (error dialog,
+ *       ROM_ also writes the run log) when the OPEN Daz scene isn't one of the
+ *       character's linked scenes; running Kira's script on Ita's scene used
+ *       to apply everything silently. Bumped so Refresh assets regenerates
+ *       every existing script with the guard.
  */
-export const RUNTIME_VERSION = 35
+export const RUNTIME_VERSION = 36
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
