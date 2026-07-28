@@ -1,4 +1,4 @@
-import { CircleCheck, TriangleAlert } from 'lucide-react'
+import { CircleCheck, CircleDashed, TriangleAlert } from 'lucide-react'
 
 import { Label, Switch } from '@dth/ui'
 
@@ -8,12 +8,13 @@ import type { SceneCheckRow, SceneCheckState } from '#/lib/scene-compat.ts'
 
 /**
  * The "Validation" block of the add-scene / create-character dialogs: the
- * checks (see `lib/scene-compat.ts`) as a compact label/state table — same
- * look as the Tools → Refresh assets version table. A FAILED row carries the
- * what/why on its tooltip (`row.why`); passing rows stay quiet — no permanent
- * hint paragraph. When a check failed, the escape switch appears (detection
- * can't know every scene, so a definite fail blocks the confirm but never
- * bricks the flow).
+ * checks (see `lib/scene-compat.ts`) as a single-line checklist — state icon +
+ * check name, with a detail after a dash only when it adds something (the
+ * detected generation/geograft, or what a failed check actually found). A
+ * FAILED row carries the what/why on its tooltip (`row.why`); passing rows
+ * stay quiet — no permanent hint paragraph. When a check failed, the escape
+ * switch appears (detection can't know every scene, so a definite fail blocks
+ * the confirm but never bricks the flow).
  */
 export function SceneValidationTable({
   rows,
@@ -32,7 +33,7 @@ export function SceneValidationTable({
   forceLabel: string
 }) {
   const failed = !loading && sceneCompatFailed(rows)
-  const valueClass = (state: SceneCheckState) =>
+  const rowClass = (state: SceneCheckState) =>
     state === 'ok'
       ? 'text-emerald-600 dark:text-emerald-500'
       : state === 'fail'
@@ -41,41 +42,37 @@ export function SceneValidationTable({
   return (
     <div>
       <Label className="mb-1 block">Validation</Label>
-      <table className="w-full overflow-hidden rounded-lg border text-sm">
-        <tbody className="divide-y">
-          {rows.map((row) => {
-            const rowFailed = !loading && row.state === 'fail'
-            return (
-              // A failed row explains itself on hover — what the check demands
-              // and why (no permanent hint paragraph under the table).
-              <tr
-                key={row.key}
-                title={rowFailed ? row.why : undefined}
-                className={rowFailed ? 'cursor-help' : undefined}
-              >
-                <th className="w-2/5 px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted-foreground">
-                  {row.label}
-                </th>
-                <td className="px-3 py-1.5">
-                  <span
-                    className={`inline-flex items-start gap-1.5 font-medium ${
-                      loading ? 'text-muted-foreground' : valueClass(row.state)
-                    }`}
-                  >
-                    {!loading && row.state === 'ok' && (
-                      <CircleCheck className="mt-0.5 size-4 shrink-0" />
-                    )}
-                    {rowFailed && (
-                      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
-                    )}
-                    {loading ? 'checking…' : row.value}
-                  </span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <ul className="divide-y overflow-hidden rounded-lg border text-sm">
+        {rows.map((row) => {
+          const rowFailed = !loading && row.state === 'fail'
+          const detail = loading ? 'checking…' : row.value
+          return (
+            // A failed row explains itself on hover — what the check demands
+            // and why (no permanent hint paragraph under the list).
+            <li
+              key={row.key}
+              title={rowFailed ? row.why : undefined}
+              className={`flex items-start gap-1.5 px-3 py-1.5 font-medium ${
+                loading ? 'text-muted-foreground' : rowClass(row.state)
+              }${rowFailed ? ' cursor-help' : ''}`}
+            >
+              {!loading && row.state === 'ok' ? (
+                <CircleCheck className="mt-0.5 size-4 shrink-0" />
+              ) : rowFailed ? (
+                <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
+              ) : (
+                <CircleDashed className="mt-0.5 size-4 shrink-0" />
+              )}
+              <span>{row.label}</span>
+              {detail && (
+                <span className="font-normal">
+                  — <span>{detail}</span>
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
       {failed && (
         <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
           <Switch checked={force} onCheckedChange={onForceChange} />
