@@ -91,7 +91,9 @@ export function PathCode({
         <button
           type="button"
           aria-label="Edit path"
-          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-card hover:text-foreground hover:shadow-sm"
+          // border-white/20 on hover, not the border token: --border over
+          // bg-card is a one-step contrast that vanishes on the tinted cards.
+          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-white/20 hover:bg-card hover:text-foreground hover:shadow-sm"
           // The chip's own click copies — editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()

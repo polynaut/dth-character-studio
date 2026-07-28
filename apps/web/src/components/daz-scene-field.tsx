@@ -706,8 +706,9 @@ export function DazSceneField({
             {/* Copyable path to the scenes' folder, above the cards. The chip's
                 pencil opens the floating move editor: the new subfolder
                 (relative to the character folder) physically moves the folder
-                on disk and repoints every linked scene. */}
-            <p className="mb-2 text-xs">{sceneDirChip}</p>
+                on disk and repoints every linked scene. A div, not a <p> — the
+                floating panel is a div, invalid inside a paragraph. */}
+            <div className="mb-2 text-xs">{sceneDirChip}</div>
             <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
               {ready ? (
                 <SceneCard

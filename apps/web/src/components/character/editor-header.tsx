@@ -240,7 +240,9 @@ export function EditorHeader({
             {countPoses(character.sections)} custom ROM frames
           </p>
           {folderChip && (
-            <p className="mt-1.5 text-xs">
+            // A div, not a <p> — FolderMoveChip's floating panel is a div,
+            // invalid inside a paragraph (hydration warning).
+            <div className="mt-1.5 text-xs">
               {folderMove ? (
                 <FolderMoveChip
                   dir={folderChip.dir}
@@ -252,7 +254,7 @@ export function EditorHeader({
               ) : (
                 <DirPathChip dir={folderChip.dir} roots={[folderChip.root]} />
               )}
-            </p>
+            </div>
           )}
         </div>
         {/* Bottom-right in the header, on the path-chip's baseline (mb-6 lifts the
