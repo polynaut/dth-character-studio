@@ -14,10 +14,12 @@ import type { RootedDir } from '#/lib/character-paths.ts'
 import type { CharacterDraft } from '#/lib/use-character-draft.ts'
 
 /**
- * Scroll-to-top with our own rAF animation: `scrollTo({behavior:'smooth'})` is
- * silently INSTANT in WebView2 when Windows has animations off (reduced
- * motion), which reads as a hard jump. Ease-out cubic, duration scaled to the
- * distance; a wheel/touch from the user cancels it instead of fighting them.
+ * Scroll-to-top with our own rAF animation: `scrollTo({behavior:'smooth'})`
+ * executes silently INSTANT in the WebView2 build (Chromium keys native smooth
+ * scrolling off assorted Windows animation/visual-effects settings — measured
+ * as a hard jump on a machine with reduced motion OFF). Ease-out cubic,
+ * duration scaled to the distance; a wheel/touch from the user cancels it
+ * instead of fighting them.
  */
 function smoothScrollTop() {
   const start = window.scrollY
