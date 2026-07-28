@@ -32,6 +32,7 @@ export function SceneCopyDialog({
   onCopy,
   onLink,
   onClose,
+  className,
 }: {
   title: string
   description: ReactNode
@@ -58,9 +59,11 @@ export function SceneCopyDialog({
   onCopy: () => void
   onLink: () => void
   onClose: () => void
+  /** Extra classes for the modal card (e.g. a wider max width). */
+  className?: string
 }) {
   return (
-    <Modal open onClose={onClose} title={title} dismissible={!busy}>
+    <Modal open onClose={onClose} title={title} dismissible={!busy} className={className}>
       <p className="text-sm text-muted-foreground">{description}</p>
         {filePath ? (
           <div>

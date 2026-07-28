@@ -262,15 +262,15 @@ describe('sceneCreateRows (create-dialog checks)', () => {
 
 describe('sceneNotLinkedRow (scene already belongs to a character)', () => {
   const owners = charactersLinkedScenes([
-    { name: 'Kira', scenePath: 'X:/p/Kira/daz3d/Kira.duf', extraScenes: ['X:/p/Kira/daz3d/Beach.duf'] },
-    { name: 'Matt', scenePath: 'X:/p/Matt/Matt.duf', extraScenes: [] },
+    { id: 'kira-1', name: 'Kira', scenePath: 'X:/p/Kira/daz3d/Kira.duf', extraScenes: ['X:/p/Kira/daz3d/Beach.duf'] },
+    { id: 'matt-1', name: 'Matt', scenePath: 'X:/p/Matt/Matt.duf', extraScenes: [] },
   ])
 
   it('flattens every linked scene (primary + extras) with its owner', () => {
     expect(owners).toEqual([
-      { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira' },
-      { path: 'X:/p/Kira/daz3d/Beach.duf', character: 'Kira' },
-      { path: 'X:/p/Matt/Matt.duf', character: 'Matt' },
+      { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira', characterId: 'kira-1' },
+      { path: 'X:/p/Kira/daz3d/Beach.duf', character: 'Kira', characterId: 'kira-1' },
+      { path: 'X:/p/Matt/Matt.duf', character: 'Matt', characterId: 'matt-1' },
     ])
   })
 
@@ -278,7 +278,8 @@ describe('sceneNotLinkedRow (scene already belongs to a character)', () => {
     const row = sceneNotLinkedRow('x:\\p\\kira\\daz3d\\BEACH.duf', owners)
     expect(row.state).toBe('fail')
     expect(row.hard).toBe(true)
-    expect(row.value).toContain('Kira')
+    expect(row.problem).toBe('This scene is already linked to “Kira”.')
+    expect(row.ownerId).toBe('kira-1')
     expect(sceneCompatHardFailed([row])).toBe(true)
   })
 
@@ -320,13 +321,14 @@ describe('SceneValidationTable', () => {
         forceLabel="Add anyway — test label"
       />,
     )
-    expect(screen.getByText('31 frames of animation')).toBeTruthy()
+    // A failed row reads as ONE sentence, not "label — detail".
+    const failText = screen.getByText(/carries 31 frames of animation/)
+    expect(failText).toBeTruthy()
+    expect(screen.queryByText('Empty timeline')).toBeNull()
     expect(screen.getByText('Add anyway — test label')).toBeTruthy()
     // The failed row explains itself on hover; passing rows carry no tooltip
     // and no detail — the label + check icon say it all.
-    expect(screen.getByText('31 frames of animation').closest('li')?.title).toContain(
-      'fills the animation timeline',
-    )
+    expect(failText.closest('li')?.title).toContain('fills the animation timeline')
     expect(screen.queryByText('1 character')).toBeNull()
     expect(screen.getByText('One character').closest('li')?.getAttribute('title')).toBeNull()
   })
@@ -350,7 +352,7 @@ describe('SceneValidationTable', () => {
     const rows = [
       ...sceneCompatRows({ scan: scan(), primaryScan: scan(), character: g9female }),
       sceneNotLinkedRow('X:/p/Kira/daz3d/Kira.duf', [
-        { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira' },
+        { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira', characterId: 'kira-1' },
       ]),
     ]
     render(
@@ -362,8 +364,32 @@ describe('SceneValidationTable', () => {
         forceLabel="Add anyway — test label"
       />,
     )
-    expect(screen.getByText('already linked to “Kira”')).toBeTruthy()
+    // Without a projectId there's no router context — the plain sentence renders.
+    expect(screen.getByText('This scene is already linked to “Kira”.')).toBeTruthy()
     expect(screen.queryByText(/Add anyway/)).toBeNull()
+  })
+
+  it('the owner link is suppressed when the owner IS the open character', () => {
+    const rows = [
+      sceneNotLinkedRow('X:/p/Kira/daz3d/Kira.duf', [
+        { path: 'X:/p/Kira/daz3d/Kira.duf', character: 'Kira', characterId: 'kira-1' },
+      ]),
+    ]
+    // projectId set AND owner === currentCharacterId → no <Link> renders (this
+    // would crash outside a router otherwise), just the sentence.
+    render(
+      <SceneValidationTable
+        rows={rows}
+        loading={false}
+        force={false}
+        onForceChange={() => {}}
+        forceLabel="Add anyway"
+        projectId="X:/p"
+        currentCharacterId="kira-1"
+      />,
+    )
+    expect(screen.getByText('This scene is already linked to “Kira”.')).toBeTruthy()
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('the escape switch reports through onForceChange', () => {

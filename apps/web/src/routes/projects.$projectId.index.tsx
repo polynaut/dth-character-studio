@@ -595,6 +595,7 @@ function ProjectCharactersPage() {
               force={createForce}
               onForceChange={setCreateForce}
               forceLabel="Create anyway — a failed check usually means a broken ROM"
+              projectId={projectId}
             />
 
             {error && <p className="text-sm text-destructive">{error}</p>}

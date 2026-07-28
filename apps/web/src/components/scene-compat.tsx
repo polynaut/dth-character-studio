@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { CircleCheck, CircleDashed, TriangleAlert } from 'lucide-react'
 
 import { Label, Switch } from '@dth/ui'
@@ -22,6 +23,8 @@ export function SceneValidationTable({
   force,
   onForceChange,
   forceLabel,
+  projectId,
+  currentCharacterId,
 }: {
   rows: Array<SceneCheckRow>
   /** The scene reads are still in flight — every row shows "checking…". */
@@ -31,6 +34,13 @@ export function SceneValidationTable({
   onForceChange: (force: boolean) => void
   /** The escape switch's label, e.g. "Add anyway — …" / "Create anyway — …". */
   forceLabel: string
+  /** When set, an "already linked" fail links the owning character's name
+   *  straight to that character's page in this project. */
+  projectId?: string
+  /** The character whose page the dialog is open ON (the add-scene flow) — an
+   *  "already linked" fail owned by this very character renders WITHOUT the
+   *  link (it would just point at the page you're already on). */
+  currentCharacterId?: string
 }) {
   const failed = !loading && sceneCompatFailed(rows)
   // A failed HARD check (scene already linked) has no escape — the "anyway"
@@ -66,11 +76,34 @@ export function SceneValidationTable({
               ) : (
                 <CircleDashed className="mt-0.5 size-4 shrink-0" />
               )}
-              <span>{row.label}</span>
-              {detail && (
-                <span className="font-normal">
-                  — <span>{detail}</span>
-                </span>
+              {/* A FAILED row reads as ONE short sentence (the "label — detail"
+                  split read as two disjoint fragments); the "already linked"
+                  fail links the owning character's name to its page. */}
+              {rowFailed ? (
+                row.ownerId && projectId && row.ownerId !== currentCharacterId ? (
+                  <span>
+                    This scene is already linked to{' '}
+                    <Link
+                      to="/projects/$projectId/characters/$characterId"
+                      params={{ projectId, characterId: row.ownerId }}
+                      className="font-medium underline underline-offset-2 hover:text-foreground"
+                    >
+                      “{row.ownerName}”
+                    </Link>
+                    .
+                  </span>
+                ) : (
+                  <span>{row.problem ?? `${row.label} — ${row.value}`}</span>
+                )
+              ) : (
+                <>
+                  <span>{row.label}</span>
+                  {detail && (
+                    <span className="font-normal">
+                      — <span>{detail}</span>
+                    </span>
+                  )}
+                </>
               )}
             </li>
           )

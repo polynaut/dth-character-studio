@@ -210,9 +210,11 @@ export function DazSceneField({
   } | null>(null)
   // Every scene the PROJECT's characters link (fetched when the add dialog
   // opens; null while loading) — feeds the "Not already linked" HARD check.
-  const [addOwners, setAddOwners] = useState<Array<{ path: string; character: string }> | null>(
-    null,
-  )
+  const [addOwners, setAddOwners] = useState<Array<{
+    path: string
+    character: string
+    characterId: string
+  }> | null>(null)
   const [forceAdd, setForceAdd] = useState(false)
   // Supersede stale reads (repick before the previous read resolved).
   const addScanId = useRef(0)
@@ -580,7 +582,14 @@ export function DazSceneField({
             pendingAdd,
             addOwners === null
               ? null
-              : [...addOwners, ...linkedScenes.map((path) => ({ path, character: character.name }))],
+              : [
+                  ...addOwners,
+                  ...linkedScenes.map((path) => ({
+                    path,
+                    character: character.name,
+                    characterId: character.id,
+                  })),
+                ],
           ),
         ]
       : []),
@@ -596,6 +605,10 @@ export function DazSceneField({
       force={forceAdd}
       onForceChange={setForceAdd}
       forceLabel="Add anyway — a failed check usually means the scene's ROM won't match"
+      projectId={projectId}
+      // A scene already linked to THIS character gets no owner link — it would
+      // just point at the page the dialog is open on.
+      currentCharacterId={character.id}
     />
   )
   const addBlockedTitle = addChecking
@@ -944,6 +957,7 @@ export function DazSceneField({
             onClose={() => setPendingAdd('')}
             title="Add Daz scene to the character?"
             dismissible={!busy}
+            className="max-w-3xl"
           >
             <div>
               <Label className="mb-1 block">Selected file</Label>
@@ -968,6 +982,7 @@ export function DazSceneField({
           <SceneCopyDialog
             title="Add Daz scene to the character?"
             description="The selected scene lives outside the character folder. Copy it into the character folder?"
+            className="max-w-3xl"
             filePath={pendingAdd}
             prefix={displayPath(`${baseDazRel}/`)}
             subfolder={addSubfolder}
