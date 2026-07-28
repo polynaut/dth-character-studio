@@ -1100,12 +1100,11 @@ function SettingsPage() {
                 <span className="flex items-center gap-1 font-medium">
                   Enable Daz Products
                   <InfoPopup label="Enable Daz Products — more information" className="-translate-y-px">
-                    Generates a <strong>Scan_Products_&lt;Character&gt;.dsa</strong> for each
-                    character. Open the character's scene in Daz and run it: it analyses the scene
-                    for used products and writes a CSV the character page reads back, so you can
-                    review and store the found products. Set the{' '}
-                    <strong>DAZ Install Manager manifests folder</strong> below for product names
-                    &amp; SKUs. Off by default.
+                    Adds per-character product scanning — a generated{' '}
+                    <strong>Scan_Products</strong> script finds the Daz products a scene uses.{' '}
+                    <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/product-scanning.html#daz-product-scanning">
+                      Open guide
+                    </GuideLink>
                   </InfoPopup>
                 </span>
                 <Switch
@@ -1119,21 +1118,9 @@ function SettingsPage() {
                   value={settings.dimManifestsFolder}
                   placeholder="E:\DAZ 3D\Install Manager\ManifestFiles"
                   onChange={(value) => setSettings((s) => ({ ...s, dimManifestsFolder: value }))}
-                  info={
-                    <>
-                      The <strong>ManifestFiles</strong> folder DAZ Install Manager writes (a folder
-                      of <code>.dsx</code> files) — see DIM → Advanced Settings → “Download/Install”.
-                      The <strong>Daz Products</strong> scan reads it to resolve scene assets to
-                      product names, SKUs and artists. Leave empty to skip product naming (the scan
-                      still lists used assets). Machine-wide setting — shared by all projects
-                      (stored with the app, not in the <code>.dcsp</code>).
-                    </>
-                  }
-                  help={
-                    <>
-                      Read by the per-character product scan to identify installed products.
-                    </>
-                  }
+                  // No "i" popup here — the Enable-Daz-Products popup above links the
+                  // guide, which covers the DIM manifests folder too.
+                  help={null}
                 />
                 <Button
                   type="button"
