@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { FolderOpen, PaintBucket, UserPlus, X } from 'lucide-react'
 
-import { Button, EditableTitle, Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
+import { Button, EditableTitle, Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SidePanel, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Tag, cn } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
 import { ScenePreview } from '#/components/scene-preview.tsx'
-import { SceneCopyDialog } from '#/components/scene-copy-dialog.tsx'
 import { BulkDeleteDialog } from '#/components/bulk-delete-dialog.tsx'
 import { AssetsGrid } from '#/components/assets-grid.tsx'
 import { AssetForm } from '#/components/asset-form.tsx'
@@ -42,7 +41,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
-import { displayPath, normalizePathLower, pathSeparator } from '#/lib/path.ts'
+import { displayPath, normalizePathLower } from '#/lib/path.ts'
 import { PathCode } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
@@ -123,14 +122,10 @@ function ProjectCharactersPage() {
   const [panelTab, setPanelTab] = useState<'character' | 'asset'>('character')
   const [listTab, setListTab] = useState<'characters' | 'assets' | 'notes'>('characters')
   const [assetRefresh, setAssetRefresh] = useState(0)
-  // When the picked scene is outside the project, the create flow pauses on this
-  // modal to ask whether to copy the scene into the character folder.
-  const [copyPrompt, setCopyPrompt] = useState(false)
-  // The scenes folder for a new character is editable (default from Settings);
-  // the subfolder is the optional nested path inside it (empty = the base root).
-  const [copyBase, setCopyBase] = useState(project.dazSubdir)
-  const [copySubfolder, setCopySubfolder] = useState('')
-  const [copyDeleteOriginal, setCopyDeleteOriginal] = useState(false)
+  // "Delete original after copying" for an outside-the-project scene — the
+  // panel's toggle beside Copy & Create (turns the copy into a move). The old
+  // intermediate copy modal is Add-scene-only now; creating never detours.
+  const [deleteOriginal, setDeleteOriginal] = useState(false)
 
   // Overview view / sort (persisted) + transient Genesis & Gender filters.
   const [view, setView] = usePersistentState<ViewMode>('dth.characters.view', 'grid')
@@ -161,6 +156,9 @@ function ProjectCharactersPage() {
   const createRows = sceneCreateRows(scenePath.trim() ? sceneScan : null)
   const createChecking = scenePath.trim() !== '' && sceneScan === null
   const createBlocked = createChecking || (sceneCompatFailed(createRows) && !createForce)
+  const createBlockedTitle = createChecking
+    ? 'Checking the scene…'
+    : 'A validation check failed — see the list above (or flip “Create anyway”)'
   // What the Gender row DISPLAYS: only what the picked scene proves (null =
   // no scene / scan pending / undecidable → "Unknown"). The `gender` state
   // keeps its best-effort value for the create input regardless.
@@ -207,6 +205,7 @@ function ProjectCharactersPage() {
     setPrefill(null)
     setSceneScan(null)
     setCreateForce(false)
+    setDeleteOriginal(false)
     setPanelTab('character')
     setPanelOpen(true)
   }
@@ -234,21 +233,17 @@ function ProjectCharactersPage() {
   function sceneInsideProject(): boolean {
     return normalizePathLower(scenePath).startsWith(normalizePathLower(project.path) + '/')
   }
+  // An outside scene gets the two-action footer (Link & Create / Copy & Create)
+  // + the delete-original toggle; an in-project scene just creates.
+  const sceneOutside = scenePath.trim() !== '' && !sceneInsideProject()
 
-  async function onCreate() {
-    // Guard `busy` too: the Create button is disabled while creating, but the
+  async function onCreate(copyScene = sceneOutside) {
+    // Guard `busy` too: the buttons are disabled while creating, but the
     // Enter-key handler isn't, so a fast double-Enter could race two creates.
     // `createBlocked` guards the Enter path against failed/running validation.
+    // Enter defaults to the primary action: copy an outside scene in.
     if (busy || !scenePath.trim() || !canCreate || createBlocked) return
-    // Scene outside the project → ask whether to copy it into the character folder.
-    if (!sceneInsideProject()) {
-      setCopyBase(project.dazSubdir)
-      setCopySubfolder('')
-      setCopyDeleteOriginal(false)
-      setCopyPrompt(true)
-      return
-    }
-    await doCreate(false)
+    await doCreate(copyScene)
   }
 
   /** Create the character; when `copyScene`, also copy the scene + its thumbnails. */
@@ -272,16 +267,15 @@ function ProjectCharactersPage() {
       if (copyScene) {
         // Copying brings the scene into the character folder — repoint the
         // stored scenePath at that in-project copy (createCharacter recorded the
-        // original external path).
-        const base = copyBase.split(/[\\/]+/).filter(Boolean).join('/')
-        const nested = copySubfolder.split(/[\\/]+/).filter(Boolean).join('/')
+        // original external path). It lands in the project's scenes folder
+        // (Settings → dazSubdir); nested subfolders are an Add-scene affair.
         const movedScene = await copyDazScene({
           data: {
             projectId,
             characterId: character.id,
             scenePath: scenePath.trim(),
-            subfolder: [base, nested].filter(Boolean).join('/'),
-            deleteOriginal: copyDeleteOriginal,
+            subfolder: project.dazSubdir.split(/[\\/]+/).filter(Boolean).join('/'),
+            deleteOriginal,
           },
         })
         character = await saveCharacter({
@@ -295,7 +289,6 @@ function ProjectCharactersPage() {
       } catch {
         // Non-fatal — the editor's Save can regenerate.
       }
-      setCopyPrompt(false)
       setScenePath('')
       setName('')
       setPrefill(null)
@@ -309,7 +302,6 @@ function ProjectCharactersPage() {
         params: { projectId, characterId: character.id },
       })
     } catch (e) {
-      setCopyPrompt(false)
       setError(e instanceof Error ? e.message : String(e))
       // A copy/save failure lands AFTER createCharacter succeeded — the character
       // already exists on disk. Refresh the list so it isn't invisible (and a
@@ -440,7 +432,27 @@ function ProjectCharactersPage() {
         {scenePath.trim() && (
           <>
             <div className="flex flex-wrap items-start gap-4">
-              <ScenePreview scenePath={scenePath} />
+              {/* The DERIVED gender rides on the preview as a badge (tooltip =
+                  the text): the figure id for gendered generations, the GP/DK
+                  geograft for G9 — see `genderForScan`. Read-only, and only as
+                  far as the SCENE proves it — undecided shows "?". */}
+              <ScenePreview
+                scenePath={scenePath}
+                badge={
+                  <span
+                    className="absolute bottom-1.5 left-1.5 flex size-6 cursor-default items-center justify-center rounded-full border bg-background/85 text-sm font-semibold"
+                    title={
+                      detectedGender === 'female'
+                        ? 'Female — read from the scene (its figure / GP-DK geograft)'
+                        : detectedGender === 'male'
+                          ? 'Male — read from the scene (its figure / GP-DK geograft)'
+                          : 'Unknown — the scene doesn’t tell (no gendered figure or GP/DK geograft)'
+                    }
+                  >
+                    {detectedGender === 'female' ? '♀' : detectedGender === 'male' ? '♂' : '?'}
+                  </span>
+                }
+              />
               <div className="min-w-[20rem] flex-1 space-y-4">
                 {/* Row 1: character name on its own line. */}
                 {/* The Input is wrapped in a div (path prefix + input), so Field's
@@ -532,25 +544,18 @@ function ProjectCharactersPage() {
                   </div>
                 </div>
 
-                {/* Row 3: the DERIVED gender on its own line — read-only (the
-                    figure id for gendered generations, the GP/DK geograft for
-                    G9 — see `genderForScan`), so it doesn't sit between the two
-                    real selects pretending to be one. Shown only as far as the
-                    SCENE proves it — an unreadable/undecided scene displays
-                    Unknown (the create input still falls back to `gender`). */}
-                <Field label="Gender" controlId="create-gender-display">
-                  <p
-                    id="create-gender-display"
-                    className="text-sm text-muted-foreground"
-                    title="Read from the scene (its figure / GP-DK geograft) — no manual choice needed"
+                {/* Row 3 (outside-the-project scene only): Copy & Create copies
+                    the scene into the character's folder — this turns the copy
+                    into a move. Linking instead is the outline footer action. */}
+                {sceneOutside && (
+                  <label
+                    className="flex h-9 w-fit items-center gap-2 text-sm"
+                    title="Copy & Create copies the picked scene into the character's folder — turn this on to move it instead"
                   >
-                    {detectedGender === 'female'
-                      ? '♀ Female'
-                      : detectedGender === 'male'
-                        ? '♂ Male'
-                        : '? Unknown'}
-                  </p>
-                </Field>
+                    <Switch checked={deleteOriginal} onCheckedChange={setDeleteOriginal} />
+                    Delete original after copying
+                  </label>
+                )}
               </div>
             </div>
 
@@ -564,19 +569,47 @@ function ProjectCharactersPage() {
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <div className="flex justify-end">
+            {/* An outside scene offers both actions — Copy & Create primary,
+                Link & Create beside it. An in-project scene has nothing to
+                copy: one plain Create. No intermediate modal either way. */}
+            <div className="flex justify-end gap-2">
+              {sceneOutside && (
+                <Button
+                  variant="outline"
+                  onClick={() => void onCreate(false)}
+                  disabled={busy || !canCreate || createBlocked || deleteOriginal}
+                  title={
+                    createBlocked
+                      ? createBlockedTitle
+                      : deleteOriginal
+                        ? 'Disabled while “Delete original” is on'
+                        : 'Keep the scene where it is — the character links to it'
+                  }
+                >
+                  <UserPlus /> Link & Create
+                </Button>
+              )}
               <Button
-                onClick={onCreate}
+                onClick={() => void onCreate()}
                 disabled={busy || !canCreate || createBlocked}
                 title={
                   createBlocked
-                    ? createChecking
-                      ? 'Checking the scene…'
-                      : 'A validation check failed — see the table above (or flip “Create anyway”)'
-                    : undefined
+                    ? createBlockedTitle
+                    : sceneOutside
+                      ? 'Copy the scene into the character’s folder, then create'
+                      : undefined
                 }
               >
-                <UserPlus /> Create
+                <UserPlus />{' '}
+                {busy
+                  ? sceneOutside
+                    ? deleteOriginal
+                      ? 'Moving…'
+                      : 'Copying…'
+                    : 'Creating…'
+                  : sceneOutside
+                    ? 'Copy & Create'
+                    : 'Create'}
               </Button>
             </div>
           </>
@@ -811,27 +844,6 @@ function ProjectCharactersPage() {
           onClose={() => setFillOpen(false)}
         />
       )}
-      {copyPrompt && (
-        <SceneCopyDialog
-          title="Copy Daz scene files?"
-          description="Do you want to copy the Daz scene files into the character's folder structure?"
-          filePath={scenePath}
-          baseValue={copyBase}
-          onBaseChange={setCopyBase}
-          separator={pathSeparator()}
-          subfolder={copySubfolder}
-          onSubfolderChange={setCopySubfolder}
-          deleteOriginal={copyDeleteOriginal}
-          onDeleteOriginalChange={setCopyDeleteOriginal}
-          busy={busy}
-          error={error}
-          copyLabel="Copy & create"
-          onCopy={() => void doCreate(true)}
-          onLink={() => void doCreate(false)}
-          onClose={() => setCopyPrompt(false)}
-        />
-      )}
-
       <SelectionBar
         // The Unreal footer bar docks at bottom-0 on this page — float the pill
         // above it instead of on top of it.
