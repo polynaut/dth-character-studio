@@ -1,5 +1,23 @@
 # @dth/web
 
+## 0.48.1
+
+### Patch Changes
+
+- [#559](https://github.com/polynaut/dth-character-studio/pull/559) [`a73f01a`](https://github.com/polynaut/dth-character-studio/commit/a73f01ac3a7f61d4e06b2a1c4e2fd6c6194804c4) Thanks [@polynaut](https://github.com/polynaut)! - Creating a character now pre-selects the primary scene's detected hair items (the same heuristic as the editor's "Select all detected hair items" wand), so the export excludes them from day one — trim the list in the editor if the guess overshoots.
+
+- [#557](https://github.com/polynaut/dth-character-studio/pull/557) [`b9beccd`](https://github.com/polynaut/dth-character-studio/commit/b9beccdb2b52ff5f80bf80d84ef7148dd52284e9) Thanks [@polynaut](https://github.com/polynaut)! - Creating a character no longer detours through the "Copy Daz scene files?" modal: an outside-the-project scene shows **Link & Create** and **Copy & Create** (primary) right in the panel, with the "Delete original after copying" toggle beside them; an in-project scene keeps its single **Create**. The derived gender left its own row and now overlays the scene preview as a symbol badge (tooltip carries the text). The modal remains for adding extra scenes to an existing character.
+
+- [#555](https://github.com/polynaut/dth-character-studio/pull/555) [`37ae9ed`](https://github.com/polynaut/dth-character-studio/commit/37ae9ed5b6c158b47a1eac81346d768f41cd5805) Thanks [@polynaut](https://github.com/polynaut)! - The character header's macOS-only "liquid glass" vibrancy background is removed — macOS now gets the same plain, opaque sticky header as Windows.
+
+- [#557](https://github.com/polynaut/dth-character-studio/pull/557) [`b9beccd`](https://github.com/polynaut/dth-character-studio/commit/b9beccdb2b52ff5f80bf80d84ef7148dd52284e9) Thanks [@polynaut](https://github.com/polynaut)! - The create-character / add-scene Validation table is now a single-line checklist — check name + state icon, with detail only where it adds something (the detected generation/geograft, or what a failed check found) instead of a redundant second column.
+
+- [#560](https://github.com/polynaut/dth-character-studio/pull/560) [`cc17cae`](https://github.com/polynaut/dth-character-studio/commit/cc17cae4ff9207535bd679fb713be1c25a9f2dc1) Thanks [@polynaut](https://github.com/polynaut)! - Toasts are redesigned on the app's dark surface: a colored left accent bar with a soft matching glow per severity (green/amber/red/sky), solid round severity icons, bold title over a muted description, and the close X on the right. Plain (severity-less) toasts keep a neutral edge.
+
+- Updated dependencies [[`cc17cae`](https://github.com/polynaut/dth-character-studio/commit/cc17cae4ff9207535bd679fb713be1c25a9f2dc1)]:
+  - @dth/ui@0.48.1
+  - @dth/rom@0.48.1
+
 ## 0.48.0
 
 ### Minor Changes

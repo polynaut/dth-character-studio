@@ -1,5 +1,11 @@
 # @dth/ui
 
+## 0.48.1
+
+### Patch Changes
+
+- [#560](https://github.com/polynaut/dth-character-studio/pull/560) [`cc17cae`](https://github.com/polynaut/dth-character-studio/commit/cc17cae4ff9207535bd679fb713be1c25a9f2dc1) Thanks [@polynaut](https://github.com/polynaut)! - The inline-rename input (character/project title) now grows with the text instead of cropping a long name at the fixed width — the whole name stays visible while editing (engines without `field-sizing` keep the previous fixed width).
+
 ## 0.48.0
 
 ## 0.47.0
