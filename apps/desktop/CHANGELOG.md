@@ -1,5 +1,14 @@
 # @dth/desktop
 
+## 0.48.0
+
+### Patch Changes
+
+- [#541](https://github.com/polynaut/dth-character-studio/pull/541) [`b24289c`](https://github.com/polynaut/dth-character-studio/commit/b24289c8bbe6e7bec4ea13ccd5babd15c47218ba) Thanks [@dependabot](https://github.com/apps/dependabot)! - The desktop crate's zip handling moves to zip 8 (from 4). The dedup/install
+  pipeline's behavior is unchanged — zip-slip refusal, unreadable-entry
+  hard-errors and ZipCrypto detection are all pinned by the crate's tests, which
+  pass against the new major.
+
 ## 0.47.0
 
 ## 0.46.2
