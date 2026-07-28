@@ -1,23 +1,20 @@
-import { type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react'
 import { poseAssetCsvEra } from '@dth/rom'
-
-import { InfoPopup } from '@dth/ui'
 
 import type { AssetVersionReport } from '#/lib/rom/api.ts'
 
 /** One row of the local-vs-app version table. `state` drives the colour + icon:
  *  matched (green/check), differing (red value + yellow warning), or not comparable
- *  (muted "—" — no DAZ library, or no DTH release to compare against). */
+ *  (muted "—" — no DAZ library, or no DTH release to compare against). What each
+ *  version GOVERNS is documented in the guide's Refresh-assets section (linked
+ *  from the tab title's popup), not in per-row popups. */
 type VersionRowState = 'match' | 'mismatch' | 'unchecked'
 interface VersionRow {
   label: string
   local: string
   app: string
   state: VersionRowState
-  /** Popup copy explaining which generated files this version governs. */
-  info: ReactNode
 }
 
 /** The version-detection block: a compact local-vs-app table over the three version
@@ -74,28 +71,12 @@ export function RefreshDetection({ report }: { report: AssetVersionReport }) {
           : releaseLocals.map((r) => (r === '' ? 'not generated' : `v${r}`)).join(', '),
       app: hasDthRelease ? `v${app.dthRelease}` : 'none',
       state: releaseState,
-      info: (
-        <>
-          Governs the Houdini <strong>PoseAsset CSV</strong> (<em>…_pose_asset.csv</em>) — the only
-          artifact tied to the DTH release. It's pinned to the release's CSV <em>era</em>, so a
-          non-breaking release (e.g. 2.4.3 → 2.4.4) stays current; only a release that changes the
-          CSV format marks it out of date. Out of date → the CSV is regenerated.
-        </>
-      ),
     },
     {
       label: 'Character Schema Version',
       local: schemaState === 'unchecked' ? '—' : schemaLocals.map((n) => `v${n}`).join(', '),
       app: `v${app.schema}`,
       state: schemaState,
-      info: (
-        <>
-          Governs the <strong>character definition</strong> (its <em>.json</em>). A newer version
-          means the stored shape changed: the definition is migrated and re-saved — and, since a
-          migration can change generated output, its Daz scripts and PoseAsset CSV are regenerated
-          too.
-        </>
-      ),
     },
     {
       label: 'Script Runtime Version',
@@ -105,13 +86,6 @@ export function RefreshDetection({ report }: { report: AssetVersionReport }) {
           : runtimeLocals.map((n) => (n === null ? 'not generated' : `v${n}`)).join(', '),
       app: `v${app.runtime}`,
       state: runtimeState,
-      info: (
-        <>
-          Governs the generated <strong>Daz scripts</strong> (the ROM / Export <em>.dsa</em>) and the
-          shared <strong>DTH runtime files</strong>. A newer version means the runtime's call API
-          changed, so the runtime files are reinstalled and every character's scripts regenerated.
-        </>
-      ),
     },
   ]
 
@@ -148,10 +122,7 @@ export function RefreshDetection({ report }: { report: AssetVersionReport }) {
           {rows.map((row) => (
             <tr key={row.label}>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                <span className="inline-flex items-center gap-0.5">
-                  {row.label}
-                  <InfoPopup label={`${row.label} — what it affects`}>{row.info}</InfoPopup>
-                </span>
+                {row.label}
               </th>
               <td className="px-3 py-2">
                 <span className={`inline-flex items-center gap-1.5 font-medium ${valueClass(row.state)}`}>

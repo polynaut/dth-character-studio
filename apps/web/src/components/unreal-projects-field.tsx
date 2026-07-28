@@ -310,10 +310,10 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
       label="Drop an Unreal project (.uproject) to link"
       className="fixed inset-x-0 bottom-0 z-20"
     >
-      {/* min-h reserves the linked-card row height (a card is ~54px: the U logo +
-          padding + border), so the empty bar doesn't collapse shorter than the
-          filled one — the footer height stays put as the first project is linked. */}
-      <div className="footer-3d flex min-h-[71px] items-center gap-3 px-4 backdrop-blur">
+      {/* min-h reserves the FILLED bar's height (measured 79.7px: card + the
+          rail's py-2), clamping BOTH states to 80px — linking the first
+          project must not shift the layout. Re-measure if the card changes. */}
+      <div className="footer-3d flex min-h-[80px] items-center gap-3 px-4 backdrop-blur">
         {/* Left column: the section title with a compact "+ Add" trigger stacked
             underneath it. Kept short (h-7) so the two rows still fit the reserved
             card-row height — the footer doesn't grow taller than a linked card. */}
@@ -326,8 +326,8 @@ export function UnrealProjectsBar({ project }: { project: ProjectInfo }) {
             size="sm"
             className={cn('h-7 w-fit gap-1 px-2 text-xs', busy && 'animate-pulse')}
             disabled={busy}
+            // aria-label only — no tooltip; the visible "+ Add project" says it.
             aria-label={addLabel}
-            title={addLabel}
             onClick={() => void onPick()}
           >
             <Plus className="size-3.5" /> Add project

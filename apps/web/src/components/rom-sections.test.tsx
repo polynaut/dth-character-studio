@@ -52,10 +52,11 @@ describe('RomSections multi-morph editor', () => {
     )
     // Open the FBM section accordion.
     fireEvent.click(screen.getByText('Full Body'))
-    // Expand the pose's morph list — the "Property" column header marks the editor.
+    // Expand the pose's morph list — the sub-header's "Node" info chip marks
+    // the editor.
     fireEvent.click(screen.getByTitle('Combine multiple Daz morphs into this single generated morph'))
-    expect(screen.getByTitle('The internal property name of the Daz morph')).toBeTruthy()
-    // The morph Property cells are comboboxes (autocomplete) in the expanded sub-rows.
+    expect(screen.getByLabelText('Node — more information')).toBeTruthy()
+    // The Parameter name cells are comboboxes (autocomplete) in the expanded sub-rows.
     const values = screen
       .getAllByRole('combobox')
       .map((input) => (input as HTMLInputElement).value)
@@ -753,7 +754,10 @@ describe('scene override mode', () => {
     const header = screen.getByText('Genitalia').closest('div') as HTMLElement
     const toggle = within(header).getByRole('switch') as HTMLButtonElement
     expect(toggle.disabled).toBe(true)
-    expect(toggle.title).toContain('geograft')
+    // The enable rules live in the "i" popup on the section title now (the
+    // disabled Switch carries no tooltip).
+    expect(within(header).getByLabelText('Genitalia — more information')).toBeTruthy()
+    expect(toggle.title).toBe('')
     fireEvent.click(toggle)
     expect(latest).toBeNull()
 
@@ -825,8 +829,8 @@ describe('scene override mode', () => {
     const header = screen.getByText('Genitalia').closest('div') as HTMLElement
     const toggle = within(header).getByRole('switch') as HTMLButtonElement
     expect(toggle.disabled).toBe(true)
-    // The tooltip explains where the state comes from.
-    expect(toggle.title).toContain('geograft')
+    // The "i" popup on the section title explains where the state comes from.
+    expect(within(header).getByLabelText('Genitalia — more information')).toBeTruthy()
     // Clicking (dispatched events reach disabled controls in jsdom) stores
     // nothing — the enabled state only ever comes from primarySceneDerivation.
     fireEvent.click(toggle)

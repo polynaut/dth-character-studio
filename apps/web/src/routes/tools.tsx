@@ -15,6 +15,7 @@ import {
   setAcceptedConflicts,
   uninstallDaz,
 } from '#/lib/rom/api.ts'
+import { navOrigin } from '#/lib/nav-origin.ts'
 import { CustomMorphsSection } from '#/components/tools/custom-morphs-section.tsx'
 import { DangerZoneSection } from '#/components/tools/danger-zone-section.tsx'
 import { DazAssetsSection } from '#/components/tools/daz-assets-section.tsx'
@@ -41,11 +42,10 @@ function ToolsPage() {
   const { tab } = Route.useSearch()
   const router = useRouter()
 
-  // Reachable from several places, so return to wherever we came from (falling
-  // back to the projects home if there's no history to pop) — like the About page.
+  // A HARD link to the page we entered the utility area from — never
+  // history.back(), which walks tab switches one entry at a time.
   function goBack() {
-    if (router.history.canGoBack()) router.history.back()
-    else void router.navigate({ to: '/' })
+    router.history.push(navOrigin())
   }
 
   const [settings, setSettings] = useState(initial)

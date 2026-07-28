@@ -32,6 +32,19 @@ import { SortablePoseRow, poseColumns } from './pose-table.tsx'
 
 import type { PoseTableMeta } from './pose-table.tsx'
 
+/** The pose grid's column proportions (auto layout keeps content minimums):
+ *  Name — and with it the expansion's Node — stays NARROW, Parameter name
+ *  takes the width, and Value / Bone scale / morphs sit pushed right. */
+const POSE_COLUMN_WIDTHS: Record<string, string> = {
+  frame: 'w-24',
+  name: 'w-[21%]',
+  prop: 'w-[33%]',
+  value: 'w-[12%]',
+  boneScaleRef: 'w-[9%]',
+  expand: 'w-[9%]',
+  actions: 'w-10',
+}
+
 /**
  * The SPARSE scene-override layer for a section not yet wholly owned (built once in
  * RomSections, shared by every group card): a base ROM row value-edited for the scene
@@ -369,6 +382,7 @@ export const GroupCard = memo(function GroupCard({
         )}
       </div>
       <div ref={setDropRef}>
+        {/* POSE_COLUMN_WIDTHS lives right above the component using it. */}
         <table className="w-full border-collapse text-sm">
           <thead>
             {/* Third sticky tier: the column titles pin right under the section
@@ -386,7 +400,10 @@ export const GroupCard = memo(function GroupCard({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="sticky z-[4] bg-background px-2 py-1.5 text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border)]"
+                    // Proportioned columns: Name (and so the expansion's Node)
+                    // narrow, Parameter name wide, the toggles/values pushed
+                    // right. Auto table layout keeps content-driven minimums.
+                    className={`sticky z-[4] bg-background px-2 py-1.5 text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border)] ${POSE_COLUMN_WIDTHS[header.id] ?? ''}`}
                     style={{ top: 'calc(var(--sticky-header-h, 128px) + var(--override-bar-h, 0px) + 48px)' }}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}

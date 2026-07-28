@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, BookOpen, ExternalLink, Globe } from 'lucide-react'
+import { navOrigin } from '#/lib/nav-origin.ts'
 import { openExternal } from '#/lib/desktop.ts'
 import { Button } from '@dth/ui'
 
@@ -28,11 +29,10 @@ function AboutPage() {
     version ? `&version=${encodeURIComponent(`v${version}`)}` : ''
   }`
 
-  // About is reachable from several places, so go back to wherever we came from
-  // (falling back to the projects home if there's no history to pop).
+  // A HARD link to the page we entered the utility area from — never
+  // history.back() (see lib/nav-origin.ts).
   function goBack() {
-    if (router.history.canGoBack()) router.history.back()
-    else void router.navigate({ to: '/' })
+    router.history.push(navOrigin())
   }
 
   return (

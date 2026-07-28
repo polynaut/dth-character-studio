@@ -3,7 +3,7 @@ import { FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, Field, Input, Switch, Textarea } from '@dth/ui'
-import { PathCode } from '#/components/path-code.tsx'
+import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { ScenePreview } from '#/components/scene-preview.tsx'
 import { createAsset } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
@@ -91,7 +91,7 @@ export function AssetForm({
         <Button variant="outline" className="shrink-0" onClick={() => void pick()}>
           <FolderOpen /> {scenePath ? 'Choose another…' : 'Choose Daz scene…'}
         </Button>
-        {scenePath && <PathCode path={displayPath(scenePath)} className="flex h-9 items-center" />}
+        {scenePath && <PathCode path={displayPath(scenePath)} className={tallPathChipClass} />}
       </div>
       {scenePath && (
         <>

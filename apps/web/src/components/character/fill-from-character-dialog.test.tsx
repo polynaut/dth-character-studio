@@ -57,11 +57,11 @@ describe('FillFromCharacterDialog', () => {
         onClose={() => {}}
       />,
     )
-    // Only the gender-compatible candidate is listed.
-    expect(await screen.findAllByRole('radio')).toHaveLength(1)
+    // Only the gender-compatible candidate is listed; clicking its row button
+    // advances straight to step 2 (no radio + Next round-trip).
+    expect(await screen.findByRole('button', { name: 'Kira' })).toBeTruthy()
     expect(screen.queryByText('Bob')).toBeNull()
-    fireEvent.click(screen.getByRole('radio'))
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Kira' }))
 
     // Step 2: the filled sections; JCM rules pre-checked, the preserve list
     // offered but starting UNCHECKED (its node-transform sibling isn't offered
@@ -72,7 +72,9 @@ describe('FillFromCharacterDialog', () => {
     expect(screen.getByText('Preserve morphs')).toBeTruthy()
     expect(screen.queryByText('Preserve node transforms')).toBeNull()
 
-    // Opt the preserve-morph list in, then fill.
+    // JCM starts UNCHECKED (copying the base ROM config is an opt-in) — check
+    // it here so the fill covers all four. Opt the preserve-morph list in too.
+    fireEvent.click(screen.getByText('Joint Corrective'))
     fireEvent.click(screen.getByText('Preserve morphs'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
     expect(patch!.sections.EXP.groups[0].poses[0].name).toBe('Smile')
@@ -102,8 +104,7 @@ describe('FillFromCharacterDialog', () => {
         onClose={() => {}}
       />,
     )
-    fireEvent.click(await screen.findByRole('radio'))
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Kira' }))
     // Uncheck the pre-checked JCM rules (the preserve list already starts off).
     fireEvent.click(screen.getByText('Modify JCM frames'))
     fireEvent.click(screen.getByRole('button', { name: 'Fill from character' }))
@@ -125,12 +126,14 @@ describe('FillFromCharacterDialog', () => {
         onClose={() => {}}
       />,
     )
-    fireEvent.click(await screen.findByRole('radio'))
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Kira' }))
     const ret = within(screen.getByText('Retargeting').closest('label')!).getByRole('checkbox')
     expect(ret).toHaveProperty('disabled', true)
+    // JCM starts unchecked, so the mirrored RET does too…
+    expect(ret).toHaveProperty('checked', false)
+    // …checking Joint Corrective flips the mirrored RET checkbox with it…
+    fireEvent.click(screen.getByText('Joint Corrective'))
     expect(ret).toHaveProperty('checked', true)
-    // Unchecking Joint Corrective flips the mirrored RET checkbox too…
     fireEvent.click(screen.getByText('Joint Corrective'))
     expect(ret).toHaveProperty('checked', false)
     // …and the fill copies neither.

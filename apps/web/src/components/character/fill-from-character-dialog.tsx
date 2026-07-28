@@ -53,7 +53,8 @@ function extraSummary(extra: FillExtra, source: Character): string {
 
 /**
  * The ROM "Fill" wizard: step 1 picks a source character from every known
- * project (the recents list, filtered to the target's generation + gender),
+ * project (the recents list, filtered to the target's generation + gender) —
+ * each row is a button that advances directly —
  * step 2 picks which of the source's filled ROM sections to copy — plus the
  * "Also copy" extras ({@link EXTRA_LABELS}). Confirming REPLACES the picked
  * sections of the target with the source's config (`fillSectionsFrom` — GEN
@@ -116,18 +117,25 @@ export function FillFromCharacterDialog({
   const offered = source ? filledSections(source.sections) : []
   const extrasAvailable = source ? offeredExtras(source) : []
 
-  function next() {
-    if (!source) return
-    // Every offered section starts checked — the user deselects what to keep.
-    // RET is never in the set: it has no checkbox of its own (it rides with
-    // JCM, exactly like the editor's tied enable toggle). The two preserve
-    // lists start UNCHECKED: they're the most target-specific tuning (which
-    // morphs/nodes to hold depends on this character's own setup), so copying
-    // them is a deliberate opt-in.
-    setChecked(new Set(filledSections(source.sections).filter((section) => section !== 'RET')))
+  // Picking a character IS the step-1 action — each row is a button that
+  // selects it and advances (no radio + Next round-trip).
+  function pick(c: CharacterWithProject) {
+    setSourceId(c.id)
+    // Every offered section starts checked — the user deselects what to keep —
+    // EXCEPT JCM: it's usually the stock preset base, so copying it is an
+    // opt-in (and RET mirrors it). RET is never in the set: it has no checkbox
+    // of its own (it rides with JCM, exactly like the editor's tied enable
+    // toggle). The two preserve lists start UNCHECKED: they're the most
+    // target-specific tuning (which morphs/nodes to hold depends on this
+    // character's own setup), so copying them is a deliberate opt-in.
+    setChecked(
+      new Set(
+        filledSections(c.sections).filter((section) => section !== 'RET' && section !== 'JCM'),
+      ),
+    )
     setExtras(
       new Set(
-        offeredExtras(source).filter(
+        offeredExtras(c).filter(
           (extra) => extra !== 'preserveMorphs' && extra !== 'preserveNodeTransforms',
         ),
       ),
@@ -190,7 +198,13 @@ export function FillFromCharacterDialog({
     <Modal
       open
       onClose={onClose}
-      title={step === 'pick' ? 'Fill ROM from character' : `Fill from “${source?.name ?? ''}”`}
+      // Step 2 names the source WITH its project ("Playground - Kira") — the
+      // step-1 project grouping is gone from view by then.
+      title={
+        step === 'pick'
+          ? 'Fill ROM from character'
+          : `Fill from “${source ? `${source.projectName} - ${source.name}` : ''}”`
+      }
       // A flex column whose LIST is the only scroller (overflow-hidden replaces
       // the shell's own overflow-y-auto via tailwind-merge), so the title, intro
       // and footer buttons stay pinned while a big character list scrolls. With
@@ -224,28 +238,23 @@ export function FillFromCharacterDialog({
                       const empty = filledSections(c.sections).length === 0
                       return (
                         <li key={c.id}>
-                          <label
-                            className={`flex items-center gap-2.5 rounded-md border px-3 py-2 text-sm ${
+                          <button
+                            type="button"
+                            disabled={empty}
+                            onClick={() => pick(c)}
+                            className={`flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left text-sm ${
                               empty
-                                ? 'cursor-default opacity-50'
+                                ? 'opacity-50'
                                 : 'cursor-pointer hover:bg-accent hover:text-accent-foreground'
                             }`}
                           >
-                            <input
-                              type="radio"
-                              name="fill-source"
-                              className="accent-primary"
-                              disabled={empty}
-                              checked={sourceId === c.id}
-                              onChange={() => setSourceId(c.id)}
-                            />
                             <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
                             {empty && (
                               <span className="shrink-0 text-xs text-muted-foreground">
                                 empty ROM
                               </span>
                             )}
-                          </label>
+                          </button>
                         </li>
                       )
                     })}
@@ -254,12 +263,9 @@ export function FillFromCharacterDialog({
               ))}
             </div>
           )}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" className="mr-auto" onClick={onClose}>
+          <div className="flex">
+            <Button variant="ghost" onClick={onClose}>
               Cancel
-            </Button>
-            <Button disabled={!source} onClick={next}>
-              Next
             </Button>
           </div>
         </>

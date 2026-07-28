@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MutableRefObject, Ref } from 'react'
+import type { MutableRefObject, ReactNode, Ref } from 'react'
 import { FolderInput, Link2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
-import { PathCode } from '#/components/path-code.tsx'
+import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
+import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import type { SceneDockActions } from '#/components/character/scene-footer.tsx'
@@ -16,14 +18,23 @@ import {
   copyDazScene,
   dazStudioRunning,
   deleteFiles,
+  fetchCharactersWithProblems,
   moveCharacterScenesFolder,
   openScene,
+  renameDazScene,
   revealPath,
   relinkScene,
   sceneWearables,
 } from '#/lib/rom/api.ts'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
-import { primarySceneDerivation, sceneCompatFailed, sceneCompatRows } from '#/lib/scene-compat.ts'
+import {
+  charactersLinkedScenes,
+  primarySceneDerivation,
+  sceneCompatFailed,
+  sceneCompatHardFailed,
+  sceneCompatRows,
+  sceneNotLinkedRow,
+} from '#/lib/scene-compat.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 
@@ -39,14 +50,19 @@ function SceneCard({
   scenePath,
   name,
   onOpen,
+  onRename,
   onRemove,
   primary,
   selected,
   onSelect,
+  pathChip,
 }: {
   scenePath: string
   name: string
   onOpen: (e: React.MouseEvent) => void
+  /** Inline-rename the scene's files (in-folder scenes only — a linked-in-place
+   *  scene is the user's original, its name stays theirs). */
+  onRename?: (next: string) => Promise<void> | void
   /** When set, a hover ✕ unlinks the scene from the character (file is kept). */
   onRemove?: () => void
   /** The character's original creation scene — gets a "primary" badge and is not
@@ -55,6 +71,9 @@ function SceneCard({
   /** Selectable mode (see LinkedAssetCard): card click selects, icon opens. */
   selected?: boolean
   onSelect?: () => void
+  /** Where the scene lives, shown under the title (a non-primary scene in a
+   *  subfolder / linked in place — see `sceneLocationChip`). */
+  pathChip?: ReactNode
 }) {
   const fileName = scenePath.split(/[\\/]/).pop() ?? scenePath
   // The heading shows the scene name without its extension (e.g. ".duf").
@@ -68,7 +87,10 @@ function SceneCard({
         <Portrait
           scenePath={scenePath}
           name={name}
-          className="aspect-[3/4] w-14 shrink-0 rounded-md"
+          // h-[78px]: the PRIMARY label's bottom lands 2px ABOVE the avatar's
+          // bottom edge (stack = title 24 + mt-1 4 + chip ~21 + gap-2 8 +
+          // PRIMARY 19 ≈ 76, measured). Re-measure if the rows change.
+          className="aspect-[3/4] h-[78px] shrink-0 rounded-md"
           fallbackClassName="text-xl"
         />
       }
@@ -82,8 +104,22 @@ function SceneCard({
         />
       }
       extra={
-        primary ? (
-          <PrimaryBadge title="The character's original scene — it can't be unlinked" />
+        primary || pathChip ? (
+          // Stacked rows under the title: the path chip always second, the
+          // PRIMARY label alone on the third. The chip is interactive (copy /
+          // Alt-reveal / edit-to-move) — the card's extra block sits ABOVE the
+          // cover button (LinkedAssetCard), so its clicks are its own and
+          // never select/open the card. The chip's 1px offset is paint-only
+          // (relative top) so the PRIMARY row below doesn't move with it.
+          <span className="flex flex-col items-start gap-2">
+            {pathChip && <span className="relative top-[1px]">{pathChip}</span>}
+            {primary && (
+              <PrimaryBadge
+                dense
+                title="The character's original scene — it can't be unlinked"
+              />
+            )}
+          </span>
         ) : undefined
       }
       altHeld={altHeld}
@@ -93,6 +129,7 @@ function SceneCard({
       barClass="bg-daz-green"
       checkClass="bg-daz-green"
       onOpen={onOpen}
+      onRename={onRename}
       onRemove={onRemove}
       removeTitle="Unlink from character"
       selected={selected}
@@ -171,6 +208,13 @@ export function DazSceneField({
     scene: SceneWearables
     primary: SceneWearables | null
   } | null>(null)
+  // Every scene the PROJECT's characters link (fetched when the add dialog
+  // opens; null while loading) — feeds the "Not already linked" HARD check.
+  const [addOwners, setAddOwners] = useState<Array<{
+    path: string
+    character: string
+    characterId: string
+  }> | null>(null)
   const [forceAdd, setForceAdd] = useState(false)
   // Supersede stale reads (repick before the previous read resolved).
   const addScanId = useRef(0)
@@ -180,9 +224,6 @@ export function DazSceneField({
   // A scene pending the unlink confirm + whether to also delete it from disk.
   const [pendingRemove, setPendingRemove] = useState('')
   const [removeDeleteFile, setRemoveDeleteFile] = useState(false)
-  // Editing the scenes subfolder (the chip's pencil): null = not editing,
-  // otherwise the draft value relative to the character folder.
-  const [editDir, setEditDir] = useState<string | null>(null)
   // Guards onOpen against a double-click launching Daz twice (a ref, so it takes
   // effect synchronously within the same tick — a state flag would lag a render).
   const openingRef = useRef(false)
@@ -208,12 +249,24 @@ export function DazSceneField({
     const target = normalizePath(p).toLowerCase()
     return linkedScenes.some((s) => normalizePath(s).toLowerCase() === target)
   }
+  const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
   const primaryDir = character.scenePath ? parentDir(character.scenePath) : ''
-  const baseDazRel =
+  const primaryDirRel =
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
       ? primaryDir.slice(charFolder.length + 1)
-      : defaultSubdir
-  const cleanSub = (s: string) => s.split(/[\\/]+/).filter(Boolean).join('/')
+      : ''
+  // The scenes ROOT (the character's "Daz scenes main folder"): the project's
+  // configured subdir when the primary sits under it — the primary itself may
+  // live in a SUBFOLDER of the root — else the primary's own folder (a
+  // renamed per-character root).
+  const defRel = cleanSub(defaultSubdir)
+  const rootMatchesDefault =
+    primaryDirRel !== '' &&
+    defRel !== '' &&
+    (primaryDirRel.toLowerCase() === defRel.toLowerCase() ||
+      primaryDirRel.toLowerCase().startsWith(`${defRel.toLowerCase()}/`))
+  const scenesRootRel = rootMatchesDefault ? primaryDirRel.slice(0, defRel.length) : primaryDirRel
+  const baseDazRel = scenesRootRel || defaultSubdir
 
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
@@ -308,6 +361,7 @@ export function DazSceneField({
     setDeleteOriginal(false)
     setForceAdd(false)
     setAddScan(null)
+    setAddOwners(null)
     setPendingAdd(picked)
     const scanId = (addScanId.current += 1)
     const primary = character.scenePath
@@ -320,6 +374,20 @@ export function DazSceneField({
       if (scanId !== addScanId.current) return
       setAddScan({ scene, primary: primaryScan })
     })
+    // The "Not already linked" check's reference: the OTHER characters' linked
+    // scenes from a fresh library walk (this character's own come from the
+    // live draft at render time). A failed walk just leaves the row unchecked.
+    void fetchCharactersWithProblems({ data: { projectId } })
+      .then(({ characters }) => {
+        if (scanId !== addScanId.current) return
+        setAddOwners(charactersLinkedScenes(characters.filter((c) => c.id !== character.id)))
+      })
+      // A failed walk must not leave the dialog on "checking…" forever — an
+      // empty reference just means the cross-character check can't verify
+      // (this character's own scenes still come from the live draft).
+      .catch(() => {
+        if (scanId === addScanId.current) setAddOwners([])
+      })
   }
 
   async function onAddPick() {
@@ -499,13 +567,37 @@ export function DazSceneField({
   // two scene reads; a definite failure gates the confirm actions behind the
   // "Add anyway" switch, and so does reads-still-in-flight (they resolve in
   // well under a second — a slow network share shows "checking…").
-  const addRows = sceneCompatRows({
-    scan: addScan?.scene ?? null,
-    primaryScan: addScan?.primary ?? null,
-    character,
-  })
-  const addChecking = pendingAdd !== '' && addScan === null
-  const addBlocked = addChecking || (sceneCompatFailed(addRows) && !forceAdd)
+  const addRows = [
+    ...sceneCompatRows({
+      scan: addScan?.scene ?? null,
+      primaryScan: addScan?.primary ?? null,
+      character,
+    }),
+    // The picked scene must not already belong to a character — the other
+    // characters' scenes come from the dialog-open walk (addOwners), this
+    // character's own from the live draft. A hit is a HARD fail (no escape).
+    ...(pendingAdd
+      ? [
+          sceneNotLinkedRow(
+            pendingAdd,
+            addOwners === null
+              ? null
+              : [
+                  ...addOwners,
+                  ...linkedScenes.map((path) => ({
+                    path,
+                    character: character.name,
+                    characterId: character.id,
+                  })),
+                ],
+          ),
+        ]
+      : []),
+  ]
+  const addChecking = pendingAdd !== '' && (addScan === null || addOwners === null)
+  const addHardBlocked = sceneCompatHardFailed(addRows)
+  const addBlocked =
+    addChecking || addHardBlocked || (sceneCompatFailed(addRows) && !forceAdd)
   const addValidation = (
     <SceneValidationTable
       rows={addRows}
@@ -513,36 +605,95 @@ export function DazSceneField({
       force={forceAdd}
       onForceChange={setForceAdd}
       forceLabel="Add anyway — a failed check usually means the scene's ROM won't match"
+      projectId={projectId}
+      // A scene already linked to THIS character gets no owner link — it would
+      // just point at the page the dialog is open on.
+      currentCharacterId={character.id}
     />
   )
   const addBlockedTitle = addChecking
     ? 'Checking the scene…'
-    : 'A validation check failed — see the table above (or flip “Add anyway”)'
+    : addHardBlocked
+      ? 'This scene already belongs to a character — pick a different scene'
+      : 'A validation check failed — see the table above (or flip “Add anyway”)'
 
-  // Two-tone path chip for the scenes' folder (the primary scene's directory):
-  // everything through the CHARACTER folder is dimmed — we're already inside the
-  // character here, so only the actual scenes subfolder ("\daz3d") reads bright.
-  // A scene outside the character folder falls back to dimming the project root.
-  const sceneDir = displayDirOf(character.scenePath)
-  // The scenes subfolder relative to the character folder ('' when the scene is
-  // linked from outside it) — that's the editable part of the chip.
-  const sceneDirAbs = parentDir(character.scenePath)
-  const sceneDirRel = insideCharFolder(character.scenePath)
-    ? sceneDirAbs.slice(charFolder.length + 1)
-    : ''
-  const sceneDirChip = (
-    <DirPathChip
+  // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
+  // folder is dimmed — we're already inside the character here, so only the
+  // scenes root ("\daz3d") reads bright. The root, NOT the primary's own
+  // folder — the primary may sit in a subfolder of it. A primary linked from
+  // outside the character folder falls back to its full directory.
+  const sceneDirRel = scenesRootRel
+  const sceneDir = sceneDirRel
+    ? displayPath(`${charFolder}/${sceneDirRel}`)
+    : displayDirOf(character.scenePath)
+  // Edit-to-move via the shared floating panel (FolderMoveChip) — moving the
+  // root physically moves the whole folder; editable only for an in-folder root.
+  const sceneDirChip = sceneDirRel ? (
+    <FolderMoveChip
       dir={sceneDir}
       roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
-      onEdit={sceneDirRel && !busy ? () => setEditDir(displayPath(sceneDirRel)) : undefined}
+      editValue={displayPath(sceneDirRel)}
+      editLabel="Scenes subfolder"
+      onMove={moveScenesRoot}
+      disabled={busy}
     />
+  ) : (
+    <DirPathChip dir={sceneDir} roots={[displayPath(charFolder), displayPath(location.libraryFolder)]} />
   )
 
-  async function onMoveScenesDir() {
-    if (editDir === null || !editDir.trim()) return
-    const newSubdir = editDir
+  /** Where a scene lives — EVERY card shows its chip: relative to the
+   *  character folder (e.g. `.\daz3d\Outfit_B`) for an in-folder scene, the
+   *  full folder for one linked in place; copying always yields the full
+   *  folder path. In-folder chips are EDIT-TO-MOVE — the PRIMARY exactly like
+   *  any other scene: the scenes root shows as a fixed prefix, only the
+   *  subfolder beyond it is editable, and an EMPTY input means "directly in
+   *  the root". A linked-in-place chip stays read-only. */
+  function sceneLocationChip(scene: string): ReactNode {
+    const dir = parentDir(scene)
+    const inside = insideCharFolder(scene)
+    const rel = inside ? normalizePath(dir).slice(charFolder.length + 1) : ''
+    const shown = displayPath(inside ? `./${rel}` : dir)
+    // Two-tone (same look + height as every small path chip): the part
+    // matching the scenes root (`.\daz3d`) is DIM — a root-dwelling scene's
+    // chip is all root, so all dim — and only what goes beyond it reads
+    // bright. Scenes elsewhere fall back to the last-separator split.
+    const cut = Math.max(shown.lastIndexOf('\\'), shown.lastIndexOf('/'))
+    const scenesRootShown = sceneDirRel ? displayPath(`./${sceneDirRel}`) : ''
+    const roots = [scenesRootShown, cut > 0 ? shown.slice(0, cut) : ''].filter(Boolean)
+    if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
+    // The scenes-root prefix stays fixed (the root itself moves via the
+    // section chip above the cards); an emptied input moves the scene back to
+    // the root, and the vacated subfolder is pruned by the move.
+    const rootLower = sceneDirRel.toLowerCase()
+    const underRoot =
+      sceneDirRel !== '' &&
+      (rel.toLowerCase() === rootLower || rel.toLowerCase().startsWith(`${rootLower}/`))
+    const beyond = underRoot ? rel.slice(sceneDirRel.length).replace(/^\//, '') : ''
+    return (
+      <FolderMoveChip
+        dir={shown}
+        roots={roots}
+        copyPath={displayPath(dir)}
+        editValue={displayPath(underRoot ? beyond : rel)}
+        editPrefix={underRoot ? displayPath(`./${sceneDirRel}/`) : undefined}
+        editLabel="Move to"
+        inputWidthClass="w-36"
+        onMove={(next) =>
+          moveLinkedScene(
+            scene,
+            underRoot ? [sceneDirRel, cleanSub(next)].filter(Boolean).join('/') : next,
+          )
+        }
+        disabled={busy}
+      />
+    )
+  }
+
+  /** Move the WHOLE scenes folder to `newSubdir` (relative to the character
+   *  folder) — shared by the section chip's inline editor and the primary
+   *  card's chip. Throws on failure (each caller owns its error surface). */
+  async function moveScenesRoot(newSubdir: string): Promise<void> {
     setBusy(true)
-    setError('')
     try {
       // Through the draft's persist primitive, like every other persisting flow:
       // the single-flight `saving` flag is held for the whole move+save+generate
@@ -554,8 +705,6 @@ export function DazSceneField({
         {},
         {
           toast: 'Moved the Daz scenes folder',
-          // The inline editor owns the error surface — a failed move/save shows
-          // next to the input (guard refusals still toast in the hook).
           rethrow: true,
           persist: (updated) =>
             moveCharacterScenesFolder({ data: { projectId, character: updated, newSubdir } }),
@@ -567,10 +716,80 @@ export function DazSceneField({
         // draft; without this merge those kept scene paths would still point at
         // the old folder (and read as pending reverse-changes).
         onScenesFolderMoved(saved)
-        setEditDir(null)
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Move ONE extra scene to `nextSub` (relative to the character folder) —
+   *  the card chip's editor. Copies + deletes the original (a move), then
+   *  persists the repointed scene path and its per-scene record. The PRIMARY
+   *  moves exactly the same way — its `scenePath` (and the avatar's
+   *  `imageScene`, when it points at it) repoint instead of `extraScenes`. */
+  async function moveLinkedScene(scene: string, nextSub: string): Promise<void> {
+    const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    const dest = [charFolder, cleanSub(nextSub), sceneName].filter(Boolean).join('/')
+    if (normalizePath(dest).toLowerCase() === normalizePath(scene).toLowerCase()) return
+    if (isAlreadyLinked(dest)) throw new Error(`“${sceneName}” is already linked from there.`)
+    setBusy(true)
+    try {
+      const moved = await copyDazScene({
+        data: {
+          projectId,
+          characterId: character.id,
+          scenePath: scene,
+          subfolder: cleanSub(nextSub),
+          deleteOriginal: true,
+        },
+      })
+      await repointLinkedScene(scene, moved, `Moved “${sceneName}”`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Persist a linked scene's NEW path everywhere it appears — scenePath (+
+   *  the avatar's imageScene) for the primary, extraScenes otherwise, and the
+   *  per-scene records either way. The persist regenerates the scripts, so
+   *  the generated `.dsa`/CSVs pick the new path/name up immediately. */
+  async function repointLinkedScene(scene: string, moved: string, toastMsg: string): Promise<void> {
+    const target = normalizePath(scene).toLowerCase()
+    const repoint = (p: string) => (normalizePath(p).toLowerCase() === target ? moved : p)
+    const isPrimary = normalizePath(character.scenePath).toLowerCase() === target
+    await persistPatch(
+      {
+        ...(isPrimary
+          ? {
+              scenePath: moved,
+              ...(character.imageScene && normalizePath(character.imageScene).toLowerCase() === target
+                ? { imageScene: moved }
+                : {}),
+            }
+          : { extraScenes: character.extraScenes.map(repoint) }),
+        sceneOverrides: character.sceneOverrides.map((o) => ({
+          ...o,
+          scenePath: repoint(o.scenePath),
+        })),
+      },
+      { toast: toastMsg, rethrow: true },
+    )
+    // Keep the selection on the moved/renamed card (its path just changed).
+    if (selectedScene === scene) onSelectScene?.(moved)
+  }
+
+  /** Rename a linked scene's FILES in place (`.duf` + both thumbnail
+   *  sidecars), then repoint — the card title's inline rename. */
+  async function renameLinkedScene(scene: string, nextName: string): Promise<void> {
+    const clean = nextName.trim()
+    if (!clean) return
+    const dest = `${parentDir(scene)}/${clean}.duf`
+    if (normalizePath(dest).toLowerCase() === normalizePath(scene).toLowerCase()) return
+    if (isAlreadyLinked(dest)) throw new Error(`“${clean}.duf” is already linked.`)
+    setBusy(true)
+    try {
+      const moved = await renameDazScene({ data: { scenePath: scene, newName: clean } })
+      await repointLinkedScene(scene, moved, `Renamed to “${clean}”`)
     } finally {
       setBusy(false)
     }
@@ -599,8 +818,14 @@ export function DazSceneField({
       label={linked ? 'Drop a Daz scene (.duf) to add' : 'Drop a Daz scene (.duf) to link'}
       className="rounded-lg"
     >
-      <Label id="daz-scenes" className="mb-3 block scroll-mt-28 text-xl font-semibold">
+      <Label id="daz-scenes" className="mb-3 flex w-fit scroll-mt-28 items-center gap-1 text-xl font-semibold">
         Daz scenes
+        <InfoPopup label="Daz scenes — more information">
+          The character's linked scenes — the primary plus any outfit or hair variants.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#multiple-daz-scenes--outfits-amp-hair-variants">
+            Open guide
+          </GuideLink>
+        </InfoPopup>
       </Label>
       {linked ? (
         folderMissing ? (
@@ -621,52 +846,26 @@ export function DazSceneField({
         ) : (
           <>
             {/* Copyable path to the scenes' folder, above the cards. The chip's
-                pencil swaps it for an inline editor: the new subfolder (relative
-                to the character folder) physically moves the folder on disk and
-                repoints every linked scene. */}
-            {editDir === null ? (
-              <p className="mb-2 text-xs">{sceneDirChip}</p>
-            ) : (
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">Scenes subfolder:</span>
-                <Input
-                  value={editDir}
-                  autoFocus
-                  disabled={busy}
-                  className="h-7 w-64 font-mono text-xs"
-                  onChange={(e) => setEditDir(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void onMoveScenesDir()
-                    if (e.key === 'Escape') setEditDir(null)
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || !editDir.trim()}
-                  onClick={() => void onMoveScenesDir()}
-                >
-                  {busy ? 'Moving…' : 'Move'}
-                </Button>
-                <Button
-                  variant="ghost-destructive"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setEditDir(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
+                pencil opens the floating move editor: the new subfolder
+                (relative to the character folder) physically moves the folder
+                on disk and repoints every linked scene. A div, not a <p> — the
+                floating panel is a div, invalid inside a paragraph. */}
+            <div className="mb-2 text-xs">{sceneDirChip}</div>
             <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
               {ready ? (
                 <SceneCard
                   scenePath={character.scenePath}
                   name={character.name}
                   onOpen={(e) => void onOpen(character.scenePath, e)}
+                  onRename={
+                    insideCharFolder(character.scenePath)
+                      ? (next) => renameLinkedScene(character.scenePath, next)
+                      : undefined
+                  }
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
+                  pathChip={sceneLocationChip(character.scenePath)}
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
@@ -682,9 +881,13 @@ export function DazSceneField({
                   scenePath={scene}
                   name={character.name}
                   onOpen={(e) => void onOpen(scene, e)}
+                  onRename={
+                    insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
+                  }
                   onRemove={() => askRemove(scene)}
                   selected={selectedScene !== undefined ? selectedScene === scene : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
+                  pathChip={sceneLocationChip(scene)}
                 />
               ))}
             </div>
@@ -754,10 +957,11 @@ export function DazSceneField({
             onClose={() => setPendingAdd('')}
             title="Add Daz scene to the character?"
             dismissible={!busy}
+            className="max-w-3xl"
           >
             <div>
               <Label className="mb-1 block">Selected file</Label>
-              <PathCode path={displayPath(pendingAdd)} className="flex h-9 items-center" />
+              <PathCode path={displayPath(pendingAdd)} className={tallPathChipClass} />
             </div>
             {addValidation}
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -778,6 +982,7 @@ export function DazSceneField({
           <SceneCopyDialog
             title="Add Daz scene to the character?"
             description="The selected scene lives outside the character folder. Copy it into the character folder?"
+            className="max-w-3xl"
             filePath={pendingAdd}
             prefix={displayPath(`${baseDazRel}/`)}
             subfolder={addSubfolder}

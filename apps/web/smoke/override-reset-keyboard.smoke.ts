@@ -18,7 +18,11 @@ test('overridden reset shows on keyboard focus', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText(/custom ROM frames/)).toBeVisible()
-  await page.getByText('Beach', { exact: false }).first().click()
+  // The card's SELECT cover button, clicked over the avatar strip (the visible
+  // title is the rename button and the card center holds the z-10 path chip).
+  await page
+    .getByRole('button', { name: 'KiraBeach', exact: true })
+    .click({ position: { x: 40, y: 52 } })
   await page.waitForTimeout(200)
 
   // Override the FACS dial → its reset control mounts (still hidden until hover/focus).

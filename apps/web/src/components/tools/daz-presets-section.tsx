@@ -39,22 +39,20 @@ export function DazPresetsSection({
           Your Daz presets. Merge-only — adds new files, never overwrites.
         </p>
       </div>
+      {/* No "i" popups on the folder fields — the placeholders and the section
+          subtitle already say what goes where. */}
       <FolderField
         label="Presets source"
         value={source}
         placeholder="D:\…\_presets"
-        help={<>Your presets source folder.</>}
+        help={null}
         onChange={onSourceChange}
       />
       <FolderField
         label="Presets destination"
         value={dest}
         placeholder="C:\Users\you\Documents\DAZ 3D\Studio\My Library\Presets"
-        help={
-          <>
-            Your personal library's <span className="font-mono">Presets</span> folder.
-          </>
-        }
+        help={null}
         onChange={onDestChange}
       />
       <div className="flex gap-2">

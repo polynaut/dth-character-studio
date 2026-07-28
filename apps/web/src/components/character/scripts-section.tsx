@@ -1,4 +1,5 @@
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
+import { tallPathChipClass } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { InfoPopup } from '@dth/ui'
 
@@ -35,7 +36,7 @@ export function ScriptsSection({
         <DirPathChip
           dir={scriptsPath.dir}
           roots={[scriptsPath.root]}
-          className="flex h-9 items-center"
+          className={tallPathChipClass}
         />
       ) : (
         <p className="text-sm text-muted-foreground">
