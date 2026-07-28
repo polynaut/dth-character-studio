@@ -24,6 +24,7 @@ export function FolderMoveChip({
   roots,
   copyPath,
   editValue,
+  editPrefix,
   editLabel,
   inputWidthClass = 'w-64',
   onMove,
@@ -37,6 +38,10 @@ export function FolderMoveChip({
   copyPath?: string
   /** Seed for the edit input (what "moving" changes — a subfolder or a path). */
   editValue: string
+  /** A fixed, read-only prefix chip before the input (e.g. the scenes root
+   *  `.\daz3d\`) — only what's beyond it is editable, and an EMPTY input is a
+   *  valid target (the prefix itself). The caller prepends it in `onMove`. */
+  editPrefix?: string
   /** Small label before the input, e.g. "Folder" / "Move to". */
   editLabel: string
   /** Tailwind width for the input (paths need more room than a subfolder). */
@@ -67,7 +72,10 @@ export function FolderMoveChip({
   }, [draft, busy])
 
   const trimmed = (draft ?? '').trim()
-  const canMove = !busy && !!trimmed && trimmed !== editValue.trim()
+  // With a fixed prefix an EMPTY input is a real target (the prefix itself);
+  // without one it isn't.
+  const canMove =
+    !busy && (editPrefix !== undefined || !!trimmed) && trimmed !== editValue.trim()
 
   async function move() {
     if (!canMove) return
@@ -98,6 +106,11 @@ export function FolderMoveChip({
           className={`absolute top-full left-0 z-50 mt-1 flex w-max items-center gap-2 p-2 ${menuSurfaceClass}`}
         >
           <span className="text-xs whitespace-nowrap text-muted-foreground">{editLabel}:</span>
+          {editPrefix !== undefined && (
+            <span className="flex h-7 shrink-0 items-center rounded-md border border-input bg-[#333] px-2 font-mono text-xs text-muted-foreground">
+              {editPrefix}
+            </span>
+          )}
           <Input
             value={draft}
             autoFocus

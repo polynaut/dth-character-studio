@@ -1,4 +1,4 @@
-import { copyFile, exists, mkdir, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, exists, mkdir, readDir, remove, stat, writeTextFile } from '@tauri-apps/plugin-fs'
 import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { invoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
@@ -72,13 +72,39 @@ async function copySceneInto(
   return joinPath(destDir, basename(scenePath))
 }
 
+/** Remove `dir`, then its parents, while they are EMPTY — stopping at (and
+ *  never removing) `boundary`. A dir outside the boundary is a no-op, so an
+ *  external source's folders are never touched. Best-effort: any read/remove
+ *  hiccup just stops the pruning. */
+async function pruneEmptyDirsUpTo(dir: string, boundary: string): Promise<void> {
+  const bound = boundary.replace(/[\\/]+$/, '').replaceAll('\\', '/').toLowerCase()
+  let current = dir.replace(/[\\/]+$/, '').replaceAll('\\', '/')
+  while (current.toLowerCase() !== bound && current.toLowerCase().startsWith(`${bound}/`)) {
+    try {
+      if ((await readDir(current)).length > 0) return
+      await remove(current)
+    } catch {
+      return
+    }
+    current = current.slice(0, current.lastIndexOf('/'))
+  }
+}
+
 export async function copyDazScene({ data }: { data: unknown }): Promise<string> {
   const input = copySceneInput.parse(data)
   const lib = await charactersRoot(input.projectId)
   const folder = await storage.getCharacterFolder(lib, input.characterId)
   const sub = normalizeRelFolder(input.subfolder ?? '')
   const destDir = sub ? joinPath(folder, sub) : folder
-  return copySceneInto(input.scenePath, destDir, input.deleteOriginal ?? false)
+  const moved = await copySceneInto(input.scenePath, destDir, input.deleteOriginal ?? false)
+  // A move can leave the source's subfolder(s) empty — prune them, bounded to
+  // THIS character's folder (moving a scene back to the scenes root deletes
+  // the subfolder it came out of).
+  if (input.deleteOriginal) {
+    const srcDir = input.scenePath.replaceAll('\\', '/').split('/').slice(0, -1).join('/')
+    await pruneEmptyDirsUpTo(srcDir, folder)
+  }
+  return moved
 }
 
 // --- Assets ---------------------------------------------------------------
