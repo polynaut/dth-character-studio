@@ -457,138 +457,103 @@ export const jcmMorphModSchema = z.object({
 export type JcmMorphMod = z.infer<typeof jcmMorphModSchema>
 
 /**
- * A per-Daz-scene ROM override — "the same character in another scene/outfit":
- * most frames stay exactly as the base ROM defines them, a few rows are
- * REPLACED (other morphs / other values on the same frame) and a few extra
- * frames are APPENDED for morphs only that scene's assets have (e.g. clothing
- * morphs). The base structure is never edited through an override — sections,
- * groups and row order come from `sections`; an override only substitutes row
- * content by pose id and appends rows at group ends. Generation compiles the
- * merged result (see `applySceneOverride`) into its own scene-suffixed script +
- * CSV pair, so the default artifacts and the per-scene ones coexist.
+ * One SECTION's per-scene ROM override — all of a scene's divergence for that
+ * section lives at this one key (schema v24; the pre-v24 shape spread it over
+ * four parallel arrays). Precedence is structural now:
+ *
+ * - `owned` set → the scene OWNS the section: the config replaces the base
+ *   wholesale (mode, preset assets, art direction, groups, custom path) and
+ *   `replaced`/`added` are cleared at the same key when the editor escalates —
+ *   dead sparse layers can no longer linger under an owned section.
+ * - else the SPARSE layer: `replaced` substitutes row content by base pose id
+ *   (surviving base reorders), `added` appends rows at group ends. Entries
+ *   whose base pose/group no longer exists are ignored.
+ * - `enabled` overlays the on/off state LAST, over base or owned config — a
+ *   plain toggle never "owns" the section.
  */
-export const sceneOverrideSchema = z.object({
-  /** Absolute path of the linked extra Daz scene (`.duf`) this override is for.
-   *  Repointed alongside `scenePath`/`extraScenes` on folder moves. */
-  scenePath: z.string().max(MAX_PATH_LENGTH),
-  /**
-   * Whether the ROM override panel is armed for this scene — the ROM-frames
-   * gate, parallel to `identity.enabled` / `groom.enabled` below. Armed, the
-   * scene's merged rows drive its config delta + its own PoseAsset CSV; disarmed
-   * keeps the stored rows (re-arming restores them) but stops contributing.
-   * Defaults OFF so a freshly-minted override for a new scene starts fully
-   * disabled — the user opts each panel in.
-   */
-  enabled: z.boolean().default(false),
-  /**
-   * Replaced rows: each pose's `id` names the BASE pose it substitutes, so the
-   * replacement survives base-row reordering. An entry whose base pose no
-   * longer exists is simply ignored (never breaks the merge).
-   */
-  poses: z.array(romPoseSchema).default([]),
-  /**
-   * Appended rows, per group (`groupId` = the base group's id, or
-   * {@link flatSectionGroupId} for a flat section with no stored group). Always
-   * appended AFTER the group's base poses — an override can't insert between
-   * existing frames. Entries for a group that no longer exists are ignored.
-   */
-  additions: z
+export const sceneRomOverrideSchema = z.object({
+  enabled: z.boolean().optional(),
+  owned: romSectionConfigSchema.optional(),
+  replaced: z.array(romPoseSchema).default([]),
+  added: z
     .array(
       z.object({
+        /** The base group's id, or {@link flatSectionGroupId} for a flat
+         *  section with no stored group yet. */
         groupId: z.string().max(MAX_NAME_LENGTH),
         poses: z.array(romPoseSchema).default([]),
       }),
     )
     .default([]),
+})
+export type SceneRomOverride = z.infer<typeof sceneRomOverrideSchema>
+
+/**
+ * A character's per-Daz-scene record — "the same character in another
+ * scene/outfit". ONE record holds everything scene-scoped: the ROM overrides
+ * (section-keyed), the scene's hair list, and the per-scene panels. Panels are
+ * PRESENCE-armed (schema v24): a block being present IS the override — there
+ * are no stored `enabled` booleans, and disarming a panel deletes its block.
+ * An empty-but-present `preserve`/`jcm` block still overrides (it means
+ * "hold nothing" / "no JCM mods for this scene").
+ *
+ * The PRIMARY scene may carry a record too — hair only (its ROM/panels are by
+ * definition the base). Records whose scene is no longer linked stay stored
+ * (re-linking the scene restores the work) but are inactive. Generation
+ * compiles the merged result (see `applySceneOverride`) into the one script's
+ * per-scene config delta + a scene-suffixed CSV when the frame layout differs.
+ */
+export const sceneOverrideSchema = z.object({
+  /** Absolute path of the linked Daz scene (`.duf`) this record is for.
+   *  Repointed alongside `scenePath`/`extraScenes` on folder moves. */
+  scenePath: z.string().max(MAX_PATH_LENGTH),
+  /** Section-keyed ROM overrides — {@link sceneRomOverrideSchema}. Any entry
+   *  present = the ROM panel is armed for this scene. */
+  rom: z
+    .partialRecord(romSectionSchema, sceneRomOverrideSchema)
+    .default({})
+    // An owned config can't put a section into a mode it doesn't support — the
+    // same rule the base sectionsSchema enforces, so it can't desync generation.
+    .superRefine((rom, ctx) => {
+      for (const section of ROM_SECTIONS) {
+        const owned = rom[section]?.owned
+        if (owned && !SECTION_MODES[section].includes(owned.mode)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [section, 'owned', 'mode'],
+            message: `${section} does not support '${owned.mode}' mode`,
+          })
+        }
+      }
+    }),
   /**
-   * WHOLE-SECTION overrides: a scene's complete OWNED config for a section. Stored when
-   * the scene diverges from the base in a way the sparse `poses`/`additions` above can't
-   * hold — a STRUCTURAL row edit (reorder / insert-between / add/remove a frame) OR any
-   * non-row config edit (mode, preset asset, GEN art direction, custom JCM path). When a
-   * section has an entry here its whole `config` REPLACES that section in
-   * {@link applySceneOverride} (the sparse entries for it no longer apply), so — unlike
-   * them — it does NOT track later edits to the base ROM: the scene "owns" that section
-   * until it's reset. `config` is the full base section config shape; `sectionEnabled`
-   * (below) still overlays `enabled` on top.
+   * The scene's hair items (labels as shown in Daz's Scene pane), excluded from
+   * the DTH export via the hide-only groom bracket. Hair is per scene BY
+   * PRESENCE — no entries means "this scene excludes nothing" (e.g. a bald
+   * outfit scene) — and never arms the override on its own. Replaces the
+   * pre-v24 character-level `groomScenes` map.
    */
-  sectionOverrides: z
-    .array(
-      z
-        .object({
-          section: romSectionSchema,
-          config: romSectionConfigSchema,
-        })
-        // A scene can't put a section into a mode it doesn't support — the same rule the
-        // base sectionsSchema enforces, so an owned config can't desync generation.
-        .superRefine((entry, ctx) => {
-          if (!SECTION_MODES[entry.section].includes(entry.config.mode)) {
-            ctx.addIssue({
-              code: 'custom',
-              path: ['config', 'mode'],
-              message: `${entry.section} does not support '${entry.config.mode}' mode`,
-            })
-          }
-        }),
-    )
-    .default([]),
-  /**
-   * Per-scene ENABLE/DISABLE overrides: sections whose on/off state differs from the
-   * base FOR THIS SCENE — an outfit that drops GEN, or turns a normally-off section on.
-   * Only divergent sections are stored (resetting a section drops its entry). In
-   * {@link applySceneOverride} the stored value REPLACES the base section's `enabled`
-   * while its mode/groups stay the base's, so a disabled section simply contributes no
-   * frames and an enabled one uses the base config — the frame math then follows. Unlike
-   * the ROM row layers this needs no `custom` section: a preset section can be toggled too.
-   */
-  sectionEnabled: z
-    .array(z.object({ section: romSectionSchema, enabled: z.boolean() }))
-    .default([]),
-  /**
-   * Per-scene GENESIS-9 identity override (FACS detail / flexion strength / UE5
-   * tear UV) — the same three values as the base character's G9 fields. Its
-   * `enabled` gates the panel + generation exactly like the ROM `enabled` above;
-   * off keeps the stored values but stops contributing.
-   */
+  hair: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
+  /** Per-scene GENESIS-9 identity dials (FACS detail / flexion / UE5 tear UV) —
+   *  present = armed, replacing the base character's three fields. */
   identity: z
     .object({
-      enabled: z.boolean().default(false),
       facsDetailStrength: z.number().default(1),
       flexionStrength: z.number().default(1),
       applyUE5TearUV: z.boolean().default(false),
     })
-    .default({ enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false }),
-  /**
-   * Per-scene HAIR override gate. The hair lists already live per scene in
-   * `groomScenes` (keyed by scene path); this only opts the Hair panel in for a
-   * non-primary scene so it reads like the other overrides.
-   */
-  groom: z.object({ enabled: z.boolean().default(false) }).default({ enabled: false }),
-  /**
-   * Per-scene "preserve after ROM loading" lists (Advanced options) — the scene's
-   * OWN morph-hold + node-transform lists, a full replacement of the base ones
-   * when `enabled` (so an outfit scene can add, edit AND remove entries). Armed,
-   * both lists override the base even when empty (an empty list means "preserve
-   * nothing for this scene").
-   */
+    .optional(),
+  /** Per-scene "preserve after ROM loading" lists — present = armed, a full
+   *  replacement of the base lists (empty = "preserve nothing"). */
   preserve: z
     .object({
-      enabled: z.boolean().default(false),
       morphs: z.array(preserveMorphSchema).default([]),
       nodeTransforms: z.array(preserveNodeTransformSchema).default([]),
     })
-    .default({ enabled: false, morphs: [], nodeTransforms: [] }),
-  /**
-   * Per-scene "Modify JCM frames" override — the scene's OWN `jcmMorphMods` list, a full
-   * replacement of the base one when `enabled` (a runtime config delta, like `preserve`;
-   * it doesn't change the frame layout / CSV). Armed, it overrides even when empty (an
-   * empty list means "no JCM modifications for this scene").
-   */
-  jcm: z
-    .object({
-      enabled: z.boolean().default(false),
-      mods: z.array(jcmMorphModSchema).default([]),
-    })
-    .default({ enabled: false, mods: [] }),
+    .optional(),
+  /** Per-scene "Modify JCM frames" rules — present = armed, a full replacement
+   *  of the base `jcmMorphMods` (empty = "no JCM mods for this scene"). */
+  jcm: z.array(jcmMorphModSchema).optional(),
 })
 export type SceneOverride = z.infer<typeof sceneOverrideSchema>
 
@@ -902,8 +867,19 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       old `groups` into a `custom` config. Also added a `jcm` override block
  *       (per-scene `jcmMorphMods`, a runtime delta like `preserve`) — additive,
  *       no step. `applySceneOverride` now applies the owned config wholesale.
+ *  24 — the scene-override RESTRUCTURE: the four parallel ROM arrays
+ *       (`poses`/`additions`/`sectionOverrides`/`sectionEnabled`) became ONE
+ *       section-keyed `rom` record (`{enabled?, owned?, replaced, added}` per
+ *       section — escalation clears the sparse layers at the same key); the
+ *       per-scene panels went PRESENCE-armed (`identity`/`preserve`/`jcm`
+ *       blocks exist iff armed — the stored `enabled` booleans and the derived
+ *       ROM gate are gone); and the character-level `groomScenes` map folded
+ *       into the records as `hair` (the primary scene may now carry a
+ *       hair-only record). Migration step converts everything; sparse entries
+ *       that were dead (orphaned ids, disarmed panels' stored payloads) are
+ *       dropped rather than carried as unreachable data.
  */
-export const CHARACTER_SCHEMA_VERSION = 23
+export const CHARACTER_SCHEMA_VERSION = 24
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1282,12 +1258,11 @@ export const characterSchema = z.object({
    */
   extraScenes: z.array(z.string().max(MAX_PATH_LENGTH)).max(MAX_PATH_LIST).default([]),
   /**
-   * Per-SCENE ROM overrides for the linked extra scenes (see
-   * {@link sceneOverrideSchema}): another outfit of the same character usually
-   * keeps most of the base ROM and just replaces a few rows / appends a few
-   * frames for that scene's own morphs. Entries whose scene is no longer
-   * linked stay stored (re-linking the scene restores the work) but are
-   * inactive — only enabled entries for a linked extra scene generate.
+   * Per-SCENE records (see {@link sceneOverrideSchema}): the ROM overrides,
+   * hair list and per-scene panels of every linked scene — the primary's
+   * record carries hair only. Records whose scene is no longer linked stay
+   * stored (re-linking restores the work) but are inactive — only armed
+   * records for a linked extra scene generate.
    */
   sceneOverrides: z.array(sceneOverrideSchema).max(MAX_PATH_LIST).default([]),
   /**
@@ -1309,30 +1284,6 @@ export const characterSchema = z.object({
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
   preserveNodeTransforms: z.array(preserveNodeTransformSchema).default([]),
-  /**
-   * Groom items (hair — usually the fitted cap; its children ride along) kept OUT
-   * of the DTH export, so one scene can carry full hair while the ROM export stays
-   * clean. The generated script unfits + unparents each item before `doExport` and
-   * restores it after — the exporter walks the selected figure's hierarchy and
-   * IGNORES visibility (measured July 2026), so exclusion means leaving the
-   * hierarchy, not hiding. Labels as shown in Daz's Scene pane.
-   */
-  /**
-   * Per-SCENE groom lists: a character's outfit scenes can carry different hair
-   * styles, so the excluded items are tied to the scene they live in. The
-   * generated script embeds the whole map and resolves the OPEN scene's list at
-   * run time (`Scene.getFilename()`); a scene without an entry excludes nothing
-   * (that's its meaning — e.g. a bald outfit scene). Paths repoint alongside
-   * `scenePath`/`extraScenes` on folder moves.
-   */
-  groomScenes: z
-    .array(
-      z.object({
-        scenePath: z.string().max(MAX_PATH_LENGTH),
-        nodes: z.array(z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })).default([]),
-      }),
-    )
-    .default([]),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   // Function form: a value default would hand every parsed character THE SAME
   // mutable sections object.

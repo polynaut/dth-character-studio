@@ -90,8 +90,8 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
    DRAFT merge (`onScenesFolderMoved`), which must never keep a hand-picked
    field list (a list that misses a path field writes the dead old path back on
    the next Save). Add the field to that ONE helper. Still separate: only the
-   prefill field list `romFields` (`api/characters.ts`). `sceneOverrides` and
-   `groomScenes` are the existing examples — grep them to find every site. (Regression fixed: `moveCharacter`
+   prefill field list `romFields` (`api/characters.ts`). `sceneOverrides` (which
+   carries each scene's hair since schema v24) is the existing example — grep it to find every site. (Regression fixed: `moveCharacter`
    used to repoint only `scenePath`, orphaning extra scenes/grooms/overrides on a
    folder move.)
 

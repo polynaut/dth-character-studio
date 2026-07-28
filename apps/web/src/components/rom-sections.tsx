@@ -35,6 +35,7 @@ import type {
   RomSectionConfig,
   RomSections as RomSectionsModel,
   SceneOverride,
+  SceneRomOverride,
   SectionMode,
 } from '@dth/rom'
 
@@ -185,65 +186,138 @@ export const RomSections = memo(function RomSections({
   )
 
   // The scene override's grid controller, shared by every section's group
-  // editor: replaced rows keyed by base pose id, additions keyed by group id.
-  // Checking a row seeds its override with a copy of the base pose. The map and
-  // the empty-additions fallback keep STABLE identities across re-renders —
-  // they end up in GroupCard's memoized table `data`, which must not churn.
-  // The controller itself is memoized too: it's a prop of the memoized group
-  // editors, so its identity may only change when the override data does.
+  // editor. Since schema v24 the override rows live SECTION-KEYED on the
+  // record's `rom` map; the controller keeps its flat interface (the group
+  // editors don't know sections) and derives each write's section from the base
+  // pose/group ids. Checking a row seeds its override with a copy of the base
+  // pose. The maps and the empty-additions fallback keep STABLE identities
+  // across re-renders — they end up in GroupCard's memoized table `data`, which
+  // must not churn. The controller itself is memoized too: it's a prop of the
+  // memoized group editors, so its identity may only change when the override
+  // data does.
   const overriddenById = useMemo(
-    () => new Map((overrideData?.poses ?? []).map((pose) => [pose.id, pose])),
-    [overrideData?.poses],
+    () =>
+      new Map(
+        Object.values(overrideData?.rom ?? {}).flatMap((entry) =>
+          (entry?.replaced ?? []).map((pose) => [pose.id, pose] as const),
+        ),
+      ),
+    [overrideData?.rom],
   )
-  // Base (primary-scene) pose by id, across every section — so an override edited
-  // back to match its base row can be dropped instead of lingering as a green no-op.
-  const basePoseById = useMemo(() => {
-    const map = new Map<string, RomPose>()
+  // Base (primary-scene) attribution across every section: the pose by id (so an
+  // override edited back to match its base row can be dropped instead of
+  // lingering as a green no-op) and each pose/group id's SECTION (so the flat
+  // controller's writes land at the right `rom` key — flat sentinels included).
+  const { basePoseById, poseSection, groupSection } = useMemo(() => {
+    const poses = new Map<string, RomPose>()
+    const poseSec = new Map<string, RomSection>()
+    const groupSec = new Map<string, RomSection>()
     for (const section of ROM_SECTIONS) {
+      groupSec.set(flatSectionGroupId(section), section)
       for (const group of sections[section].groups) {
-        for (const pose of group.poses) map.set(pose.id, pose)
+        groupSec.set(group.id, section)
+        for (const pose of group.poses) {
+          poses.set(pose.id, pose)
+          poseSec.set(pose.id, section)
+        }
       }
     }
-    return map
+    return { basePoseById: poses, poseSection: poseSec, groupSection: groupSec }
   }, [sections])
   const onOverrideChange = override?.onChange
+  // ONE rom-entry updater: applies `update` at the section's key and prunes an
+  // entry left carrying nothing (no owned config, no enable overlay, no rows) —
+  // the structural cleanup that keeps a record's `rom` free of dead keys (and,
+  // via the empty-record prune in onOverrideChange, the character free of dead
+  // records).
+  const updateRomEntry = useCallback(
+    (
+      od: SceneOverride,
+      section: RomSection,
+      update: (entry: SceneRomOverride) => SceneRomOverride,
+    ): SceneOverride => {
+      const next = update(od.rom[section] ?? { replaced: [], added: [] })
+      const rom = { ...od.rom }
+      if (
+        next.owned === undefined &&
+        next.enabled === undefined &&
+        next.replaced.length === 0 &&
+        next.added.length === 0
+      ) {
+        delete rom[section]
+      } else {
+        rom[section] = next
+      }
+      return { ...od, rom }
+    },
+    [],
+  )
   const overrideCtl = useMemo<SectionOverrideCtl | undefined>(
     () =>
       onOverrideChange && overrideData
         ? {
             overriddenById,
-            additionsFor: (groupId) =>
-              overrideData.additions.find((entry) => entry.groupId === groupId)?.poses ??
-              EMPTY_POSES,
+            additionsFor: (groupId) => {
+              const section = groupSection.get(groupId)
+              const added =
+                section &&
+                overrideData.rom[section]?.added.find((entry) => entry.groupId === groupId)
+              return added?.poses ?? EMPTY_POSES
+            },
             // Arm-on-edit: editing a base row upserts its override copy (keyed by the
             // base pose id); the display substitutes it in place. There's no explicit
             // "check to override" — touching the row IS the override. But an edit that
             // lands back ON the base row (e.g. a bone-scale flag toggled off again)
             // drops the copy, so the row stops reading as overridden.
             upsertPose: (pose) => {
+              const section = poseSection.get(pose.id)
+              if (!section) return
               const base = basePoseById.get(pose.id)
-              const rest = overrideData.poses.filter((p) => p.id !== pose.id)
-              onOverrideChange({
-                ...overrideData,
-                poses: base && romPoseEqual(pose, base) ? rest : [...rest, pose],
-              })
+              onOverrideChange(
+                updateRomEntry(overrideData, section, (entry) => {
+                  const rest = entry.replaced.filter((p) => p.id !== pose.id)
+                  return {
+                    ...entry,
+                    replaced: base && romPoseEqual(pose, base) ? rest : [...rest, pose],
+                  }
+                }),
+              )
             },
             // Reset a base row → drop its override copy so it falls back to the base.
-            resetPose: (poseId) =>
-              onOverrideChange({
-                ...overrideData,
-                poses: overrideData.poses.filter((p) => p.id !== poseId),
-              }),
+            resetPose: (poseId) => {
+              const section = poseSection.get(poseId)
+              if (!section) return
+              onOverrideChange(
+                updateRomEntry(overrideData, section, (entry) => ({
+                  ...entry,
+                  replaced: entry.replaced.filter((p) => p.id !== poseId),
+                })),
+              )
+            },
             onAdditionsChange: (groupId, poses) => {
-              const rest = overrideData.additions.filter((entry) => entry.groupId !== groupId)
-              onOverrideChange({
-                ...overrideData,
-                additions: poses.length > 0 ? [...rest, { groupId, poses }] : rest,
-              })
+              const section = groupSection.get(groupId)
+              if (!section) return
+              onOverrideChange(
+                updateRomEntry(overrideData, section, (entry) => {
+                  const rest = entry.added.filter((e) => e.groupId !== groupId)
+                  return {
+                    ...entry,
+                    added: poses.length > 0 ? [...rest, { groupId, poses }] : rest,
+                  }
+                }),
+              )
             },
           }
         : undefined,
-    [onOverrideChange, overrideData, overriddenById, basePoseById],
+    [
+      onOverrideChange,
+      overrideData,
+      overriddenById,
+      basePoseById,
+      poseSection,
+      groupSection,
+      updateRomEntry,
+    ],
   )
   // On a non-primary scene the section STRUCTURE (enable/mode/groups) is locked —
   // whether the override is armed (overrideCtl) or not (locked). Mute the section
@@ -347,45 +421,38 @@ export const RomSections = memo(function RomSections({
   // THE per-scene section-config writer. On the primary scene it edits the base
   // section; on a non-primary scene it makes the scene OWN the section's config —
   // ANY config field (mode, preset assets, art direction, groups, custom path) can
-  // be overridden this way. The first owning edit ESCALATES: it snapshots the merged
-  // section config (base + this scene's sparse row edits), applies the patch, and
-  // drops the section's now-superseded sparse `poses`/`additions`. `sectionEnabled`
-  // still overlays `enabled` on top (a plain toggle doesn't own the section).
-  const patchSectionForScene = useCallback((section: RomSection, patch: Partial<RomSectionConfig>) => {
-    const od = overrideDataRef.current
-    const emit = onOverrideChangeRef.current
-    if (!od || !emit) {
-      onChangeRef.current({
-        ...sectionsRef.current,
-        [section]: { ...sectionsRef.current[section], ...patch },
-      })
-      return
-    }
-    if (od.sectionOverrides.some((s) => s.section === section)) {
-      emit({
-        ...od,
-        sectionOverrides: od.sectionOverrides.map((s) =>
-          s.section === section ? { section, config: { ...s.config, ...patch } } : s,
-        ),
-      })
-      return
-    }
-    const base = sectionsRef.current[section]
-    const merged = applySceneOverride(sectionsRef.current, od)[section]
-    const basePoseIds = new Set(base.groups.flatMap((g) => g.poses.map((p) => p.id)))
-    const sectionGroupIds = new Set([...base.groups.map((g) => g.id), flatSectionGroupId(section)])
-    emit({
-      ...od,
-      poses: od.poses.filter((p) => !basePoseIds.has(p.id)),
-      additions: od.additions.filter((a) => !sectionGroupIds.has(a.groupId)),
-      // The owned config captures the CURRENT effective `enabled` (merged already folds
-      // the sectionEnabled overlay in), so the overlay is now redundant — DROP it, or it
-      // shadows the owned config in applySceneOverride and re-toggling the section goes
-      // dead (its overlay-vs-base compare no longer matches the owned resting value).
-      sectionEnabled: od.sectionEnabled.filter((s) => s.section !== section),
-      sectionOverrides: [...od.sectionOverrides, { section, config: { ...merged, ...patch } }],
-    })
-  }, [])
+  // be overridden this way. The first owning edit ESCALATES: it snapshots the
+  // merged section config (base + this scene's sparse edits + the enable
+  // overlay), applies the patch, and clears the sparse layers AND the overlay AT
+  // THE SAME `rom` KEY — the owned config carries `enabled` itself, and dead
+  // layers structurally can't linger under it (the point of the v24 shape).
+  const patchSectionForScene = useCallback(
+    (section: RomSection, patch: Partial<RomSectionConfig>) => {
+      const od = overrideDataRef.current
+      const emit = onOverrideChangeRef.current
+      if (!od || !emit) {
+        onChangeRef.current({
+          ...sectionsRef.current,
+          [section]: { ...sectionsRef.current[section], ...patch },
+        })
+        return
+      }
+      const owned = od.rom[section]?.owned
+      if (owned) {
+        emit(updateRomEntry(od, section, (entry) => ({ ...entry, owned: { ...owned, ...patch } })))
+        return
+      }
+      const merged = applySceneOverride(sectionsRef.current, od)[section]
+      emit(
+        updateRomEntry(od, section, () => ({
+          replaced: [],
+          added: [],
+          owned: { ...merged, ...patch },
+        })),
+      )
+    },
+    [updateRomEntry],
+  )
   // The groups editor reports (section, groups); route it through the general writer.
   const onSectionGroupsChange = useCallback(
     (section: RomSection, groups: Array<RomGroup>) => patchSectionForScene(section, { groups }),
@@ -396,40 +463,48 @@ export const RomSections = memo(function RomSections({
   // the base (toggling back to the base value drops the entry, so the mark quiets).
   // The base section's mode/groups are untouched — a disabled section just stops
   // contributing frames for this scene; an enabled one uses the base config.
-  const onSectionEnabledChange = useCallback((section: RomSection, enabled: boolean) => {
-    const od = overrideDataRef.current
-    const emit = onOverrideChangeRef.current
-    if (!od || !emit) return
-    // A scene-gated section's on/off state follows the primary scene's
-    // contents on EVERY scene — a per-scene enable override is refused
-    // (backstop; the switch itself is disabled).
-    if (SCENE_GATED_SECTIONS.includes(section)) return
-    // An OWNED section keeps `enabled` in its own config (the overlay was dropped on
-    // escalation), so its toggle patches the owned config — NOT the overlay, whose
-    // base-relative drop rule can't express the owned resting value (that mismatch is
-    // what made a disabled-then-customized section's re-enable go dead).
-    if (od.sectionOverrides.some((s) => s.section === section)) {
-      patchSectionForScene(section, { enabled })
-      return
-    }
-    const baseEnabled = sectionsRef.current[section].enabled
-    const rest = od.sectionEnabled.filter((s) => s.section !== section)
-    emit({
-      ...od,
-      sectionEnabled: enabled === baseEnabled ? rest : [...rest, { section, enabled }],
-    })
-  }, [patchSectionForScene])
+  const onSectionEnabledChange = useCallback(
+    (section: RomSection, enabled: boolean) => {
+      const od = overrideDataRef.current
+      const emit = onOverrideChangeRef.current
+      if (!od || !emit) return
+      // A scene-gated section's on/off state follows the primary scene's
+      // contents on EVERY scene — a per-scene enable override is refused
+      // (backstop; the switch itself is disabled).
+      if (SCENE_GATED_SECTIONS.includes(section)) return
+      // An OWNED section keeps `enabled` in its own config (the overlay was
+      // cleared on escalation), so its toggle patches the owned config — NOT the
+      // overlay, whose base-relative drop rule can't express the owned resting
+      // value (that mismatch is what made a disabled-then-customized section's
+      // re-enable go dead).
+      if (od.rom[section]?.owned) {
+        patchSectionForScene(section, { enabled })
+        return
+      }
+      // The overlay is stored only while it DIFFERS from the base (undefined
+      // drops it — and an entry left empty prunes with it).
+      const baseEnabled = sectionsRef.current[section].enabled
+      emit(
+        updateRomEntry(od, section, (entry) => ({
+          ...entry,
+          enabled: enabled === baseEnabled ? undefined : enabled,
+        })),
+      )
+    },
+    [patchSectionForScene, updateRomEntry],
+  )
 
-  // Per-scene "Modify JCM frames" override — the scene's own jcmMorphMods list. Armed
-  // (jcm.enabled) only when it DIFFERS from the base, so editing it back to the base
-  // list disarms it (and the runtime rides the base delta). No-op on the primary scene
-  // (there the grid edits the base via onJcmMorphModsChange).
+  // Per-scene "Modify JCM frames" override — the scene's own jcmMorphMods list.
+  // PRESENT only while it DIFFERS from the base (presence = armed), so editing
+  // it back to the base list deletes the block (and the runtime rides the base
+  // delta). No-op on the primary scene (there the grid edits the base via
+  // onJcmMorphModsChange).
   const onJcmModsForScene = useCallback((mods: Array<JcmMorphMod>) => {
     const od = overrideDataRef.current
     const emit = onOverrideChangeRef.current
     if (!od || !emit) return
     const same = JSON.stringify(mods) === JSON.stringify(jcmMorphModsRef.current ?? [])
-    emit({ ...od, jcm: { enabled: !same, mods } })
+    emit({ ...od, jcm: same ? undefined : mods })
   }, [])
 
   // Execute a confirmed Clear (the modal at the bottom): `rules` empties the JCM
@@ -579,31 +654,20 @@ export const RomSections = memo(function RomSections({
           effectiveEnabled && config.mode === 'preset' && !presetAvailable
         // Scene-override editing model for THIS section. Not escalated → the sparse
         // ctl edits base rows/appends (green) over the merged display; once a
-        // structural edit escalates it, the scene OWNS the section and it edits like
-        // the primary (plain groups, no ctl) — just stored on its sectionOverride.
-        const escalated = !!overrideData?.sectionOverrides.some((s) => s.section === section)
+        // structural edit escalates it, the scene OWNS the section (its rom
+        // entry's `owned`) and it edits like the primary (plain groups, no ctl).
+        const romEntry = overrideData?.rom[section]
+        const escalated = !!romEntry?.owned
         const editorGroups = overrideData ? displaySections[section].groups : config.groups
         const editorOverride = overrideData && !escalated ? overrideCtl : undefined
-        // The section-title override marker: shown for a custom, enabled section on a
-        // non-primary scene. Green (with a reset-all that clears every override kind
-        // for the section) whenever the section diverges from the primary scene's ROM
-        // in ANY way — a sparse per-row value edit, an appended frame, or a whole-
-        // section escalation. Base pose / group ids attribute the sparse `poses` and
-        // `additions` back to their section; upsertPose already drops a per-row copy
-        // that matches its base, so every entry counted here is a real divergence.
-        const sectionPoseIds = new Set(config.groups.flatMap((g) => g.poses.map((p) => p.id)))
-        const sectionGroupIds = new Set([
-          ...config.groups.map((g) => g.id),
-          flatSectionGroupId(section),
-        ])
         // The JCM "Modify frames" grid is a per-scene override tied to the JCM section.
-        const jcmOverridden = section === 'JCM' && (overrideData?.jcm.enabled ?? false)
-        const sectionOverridden =
-          enabledOverridden ||
-          escalated ||
-          jcmOverridden ||
-          (overrideData?.poses.some((p) => sectionPoseIds.has(p.id)) ?? false) ||
-          (overrideData?.additions.some((a) => sectionGroupIds.has(a.groupId)) ?? false)
+        const jcmOverridden = section === 'JCM' && overrideData?.jcm !== undefined
+        // The section-title override marker goes green whenever the section
+        // diverges from the primary scene's ROM in ANY way. Its rom entry
+        // EXISTING is that signal (entries prune the moment they carry nothing,
+        // and upsertPose already drops a per-row copy that matches its base) —
+        // plus the JCM-rules override riding the JCM section.
+        const sectionOverridden = !!romEntry || jcmOverridden
         // Every part of a section is overridable per scene now (enable, mode, preset
         // asset, art direction, rows, JCM mods), so the mark shows on EVERY section on a
         // non-primary scene (never RET, which follows JCM) — the resting "can override"
@@ -683,21 +747,15 @@ export const RomSections = memo(function RomSections({
                   resetTitle="Reset this section to the primary scene's ROM"
                   onReset={() => {
                     if (!overrideData || !onOverrideChange) return
+                    // Drop the section's WHOLE rom entry — sparse rows, owned
+                    // config and enable overlay all live at that one key now.
+                    // JCM also drops the per-scene "Modify frames" rules.
+                    const rom = { ...overrideData.rom }
+                    delete rom[section]
                     onOverrideChange({
                       ...overrideData,
-                      poses: overrideData.poses.filter((p) => !sectionPoseIds.has(p.id)),
-                      additions: overrideData.additions.filter(
-                        (a) => !sectionGroupIds.has(a.groupId),
-                      ),
-                      sectionOverrides: overrideData.sectionOverrides.filter(
-                        (s) => s.section !== section,
-                      ),
-                      // Restore the primary scene's on/off state too (drop the entry).
-                      sectionEnabled: overrideData.sectionEnabled.filter(
-                        (s) => s.section !== section,
-                      ),
-                      // JCM: also drop the per-scene "Modify frames" override.
-                      jcm: section === 'JCM' ? { enabled: false, mods: [] } : overrideData.jcm,
+                      rom,
+                      jcm: section === 'JCM' ? undefined : overrideData.jcm,
                     })
                   }}
                 />
@@ -983,7 +1041,7 @@ export const RomSections = memo(function RomSections({
                 {section === 'JCM' && jcmMorphMods && onJcmMorphModsChange && (
                   <div className="mt-5 border-t pt-5">
                     <JcmModsGrid
-                      mods={overrideData?.jcm.enabled ? overrideData.jcm.mods : jcmMorphMods}
+                      mods={overrideData?.jcm ?? jcmMorphMods}
                       onChange={overrideData ? onJcmModsForScene : onJcmMorphModsChange}
                       boneIndex={boneIndex}
                       onClear={() => setClearRequest({ section, rules: true })}

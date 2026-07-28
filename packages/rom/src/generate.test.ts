@@ -168,13 +168,17 @@ describe('sectionsFromFlatFrames', () => {
     expect(sections.MISC.groups[0].id).toBe(flatSectionGroupId('MISC'))
     // A scene override addressed at the flat group id reaches the imported poses.
     const merged = applySceneOverride(sections, {
-      poses: [],
-      additions: [
-        {
-          groupId: flatSectionGroupId('FBM'),
-          poses: [{ id: 'add1', name: 'BeachFix', morphs: [], boneScaleRef: false }],
+      rom: {
+        FBM: {
+          replaced: [],
+          added: [
+            {
+              groupId: flatSectionGroupId('FBM'),
+              poses: [{ id: 'add1', name: 'BeachFix', morphs: [], boneScaleRef: false }],
+            },
+          ],
         },
-      ],
+      },
     })
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['Heavy', 'Tall', 'BeachFix'])
   })
@@ -1545,12 +1549,14 @@ describe('exporter integration', () => {
 })
 
 describe('groom items (hair kept out of the export)', () => {
+  // Hair lives on the per-scene records now (schema v24): a hair-only record
+  // never arms the override — it only feeds the groom map.
   const groomChar = (over: Partial<Character> = {}) =>
     makeCharacter({
       name: 'Electra',
       exportPath: 'X:\\exports\\electra',
-      groomScenes: [
-        { scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: 'dForce Black Tie Cap' }] },
+      sceneOverrides: [
+        { scenePath: 'X:\\scenes\\Karen.duf', rom: {}, hair: [{ nodeLabel: 'dForce Black Tie Cap' }] },
       ],
       ...over,
     })
@@ -1600,7 +1606,7 @@ describe('groom items (hair kept out of the export)', () => {
     const plain = makeCharacter({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
     expect(toCharacterScriptDsa(plain, {}, FRAMES).content).not.toContain('dthGroom')
     const blank = groomChar({
-      groomScenes: [{ scenePath: 'X:\\scenes\\Karen.duf', nodes: [{ nodeLabel: '  ' }] }],
+      sceneOverrides: [{ scenePath: 'X:\\scenes\\Karen.duf', rom: {}, hair: [{ nodeLabel: '  ' }] }],
     })
     expect(toCharacterScriptDsa(blank, {}, FRAMES).content).not.toContain('dthGroom')
   })

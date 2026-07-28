@@ -4,7 +4,7 @@ import { InfoPopup } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { RomSections } from '#/components/rom-sections.tsx'
 import { RomTimeline } from '#/components/rom/rom-timeline.tsx'
-import { applySceneOverride, characterSkinning, romTimeline, sceneOverrideSchema } from '@dth/rom'
+import { applySceneOverride, characterSkinning, romTimeline, sceneOverrideSchema, sceneRecordEmpty } from '@dth/rom'
 
 import type { BoneIndexEntry, MorphIndexEntry } from '#/lib/rom/api.ts'
 import type { PoseAssetCatalog } from '#/components/rom/preset-asset-picker.tsx'
@@ -59,22 +59,11 @@ export const RomEditorSection = memo(function RomEditorSection({
   )
   const onOverrideChange = useCallback(
     (next: SceneOverride) => {
-      // Derive the ROM gate from "has any override rows" — generation reads
-      // `enabled`, so this keeps the .dsa/CSV output identical without a toggle.
-      const hasRom =
-        next.poses.length > 0 ||
-        next.additions.some((a) => a.poses.length > 0) ||
-        next.sectionOverrides.length > 0 ||
-        next.sectionEnabled.length > 0
-      const withGate = { ...next, enabled: hasRom }
-      const exists = character.sceneOverrides.some((o) => o.scenePath === withGate.scenePath)
-      patch({
-        sceneOverrides: exists
-          ? character.sceneOverrides.map((o) =>
-              o.scenePath === withGate.scenePath ? withGate : o,
-            )
-          : [...character.sceneOverrides, withGate],
-      })
+      // Presence IS the ROM gate (schema v24) — a `rom` entry existing arms the
+      // scene, so there's no derived boolean to maintain. A record left holding
+      // nothing at all is dropped instead of stored.
+      const others = character.sceneOverrides.filter((o) => o.scenePath !== next.scenePath)
+      patch({ sceneOverrides: sceneRecordEmpty(next) ? others : [...others, next] })
     },
     [character.sceneOverrides, patch],
   )

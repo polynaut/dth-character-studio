@@ -12,24 +12,23 @@ import {
 } from './scene-override'
 import { characterSchema, defaultSections, flatSectionGroupId, sceneOverrideSchema } from './types'
 
+import type { z } from 'zod'
 import type { PresetFrames } from './frames'
-import type { ArtDirectionFrame, Character, RomGroup, RomSection, RomSections, SceneOverride } from './types'
+import type { ArtDirectionFrame, Character, RomGroup, RomSections, SceneOverride } from './types'
 
 const FRAMES: PresetFrames = { base: 328, gp: 104, dk: 54, phys: 43 }
 
-/** A whole-section OWNED config (what escalation / the v23 migration stores) — a
- *  custom, enabled section wrapping `groups`, the rest defaulted by the schema. */
-function ownedSection(section: RomSection, groups: Array<RomGroup>) {
+/** A whole-section OWNED config (what escalation / the v24 migration stores at
+ *  `rom.<S>.owned`) — a custom, enabled section wrapping `groups`, the rest
+ *  defaulted by the schema. */
+function ownedConfig(groups: Array<RomGroup>) {
   return {
-    section,
-    config: {
-      enabled: true,
-      mode: 'custom' as const,
-      presetAssets: [],
-      artDirection: [],
-      groups,
-      customAssetPath: '',
-    },
+    enabled: true,
+    mode: 'custom' as const,
+    presetAssets: [],
+    artDirection: [],
+    groups,
+    customAssetPath: '',
   }
 }
 
@@ -76,24 +75,28 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
   })
 }
 
-// Defaults the ROM gate ON (the schema now defaults it off) — most cases here
-// want a ROM-active override; pass `enabled: false` for the identity/groom-only
-// cases.
-function makeOverride(patch: Partial<SceneOverride> = {}): SceneOverride {
-  return sceneOverrideSchema.parse({ scenePath: 'D:\\scenes\\Electra Beach.duf', enabled: true, ...patch })
+// A record is armed by PRESENCE (schema v24): any `rom` entry or panel block in
+// the patch arms it; an empty patch is the fully-disarmed state. The schema
+// fills the `replaced`/`added`/`hair` defaults, so patches stay sparse.
+function makeOverride(patch: Partial<z.input<typeof sceneOverrideSchema>> = {}): SceneOverride {
+  return sceneOverrideSchema.parse({ scenePath: 'D:\\scenes\\Electra Beach.duf', ...patch })
 }
 
 describe('applySceneOverride', () => {
   it('replaces a base row IN PLACE by pose id — same frame, other content', () => {
     const override = makeOverride({
-      poses: [
-        {
-          id: 'p1',
-          name: 'BeachBodyTone',
-          morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
-          boneScaleRef: false,
+      rom: {
+        FBM: {
+          replaced: [
+            {
+              id: 'p1',
+              name: 'BeachBodyTone',
+              morphs: [{ id: 'mo1', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
+              boneScaleRef: false,
+            },
+          ],
         },
-      ],
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['BeachBodyTone', 'GluteSize'])
@@ -102,7 +105,7 @@ describe('applySceneOverride', () => {
 
   it('ignores a replacement whose base pose no longer exists', () => {
     const override = makeOverride({
-      poses: [{ id: 'gone', name: 'Orphan', morphs: [], boneScaleRef: false }],
+      rom: { FBM: { replaced: [{ id: 'gone', name: 'Orphan', morphs: [], boneScaleRef: false }] } },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['BodyTone', 'GluteSize'])
@@ -110,19 +113,23 @@ describe('applySceneOverride', () => {
 
   it('appends added rows at the END of their group, never in between', () => {
     const override = makeOverride({
-      additions: [
-        {
-          groupId: 'g1',
-          poses: [
+      rom: {
+        FBM: {
+          added: [
             {
-              id: 'a1',
-              name: 'BeachDress',
-              morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
-              boneScaleRef: false,
+              groupId: 'g1',
+              poses: [
+                {
+                  id: 'a1',
+                  name: 'BeachDress',
+                  morphs: [{ id: 'ma1', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+                  boneScaleRef: false,
+                },
+              ],
             },
           ],
         },
-      ],
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual([
@@ -134,7 +141,11 @@ describe('applySceneOverride', () => {
 
   it('ignores additions for a group that no longer exists', () => {
     const override = makeOverride({
-      additions: [{ groupId: 'gone', poses: [{ id: 'a1', name: 'X', morphs: [], boneScaleRef: false }] }],
+      rom: {
+        FBM: {
+          added: [{ groupId: 'gone', poses: [{ id: 'a1', name: 'X', morphs: [], boneScaleRef: false }] }],
+        },
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses).toHaveLength(2)
@@ -143,12 +154,16 @@ describe('applySceneOverride', () => {
 
   it('materializes the implicit flat group for additions to an empty flat section', () => {
     const override = makeOverride({
-      additions: [
-        {
-          groupId: flatSectionGroupId('MISC'),
-          poses: [{ id: 'a1', name: 'OutfitFix', morphs: [], boneScaleRef: false }],
+      rom: {
+        MISC: {
+          added: [
+            {
+              groupId: flatSectionGroupId('MISC'),
+              poses: [{ id: 'a1', name: 'OutfitFix', morphs: [], boneScaleRef: false }],
+            },
+          ],
         },
-      ],
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.MISC.groups).toHaveLength(1)
@@ -157,7 +172,7 @@ describe('applySceneOverride', () => {
   })
 
   it('disables an enabled section for the scene (mode/groups untouched, off for frames)', () => {
-    const override = makeOverride({ sectionEnabled: [{ section: 'FBM', enabled: false }] })
+    const override = makeOverride({ rom: { FBM: { enabled: false } } })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.enabled).toBe(false)
     // The base groups stay put — re-enabling brings them back unchanged.
@@ -167,65 +182,75 @@ describe('applySceneOverride', () => {
   it('enables a section the base leaves disabled (uses the base config)', () => {
     const base = makeSections()
     expect(base.MISC.enabled).toBe(false)
-    const override = makeOverride({ sectionEnabled: [{ section: 'MISC', enabled: true }] })
+    const override = makeOverride({ rom: { MISC: { enabled: true } } })
     const merged = applySceneOverride(base, override)
     expect(merged.MISC.enabled).toBe(true)
   })
 
-  it('a section-enabled override applies alongside a whole-section override', () => {
+  it('an enable override applies alongside an owned config at the same key', () => {
     const override = makeOverride({
-      sectionEnabled: [{ section: 'FBM', enabled: false }],
-      sectionOverrides: [
-        ownedSection('FBM', [
-          { ...fbmGroup(), poses: [{ id: 'only', name: 'OnlyThis', morphs: [], boneScaleRef: false }] },
-        ]),
-      ],
+      rom: {
+        FBM: {
+          enabled: false,
+          owned: ownedConfig([
+            { ...fbmGroup(), poses: [{ id: 'only', name: 'OnlyThis', morphs: [], boneScaleRef: false }] },
+          ]),
+        },
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.enabled).toBe(false)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['OnlyThis'])
   })
 
-  it('leaves a section untouched when it has no enable override entry', () => {
-    const override = makeOverride({ sectionEnabled: [{ section: 'FBM', enabled: false }] })
+  it('leaves a section untouched when it has no override entry', () => {
+    const override = makeOverride({ rom: { FBM: { enabled: false } } })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.JCM.enabled).toBe(makeSections().JCM.enabled)
   })
 
-  it('a whole-section override replaces the section verbatim — reordered / restructured', () => {
+  it('an owned config replaces the section verbatim — reordered / restructured', () => {
     // The scene reorders FBM (GluteSize before BodyTone) — a structural change the
-    // sparse layer can't express, so it's stored whole in `sectionOverrides`.
+    // sparse layer can't express, so it's stored whole in `rom.FBM.owned`.
     const override = makeOverride({
-      sectionOverrides: [
-        ownedSection('FBM', [
-          { ...fbmGroup(), poses: [fbmGroup().poses[1], fbmGroup().poses[0]] }, // GluteSize, BodyTone
-        ]),
-      ],
+      rom: {
+        FBM: {
+          owned: ownedConfig([
+            { ...fbmGroup(), poses: [fbmGroup().poses[1], fbmGroup().poses[0]] }, // GluteSize, BodyTone
+          ]),
+        },
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['GluteSize', 'BodyTone'])
   })
 
-  it('a whole-section override WINS over the sparse poses/additions for that section', () => {
+  it('an owned config WINS over sparse replaced/added lingering at the same key', () => {
+    // Escalation clears the sparse layers when it stores `owned`, but the schema
+    // still tolerates both — precedence must be structural, not data-dependent.
     const override = makeOverride({
-      poses: [{ id: 'p1', name: 'ShouldBeIgnored', morphs: [], boneScaleRef: false }],
-      additions: [
-        { groupId: 'g1', poses: [{ id: 'x', name: 'AlsoIgnored', morphs: [], boneScaleRef: false }] },
-      ],
-      sectionOverrides: [
-        ownedSection('FBM', [
-          { ...fbmGroup(), poses: [{ id: 'only', name: 'OnlyThis', morphs: [], boneScaleRef: false }] },
-        ]),
-      ],
+      rom: {
+        FBM: {
+          replaced: [{ id: 'p1', name: 'ShouldBeIgnored', morphs: [], boneScaleRef: false }],
+          added: [
+            { groupId: 'g1', poses: [{ id: 'x', name: 'AlsoIgnored', morphs: [], boneScaleRef: false }] },
+          ],
+          owned: ownedConfig([
+            { ...fbmGroup(), poses: [{ id: 'only', name: 'OnlyThis', morphs: [], boneScaleRef: false }] },
+          ]),
+        },
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['OnlyThis'])
   })
 
-  it('leaves sections WITHOUT a whole-section override on the sparse layer', () => {
+  it('leaves sections WITHOUT an owned config on the sparse layer', () => {
     const override = makeOverride({
-      poses: [{ id: 'p1', name: 'SparseReplace', morphs: [], boneScaleRef: false }],
-      sectionOverrides: [ownedSection('MISC', [])], // only MISC is whole-overridden
+      rom: {
+        FBM: { replaced: [{ id: 'p1', name: 'SparseReplace', morphs: [], boneScaleRef: false }] },
+        MISC: { owned: ownedConfig([]) }, // only MISC is whole-overridden
+      },
     })
     const merged = applySceneOverride(makeSections(), override)
     expect(merged.FBM.groups[0].poses.map((p) => p.name)).toEqual(['SparseReplace', 'GluteSize'])
@@ -238,8 +263,12 @@ describe('applySceneOverride', () => {
     applySceneOverride(
       sections,
       makeOverride({
-        poses: [{ id: 'p1', name: 'Changed', morphs: [], boneScaleRef: false }],
-        additions: [{ groupId: 'g1', poses: [{ id: 'a1', name: 'Added', morphs: [], boneScaleRef: false }] }],
+        rom: {
+          FBM: {
+            replaced: [{ id: 'p1', name: 'Changed', morphs: [], boneScaleRef: false }],
+            added: [{ groupId: 'g1', poses: [{ id: 'a1', name: 'Added', morphs: [], boneScaleRef: false }] }],
+          },
+        },
       }),
     )
     expect(sections).toEqual(before)
@@ -248,22 +277,19 @@ describe('applySceneOverride', () => {
 
 describe('applySceneOverride — full owned config (mode / preset / art direction)', () => {
   const ownedGen = (patch: Record<string, unknown>) => ({
-    section: 'GEN' as const,
-    config: {
-      enabled: true,
-      mode: 'preset' as const,
-      presetAssets: [],
-      artDirection: [],
-      groups: [],
-      customAssetPath: '',
-      ...patch,
-    },
+    enabled: true,
+    mode: 'preset' as const,
+    presetAssets: [],
+    artDirection: [],
+    groups: [],
+    customAssetPath: '',
+    ...patch,
   })
 
   it('replaces the whole section config (a per-scene preset-asset swap)', () => {
     const merged = applySceneOverride(
       makeSections(),
-      makeOverride({ sectionOverrides: [ownedGen({ presetAssets: ['DK9 - Dicktator.duf'] })] }),
+      makeOverride({ rom: { GEN: { owned: ownedGen({ presetAssets: ['DK9 - Dicktator.duf'] }) } } }),
     )
     expect(merged.GEN.mode).toBe('preset')
     expect(merged.GEN.presetAssets).toEqual(['DK9 - Dicktator.duf'])
@@ -275,17 +301,16 @@ describe('applySceneOverride — full owned config (mode / preset / art directio
     ]
     const merged = applySceneOverride(
       makeSections(),
-      makeOverride({ sectionOverrides: [ownedGen({ artDirection: art })] }),
+      makeOverride({ rom: { GEN: { owned: ownedGen({ artDirection: art }) } } }),
     )
     expect(merged.GEN.artDirection).toEqual(art)
   })
 
-  it('sectionEnabled still overlays enabled on top of an owned config', () => {
+  it('`enabled` still overlays on top of an owned config', () => {
     const merged = applySceneOverride(
       makeSections(),
       makeOverride({
-        sectionOverrides: [ownedGen({ presetAssets: ['DK9 - Dicktator.duf'] })],
-        sectionEnabled: [{ section: 'GEN', enabled: false }],
+        rom: { GEN: { owned: ownedGen({ presetAssets: ['DK9 - Dicktator.duf'] }), enabled: false } },
       }),
     )
     expect(merged.GEN.enabled).toBe(false)
@@ -298,14 +323,14 @@ describe('mergeSceneOverride — jcm swap', () => {
   const withBaseJcm = () =>
     makeCharacter({ jcmMorphMods: [{ id: 'base', boneLabel: 'Right Thigh', axis: 'XRotate', drives: [] }] })
 
-  it('swaps jcmMorphMods when the jcm panel is armed', () => {
-    const merged = mergeSceneOverride(withBaseJcm(), makeOverride({ enabled: false, jcm: { enabled: true, mods } }))
+  it('swaps jcmMorphMods when the jcm panel is armed (block present)', () => {
+    const merged = mergeSceneOverride(withBaseJcm(), makeOverride({ jcm: mods }))
     expect(merged.jcmMorphMods).toEqual(mods)
   })
 
-  it('leaves jcmMorphMods alone when the jcm panel is off', () => {
+  it('leaves jcmMorphMods alone when the jcm block is absent (disarmed)', () => {
     const character = withBaseJcm()
-    const merged = mergeSceneOverride(character, makeOverride({ enabled: false, jcm: { enabled: false, mods: [] } }))
+    const merged = mergeSceneOverride(character, makeOverride({}))
     expect(merged.jcmMorphMods).toEqual(character.jcmMorphMods)
   })
 })
@@ -319,28 +344,35 @@ describe('sceneOverrideBuildsRom — structural (frame-layout) gate', () => {
   const genBase = () => makeCharacter({ sections: { ...defaultSections(), GEN: genConfig([artA]) } })
 
   it('a custom-row change builds a per-scene CSV', () => {
-    const override = makeOverride({ poses: [{ id: 'p1', name: 'BeachTone', morphs: [], boneScaleRef: false }] })
+    const override = makeOverride({
+      rom: { FBM: { replaced: [{ id: 'p1', name: 'BeachTone', morphs: [], boneScaleRef: false }] } },
+    })
     expect(sceneOverrideBuildsRom(makeCharacter(), override)).toBe(true)
   })
 
   it('an art-direction-only owned config does NOT build a CSV (rides the base CSV)', () => {
-    const override = makeOverride({ sectionOverrides: [{ section: 'GEN', config: genConfig([artB]) }] })
+    const override = makeOverride({ rom: { GEN: { owned: genConfig([artB]) } } })
     expect(sceneOverrideBuildsRom(genBase(), override)).toBe(false)
   })
 
   it('a preset-asset swap DOES build a CSV (changes the frame layout)', () => {
     const override = makeOverride({
-      sectionOverrides: [{ section: 'GEN', config: genConfig([artA], ['DK9 - Dicktator.duf']) }],
+      rom: { GEN: { owned: genConfig([artA], ['DK9 - Dicktator.duf']) } },
     })
     expect(sceneOverrideBuildsRom(genBase(), override)).toBe(true)
   })
 
   it('a jcm-only override does NOT build a CSV', () => {
     const override = makeOverride({
-      enabled: false,
-      jcm: { enabled: true, mods: [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }] },
+      jcm: [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }],
     })
     expect(sceneOverrideBuildsRom(makeCharacter(), override)).toBe(false)
+  })
+
+  it('a fully-disarmed record (empty rom, no panels) never builds', () => {
+    // The v24 equivalent of the old "disabled override with stored rows": a
+    // record whose rom is empty simply has nothing to compile.
+    expect(sceneOverrideBuildsRom(makeCharacter(), makeOverride())).toBe(false)
   })
 })
 
@@ -357,30 +389,32 @@ describe('sceneOverrideSlug', () => {
 })
 
 describe('activeSceneOverrides', () => {
-  it('keeps only enabled overrides whose scene is a linked EXTRA scene', () => {
-    const linked = makeOverride({ scenePath: 'D:\\s\\Beach.duf' })
-    const disabled = makeOverride({ scenePath: 'D:\\s\\Office.duf', enabled: false })
-    const unlinked = makeOverride({ scenePath: 'D:\\s\\Gone.duf' })
+  it('keeps only ARMED records whose scene is a linked EXTRA scene', () => {
+    const linked = makeOverride({ scenePath: 'D:\\s\\Beach.duf', rom: { FBM: { enabled: false } } })
+    // rom: {} + no panel blocks — the v24 "fully disarmed" state (the old
+    // enabled:false gate no longer exists).
+    const disarmed = makeOverride({ scenePath: 'D:\\s\\Office.duf' })
+    const unlinked = makeOverride({ scenePath: 'D:\\s\\Gone.duf', rom: { FBM: { enabled: false } } })
     const character = makeCharacter({
       scenePath: 'D:\\s\\Primary.duf',
       extraScenes: ['D:\\s\\Beach.duf', 'D:\\s\\Office.duf'],
-      sceneOverrides: [linked, disabled, unlinked],
+      sceneOverrides: [linked, disarmed, unlinked],
     })
     expect(activeSceneOverrides(character)).toEqual([linked])
   })
 
-  it('a groom-only gate does NOT activate an override (hair rides groomScenes)', () => {
-    // groom.enabled is never armed by the UI and hair generates from groomScenes,
-    // not this override — so a scene whose ONLY set gate is groom must stay inert.
-    const groomOnly = makeOverride({
+  it('a hair-only record does NOT activate an override (hair rides the groom map by presence)', () => {
+    // Hair never arms: it generates from the per-scene groom map, not the
+    // override delta — so a record carrying ONLY hair items must stay inert
+    // (the primary scene's record is exactly this shape).
+    const hairOnly = makeOverride({
       scenePath: 'D:\\s\\Beach.duf',
-      enabled: false,
-      groom: { enabled: true },
+      hair: [{ nodeLabel: 'dForce Black Tie Cap' }],
     })
     const character = makeCharacter({
       scenePath: 'D:\\s\\Primary.duf',
       extraScenes: ['D:\\s\\Beach.duf'],
-      sceneOverrides: [groomOnly],
+      sceneOverrides: [hairOnly],
     })
     expect(activeSceneOverrides(character)).toEqual([])
   })
@@ -416,27 +450,31 @@ describe('generateAll — scene overrides folded into the one script', () => {
   const sceneKey = 'd:/scenes/electra beach.duf'
   const override = makeOverride({
     scenePath: scene,
-    poses: [
-      {
-        id: 'p1',
-        name: 'BeachBodyTone',
-        morphs: [{ id: 'mo2', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
-        boneScaleRef: false,
-      },
-    ],
-    additions: [
-      {
-        groupId: 'g1',
-        poses: [
+    rom: {
+      FBM: {
+        replaced: [
           {
-            id: 'a1',
-            name: 'BeachDress',
-            morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+            id: 'p1',
+            name: 'BeachBodyTone',
+            morphs: [{ id: 'mo2', node: 'Genesis9', prop: 'body_bs_BeachTone', value: 0.5 }],
             boneScaleRef: false,
           },
         ],
+        added: [
+          {
+            groupId: 'g1',
+            poses: [
+              {
+                id: 'a1',
+                name: 'BeachDress',
+                morphs: [{ id: 'ma2', node: 'BeachDress', prop: 'dress_bs_Flow', value: 1 }],
+                boneScaleRef: false,
+              },
+            ],
+          },
+        ],
       },
-    ],
+    },
   })
   // A scene override only generates once its scene is a LINKED extra scene.
   const withScene = (extra: Partial<Character> = {}): Character =>
@@ -481,13 +519,14 @@ describe('generateAll — scene overrides folded into the one script', () => {
   })
 
   it('a whole-section REORDER folds into the scene delta — Daz frames + CSV both reordered', () => {
-    // The scene reorders FBM (GluteSize before BodyTone), stored whole. Both the Daz
-    // frame delta and the scene's CSV must follow the new order (per-scene alignment).
+    // The scene reorders FBM (GluteSize before BodyTone), stored as the owned
+    // config. Both the Daz frame delta and the scene's CSV must follow the new
+    // order (per-scene alignment).
     const reordered = makeOverride({
       scenePath: scene,
-      sectionOverrides: [
-        ownedSection('FBM', [{ ...fbmGroup(), poses: [fbmGroup().poses[1], fbmGroup().poses[0]] }]),
-      ],
+      rom: {
+        FBM: { owned: ownedConfig([{ ...fbmGroup(), poses: [fbmGroup().poses[1], fbmGroup().poses[0]] }]) },
+      },
     })
     const files = generateAll(withScene({ sceneOverrides: [reordered] }), {}, FRAMES)
     const overrides = grabObject(files[0].content, 'dthSceneOverrides')
@@ -528,14 +567,18 @@ describe('generateAll — scene overrides folded into the one script', () => {
     const romOverride = (path: string, poseName: string) =>
       makeOverride({
         scenePath: path,
-        poses: [
-          {
-            id: 'p1',
-            name: poseName,
-            morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }],
-            boneScaleRef: false,
+        rom: {
+          FBM: {
+            replaced: [
+              {
+                id: 'p1',
+                name: poseName,
+                morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }],
+                boneScaleRef: false,
+              },
+            ],
           },
-        ],
+        },
       })
     const files = generateAll(
       makeCharacter({
@@ -570,8 +613,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
   it('an identity-only override adds a config delta but NO scene CSV', () => {
     const idOverride = makeOverride({
       scenePath: scene,
-      enabled: false,
-      identity: { enabled: true, facsDetailStrength: 0.5, flexionStrength: 0.5, applyUE5TearUV: true },
+      identity: { facsDetailStrength: 0.5, flexionStrength: 0.5, applyUE5TearUV: true },
     })
     const files = generateAll(
       makeCharacter({ extraScenes: [scene], sceneOverrides: [idOverride] }),
@@ -590,15 +632,19 @@ describe('generateAll — scene overrides folded into the one script', () => {
   it('mergeSceneOverride merges the ROM sections only (frames), not identity dials', () => {
     const romOverride = makeOverride({
       scenePath: scene,
-      poses: [
-        {
-          id: 'p1',
-          name: 'BeachTone',
-          morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5 }],
-          boneScaleRef: false,
+      rom: {
+        FBM: {
+          replaced: [
+            {
+              id: 'p1',
+              name: 'BeachTone',
+              morphs: [{ id: 'mo', node: 'Genesis9', prop: 'b', value: 0.5 }],
+              boneScaleRef: false,
+            },
+          ],
         },
-      ],
-      identity: { enabled: true, facsDetailStrength: 0.25, flexionStrength: 0.75, applyUE5TearUV: true },
+      },
+      identity: { facsDetailStrength: 0.25, flexionStrength: 0.75, applyUE5TearUV: true },
     })
     const merged = mergeSceneOverride(makeCharacter(), romOverride)
     // Sections reflect the ROM override…
@@ -612,9 +658,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
   it('a preserve-only override full-replaces the base lists (empty overrides too), NO scene CSV', () => {
     const preserveOverride = makeOverride({
       scenePath: scene,
-      enabled: false,
       preserve: {
-        enabled: true,
         morphs: [{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }],
         nodeTransforms: [],
       },
@@ -652,19 +696,21 @@ describe('generateAll — scene overrides folded into the one script', () => {
       ...extra,
     })
   const ownedGenConfig = (patch: Record<string, unknown>) => ({
-    section: 'GEN' as const,
-    config: { enabled: true, mode: 'preset' as const, presetAssets: [], artDirection: [], groups: [], customAssetPath: '', ...patch },
+    enabled: true, mode: 'preset' as const, presetAssets: [], artDirection: [], groups: [], customAssetPath: '', ...patch,
   })
 
-  it('disabling a preset GEN for a scene now emits bIncludeGP:false (v22 sectionEnabled desync fix)', () => {
-    const off = makeOverride({ scenePath: scene, enabled: true, sectionEnabled: [{ section: 'GEN', enabled: false }] })
+  it('disabling a preset GEN for a scene now emits bIncludeGP:false (v22 desync fix)', () => {
+    const off = makeOverride({ scenePath: scene, rom: { GEN: { enabled: false } } })
     const files = generateAll(genFemale({ sceneOverrides: [off] }), {}, FRAMES)
     expect(grabObject(files[0].content, 'dthCharacterConfig').bIncludeGP).toBe(true)
     expect(grabObject(files[0].content, 'dthSceneOverrides')[sceneKey].bIncludeGP).toBe(false)
   })
 
   it('a per-scene preset-asset swap emits the changed include flags', () => {
-    const swap = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [ownedGenConfig({ presetAssets: ['DK9 - Dicktator.duf'] })] })
+    const swap = makeOverride({
+      scenePath: scene,
+      rom: { GEN: { owned: ownedGenConfig({ presetAssets: ['DK9 - Dicktator.duf'] }) } },
+    })
     const delta = grabObject(generateAll(genFemale({ sceneOverrides: [swap] }), {}, FRAMES)[0].content, 'dthSceneOverrides')[sceneKey]
     expect(delta.bIncludeGP).toBe(false)
     expect(delta.bIncludeDK).toBe(true)
@@ -672,7 +718,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
 
   it('an art-direction-only scene override emits gpArtDirection but NO scene CSV', () => {
     const artB = { id: 'a', rom: 'gp' as const, frame: 96, name: 'Open', morphs: [{ id: 'm', node: 'GoldenPalace_G9', prop: 'GP_Open', value: 0.8 }] }
-    const ov = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [ownedGenConfig({ artDirection: [artB] })] })
+    const ov = makeOverride({ scenePath: scene, rom: { GEN: { owned: ownedGenConfig({ artDirection: [artB] }) } } })
     const files = generateAll(genFemale({ sceneOverrides: [ov] }), {}, FRAMES)
     // Art direction doesn't change the frame layout → no scene-suffixed CSV.
     expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
@@ -684,8 +730,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
   it('a jcm-only scene override emits jcmMorphMods but NO scene CSV', () => {
     const ov = makeOverride({
       scenePath: scene,
-      enabled: false,
-      jcm: { enabled: true, mods: [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }] },
+      jcm: [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }],
     })
     const files = generateAll(makeCharacter({ extraScenes: [scene], sceneOverrides: [ov] }), {}, FRAMES)
     expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
@@ -694,11 +739,11 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(delta.extraFrames).toBeUndefined()
   })
 
-  it('a jcm DELETE-ALL (armed, empty mods) emits an empty jcmMorphMods delta', () => {
-    // Mirrors the preserve delete-all above: an armed jcm panel with an EMPTY list must
+  it('a jcm DELETE-ALL (armed, empty list) emits an empty jcmMorphMods delta', () => {
+    // Mirrors the preserve delete-all above: a PRESENT jcm block with an EMPTY list must
     // still OVERRIDE the base's mods (empty ⇒ no JCM modifications for this scene) — the
     // shallow runtime copy can only set a key, so the empty array has to be emitted.
-    const ov = makeOverride({ scenePath: scene, enabled: false, jcm: { enabled: true, mods: [] } })
+    const ov = makeOverride({ scenePath: scene, jcm: [] })
     const character = makeCharacter({
       extraScenes: [scene],
       jcmMorphMods: [{ id: 'base', boneLabel: 'Right Thigh', axis: 'XRotate', drives: [] }],
@@ -712,26 +757,23 @@ describe('generateAll — scene overrides folded into the one script', () => {
     // Owning GEN in custom mode changes the frame layout (custom rows replace the preset
     // block) — so the delta drops the GP include and a scene-suffixed CSV is minted.
     const owned = {
-      section: 'GEN' as const,
-      config: {
-        enabled: true,
-        mode: 'custom' as const,
-        presetAssets: [],
-        artDirection: [],
-        groups: [
-          {
-            id: 'gg',
-            label: '',
-            suffix: 'centre' as const,
-            method: 'individual' as const,
-            calculateFrom: 'default' as const,
-            poses: [{ id: 'gp1', name: 'BeachGP', morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }], boneScaleRef: false }],
-          },
-        ],
-        customAssetPath: '',
-      },
+      enabled: true,
+      mode: 'custom' as const,
+      presetAssets: [],
+      artDirection: [],
+      groups: [
+        {
+          id: 'gg',
+          label: '',
+          suffix: 'centre' as const,
+          method: 'individual' as const,
+          calculateFrom: 'default' as const,
+          poses: [{ id: 'gp1', name: 'BeachGP', morphs: [{ id: 'm', node: 'Genesis9', prop: 'p', value: 1 }], boneScaleRef: false }],
+        },
+      ],
+      customAssetPath: '',
     }
-    const ov = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [owned] })
+    const ov = makeOverride({ scenePath: scene, rom: { GEN: { owned } } })
     const files = generateAll(genFemale({ sceneOverrides: [ov] }), {}, FRAMES)
     // Frame layout changed (custom GEN rows) → the scene gets its own CSV.
     expect(files.map((f) => f.fileName)).toContain('ElectraG9_ElectraBeach_pose_asset.csv')
@@ -746,17 +788,14 @@ describe('generateAll — scene overrides folded into the one script', () => {
     // A custom base-ROM `.duf` for the scene rides as a jcmRomPath delta (forward-slashed);
     // the exact-key assertion pins that nothing else leaks into the delta.
     const owned = {
-      section: 'JCM' as const,
-      config: {
-        enabled: true,
-        mode: 'custom' as const,
-        presetAssets: [],
-        artDirection: [],
-        groups: [],
-        customAssetPath: 'C:\\Custom\\Beach JCM.duf',
-      },
+      enabled: true,
+      mode: 'custom' as const,
+      presetAssets: [],
+      artDirection: [],
+      groups: [],
+      customAssetPath: 'C:\\Custom\\Beach JCM.duf',
     }
-    const ov = makeOverride({ scenePath: scene, enabled: true, sectionOverrides: [owned] })
+    const ov = makeOverride({ scenePath: scene, rom: { JCM: { owned } } })
     const delta = grabObject(generateAll(withScene({ sceneOverrides: [ov] }), {}, FRAMES)[0].content, 'dthSceneOverrides')[sceneKey]
     expect(Object.keys(delta)).toEqual(['jcmRomPath'])
     expect(delta.jcmRomPath).toBe('C:/Custom/Beach JCM.duf')
@@ -768,8 +807,9 @@ describe('generateAll — scene overrides folded into the one script', () => {
     // per-scene maps through to the delta (the base romPaths {} / FRAMES carry neither).
     const ov = makeOverride({
       scenePath: scene,
-      enabled: true,
-      sectionOverrides: [{ section: 'GEN' as const, config: { enabled: true, mode: 'preset' as const, presetAssets: ['DK9 - Dicktator.duf'], artDirection: [], groups: [], customAssetPath: '' } }],
+      rom: {
+        GEN: { owned: { enabled: true, mode: 'preset' as const, presetAssets: ['DK9 - Dicktator.duf'], artDirection: [], groups: [], customAssetPath: '' } },
+      },
     })
     const sceneRomPaths = { [sceneKey]: { dk: 'X:/poses/DK.duf' } }
     const sceneFrames = { [sceneKey]: { base: 328, gp: 0, dk: 60, phys: 43 } }

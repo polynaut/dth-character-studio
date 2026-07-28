@@ -9,7 +9,7 @@ import { RomSections } from './rom-sections'
 import { applySceneOverride, defaultSections, sceneOverrideSchema } from '@dth/rom'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
-import type { RomSections as RomSectionsModel } from '@dth/rom'
+import type { RomSections as RomSectionsModel, SceneOverride } from '@dth/rom'
 
 function sectionsWithMultiMorphPose(): RomSectionsModel {
   const sections = defaultSections()
@@ -359,28 +359,22 @@ describe('pose Name validation (Houdini-safe)', () => {
 })
 
 describe('scene override mode', () => {
-  // A controlled harness like the character page: the override entry lives in
+  // A controlled harness like the character page: the override record lives in
   // state and RomSections edits it; the base sections are handed in fixed so
-  // any base edit would be visible via onSectionsChange.
+  // any base edit would be visible via onSectionsChange. The record starts
+  // EMPTY — { scenePath, rom: {}, hair: [] } is exactly what
+  // sceneOverrideSchema.parse mints for a fresh scene (schema v24: panels are
+  // presence-armed, all ROM divergence lives section-keyed on `rom`).
   function OverrideHarness({
     onOverrideChange,
     onSectionsChange,
   }: {
-    onOverrideChange: (next: import('@dth/rom').SceneOverride) => void
+    onOverrideChange: (next: SceneOverride) => void
     onSectionsChange: () => void
   }) {
-    const [override, setOverride] = useState<import('@dth/rom').SceneOverride>({
-      scenePath: 'X:/scenes/Beach.duf',
-      enabled: true,
-      poses: [],
-      additions: [],
-      sectionOverrides: [],
-      sectionEnabled: [],
-      identity: { enabled: false, facsDetailStrength: 1, flexionStrength: 1, applyUE5TearUV: false },
-      groom: { enabled: false },
-      preserve: { enabled: false, morphs: [], nodeTransforms: [] },
-      jcm: { enabled: false, mods: [] },
-    })
+    const [override, setOverride] = useState<SceneOverride>(() =>
+      sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf' }),
+    )
     return (
       <RomSections
         sections={sectionsWithMultiMorphPose()}
@@ -413,7 +407,7 @@ describe('scene override mode', () => {
   })
 
   it('inserting a frame escalates the whole section to a scene override', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     let sectionsChanged = false
     render(
       <OverrideHarness
@@ -424,10 +418,15 @@ describe('scene override mode', () => {
     fireEvent.click(screen.getByText('Full Body'))
     fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
     fireEvent.click(screen.getByText('Add after'))
-    // The scene now OWNS the section — snapshotted whole, with the extra frame.
-    expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionOverrides[0].section).toBe('FBM')
-    expect(latest!.sectionOverrides[0].config.groups[0].poses).toHaveLength(2)
+    // The scene now OWNS the section — the whole config snapshotted (with the
+    // extra frame) into `owned` at the one rom key; the sparse layers and the
+    // enable overlay are cleared at that same key.
+    const entry = latest!.rom.FBM!
+    expect(entry.owned).toBeDefined()
+    expect(entry.owned!.groups[0].poses).toHaveLength(2)
+    expect(entry.replaced).toEqual([])
+    expect(entry.added).toEqual([])
+    expect(entry.enabled).toBeUndefined()
     // The base sections are never touched by a scene override.
     expect(sectionsChanged).toBe(false)
     // The section title now carries the green reset-all control.
@@ -435,22 +434,23 @@ describe('scene override mode', () => {
   })
 
   it('deleting a base frame escalates, and the section reset restores the primary', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(
       <OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />,
     )
     fireEvent.click(screen.getByText('Full Body'))
     fireEvent.click(screen.getByRole('button', { name: 'Delete this frame for this scene' }))
-    expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionOverrides[0].config.groups[0].poses).toHaveLength(0)
-    // The section-title reset drops the whole-section override entirely.
+    expect(latest!.rom.FBM?.owned).toBeDefined()
+    expect(latest!.rom.FBM!.owned!.groups[0].poses).toHaveLength(0)
+    // The section-title reset deletes the whole rom entry for the section.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
-    expect(latest!.sectionOverrides).toHaveLength(0)
+    expect(latest!.rom.FBM).toBeUndefined()
+    expect(Object.keys(latest!.rom)).toHaveLength(0)
   })
 
   it('editing a base row arms it as an override; reset drops it', () => {
     let sectionsChanged = false
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(
       <OverrideHarness
         onOverrideChange={(next) => {
@@ -464,21 +464,23 @@ describe('scene override mode', () => {
     fireEvent.click(screen.getByText('Full Body'))
 
     // Editing the base row's name arms it: an override copy (keyed by the base pose
-    // id) appears, the base stays fixed.
+    // id) lands in rom.FBM.replaced, the base stays fixed.
     const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
     fireEvent.change(nameInput, { target: { value: 'BeachGlutes' } })
     fireEvent.blur(nameInput)
-    expect(latest!.poses).toHaveLength(1)
-    expect(latest!.poses[0]).toMatchObject({ id: 'p1', name: 'BeachGlutes' })
+    expect(latest!.rom.FBM?.replaced).toHaveLength(1)
+    expect(latest!.rom.FBM!.replaced[0]).toMatchObject({ id: 'p1', name: 'BeachGlutes' })
+    expect(latest!.rom.FBM?.owned).toBeUndefined() // stayed sparse
     expect(sectionsChanged).toBe(false)
 
-    // The row now offers a reset → clicking it drops the override entry.
+    // The row now offers a reset → dropping the copy leaves the entry carrying
+    // nothing, so the whole rom key prunes with it.
     fireEvent.click(screen.getByTitle('Reset this frame to the base ROM'))
-    expect(latest!.poses).toHaveLength(0)
+    expect(latest!.rom.FBM).toBeUndefined()
   })
 
   it('a sparse per-row edit makes the section title diverge; the section reset clears it', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
     // No divergence yet → the section title carries no reset-all control.
@@ -489,29 +491,30 @@ describe('scene override mode', () => {
     const nameInput = document.querySelector<HTMLInputElement>('input[data-pose-input]')!
     fireEvent.change(nameInput, { target: { value: 'BeachGlutes' } })
     fireEvent.blur(nameInput)
-    expect(latest!.poses).toHaveLength(1)
-    expect(latest!.sectionOverrides).toHaveLength(0) // stayed sparse — not escalated
+    expect(latest!.rom.FBM?.replaced).toHaveLength(1)
+    expect(latest!.rom.FBM?.owned).toBeUndefined() // stayed sparse — not escalated
     const sectionReset = screen.getByTitle("Reset this section to the primary scene's ROM")
 
     // The section reset clears the sparse override too (not just escalations).
     fireEvent.click(sectionReset)
-    expect(latest!.poses).toHaveLength(0)
+    expect(latest!.rom.FBM).toBeUndefined()
     expect(screen.queryByTitle("Reset this section to the primary scene's ROM")).toBeNull()
   })
 
   it('an appended frame makes the section title diverge (green reset-all)', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
     fireEvent.click(screen.getByText('Add morph'))
-    expect(latest!.additions).toHaveLength(1)
-    // An added frame is a divergence from the primary → section title goes green.
+    expect(latest!.rom.FBM?.added).toHaveLength(1)
+    // An added frame is a divergence from the primary → section title goes green;
+    // the reset deletes the whole rom entry.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
-    expect(latest!.additions).toHaveLength(0)
+    expect(latest!.rom.FBM).toBeUndefined()
   })
 
   it('a value edited back to the base row un-arms it (no lingering green override)', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
     const boneScale = screen.getByTitle(
@@ -519,20 +522,21 @@ describe('scene override mode', () => {
     )
     // Toggle bone scale ON → the base row arms as a per-scene override.
     fireEvent.click(boneScale)
-    expect(latest!.poses).toHaveLength(1)
-    expect(latest!.poses[0].boneScaleRef).toBe(true)
+    expect(latest!.rom.FBM?.replaced).toHaveLength(1)
+    expect(latest!.rom.FBM!.replaced[0].boneScaleRef).toBe(true)
     // Toggle it OFF again → the override now matches the base row, so it's dropped
-    // (the row stops reading as overridden) rather than lingering as a no-op copy.
+    // (rather than lingering as a no-op copy) — and the entry left carrying
+    // nothing prunes from `rom` entirely.
     fireEvent.click(boneScale)
-    expect(latest!.poses).toHaveLength(0)
+    expect(latest!.rom.FBM).toBeUndefined()
   })
 
   it('Add morph appends an override frame at the group end, marked new and removable', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     fireEvent.click(screen.getByText('Full Body'))
     fireEvent.click(screen.getByText('Add morph'))
-    expect(latest!.additions).toEqual([
+    expect(latest!.rom.FBM?.added).toEqual([
       expect.objectContaining({ groupId: 'g1', poses: [expect.objectContaining({ name: '' })] }),
     ])
 
@@ -548,11 +552,12 @@ describe('scene override mode', () => {
       screen.getByTitle('Reset this added frame — removes it (not in the primary scene)'),
     ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Delete this added frame for this scene' }))
-    expect(latest!.additions).toEqual([])
+    // The last addition removed leaves the entry carrying nothing → it prunes.
+    expect(latest!.rom.FBM).toBeUndefined()
   })
 
-  it('disabling a section for the scene stores a sectionEnabled override + green reset', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+  it('disabling a section for the scene stores an enable overlay + green reset', () => {
+    let latest: SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     // FBM is enabled on the base and not overridden yet.
     expect(screen.queryByTitle("Reset this section to the primary scene's ROM")).toBeNull()
@@ -562,23 +567,24 @@ describe('scene override mode', () => {
     const header = screen.getByText('Full Body').closest('div') as HTMLElement
     fireEvent.click(within(header).getByRole('switch'))
 
-    // Only the per-section disable is stored — no phantom row/section entries.
-    expect(latest!.sectionEnabled).toEqual([{ section: 'FBM', enabled: false }])
-    expect(latest!.poses).toHaveLength(0)
-    expect(latest!.sectionOverrides).toHaveLength(0)
+    // Only the per-section enable overlay is stored — no owned config, no rows.
+    expect(latest!.rom.FBM).toEqual({ enabled: false, replaced: [], added: [] })
 
     // The title now carries the green reset-all; it restores the primary on/off state.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
-    expect(latest!.sectionEnabled).toHaveLength(0)
+    expect(latest!.rom.FBM).toBeUndefined()
   })
 
   it('enabling a base-disabled section for the scene stores enabled: true', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(<OverrideHarness onOverrideChange={(next) => (latest = next)} onSectionsChange={() => {}} />)
     // EXP is disabled on the base — flip it on for this scene.
     const header = screen.getByText('Expressions').closest('div') as HTMLElement
     fireEvent.click(within(header).getByRole('switch'))
-    expect(latest!.sectionEnabled).toEqual([{ section: 'EXP', enabled: true }])
+    expect(latest!.rom.EXP).toEqual({ enabled: true, replaced: [], added: [] })
+    // Toggling back to the base value drops the overlay — and with it the entry.
+    fireEvent.click(within(header).getByRole('switch'))
+    expect(latest!.rom.EXP).toBeUndefined()
   })
 
   it('never touches the base sections when a section is toggled for a scene', () => {
@@ -610,11 +616,11 @@ describe('scene override mode', () => {
     // A JCM section in custom mode → an editable base-ROM path Input. On a non-primary
     // scene editing it escalates the section to an owned config (per-scene), stores the
     // path there, and shows the green section reset — WITHOUT touching the base.
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     let sectionsChanged = false
     function JcmHarness() {
-      const [override, setOverride] = useState(
-        sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf', enabled: true }),
+      const [override, setOverride] = useState(() =>
+        sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf' }),
       )
       const sections = defaultSections()
       sections.JCM = { ...sections.JCM, enabled: true, mode: 'custom', customAssetPath: 'C:/base.duf' }
@@ -641,9 +647,8 @@ describe('scene override mode', () => {
     fireEvent.click(screen.getByText('Joint Corrective'))
     fireEvent.change(screen.getByDisplayValue('C:/base.duf'), { target: { value: 'C:/beach.duf' } })
 
-    expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionOverrides[0].section).toBe('JCM')
-    expect(latest!.sectionOverrides[0].config.customAssetPath).toBe('C:/beach.duf')
+    expect(latest!.rom.JCM?.owned).toBeDefined()
+    expect(latest!.rom.JCM!.owned!.customAssetPath).toBe('C:/beach.duf')
     expect(sectionsChanged).toBe(false)
     expect(screen.getByTitle("Reset this section to the primary scene's ROM")).toBeTruthy()
   })
@@ -655,10 +660,10 @@ describe('scene override mode', () => {
     onLatest,
   }: {
     base: RomSectionsModel
-    onLatest: (next: import('@dth/rom').SceneOverride) => void
+    onLatest: (next: SceneOverride) => void
   }) {
-    const [override, setOverride] = useState(
-      sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf', enabled: true }),
+    const [override, setOverride] = useState(() =>
+      sceneOverrideSchema.parse({ scenePath: 'X:/scenes/Beach.duf' }),
     )
     return (
       <RomSections
@@ -681,32 +686,33 @@ describe('scene override mode', () => {
   }
 
   it('re-enabling a section disabled THEN customized is live, not dead (dual-source enabled)', () => {
-    // Two sources of truth for `enabled` — the sectionEnabled overlay and the owned
-    // config — used to disagree: escalation baked the effective (disabled) enabled into
-    // the owned config but left the overlay, and re-enabling dropped the overlay (it
-    // matched the base) while the owned config's enabled:false silently won. Repro:
+    // Two sources of truth for `enabled` — the enable overlay and the owned
+    // config — must not disagree: escalation bakes the effective (disabled)
+    // enabled into the owned config and clears the overlay AT THE SAME rom key,
+    // and the toggle on an owned section patches owned.enabled (the overlay's
+    // base-relative drop rule can't express the owned resting value). Repro:
     // base FBM on → disable for scene → customize (escalate) → re-enable ⇒ must turn on.
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     const base = sectionsWithMultiMorphPose() // FBM enabled, one pose
     render(<EnableHarness base={base} onLatest={(next) => (latest = next)} />)
     fireEvent.click(screen.getByText('Full Body')) // expand FBM
     const header = () => screen.getByText('Full Body').closest('div') as HTMLElement
 
-    // 1) Disable FBM for the scene → a lightweight overlay entry.
+    // 1) Disable FBM for the scene → a lightweight enable overlay at the rom key.
     fireEvent.click(within(header()).getByRole('switch'))
-    expect(latest!.sectionEnabled).toEqual([{ section: 'FBM', enabled: false }])
+    expect(latest!.rom.FBM).toEqual({ enabled: false, replaced: [], added: [] })
 
     // 2) Customize FBM (insert a frame) → escalates to an owned config; the now-redundant
-    // overlay is dropped and the owned config carries the effective enabled:false.
+    // overlay is cleared at the key and the owned config carries the effective enabled:false.
     fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
     fireEvent.click(screen.getByText('Add after'))
-    expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionEnabled).toHaveLength(0)
-    expect(latest!.sectionOverrides[0].config.enabled).toBe(false)
+    expect(latest!.rom.FBM?.owned).toBeDefined()
+    expect(latest!.rom.FBM?.enabled).toBeUndefined()
+    expect(latest!.rom.FBM!.owned!.enabled).toBe(false)
 
     // 3) Re-enable FBM → the owned config flips back on (dead toggle would leave it off).
     fireEvent.click(within(header()).getByRole('switch'))
-    expect(latest!.sectionOverrides[0].config.enabled).toBe(true)
+    expect(latest!.rom.FBM!.owned!.enabled).toBe(true)
     expect(applySceneOverride(base, latest!).FBM.enabled).toBe(true)
   })
 
@@ -739,7 +745,7 @@ describe('scene override mode', () => {
   }
 
   it('GEN keeps a dead (scene-gated) toggle on a non-primary scene — but its content IS overridable', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     render(<EnableHarness base={baseWithCustomGen()} onLatest={(next) => (latest = next)} />)
 
     // The enable toggle is disabled (it follows the primary scene's geograft on
@@ -759,22 +765,21 @@ describe('scene override mode', () => {
     expect(section.querySelector('fieldset')?.disabled).toBe(false)
     fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
     fireEvent.click(screen.getByText('Add after'))
-    expect(latest!.sectionOverrides).toHaveLength(1)
-    expect(latest!.sectionOverrides[0].section).toBe('GEN')
-    // A per-scene enable flip is still refused: the escalated config keeps the
-    // base's enabled state and no sectionEnabled overlay was stored.
-    expect(latest!.sectionEnabled).toHaveLength(0)
+    expect(latest!.rom.GEN?.owned).toBeDefined()
+    // A per-scene enable flip is still refused: no enable overlay was stored and
+    // the escalated (owned) config keeps the base's enabled state.
+    expect(latest!.rom.GEN?.enabled).toBeUndefined()
+    expect(latest!.rom.GEN!.owned!.enabled).toBe(true)
   })
 
   it('a stale GEN enable-override (pre-gating data) still shows the green mark and resets', () => {
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     function StaleGenHarness() {
       const base = baseWithCustomGen()
-      const [override, setOverride] = useState(
+      const [override, setOverride] = useState(() =>
         sceneOverrideSchema.parse({
           scenePath: 'X:/scenes/Beach.duf',
-          enabled: true,
-          sectionOverrides: [{ section: 'GEN', config: { ...base.GEN, enabled: false } }],
+          rom: { GEN: { owned: { ...base.GEN, enabled: false } } },
         }),
       )
       return (
@@ -799,7 +804,7 @@ describe('scene override mode', () => {
     render(<StaleGenHarness />)
     // The stale divergence must stay escapable: the green section reset drops it.
     fireEvent.click(screen.getByTitle("Reset this section to the primary scene's ROM"))
-    expect(latest!.sectionOverrides).toHaveLength(0)
+    expect(latest!.rom.GEN).toBeUndefined()
   })
 
   it("GEN's toggle is scene-gated on the PRIMARY scene too — auto state, never hand-toggled", () => {
@@ -831,26 +836,26 @@ describe('scene override mode', () => {
   it('disabling a section enabled THEN customized on a base-off section actually turns it off (mirror)', () => {
     // Mirror of the above: base FBM off → enable for scene → customize (escalate) →
     // disable ⇒ the section must go off, not keep generating the frames the user cut.
-    let latest: import('@dth/rom').SceneOverride | null = null
+    let latest: SceneOverride | null = null
     const base = sectionsWithMultiMorphPose()
     base.FBM.enabled = false // base-disabled, but keeps its pose row so we can escalate
     render(<EnableHarness base={base} onLatest={(next) => (latest = next)} />)
     fireEvent.click(screen.getByText('Full Body')) // expand FBM
     const header = () => screen.getByText('Full Body').closest('div') as HTMLElement
 
-    // 1) Enable FBM for the scene.
+    // 1) Enable FBM for the scene → an enable overlay at the rom key.
     fireEvent.click(within(header()).getByRole('switch'))
-    expect(latest!.sectionEnabled).toEqual([{ section: 'FBM', enabled: true }])
+    expect(latest!.rom.FBM).toEqual({ enabled: true, replaced: [], added: [] })
 
-    // 2) Customize (insert a frame) → escalate. Overlay dropped, owned enabled:true.
+    // 2) Customize (insert a frame) → escalate. Overlay cleared, owned enabled:true.
     fireEvent.click(screen.getAllByLabelText('Insert a frame here')[0])
     fireEvent.click(screen.getByText('Add after'))
-    expect(latest!.sectionEnabled).toHaveLength(0)
-    expect(latest!.sectionOverrides[0].config.enabled).toBe(true)
+    expect(latest!.rom.FBM?.enabled).toBeUndefined()
+    expect(latest!.rom.FBM!.owned!.enabled).toBe(true)
 
     // 3) Disable → the owned config flips off (not swallowed by a stale overlay).
     fireEvent.click(within(header()).getByRole('switch'))
-    expect(latest!.sectionOverrides[0].config.enabled).toBe(false)
+    expect(latest!.rom.FBM!.owned!.enabled).toBe(false)
     expect(applySceneOverride(base, latest!).FBM.enabled).toBe(false)
   })
 })

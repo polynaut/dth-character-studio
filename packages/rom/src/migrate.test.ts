@@ -139,9 +139,9 @@ describe('schema v17 — sceneOverrides (additive, zod default)', () => {
   })
 })
 
-describe('schema v23 — sectionOverrides {section,groups} → {section,config} + jcm block', () => {
+describe('schema v23 — sectionOverrides {section,groups} → {section,config} (now rom.<S>.owned)', () => {
   const now = '2026-07-20T00:00:00.000Z'
-  it('wraps a legacy whole-section override groups into a custom config', () => {
+  it('wraps a legacy whole-section override groups into a custom config, landing as the owned config', () => {
     const parsed = characterSchema.parse(
       migrateCharacterData({
         id: 'c',
@@ -163,30 +163,31 @@ describe('schema v23 — sectionOverrides {section,groups} → {section,config} 
         ],
       }),
     )
-    const entry = parsed.sceneOverrides[0].sectionOverrides[0]
-    expect(entry.section).toBe('FBM')
-    expect(entry.config).toMatchObject({ enabled: true, mode: 'custom', presetAssets: [], artDirection: [], customAssetPath: '' })
-    expect(entry.config.groups[0].id).toBe('g1')
-    // The new per-scene jcm block defaults in too.
-    expect(parsed.sceneOverrides[0].jcm).toEqual({ enabled: false, mods: [] })
+    // v23 wrapped the groups into a config; v24 then folds it to `rom.FBM.owned`.
+    const owned = parsed.sceneOverrides[0].rom.FBM!.owned!
+    expect(owned).toMatchObject({ enabled: true, mode: 'custom', presetAssets: [], artDirection: [], customAssetPath: '' })
+    expect(owned.groups[0].id).toBe('g1')
+    // The jcm panel stays disarmed (absent) — the old default block is gone.
+    expect(parsed.sceneOverrides[0].jcm).toBeUndefined()
   })
 
-  it('is idempotent — an already-config entry is left untouched', () => {
+  it('is idempotent — a v23 config entry converts once, then stays put', () => {
     const already = {
       section: 'FBM' as const,
       config: { enabled: true, mode: 'custom' as const, presetAssets: [], artDirection: [], groups: [], customAssetPath: '' },
     }
-    const out = migrateCharacterData({
+    const once = migrateCharacterData({
       sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [], sectionOverrides: [structuredClone(already)] }],
       schemaVersion: 23,
     })
-    expect(out.sceneOverrides[0].sectionOverrides[0]).toEqual(already)
+    expect(once.sceneOverrides[0].rom.FBM.owned).toEqual(already.config)
+    expect(migrateCharacterData(structuredClone(once))).toEqual(once)
   })
 
   it('heals a preset-only section (RET) to its default mode instead of hard-failing', () => {
     // The UI can't produce this, but a crafted/legacy v22 file could carry a whole-section
     // override for RET (preset-only). A blanket mode:'custom' would fail the reject-only
-    // sectionOverride superRefine and take the WHOLE character down; RET must heal to
+    // owned-config superRefine and take the WHOLE character down; RET must heal to
     // 'preset' so the character still loads.
     const parsed = characterSchema.parse(
       migrateCharacterData({
@@ -209,14 +210,142 @@ describe('schema v23 — sectionOverrides {section,groups} → {section,config} 
         ],
       }),
     )
-    const entry = parsed.sceneOverrides[0].sectionOverrides[0]
-    expect(entry.section).toBe('RET')
-    expect(entry.config.mode).toBe('preset') // healed — RET has no 'custom' mode
+    expect(parsed.sceneOverrides[0].rom.RET!.owned!.mode).toBe('preset') // healed — RET has no 'custom' mode
   })
 })
 
-describe('schema v21 — sceneOverride.sectionOverrides (additive, zod default)', () => {
-  it('fills an empty list on a legacy sceneOverride (pre-v21)', () => {
+describe('migrateCharacterData — v24 (scene-override restructure: rom record + presence panels + hair fold)', () => {
+  const now = '2026-07-20T00:00:00.000Z'
+  // Base sections for row attribution: a custom FBM group g1 (pose p1) plus a
+  // custom EXP group ge1 (pose pe1) — EXP is the section the override OWNS, so
+  // sparse entries pointing into it are dead and must drop.
+  const v23Sections = () => ({
+    FBM: {
+      enabled: true,
+      mode: 'custom',
+      groups: [
+        {
+          id: 'g1',
+          label: '',
+          suffix: 'centre',
+          method: 'individual',
+          calculateFrom: 'default',
+          poses: [
+            { id: 'p1', name: 'BodyTone', morphs: [{ id: 'm1', node: 'Genesis9', prop: 'body_bs_BodyTone', value: 1 }], boneScaleRef: false },
+          ],
+        },
+      ],
+    },
+    EXP: {
+      enabled: true,
+      mode: 'custom',
+      groups: [
+        {
+          id: 'ge1',
+          label: '',
+          suffix: 'centre',
+          method: 'individual',
+          calculateFrom: 'default',
+          poses: [{ id: 'pe1', name: 'Angry', morphs: [], boneScaleRef: false }],
+        },
+      ],
+    },
+  })
+  const expOwned = {
+    enabled: true,
+    mode: 'custom',
+    presetAssets: [],
+    artDirection: [],
+    groups: [{ id: 'ge2', label: '', suffix: 'centre', method: 'individual', calculateFrom: 'default', poses: [] }],
+    customAssetPath: '',
+  }
+  const replacedP1 = { id: 'p1', name: 'SceneTone', morphs: [], boneScaleRef: false }
+  const addG1 = { groupId: 'g1', poses: [{ id: 'a1', name: 'Added', morphs: [], boneScaleRef: false }] }
+  // A flat-section sentinel encodes its target section in the group id itself.
+  const addFlatMisc = { groupId: 'flat-MISC', poses: [{ id: 'a2', name: 'OutfitFix', morphs: [], boneScaleRef: false }] }
+  const jcmMods = [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }]
+  const v23Character = () => ({
+    id: 'c',
+    name: 'X',
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 23,
+    sections: v23Sections(),
+    sceneOverrides: [
+      {
+        scenePath: 'D:/s/Beach.duf',
+        enabled: true,
+        poses: [
+          structuredClone(replacedP1),
+          // Sparse replacement under the OWNED EXP section is dead — must drop.
+          { id: 'pe1', name: 'IgnoredUnderOwned', morphs: [], boneScaleRef: false },
+          // Orphan: no base pose carries this id — must drop.
+          { id: 'gone', name: 'Orphan', morphs: [], boneScaleRef: false },
+        ],
+        additions: [
+          structuredClone(addG1),
+          structuredClone(addFlatMisc),
+          // Addition targeting a group of the owned EXP section is dead too.
+          { groupId: 'ge1', poses: [{ id: 'a3', name: 'AlsoIgnored', morphs: [], boneScaleRef: false }] },
+        ],
+        sectionOverrides: [{ section: 'EXP', config: structuredClone(expOwned) }],
+        sectionEnabled: [{ section: 'GEN', enabled: false }],
+        identity: { enabled: true, facsDetailStrength: 0.5, flexionStrength: 0.75, applyUE5TearUV: true },
+        preserve: { enabled: false, morphs: [{ name: 'kept', keepValue: 1 }], nodeTransforms: [] },
+        jcm: { enabled: true, mods: structuredClone(jcmMods) },
+        groom: { enabled: true },
+      },
+      // Disarmed ROM gate (enabled:false): its stored rows never generated — they DROP.
+      { scenePath: 'D:/s/Office.duf', enabled: false, poses: [structuredClone(replacedP1)] },
+    ],
+    groomScenes: [
+      { scenePath: 'D:/s/Beach.duf', nodes: [{ nodeLabel: 'dForce Cap' }] },
+      // The PRIMARY scene had hair but no override — it gains a hair-only record.
+      { scenePath: 'D:/s/Primary.duf', nodes: [{ nodeLabel: 'Primary Hair' }] },
+    ],
+  })
+
+  it('converts the whole old shape in one pass (rows attributed, dead layers dropped)', () => {
+    const data = migrateCharacterData(v23Character())
+    expect(data.sceneOverrides).toEqual([
+      {
+        scenePath: 'D:/s/Beach.duf',
+        rom: {
+          // The owned section carries NO sparse rows — pe1/ge1 entries dropped.
+          EXP: { replaced: [], added: [], owned: expOwned },
+          // Rows attributed to their base section by pose/group id; the orphan
+          // 'gone' replacement dropped.
+          FBM: { replaced: [replacedP1], added: [addG1] },
+          MISC: { replaced: [], added: [addFlatMisc] },
+          // sectionEnabled folds to the per-section enable overlay.
+          GEN: { replaced: [], added: [], enabled: false },
+        },
+        // Panels are presence-armed: identity's `enabled:true` folds to presence,
+        // preserve's `enabled:false` drops the whole block (payload and all),
+        // jcm's armed mods become the plain array, groom vanishes entirely.
+        identity: { facsDetailStrength: 0.5, flexionStrength: 0.75, applyUE5TearUV: true },
+        jcm: jcmMods,
+        // groomScenes folded onto the record.
+        hair: [{ nodeLabel: 'dForce Cap' }],
+      },
+      // The disarmed override's rows dropped — nothing to arm, but the record stays.
+      { scenePath: 'D:/s/Office.duf', rom: {} },
+      // The primary scene's hair minted a NEW hair-only record.
+      { scenePath: 'D:/s/Primary.duf', rom: {}, hair: [{ nodeLabel: 'Primary Hair' }] },
+    ])
+    expect(data.groomScenes).toBeUndefined()
+    // The migrated raw object parses as a valid current-shape character.
+    expect(characterSchema.safeParse(data).success).toBe(true)
+  })
+
+  it('is idempotent — migrating twice yields the same result', () => {
+    const once = migrateCharacterData(v23Character())
+    expect(migrateCharacterData(structuredClone(once))).toEqual(once)
+  })
+})
+
+describe('schema v21 — whole-section overrides (now a rom-record key)', () => {
+  it('a legacy sceneOverride with no rows lands with an EMPTY rom record', () => {
     const now = '2026-07-20T00:00:00.000Z'
     const parsed = characterSchema.parse(
       migrateCharacterData({
@@ -229,13 +358,15 @@ describe('schema v21 — sceneOverride.sectionOverrides (additive, zod default)'
         sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [] }],
       }),
     )
-    expect(parsed.sceneOverrides[0].sectionOverrides).toEqual([])
+    expect(parsed.sceneOverrides[0].rom).toEqual({})
   })
 })
 
-describe('schema v20 — per-scene identity/groom override blocks (additive, zod default)', () => {
+describe('schema v20 — per-scene panel blocks (PRESENCE-armed since v24)', () => {
   const now = '2026-07-20T00:00:00.000Z'
-  it('fills identity + groom defaults on a legacy sceneOverride (pre-v20)', () => {
+  it('a legacy sceneOverride without panel blocks gains NO armed panels', () => {
+    // Pre-v20 files never stored the blocks; under v24 "absent = disarmed", so
+    // nothing materializes (the old zod defaults minted disabled stubs instead).
     const parsed = characterSchema.parse(
       migrateCharacterData({
         id: 'c',
@@ -247,20 +378,14 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
         sceneOverrides: [{ scenePath: 'D:/s.duf', enabled: true, poses: [], additions: [] }],
       }),
     )
-    expect(parsed.sceneOverrides[0].identity).toEqual({
-      enabled: false,
-      facsDetailStrength: 1,
-      flexionStrength: 1,
-      applyUE5TearUV: false,
-    })
-    expect(parsed.sceneOverrides[0].groom).toEqual({ enabled: false })
-    expect(parsed.sceneOverrides[0].preserve).toEqual({
-      enabled: false,
-      morphs: [],
-      nodeTransforms: [],
-    })
+    const record = parsed.sceneOverrides[0]
+    expect(record.identity).toBeUndefined()
+    expect(record.preserve).toBeUndefined()
+    expect(record.jcm).toBeUndefined()
+    expect('groom' in record).toBe(false)
+    expect(record.hair).toEqual([])
   })
-  it('round-trips explicit identity + groom override values', () => {
+  it('an old armed identity block folds to presence (enabled key dropped); groom is gone', () => {
     const parsed = characterSchema.parse(
       migrateCharacterData({
         id: 'c',
@@ -268,7 +393,7 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
         createdAt: now,
         updatedAt: now,
         sections: {},
-        schemaVersion: CHARACTER_SCHEMA_VERSION,
+        schemaVersion: 23,
         sceneOverrides: [
           {
             scenePath: 'D:/s.duf',
@@ -284,34 +409,42 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
       }),
     )
     expect(parsed.sceneOverrides[0].identity).toEqual({
-      enabled: true,
       facsDetailStrength: 0.5,
       flexionStrength: 0.75,
       applyUE5TearUV: true,
     })
-    expect(parsed.sceneOverrides[0].groom.enabled).toBe(true)
+    // The groom gate is gone entirely — hair-by-presence replaced it.
+    expect('groom' in parsed.sceneOverrides[0]).toBe(false)
   })
 
   // The ROM `enabled` gate's default flipped true → false at v20 (fresh override
   // = fully disabled). The v20 migrate step keeps a PRE-v20 override that omits
-  // `enabled` ACTIVE, so the flip can't silently deactivate a stored scene's ROM
-  // override (a quiet frame regression next to the core invariant).
-  it('a pre-v20 override missing `enabled` heals to ACTIVE (old default preserved)', () => {
+  // `enabled` ACTIVE — which is what lets its rows survive the v24 fold (the
+  // v24 step drops a DISARMED override's rows as dead data).
+  it('a pre-v20 override missing `enabled` was ACTIVE — its rows survive the v24 fold', () => {
     const parsed = characterSchema.parse(
       migrateCharacterData({
         id: 'c',
         name: 'X',
         createdAt: now,
         updatedAt: now,
-        sections: {},
         schemaVersion: 19,
-        sceneOverrides: [{ scenePath: 'D:/s.duf' }],
+        sections: {
+          FBM: {
+            enabled: true,
+            mode: 'custom',
+            groups: [{ id: 'g1', poses: [{ id: 'p1', name: 'BodyTone', morphs: [] }] }],
+          },
+        },
+        sceneOverrides: [
+          { scenePath: 'D:/s.duf', poses: [{ id: 'p1', name: 'SceneTone', morphs: [] }] },
+        ],
       }),
     )
-    expect(parsed.sceneOverrides[0].enabled).toBe(true)
+    expect(parsed.sceneOverrides[0].rom.FBM!.replaced.map((p) => p.name)).toEqual(['SceneTone'])
   })
 
-  it('a v20+ bare override defaults to DISABLED (the new default, no step)', () => {
+  it('a bare current-shape record parses fully disarmed (empty rom, no panels)', () => {
     const parsed = characterSchema.parse(
       migrateCharacterData({
         id: 'c',
@@ -323,7 +456,12 @@ describe('schema v20 — per-scene identity/groom override blocks (additive, zod
         sceneOverrides: [{ scenePath: 'D:/s.duf' }],
       }),
     )
-    expect(parsed.sceneOverrides[0].enabled).toBe(false)
+    const record = parsed.sceneOverrides[0]
+    expect(record.rom).toEqual({})
+    expect(record.hair).toEqual([])
+    expect(record.identity).toBeUndefined()
+    expect(record.preserve).toBeUndefined()
+    expect(record.jcm).toBeUndefined()
   })
 })
 
@@ -457,27 +595,34 @@ describe('characterSchema — v12 imageScene (additive)', () => {
   })
 })
 
-// v15 replaced the flat groomNodes with per-scene `groomScenes` (additive with
-// a [] default; the never-released flat list is stripped by zod on read).
-describe('characterSchema — v15 groomScenes (additive)', () => {
+// v15 replaced the flat groomNodes with per-scene `groomScenes`; v24 then folded
+// groomScenes into the sceneOverrides records as `hair`. Both legacy spellings
+// are stripped by zod on read — it's the v24 migration step that rescues a
+// stored groomScenes payload into `hair` BEFORE parsing.
+describe('characterSchema — v15 groomScenes → v24 sceneOverrides.hair', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it('fills groomScenes with [] and strips the old flat groomNodes', () => {
+  it('strips the old flat groomNodes (and a raw groomScenes) on read', () => {
     const parsed = characterSchema.parse({
       ...base,
       schemaVersion: 13,
       groomNodes: [{ nodeLabel: 'Old Cap' }],
-    })
-    expect(parsed.groomScenes).toEqual([])
+    }) as Record<string, unknown>
     expect('groomNodes' in parsed).toBe(false)
+    expect('groomScenes' in parsed).toBe(false)
   })
 
-  it('round-trips per-scene groom lists', () => {
-    const parsed = characterSchema.parse({
-      ...base,
-      groomScenes: [{ scenePath: 'X:/scenes/Karen.duf', nodes: [{ nodeLabel: 'dForce Black Tie Cap' }] }],
-    })
-    expect(parsed.groomScenes[0].nodes[0].nodeLabel).toBe('dForce Black Tie Cap')
+  it('migrateCharacterData folds a stored groomScenes into per-scene hair records', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        ...base,
+        sections: {},
+        schemaVersion: 15,
+        groomScenes: [{ scenePath: 'X:/scenes/Karen.duf', nodes: [{ nodeLabel: 'dForce Black Tie Cap' }] }],
+      }),
+    )
+    expect(parsed.sceneOverrides[0].scenePath).toBe('X:/scenes/Karen.duf')
+    expect(parsed.sceneOverrides[0].hair[0].nodeLabel).toBe('dForce Black Tie Cap')
   })
 })
 

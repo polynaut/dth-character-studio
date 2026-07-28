@@ -115,24 +115,19 @@ describe('PreserveFields per-scene override', () => {
   })
 
   it('arms even when the scene already carries an override entry (identity armed)', () => {
+    // Presence-armed record (schema v24): the identity block EXISTING is the
+    // override — no rom entries, no preserve/jcm blocks, no stored booleans.
     const initial = makeCharacter({
       sceneOverrides: [
         {
           scenePath: BEACH,
-          enabled: false,
-          poses: [],
-          additions: [],
-          sectionOverrides: [],
-          sectionEnabled: [],
+          rom: {},
+          hair: [],
           identity: {
-            enabled: true,
             facsDetailStrength: 0.5,
             flexionStrength: 1,
             applyUE5TearUV: false,
           },
-          groom: { enabled: false },
-          preserve: { enabled: false, morphs: [], nodeTransforms: [] },
-          jcm: { enabled: false, mods: [] },
         },
       ],
     })
