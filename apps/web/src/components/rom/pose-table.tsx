@@ -146,8 +146,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
         <InfoPopup label="Name — more information" className="-my-1">
           The generated morph's name in <strong>Houdini</strong> and later{' '}
           <strong>Unreal Engine</strong> — the one value that travels the whole pipeline.
-          Letters, numbers and underscores only — Houdini accepts nothing else. The
-          group's Left/Right suffix is appended for you (<code>_l</code>/<code>_r</code>).
+          Letters, numbers and underscores only.
         </InfoPopup>
       </span>
     ),
