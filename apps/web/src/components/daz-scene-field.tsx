@@ -73,11 +73,10 @@ function SceneCard({
         <Portrait
           scenePath={scenePath}
           name={name}
-          // h-[75px] = the primary card's three text rows (title 24 + mt-1 4 +
-          // chip 20 + gap-2 8 + PRIMARY 19 = 75 measured), so the avatar's
-          // bottom edge lands exactly on the PRIMARY label's. Re-measure if
-          // the rows change.
-          className="aspect-[3/4] h-[75px] shrink-0 rounded-md"
+          // h-[78px]: the PRIMARY label's bottom lands 2px ABOVE the avatar's
+          // bottom edge (stack = title 24 + mt-1 4 + chip ~21 + gap-2 8 +
+          // PRIMARY 19 ≈ 76, measured). Re-measure if the rows change.
+          className="aspect-[3/4] h-[78px] shrink-0 rounded-md"
           fallbackClassName="text-xl"
         />
       }
@@ -96,11 +95,10 @@ function SceneCard({
           // PRIMARY label alone on the third. The chip is interactive (copy /
           // Alt-reveal / edit-to-move) — the card's extra block sits ABOVE the
           // cover button (LinkedAssetCard), so its clicks are its own and
-          // never select/open the card. gap-[7px]: the chip's line box is
-          // fractionally taller than 20px, so a plain gap-2 landed the PRIMARY
-          // row 1px low (measured).
-          <span className="flex flex-col items-start gap-[7px]">
-            {pathChip}
+          // never select/open the card. The chip's 1px offset is paint-only
+          // (relative top) so the PRIMARY row below doesn't move with it.
+          <span className="flex flex-col items-start gap-2">
+            {pathChip && <span className="relative top-[1px]">{pathChip}</span>}
             {primary && (
               <PrimaryBadge
                 dense
