@@ -125,8 +125,10 @@ function renderPage(source) {
   // when a visited URL's hash targets one.
   html = html.replace(/<details>\s*<summary>([\s\S]*?)<\/summary>/g, (_, inner) => {
     // Entities would slug as words ("&amp;" → "-amp-"); these ids are new,
-    // so no GitHub-slug compatibility to preserve — just drop them.
-    const id = takeSlug(inner.replace(/&[a-z]+;|&#\d+;/gi, ' '))
+    // so no GitHub-slug compatibility to preserve — just drop them. Drop, not
+    // space-replace: "morphs &amp; node" must slug with two dashes (like a
+    // stripped "&" would), or links written against the visible text miss.
+    const id = takeSlug(inner.replace(/&[a-z]+;|&#\d+;/gi, ''))
     return (
       `<details id="${id}"><summary>${inner}` +
       `<a class="details-anchor" href="#${id}" aria-label="Copy link to this section">#</a></summary>`
@@ -482,6 +484,25 @@ for (const md of pages) {
   writeFileSync(join(OUT, htmlName(md)), shell(md, html))
 }
 writeFileSync(join(OUT, 'search-index.json'), JSON.stringify(searchIndex))
+
+// In-guide hash links must point at ids that EXIST in their target page — a
+// renamed heading/accordion (or a changed slug rule) otherwise ships a
+// silently dead deep link: the page opens at the top and nobody errors.
+// Validated on the BUILT pages, so heading ids, accordion ids and the pager
+// all count. External hrefs don't match the pattern.
+{
+  const built = new Map(pages.map((md) => [htmlName(md), readFileSync(join(OUT, htmlName(md)), 'utf8')]))
+  const dead = []
+  for (const [name, html] of built) {
+    for (const m of html.matchAll(/href="([\w.-]+\.html)?#([^"]+)"/g)) {
+      const targetHtml = built.get(m[1] ?? name)
+      if (targetHtml && !targetHtml.includes(`id="${m[2]}"`))
+        dead.push(`${name}: ${m[1] ?? ''}#${m[2]}`)
+    }
+  }
+  if (dead.length)
+    throw new Error(`in-guide hash links point at ids that don't exist:\n  ${dead.join('\n  ')}`)
+}
 cpSync(join(SRC, 'screenshots'), join(OUT, 'screenshots'), { recursive: true })
 if (existsSync(join(SRC, 'clips'))) cpSync(join(SRC, 'clips'), join(OUT, 'clips'), { recursive: true })
 if (existsSync(join(SRC, 'gifs'))) cpSync(join(SRC, 'gifs'), join(OUT, 'gifs'), { recursive: true })

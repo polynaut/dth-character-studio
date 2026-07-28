@@ -91,6 +91,26 @@ document.addEventListener('click', (e) => {
   details.scrollIntoView({ behavior: 'smooth', block: 'start' }) // rides the details' scroll-margin
 })
 
+// ── Exact sticky-chrome clearance ────────────────────────────────────────────
+// Anchors inside a section must land BELOW the docked chapter title, whose
+// height varies with viewport width — narrow columns wrap a title to 2-3
+// lines, so the stylesheet's fixed scroll-margin (kept as the no-JS fallback)
+// hid the target under the taller mobile dock. Measure each section's own h2
+// and set the margin per element; re-run before every reveal (fonts swapping
+// in can change the h2's height) and on resize (titles rewrap).
+function setAnchorClearance() {
+  const topbar = document.querySelector('.topbar')?.offsetHeight ?? 72
+  for (const section of document.querySelectorAll('.guide-section')) {
+    const h2 = section.querySelector('h2')
+    if (!h2) continue
+    const clearance = `${topbar + h2.offsetHeight + 8}px`
+    for (const el of section.querySelectorAll('h3[id], h4[id], h5[id], h6[id], details[id]'))
+      el.style.scrollMarginTop = clearance
+  }
+}
+setAnchorClearance()
+window.addEventListener('resize', setAnchorClearance)
+
 // Any hash target, not just accordions: local images reserve their space at
 // build time (aspect-ratio, build-guide-site.mjs), but the few EXTERNAL images
 // (GitHub user-attachments) can still shift layout while they load — this
@@ -102,6 +122,7 @@ function revealHashTarget() {
   if (!target) return
   const details = target.closest('details')
   if (details) details.open = true
+  setAnchorClearance()
   ;(details ?? target).scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 window.addEventListener('hashchange', revealHashTarget)

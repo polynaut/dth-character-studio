@@ -33,6 +33,10 @@ JS; keep them dependency-free.
 - **Search extraction** — every page must yield at least one search-index entry
   (see below); zero entries means the heading markup and the index extractor
   drifted apart.
+- **Hash links** — every in-guide `href="page.html#id"` / `href="#id"` must
+  point at an id that exists in the built target page; a renamed
+  heading/accordion (or a changed slug rule) fails the build instead of
+  shipping a silently dead deep link.
 
 ## Deploy & previews
 
@@ -84,3 +88,11 @@ finished image pushes the target down. Two-part fix, keep both halves intact:
 - **Load time**: `revealHashTarget` in `site/guide.js` re-scrolls the visited
   hash after `load` (and opens a targeted accordion) — the fallback for an
   external image whose build-time fetch failed.
+- **Sticky-chrome clearance is MEASURED, not fixed**: an anchor inside a
+  section must land below the docked chapter title, and that title WRAPS to
+  2-3 lines on narrow viewports — a fixed `scroll-margin-top` hid h4 targets
+  on phones. `setAnchorClearance` (guide.js) measures each section's own h2
+  and sets per-element margins, re-run before every reveal and on resize; the
+  stylesheet's fixed values remain only as the no-JS fallback. Every id'd
+  heading level (h3-h6) and accordion needs this clearance — h4s were missed
+  once already.
