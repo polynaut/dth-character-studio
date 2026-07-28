@@ -387,10 +387,12 @@ test('gen-art-direction', async ({ page }) => {
   await openCharacter(page)
   // Expand the GEN section (preset Golden Palace), then its VaginaOpen art-direction
   // frame — the fixture seeds one morph on it, the rest read "preset default".
-  await page.getByRole('button', { name: /Genitalia/ }).click()
+  // The full accordion-button name ("GEN Genitalia") — a bare /Genitalia/ also
+  // matches the section title's "i" popup trigger now.
+  await page.getByRole('button', { name: 'GEN Genitalia' }).click()
   await page.getByText('VaginaOpen').click()
   const gen = page
-    .getByRole('button', { name: /Genitalia/ })
+    .getByRole('button', { name: 'GEN Genitalia' })
     .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
   await shoot(page, join(OUT, 'gen-art-direction.png'), gen)
 })
@@ -442,7 +444,12 @@ test('combine-morphs', async ({ page }) => {
  *  the state the multi-scene docs describe (per-scene hair, header tag, override). */
 async function openCharacterOnOutfitScene(page: Page) {
   await openCharacter(page, { extraScene: true })
-  await page.getByText('KiraSummertide_G9_GP', { exact: true }).first().click()
+  // The card's SELECT cover button, clicked over the avatar strip — the visible
+  // title is the inline-RENAME button now, and the card's center holds the
+  // z-10 path chip; both sit above the cover and would swallow the click.
+  await page
+    .getByRole('button', { name: 'KiraSummertide_G9_GP', exact: true })
+    .click({ position: { x: 40, y: 52 } })
 }
 
 test('character-daz-scenes', async ({ page }) => {
