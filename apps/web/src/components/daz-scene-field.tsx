@@ -7,7 +7,8 @@ import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
 import type { SceneDockActions } from '#/components/character/scene-footer.tsx'
@@ -757,8 +758,14 @@ export function DazSceneField({
       label={linked ? 'Drop a Daz scene (.duf) to add' : 'Drop a Daz scene (.duf) to link'}
       className="rounded-lg"
     >
-      <Label id="daz-scenes" className="mb-3 block scroll-mt-28 text-xl font-semibold">
+      <Label id="daz-scenes" className="mb-3 flex w-fit scroll-mt-28 items-center gap-1 text-xl font-semibold">
         Daz scenes
+        <InfoPopup label="Daz scenes — more information">
+          The character's linked scenes — the primary plus any outfit or hair variants.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/advanced.html#multiple-daz-scenes--outfits-amp-hair-variants">
+            Open guide
+          </GuideLink>
+        </InfoPopup>
       </Label>
       {linked ? (
         folderMissing ? (
