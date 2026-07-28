@@ -200,7 +200,7 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
           (e.g. <code>body_bs_BodyTone</code>) — that's how the ROM script finds and
           dials it.{' '}
           <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#finding-a-morph39s-internal-daz-name">
-            open guide
+            Open guide
           </GuideLink>
         </InfoPopup>
       </span>
@@ -255,12 +255,12 @@ export const poseColumns: Array<ColumnDef<RomPose, any>> = [
       <span className="flex items-center justify-center gap-1">
         Bone scale
         <InfoPopup label="Bone scale — more information">
-          Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length,
-          Proportion Height). Unreal can't drive bone scale from a morph alone, so when an
-          export directory is set the DTH Exporter writes a per-frame{' '}
-          <strong>reference-skeleton FBX</strong> for the frame and the studio fills its path
-          into the PoseAsset CSV automatically. With no export directory it's simply a no-op —
-          nothing exports, so you handle the reference skeletons yourself.
+          Turn this on for a morph that scales <strong>bones</strong> (e.g. Torso Length) —
+          its <strong>reference-skeleton FBX</strong> then exports and wires up
+          automatically.{' '}
+          <GuideLink href="https://polynaut.github.io/dth-character-studio/guide/04-first-character.html#bone-scale--morphs-that-scale-bones-reference-skeletons">
+            Open guide
+          </GuideLink>
         </InfoPopup>
       </span>
     ),

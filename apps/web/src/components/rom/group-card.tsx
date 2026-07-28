@@ -37,8 +37,8 @@ import type { PoseTableMeta } from './pose-table.tsx'
  *  takes the width, and Value / Bone scale / morphs sit pushed right. */
 const POSE_COLUMN_WIDTHS: Record<string, string> = {
   frame: 'w-24',
-  name: 'w-[16%]',
-  prop: 'w-[38%]',
+  name: 'w-[21%]',
+  prop: 'w-[33%]',
   value: 'w-[12%]',
   boneScaleRef: 'w-[9%]',
   expand: 'w-[9%]',
