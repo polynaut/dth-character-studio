@@ -73,12 +73,14 @@ Deep links (`page.html#section` — hand-shared or from search) used to land
 "randomly": the browser scrolls before the big screenshots load, then each
 finished image pushes the target down. Two-part fix, keep both halves intact:
 
-- **Build time**: `reserveImageSpace` in `build-guide-site.mjs` stamps every
-  local `<img>` (screenshots/clips/gifs) with `style="aspect-ratio: W / H"`,
-  reading dimensions straight from the file headers (PNG IHDR, GIF logical
-  screen, WebP VP8X/VP8/VP8L) — no image library. Boxes get their height at
-  first paint, so the native anchor scroll is already exact.
+- **Build time**: `reserveImageSpace` in `build-guide-site.mjs` stamps EVERY
+  `<img>` with `style="aspect-ratio: W / H"` — local assets
+  (screenshots/clips/gifs) read from disk, external ones (GitHub
+  user-attachments URLs) fetched once per build. Dimensions come straight from
+  the image bytes, sniffed by magic number (PNG IHDR, GIF logical screen, WebP
+  VP8X/VP8/VP8L) — no image library. Boxes get their height at first paint, so
+  the native anchor scroll is already exact. A failed external fetch only warns
+  (never fails the build) and skips that stamp.
 - **Load time**: `revealHashTarget` in `site/guide.js` re-scrolls the visited
-  hash after `load` (and opens a targeted accordion) — needed because a few
-  guide images are EXTERNAL (GitHub user-attachments URLs) and can't be
-  measured at build time.
+  hash after `load` (and opens a targeted accordion) — the fallback for an
+  external image whose build-time fetch failed.

@@ -347,18 +347,22 @@ function stripMdFooterNav(md) {
 // Anchor navigation (#section links, search results) scrolls BEFORE the big
 // screenshots have loaded — without known dimensions every finished image then
 // pushes the target further down, and the visitor lands somewhere random.
-// Local images' sizes are knowable at build time: stamp each with an
-// aspect-ratio style so its box height is reserved from first paint and the
-// native anchor scroll lands exactly. (External images can't be measured here —
-// guide.js re-anchors once more on `load` for pages carrying those.)
+// Every guide image is static, so every size is knowable at build time: local
+// assets are read from disk, external ones (GitHub user-attachments) fetched
+// once here. Each <img> gets an aspect-ratio style so its box height is
+// reserved from first paint and the native anchor scroll lands exactly.
+// A failed external fetch skips the stamp with a warning — guide.js re-anchors
+// on `load` as the fallback for exactly that case.
 
-/** Pixel dimensions from the file header — PNG (IHDR), GIF (logical screen),
- *  WebP (VP8X extended / VP8 lossy / VP8L lossless). Null when unrecognized. */
-function imageDims(file) {
-  const buf = readFileSync(file)
-  if (/\.png$/i.test(file)) return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
-  if (/\.gif$/i.test(file)) return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) }
-  if (/\.webp$/i.test(file)) {
+/** Pixel dimensions from the image bytes, sniffed by magic number — PNG
+ *  (IHDR), GIF (logical screen), WebP (VP8X extended / VP8 lossy / VP8L
+ *  lossless). Null when unrecognized. */
+function imageDims(buf) {
+  if (buf.length > 24 && buf.readUInt32BE(0) === 0x89504e47)
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
+  if (buf.length > 10 && buf.toString('ascii', 0, 4) === 'GIF8')
+    return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) }
+  if (buf.length > 30 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
     const fourCC = buf.toString('ascii', 12, 16)
     if (fourCC === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) }
     if (fourCC === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
@@ -370,17 +374,50 @@ function imageDims(file) {
   return null
 }
 
-/** Stamp local `<img>` tags (screenshots/clips/gifs — the shipped assets) with
- *  their natural aspect ratio. The attrs stay untouched: CSS already governs
- *  display width, the ratio just gives the box its height before load. */
-const reserveImageSpace = (html) =>
-  html.replace(/<img\b[^>]*?>/g, (tag) => {
-    const src = /\bsrc="((?:screenshots|clips|gifs)\/[^"]+)"/.exec(tag)
-    if (!src || /\bstyle="/.test(tag)) return tag
-    const dims = imageDims(join(SRC, decodeURIComponent(src[1])))
-    if (!dims) return tag
-    return tag.replace(/^<img\b/, `<img style="aspect-ratio: ${dims.w} / ${dims.h}"`)
+/** Dimensions of an external image, fetched once per URL across the whole
+ *  build. Null (with a warning) on any failure — never fails the build over a
+ *  CDN hiccup; the affected image just keeps the load-time re-anchor fallback. */
+const externalDimsCache = new Map()
+async function externalImageDims(url) {
+  if (externalDimsCache.has(url)) return externalDimsCache.get(url)
+  let dims = null
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+    if (res.ok) dims = imageDims(Buffer.from(await res.arrayBuffer()))
+    if (!dims) console.warn(`could not size external image (${res.status}): ${url}`)
+  } catch (e) {
+    console.warn(`could not fetch external image: ${url} (${e.message})`)
+  }
+  externalDimsCache.set(url, dims)
+  return dims
+}
+
+/** Stamp every `<img>` with its natural aspect ratio — local assets
+ *  (screenshots/clips/gifs) from disk, http(s) sources via fetch. The attrs
+ *  stay untouched: CSS already governs display width, the ratio just gives the
+ *  box its height before load. */
+async function reserveImageSpace(html) {
+  const jobs = []
+  html.replace(/<img\b[^>]*?>/g, (tag, at) => {
+    if (/\bstyle="/.test(tag)) return tag
+    const src = /\bsrc="([^"]+)"/.exec(tag)?.[1]
+    if (!src) return tag
+    if (/^(?:screenshots|clips|gifs)\//.test(src)) {
+      const dims = imageDims(readFileSync(join(SRC, decodeURIComponent(src))))
+      if (dims) jobs.push(Promise.resolve({ at, tag, dims }))
+    } else if (/^https?:\/\//.test(src)) {
+      jobs.push(externalImageDims(src).then((dims) => ({ at, tag, dims })))
+    }
+    return tag
   })
+  // Splice back-to-front so earlier match offsets stay valid.
+  for (const { at, tag, dims } of (await Promise.all(jobs)).reverse()) {
+    if (!dims) continue
+    const stamped = tag.replace(/^<img\b/, `<img style="aspect-ratio: ${dims.w} / ${dims.h}"`)
+    html = html.slice(0, at) + stamped + html.slice(at + tag.length)
+  }
+  return html
+}
 
 // ── Search index ─────────────────────────────────────────────────────────────
 // The guide's client-side search (guide.js) runs on search-index.json: one
@@ -432,7 +469,7 @@ const searchIndex = []
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 for (const md of pages) {
-  let html = reserveImageSpace(renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8'))))
+  let html = await reserveImageSpace(renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8'))))
   // Index before the GH-button injection — that's page chrome, not content.
   const pageEntries = indexPage(md, html)
   // Every page has at least its own H1 (titleOf enforces the "# " first line) —
