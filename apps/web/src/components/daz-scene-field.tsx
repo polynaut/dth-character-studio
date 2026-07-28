@@ -86,12 +86,18 @@ function SceneCard({
         />
       }
       extra={
-        primary ? (
-          <PrimaryBadge title="The character's original scene — it can't be unlinked" />
-        ) : pathChip ? (
-          // The chip's own click copies / Alt-reveals — it must not bubble into
-          // the card (which would select it, or open the scene in Daz).
-          <span onClick={(e) => e.stopPropagation()}>{pathChip}</span>
+        primary || pathChip ? (
+          <span className="flex flex-wrap items-center gap-2">
+            {primary && (
+              <PrimaryBadge
+                dense
+                title="The character's original scene — it can't be unlinked"
+              />
+            )}
+            {/* The chip's own click copies / Alt-reveals — it must not bubble
+                into the card (which would select it, or open the scene in Daz). */}
+            {pathChip && <span onClick={(e) => e.stopPropagation()}>{pathChip}</span>}
+          </span>
         ) : undefined
       }
       altHeld={altHeld}
@@ -546,15 +552,16 @@ export function DazSceneField({
     />
   )
 
-  /** Where a NON-primary scene lives, when it deviates from the primary's
-   *  folder: shown relative to the character folder (e.g. `.\daz3d\Outfit_B`)
-   *  for an in-folder scene, as the full folder for one linked in place —
-   *  copying always yields the full folder path. A scene right beside the
-   *  primary stays chip-less: the section chip above the cards names that
-   *  folder already. */
-  function sceneLocationChip(scene: string): ReactNode {
+  /** Where a scene lives: shown relative to the character folder (e.g.
+   *  `.\daz3d\Outfit_B`) for an in-folder scene, as the full folder for one
+   *  linked in place — copying always yields the full folder path. The primary
+   *  card always shows its chip (`alwaysShow`); an extra scene right beside
+   *  the primary stays chip-less — the primary's chip names that folder
+   *  already. */
+  function sceneLocationChip(scene: string, alwaysShow = false): ReactNode {
     const dir = parentDir(scene)
-    if (normalizePath(dir).toLowerCase() === normalizePath(sceneDirAbs).toLowerCase()) return null
+    if (!alwaysShow && normalizePath(dir).toLowerCase() === normalizePath(sceneDirAbs).toLowerCase())
+      return null
     const shown = displayPath(
       insideCharFolder(scene) ? `./${normalizePath(dir).slice(charFolder.length + 1)}` : dir,
     )
@@ -700,6 +707,7 @@ export function DazSceneField({
                   primary
                   selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                   onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
+                  pathChip={sceneLocationChip(character.scenePath, true)}
                 />
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
