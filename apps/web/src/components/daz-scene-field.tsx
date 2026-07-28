@@ -73,7 +73,11 @@ function SceneCard({
         <Portrait
           scenePath={scenePath}
           name={name}
-          className="aspect-[3/4] w-14 shrink-0 rounded-md"
+          // h-[78px] = the primary card's three text rows (title 24 + mt-2 8 +
+          // chip 20 + gap 6 + PRIMARY 19 ≈ 78 measured), so the avatar's
+          // bottom edge lands exactly on the PRIMARY label's. Re-measure if
+          // the rows change.
+          className="aspect-[3/4] h-[78px] shrink-0 rounded-md"
           fallbackClassName="text-xl"
         />
       }
