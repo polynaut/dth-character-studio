@@ -1,6 +1,6 @@
 import { GENERATIONS } from './types'
 
-import type { GenesisVersion } from './types'
+import type { Character, GenesisVersion } from './types'
 
 /**
  * Embedded DzScript text shared by the `.dsa` generators (dsa.ts): the reusable
@@ -94,6 +94,38 @@ if (dthSceneDelta) {
         if (dthSceneDelta.hasOwnProperty(dthOk)) dthCharacterConfig[dthOk] = dthSceneDelta[dthOk];
     }
     print("DTH: per-scene override applied for " + dthOpenScene);
+}
+`
+}
+
+/**
+ * The wrong-scene guard every per-character script leads with: running Kira's
+ * ROM/export/scan against some OTHER character's open scene used to apply
+ * everything silently. Declares `dthSceneLinkError()` — '' when the open scene
+ * is one of the character's linked scenes (same normalization as the other
+ * scene lookups: backslashes → '/', lowercased — a change to one must land in
+ * all), else a ready-to-show message naming the open scene and the linked
+ * ones; the caller aborts on it. A definition without linked scenes can't
+ * validate, so the guard always passes there (legacy/sceneless definitions).
+ * Base indent 0.
+ */
+export function sceneGuardSnippet(
+  character: Pick<Character, 'name' | 'scenePath' | 'extraScenes'>,
+): string {
+  const scenes = [character.scenePath, ...character.extraScenes]
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const keys = scenes.map((s) => s.replace(/\\/g, '/').toLowerCase())
+  const names = scenes.map((s) => s.replace(/\\/g, '/').split('/').pop() ?? s)
+  return `var dthLinkedScenes = ${dazJson(keys, 2)};
+function dthSceneLinkError() {
+    if (dthLinkedScenes.length == 0) return "";
+    var dthOpenPath = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+    for (var dthLsI = 0; dthLsI < dthLinkedScenes.length; dthLsI++) {
+        if (dthLinkedScenes[dthLsI] == dthOpenPath) return "";
+    }
+    var dthOpenName = dthOpenPath ? String(dthOpenPath.split("/").pop()) : "(unsaved scene)";
+    return "The open Daz scene is not linked to " + ${dazJson(character.name)} + " - nothing was applied.\\n\\nOpen scene: " + dthOpenName + "\\n\\nThis script runs only on:\\n" + ${dazJson(names.map((n) => `• ${n}`).join('\n'))};
 }
 `
 }

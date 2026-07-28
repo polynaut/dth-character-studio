@@ -7,6 +7,7 @@ import {
   hideTreeSnippet,
   indentLines,
   sceneConfigLookupSnippet,
+  sceneGuardSnippet,
   sceneCsvLookupSnippet,
   sceneSubfolderSnippet,
 } from './dz-snippets'
@@ -582,6 +583,9 @@ ${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap)
 
 var dthCharacterConfig = ${dazJson(config, 2)};
 ${sceneSelectBlock}
+// The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
+// character's linked scenes (see dthSceneLinkError below the config).
+${sceneGuardSnippet(character)}
 // Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
     try {
@@ -640,7 +644,13 @@ function dthApplyUE5TearUV() {
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath("../../.DthWorkflow.dsa"));
 
-if (typeof ApplyDTHCharacter != "function") {
+var dthSceneLinkErr = dthSceneLinkError();
+if (dthSceneLinkErr) {
+    // Wrong (or unsaved) scene open — refuse before touching anything, and log
+    // it so the studio's run report names the aborted run too.
+    dthWriteFailureLog(dthSceneLinkErr);
+    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+} else if (typeof ApplyDTHCharacter != "function") {
     // Runtime not loaded (moved/deleted library?) — report instead of crashing.
     dthWriteFailureLog("The DTH runtime (.DthWorkflow.dsa) could not be loaded. Reinstall it from DTH Character Studio: save the character, or Tools \\u2192 Refresh assets.");
     dthFailureDialog();
@@ -688,7 +698,11 @@ export function toExportScriptDsa(
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
-${figureAutoSelectSnippet(character.genesis)}if (!dthFig) {
+${sceneGuardSnippet(character)}
+${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
+if (dthSceneLinkErr) {
+    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+} else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
 ${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character))
@@ -737,8 +751,12 @@ export function toGroomExportScriptDsa(character: Character): GeneratedFile {
 // via the DTH Exporter, restores the scene. Run it on the character's scene with
 // the figure selected; the ROM is NOT needed.
 
+${sceneGuardSnippet(character)}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
-${figureAutoSelectSnippet(character.genesis)}if (!dthAction) {
+${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
+if (dthSceneLinkErr) {
+    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+} else if (!dthAction) {
     MessageBox.critical("DazToHue Exporter Action not found - install the DTH Exporter Plugin v2.0+.", "DTH Character Studio", "&OK");
 } else if (!dthFig || !dthFig.inherits("DzNode")) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
@@ -852,10 +870,18 @@ export function toScanProductsScriptDsa(
 // — two levels up from this script's <project>/<character>/ subfolder. The found
 // products are written as a CSV the studio reads back on the character page.
 
+${sceneGuardSnippet(character)}
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath("../../.DthProducts.dsa"));
 
-DthScanProducts(${dazJson(config, 2)});
+var dthSceneLinkErr = dthSceneLinkError();
+if (dthSceneLinkErr) {
+    // A wrong-scene scan would silently attribute another scene's products to
+    // this character — refuse, like the ROM/export scripts.
+    MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
+} else {
+    DthScanProducts(${dazJson(config, 2)});
+}
 `
   return { fileName: `Scan_Products_${characterSlug(character)}.dsa`, content, target: 'daz' }
 }
