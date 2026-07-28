@@ -358,7 +358,12 @@ a {
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
   }
-  .title-scroll h1 {
+  /* The rename input (.title-edit-scroll, EditableTitle's edit state) shrinks on
+     the same timeline as the h1, so editing in the collapsed header doesn't pop
+     the title back to full size. Scoped by class, NOT `.title-scroll input` —
+     the folder chip's move-panel input lives in this container too. */
+  .title-scroll h1,
+  .title-scroll .title-edit-scroll input {
     animation: dth-title-text linear both;
     animation-timeline: scroll(root block);
     animation-range: 100px 242px;
