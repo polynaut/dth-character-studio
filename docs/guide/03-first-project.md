@@ -14,12 +14,13 @@ back it up with them, and you're done.
 </p>
 
 1. On the **Home** screen press **New project**.
-2. **Choose folder…** — pick the folder the project should live in.
-   You can also just drop a folder anywhere onto the Home screen.
-4. Give it a **Project name** and press **Create**.
+2. **Choose folder…** — pick the folder the project should live in. You can
+   also just drop a folder anywhere onto the Home screen.
+3. Give it a **Project name** and press **Create**.
 
 The project opens **in its own window**. From now on you can also open it by
-double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent list:
+double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent
+list:
 
 <p align="center">
   <img width="900" alt="Home screen with the project in the recent list" src="screenshots/home.png" />
@@ -36,18 +37,18 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
 
 ## Good to know
 
-- Every character you create becomes a **subfolder of the project** — definition,
-  scenes, and generated files live together, so the project folder is fully
-  self-contained and portable.  
-- Per-project options (folder layout, optional [Assets](./attachments.md) and
-  [Daz Products](./product-scanning.md) features) live in **Settings → Project** —
-  the defaults are fine for a first run.
+- Every character you create becomes a **subfolder of the project** —
+  definition, scenes, and generated files live together, so the project folder
+  is fully self-contained and portable.
+- Per-project options (folder layout, the optional [Assets](./attachments.md)
+  and [Daz Products](./product-scanning.md) features) live in
+  **Settings → Project** — the defaults are fine for a first run.
 
-- **Path chips** — the monospace path badges all over the app — **copy the full
-  path on click** (a check mark confirms it); **Alt+click opens the location
-  in Explorer** (for a file, its folder). Where a chip carries a pencil, it
-  edits the value in place. The same Alt+click works on every linked card —
-  Daz scenes, Houdini projects and Unreal projects.
+- **Path chips** — the monospace path badges all over the app — **copy the
+  full path on click** (a check mark confirms it); **Alt+click opens the
+  location in Explorer** (for a file, its folder). Where a chip carries a
+  pencil, it edits the value in place. The same Alt+click works on every
+  linked card — Daz scenes, Houdini projects and Unreal projects.
 
   <p align="center">
     <img width="372" alt="Clicking a path chip copies the full path" src="clips/path-chip-copy.webp" />
@@ -63,22 +64,22 @@ double-clicking the `.dcsp` file in Explorer, or from the Home screen's recent l
 
 ## Linking Unreal projects
 
-The bar docked to the bottom of the project window holds the **Unreal projects**
-this studio project feeds. Link one or more `.uproject` files with the button or
-by dropping them onto the bar — links only: the files stay where they are, and
-unlinking never deletes anything.
+The bar docked to the bottom of the project window holds the **Unreal
+projects** this studio project feeds. Link one or more `.uproject` files with
+the button or by dropping them onto the bar — links only: the files stay where
+they are, and unlinking never deletes anything.
 
-- **The open button** on a card launches that project in Unreal Engine —
-  **Alt+click** it to show the project in Explorer instead. The card's **path
-  chip** works like every path chip: click copies the full `.uproject` path,
-  Alt+click reveals it. The rest of the card is inert — no accidental launches.
+- **The open button** on a card launches the project in Unreal Engine;
+  **Alt+click** shows it in Explorer instead. The card's path chip works like
+  every path chip (click copies, Alt+click reveals). The rest of the card is
+  inert — no accidental launches.
 - **The small install button** on each card bootstraps the Unreal project with
   DTH: it copies the linked DTH release's *Unreal Engine Content* into the
   project's `Content/DazToHue` — a fresh Unreal project is DTH-ready in one
-  click. The button dims once the folder exists; **Ctrl+click always installs**,
-  overwriting the content with whatever release is currently selected in
-  Settings (handy after switching the DTH release — files are copied over,
-  project-local additions inside the folder survive).
+  click. The button dims once the folder exists; **Ctrl+click always
+  installs**, overwriting with whatever release is selected in Settings
+  (project-local additions inside the folder survive) — handy after switching
+  the DTH release.
 
 <p align="center">
   <img width="900" alt="Unreal projects footer bar with a linked project card" src="screenshots/project-unreal-footer.png" />

@@ -77,11 +77,11 @@ Settings → "Download/Install"). The scan reads it to resolve used assets to re
 
 &nbsp;
 
-Behind the scenes it matches assets strongest-first: the file the asset came from →
-its textures' folder → SKU → product keywords → known third-party products (e.g.
-Golden Palace) → Genesis base essentials, with a content-library fallback for manual
-installs that have no DIM manifest. Scans are stored under the app's data folder,
-keyed to the project + character, and **age out after 30 days** (and are removed when
+Matching tries the strongest signals first — the asset's own file, its
+textures, SKU, product keywords — falling back to a content-library match for
+manual installs without a DIM manifest (that's the **Match** column on the
+Products tab). Scans are stored under the app's data folder, keyed to
+project + character, and **age out after 30 days** (they're also removed when
 you delete the character) — see [Storage & housekeeping](./tools.md).
 
 ---

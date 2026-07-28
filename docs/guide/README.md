@@ -25,17 +25,15 @@ to Houdini.
 
 ## Optional & advanced
 
-None of these are needed to generate a ROM — reach for them once you want finer
-control over a character, or want the studio to help maintain your Daz/Houdini
-content or organize a project beyond its characters:
+None of these are needed to generate a ROM:
 
 - [Advanced character options](./advanced.md) — multiple Daz scenes on one
-  character (outfits, per-scene hair, and per-scene overrides for ROM frames,
-  identity dials and preserve morphs), and driving extra morphs off bone rotations
-  (Modify JCM frames).
-- [The Tools page](./tools.md) — install/maintain your own Daz & Houdini content,
-  deduplicate downloads, storage housekeeping, and refresh generated files.
-- [Attachments](./attachments.md) — attach reusable Daz scenes (not full characters)
-  to a project, organized alongside its characters. *(Opt-in per project.)*
-- [Daz product scanning](./product-scanning.md) — discover which Daz products a
-  character uses and store the list on it. *(Opt-in per project.)*
+  character (outfits, per-scene hair, per-scene overrides), and driving extra
+  morphs off bone rotations (Modify JCM frames).
+- [The Tools page](./tools.md) — install/maintain your own Daz & Houdini
+  content, deduplicate downloads, storage housekeeping, refresh generated
+  files.
+- [Attachments](./attachments.md) — reusable Daz scenes (not full characters),
+  organized in a project alongside its characters. *(Opt-in per project.)*
+- [Daz product scanning](./product-scanning.md) — discover which Daz products
+  a character uses and store the list on it. *(Opt-in per project.)*
