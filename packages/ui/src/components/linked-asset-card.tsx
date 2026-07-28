@@ -99,7 +99,7 @@ export function LinkedAssetCard({
             above the cover button, so an INTERACTIVE extra (the scene cards'
             edit-to-move path chip) receives its own clicks — nesting it inside
             a card <button> would be invalid HTML (see the corner buttons). */}
-        {extra && <div className="relative z-10 mt-2 w-fit">{extra}</div>}
+        {extra && <div className="relative z-10 mt-1 w-fit">{extra}</div>}
       </div>
     </>
   )
