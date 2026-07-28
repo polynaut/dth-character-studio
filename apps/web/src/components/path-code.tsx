@@ -91,9 +91,10 @@ export function PathCode({
         <button
           type="button"
           aria-label="Edit path"
-          // border-white/20 on hover, not the border token: --border over
-          // bg-card is a one-step contrast that vanishes on the tinted cards.
-          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-white/20 hover:bg-card hover:text-foreground hover:shadow-sm"
+          // The hover box = EXACTLY the copy hint's (solid #333 + white/20
+          // edge, see below): one adornment family, unaffected by whatever
+          // surface the chip sits on (dark page or tinted card).
+          className="mr-1 inline-flex size-5 shrink-0 items-center justify-center self-center rounded border border-transparent text-muted-foreground transition-colors hover:border-white/20 hover:bg-[#333] hover:text-foreground hover:shadow-sm"
           // The chip's own click copies — editing must not also copy.
           onClick={(e) => {
             e.stopPropagation()
@@ -116,7 +117,9 @@ export function PathCode({
       </code>
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border bg-card p-1 shadow-sm group-hover/path:flex"
+        // Solid #333 + white/20 edge — the shared adornment recipe (the edit
+        // pencil's hover box matches), independent of the surface below.
+        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border border-white/20 bg-[#333] p-1 shadow-sm group-hover/path:flex"
       >
         {copied ? (
           <Check className="size-3 text-primary" />

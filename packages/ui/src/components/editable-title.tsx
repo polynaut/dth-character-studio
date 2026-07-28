@@ -109,7 +109,9 @@ export function EditableTitle({
       </h1>
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border bg-card p-1 shadow-sm group-hover/title:flex"
+        // Solid #333 + white/20 edge — the app's shared adornment recipe (the
+        // path chips' copy hint and pencil hover match).
+        className="pointer-events-none absolute -top-2 -right-2 hidden items-center justify-center rounded border border-white/20 bg-[#333] p-1 shadow-sm group-hover/title:flex"
       >
         <Pencil className="size-3 text-muted-foreground" />
       </span>
