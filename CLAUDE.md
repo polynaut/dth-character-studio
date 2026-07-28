@@ -180,7 +180,9 @@ Two scopes now:
   `architecture.md` (packages, routes, lib/ boundary, FFI surface),
   `domain.md` (ROM/frame-math/CSV/runtime semantics), `conventions.md` (schema/FFI/
   versioning rituals), `testing.md` (the four test layers), `release.md` (the
-  release train), `gotchas.md` (measured Daz/Tauri/build facts). Index: `.ai/README.md`.
+  release train), `gotchas.md` (measured Daz/Tauri/build facts), `docs-site.md`
+  (the public GitHub Pages docs site: landing page + guide build/deploy/search).
+  Index: `.ai/README.md`.
   **Important learnings always land there, in the same PR that earned them** — a
   debugged footgun goes to `gotchas.md`, a new ritual to `conventions.md`, changed
   architecture/domain facts to their files. CLAUDE.md stays the short version.

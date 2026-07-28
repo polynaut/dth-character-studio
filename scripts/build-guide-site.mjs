@@ -1,5 +1,6 @@
 // Builds the getting-started guide into the Pages site: docs/guide/*.md →
-// site/guide/*.html (+ a copy of docs/guide/screenshots/).
+// site/guide/*.html (+ a copy of docs/guide/screenshots/ and the client-side
+// search's index, site/guide/search-index.json — see "Search index" below).
 //
 // docs/guide/ stays the single source of truth — same files GitHub renders,
 // same screenshot pipeline (`pnpm screenshots`), same coverage guard. This
@@ -124,8 +125,10 @@ function renderPage(source) {
   // when a visited URL's hash targets one.
   html = html.replace(/<details>\s*<summary>([\s\S]*?)<\/summary>/g, (_, inner) => {
     // Entities would slug as words ("&amp;" → "-amp-"); these ids are new,
-    // so no GitHub-slug compatibility to preserve — just drop them.
-    const id = takeSlug(inner.replace(/&[a-z]+;|&#\d+;/gi, ' '))
+    // so no GitHub-slug compatibility to preserve — just drop them. Drop, not
+    // space-replace: "morphs &amp; node" must slug with two dashes (like a
+    // stripped "&" would), or links written against the visible text miss.
+    const id = takeSlug(inner.replace(/&[a-z]+;|&#\d+;/gi, ''))
     return (
       `<details id="${id}"><summary>${inner}` +
       `<a class="details-anchor" href="#${id}" aria-label="Copy link to this section">#</a></summary>`
@@ -294,10 +297,19 @@ const shell = (md, content) => `<!doctype html>
           <a href="../#features">Why?</a>
           <a href="index.html"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting started</a>
         </nav>
-        <a class="btn btn-primary btn-compact" href="../">
-          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download
-        </a>
+        <div class="topbar-actions">
+          <button class="topbar-search" type="button" title="Search the docs (Ctrl+K / ⌘K)" aria-label="Search the docs" aria-keyshortcuts="Control+K Meta+K">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Search docs</span>
+            <kbd>⌘/Ctrl K</kbd>
+          </button>
+          <span class="topbar-sep" aria-hidden="true"></span>
+          <a class="topbar-icon" href="https://github.com/polynaut/dth-character-studio" target="_blank" rel="noopener" title="GitHub repository" aria-label="GitHub repository"><svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+          <a class="btn btn-primary btn-compact" href="../" aria-label="Download">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="btn-label">Download</span>
+          </a>
+        </div>
       </div>
     </header>
     <div class="container guide-layout">
@@ -333,12 +345,163 @@ function stripMdFooterNav(md) {
   return lines.join('\n')
 }
 
+// ── Image space reservation ──────────────────────────────────────────────────
+// Anchor navigation (#section links, search results) scrolls BEFORE the big
+// screenshots have loaded — without known dimensions every finished image then
+// pushes the target further down, and the visitor lands somewhere random.
+// Every guide image is static, so every size is knowable at build time: local
+// assets are read from disk, external ones (GitHub user-attachments) fetched
+// once here. Each <img> gets an aspect-ratio style so its box height is
+// reserved from first paint and the native anchor scroll lands exactly.
+// A failed external fetch skips the stamp with a warning — guide.js re-anchors
+// on `load` as the fallback for exactly that case.
+
+/** Pixel dimensions from the image bytes, sniffed by magic number — PNG
+ *  (IHDR), GIF (logical screen), WebP (VP8X extended / VP8 lossy / VP8L
+ *  lossless). Null when unrecognized. */
+function imageDims(buf) {
+  if (buf.length > 24 && buf.readUInt32BE(0) === 0x89504e47)
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
+  if (buf.length > 10 && buf.toString('ascii', 0, 4) === 'GIF8')
+    return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) }
+  if (buf.length > 30 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+    const fourCC = buf.toString('ascii', 12, 16)
+    if (fourCC === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) }
+    if (fourCC === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
+    if (fourCC === 'VP8L') {
+      const bits = buf.readUInt32LE(21)
+      return { w: 1 + (bits & 0x3fff), h: 1 + ((bits >> 14) & 0x3fff) }
+    }
+  }
+  return null
+}
+
+/** Dimensions of an external image, fetched once per URL across the whole
+ *  build. Null (with a warning) on any failure — never fails the build over a
+ *  CDN hiccup; the affected image just keeps the load-time re-anchor fallback. */
+const externalDimsCache = new Map()
+async function externalImageDims(url) {
+  if (externalDimsCache.has(url)) return externalDimsCache.get(url)
+  let dims = null
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+    if (res.ok) dims = imageDims(Buffer.from(await res.arrayBuffer()))
+    if (!dims) console.warn(`could not size external image (${res.status}): ${url}`)
+  } catch (e) {
+    console.warn(`could not fetch external image: ${url} (${e.message})`)
+  }
+  externalDimsCache.set(url, dims)
+  return dims
+}
+
+/** Stamp every `<img>` with its natural aspect ratio — local assets
+ *  (screenshots/clips/gifs) from disk, http(s) sources via fetch. The attrs
+ *  stay untouched: CSS already governs display width, the ratio just gives the
+ *  box its height before load. */
+async function reserveImageSpace(html) {
+  const jobs = []
+  html.replace(/<img\b[^>]*?>/g, (tag, at) => {
+    if (/\bstyle="/.test(tag)) return tag
+    const src = /\bsrc="([^"]+)"/.exec(tag)?.[1]
+    if (!src) return tag
+    if (/^(?:screenshots|clips|gifs)\//.test(src)) {
+      const dims = imageDims(readFileSync(join(SRC, decodeURIComponent(src))))
+      if (dims) jobs.push(Promise.resolve({ at, tag, dims }))
+    } else if (/^https?:\/\//.test(src)) {
+      jobs.push(externalImageDims(src).then((dims) => ({ at, tag, dims })))
+    }
+    return tag
+  })
+  // Splice back-to-front so earlier match offsets stay valid.
+  for (const { at, tag, dims } of (await Promise.all(jobs)).reverse()) {
+    if (!dims) continue
+    const stamped = tag.replace(/^<img\b/, `<img style="aspect-ratio: ${dims.w} / ${dims.h}"`)
+    html = html.slice(0, at) + stamped + html.slice(at + tag.length)
+  }
+  return html
+}
+
+// ── Search index ─────────────────────────────────────────────────────────────
+// The guide's client-side search (guide.js) runs on search-index.json: one
+// entry per heading section, cut from the SAME rendered HTML the pages ship
+// with, so every entry deep-links to an anchor id that actually exists.
+// Regenerated on every build — a new page or section needs no extra step.
+
+/** The handful of entities marked emits for text content, back to plain text
+ *  (`&amp;` last, so a literal `&amp;amp;` can't double-decode). */
+const decodeEntities = (s) =>
+  s
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
+
+const HEADING_START_RE = /^<h([1-6]) id="([^"]+)">([\s\S]*?)<a class="anchor"[\s\S]*?<\/h\1>/
+
+/** One rendered page → its search entries. A section starts at each id'd
+ *  heading (every heading gets one in renderPage) and runs to the next one;
+ *  accordion content inside a section counts as its body text. */
+function indexPage(md, html) {
+  const entries = []
+  // No .slice(1) to drop a pre-heading preamble: a zero-width split yields NO
+  // leading chunk when the html starts at a heading (which every page does —
+  // slicing here silently dropped all the h1 entries). The regex below
+  // rejects a non-heading first chunk anyway.
+  for (const chunk of html.split(/(?=<h[1-6] id=)/)) {
+    const m = HEADING_START_RE.exec(chunk)
+    if (!m) continue
+    const body = chunk
+      .slice(m[0].length)
+      // The accordion summaries' "#" anchor glyph is chrome, not content.
+      .replace(/<a class="details-anchor"[^>]*>#<\/a>/g, '')
+    entries.push({
+      page: htmlName(md),
+      title: pageTitle(md),
+      level: Number(m[1]),
+      id: m[2],
+      heading: decodeEntities(stripTags(m[3])).trim(),
+      text: decodeEntities(stripTags(body)).replace(/\s+/g, ' ').trim(),
+    })
+  }
+  return entries
+}
+
+const searchIndex = []
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 for (const md of pages) {
-  let html = renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8')))
+  let html = await reserveImageSpace(renderPage(stripMdFooterNav(readFileSync(join(SRC, md), 'utf8'))))
+  // Index before the GH-button injection — that's page chrome, not content.
+  const pageEntries = indexPage(md, html)
+  // Every page has at least its own H1 (titleOf enforces the "# " first line) —
+  // a page yielding nothing means indexPage no longer matches renderPage's
+  // heading markup. Fail the build rather than deploy unsearchable pages.
+  if (!pageEntries.length)
+    throw new Error(`${md}: no search entries extracted — indexPage vs renderPage markup drift`)
+  searchIndex.push(...pageEntries)
   if (md === 'README.md') html = html.replace('</p>', `</p>${GH_BUTTON}`)
   writeFileSync(join(OUT, htmlName(md)), shell(md, html))
+}
+writeFileSync(join(OUT, 'search-index.json'), JSON.stringify(searchIndex))
+
+// In-guide hash links must point at ids that EXIST in their target page — a
+// renamed heading/accordion (or a changed slug rule) otherwise ships a
+// silently dead deep link: the page opens at the top and nobody errors.
+// Validated on the BUILT pages, so heading ids, accordion ids and the pager
+// all count. External hrefs don't match the pattern.
+{
+  const built = new Map(pages.map((md) => [htmlName(md), readFileSync(join(OUT, htmlName(md)), 'utf8')]))
+  const dead = []
+  for (const [name, html] of built) {
+    for (const m of html.matchAll(/href="([\w.-]+\.html)?#([^"]+)"/g)) {
+      const targetHtml = built.get(m[1] ?? name)
+      if (targetHtml && !targetHtml.includes(`id="${m[2]}"`))
+        dead.push(`${name}: ${m[1] ?? ''}#${m[2]}`)
+    }
+  }
+  if (dead.length)
+    throw new Error(`in-guide hash links point at ids that don't exist:\n  ${dead.join('\n  ')}`)
 }
 cpSync(join(SRC, 'screenshots'), join(OUT, 'screenshots'), { recursive: true })
 if (existsSync(join(SRC, 'clips'))) cpSync(join(SRC, 'clips'), join(OUT, 'clips'), { recursive: true })
@@ -359,4 +522,6 @@ if (outMissing.length)
     `built site is missing referenced assets (a copy step above is broken): ${outMissing.join(', ')}`,
   )
 
-console.log(`guide → site/guide: ${pages.length} pages + screenshots + clips + gifs`)
+console.log(
+  `guide → site/guide: ${pages.length} pages (+${searchIndex.length}-entry search index) + screenshots + clips + gifs`,
+)
