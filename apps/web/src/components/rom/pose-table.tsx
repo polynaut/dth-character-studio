@@ -468,20 +468,14 @@ export function SortablePoseRow({
               </span>
             </td>
             {/* Every sub-column indents pl-8, like Node — the expansion reads
-                as one right-shifted block under the main row. */}
-            <td className="py-1 pr-1 pl-8" title="The parameter's internal name in Daz Studio">
-              Parameter name
-            </td>
+                as one right-shifted block under the main row. Parameter name and
+                Value carry no info of their own: the main grid's identically-named
+                headers already explain them. */}
+            <td className="py-1 pr-1 pl-8">Parameter name</td>
             <td className="py-1 pr-1 pl-8">
               {/* Mirror the NumberCell box (w-20, pr-5 "%" gutter) so the title sits
-                  flush over the digits — the same trick the main grid's Value header
-                  uses, "i" pulled back over the % gutter (-ml-4) too. */}
-              <span className="flex items-center">
-                <span className="block w-20 pr-5 text-right">Value</span>
-                <InfoPopup label="Value — more information" className="-ml-4">
-                  The value the pose dials the morph to.
-                </InfoPopup>
-              </span>
+                  flush over the digits — the same trick the main grid's Value header uses. */}
+              <span className="block w-20 pr-5 text-right">Value</span>
             </td>
             <td className="py-1 pr-1 pl-8 text-center">
               <span className="flex items-center justify-center gap-1">

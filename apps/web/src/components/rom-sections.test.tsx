@@ -52,10 +52,10 @@ describe('RomSections multi-morph editor', () => {
     )
     // Open the FBM section accordion.
     fireEvent.click(screen.getByText('Full Body'))
-    // Expand the pose's morph list — the "Parameter name" column header marks
+    // Expand the pose's morph list — the sub-header's "Node" info chip marks
     // the editor.
     fireEvent.click(screen.getByTitle('Combine multiple Daz morphs into this single generated morph'))
-    expect(screen.getByTitle("The parameter's internal name in Daz Studio")).toBeTruthy()
+    expect(screen.getByLabelText('Node — more information')).toBeTruthy()
     // The Parameter name cells are comboboxes (autocomplete) in the expanded sub-rows.
     const values = screen
       .getAllByRole('combobox')
