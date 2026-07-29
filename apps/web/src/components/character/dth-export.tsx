@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Ban, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, Modal, useRefetchOnFocus } from '@dth/ui'
+import { Button, InfoPopup, Modal, useRefetchOnFocus } from '@dth/ui'
 import dthLogo from '#/assets/dth-logo.webp'
 import dthLogoStamp from '#/assets/dth-logo-stamp.png'
 import { Portrait } from '#/components/portrait.tsx'
@@ -353,11 +353,20 @@ function DthExportDialog({
   }
 
   return (
-    <Modal open onClose={onClose} title="DTH Export" dismissible={!busy}>
-      <p className="text-sm text-muted-foreground">
-        Choose the Daz scenes to run through the DTH Exporter Plugin. Scenes that changed since
-        their last export are pre-selected; the wand picks a single scene.
-      </p>
+    <Modal
+      open
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-1.5">
+          DTH Export
+          <InfoPopup label="DTH Export — more information">
+            Choose the Daz scenes to run through the DTH Exporter Plugin. Scenes that changed
+            since their last export are pre-selected; the wand picks a single scene.
+          </InfoPopup>
+        </span>
+      }
+      dismissible={!busy}
+    >
       <div className="space-y-2">
         {rows.map((row) => (
           <SceneRow
