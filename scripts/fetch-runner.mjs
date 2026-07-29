@@ -94,6 +94,9 @@ try {
     for (const rel of dlls) cpSync(join(extractDir, rel), join(outDir, basename(rel)))
     console.log(`staged ${flavor}: ${dlls.map((rel) => basename(rel)).join(', ')}`)
   }
+  // A placeholder that build.rs seeded for a DLL-less cargo check must not
+  // ride into a real bundle next to the DLLs.
+  rmSync(join(destDir, 'PLACEHOLDER.txt'), { force: true })
   writeFileSync(versionFile, `${version}\n`)
   console.log(`dth-runner ${version} staged into apps/desktop/resources/dth-runner`)
 } finally {
