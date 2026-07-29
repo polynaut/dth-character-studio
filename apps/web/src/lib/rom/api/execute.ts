@@ -198,10 +198,11 @@ async function currentStamp(character: Character, scenePath: string): Promise<Ex
 /**
  * Write the DTH Exporter job file for the chosen scenes and start Daz Studio.
  *
- * Each scene contributes its script rows in run order (the ROM script, plus the
- * split Export script when the export is split off). The job file replaces any
- * pending one (last write wins). Scenes are stamped at handoff — the job file
- * is the delivery, the plugin deletes it once parsed.
+ * One row per scene: the ROM script — the plugin executes it with the
+ * "bulk-export" argument, which makes it always export (the split/hair toggles
+ * only govern manual runs). The job file replaces any pending one (last write
+ * wins). Scenes are stamped at handoff — the job file is the delivery, the
+ * plugin deletes it once parsed.
  *
  * Throws with a user-facing message when preconditions fail: no DAZ library
  * configured, no export directory, generated scripts missing (save first), or
@@ -255,9 +256,8 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     stamps.set(scene, await currentStamp(character, scene))
   }
 
-  // One row per (scene, script) in run order. Consecutive same-scene rows run in
-  // the same Daz session (the plugin only reopens on a path change), which is
-  // what lets the split Export script see the ROM the previous row built.
+  // One row per (scene, script) in run order — today that's one ROM-script row
+  // per scene (see characterJobScriptNames).
   const jobs: Array<ExporterJob> = scenes.flatMap((scene) =>
     scriptPaths.map((scriptPath) => ({ scenePath: scene, scriptPath })),
   )

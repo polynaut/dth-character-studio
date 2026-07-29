@@ -170,6 +170,15 @@ older runtimes as stale.
   pure migration step).
 - `referenceFrames()` (generate.ts) hands the exporter the same absolute frames
   the CSV references — the 1:1 mapping is test-pinned.
+- **Bulk runs** (runtime v38): the DTH Exporter Plugin executes job-file scripts
+  with the `bulk-export` argument (`BULK_EXPORT_ARG`, read via the script-side
+  `getArguments()`). With it, the ROM script ALWAYS exports — the export block
+  is embedded even with `exportWithRomScript` off (gate:
+  `dthRomOk === true && dthBulkExport`) and the hair pass runs past a disabled
+  `exportHairAssets` (gate: `if (dthBulkExport)`). A manual run (no argument)
+  honors the toggles exactly as before. The job file therefore carries ONE
+  ROM-script row per scene — no split Export_ rows, no same-scene session
+  sharing (contract: docs/exporter-plugin-job-file.md).
 
 ## PoseAsset CSV eras & templates
 

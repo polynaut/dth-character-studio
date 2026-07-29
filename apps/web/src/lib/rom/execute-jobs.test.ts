@@ -51,23 +51,16 @@ describe('jobFileCsv', () => {
 })
 
 describe('characterJobScriptNames', () => {
-  it('is the one ROM script by default (it carries the export when set)', () => {
+  it('is always the one ROM script — bulk runs export via the script argument', () => {
     expect(characterJobScriptNames(makeCharacter())).toEqual(['ROM_Electra_G9.dsa'])
     expect(
       characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: true })),
     ).toEqual(['ROM_Electra_G9.dsa'])
-  })
-
-  it('appends the split Export script when the export is split off', () => {
+    // Even with the export split off: the plugin passes "bulk-export", which
+    // makes the ROM script export inline — no Export_ row needed.
     expect(
       characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: false })),
-    ).toEqual(['ROM_Electra_G9.dsa', 'Export_Electra_G9.dsa'])
-  })
-
-  it('ignores the split flag without an export directory', () => {
-    expect(characterJobScriptNames(makeCharacter({ exportWithRomScript: false }))).toEqual([
-      'ROM_Electra_G9.dsa',
-    ])
+    ).toEqual(['ROM_Electra_G9.dsa'])
   })
 })
 

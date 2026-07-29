@@ -72,17 +72,15 @@ export function jobFileCsv(jobs: Array<ExporterJob>): string {
 }
 
 /**
- * The generated script(s) a scene must run, in run order. Normally that's the
- * ONE ROM script (it selects the open scene's overrides itself and, with
- * `exportWithRomScript`, carries the export). With the export SPLIT off, the
- * Export script must follow the ROM script IN THE SAME Daz session (it exports
- * the ROM already built on the timeline) — the plugin keeps the scene open
- * between consecutive same-scene rows for exactly this case.
+ * The generated script(s) a scene must run, in run order — always just the ONE
+ * ROM script: it selects the open scene's overrides itself, and the plugin
+ * executes it with the "bulk-export" argument (runtime v38), which makes it
+ * ALWAYS build AND export — the export/hair toggles (`exportWithRomScript`,
+ * `exportHairAssets`) only govern manual runs. Kept as an array for forward
+ * compatibility (a future job kind may need multiple rows per scene).
  */
 export function characterJobScriptNames(character: Character): Array<string> {
-  const base = characterScriptName(character)
-  const split = character.exportPath.trim() !== '' && character.exportWithRomScript === false
-  return split ? [`ROM_${base}.dsa`, `Export_${base}.dsa`] : [`ROM_${base}.dsa`]
+  return [`ROM_${characterScriptName(character)}.dsa`]
 }
 
 /** Character fields that don't influence what a ROM run produces (cosmetic,
