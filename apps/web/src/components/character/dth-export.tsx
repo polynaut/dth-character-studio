@@ -131,10 +131,10 @@ export function DthExportAction({
         className="px-3"
         onClick={() => setOpen(true)}
         disabled={disabled}
-        title={
-          blockedHint ??
-          'Choose scenes and run them through the DTH Exporter Plugin — writes the job file and starts Daz Studio'
-        }
+        // Only the blocked states carry a tooltip (they explain WHY the button
+        // is off); the enabled button speaks for itself — the dialog's title
+        // popup holds the long description.
+        title={blockedHint}
       >
         <DthLogo /> DTH Export
       </Button>
