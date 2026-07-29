@@ -57,12 +57,14 @@ function dthGenesisBuildPlan(){
 			figures: [
 				{
 					label: "Genesis 3 Female",
+					short: "Female",
 					rel: ["People/Genesis 3 Female/Genesis 3 Female.duf"],
 					searchDirs: [{ dir: "People/Genesis 3 Female", depth: 1 }],
 					searchRx: [/^genesis 3 (basic )?female\.duf$/]
 				},
 				{
 					label: "Genesis 3 Male",
+					short: "Male",
 					rel: ["People/Genesis 3 Male/Genesis 3 Male.duf"],
 					searchDirs: [{ dir: "People/Genesis 3 Male", depth: 1 }],
 					searchRx: [/^genesis 3 (basic )?male\.duf$/]
@@ -74,6 +76,7 @@ function dthGenesisBuildPlan(){
 			figures: [
 				{
 					label: "Genesis 8 Female",
+					short: "Female",
 					rel: [
 						"People/Genesis 8 Female/Genesis 8 Basic Female.duf",
 						"People/Genesis 8 Female/Genesis 8 Female.duf"
@@ -83,6 +86,7 @@ function dthGenesisBuildPlan(){
 				},
 				{
 					label: "Genesis 8 Male",
+					short: "Male",
 					rel: [
 						"People/Genesis 8 Male/Genesis 8 Basic Male.duf",
 						"People/Genesis 8 Male/Genesis 8 Male.duf"
@@ -97,6 +101,7 @@ function dthGenesisBuildPlan(){
 			figures: [
 				{
 					label: "Genesis 8.1 Female",
+					short: "Female",
 					// 8.1 ships INTO the Genesis 8 Female folder; the dedicated
 					// 8.1 folder is the layout some manual installs end up with.
 					rel: [
@@ -109,6 +114,7 @@ function dthGenesisBuildPlan(){
 				},
 				{
 					label: "Genesis 8.1 Male",
+					short: "Male",
 					rel: [
 						"People/Genesis 8 Male/Genesis 8.1 Basic Male.duf",
 						"People/Genesis 8.1 Male/Genesis 8.1 Basic Male.duf",
@@ -124,6 +130,7 @@ function dthGenesisBuildPlan(){
 			figures: [
 				{
 					label: "Genesis 9 + Golden Palace",
+					short: "with Golden Palace",
 					rel: aG9,
 					searchDirs: [{ dir: "People/Genesis 9", depth: 1 }],
 					searchRx: [/^genesis 9\.duf$/],
@@ -151,6 +158,7 @@ function dthGenesisBuildPlan(){
 				},
 				{
 					label: "Genesis 9 + Dicktator",
+					short: "with Dicktator",
 					rel: aG9,
 					searchDirs: [{ dir: "People/Genesis 9", depth: 1 }],
 					searchRx: [/^genesis 9\.duf$/],
@@ -732,13 +740,98 @@ function dthProgressFinish(oProgress){
 }
 
 /**********************************************************************
+ * Pre-flight: what is actually installed?
+ *
+ * Every asset resolves BEFORE the scene is touched, so the confirm dialog can
+ * name exactly what will be built and what will be skipped — and so a library
+ * missing a generation (or missing both geografts, or everything) never costs
+ * the user their open scene for nothing. Read-only: no load, no clear.
+ *
+ * Annotates the plan in place — each figure gets `asset`, each graft
+ * `graft.asset` — and gives every generation a `ready` list of the figures that
+ * can be built. A generation with an empty `ready` list is skipped whole.
+ */
+function dthResolvePlan(aPlan, aRoots){
+	var oReport = {
+		buildable: [],
+		skippedGenesis: [],
+		skippedFigures: [],
+		missingGrafts: [],
+		grafts: []
+	};
+	for(var g = 0; g < aPlan.length; g++){
+		var oGen = aPlan[g];
+		var aReady = [];
+		var oSeenBuild = {};
+		for(var f = 0; f < oGen.figures.length; f++){
+			var oSpec = oGen.figures[f];
+			print("Resolving", oSpec.label, "...");
+			oSpec.asset = dthResolveAsset(aRoots, oSpec);
+			if(!oSpec.asset){
+				oReport.skippedFigures.push(oSpec.label);
+				continue;
+			}
+			oSpec.graftAsset = "";
+			if(oSpec.graft){
+				oSpec.graftAsset = dthResolveAsset(aRoots, oSpec.graft);
+				if(oSpec.graftAsset)
+					// The graft products reship under new names, so the file the
+					// glob settled on is reported: the one resolution here that
+					// can't be verified up front is verifiable after the fact.
+					oReport.grafts.push(oSpec.graft.name + " <- " + dthBaseName(oSpec.graftAsset));
+				else
+					oReport.missingGrafts.push(oSpec.graft.name);
+			}
+			// Genesis 9's two entries are the SAME figure asset differing only by
+			// geograft — with neither geograft installed they would build and scan
+			// two identical figures, so collapse them to one.
+			var sKey = oSpec.asset.toLowerCase() + "|" + oSpec.graftAsset.toLowerCase();
+			if(oSeenBuild[sKey]) continue;
+			oSeenBuild[sKey] = true;
+			aReady.push(oSpec);
+		}
+		// A graft-LESS entry only earns its place when no sibling got its
+		// geograft: it loads the same figure asset, so everything it could
+		// contribute is already in a grafted sibling's scan. It exists purely so
+		// Genesis 9 still gets indexed when neither geograft is installed.
+		var bAnyGraft = false;
+		var i;
+		for(i = 0; i < aReady.length; i++){
+			if(aReady[i].graft && aReady[i].graftAsset) bAnyGraft = true;
+		}
+		if(bAnyGraft){
+			var aKeep = [];
+			for(i = 0; i < aReady.length; i++){
+				if(!aReady[i].graft || aReady[i].graftAsset) aKeep.push(aReady[i]);
+			}
+			aReady = aKeep;
+		}
+		oGen.ready = aReady;
+		if(aReady.length) oReport.buildable.push(oGen);
+		else oReport.skippedGenesis.push(dthGenesisLabel(oGen.genesis));
+	}
+	return oReport;
+}
+
+/** The generation key as users read it: G8.1 -> "Genesis 8.1". */
+function dthGenesisLabel(sGenesis){
+	return "Genesis " + String(sGenesis).replace(/^G/, "");
+}
+
+/** How one ready figure reads in the confirm dialog. */
+function dthFigureBuildLabel(oSpec){
+	if(!oSpec.graft) return oSpec.short;
+	if(oSpec.graftAsset) return oSpec.short;
+	return "plain (no geograft installed)";
+}
+
+/**********************************************************************
  * The whole job. config: { outDir, scriptDir }
  */
 function DthBuildGenesisIndex(config){
 	var aPlan = dthGenesisBuildPlan();
 	var oByGen = {};
-	var aMissing = [];
-	var aGrafts = [];
+	var oReport = null;
 	var iUnknown = 0;
 	var g, f;
 
@@ -758,52 +851,60 @@ function DthBuildGenesisIndex(config){
 			"&Scan open scene", "&Build stock figures") == 0;
 	}
 
-	if(!bScanOpenScene){
-		var bGo = MessageBox.question(
-			"This builds the morph + bone index for every generation:\n\n" +
-			"  Genesis 3, 8 and 8.1 - female + male\n" +
-			"  Genesis 9 - twice, one with Golden Palace, one with Dicktator\n\n" +
-			"It loads them a generation at a time and CLEARS THE SCENE between " +
-			"each, so save your work first. This takes a few minutes.",
-			"DTH Character Studio",
-			"&Build the index", "&Cancel") == 0;
-		if(!bGo) return;
-	}
-
 	if(bScanOpenScene){
 		iUnknown = dthScanSceneInto(oByGen);
 	} else {
-		var oProgress = dthProgressStart("Building the DTH Genesis index...", aPlan.length);
 		var aRoots = dthContentRoots(config["scriptDir"]);
 		print("Content roots:", aRoots.join(" | "));
-		for(g = 0; g < aPlan.length; g++){
-			var oGen = aPlan[g];
-			dthProgressStep(oProgress, "Genesis " + oGen.genesis + "...");
+		oReport = dthResolvePlan(aPlan, aRoots);
+
+		// Nothing installed that this can build: say so and leave the scene alone.
+		if(!oReport.buildable.length){
+			MessageBox.information(
+				"No Genesis 3, 8, 8.1 or 9 figure could be found in your Daz " +
+				"content, so there is nothing to build.\n\nThe open scene was left " +
+				"untouched. Install a Genesis figure, or load the figures you want " +
+				"indexed into the scene and run this again to scan those.",
+				"DTH Character Studio", "&OK");
+			return;
+		}
+
+		var sPlanMsg = "This builds the morph + bone index from the figures you " +
+			"have installed:\n\n";
+		for(g = 0; g < oReport.buildable.length; g++){
+			var oB = oReport.buildable[g];
+			var aWhat = [];
+			for(f = 0; f < oB.ready.length; f++) aWhat.push(dthFigureBuildLabel(oB.ready[f]));
+			sPlanMsg += "  " + dthGenesisLabel(oB.genesis) + " - " + aWhat.join(", ") + "\n";
+		}
+		if(oReport.skippedGenesis.length)
+			sPlanMsg += "\nNot installed, skipped: " + oReport.skippedGenesis.join(", ") + "\n";
+		if(oReport.missingGrafts.length)
+			sPlanMsg += "\nGeograft not installed, skipped: " +
+				oReport.missingGrafts.join(", ") + "\n";
+		sPlanMsg += "\nIt loads them a generation at a time and CLEARS THE SCENE " +
+			"between each, so save your work first. This takes a few minutes.";
+
+		if(MessageBox.question(sPlanMsg, "DTH Character Studio",
+			"&Build the index", "&Cancel") != 0) return;
+
+		var oProgress = dthProgressStart("Building the DTH Genesis index...",
+			oReport.buildable.length);
+		for(g = 0; g < oReport.buildable.length; g++){
+			var oGen = oReport.buildable[g];
+			dthProgressStep(oProgress, dthGenesisLabel(oGen.genesis) + "...");
 			dthClearScene();
-			for(f = 0; f < oGen.figures.length; f++){
-				var oSpec = oGen.figures[f];
-				var sAsset = dthResolveAsset(aRoots, oSpec);
-				if(!sAsset){
-					aMissing.push(oSpec.label);
-					continue;
-				}
-				var oFigure = dthLoadFigure(sAsset);
+			for(f = 0; f < oGen.ready.length; f++){
+				var oSpec = oGen.ready[f];
+				var oFigure = dthLoadFigure(oSpec.asset);
 				if(!oFigure){
-					aMissing.push(oSpec.label);
+					// Resolved but wouldn't load (a corrupt/partial install) —
+					// report it exactly like a missing one rather than dying.
+					oReport.skippedFigures.push(oSpec.label);
 					continue;
 				}
-				if(oSpec.graft){
-					var sGraft = dthResolveAsset(aRoots, oSpec.graft);
-					if(!sGraft || !dthLoadGraft(sGraft, oFigure)){
-						aMissing.push(oSpec.graft.name);
-					} else {
-						// The graft products reship under new names, so the file
-						// the search settled on goes in the summary: the one
-						// resolution in this script that can't be verified up
-						// front is at least verifiable after the fact.
-						aGrafts.push(oSpec.graft.name + " ← " + dthBaseName(sGraft));
-					}
-				}
+				if(oSpec.graftAsset && !dthLoadGraft(oSpec.graftAsset, oFigure))
+					oReport.missingGrafts.push(oSpec.graft.name);
 			}
 			iUnknown += dthScanSceneInto(oByGen, oGen.genesis);
 		}
@@ -818,10 +919,10 @@ function DthBuildGenesisIndex(config){
 		var oAcc = oByGen[aGenesis[g]];
 		if(!oAcc) continue;
 		if(dthWriteIndex(config["outDir"], aGenesis[g], oAcc))
-			aWritten.push("Genesis " + aGenesis[g] + ": " + oAcc.morphs.length +
+			aWritten.push(dthGenesisLabel(aGenesis[g]) + ": " + oAcc.morphs.length +
 				" morphs, " + oAcc.bones.length + " bones");
 		else
-			aFailed.push("Genesis " + aGenesis[g]);
+			aFailed.push(dthGenesisLabel(aGenesis[g]));
 	}
 
 	var sMsg;
@@ -831,8 +932,21 @@ function DthBuildGenesisIndex(config){
 	} else {
 		sMsg = "Nothing was indexed - no Genesis figure could be built or found in the scene.";
 	}
-	if(aMissing.length)
-		sMsg += "\n\nNot installed (skipped): " + aMissing.join(", ") + ".";
+	// A skipped generation leaves its EXISTING index alone rather than replacing
+	// it with nothing, so say that plainly - an uninstalled generation must not
+	// read as "your old index was wiped".
+	if(oReport){
+		if(oReport.grafts.length)
+			sMsg += "\n\nGeografts loaded:\n" + oReport.grafts.join("\n");
+		if(oReport.skippedGenesis.length)
+			sMsg += "\n\nNot installed, skipped (any existing index for them is " +
+				"untouched): " + oReport.skippedGenesis.join(", ") + ".";
+		if(oReport.missingGrafts.length)
+			sMsg += "\n\nGeograft not installed, skipped: " +
+				oReport.missingGrafts.join(", ") + ".";
+		if(oReport.skippedFigures.length)
+			sMsg += "\n\nFigures skipped: " + oReport.skippedFigures.join(", ") + ".";
+	}
 	if(iUnknown)
 		sMsg += "\n\n" + iUnknown + " figure(s) in the scene were not a Genesis 3/8/8.1/9 " +
 			"figure and were skipped.";

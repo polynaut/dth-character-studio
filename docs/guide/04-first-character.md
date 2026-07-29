@@ -351,7 +351,8 @@ there is nothing to load or select first:
 
 1. In Daz Studio, **save your open scene** (the build clears it), then run
    `Scripts/DTH-Character-Studio/Build_Genesis_Index` from the Content Library.
-2. Confirm the prompt. It then creates the stock figures itself, one generation
+2. Confirm the prompt — it lists exactly which generations it found installed
+   and what it will skip. It then creates the stock figures itself, one generation
    at a time — *Genesis 3*, *8* and *8.1* female **and** male, and *Genesis 9*
    twice: it's gender-neutral, so that pair is differentiated by geograft
    instead (**Golden Palace** on one, **Dicktator** on the other, when you have

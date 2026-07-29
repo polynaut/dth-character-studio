@@ -33,7 +33,7 @@ const RUNTIME_FILES = [
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '2e41b314f928828b2ef9d74ad7364060a340306a1ca9c29411c9bbe88124251b'
+const EXPECTED_RUNTIME_HASH = '450ede325253145786ce266a92f629d4845b45e9685aa38a2f25e0c26a3febb2'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -118,27 +118,50 @@ interface PickSpec {
   glob: RegExp
   prefer?: Array<{ rx: RegExp; score: number }>
 }
+interface FigureSpec {
+  label: string
+  short: string
+  asset?: string
+  graftAsset?: string
+  graft?: { name: string; pick: PickSpec }
+}
+interface GenerationSpec {
+  genesis: string
+  figures: Array<FigureSpec>
+  ready?: Array<FigureSpec>
+}
+interface PlanReport {
+  buildable: Array<GenerationSpec>
+  skippedGenesis: Array<string>
+  skippedFigures: Array<string>
+  missingGrafts: Array<string>
+  grafts: Array<string>
+}
 interface ScannerModule {
-  dthGenesisBuildPlan: () => Array<{
-    genesis: string
-    figures: Array<{ graft?: { name: string; pick: PickSpec } }>
-  }>
+  dthGenesisBuildPlan: () => Array<GenerationSpec>
   dthScoreCandidate: (candidate: GlobCandidate, pick: PickSpec) => number
   dthCandBeats: (a: GlobCandidate, aScore: number, b: GlobCandidate, bScore: number) => boolean
+  dthContentRoots: (scriptDir: string) => Array<string>
+  dthResolvePlan: (plan: Array<GenerationSpec>, roots: Array<string>) => PlanReport
+  dthFigureBuildLabel: (spec: FigureSpec) => string
+  dthGenesisLabel: (genesis: string) => string
   DTH_PICK_REJECT: RegExp
 }
 
-function loadScanner(): ScannerModule {
+const SCANNER_EXPORTS =
+  'dthGenesisBuildPlan, dthScoreCandidate, dthCandBeats, dthContentRoots, dthResolvePlan, dthFigureBuildLabel, dthGenesisLabel, DTH_PICK_REJECT'
+
+function loadScanner(globals: Record<string, unknown> = {}): ScannerModule {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
   const src = readFileSync(join(dir, 'DthScanMorphs.dsa'), 'utf8')
-  // A sandbox holding ONLY `print` — the one Daz global the runtime's top level
-  // could reach. That's also a canary: if a future edit calls a Daz API at load
+  // A sandbox holding only `print` (plus whatever a test fakes) — nothing else of
+  // Daz is defined. That's also a canary: if a future edit calls a Daz API at load
   // time (rather than inside a function), this throws "X is not defined" instead
   // of failing mysteriously in Daz, where a broken script logs nothing at all.
-  return runInNewContext(
-    `${src}\n;({ dthGenesisBuildPlan, dthScoreCandidate, dthCandBeats, DTH_PICK_REJECT })`,
-    { print: () => {} },
-  ) as ScannerModule
+  return runInNewContext(`${src}\n;({ ${SCANNER_EXPORTS} })`, {
+    print: () => {},
+    ...globals,
+  }) as ScannerModule
 }
 
 /** Rank the fixture exactly as dthPickAsset does, and return the winner. */
@@ -227,5 +250,174 @@ describe('Build_Genesis_Index geograft glob', () => {
     expect(pickFrom(scanner, pick, [...both].reverse())).toBe(
       'People/Genesis 9/Anatomy/Golden Palace/2a-Golden Palace Smart_Vanilla.duf',
     )
+  })
+})
+
+/**
+ * Pre-flight. Every asset resolves BEFORE the scene is touched, so a library
+ * missing a generation — or missing everything — never costs the user their open
+ * scene for nothing, and the confirm dialog can name what will actually happen.
+ * That makes the whole decision pure, so it's driven here against a fake content
+ * tree: the Daz file APIs are the only thing stubbed, `dthResolvePlan` is the
+ * shipped one.
+ */
+const FAKE_LIB = 'C:/lib'
+const FULL_TREE = [
+  'People/Genesis 3 Female/Genesis 3 Female.duf',
+  'People/Genesis 3 Male/Genesis 3 Male.duf',
+  'People/Genesis 8 Female/Genesis 8 Basic Female.duf',
+  'People/Genesis 8 Female/Genesis 8.1 Basic Female.duf',
+  'People/Genesis 8 Male/Genesis 8 Basic Male.duf',
+  'People/Genesis 8 Male/Genesis 8.1 Basic Male.duf',
+  'People/Genesis 9/Genesis 9.duf',
+  'People/Genesis 9/Anatomy/Golden Palace/2a-Golden Palace Smart_Vanilla.duf',
+  'People/Genesis 9/Anatomy/Dicktator/1-Dicktator_Smart.duf',
+]
+
+/** Minimal DzDir/DzFileInfo/DzFile/App over an in-memory path list. */
+function fakeContent(relPaths: Array<string>): Record<string, unknown> {
+  const files = new Set(relPaths.map((p) => `${FAKE_LIB}/${p}`))
+  const dirs = new Set<string>()
+  for (const file of files) {
+    let at = file.lastIndexOf('/')
+    while (at > FAKE_LIB.length) {
+      dirs.add(file.slice(0, at))
+      at = file.lastIndexOf('/', at - 1)
+    }
+    dirs.add(FAKE_LIB)
+  }
+  const childrenOf = (dir: string, want: 'files' | 'dirs') => {
+    const out: Array<string> = []
+    for (const p of want === 'files' ? files : dirs) {
+      if (p.lastIndexOf('/') === dir.length && p.startsWith(`${dir}/`)) out.push(p.slice(dir.length + 1))
+    }
+    return out
+  }
+  class DzDir {
+    p: string
+    constructor(p: string) {
+      this.p = p
+    }
+    exists() {
+      return dirs.has(this.p)
+    }
+    entryList() {
+      return [...childrenOf(this.p, 'files'), ...childrenOf(this.p, 'dirs')]
+    }
+    getSubdirList() {
+      return childrenOf(this.p, 'dirs')
+    }
+  }
+  class DzFileInfo {
+    p: string
+    constructor(p: string) {
+      this.p = p
+    }
+    exists() {
+      return files.has(this.p)
+    }
+  }
+  class DzFile {
+    static ReadOnly = 1
+    open() {
+      return false
+    }
+    close() {}
+  }
+  return {
+    DzDir,
+    DzFileInfo,
+    DzFile,
+    // No getNumContentDirectories: the enumeration is typeof-guarded, so the
+    // only root is the one derived from the script's own install path.
+    App: {
+      getContentMgr: () => ({
+        findFile: (rel: string) => (files.has(`${FAKE_LIB}/${rel}`) ? `${FAKE_LIB}/${rel}` : ''),
+      }),
+    },
+  }
+}
+
+function preflight(tree: Array<string>) {
+  const scanner = loadScanner(fakeContent(tree))
+  const roots = scanner.dthContentRoots(`${FAKE_LIB}/Scripts/DTH-Character-Studio`)
+  expect(roots).toEqual([FAKE_LIB]) // the install path IS a content root
+  const report = scanner.dthResolvePlan(scanner.dthGenesisBuildPlan(), roots)
+  return {
+    report,
+    /** What the confirm dialog would list, e.g. 'Genesis 9 - with Dicktator'. */
+    lines: report.buildable.map(
+      (gen) =>
+        `${scanner.dthGenesisLabel(gen.genesis)} - ${(gen.ready ?? [])
+          .map((f) => scanner.dthFigureBuildLabel(f))
+          .join(', ')}`,
+    ),
+  }
+}
+
+describe('Build_Genesis_Index pre-flight', () => {
+  it('plans every generation when the whole library is installed', () => {
+    const { report, lines } = preflight(FULL_TREE)
+    expect(lines).toEqual([
+      'Genesis 3 - Female, Male',
+      'Genesis 8 - Female, Male',
+      'Genesis 8.1 - Female, Male',
+      'Genesis 9 - with Golden Palace, with Dicktator',
+    ])
+    expect(report.skippedGenesis).toEqual([])
+    expect(report.skippedFigures).toEqual([])
+    expect(report.missingGrafts).toEqual([])
+    expect(report.grafts).toEqual([
+      'Golden Palace <- 2a-Golden Palace Smart_Vanilla.duf',
+      'Dicktator <- 1-Dicktator_Smart.duf',
+    ])
+  })
+
+  it('skips a generation that is not installed, and names it', () => {
+    const { report, lines } = preflight(FULL_TREE.filter((p) => !p.includes('Genesis 3')))
+    expect(lines).toEqual([
+      'Genesis 8 - Female, Male',
+      'Genesis 8.1 - Female, Male',
+      'Genesis 9 - with Golden Palace, with Dicktator',
+    ])
+    expect(report.skippedGenesis).toEqual(['Genesis 3'])
+    expect(report.skippedFigures).toEqual(['Genesis 3 Female', 'Genesis 3 Male'])
+  })
+
+  it('still builds a generation when only one gender is installed', () => {
+    const { lines, report } = preflight(FULL_TREE.filter((p) => !p.includes('Genesis 3 Male')))
+    expect(lines[0]).toBe('Genesis 3 - Female')
+    expect(report.skippedGenesis).toEqual([])
+    expect(report.skippedFigures).toEqual(['Genesis 3 Male'])
+  })
+
+  it('collapses the Genesis 9 pair to ONE plain figure when neither geograft is installed', () => {
+    // Both G9 entries are the same figure asset differing only by geograft, so
+    // without either one they would build and scan two identical figures.
+    const { report, lines } = preflight(FULL_TREE.filter((p) => !p.includes('/Anatomy/')))
+    expect(lines[3]).toBe('Genesis 9 - plain (no geograft installed)')
+    expect(report.buildable[3]?.ready).toHaveLength(1)
+    expect(report.missingGrafts).toEqual(['Golden Palace', 'Dicktator'])
+  })
+
+  it('drops the redundant plain figure when ONE geograft is installed', () => {
+    // The grafted sibling's scan is a superset of the plain one's, so building
+    // the plain figure too would only cost minutes.
+    const { report, lines } = preflight(FULL_TREE.filter((p) => !p.includes('Golden Palace')))
+    expect(lines[3]).toBe('Genesis 9 - with Dicktator')
+    expect(report.buildable[3]?.ready).toHaveLength(1)
+    expect(report.missingGrafts).toEqual(['Golden Palace'])
+    expect(report.grafts).toEqual(['Dicktator <- 1-Dicktator_Smart.duf'])
+  })
+
+  it('finds nothing buildable on a library with no Genesis figure — the caller then leaves the scene alone', () => {
+    const { report } = preflight([])
+    expect(report.buildable).toEqual([])
+    expect(report.skippedGenesis).toEqual([
+      'Genesis 3',
+      'Genesis 8',
+      'Genesis 8.1',
+      'Genesis 9',
+    ])
   })
 })
