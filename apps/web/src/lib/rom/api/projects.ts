@@ -1,8 +1,9 @@
-import { exists, stat } from '@tauri-apps/plugin-fs'
+import { exists, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
+import { normalizePathLower } from '#/lib/path.ts'
 
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
@@ -16,8 +17,10 @@ import {
   projectIdInput,
   projectPath,
   resolveProject,
+  setActiveProjectDir,
 } from './core'
 import { generateCharacterFiles } from './generate'
+import { assertMovable } from './move'
 
 import type { ProjectInfo } from './core'
 
@@ -135,6 +138,71 @@ export async function renameProject({ data }: { data: unknown }): Promise<Projec
     }
   }
   return resolveProject(dir)
+}
+
+/**
+ * Permanently delete a project (the Operations tab's danger zone):
+ *
+ *  1. the entire project folder — characters, scenes, generated artifacts, the
+ *     `.dcsp` manifest and the hidden `.dcsmeta` (avatars/notes media);
+ *  2. the project's generated Daz-script folder in the Daz library
+ *     (`<lib>/Scripts/DTH-Character-Studio/<project>/`) — a derived artifact,
+ *     orphaned once the project is gone (best-effort; the shared runtime at the
+ *     root stays, other projects use it);
+ *  3. the project's app-data product scans (best-effort housekeeping);
+ *  4. every recents entry pointing into the folder (recents IS the registry);
+ *  5. this window's project pin, so it continues as a Home window.
+ *
+ * The lock gate runs FIRST: a file open in Daz/Houdini aborts the delete before
+ * anything is touched (all-or-nothing, like the folder moves) — otherwise
+ * `remove` would tear out half the folder and then fail.
+ */
+export async function deleteProject({ data }: { data: unknown }): Promise<void> {
+  const { projectId } = projectIdInput.parse(data)
+  const dir = await projectPath(projectId)
+  // Resolves the name (keys the scripts folder) + id (keys the scans folder);
+  // throws for an unreachable folder — nothing to delete there, and recents
+  // cleanup for a MISSING project is the Home screen's "forget" instead.
+  const project = await resolveProject(dir)
+  await assertMovable(dir)
+  invalidateCharacterLocations()
+  // The derived artifacts first (best-effort — an orphaned script/scan folder
+  // must not block the real delete)…
+  try {
+    const settings = await storage.getSettings()
+    if (settings.dazLibraryFolder) {
+      const scripts = storage.studioProjectScriptsDir(settings.dazLibraryFolder, project.name)
+      if (await exists(scripts)) await remove(scripts, { recursive: true })
+    }
+  } catch {
+    // stays behind as an orphan — harmless, and visible in the Daz library
+  }
+  try {
+    const scans = await storage.dataPath('product-scans', project.id)
+    if (await exists(scans)) await remove(scans, { recursive: true })
+  } catch {
+    // orphaned scans age out via the housekeeping sweep
+  }
+  // …then the project folder itself — THE delete; this one throws on failure.
+  await withBusyCursor(remove(dir, { recursive: true }))
+  // Recents: drop every entry whose `.dcsp` lives in the deleted folder (the
+  // stored path can differ in casing/separators from the route param). Safe in
+  // parallel — forgetRecent serializes through the recents mutation queue.
+  const key = normalizePathLower(dir)
+  const stale = (await storage.listRecents()).filter(
+    (r) => normalizePathLower(dirname(r.path)) === key,
+  )
+  await Promise.all(stale.map((r) => storage.forgetRecent(r.path)))
+  // Unpin the window (native map + title) BEFORE clearing the TS-side value —
+  // getActiveProjectDir re-reads the native pin once its cached value is ''.
+  if (isTauri()) {
+    try {
+      await invoke('release_project_window')
+    } catch {
+      // an un-released pin only leaves a stale window title
+    }
+  }
+  setActiveProjectDir('')
 }
 
 /** Save a project's behaviour defaults (the `.dcsp` manifest's per-project
