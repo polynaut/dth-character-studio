@@ -3,6 +3,11 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { normalizePathLower } from '#/lib/path.ts'
+import {
+  PRIMARY_SCENE_SUBFOLDER,
+  deriveScenesRootRel,
+  suggestSceneSubfolder,
+} from '#/lib/scene-subfolder.ts'
 import { withBusyCursor } from '../../busy-cursor.ts'
 
 import {
@@ -19,6 +24,8 @@ import {
   sceneRomArmed,
 } from '@dth/rom'
 import * as storage from '../storage'
+import { relativeInside } from '../storage/fs'
+import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
@@ -28,8 +35,10 @@ import {
   characterLocationCache,
   charScopeInput,
   charsRoot,
+  dirname,
   fetchPoseAssets,
   fetchPoseAssetsCurrent,
+  joinPath,
   locateCharacter,
   projectsForSweep,
   resolveProject,
@@ -291,6 +300,20 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sceneRomPaths[key] = catalog.error ? {} : resolveRomPaths(merged, catalog)
     sceneFrames[key] = await resolvePresetFrames(merged, catalog)
   }
+  // The character's scenes ROOT (charFolder-relative rule shared with the
+  // scenes UI — lib/scene-subfolder.ts): each scene's export nests under its
+  // own subfolder below it. A primary linked outside the character folder
+  // leaves it undefined — the export block then falls back to stem-named
+  // subfolders per scene.
+  const primaryDir = dirname(versioned.scenePath)
+  const primaryRel =
+    normalizePathLower(primaryDir) === normalizePathLower(outDir)
+      ? ''
+      : relativeInside(outDir, primaryDir)
+  const scenesRootAbs =
+    primaryRel === null
+      ? undefined
+      : joinPath(outDir, deriveScenesRootRel(primaryRel, project.dazSubdir))
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
@@ -304,6 +327,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     scanProducts,
     sceneRomPaths,
     sceneFrames,
+    scenesRootAbs,
   )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just
@@ -425,6 +449,90 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     }
   }
   return { outDir, files, scriptsDir, scriptsError }
+}
+
+/**
+ * Move a character's root-dwelling linked scene files into their own
+ * subfolders — the primary into "primary", extras into sanitized-name folders
+ * (the v26 layout; each scene's export nests under that name). Runs from the
+ * REFRESH sweep only: physically moving files during a routine save would
+ * surprise, and the v26 schema bump flags every pre-v26 character stale, so
+ * one Refresh migrates users' whole libraries. Per-move save (repoint scene
+ * paths + records + avatar source), so a failure mid-list — e.g. a scene
+ * locked by an open Daz — leaves a consistent character behind. Scenes linked
+ * outside the character folder or already in a subfolder are left alone.
+ * Exported for its focused test (scene-subfolder-migration.test.ts).
+ */
+export async function ensureSceneSubfolders(
+  project: ProjectInfo,
+  lib: string,
+  character: Character,
+  location: storage.CharacterLocation,
+): Promise<{ character: Character; moved: number }> {
+  if (!character.scenePath) return { character, moved: 0 }
+  const charFolder = location.folderAbs
+  const primaryDir = dirname(character.scenePath)
+  const primaryRel =
+    normalizePathLower(primaryDir) === normalizePathLower(charFolder)
+      ? ''
+      : relativeInside(charFolder, primaryDir)
+  // Primary linked outside the character folder — no root to normalize against.
+  if (primaryRel === null) return { character, moved: 0 }
+  const rootRel = deriveScenesRootRel(primaryRel, project.dazSubdir)
+  const rootAbs = rootRel ? joinPath(charFolder, rootRel) : charFolder
+  const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  // Subfolder names already in use below the root — a migrated scene must not
+  // move into a sibling's folder (its export would collide there too).
+  const taken = new Set<string>()
+  for (const scene of linked) {
+    const rel = relativeInside(rootAbs, dirname(scene))
+    if (rel) taken.add(rel.toLowerCase())
+  }
+  let current: Character = { ...character }
+  let moved = 0
+  // The primary is first in `linked`, so it claims "primary" before any extra
+  // whose sanitized name happens to be the same word.
+  for (const scene of linked) {
+    if (normalizePathLower(dirname(scene)) !== normalizePathLower(rootAbs)) continue
+    const isPrimary = normalizePathLower(scene) === normalizePathLower(current.scenePath)
+    let name = isPrimary
+      ? PRIMARY_SCENE_SUBFOLDER
+      : suggestSceneSubfolder(scene, character.name)
+    if (
+      taken.has(name.toLowerCase()) ||
+      (!isPrimary && name.toLowerCase() === PRIMARY_SCENE_SUBFOLDER)
+    ) {
+      let n = 2
+      while (taken.has(`${name} (${n})`.toLowerCase())) n += 1
+      name = `${name} (${n})`
+    }
+    taken.add(name.toLowerCase())
+    const movedPath = await copyDazScene({
+      data: {
+        projectId: project.path,
+        characterId: current.id,
+        scenePath: scene,
+        subfolder: [rootRel, name].filter(Boolean).join('/'),
+        deleteOriginal: true,
+      },
+    })
+    const target = normalizePathLower(scene)
+    const repoint = (p: string) => (normalizePathLower(p) === target ? movedPath : p)
+    // Mutating is safe: `current` is either this function's own shallow copy or
+    // the fresh object the previous iteration's save returned.
+    current.scenePath = repoint(current.scenePath)
+    current.extraScenes = current.extraScenes.map(repoint)
+    current.imageScene = repoint(current.imageScene)
+    current.sceneOverrides = current.sceneOverrides.map((o) => ({
+      ...o,
+      scenePath: repoint(o.scenePath),
+    }))
+    const saved = await storage.saveCharacter(project, current, lib)
+    cacheCharacterLocation(lib, saved.character.id, saved.location)
+    current = saved.character
+    moved += 1
+  }
+  return { character: current, moved }
 }
 
 /** One character's outcome in a {@link refreshAllAssets} run. */
@@ -722,6 +830,22 @@ async function refreshAllAssetsInner(refreshOpts: {
         await storage.saveCharacter(project, fresh, lib, { location, character: fresh })
         counts.migrated += 1
       }
+      // v26 layout migration: move root-dwelling scene files into their
+      // per-scene subfolders (primary → "primary", extras → sanitized names).
+      // Soft-fails — a scene locked by an open Daz must not fail the whole
+      // character's refresh; the export block's stem fallback keeps the old
+      // layout working until the next Refresh completes the move.
+      let sceneMoveNote: string | undefined
+      try {
+        const migrated = await ensureSceneSubfolders(project, lib, fresh, location)
+        if (migrated.moved > 0) {
+          sceneMoveNote = `moved ${migrated.moved} scene${migrated.moved === 1 ? '' : 's'} into subfolders`
+        }
+      } catch (e) {
+        sceneMoveNote = `scene-subfolder migration incomplete (close Daz Studio and refresh again): ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      }
       const res = await generateCharacterFiles({
         data: {
           projectId: project.path,
@@ -737,7 +861,7 @@ async function refreshAllAssetsInner(refreshOpts: {
         project: project.name,
         character: character.name,
         ok: true,
-        detail: res.scriptsError ?? undefined,
+        detail: [sceneMoveNote, res.scriptsError].filter(Boolean).join(' — ') || undefined,
       })
     } catch (e) {
       results.push({

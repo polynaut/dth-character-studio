@@ -107,23 +107,15 @@ export function ExportSettingsSection({
           </>
         )}
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <Switch
-          checked={character.exportSceneSubfolders}
-          disabled={!character.exportPath || saving}
-          onCheckedChange={(exportSceneSubfolders) =>
-            void persistPatch(
-              { exportSceneSubfolders },
-              { toast: `Scene subfolders ${exportSceneSubfolders ? 'on' : 'off'} — script regenerated` },
-            )
-          }
-        />
-        <span
-          className={`text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
-        >
-          Generate subfolders based on Daz scenes
-        </span>
-      </div>
+      {/* No subfolder toggle anymore: every linked scene lives in its own
+          subfolder now, and the export always nests under that name (see
+          lib/scene-subfolder.ts + sceneExportSubfolders in @dth/rom). */}
+      {character.exportPath && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Each scene exports into its own subfolder here, named after the scene&apos;s folder
+          (e.g. <code>primary</code>).
+        </p>
+      )}
       <div className="mt-4 flex items-center gap-3">
         <Switch
           checked={character.exportWithRomScript}

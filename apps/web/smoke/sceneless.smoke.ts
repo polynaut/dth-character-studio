@@ -26,7 +26,8 @@ const unhandledCommands = (page: Page) =>
 // The scene the user "saved from Daz Studio" into the seeded folder after the
 // create — a Dicktator scene, so the first link provably re-derives gender
 // (the sceneless create defaulted to female) and enables GEN.
-const VERA_SCENE = 'D:/DTH Projects/Demo/Vera/daz3d/Vera_G9_DK.duf'
+// Saved where the seeded guidance points: the primary's own "primary" subfolder.
+const VERA_SCENE = 'D:/DTH Projects/Demo/Vera/daz3d/primary/Vera_G9_DK.duf'
 
 test('sceneless create: seeded folder, locked editor, first link unlocks + derives', async ({
   page,
@@ -60,12 +61,13 @@ test('sceneless create: seeded folder, locked editor, first link unlocks + deriv
   await expect(page.getByRole('button', { name: 'Fill from character' })).toBeDisabled()
 
   // The scenes panel is the one live control: it names the seeded folder the
-  // user should save their scene into (created on disk at create time).
-  await expect(page.getByText('D:/DTH Projects/Demo/Vera/daz3d')).toBeVisible()
+  // user should save their scene into (created on disk at create time) — the
+  // primary's own "primary" subfolder below the scenes root.
+  await expect(page.getByText('D:/DTH Projects/Demo/Vera/daz3d/primary')).toBeVisible()
   const mkdirs = (await commandCalls(page, 'plugin:fs|mkdir')).map((a) =>
     ((a as { path?: string }).path ?? '').replaceAll('\\', '/'),
   )
-  expect(mkdirs.some((p) => p.endsWith('Demo/Vera/daz3d'))).toBe(true)
+  expect(mkdirs.some((p) => p.endsWith('Demo/Vera/daz3d/primary'))).toBe(true)
 
   // ── "Save" the scene from Daz Studio into the seeded folder, then link. ──
   await page.evaluate(
