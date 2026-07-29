@@ -153,6 +153,49 @@ export function executeSceneSignature(character: Character, scenePath: string): 
   return fnvHash(canonicalJson({ base, record }))
 }
 
+/**
+ * Parse a job file back into its rows — the studio's own reader, used by Abort
+ * to learn which scenes a pending (deleted) handoff carried so their stamps can
+ * roll back. RFC-4180 tolerant like the contract asks of the plugin: quoted
+ * fields, LF or CRLF, extra columns ignored, the header row skipped.
+ */
+export function parseJobFileCsv(text: string): Array<ExporterJob> {
+  const rows: Array<Array<string>> = []
+  let field = ''
+  let row: Array<string> = []
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i++
+        } else inQuotes = false
+      } else field += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      row.push(field)
+      field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(field)
+      field = ''
+      rows.push(row)
+      row = []
+    } else field += ch
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows
+    .slice(1) // the fixed header row
+    .filter((r) => r.length >= 2 && r[0].trim() !== '')
+    .map((r) => ({ scenePath: r[0], scriptPath: r[1] }))
+}
+
 /** Parse a stored stamps file, tolerating garbage (a bad file = no stamps = the
  *  first-run "everything is affected" behaviour). */
 export function parseExecuteStamps(text: string): ExecuteStamps {

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Play, Wand } from 'lucide-react'
+import { Ban, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, Modal } from '@dth/ui'
+import { Button, Modal, useRefetchOnFocus } from '@dth/ui'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
-import { executeCharacterJobs, fetchExecuteScenes } from '#/lib/rom/api.ts'
+import {
+  abortExporterJobs,
+  executeCharacterJobs,
+  exporterJobsPending,
+  fetchExecuteScenes,
+} from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus } from '#/lib/rom/api.ts'
@@ -26,6 +31,13 @@ import type { Character } from '@dth/rom'
  * Disabled while the draft is dirty (the export runs the GENERATED scripts on
  * disk, which lag unsaved edits), without an export directory (the runs exist
  * to deliver exports), or without a configured Daz library.
+ *
+ * While a job file is WAITING for Daz (written but not yet consumed — the
+ * plugin deletes it once parsed, so "exists" is "pending") the button turns
+ * into **Abort**: clicking deletes the job file (and rolls the aborted scenes'
+ * handoff stamps back) and the button returns to DTH Export. The existence
+ * check refreshes on window focus and polls lightly while pending, so the
+ * button also flips back by itself once Daz picks the jobs up.
  */
 export function DthExportAction({
   projectId,
@@ -42,6 +54,53 @@ export function DthExportAction({
   dazLibraryConfigured: boolean
 }) {
   const [open, setOpen] = useState(false)
+  // null = not yet checked (renders as the normal export button).
+  const [pending, setPending] = useState<boolean | null>(null)
+  const [aborting, setAborting] = useState(false)
+
+  // Refresh the pending state on mount + window focus (tabbing back from Daz),
+  // and poll lightly while pending so the button flips back on its own the
+  // moment the plugin consumes the file.
+  useRefetchOnFocus(
+    () => {
+      void exporterJobsPending().then(setPending)
+    },
+    [],
+    { immediate: true },
+  )
+  useEffect(() => {
+    if (pending !== true) return
+    const id = window.setInterval(() => {
+      void exporterJobsPending().then(setPending)
+    }, 2500)
+    return () => window.clearInterval(id)
+  }, [pending])
+
+  async function onAbort() {
+    setAborting(true)
+    try {
+      await abortExporterJobs({ data: { projectId, id: character.id } })
+      setPending(false)
+      toast.success('Pending export jobs aborted — the job file was deleted.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAborting(false)
+    }
+  }
+
+  if (pending === true) {
+    return (
+      <Button
+        variant="outline-destructive"
+        onClick={() => void onAbort()}
+        disabled={aborting}
+        title="A job file is waiting for Daz Studio — Abort deletes it, nothing will run"
+      >
+        <Ban /> {aborting ? 'Aborting…' : 'Abort'}
+      </Button>
+    )
+  }
 
   const sceneLinked = Boolean(character.scenePath)
   const exportDirSet = character.exportPath.trim() !== ''
@@ -70,7 +129,12 @@ export function DthExportAction({
         <Play /> DTH Export
       </Button>
       {open && (
-        <DthExportDialog projectId={projectId} character={character} onClose={() => setOpen(false)} />
+        <DthExportDialog
+          projectId={projectId}
+          character={character}
+          onClose={() => setOpen(false)}
+          onExported={() => setPending(true)}
+        />
       )}
     </>
   )
@@ -174,10 +238,13 @@ function DthExportDialog({
   projectId,
   character,
   onClose,
+  onExported,
 }: {
   projectId: string
   character: Character
   onClose: () => void
+  /** A handoff was written — the header button flips to Abort. */
+  onExported: () => void
 }) {
   // Rows render immediately from the linked scenes; the affected-detection
   // (one stat + signature per scene) fills in and pre-checks the changed ones.
@@ -255,6 +322,7 @@ function DthExportDialog({
           `Started Daz Studio — ${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'} queued for export.`,
         )
       }
+      onExported()
       onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))

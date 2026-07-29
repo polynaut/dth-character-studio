@@ -9,6 +9,7 @@ import {
   jobFileCsv,
   normalizeSceneKey,
   parseExecuteStamps,
+  parseJobFileCsv,
 } from './execute-jobs'
 
 function makeCharacter(over: Partial<Character> = {}): Character {
@@ -112,6 +113,26 @@ describe('executeSceneSignature', () => {
     const forwardSlashUpper = EXTRA.replace(/\\/g, '/').toUpperCase()
     expect(normalizeSceneKey(forwardSlashUpper)).toBe(normalizeSceneKey(EXTRA))
     expect(executeSceneSignature(c, forwardSlashUpper)).toBe(executeSceneSignature(c, EXTRA))
+  })
+})
+
+describe('parseJobFileCsv', () => {
+  it('round-trips jobFileCsv output, including quoted fields', () => {
+    const jobs = [
+      { scenePath: 'X:\\scenes\\A.duf', scriptPath: 'X:\\lib\\ROM_A.dsa' },
+      { scenePath: 'X:\\my, scenes\\B.duf', scriptPath: 'X:\\lib\\"quoted".dsa' },
+    ]
+    expect(parseJobFileCsv(jobFileCsv(jobs))).toEqual(jobs)
+  })
+
+  it('accepts CRLF line endings and ignores extra columns', () => {
+    const text = `${EXPORTER_JOB_HEADER},future-column\r\nX:\\a.duf,X:\\a.dsa,ignored\r\n`
+    expect(parseJobFileCsv(text)).toEqual([{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\a.dsa' }])
+  })
+
+  it('skips blank/short rows and yields nothing for an empty file', () => {
+    expect(parseJobFileCsv('')).toEqual([])
+    expect(parseJobFileCsv(`${EXPORTER_JOB_HEADER}\n\nonly-one-field\n`)).toEqual([])
   })
 })
 

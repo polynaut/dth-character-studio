@@ -1,4 +1,4 @@
-import { exists, readTextFile, stat } from '@tauri-apps/plugin-fs'
+import { exists, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -11,6 +11,7 @@ import {
   jobFileCsv,
   normalizeSceneKey,
   parseExecuteStamps,
+  parseJobFileCsv,
 } from '../execute-jobs'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
@@ -53,6 +54,68 @@ async function readStamps(location: CharacterLocation): Promise<ExecuteStamps> {
     // unreadable stamps = no stamps — worst case a scene re-runs needlessly
   }
   return { version: 1, scenes: {} }
+}
+
+/** Absolute path of the (one, global) job file — null when the desktop app /
+ *  Daz library aren't available, i.e. there can be no job file to speak of. */
+async function exporterJobFilePath(): Promise<string | null> {
+  if (!isTauri()) return null
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) return null
+  return joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), EXPORTER_JOB_FILE)
+}
+
+/**
+ * Whether a job file is currently waiting for Daz Studio to pick it up. Drives
+ * the header button's Abort state — the plugin deletes the file once parsed,
+ * so "exists" IS "pending". Best-effort false on any read problem.
+ */
+export async function exporterJobsPending(): Promise<boolean> {
+  const path = await exporterJobFilePath()
+  if (!path) return false
+  try {
+    return await exists(path)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Abort a pending handoff: delete the job file before Daz consumes it, and roll
+ * the aborted scenes' handoff stamps back on THIS character (they were stamped
+ * at handoff; without the rollback they'd read "unchanged" in the next dialog
+ * despite never having run). Rows belonging to another character's handoff
+ * simply don't match this character's stamp keys — the file still goes away,
+ * which is what Abort promises.
+ */
+export async function abortExporterJobs({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const path = await exporterJobFilePath()
+  if (!path) return
+  let rows: ReturnType<typeof parseJobFileCsv> = []
+  try {
+    if (!(await exists(path))) return
+    rows = parseJobFileCsv(await readTextFile(path))
+  } catch {
+    // unreadable job file — still delete it below; stamps stay (worst case a
+    // scene reads "unchanged" until its next real change or a manual re-check)
+  }
+  await remove(path)
+  if (rows.length === 0) return
+  try {
+    const { location } = await loadCharacter(projectId, id)
+    const stored = await readStamps(location)
+    const aborted = new Set(rows.map((row) => normalizeSceneKey(row.scenePath)))
+    const scenes = Object.fromEntries(
+      Object.entries(stored.scenes).filter(([key]) => !aborted.has(key)),
+    )
+    await storage.writeTextFileAtomic(
+      joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
+      JSON.stringify({ version: 1, scenes }, null, 2),
+    )
+  } catch {
+    // stamp rollback is best-effort — the abort itself (the delete) succeeded
+  }
 }
 
 /** One linked scene's state for the DTH Export dialog. */

@@ -51,9 +51,12 @@ X:\Projects\Sol\Electra\daz3d\Electra_Armor.duf,X:\DazLibrary\Scripts\DTH-Charac
   inner quotes doubled (`""`). Plain paths are written unquoted.
 - Rows are **ordered** — run them top to bottom. Extra columns appended in a
   future version must be ignored by the parser (forward compatibility).
-- The file is **replaced whole** on every Execute (last write wins). The studio
+- The file is **replaced whole** on every export (last write wins). The studio
   writes it atomically (temp file + rename), so a partially-written file is
   never observed.
+- The studio may also **abort** a pending handoff by deleting the file before
+  Daz starts (the header button shows Abort while the file exists). Nothing
+  changes for the plugin — at startup the file is simply absent.
 
 **Lifecycle:** parse → **delete** → run. Delete immediately after a successful
 parse, before running the first job. Deletion = "transfer succeeded". If the
@@ -155,6 +158,12 @@ per-row wand solos that scene; any combination can be checked by hand.
 Confirming writes the job file for the checked scenes (in row order) and
 starts Daz. Stamps live in the character folder (`.dth_execute_stamps.json`)
 and update at handoff time.
+
+While the job file exists (written but not yet consumed) the button shows
+**Abort**: it deletes the file and rolls the aborted scenes' stamps back, so
+they read as affected again in the next dialog. The state refreshes on window
+focus and polls while pending, so the button returns to DTH Export by itself
+once the plugin picks the jobs up (deleting the file).
 
 Per scene the row set is: `ROM_<Name>_<Genesis>.dsa` (the one ROM script — it
 selects the open scene's overrides itself and carries the export unless split),
