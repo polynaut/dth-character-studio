@@ -238,20 +238,11 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   // The create just resolved where the character lives — prime the cache so the
   // route's first read doesn't immediately re-walk the library it came from.
   cacheCharacterLocation(lib, created.id, location)
-  // Seed an empty Houdini folder (named from the project manifest) so the user is
-  // nudged to create the character's Houdini project there. Best-effort and only
-  // for characters that own a folder — never scatter it into the project root.
-  // The subdir normalization lives INSIDE the try: readManifest already
-  // sanitizes it, but even a hostile value must never throw AFTER the character
-  // was created on disk.
-  if (project.createHoudiniSubdir && location.relFolder) {
-    try {
-      const houSub = normalizeRelFolder(project.houdiniSubdir)
-      if (houSub) await mkdir(joinPath(location.folderAbs, houSub), { recursive: true })
-    } catch {
-      // a missing seed folder shouldn't fail character creation
-    }
-  }
+  // The empty Houdini folder — and the character's export directory, which starts
+  // pointed at it — are seeded by storage.createCharacterAt itself: it's the only
+  // place that knows the final (possibly auto-suffixed) folder, and doing it there
+  // keeps the create to one definition write.
+  //
   // A scene-LESS create (the user will save their scene from Daz afterwards)
   // seeds the Daz-scenes subfolder too — the whole point is giving them the
   // right folder to save into. The primary always lives in its own "primary"

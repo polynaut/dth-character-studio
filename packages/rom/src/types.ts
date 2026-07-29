@@ -1333,9 +1333,19 @@ export const characterSchema = z.object({
   /**
    * Export directory for the DTH Exporter plugin (v1.8.1+). When set, the
    * generated Daz script runs the exporter (`doExport`) into this folder after
-   * building the ROM — empty = no auto-export. The exporter creates its own
-   * `<characterName>` subfolder here, so this should be a folder OUTSIDE the
-   * project's character directory.
+   * building the ROM — empty = no auto-export. Every scene exports into its OWN
+   * subfolder of this dir, named after the subfolder the scene lives in inside
+   * the character folder (`sceneExportSubfolders`), and the PoseAsset CSV is
+   * copied in beside the exporter output.
+   *
+   * A new character starts with this pointed at its seeded Houdini subfolder
+   * inside the character folder (`seedHoudiniFolder`, web storage layer) — which
+   * is where the character's Houdini project lives, so it's where the export
+   * belongs. (An earlier comment here said this should be a folder OUTSIDE the
+   * character directory, on the since-removed assumption that the exporter adds
+   * its own `<characterName>` level; the nesting is per-SCENE and the studio's
+   * own default has been the in-folder Houdini subdir for as long as the folder
+   * picker has had a default.)
    */
   exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
   /**
