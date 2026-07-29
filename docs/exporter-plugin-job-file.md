@@ -1,9 +1,21 @@
 # DTH Exporter job file — the Execute handoff contract
 
-How DTH Character Studio hands a batch of export runs to the **DTH Exporter
-Plugin** (the C++ Daz Studio plugin). The studio side is implemented
-(`apps/web/src/lib/rom/execute-jobs.ts` + `apps/web/src/lib/rom/api/execute.ts`);
-the plugin side is a proposal for the plugin's next version.
+How DTH Character Studio hands a batch of export runs to a Daz Studio plugin
+watching for a job file. **This is the normative contract.** Both sides are
+implemented:
+
+- Studio side: `apps/web/src/lib/rom/execute-jobs.ts` +
+  `apps/web/src/lib/rom/api/execute.ts`.
+- Plugin side: the **DTH Character Studio Runner**
+  ([polynaut/dth-character-studio-runner](https://github.com/polynaut/dth-character-studio-runner)),
+  our own C++ plugin. Its DLLs are fetched at build time
+  (`scripts/fetch-runner.mjs`) and ship inside the app installer; Settings →
+  General installs the right one (DS4 vs DS6) into the configured Daz Studio
+  install folder.
+
+The scripts the jobs run come from the studio's generation; the `bulk-export`
+argument below is also honored when OTHER plugins (e.g. a future DTH Exporter
+version) execute them the same way.
 
 ## The idea
 

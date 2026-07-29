@@ -151,6 +151,35 @@ export async function installDthPlugin({ data }: { data: unknown }): Promise<Ins
   }))
 }
 
+/** The bundled DTH Character Studio Runner plugin's state vs the configured Daz
+ *  install — drives the Settings panel (see `storage.runnerStatus`: the DLL has
+ *  no version resource, so "up to date" is a byte-compare with the bundled one). */
+export function fetchRunnerStatus(dazInstallFolder: string): Promise<storage.RunnerStatus> {
+  return storage.runnerStatus(dazInstallFolder)
+}
+
+/**
+ * Install the bundled **DTH Character Studio Runner** plugin DLL into
+ * `<Daz install>/plugins` — the same admin-sensitive copy as the Exporter
+ * plugin (native `install_dth_plugin`), except the source ships INSIDE the app
+ * (a Tauri resource staged at build time by scripts/fetch-runner.mjs) and the
+ * right DLL (DS4 vs DS6) is picked by reading the install folder's
+ * DAZStudio exe version — no folder to select.
+ */
+export async function installDthRunner({ data }: { data: unknown }): Promise<InstallReport> {
+  const { dryRun } = z.object({ dryRun: z.boolean().optional() }).parse(data ?? {})
+  const plan = await storage.resolveRunnerInstall()
+  if (plan.errors.length) throw new Error(plan.errors.join('\n'))
+  return installReportSchema.parse(await invoke('install_dth_plugin', {
+    request: {
+      exporterFolder: plan.runnerFolder,
+      dazInstallFolder: plan.dazInstallFolder,
+      dryRun: dryRun ?? false,
+      label: 'Runner plugin',
+    },
+  }))
+}
+
 // --- "Optional" tab: install your own Daz/Houdini content -----------------
 // Ports of the dth-cli install-daz-assets / -morphs / -presets / -houdini-presets
 // (and list-daz-assets) commands. Paths come from settings; the copy + scan run

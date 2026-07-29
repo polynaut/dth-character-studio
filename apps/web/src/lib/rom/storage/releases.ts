@@ -1,3 +1,4 @@
+import { resolveResource } from '@tauri-apps/api/path'
 import { exists, readDir, readFile } from '@tauri-apps/plugin-fs'
 
 import { basename, isDir, join } from './fs'
@@ -436,4 +437,158 @@ export async function installedExporterVersion(dazInstallFolder: string): Promis
   if (!dazInstallFolder) return ''
   const dll = await findExporterDll(join(dazInstallFolder, 'plugins'))
   return dll ? readDllFileVersion(dll) : ''
+}
+
+// --- The bundled DTH Character Studio Runner plugin --------------------------
+// The studio's OWN Daz plugin (polynaut/dth-character-studio-runner): it polls
+// for the DTH Export job file and runs the batches unattended. Its DLLs ship
+// INSIDE the app as Tauri resources, staged at build time by
+// scripts/fetch-runner.mjs under resources/dth-runner/{version.txt,ds4/,ds6/}.
+// The DLL carries no Windows VERSIONINFO, so "installed"/"up to date" comes
+// from BYTE-comparing the installed DLL against the bundled one; the display
+// version is the staged release tag (version.txt).
+
+export type DazFlavor = 'ds4' | 'ds6'
+
+/** The per-generation DLL names — fixed by the runner's install contract
+ *  (DS6 only loads plugins named `dsp_*.dll`; DS4 uses the plain name). */
+export const RUNNER_DLL: Record<DazFlavor, string> = {
+  ds4: 'dthcharacterstudiorunner.dll',
+  ds6: 'dsp_dthcharacterstudiorunner.dll',
+}
+
+/** DS4 vs DS6 from a DAZStudio exe's file version: major 4 → ds4, 5+ → ds6
+ *  (null for an unreadable/absent version — never guess from folder names,
+ *  "DAZStudio4 64-bit" contains a 6). */
+export function dazFlavorFromExeVersion(version: string): DazFlavor | null {
+  const major = Number.parseInt(version.split('.')[0] ?? '', 10)
+  if (!Number.isFinite(major) || major <= 0) return null
+  return major >= 5 ? 'ds6' : 'ds4'
+}
+
+/** Detect the install folder's Daz generation by reading the version resource
+ *  of its `DAZStudio*.exe` (the exe, unlike the runner DLL, carries one). */
+export async function detectDazFlavor(dazInstallFolder: string): Promise<DazFlavor | null> {
+  let entries: Awaited<ReturnType<typeof readDir>>
+  try {
+    entries = await readDir(dazInstallFolder)
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    if (!entry.isFile || !/^dazstudio.*\.exe$/i.test(entry.name)) continue
+    const flavor = dazFlavorFromExeVersion(
+      await readDllFileVersion(join(dazInstallFolder, entry.name)),
+    )
+    if (flavor) return flavor
+  }
+  return null
+}
+
+/** Absolute path of the bundled runner resources for a flavor (the folder
+ *  holding that generation's one DLL). */
+async function bundledRunnerDir(flavor: DazFlavor): Promise<string> {
+  return resolveResource(`resources/dth-runner/${flavor}`)
+}
+
+/** The staged runner release tag ('' when this build has none — a dev checkout
+ *  before `pnpm fetch:runner`). */
+async function bundledRunnerVersion(): Promise<string> {
+  try {
+    const bytes = await readFile(await resolveResource('resources/dth-runner/version.txt'))
+    return new TextDecoder().decode(bytes).trim()
+  } catch {
+    return ''
+  }
+}
+
+export interface RunnerStatus {
+  /** The runner release shipped inside this build ('' when absent). */
+  bundledVersion: string
+  /** The configured install's Daz generation (null = not detectable / unset). */
+  flavor: DazFlavor | null
+  /** none = no runner DLL in the plugins folder; current = byte-identical to
+   *  the bundled DLL; differs = present but different bytes (older or newer). */
+  installed: 'none' | 'current' | 'differs'
+  error: string | null
+}
+
+/** The bundled-vs-installed runner state driving the Settings panel. */
+export async function runnerStatus(dazInstallFolder: string): Promise<RunnerStatus> {
+  const bundledVersion = await bundledRunnerVersion()
+  if (!dazInstallFolder) return { bundledVersion, flavor: null, installed: 'none', error: null }
+  const flavor = await detectDazFlavor(dazInstallFolder)
+  if (!flavor) {
+    return {
+      bundledVersion,
+      flavor: null,
+      installed: 'none',
+      error:
+        'Could not detect the Daz Studio version — the install folder has no readable DAZStudio*.exe.',
+    }
+  }
+  let bundled: Uint8Array
+  try {
+    bundled = await readFile(join(await bundledRunnerDir(flavor), RUNNER_DLL[flavor]))
+  } catch {
+    return {
+      bundledVersion,
+      flavor,
+      installed: 'none',
+      error:
+        'This build carries no bundled Runner plugin — reinstall the app (dev checkout: run `pnpm fetch:runner`).',
+    }
+  }
+  let installedBytes: Uint8Array | null = null
+  try {
+    installedBytes = await readFile(join(dazInstallFolder, 'plugins', RUNNER_DLL[flavor]))
+  } catch {
+    installedBytes = null
+  }
+  const installed =
+    installedBytes === null ? 'none' : bytesEqual(installedBytes, bundled) ? 'current' : 'differs'
+  return { bundledVersion, flavor, installed, error: null }
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+/** Resolved paths for the bundled Runner plugin install (DLL → Daz install). */
+export interface RunnerInstall {
+  /** The bundled resource folder holding the ONE DLL for the detected flavor. */
+  runnerFolder: string
+  dazInstallFolder: string
+  errors: Array<string>
+}
+
+/**
+ * Resolve the Runner plugin install from saved settings: no source folder to
+ * pick — the DLLs ship with the app — only the Daz install folder (and its
+ * detected DS4/DS6 generation) matters.
+ */
+export async function resolveRunnerInstall(): Promise<RunnerInstall> {
+  const s = await getSettings()
+  const errors: Array<string> = []
+  let runnerFolder = ''
+  if (!s.dazInstallFolder) {
+    errors.push('Set the Daz Studio install folder.')
+  } else {
+    const flavor = await detectDazFlavor(s.dazInstallFolder)
+    if (!flavor) {
+      errors.push(
+        'Could not detect the Daz Studio version — the install folder has no readable DAZStudio*.exe.',
+      )
+    } else {
+      runnerFolder = await bundledRunnerDir(flavor)
+      if (!(await exists(join(runnerFolder, RUNNER_DLL[flavor])))) {
+        errors.push(
+          'This build carries no bundled Runner plugin — reinstall the app (dev checkout: run `pnpm fetch:runner`).',
+        )
+      }
+    }
+  }
+  return { runnerFolder, dazInstallFolder: s.dazInstallFolder, errors }
 }

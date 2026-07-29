@@ -28,6 +28,14 @@ feature PR (with changeset) ──merge──▶ main
   `scripts/release-notes.mjs`, not from commit subjects.
 - **build-mac** is opt-in via the `ENABLE_MAC_RELEASE` repo variable
   (arm64-only, Developer-ID-signed + notarized).
+- **Bundled Runner plugin**: `beforeBuildCommand` (tauri.conf.json) runs
+  `pnpm fetch:runner` (`scripts/fetch-runner.mjs`) before every desktop build —
+  it stages the LATEST `polynaut/dth-character-studio-runner` release's DLLs
+  into `apps/desktop/resources/dth-runner/` (gitignored; bundled via
+  `bundle.resources`). So the installer's Runner version floats with that
+  repo's latest release at build time — ship a runner fix by releasing there,
+  then cutting any studio release. `tar -xf` extracts the zips (bsdtar);
+  a dev checkout runs `pnpm fetch:runner` once by hand.
 
 ## Signing (the human gate)
 

@@ -18,6 +18,7 @@ export type {
   DthReleaseInfo,
   KnownDrive,
   Project,
+  RunnerStatus,
 } from './storage'
 export { ProjectUnreachableError } from './storage'
 
@@ -145,11 +146,13 @@ export {
   fetchAppDataFolder,
   fetchAppVersion,
   fetchSettings,
+  fetchRunnerStatus,
   installDazAssets,
   installDazMorphs,
   installDazPresets,
   installDthPlugin,
   installDthRelease,
+  installDthRunner,
   installUnrealDthContent,
   unrealDthContentPresent,
   installHoudiniPresets,

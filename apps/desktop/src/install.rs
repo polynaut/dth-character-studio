@@ -40,6 +40,10 @@ pub(crate) struct PluginInstallRequest {
     /// Daz Studio install root — DLLs go into its `plugins` subfolder.
     daz_install_folder: String,
     dry_run: bool,
+    /// Step label in the report — defaults to the Exporter plugin (the bundled
+    /// Runner plugin install reuses this command with its own label).
+    #[serde(default)]
+    label: Option<String>,
 }
 
 /// Append `SHARED_PRESETS` + `HOUDINI_PATH` to `<houdini_docs>/houdini.env` if not
@@ -271,13 +275,14 @@ pub fn install_dth_release(request: ReleaseInstallRequest) -> InstallReport {
     InstallReport { dry_run: dry, steps, total_files }
 }
 
-/// Install the *Exporter Plugin* DLLs into `<Daz install>/plugins`. This is the
+/// Install *plugin* DLLs into `<Daz install>/plugins` — the Exporter plugin
+/// (default label) or the bundled Runner plugin (its own label). This is the
 /// admin-sensitive half — writing into Program Files needs elevation and Daz
 /// locks loaded plugin DLLs (see `install_plugin_dlls`).
 #[tauri::command(async)]
 pub fn install_dth_plugin(request: PluginInstallRequest) -> InstallReport {
     let step = install_plugin_dlls(
-        "Exporter plugin",
+        request.label.as_deref().unwrap_or("Exporter plugin"),
         Path::new(&request.exporter_folder),
         Path::new(&request.daz_install_folder),
         request.dry_run,

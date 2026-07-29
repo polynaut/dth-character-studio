@@ -7,7 +7,7 @@
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:4330",
     "beforeDevCommand": "pnpm --filter @dth/web dev",
-    "beforeBuildCommand": "pnpm --filter @dth/web build"
+    "beforeBuildCommand": "pnpm fetch:runner && pnpm --filter @dth/web build"
   },
   "app": {
     "windows": [
@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "resources": ["resources/dth-runner/**/*"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

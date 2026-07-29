@@ -139,7 +139,12 @@ by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).
 Window creation must never run on the main thread from a sync command
 (deadlock) — `windows.rs` documents the pattern. `tauri.conf.json`:
 `"version": "package.json"`, `.dcsp` file association, NSIS bundle, updater
-config + pubkey, strict CSP, `fs.requireLiteralLeadingDot: false`.
+config + pubkey, strict CSP, `fs.requireLiteralLeadingDot: false`, and
+`bundle.resources` shipping the **DTH Character Studio Runner** plugin DLLs
+(`resources/dth-runner/` — staged at build time from the
+polynaut/dth-character-studio-runner repo's latest release by
+`scripts/fetch-runner.mjs` via `beforeBuildCommand`; installed from Settings
+into `<Daz install>/plugins`, DS4 vs DS6 detected from the DAZStudio exe).
 
 ## The projects model
 
