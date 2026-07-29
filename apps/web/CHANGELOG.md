@@ -1,5 +1,21 @@
 # @dth/web
 
+## 0.51.0
+
+### Minor Changes
+
+- [#588](https://github.com/polynaut/dth-character-studio/pull/588) [`edb802d`](https://github.com/polynaut/dth-character-studio/commit/edb802d4b434f7b13f69407eaf7feaddcf24e8a2) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): a new character's **export directory** starts pointed at its seeded **Houdini subfolder** — the same folder the "Choose folder…" picker already opened in, so direct export works from the first Save instead of needing a trip through the folder dialog. Nothing to point at means nothing is set: with the project's _Create Houdini subfolder_ switched off, or for a definition dropped loose in the project root, the export directory stays empty exactly as before. An existing path (a prefilled/imported definition) is never overwritten. The seed folder and the export path are now decided in one place, `createCharacterAt` — the only code that knows the folder the create actually landed in, since a name collision auto-suffixes it.
+
+- [#585](https://github.com/polynaut/dth-character-studio/pull/585) [`9583c77`](https://github.com/polynaut/dth-character-studio/commit/9583c77d40c8ba22bb2eb85c96f49f3544c3ca74) Thanks [@polynaut](https://github.com/polynaut)! - feat(web,rom): every Daz scene lives in its **own subfolder** now — the primary in `primary` (created there on character creation), extra scenes in a folder seeded from the sanitized scene filename (character name and G9/Genesis/GP/DK-style noise stripped; editable, never empty — the scene location chips refuse an empty subfolder too). The **"Generate subfolders based on Daz scenes" switch is gone**: exports always nest under each scene's own subfolder name (schema v26, runtime v37), with the old scene-name nesting as the fallback for scenes linked outside the character folder. **Tools → Refresh assets migrates existing characters**: root-dwelling scene files are physically moved into their subfolders (primary → `primary`, extras → suggested names) with every linked path repointed — run it once after updating; a scene locked by an open Daz Studio is skipped with a note and picked up by the next refresh.
+
+### Patch Changes
+
+- [#583](https://github.com/polynaut/dth-character-studio/pull/583) [`58803cc`](https://github.com/polynaut/dth-character-studio/commit/58803ccb811b7d4fa544114d73e8f86cafdc1a36) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the Settings/Tools sticky header is now opaque — the frosted-glass translucency that let form content shimmer through under the title is gone (matching the character editor's header).
+
+- Updated dependencies [[`88e47ac`](https://github.com/polynaut/dth-character-studio/commit/88e47ac55e81ec54a1960cf4a5e30753b3bd7ac8), [`9583c77`](https://github.com/polynaut/dth-character-studio/commit/9583c77d40c8ba22bb2eb85c96f49f3544c3ca74)]:
+  - @dth/rom@0.51.0
+  - @dth/ui@0.51.0
+
 ## 0.50.1
 
 ### Patch Changes
