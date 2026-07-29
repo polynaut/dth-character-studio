@@ -37,6 +37,11 @@ feature PR (with changeset) ──merge──▶ main
   repo's latest release at build time — ship a runner fix by releasing there,
   then cutting any studio release. `tar -xf` extracts the zips (bsdtar);
   a dev checkout runs `pnpm fetch:runner` once by hand.
+  **Load-test a runner release in Daz Studio BEFORE cutting a studio release
+  that bundles it** (the log must say `successfully loaded`): v0.51.1 shipped
+  Runner v1.0.0, which Daz refused to load — the studio build can't detect
+  that, only Daz can. The plugin-SDK footguns live in the runner repo's
+  README + pluginmain.cpp.
 
 ## Signing (the human gate)
 
