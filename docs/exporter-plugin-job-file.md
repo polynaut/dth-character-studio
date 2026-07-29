@@ -142,20 +142,19 @@ build; the shapes below are the known-good mechanisms.
 
 ## What the studio writes when (implemented)
 
-Both buttons live top-right in the character editor and require a saved
-(non-dirty) character, a linked primary scene and a configured Daz library:
-
-- **Execute** — the *selected* scene, unconditionally: its script row(s) are
-  written and Daz is started.
-- **Execute all** — every linked scene, filtered by an **affected check**
-  (needs an export directory; that is what an all-scene sweep delivers):
-  a scene is queued when its `.duf` (mtime+size) or its definition signature
-  changed since the last handoff. The signature covers the base definition
-  (minus cosmetic/provenance fields) for every scene, plus the scene's own
-  override record for non-primary scenes — so a base edit re-queues all
-  scenes, an override edit only its scene. First run queues everything;
-  **Ctrl+click forces** everything. Stamps live in the character folder
-  (`.dth_execute_stamps.json`) and update at handoff time.
+The **DTH Export** button (top-right in the character editor) opens a
+scene-picker dialog; it requires a saved (non-dirty) character, a linked
+primary scene, an export directory and a configured Daz library. The dialog
+lists every linked scene with a checkbox — pre-checked when the scene is
+**affected**: its `.duf` (mtime+size) or its definition signature changed
+since the last handoff. The signature covers the base definition (minus
+cosmetic/provenance fields) for every scene, plus the scene's own override
+record for non-primary scenes — so a base edit pre-checks all scenes, an
+override edit only its scene, and the first run pre-checks everything. A
+per-row wand solos that scene; any combination can be checked by hand.
+Confirming writes the job file for the checked scenes (in row order) and
+starts Daz. Stamps live in the character folder (`.dth_execute_stamps.json`)
+and update at handoff time.
 
 Per scene the row set is: `ROM_<Name>_<Genesis>.dsa` (the one ROM script — it
 selects the open scene's overrides itself and carries the export unless split),

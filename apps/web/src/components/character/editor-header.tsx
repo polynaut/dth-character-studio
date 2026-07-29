@@ -4,7 +4,7 @@ import { ArrowLeft, CircleX, Pencil, Save, Undo2 } from 'lucide-react'
 
 import { Avatar } from '#/components/avatar.tsx'
 import { DirPathChip } from '#/components/dir-path-chip.tsx'
-import { ExecuteActions } from '#/components/character/execute-actions.tsx'
+import { DthExportAction } from '#/components/character/dth-export.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { ImageDialog } from '#/components/image-dialog.tsx'
 import { Button, EditableTitle, useModifierHeld, useStickyHeaderInset } from '@dth/ui'
@@ -81,7 +81,6 @@ export function EditorHeader({
   folderChip,
   folderMove,
   hasRunProblems,
-  selectedScene,
   dazLibraryConfigured,
 }: {
   projectId: string
@@ -94,9 +93,7 @@ export function EditorHeader({
   folderMove: { editValue: string; onMove: (next: string) => Promise<unknown> } | null
   /** Show the "errors in the last ROM run" scroll-up button. */
   hasRunProblems: boolean
-  /** The editor's selected Daz scene — the Execute button's target. */
-  selectedScene: string
-  /** “My DAZ 3D Library” is set (Execute needs it for the job file + scripts). */
+  /** “My DAZ 3D Library” is set (DTH Export needs it for the job file + scripts). */
   dazLibraryConfigured: boolean
 }) {
   const { character } = draft
@@ -293,10 +290,9 @@ export function EditorHeader({
             box so the scale below anchors on that line). They ride the sticky
             header, so they stay reachable as the form scrolls. */}
         <div className="actions-scroll ml-auto flex shrink-0 gap-2 mb-6">
-          <ExecuteActions
+          <DthExportAction
             projectId={projectId}
             character={character}
-            selectedScene={selectedScene}
             saving={draft.saving}
             dirty={draft.dirty}
             dazLibraryConfigured={dazLibraryConfigured}

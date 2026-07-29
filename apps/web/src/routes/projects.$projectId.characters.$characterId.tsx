@@ -414,7 +414,6 @@ function CharacterPage() {
       <EditorHeader
         projectId={projectId}
         draft={draft}
-        selectedScene={sceneSel.effectiveScene}
         dazLibraryConfigured={Boolean(settings.dazLibraryFolder)}
         folderChip={folderChip}
         folderMove={folderMove}
