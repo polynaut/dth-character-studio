@@ -1,5 +1,11 @@
 # @dth/desktop
 
+## 0.51.1
+
+### Patch Changes
+
+- [#589](https://github.com/polynaut/dth-character-studio/pull/589) [`dd31bb0`](https://github.com/polynaut/dth-character-studio/commit/dd31bb0afed52bbf2d265b0661507912ace11db2) Thanks [@polynaut](https://github.com/polynaut)! - fix(release): the Runner-DLL fetch step broke the release build — `beforeBuildCommand` runs from `apps/desktop`, where the root `fetch:runner` script isn't visible (`pnpm -w` now), and the fetch script's skip path crashed Node on Windows via `process.exit()` with undici handles still open. No user-facing change; this re-cuts the release that v0.51.0 failed to build.
+
 ## 0.51.0
 
 ### Minor Changes
