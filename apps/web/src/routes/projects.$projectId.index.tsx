@@ -894,9 +894,11 @@ function ProjectCharactersPage() {
         />
       )}
       <SelectionBar
-        // The Unreal footer bar docks at bottom-0 on this page — float the pill
-        // above it instead of on top of it.
-        className="bottom-20"
+        // The Unreal footer bar docks at bottom-0 on this page and reserves
+        // exactly 80px (min-h-[80px] in unreal-projects-field). bottom-20 is
+        // that same 80px, so the pill sat flush on the footer's top edge —
+        // clear it by the pill's own default bottom-6 gap: 80 + 24 = 104px.
+        className="bottom-26"
         open={sel.selecting}
         // Visible∩selected — delete acts on `selectedChars`, so the pill must
         // not count selections hidden by the Genesis/gender filters.
