@@ -27,7 +27,7 @@ import buildGenesisIndexTip from '../runtime/Build_Genesis_Index.tip.png?inline'
 import scanFramesIcon from '../runtime/Scan_Frames.png?inline'
 import scanFramesTip from '../runtime/Scan_Frames.tip.png?inline'
 
-import { join } from './fs'
+import { dataUrlBytes, join } from './fs'
 import { dataDir } from './app-data'
 
 /**
@@ -84,14 +84,6 @@ const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
   'Scan_Frames.tip.png': scanFramesTip,
 }
 
-/** Decode a bundled `?inline` asset (a `data:…;base64,…` URL) to bytes. */
-function dataUrlBytes(dataUrl: string): Uint8Array {
-  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
 
 /** Visible scripts earlier versions installed at the root that no longer exist
  *  — removed on install so a stale copy can't be run against the current

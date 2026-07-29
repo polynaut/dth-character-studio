@@ -1130,6 +1130,12 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       generation, and writes all four `morphs_<G>.json` indexes in one run
  *       (now index `version: 3`, with a `figures` array). Bumped so Refresh
  *       assets reinstalls the runtime and sweeps the retired wrappers.
+ *       Also: every Daz script the studio installs now carries Content Library
+ *       artwork beside it — the two visible runtime scripts, and each generated
+ *       per-character script (its `icon` tag picks the art; a ROM script that
+ *       also exports looks different from one that doesn't). Script CONTENT is
+ *       unchanged by that, but the artwork only lands on a (re)generate, which
+ *       this bump makes Refresh assets do.
  */
 export const RUNTIME_VERSION = 38
 

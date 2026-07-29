@@ -809,7 +809,14 @@ ${exportBlock}        }` : ''}
 }
 `
   const baseName = characterScriptName(character)
-  return { fileName: `ROM_${baseName}.dsa`, content, target: 'daz' }
+  return {
+    fileName: `ROM_${baseName}.dsa`,
+    content,
+    target: 'daz',
+    // The tile says which of the two this script is, since the file name can't:
+    // ROM_ alone always builds the ROM, but it may or may not also export.
+    icon: exportBlock ? 'rom-export' : 'rom',
+  }
 }
 
 /**
@@ -852,6 +859,7 @@ ${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character)
     fileName: `Export_${characterScriptName(character)}.dsa`,
     content,
     target: 'daz',
+    icon: 'export',
   }
 }
 
@@ -916,6 +924,7 @@ ${indentLines(indentLines(hairExportLoopSnippet(character, { fig: 'dthFig', acti
     fileName: `Export_Hair_${characterScriptName(character)}.dsa`,
     content,
     target: 'daz',
+    icon: 'export-hair',
   }
 }
 /** Inputs for the per-character product-scan script — both supplied by the host

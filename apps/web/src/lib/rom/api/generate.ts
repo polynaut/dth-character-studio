@@ -394,28 +394,39 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     try {
       await storage.copyRuntimeFiles(root)
       await storage.writeFilesToFolder(charDir, dazFiles)
+      // Content Library artwork beside each script it belongs to (`<base>.png` +
+      // `<base>.tip.png`). The names it actually wrote join the just-written set
+      // below — otherwise the sweep, which lists the same names as candidates,
+      // would delete the tiles the line above just produced.
+      const writtenIcons = await storage.writeScriptIcons(charDir, dazFiles)
       // Drop the other script variant when the combined/split choice changed, and
       // the scan script when Daz Products is turned off: keep only the .dsa names
       // just written (<base>, ROM_<base>, Export_<base>, Scan_Products_<slug>).
       // Scene-override scripts sweep the same way — the candidates of every
       // stored override minus what was just written, so disabling an override
-      // (or unlinking its scene) retires its scripts.
+      // (or unlinking its scene) retires its scripts. Each icon-bearing script
+      // name contributes its artwork twins as candidates too, so turning the
+      // split (or hair export) off retires that script's tiles with it.
       const dazBase = characterScriptName(character)
-      const writtenDaz = dazFiles.map((file) => file.fileName)
+      const iconBearing = [
+        `ROM_${dazBase}.dsa`,
+        `Export_${dazBase}.dsa`,
+        `Export_Hair_${dazBase}.dsa`,
+      ]
+      const writtenDaz = [...dazFiles.map((file) => file.fileName), ...writtenIcons]
       await storage.removeFilesFromFolder(
         charDir,
         removalSweepNames(
           [
             `${dazBase}.dsa`,
-            `ROM_${dazBase}.dsa`,
-            `Export_${dazBase}.dsa`,
-            `Export_Hair_${dazBase}.dsa`,
+            ...iconBearing,
             // Legacy name (pre-Hair rename) — never in the written set now, so it's
             // always swept from a character folder that still has the old script.
             `Export_Groom_${dazBase}.dsa`,
             `Open_Scene_${dazBase}.dsa`,
             `Scan_Products_${characterSlug(character)}.dsa`,
             ...overrideScriptNames(character.name),
+            ...iconBearing.flatMap((name) => storage.scriptIconNames(name)),
           ],
           writtenDaz,
         ),

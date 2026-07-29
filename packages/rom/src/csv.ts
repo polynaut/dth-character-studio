@@ -54,6 +54,23 @@ export const GENERATION_TEMPLATE_CSV: Partial<Record<GenesisVersion, string>> = 
   'G8.1': poseAssetTemplateG81DqsFac,
 }
 
+/**
+ * Which Content Library artwork a generated Daz script carries. The KIND is
+ * decided here, in the core, because it follows a generation rule the core
+ * already owns — whether the export block is inlined into the ROM script or
+ * split into its own — while the image bytes belong to the host (see
+ * `SCRIPT_ICONS` in the web storage layer).
+ */
+export type ScriptIcon =
+  /** ROM script that also runs the export (`exportWithRomScript`, the default). */
+  | 'rom-export'
+  /** ROM script alone: no export dir, or the export was split off. */
+  | 'rom'
+  /** The standalone `Export_…` script of a split export. */
+  | 'export'
+  /** The standalone `Export_Hair_…` groom (.abc) script. */
+  | 'export-hair'
+
 export interface GeneratedFile {
   fileName: string
   content: string
@@ -61,6 +78,8 @@ export interface GeneratedFile {
   target: 'daz' | 'houdini'
   /** Marks outputs whose format is not yet confirmed with the DTH creator. */
   experimental?: boolean
+  /** Daz-script artwork to install beside it; absent = no tile of its own. */
+  icon?: ScriptIcon
 }
 
 // Menu indices of the PoseAsset node parameters (docs/poseasset-csv-spec.md).

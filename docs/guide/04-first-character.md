@@ -425,6 +425,11 @@ Two more scripts appear alongside the ROM one **only when their feature is on**:
   it exports the `_grooms.abc` for Houdini's **DazToHueGroom Import** node (the
   groom worn, everything else hidden).
 
+Each of them gets its own **Content Library icon**, so you can tell them apart at
+a glance in Daz — the ROM script's icon even says whether the export runs with it
+or not. They appear on the next Save (or **Tools → Refresh assets** for
+characters you haven't touched since updating).
+
 A character with **[per-scene ROM overrides](./advanced.md#rom-overrides)**
 additionally gets per-scene PoseAsset CSVs — see
 [Advanced: What Save generates](./advanced.md#what-save-generates).

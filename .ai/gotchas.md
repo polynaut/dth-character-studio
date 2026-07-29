@@ -81,6 +81,19 @@ current code before relying on details, but assume the *lesson* still holds.
   the strict CSP) and `writeFile`s the decoded bytes in `copyRuntimeFiles`; they're
   folded into the runtime hash guard so a changed icon must take a
   `RUNTIME_VERSION` bump to reach existing installs, like any other runtime file.
+- **Artwork for a GENERATED script has to survive the stale-artifact sweep.**
+  `generateCharacterFiles` sweeps the character's script folder by listing every
+  name the character COULD have and removing what wasn't just written — and
+  `<script>.png`/`.tip.png` are on that list, so unless `writeScriptIcons`'
+  return value is folded into the written set, the sweep deletes the tiles the
+  line above just wrote. That two-way listing is also what retires them
+  correctly: turn the split export off and `Export_<base>.png` goes with
+  `Export_<base>.dsa`. Which art a script gets is decided in the PURE core (the
+  `icon` tag on a `GeneratedFile`) because it follows a rule the core owns —
+  `ROM_<base>.dsa` is one file name for two different scripts, one that also runs
+  the export and one that doesn't — while the bytes stay in the host
+  (`storage/script-icons.ts`, keyed by the `ScriptIcon` union so the map can't
+  drift from the tags).
 - **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
   `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
   RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from

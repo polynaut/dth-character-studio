@@ -9,6 +9,6 @@ The geografts load via their **Smart** preset, so the geoshells come along and g
 
 Everything resolves **before** the scene is touched, so the confirm dialog lists exactly what will be built and what will be skipped: a generation you don't have installed is skipped (its existing index left alone), a missing geograft is skipped, and if no Genesis figure is installed at all it says so and leaves the open scene untouched instead of clearing it for nothing. With neither G9 geograft installed the Genesis 9 pair collapses to one plain figure; with one installed the redundant plain figure is dropped.
 
-Both visible scripts now ship **Content Library artwork** too (a 91x91 tile plus a 256x256 hover preview, installed beside each script the way Daz names its own), so they show up as real items instead of broken-image placeholders.
+Every Daz script the studio installs now ships **Content Library artwork** (a 91x91 tile plus a 256x256 hover preview, named the way Daz names its own), so scripts show up as real items instead of broken-image placeholders: the two visible runtime scripts, and each generated per-character script — ROM, the split Export, and the hair export, with the ROM script's tile saying whether the export rides along with it or not.
 
 With figures already in the open scene it offers to scan **those** instead — that's how third-party geografts, add-ons and fitted clothing get indexed. Runtime v38: Refresh assets reinstalls the runtime and removes the retired wrappers.
