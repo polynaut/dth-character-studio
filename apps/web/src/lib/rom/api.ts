@@ -104,6 +104,10 @@ export {
 export { clearProductScan, detectDimManifestsFolder, fetchProductScan } from './api/products'
 export type { ProductScanFile } from './api/products'
 
+// --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
+export { executeCharacterJobs } from './api/execute'
+export type { ExecuteJobsSummary } from './api/execute'
+
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {
   characterStaleTargets,
