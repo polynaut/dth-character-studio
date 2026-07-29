@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { InfoPopup } from './info-popup.tsx'
+import { Modal } from './modal.tsx'
 import { UiConfigProvider } from '../config.tsx'
 
 beforeAll(() => {
@@ -115,6 +116,28 @@ describe('InfoPopup', () => {
     fireEvent.click(getByText('docs'))
     expect(onOpenExternal).toHaveBeenCalledWith('https://example.com/docs')
     expect(getByRole('dialog')).toBeTruthy()
+  })
+
+  it('an opening modal dialog sweeps the popup closed', async () => {
+    // The popup portals ABOVE the dialog layer (z-[60] vs z-50), so a popup
+    // still open when a dialog appears would float over it — Modal sweeps
+    // them on open (closeAllInfoPopups).
+    const ui = (withModal: boolean) => (
+      <UiConfigProvider value={{}}>
+        <InfoPopup>Some help text</InfoPopup>
+        {withModal && (
+          <Modal open onClose={() => {}} title="Busy work">
+            body
+          </Modal>
+        )}
+      </UiConfigProvider>
+    )
+    const { getByRole, rerender } = render(ui(false))
+    const trigger = getByRole('button', { name: 'More information' })
+    fireEvent.click(trigger) // pin it open
+    await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'))
+    rerender(ui(true))
+    await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('false'))
   })
 
   it('eats a relative href instead of letting it replace the webview', async () => {

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Ban, Wand } from 'lucide-react'
+import { Ban, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Modal, useRefetchOnFocus } from '@dth/ui'
 import dthLogo from '#/assets/dth-logo.webp'
-import dthLogoStamp from '#/assets/dth-logo-stamp.png'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import {
@@ -44,20 +43,9 @@ import type { Character } from '@dth/rom'
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
  *  the svg default; the mark's fine detail needs it. The host button keeps
- *  `px-3` by hand for the same reason (`has-[>svg]` doesn't see an img).
- *  `stamp` is the white-edged sticker variant for FILLED buttons (the dialog's
- *  primary confirm), where the plain mark's dark fill would sink into the
- *  button colour — it sits on a dark-gray plate (the kit's #333 adornment
- *  gray) so the mark reads against the orange fill. */
-function DthLogo({ stamp = false }: { stamp?: boolean }) {
-  return (
-    <img
-      src={stamp ? dthLogoStamp : dthLogo}
-      alt=""
-      aria-hidden
-      className={`size-6 shrink-0 object-contain${stamp ? ' rounded-sm bg-[#333] p-0.5' : ''}`}
-    />
-  )
+ *  `px-3` by hand for the same reason (`has-[>svg]` doesn't see an img). */
+function DthLogo() {
+  return <img src={dthLogo} alt="" aria-hidden className="size-6 shrink-0 object-contain" />
 }
 
 export function DthExportAction({
@@ -368,6 +356,10 @@ function DthExportDialog({
       }
       dismissible={!busy}
     >
+      <p className="text-xs text-muted-foreground">
+        Heads up: this takes a long time — Daz Studio plays through the full ROM for every
+        selected scene.
+      </p>
       <div className="space-y-2">
         {rows.map((row) => (
           <SceneRow
@@ -380,21 +372,16 @@ function DthExportDialog({
           />
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Heads up: this takes a long time — Daz Studio plays through the full ROM for every
-        selected scene.
-      </p>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
           Cancel
         </Button>
         <Button
-          className="px-3"
           disabled={busy || checked.size === 0}
           title={checked.size === 0 ? 'Select at least one scene' : undefined}
           onClick={() => void onExport()}
         >
-          <DthLogo stamp /> {busy ? 'Starting…' : 'DTH Export'}
+          <Play /> {busy ? 'Starting…' : 'Start'}
         </Button>
       </div>
     </Modal>

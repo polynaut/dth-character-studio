@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { DismissableLayer, FocusScope } from 'radix-ui/internal'
 
 import { Button } from './button.tsx'
+import { closeAllInfoPopups } from './info-popup.tsx'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -69,6 +70,12 @@ export function SidePanel({
     setShown(false)
     const timer = window.setTimeout(() => setMounted(false), ANIM_MS)
     return () => window.clearTimeout(timer)
+  }, [open])
+
+  // Same sweep as Modal: InfoPopups portal ABOVE this z-50 layer, so one left
+  // open when the drawer slides in would float over it.
+  useEffect(() => {
+    if (open) closeAllInfoPopups()
   }, [open])
 
   // Lock body scroll while open (the non-modal layer doesn't).
