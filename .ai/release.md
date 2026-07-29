@@ -29,7 +29,8 @@ feature PR (with changeset) ──merge──▶ main
 - **build-mac** is opt-in via the `ENABLE_MAC_RELEASE` repo variable
   (arm64-only, Developer-ID-signed + notarized).
 - **Bundled Runner plugin**: `beforeBuildCommand` (tauri.conf.json) runs
-  `pnpm fetch:runner` (`scripts/fetch-runner.mjs`) before every desktop build —
+  `pnpm -w fetch:runner` (`scripts/fetch-runner.mjs`; `-w` because the hook's
+  CWD is apps/desktop, not the root) before every desktop build —
   it stages the LATEST `polynaut/dth-character-studio-runner` release's DLLs
   into `apps/desktop/resources/dth-runner/` (gitignored; bundled via
   `bundle.resources`). So the installer's Runner version floats with that

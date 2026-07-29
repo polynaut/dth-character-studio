@@ -7,7 +7,7 @@
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:4330",
     "beforeDevCommand": "pnpm --filter @dth/web dev",
-    "beforeBuildCommand": "pnpm fetch:runner && pnpm --filter @dth/web build"
+    "beforeBuildCommand": "pnpm -w fetch:runner && pnpm --filter @dth/web build"
   },
   "app": {
     "windows": [
