@@ -47,14 +47,15 @@ import type { Character } from '@dth/rom'
  *  `px-3` by hand for the same reason (`has-[>svg]` doesn't see an img).
  *  `stamp` is the white-edged sticker variant for FILLED buttons (the dialog's
  *  primary confirm), where the plain mark's dark fill would sink into the
- *  button colour. */
+ *  button colour — it sits on a dark-gray plate (the kit's #333 adornment
+ *  gray) so the mark reads against the orange fill. */
 function DthLogo({ stamp = false }: { stamp?: boolean }) {
   return (
     <img
       src={stamp ? dthLogoStamp : dthLogo}
       alt=""
       aria-hidden
-      className="size-6 shrink-0 object-contain"
+      className={`size-6 shrink-0 object-contain${stamp ? ' rounded-sm bg-[#333] p-0.5' : ''}`}
     />
   )
 }
