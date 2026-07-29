@@ -63,7 +63,14 @@ current code before relying on details, but assume the *lesson* still holds.
   scripts alone; that's why the studio ships an Open_Scene script instead.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
-  re-running the character's ROM script is enough — no app rebuild needed.
+  re-running the character's ROM script is enough — no app rebuild needed. (Only
+  the dot-prefixed name needs matching; a runtime file that references no sibling
+  runtime by name needs no `../../` rewrite either — see the install-rewrite rule
+  above.) **Iterating twice within ONE `RUNTIME_VERSION` is where this bites:**
+  `.dth-runtime-installed` still matches, so even a rebuilt app SKIPS the whole
+  reinstall on save and keeps running the older bundled runtime — Tools → Refresh
+  assets (which passes `force`) is what actually replaces it. A second fix inside
+  the same unreleased version bump therefore looks like "my change had no effect".
 - **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
   `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
   RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from
