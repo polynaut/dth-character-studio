@@ -5,6 +5,15 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Generation core
 
+- **Export outputs are never housekept by the studio.** Everything under the
+  character's export directory is written Daz-side at script run time (the
+  Exporter Plugin's `.abc`/`.fbx`/`Reference Skeletons/`, the script-copied
+  CSV). Toggling `exportSceneSubfolders` only changes where FUTURE runs land —
+  previous outputs stay at the old spot (root vs `<scene>/` subfolder), so both
+  layouts can coexist until the user cleans up. Deliberate so far: exports are
+  user deliverables (large, possibly open in Houdini) — don't auto-move/delete
+  them without an explicit user action.
+
 - **Frame math returns -1, not 0, for "no preset block"** — `presetEndFrame` is
   designed so the first custom pose lands at frame 0. Clamping to 0 introduces an
   off-by-one that `generate.test.ts` guards explicitly.
