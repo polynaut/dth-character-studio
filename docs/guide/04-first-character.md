@@ -330,8 +330,8 @@ before or after it.
 The **Parameter name** the studio asks for is the parameter's internal name,
 which usually differs from the slider's label (label *Body Tone* → internal
 `body_bs_BodyTone`). The comfortable way is the studio's **autocomplete** —
-after a one-time scan per Genesis generation, every Parameter name field
-suggests matches as you type. The manual route via *Parameter Settings*
+one scan in Daz covers every generation, and from then on each Parameter name
+field suggests matches as you type. The manual route via *Parameter Settings*
 (right screenshot) still works for a single name.
 
 <p align="center">
@@ -344,10 +344,14 @@ suggests matches as you type. The manual route via *Parameter Settings*
 <summary><strong>Recommended: build the index once, then autocomplete</strong> — <code>Build_Genesis_Index.dsa</code></summary>
 <table><tr><td>
 
-The runtime installation (see [Tools](./tools.md)) puts one visible index script
-into your Daz library at `Scripts/DTH-Character-Studio/`:
-**`Build_Genesis_Index.dsa`**. It covers **every** generation in a single run —
-there is nothing to load or select first:
+The runtime installation (see [Tools](./tools.md)) puts **one** visible index
+script into your Daz library at `Scripts/DTH-Character-Studio/`:
+**`Build_Genesis_Index.dsa`**. One run covers **every** generation and builds
+both halves of the index the studio autocompletes from — the **morphs** (every
+dialable parameter) and the **skeleton** (every bone) — so it feeds the
+**Parameter name** fields *and* the bone field of
+[Modify JCM frames](./advanced.md#modify-jcm-frames).
+There is nothing to load or select first:
 
 1. In Daz Studio, **save your open scene** (the build clears it), then run
    `Scripts/DTH-Character-Studio/Build_Genesis_Index` from the Content Library.
@@ -360,26 +364,27 @@ there is nothing to load or select first:
    indexed too). It scans each figure plus everything fitted to it, and writes
    one index per generation. Takes a few minutes.
 
-  <p align="center">
-    <img width="960" alt="Running the scan script in Daz" src="https://github.com/user-attachments/assets/1b381f07-38ae-46f2-8e84-d19e9ff65e1d" />
-    <br>
-    <sub><em>Run the index script from the Content Library.</em></sub>
-  </p>
+<!-- SHOT 1 (Daz, needs re-taking): Content Library at
+     Scripts/DTH-Character-Studio, showing the Build_Genesis_Index tile with its
+     icon. The old shot here showed a per-generation Scan_Morphs script with a
+     figure selected — a flow that no longer exists. Paste the new
+     user-attachments URL into the <img src> below and delete this comment. -->
 
 3. A summary reports what was indexed per generation, which geograft file it
    picked, and anything it couldn't find — so a missing product, or an
    unexpected pick after a product update, is never silent.
 
-  <p align="center">
-    <img width="342" alt="Scan summary" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />
-    <br>
-    <sub><em>The scan reports how many morphs were found across how many nodes.</em></sub>
-  </p>
+<!-- SHOT 2 (Daz, needs re-taking): the run summary dialog — the per-generation
+     "Indexed:" list with its morph + bone counts, the geograft it picked, and any
+     skips. The old shot showed the single-figure "Scanned N morphs on M nodes"
+     dialog, which no longer exists. -->
 
 The scan indexes **everything dialable** each figure carries — classic morphs
-*and* controller dials, across all products installed for that generation.
-Installed new morph products later? Just run it again. Either way the studio
-picks the index up by itself the next time its window gains focus.
+*and* controller dials, across all products installed for that generation —
+plus every **bone** of the figure and its geografts, which is what the JCM bone
+field autocompletes from. Installed new morph products later? Just run it
+again. Either way the studio picks the index up by itself the next time its
+window gains focus.
 
 **Got a figure the stock build doesn't cover** — a third-party geograft, an
 add-on, fitted clothing whose morphs you dial? Load it in Daz, then run the

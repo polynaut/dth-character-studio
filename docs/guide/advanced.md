@@ -172,6 +172,12 @@ morphs it sets in proportion to the keyed angle — the angle range maps
 linearly onto a value range. Example: layer a custom calf-flex morph on top of
 the shipped knee-bend poses.
 
+The **bone** field autocompletes from the same one-run index as every morph
+field — that scan records the figure's whole **skeleton** alongside its morphs,
+so bones are searchable by Daz label *or* internal name. Build it once with
+`Build_Genesis_Index.dsa`; see *Finding a morph's internal Daz name* in
+[Your first character](./04-first-character.md).
+
 Each drive is one row:
 
 - **Morph name** — the morph to drive (autocompletes, like everywhere else).
