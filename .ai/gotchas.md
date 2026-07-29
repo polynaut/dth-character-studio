@@ -377,3 +377,16 @@ current code before relying on details, but assume the *lesson* still holds.
   not accessible by integration" despite `contents: write`). The publish job runs
   on the `RELEASE_PAT` secret — if publishing ever 403s/401s again, **check the
   PAT's expiry first** before diagnosing anything else. See `.ai/release.md`.
+- **`beforeBuildCommand` runs with CWD = `apps/desktop`** (the tauri config
+  dir), not the repo root — a ROOT package.json script must be invoked as
+  `pnpm -w <script>` or pnpm resolves it recursively and fails with
+  "Command not found" (broke the v0.51.0 release build; the PR-CI rust job
+  never runs the hook, so only a real release surfaces it).
+- **`process.exit()` in a Node script that used `fetch` can crash on Windows**
+  (Node 24 libuv assertion `!(handle->flags & UV_HANDLE_CLOSING)`, exit
+  0xC0000409) — undici's handles are still winding down. Let the script end
+  naturally instead (measured in scripts/fetch-runner.mjs's skip path).
+- **tauri-build hard-fails on a `bundle.resources` glob that matches nothing**
+  — a gitignored, build-time-staged resource dir needs a build.rs seed (see
+  the dth-runner placeholder in apps/desktop/build.rs) or plain
+  `cargo check`/`clippy` breaks on fresh clones and CI.

@@ -58,47 +58,54 @@ const staged = (flavor) => {
   const dir = join(destDir, flavor)
   return existsSync(dir) && readdirSync(dir).some((name) => name.toLowerCase().endsWith('.dll'))
 }
-if (
+const upToDate =
   existsSync(versionFile) &&
   readFileSync(versionFile, 'utf8').trim() === version &&
   FLAVORS.every(staged)
-) {
+
+// No process.exit() for the skip path — exiting while undici's fetch handles
+// are still winding down trips a libuv assertion crash on Windows (Node 24:
+// "!(handle->flags & UV_HANDLE_CLOSING)"), which would fail the build.
+if (upToDate) {
   console.log(`dth-runner ${version} already staged — skipping download`)
-  process.exit(0)
+} else {
+  await stage()
 }
 
-const tmp = mkdtempSync(join(tmpdir(), 'dth-runner-'))
-try {
-  for (const flavor of FLAVORS) {
-    const asset = (release.assets ?? []).find((a) => a.name.endsWith(`-${flavor}.zip`))
-    if (!asset) throw new Error(`Release v${version} has no -${flavor}.zip asset`)
-    const zipPath = join(tmp, asset.name)
-    const download = await fetch(asset.browser_download_url, {
-      headers: { 'user-agent': headers['user-agent'] },
-    })
-    if (!download.ok) throw new Error(`Downloading ${asset.name}: HTTP ${download.status}`)
-    writeFileSync(zipPath, Buffer.from(await download.arrayBuffer()))
+async function stage() {
+  const tmp = mkdtempSync(join(tmpdir(), 'dth-runner-'))
+  try {
+    for (const flavor of FLAVORS) {
+      const asset = (release.assets ?? []).find((a) => a.name.endsWith(`-${flavor}.zip`))
+      if (!asset) throw new Error(`Release v${version} has no -${flavor}.zip asset`)
+      const zipPath = join(tmp, asset.name)
+      const download = await fetch(asset.browser_download_url, {
+        headers: { 'user-agent': headers['user-agent'] },
+      })
+      if (!download.ok) throw new Error(`Downloading ${asset.name}: HTTP ${download.status}`)
+      writeFileSync(zipPath, Buffer.from(await download.arrayBuffer()))
 
-    const extractDir = join(tmp, flavor)
-    mkdirSync(extractDir, { recursive: true })
-    execFileSync('tar', ['-xf', zipPath, '-C', extractDir])
+      const extractDir = join(tmp, flavor)
+      mkdirSync(extractDir, { recursive: true })
+      execFileSync('tar', ['-xf', zipPath, '-C', extractDir])
 
-    const dlls = readdirSync(extractDir, { recursive: true })
-      .map(String)
-      .filter((rel) => rel.toLowerCase().endsWith('.dll'))
-    if (dlls.length === 0) throw new Error(`${asset.name} contains no .dll`)
+      const dlls = readdirSync(extractDir, { recursive: true })
+        .map(String)
+        .filter((rel) => rel.toLowerCase().endsWith('.dll'))
+      if (dlls.length === 0) throw new Error(`${asset.name} contains no .dll`)
 
-    const outDir = join(destDir, flavor)
-    rmSync(outDir, { recursive: true, force: true })
-    mkdirSync(outDir, { recursive: true })
-    for (const rel of dlls) cpSync(join(extractDir, rel), join(outDir, basename(rel)))
-    console.log(`staged ${flavor}: ${dlls.map((rel) => basename(rel)).join(', ')}`)
+      const outDir = join(destDir, flavor)
+      rmSync(outDir, { recursive: true, force: true })
+      mkdirSync(outDir, { recursive: true })
+      for (const rel of dlls) cpSync(join(extractDir, rel), join(outDir, basename(rel)))
+      console.log(`staged ${flavor}: ${dlls.map((rel) => basename(rel)).join(', ')}`)
+    }
+    // A placeholder that build.rs seeded for a DLL-less cargo check must not
+    // ride into a real bundle next to the DLLs.
+    rmSync(join(destDir, 'PLACEHOLDER.txt'), { force: true })
+    writeFileSync(versionFile, `${version}\n`)
+    console.log(`dth-runner ${version} staged into apps/desktop/resources/dth-runner`)
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
   }
-  // A placeholder that build.rs seeded for a DLL-less cargo check must not
-  // ride into a real bundle next to the DLLs.
-  rmSync(join(destDir, 'PLACEHOLDER.txt'), { force: true })
-  writeFileSync(versionFile, `${version}\n`)
-  console.log(`dth-runner ${version} staged into apps/desktop/resources/dth-runner`)
-} finally {
-  rmSync(tmp, { recursive: true, force: true })
 }
