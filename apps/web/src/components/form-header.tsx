@@ -31,14 +31,13 @@ export function FormHeader({
   useStickyHeaderInset(headerRef)
   return (
     // -mx-8/px-8 span the page's p-8 gutter so scrolling content can't peek
-    // past the header's background at the edges. Content frosts through a
-    // translucent fill + backdrop blur, with an opaque fallback where
-    // backdrop-filter is absent.
+    // past the header's background at the edges. Opaque fill — same as the
+    // character editor's header (no frosted-glass translucency).
     <header
       ref={headerRef}
       // z-40: above inline info popups (z-30), below modal dialogs (z-50) — the
       // same layering as the character editor's header.
-      className="sticky top-0 z-40 -mx-8 mb-8 bg-background px-8 pt-3 pb-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
+      className="sticky top-0 z-40 -mx-8 mb-8 bg-background px-8 pt-3 pb-4"
     >
       <button
         type="button"

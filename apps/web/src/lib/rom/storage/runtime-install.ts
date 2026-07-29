@@ -70,6 +70,12 @@ export function studioScriptsDir(dazLibraryFolder: string): string {
   return join(dazLibraryFolder, 'Scripts', 'DTH-Character-Studio')
 }
 
+/** Per-PROJECT script folder: `<root>/<project>/` — the parent of every
+ *  character's generated-script folder. Deleting a project removes it whole. */
+export function studioProjectScriptsDir(dazLibraryFolder: string, projectName: string): string {
+  return join(studioScriptsDir(dazLibraryFolder), characterFolderName(projectName))
+}
+
 /**
  * Per-character script folder: `<root>/<project>/<character>/`. The generated
  * `<Name>_<Genesis>.dsa` lives here and imports the runtime from the root two

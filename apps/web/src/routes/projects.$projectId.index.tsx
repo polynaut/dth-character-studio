@@ -48,6 +48,7 @@ import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
+import { ProjectOperations } from '#/components/project-operations.tsx'
 import {
   charactersLinkedScenes,
   genderForScan,
@@ -128,7 +129,9 @@ function ProjectCharactersPage() {
   // Daz scenes scoped to this project). `assetRefresh` reloads the grid after an add.
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<'character' | 'asset'>('character')
-  const [listTab, setListTab] = useState<'characters' | 'assets' | 'notes'>('characters')
+  const [listTab, setListTab] = useState<'characters' | 'assets' | 'notes' | 'operations'>(
+    'characters',
+  )
   const [assetRefresh, setAssetRefresh] = useState(0)
   // "Delete original after copying" for an outside-the-project scene — the
   // panel's toggle beside Copy & Create (turns the copy into a move). The old
@@ -698,16 +701,21 @@ function ProjectCharactersPage() {
 
       <Tabs
         value={!assetsEnabled && listTab === 'assets' ? 'characters' : listTab}
-        onValueChange={(v) => setListTab(v as 'characters' | 'assets' | 'notes')}
+        onValueChange={(v) => setListTab(v as 'characters' | 'assets' | 'notes' | 'operations')}
       >
         <TabsList className="mb-6">
           <TabsTrigger value="characters">Characters</TabsTrigger>
           {assetsEnabled && <TabsTrigger value="assets">Attachments</TabsTrigger>}
           <TabsTrigger value="notes">Notes</TabsTrigger>
+          <TabsTrigger value="operations">Operations</TabsTrigger>
         </TabsList>
         <TabsContent value="notes">
           {/* Freeform project notes (markdown + dropped media). */}
           <NotesEditor projectId={projectId} />
+        </TabsContent>
+        <TabsContent value="operations">
+          {/* Project-level danger zone (delete the whole project). */}
+          <ProjectOperations project={project} />
         </TabsContent>
         <TabsContent value="characters">
           {scanProblems.length > 0 && (
