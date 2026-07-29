@@ -355,8 +355,9 @@ there is nothing to load or select first:
    at a time — *Genesis 3*, *8* and *8.1* female **and** male, and *Genesis 9*
    twice: it's gender-neutral, so that pair is differentiated by geograft
    instead (**Golden Palace** on one, **Dicktator** on the other, when you have
-   them installed). It scans each figure plus everything fitted to it, and
-   writes one index per generation. Takes a few minutes.
+   them installed — loaded via their *Smart* preset, so the geoshells are
+   indexed too). It scans each figure plus everything fitted to it, and writes
+   one index per generation. Takes a few minutes.
 
   <p align="center">
     <img width="960" alt="Running the scan script in Daz" src="https://github.com/user-attachments/assets/1b381f07-38ae-46f2-8e84-d19e9ff65e1d" />
@@ -364,8 +365,9 @@ there is nothing to load or select first:
     <sub><em>Run the index script from the Content Library.</em></sub>
   </p>
 
-3. A summary reports what was indexed per generation — plus anything it couldn't
-   find, so a missing product is never silent.
+3. A summary reports what was indexed per generation, which geograft file it
+   picked, and anything it couldn't find — so a missing product, or an
+   unexpected pick after a product update, is never silent.
 
   <p align="center">
     <img width="342" alt="Scan summary" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />

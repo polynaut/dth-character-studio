@@ -80,11 +80,37 @@ current code before relying on details, but assume the *lesson* still holds.
   `People/Genesis 8 Female/Genesis 8.1 Basic Female.duf`. G3 and G9 are the plain
   names (`People/Genesis 3 Female/Genesis 3 Female.duf`, `People/Genesis 9/Genesis 9.duf`).
   The G9 geografts are **wearable** presets (so the target figure must be SELECTED
-  before `openFile`) under `People/Genesis 9/Anatomy/<product>/00-Manual Setup/`:
-  `2-Golden Palace Graft.duf` and `1-Dicktator.duf`. `Build_Genesis_Index` therefore
-  tries a candidate list, then a bounded depth-2 walk (shortest matching `.duf` wins,
-  which is what prefers the plain graft over `…Smart_Vanilla.duf`) — never one
-  hard-coded path.
+  before `openFile`), and they are third-party — they reship under new names and
+  folders, so `Build_Genesis_Index` does NOT trust a path for them (see the scored
+  glob below).
+- **A name glob for a geograft product finds the OTHER GENERATIONS' versions too, so
+  the pick has to be generation-scored.** Measured over a full library (14,902 `.duf`
+  under `People`, 2026-07-29): `*Dicktator*` also returns
+  `People/Genesis 8 Male/Anatomy/Dicktator v3/1_Dicktator Genitalia 0.3.duf`, and
+  `*Golden*Palace*` returns `…/Genesis 8 Female/Anatomy/Golden Palace v2/1-GoldenPalace_Genitalia_v2.duf`
+  — fitting either to a Genesis 9 figure would be wrong. `dthPickAsset` therefore
+  scores candidates with the generation term DOMINANT (`genesis 9` +100 vs
+  `genesis 2..8` −100) over the completeness terms (`smart` +50, `graft|genitalia`
+  +20), rejects the neighbours outright by name (`DTH_PICK_REJECT`: shells, UV fixes,
+  rigidity, material/pose/shape presets, hair loaders), and requires a POSITIVE
+  score — so a library with only the G8 products resolves to nothing and reports "not
+  installed" instead of loading the wrong graft. Ties break on shorter file name then
+  shorter path, never on directory-listing order. The ranking is CI-pinned against
+  that measured candidate set in `runtime.test.ts`, which loads the `.dsa` itself via
+  `new Function` (the runtime is plain ECMAScript — it only touches Daz APIs from
+  inside functions, which makes its pure logic directly unit-testable).
+- **Load the geograft's SMART preset, not its `00-Manual Setup` graft — only the
+  Smart one brings the geoshells.** Measured by reading the DSON (2026-07-29):
+  `00-Manual Setup/2-Golden Palace Graft.duf` and `00-Manual Setup/1-Dicktator.duf`
+  add the graft node alone, while `2a-Golden Palace Smart_Vanilla.duf` also adds
+  `GoldenPalace_G9_Shell_Minora`/`_Shell_Majora` and `1-Dicktator_Smart.duf` adds
+  `DicktatorG9_Shell`/`DicktatorG9_ForeskinShell`. Every one of those nodes declares
+  `parent: "name://@selection:"`, so with the figure selected at load time the shells
+  become CHILDREN of the figure and `getNodeChildren(true)` scans them — pick the
+  manual graft and the shells are simply absent from the scene (that shipped in the
+  first cut of the index builder, and shows up as "no geoshells under the figure").
+  The Smart preset also rigs slightly more bones (`l_shin`/`r_shin`/`spine2`), so it
+  yields a richer bone index too.
 - **`DzContentMgr.findFile(rel, DzContentMgr.AllDirsAndCloud)` is the supported way
   to resolve a content-relative path** (confirmed against Daz's own shipped scripts
   under `data/resources/Lesson Strips`, which use exactly that two-arg form). Content

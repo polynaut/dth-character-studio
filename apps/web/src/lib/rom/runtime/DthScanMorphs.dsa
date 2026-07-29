@@ -35,11 +35,19 @@
 //      modifiers, and would otherwise be invisible to the scan.
 
 /**********************************************************************
- * The build plan: which stock assets make up each generation's scan. Content
- * paths are RELATIVE to a Daz content root and tried in order; `searchDir` +
- * `searchRx` are the fallback when an install names things differently (a
- * bounded walk under that folder, shortest matching .duf wins). Genesis 9 is
- * one figure asset twice, differentiated by its geograft.
+ * The build plan: which stock assets make up each generation's scan. Genesis 9
+ * is one figure asset twice, differentiated by its geograft.
+ *
+ * The stock figures resolve by path (`rel`, tried in order) with an anchored
+ * bounded search behind it — Daz's own naming is stable enough for that.
+ *
+ * The two GEOGRAFTS do not: they are third-party and reship under new names and
+ * folders ("Golden Palace" vs "Golden Palace 9", Smart_Vanilla vs Smart_Wild,
+ * the older `…Genitalia_v2` naming), so no path list ages well. They carry a
+ * `pick` spec instead and are found by the scored glob below — the paths in
+ * their `rel` stay only as a fast/last-resort exact hit. Whatever the glob
+ * settles on is named in the run summary, so a wrong pick is visible rather
+ * than silent.
  */
 function dthGenesisBuildPlan(){
 	var aG9 = ["People/Genesis 9/Genesis 9.duf"];
@@ -50,14 +58,14 @@ function dthGenesisBuildPlan(){
 				{
 					label: "Genesis 3 Female",
 					rel: ["People/Genesis 3 Female/Genesis 3 Female.duf"],
-					searchDir: "People/Genesis 3 Female",
-					searchRx: /^genesis 3 (basic )?female\.duf$/
+					searchDirs: [{ dir: "People/Genesis 3 Female", depth: 1 }],
+					searchRx: [/^genesis 3 (basic )?female\.duf$/]
 				},
 				{
 					label: "Genesis 3 Male",
 					rel: ["People/Genesis 3 Male/Genesis 3 Male.duf"],
-					searchDir: "People/Genesis 3 Male",
-					searchRx: /^genesis 3 (basic )?male\.duf$/
+					searchDirs: [{ dir: "People/Genesis 3 Male", depth: 1 }],
+					searchRx: [/^genesis 3 (basic )?male\.duf$/]
 				}
 			]
 		},
@@ -70,8 +78,8 @@ function dthGenesisBuildPlan(){
 						"People/Genesis 8 Female/Genesis 8 Basic Female.duf",
 						"People/Genesis 8 Female/Genesis 8 Female.duf"
 					],
-					searchDir: "People/Genesis 8 Female",
-					searchRx: /^genesis 8 (basic )?female\.duf$/
+					searchDirs: [{ dir: "People/Genesis 8 Female", depth: 1 }],
+					searchRx: [/^genesis 8 (basic )?female\.duf$/]
 				},
 				{
 					label: "Genesis 8 Male",
@@ -79,8 +87,8 @@ function dthGenesisBuildPlan(){
 						"People/Genesis 8 Male/Genesis 8 Basic Male.duf",
 						"People/Genesis 8 Male/Genesis 8 Male.duf"
 					],
-					searchDir: "People/Genesis 8 Male",
-					searchRx: /^genesis 8 (basic )?male\.duf$/
+					searchDirs: [{ dir: "People/Genesis 8 Male", depth: 1 }],
+					searchRx: [/^genesis 8 (basic )?male\.duf$/]
 				}
 			]
 		},
@@ -96,8 +104,8 @@ function dthGenesisBuildPlan(){
 						"People/Genesis 8.1 Female/Genesis 8.1 Basic Female.duf",
 						"People/Genesis 8 Female/Genesis 8.1 Female.duf"
 					],
-					searchDir: "People/Genesis 8 Female",
-					searchRx: /^genesis 8\.1 (basic )?female\.duf$/
+					searchDirs: [{ dir: "People/Genesis 8 Female", depth: 1 }],
+					searchRx: [/^genesis 8\.1 (basic )?female\.duf$/]
 				},
 				{
 					label: "Genesis 8.1 Male",
@@ -106,8 +114,8 @@ function dthGenesisBuildPlan(){
 						"People/Genesis 8.1 Male/Genesis 8.1 Basic Male.duf",
 						"People/Genesis 8 Male/Genesis 8.1 Male.duf"
 					],
-					searchDir: "People/Genesis 8 Male",
-					searchRx: /^genesis 8\.1 (basic )?male\.duf$/
+					searchDirs: [{ dir: "People/Genesis 8 Male", depth: 1 }],
+					searchRx: [/^genesis 8\.1 (basic )?male\.duf$/]
 				}
 			]
 		},
@@ -117,34 +125,50 @@ function dthGenesisBuildPlan(){
 				{
 					label: "Genesis 9 + Golden Palace",
 					rel: aG9,
-					searchDir: "People/Genesis 9",
-					searchRx: /^genesis 9\.duf$/,
+					searchDirs: [{ dir: "People/Genesis 9", depth: 1 }],
+					searchRx: [/^genesis 9\.duf$/],
 					graft: {
 						name: "Golden Palace",
-						// The manual-setup graft is the minimal wearable (the
-						// Smart preset drags in the geoshells too); both fit to
-						// the selected figure, so either serves the scan.
+						// Known paths as of GP9 2026-07, Smart preset first: both fit
+						// the graft to the selected figure, but only the Smart one also
+						// brings the geoshells (Minora + Majora) - and those parent to
+						// the FIGURE, so they get scanned with it. The manual-setup
+						// graft yields the graft alone, no shells. Same order the pick
+						// scores in, so an exact path hit and a glob hit agree.
 						rel: [
-							"People/Genesis 9/Anatomy/Golden Palace/00-Manual Setup/2-Golden Palace Graft.duf",
-							"People/Genesis 9/Anatomy/Golden Palace/2a-Golden Palace Smart_Vanilla.duf"
+							"People/Genesis 9/Anatomy/Golden Palace/2a-Golden Palace Smart_Vanilla.duf",
+							"People/Genesis 9/Anatomy/Golden Palace/00-Manual Setup/2-Golden Palace Graft.duf"
 						],
-						searchDir: "People/Genesis 9/Anatomy/Golden Palace",
-						searchRx: /golden.?palace.*(graft|smart|genitalia)/
+						pick: {
+							glob: /golden.?palace/,
+							prefer: [
+								{ rx: /smart/, score: 50 },
+								{ rx: /graft|genitalia/, score: 20 },
+								{ rx: /vanilla/, score: 2 }
+							]
+						}
 					}
 				},
 				{
 					label: "Genesis 9 + Dicktator",
 					rel: aG9,
-					searchDir: "People/Genesis 9",
-					searchRx: /^genesis 9\.duf$/,
+					searchDirs: [{ dir: "People/Genesis 9", depth: 1 }],
+					searchRx: [/^genesis 9\.duf$/],
 					graft: {
 						name: "Dicktator",
+						// Smart preset first for the same reason: it adds the shaft +
+						// foreskin geoshells alongside the graft.
 						rel: [
-							"People/Genesis 9/Anatomy/Dicktator/00-Manual Setup/1-Dicktator.duf",
-							"People/Genesis 9/Anatomy/Dicktator/1-Dicktator_Smart.duf"
+							"People/Genesis 9/Anatomy/Dicktator/1-Dicktator_Smart.duf",
+							"People/Genesis 9/Anatomy/Dicktator/00-Manual Setup/1-Dicktator.duf"
 						],
-						searchDir: "People/Genesis 9/Anatomy/Dicktator",
-						searchRx: /dicktator/
+						pick: {
+							glob: /dicktator/,
+							prefer: [
+								{ rx: /smart/, score: 50 },
+								{ rx: /graft|genitalia/, score: 20 }
+							]
+						}
 					}
 				}
 			]
@@ -198,6 +222,12 @@ function dthContentRoots(sScriptDir){
 	return aRoots;
 }
 
+/** The file name out of a path — what the run summary reports, so the user can
+ *  see WHICH asset a search settled on without reading a full path. */
+function dthBaseName(sPath){
+	return String(sPath).replace(/\\/g, "/").replace(/^.*\//, "");
+}
+
 /** True when `sPath` is a readable file. */
 function dthFileExists(sPath){
 	try {
@@ -228,16 +258,19 @@ function dthContentFindFile(sRel){
 	} catch(e){ return ""; }
 }
 
-/** Bounded breadth-first walk for a .duf matching `rxName` (tested against the
- *  lowercased file name) under `sDir`. The SHORTEST match wins — the plain
- *  graft/figure asset beats its longer variants ("...Smart_Vanilla"). */
-function dthFindDufUnder(sDir, rxName, iMaxDepth){
+/** Bounded breadth-first walk for a .duf matching `rxName` and NOT `rxExclude`
+ *  (both tested against the lowercased file name) under `sDir`. The SHORTEST
+ *  match wins — the setup file beats the longer variants that share its name. */
+function dthFindDufUnder(sDir, rxName, rxExclude, iMaxDepth){
 	var sBest = "";
 	var sBestName = "";
 	try {
 		var aQueue = [{ dir: String(sDir), depth: 0 }];
 		var iVisited = 0;
-		while(aQueue.length && iVisited < 60){
+		// Generous enough for the whole `Anatomy` tree of a big library (vendor
+		// folder per product, a few subfolders each) — this only runs when the
+		// known paths all missed, and the walk is entryList() calls, not loads.
+		while(aQueue.length && iVisited < 400){
 			var oItem = aQueue.shift();
 			iVisited++;
 			var oDir = new DzDir(oItem.dir);
@@ -248,6 +281,7 @@ function dthFindDufUnder(sDir, rxName, iMaxDepth){
 				var sLow = sName.toLowerCase();
 				if(sLow.lastIndexOf(".duf") != sLow.length - 4) continue;
 				if(!rxName.test(sLow)) continue;
+				if(rxExclude && rxExclude.test(sLow)) continue;
 				if(sBest == "" || sName.length < sBestName.length){
 					sBest = oItem.dir + "/" + sName;
 					sBestName = sName;
@@ -266,10 +300,136 @@ function dthFindDufUnder(sDir, rxName, iMaxDepth){
 	return sBest;
 }
 
-/** Absolute path of a planned asset: Daz's own lookup, then a direct probe of
- *  every content root, then the bounded search. '' when nothing matched. */
+/**********************************************************************
+ * The scored glob — how the two geograft products are found.
+ *
+ * They are third-party and reship freely: "Golden Palace" vs "Golden Palace 9",
+ * Smart_Vanilla vs Smart_Wild, "1-Dicktator" vs "1_Dicktator Genitalia 0.3",
+ * sometimes under a vendor folder. So instead of trusting a path, glob the whole
+ * People tree for the product NAME and rank what comes back.
+ *
+ * Ranking is not cosmetic — the same glob finds the OLDER GENERATION's version
+ * of both products (measured: People/Genesis 8 Female/Anatomy/Golden Palace v2/
+ * 1-GoldenPalace_Genitalia_v2.duf, People/Genesis 8 Male/Anatomy/Dicktator v3/
+ * 1_Dicktator Genitalia 0.3.duf), and fitting a G8 geograft to a Genesis 9
+ * figure would be wrong. The generation term dominates the score and
+ * `minScore` is above zero, so a wrong-generation-only install resolves to
+ * NOTHING (reported as not installed) rather than to the wrong graft.
+ */
+
+/** Path terms every product shares: which generation the asset belongs to. */
+var DTH_PICK_PATH_SCORE = [
+	{ rx: /genesis.?9|[\/_\- ]g9/, score: 100 },
+	{ rx: /genesis.?[2-8]|[\/_\- ]g[2-8]/, score: -100 }
+];
+
+/** File-name terms no product's setup file can be: the geoshells, material and
+ *  pose presets, UV fixes and rigidity files that sit right next to it. */
+var DTH_PICK_REJECT = /shell|uv.?fix|rigidity|material|opacity|preset|tutorial|zero|pose|shap|cum|fluid|hair|clit|vagzilla/;
+
+/** Where the glob looks. One root, deep enough for
+ *  People/<figure>/Anatomy/<vendor>/<product>/<setup folder>/. */
+var DTH_PICK_SEARCH_DIR = "People";
+var DTH_PICK_SEARCH_DEPTH = 5;
+
+/** Collect every .duf under `sDir` whose FILE NAME matches `rxGlob` and isn't
+ *  rejected. `oBudget.left` bounds the whole walk (shared across roots). */
+function dthCollectDufs(sDir, rxGlob, aOut, oBudget){
+	try {
+		var aQueue = [{ dir: String(sDir), depth: 0 }];
+		while(aQueue.length && oBudget.left > 0){
+			var oItem = aQueue.shift();
+			oBudget.left--;
+			var oDir = new DzDir(oItem.dir);
+			if(!oDir.exists()) continue;
+			var aEntries = oDir.entryList();
+			for(var i = 0; i < aEntries.length; i++){
+				var sName = String(aEntries[i]);
+				var sLow = sName.toLowerCase();
+				if(sLow.lastIndexOf(".duf") != sLow.length - 4) continue;
+				if(!rxGlob.test(sLow)) continue;
+				if(DTH_PICK_REJECT.test(sLow)) continue;
+				aOut.push({ path: oItem.dir + "/" + sName, name: sName });
+			}
+			if(oItem.depth >= DTH_PICK_SEARCH_DEPTH) continue;
+			var aSubs = typeof oDir.getSubdirList == "function" ? oDir.getSubdirList() : aEntries;
+			for(var s = 0; s < aSubs.length; s++){
+				var sSub = String(aSubs[s]);
+				if(sSub == "." || sSub == "..") continue;
+				var sFull = oItem.dir + "/" + sSub;
+				if(new DzDir(sFull).exists()) aQueue.push({ dir: sFull, depth: oItem.depth + 1 });
+			}
+		}
+	} catch(e){ /* unreadable tree — whatever was collected still ranks */ }
+}
+
+/** Plausibility of one candidate: generation first, then how complete a setup
+ *  the file name says it is. */
+function dthScoreCandidate(oCand, oPick){
+	var sPathLow = oCand.path.toLowerCase();
+	var sNameLow = oCand.name.toLowerCase();
+	var iScore = 0;
+	var i;
+	for(i = 0; i < DTH_PICK_PATH_SCORE.length; i++){
+		if(DTH_PICK_PATH_SCORE[i].rx.test(sPathLow)) iScore += DTH_PICK_PATH_SCORE[i].score;
+	}
+	var aPrefer = oPick.prefer ? oPick.prefer : [];
+	for(i = 0; i < aPrefer.length; i++){
+		if(aPrefer[i].rx.test(sNameLow)) iScore += aPrefer[i].score;
+	}
+	return iScore;
+}
+
+/** Whether a candidate outranks the incumbent: score first, then the shorter
+ *  file name, then the shorter path — both tie-breaks stable across runs,
+ *  unlike directory-listing order. */
+function dthCandBeats(oA, iA, oB, iB){
+	if(iA != iB) return iA > iB;
+	if(oA.name.length != oB.name.length) return oA.name.length < oB.name.length;
+	return oA.path.length < oB.path.length;
+}
+
+/** Best-scoring asset for a glob spec, or '' when nothing plausible exists.
+ *  Every candidate and its score is printed, so a surprising pick is
+ *  diagnosable from the Daz log without re-running anything. */
+function dthPickAsset(aRoots, oPick){
+	var aCands = [];
+	var oBudget = { left: 2500 };
+	for(var r = 0; r < aRoots.length; r++){
+		dthCollectDufs(aRoots[r] + "/" + DTH_PICK_SEARCH_DIR, oPick.glob, aCands, oBudget);
+	}
+	var oBest = null;
+	var iBest = 0;
+	for(var c = 0; c < aCands.length; c++){
+		var oCand = aCands[c];
+		var iScore = dthScoreCandidate(oCand, oPick);
+		print("  candidate", iScore, oCand.path);
+		// Must be positively plausible: a wrong-generation-only install scores
+		// negative and is never loaded (reported as not installed instead).
+		if(iScore <= 0) continue;
+		if(oBest && !dthCandBeats(oCand, iScore, oBest, iBest)) continue;
+		oBest = oCand;
+		iBest = iScore;
+	}
+	if(oBest){
+		print("Picked", oBest.path, "(score", iBest + ")");
+		return oBest.path;
+	}
+	if(oBudget.left <= 0) print("Glob budget exhausted before a plausible match was found.");
+	return "";
+}
+
+/** Absolute path of a planned asset: for a glob spec (the geografts) the scored
+ *  pick above leads, since it ages better than any path list; then Daz's own
+ *  lookup and a direct probe of the known relative paths as the fast/last
+ *  resort; then the anchored bounded search the stock figures use. '' when
+ *  nothing matched. */
 function dthResolveAsset(aRoots, oSpec){
 	var i, r;
+	if(oSpec.pick){
+		var sPicked = dthPickAsset(aRoots, oSpec.pick);
+		if(sPicked) return sPicked;
+	}
 	for(i = 0; i < oSpec.rel.length; i++){
 		var sHit = dthContentFindFile(oSpec.rel[i]);
 		if(sHit && dthFileExists(sHit)) return sHit;
@@ -280,10 +440,22 @@ function dthResolveAsset(aRoots, oSpec){
 			if(dthFileExists(sFull)) return sFull;
 		}
 	}
-	if(oSpec.searchDir && oSpec.searchRx){
-		for(r = 0; r < aRoots.length; r++){
-			var sFound = dthFindDufUnder(aRoots[r] + "/" + oSpec.searchDir, oSpec.searchRx, 2);
-			if(sFound) return sFound;
+	if(oSpec.searchDirs && oSpec.searchRx){
+		// Regex order is the preference order (Smart preset before the bare
+		// graft), so an earlier pattern wins across ALL roots and search dirs
+		// before a later one is tried at all — a Smart preset found in a renamed
+		// product folder still beats a bare graft sitting at the expected path.
+		for(var x = 0; x < oSpec.searchRx.length; x++){
+			for(var d = 0; d < oSpec.searchDirs.length; d++){
+				for(r = 0; r < aRoots.length; r++){
+					var sFound = dthFindDufUnder(
+						aRoots[r] + "/" + oSpec.searchDirs[d].dir,
+						oSpec.searchRx[x],
+						oSpec.searchExclude,
+						oSpec.searchDirs[d].depth);
+					if(sFound) return sFound;
+				}
+			}
 		}
 	}
 	return "";
@@ -566,6 +738,7 @@ function DthBuildGenesisIndex(config){
 	var aPlan = dthGenesisBuildPlan();
 	var oByGen = {};
 	var aMissing = [];
+	var aGrafts = [];
 	var iUnknown = 0;
 	var g, f;
 
@@ -621,7 +794,15 @@ function DthBuildGenesisIndex(config){
 				}
 				if(oSpec.graft){
 					var sGraft = dthResolveAsset(aRoots, oSpec.graft);
-					if(!sGraft || !dthLoadGraft(sGraft, oFigure)) aMissing.push(oSpec.graft.name);
+					if(!sGraft || !dthLoadGraft(sGraft, oFigure)){
+						aMissing.push(oSpec.graft.name);
+					} else {
+						// The graft products reship under new names, so the file
+						// the search settled on goes in the summary: the one
+						// resolution in this script that can't be verified up
+						// front is at least verifiable after the fact.
+						aGrafts.push(oSpec.graft.name + " ← " + dthBaseName(sGraft));
+					}
 				}
 			}
 			iUnknown += dthScanSceneInto(oByGen, oGen.genesis);
