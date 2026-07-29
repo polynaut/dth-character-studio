@@ -1,72 +1,417 @@
 // DAZ Studio version 4.22.0.16 filetype DAZ Script
 
-// DTH Character Studio — morph + bone scanner. Included by the visible
-// Scan_Morphs_<Genesis>.dsa wrappers installed next to this file; walks the
-// selected figure AND every descendant node (geografts like Golden Palace /
-// Dicktator, nipples/navel add-ons, fitted clothing — they all carry morphs of
-// their own) and writes every morph dial as { node, nodeLabel, label, name }
-// AND every bone as { name, label } into a per-generation JSON in the studio's
-// app-data folder. The studio's Morph-name and bone (Modify-JCM) autocompletes
-// read that index. Studio-only (no DazToHue-Scripts twin); the wrapper bakes the
-// output path at install time.
+// DTH Character Studio — morph + bone index builder. Included by the visible
+// Build_Genesis_Index.dsa installed next to this file (which also includes the
+// DTH utils runtime first — this file calls into it for the generation-asset
+// table and node asset URIs, and must NOT include it itself: the install-time
+// rewrite would repoint the include two folders up).
+//
+// It does the whole job on its own — no per-generation wrapper scripts, no
+// "select the figure first":
+//   1. builds the stock figures for each generation, one generation at a time
+//      (G3/G8/G8.1 female + male; Genesis 9 twice — it is gender-neutral, so the
+//      pair is differentiated by geograft instead: Golden Palace on one,
+//      Dicktator on the other), clearing the scene between generations so only
+//      two figures are ever loaded at once, and
+//   2. scans EVERY figure root in the scene — the figure plus every descendant
+//      node (geografts, nipples/navel add-ons, fitted clothing all carry morphs
+//      of their own) — bucketing what it finds by the figure's generation, and
+//   3. writes one per-generation JSON into the studio's app-data folder: every
+//      morph dial as { node, nodeLabel, label, name } AND every bone as
+//      { name, label }. The studio's Morph-name and bone (Modify-JCM)
+//      autocompletes read those. Studio-only (no DazToHue-Scripts twin); the
+//      wrapper bakes the output folder in at install time.
+//
+// It can also scan the OPEN scene as-is (offered when the scene already holds
+// figures) — that is how you index morphs the stock figures don't carry:
+// third-party geografts, add-ons, fitted clothing.
 //
 // Two passes per node, mirroring how the ROM runtime resolves a morph name
-// (DthUtils: findProperty -> findPropertyByLabel -> morph-modifier scan):
+// (the DTH utils runtime: findProperty -> findPropertyByLabel -> morph-modifier
+// scan):
 //   1. DzMorph modifiers on the node's object (classic delta morphs), and
 //   2. float properties on the node itself — controller dials without their
 //      own deltas (ERC shape products like SL_Hourglass) live HERE, not as
 //      modifiers, and would otherwise be invisible to the scan.
 
-function DthScanMorphs(config){
-	var oSel = Scene.getPrimarySelection();
-	if(!oSel){
-		MessageBox.information(
-			"Select the figure first - an unrenamed " + config.figurePrefix +
-			" character - then run this again.",
-			"DTH Character Studio", "&OK");
-		return;
-	}
-	var sLabel = String(oSel.getLabel());
-	var bMatch = sLabel.indexOf(config.figurePrefix) == 0;
-	// "Genesis 8 Female" and "Genesis 8.1 Female" share a prefix - the G8 scan
-	// must not accept an 8.1 figure (it has its own scan + index).
-	if(bMatch && config.excludePrefix && sLabel.indexOf(config.excludePrefix) == 0) bMatch = false;
-	if(!bMatch){
-		MessageBox.information(
-			"The selected node is \"" + sLabel + "\" - expected an unrenamed " +
-			config.figurePrefix + " figure. Select the figure root and run again.",
-			"DTH Character Studio", "&OK");
-		return;
-	}
+/**********************************************************************
+ * The build plan: which stock assets make up each generation's scan. Content
+ * paths are RELATIVE to a Daz content root and tried in order; `searchDir` +
+ * `searchRx` are the fallback when an install names things differently (a
+ * bounded walk under that folder, shortest matching .duf wins). Genesis 9 is
+ * one figure asset twice, differentiated by its geograft.
+ */
+function dthGenesisBuildPlan(){
+	var aG9 = ["People/Genesis 9/Genesis 9.duf"];
+	return [
+		{
+			genesis: "G3",
+			figures: [
+				{
+					label: "Genesis 3 Female",
+					rel: ["People/Genesis 3 Female/Genesis 3 Female.duf"],
+					searchDir: "People/Genesis 3 Female",
+					searchRx: /^genesis 3 (basic )?female\.duf$/
+				},
+				{
+					label: "Genesis 3 Male",
+					rel: ["People/Genesis 3 Male/Genesis 3 Male.duf"],
+					searchDir: "People/Genesis 3 Male",
+					searchRx: /^genesis 3 (basic )?male\.duf$/
+				}
+			]
+		},
+		{
+			genesis: "G8",
+			figures: [
+				{
+					label: "Genesis 8 Female",
+					rel: [
+						"People/Genesis 8 Female/Genesis 8 Basic Female.duf",
+						"People/Genesis 8 Female/Genesis 8 Female.duf"
+					],
+					searchDir: "People/Genesis 8 Female",
+					searchRx: /^genesis 8 (basic )?female\.duf$/
+				},
+				{
+					label: "Genesis 8 Male",
+					rel: [
+						"People/Genesis 8 Male/Genesis 8 Basic Male.duf",
+						"People/Genesis 8 Male/Genesis 8 Male.duf"
+					],
+					searchDir: "People/Genesis 8 Male",
+					searchRx: /^genesis 8 (basic )?male\.duf$/
+				}
+			]
+		},
+		{
+			genesis: "G8.1",
+			figures: [
+				{
+					label: "Genesis 8.1 Female",
+					// 8.1 ships INTO the Genesis 8 Female folder; the dedicated
+					// 8.1 folder is the layout some manual installs end up with.
+					rel: [
+						"People/Genesis 8 Female/Genesis 8.1 Basic Female.duf",
+						"People/Genesis 8.1 Female/Genesis 8.1 Basic Female.duf",
+						"People/Genesis 8 Female/Genesis 8.1 Female.duf"
+					],
+					searchDir: "People/Genesis 8 Female",
+					searchRx: /^genesis 8\.1 (basic )?female\.duf$/
+				},
+				{
+					label: "Genesis 8.1 Male",
+					rel: [
+						"People/Genesis 8 Male/Genesis 8.1 Basic Male.duf",
+						"People/Genesis 8.1 Male/Genesis 8.1 Basic Male.duf",
+						"People/Genesis 8 Male/Genesis 8.1 Male.duf"
+					],
+					searchDir: "People/Genesis 8 Male",
+					searchRx: /^genesis 8\.1 (basic )?male\.duf$/
+				}
+			]
+		},
+		{
+			genesis: "G9",
+			figures: [
+				{
+					label: "Genesis 9 + Golden Palace",
+					rel: aG9,
+					searchDir: "People/Genesis 9",
+					searchRx: /^genesis 9\.duf$/,
+					graft: {
+						name: "Golden Palace",
+						// The manual-setup graft is the minimal wearable (the
+						// Smart preset drags in the geoshells too); both fit to
+						// the selected figure, so either serves the scan.
+						rel: [
+							"People/Genesis 9/Anatomy/Golden Palace/00-Manual Setup/2-Golden Palace Graft.duf",
+							"People/Genesis 9/Anatomy/Golden Palace/2a-Golden Palace Smart_Vanilla.duf"
+						],
+						searchDir: "People/Genesis 9/Anatomy/Golden Palace",
+						searchRx: /golden.?palace.*(graft|smart|genitalia)/
+					}
+				},
+				{
+					label: "Genesis 9 + Dicktator",
+					rel: aG9,
+					searchDir: "People/Genesis 9",
+					searchRx: /^genesis 9\.duf$/,
+					graft: {
+						name: "Dicktator",
+						rel: [
+							"People/Genesis 9/Anatomy/Dicktator/00-Manual Setup/1-Dicktator.duf",
+							"People/Genesis 9/Anatomy/Dicktator/1-Dicktator_Smart.duf"
+						],
+						searchDir: "People/Genesis 9/Anatomy/Dicktator",
+						searchRx: /dicktator/
+					}
+				}
+			]
+		}
+	];
+}
 
-	// Node-property groups that are rig/scene plumbing, not morph dials. Any
-	// float property under these is skipped in pass 2 (transforms, display
-	// toggles, simulation weights, smoothing iterations, ...).
-	var rxSkipGroup = /^(General|Transforms|Display|Simulation|Smoothing|Mesh Smoothing|Line Tessellation|Rigid Follow|Instances)($|\/)/;
+/**********************************************************************
+ * Content resolution — the studio installs this runtime at
+ * <Daz library>/Scripts/DTH-Character-Studio, so the wrapper's own folder
+ * yields one guaranteed content root; Daz's content manager supplies the rest
+ * (extra libraries, mapped/cloud dirs). Every API call past the derived root is
+ * typeof/try-guarded: a Daz build that names one differently degrades to the
+ * remaining lookups instead of dying silently mid-script.
+ */
 
-	// The figure root plus every descendant (recursive) - grafts and clothing too.
-	var aNodes = [oSel].concat(oSel.getNodeChildren(true));
-	var aMorphs = [];
-	var aBones = [];
+/** `<lib>` from `<lib>/Scripts/DTH-Character-Studio` ('' when the script was
+ *  moved out of its install folder). */
+function dthLibraryRootFromScriptDir(sDir){
+	var s = String(sDir).replace(/\\/g, "/").replace(/\/+$/, "");
+	var rx = /\/Scripts\/DTH-Character-Studio$/i;
+	if(rx.test(s)) return s.replace(rx, "");
+	return "";
+}
+
+function dthPushRoot(aRoots, oSeen, sPath){
+	if(!sPath) return;
+	var s = String(sPath).replace(/\\/g, "/").replace(/\/+$/, "");
+	if(s == "" || oSeen[s.toLowerCase()]) return;
+	oSeen[s.toLowerCase()] = true;
+	aRoots.push(s);
+}
+
+/** Every Daz content root to probe, the install's own library first. */
+function dthContentRoots(sScriptDir){
+	var aRoots = [];
 	var oSeen = {};
-	var oSeenBone = {};
-	var iNodesWithMorphs = 0;
+	dthPushRoot(aRoots, oSeen, dthLibraryRootFromScriptDir(sScriptDir));
+	try {
+		var oCM = App.getContentMgr();
+		if(oCM && typeof oCM.getNumContentDirectories == "function"){
+			var iNum = oCM.getNumContentDirectories();
+			for(var i = 0; i < iNum; i++){
+				if(typeof oCM.getContentDirectoryPath == "function")
+					dthPushRoot(aRoots, oSeen, oCM.getContentDirectoryPath(i));
+				else if(typeof oCM.getContentDirectory == "function")
+					dthPushRoot(aRoots, oSeen, oCM.getContentDirectory(i));
+			}
+		}
+	} catch(e){ /* no enumerable content dirs — the derived root still stands */ }
+	return aRoots;
+}
+
+/** True when `sPath` is a readable file. */
+function dthFileExists(sPath){
+	try {
+		var oInfo = new DzFileInfo(sPath);
+		if(typeof oInfo.exists == "function") return oInfo.exists();
+	} catch(e){ /* fall through to the open() probe */ }
+	try {
+		var oFile = new DzFile(sPath);
+		if(oFile.open(DzFile.ReadOnly)){
+			oFile.close();
+			return true;
+		}
+	} catch(e){ /* unreadable */ }
+	return false;
+}
+
+/** Ask Daz to resolve a content-relative path (covers mapped + cloud dirs). */
+function dthContentFindFile(sRel){
+	try {
+		var oCM = App.getContentMgr();
+		if(!oCM || typeof oCM.findFile != "function") return "";
+		var sHit;
+		if(typeof DzContentMgr != "undefined" && DzContentMgr.AllDirsAndCloud != undefined)
+			sHit = oCM.findFile(sRel, DzContentMgr.AllDirsAndCloud);
+		else
+			sHit = oCM.findFile(sRel);
+		return sHit ? String(sHit) : "";
+	} catch(e){ return ""; }
+}
+
+/** Bounded breadth-first walk for a .duf matching `rxName` (tested against the
+ *  lowercased file name) under `sDir`. The SHORTEST match wins — the plain
+ *  graft/figure asset beats its longer variants ("...Smart_Vanilla"). */
+function dthFindDufUnder(sDir, rxName, iMaxDepth){
+	var sBest = "";
+	var sBestName = "";
+	try {
+		var aQueue = [{ dir: String(sDir), depth: 0 }];
+		var iVisited = 0;
+		while(aQueue.length && iVisited < 60){
+			var oItem = aQueue.shift();
+			iVisited++;
+			var oDir = new DzDir(oItem.dir);
+			if(!oDir.exists()) continue;
+			var aEntries = oDir.entryList();
+			for(var i = 0; i < aEntries.length; i++){
+				var sName = String(aEntries[i]);
+				var sLow = sName.toLowerCase();
+				if(sLow.lastIndexOf(".duf") != sLow.length - 4) continue;
+				if(!rxName.test(sLow)) continue;
+				if(sBest == "" || sName.length < sBestName.length){
+					sBest = oItem.dir + "/" + sName;
+					sBestName = sName;
+				}
+			}
+			if(oItem.depth >= iMaxDepth) continue;
+			var aSubs = typeof oDir.getSubdirList == "function" ? oDir.getSubdirList() : aEntries;
+			for(var s = 0; s < aSubs.length; s++){
+				var sSub = String(aSubs[s]);
+				if(sSub == "." || sSub == "..") continue;
+				var sFull = oItem.dir + "/" + sSub;
+				if(new DzDir(sFull).exists()) aQueue.push({ dir: sFull, depth: oItem.depth + 1 });
+			}
+		}
+	} catch(e){ /* unreadable tree — treated as "not found" */ }
+	return sBest;
+}
+
+/** Absolute path of a planned asset: Daz's own lookup, then a direct probe of
+ *  every content root, then the bounded search. '' when nothing matched. */
+function dthResolveAsset(aRoots, oSpec){
+	var i, r;
+	for(i = 0; i < oSpec.rel.length; i++){
+		var sHit = dthContentFindFile(oSpec.rel[i]);
+		if(sHit && dthFileExists(sHit)) return sHit;
+	}
+	for(r = 0; r < aRoots.length; r++){
+		for(i = 0; i < oSpec.rel.length; i++){
+			var sFull = aRoots[r] + "/" + oSpec.rel[i];
+			if(dthFileExists(sFull)) return sFull;
+		}
+	}
+	if(oSpec.searchDir && oSpec.searchRx){
+		for(r = 0; r < aRoots.length; r++){
+			var sFound = dthFindDufUnder(aRoots[r] + "/" + oSpec.searchDir, oSpec.searchRx, 2);
+			if(sFound) return sFound;
+		}
+	}
+	return "";
+}
+
+/**********************************************************************
+ * Scene building
+ */
+
+/** Every root node currently in the scene. */
+function dthSceneRootNodes(){
+	var aRoots = [];
+	for(var i = 0; i < Scene.getNumNodes(); i++){
+		var oNode = Scene.getNode(i);
+		if(oNode && !oNode.getNodeParent()) aRoots.push(oNode);
+	}
+	return aRoots;
+}
+
+/** Root FIGURE nodes (a figure root is a DzSkeleton/DzFigure, never a prop). */
+function dthSceneFigureRoots(){
+	var aFigures = [];
+	var aRoots = dthSceneRootNodes();
+	for(var i = 0; i < aRoots.length; i++){
+		var oNode = aRoots[i];
+		if(oNode.inherits("DzFigure") || oNode.inherits("DzSkeleton")) aFigures.push(oNode);
+	}
+	return aFigures;
+}
+
+/** Empty the scene. Scene.clear() when the build has it, else remove every
+ *  root node (a child goes with its parent). */
+function dthClearScene(){
+	try {
+		if(typeof Scene.clear == "function"){
+			Scene.clear();
+			return;
+		}
+	} catch(e){ /* fall through to the manual sweep */ }
+	var aRoots = dthSceneRootNodes();
+	for(var i = 0; i < aRoots.length; i++){
+		try { Scene.removeNode(aRoots[i]); } catch(e2){ /* already gone */ }
+	}
+}
+
+/** Load a figure asset and return the root node it added. Both character and
+ *  wearable presets MERGE into the scene, so the new figure is found by
+ *  diffing the root set rather than trusting the selection. */
+function dthLoadFigure(sPath){
+	var oBefore = {};
+	var aBefore = dthSceneRootNodes();
+	var i;
+	for(i = 0; i < aBefore.length; i++) oBefore[String(aBefore[i].name)] = true;
+	Scene.selectAllNodes(false);
+	print("Loading figure:", sPath);
+	if(!App.getContentMgr().openFile(sPath)){
+		print("Failed to load figure:", sPath);
+		return null;
+	}
+	var aFigures = dthSceneFigureRoots();
+	for(i = 0; i < aFigures.length; i++){
+		if(!oBefore[String(aFigures[i].name)]) return aFigures[i];
+	}
+	// Every root was already there — the asset merged into an existing figure
+	// (or added nothing). The last figure root is the best guess to scan.
+	return aFigures.length ? aFigures[aFigures.length - 1] : null;
+}
+
+/** Fit a geograft (a WEARABLE preset — it needs its target selected) onto
+ *  `oFigure`. Returns whether the load reported success. */
+function dthLoadGraft(sPath, oFigure){
+	Scene.selectAllNodes(false);
+	oFigure.select(true);
+	Scene.setPrimarySelection(oFigure);
+	print("Loading graft:", sPath, "onto", oFigure.getLabel());
+	if(App.getContentMgr().openFile(sPath)) return true;
+	print("Failed to load graft:", sPath);
+	return false;
+}
+
+/**********************************************************************
+ * Scanning
+ */
+
+// Node-property groups that are rig/scene plumbing, not morph dials. Any
+// float property under these is skipped in pass 2 (transforms, display
+// toggles, simulation weights, smoothing iterations, ...).
+var DTH_RX_SKIP_GROUP = /^(General|Transforms|Display|Simulation|Smoothing|Mesh Smoothing|Line Tessellation|Rigid Follow|Instances)($|\/)/;
+
+/** A per-generation accumulator: the morph + bone lists plus their dedup sets. */
+function dthNewIndexAcc(){
+	return {
+		morphs: [],
+		bones: [],
+		figures: [],
+		seenMorph: {},
+		seenBone: {},
+		nodesWithMorphs: 0
+	};
+}
+
+/**
+ * Scan one figure root and every descendant into `oAcc`. Deduped across
+ * figures by node id + internal name, so the two figures of a generation merge
+ * into one index (their shared dials land once, their gender- or
+ * graft-specific ones all land).
+ */
+function dthScanFigureInto(oFigure, oAcc){
+	// The figure root plus every descendant (recursive) - grafts and clothing too.
+	var aNodes = [oFigure].concat(oFigure.getNodeChildren(true));
+	oAcc.figures.push(String(oFigure.getLabel()));
 	for(var n = 0; n < aNodes.length; n++){
 		var oNode = aNodes[n];
 		// Instance suffixes (GoldenPalace_G9_9694) vary per scene - strip the
 		// trailing _<digits> so the stored node id matches the ROM convention
-		// (GoldenPalace_G9, Genesis9, ...).
+		// (GoldenPalace_G9, Genesis9, ...). It also collapses the second figure
+		// of a generation (Genesis9_2) onto the first.
 		var sNode = String(oNode.name).replace(/_\d+$/, "");
 		var sNodeLabel = String(oNode.getLabel());
-		var iBefore = aMorphs.length;
+		var iBefore = oAcc.morphs.length;
 
 		// Bones carry no morph dials (skipped by pass 2 below), but a JCM rule
 		// keys off a bone's rotation - so collect every bone's internal name +
 		// UI label for the studio's bone autocomplete. Deduped by internal name.
 		if(oNode.inherits("DzBone")){
-			if(!oSeenBone[sNode]){
-				oSeenBone[sNode] = true;
-				aBones.push({ name: sNode, label: sNodeLabel });
+			if(!oAcc.seenBone[sNode]){
+				oAcc.seenBone[sNode] = true;
+				oAcc.bones.push({ name: sNode, label: sNodeLabel });
 			}
 		}
 
@@ -79,9 +424,9 @@ function DthScanMorphs(config){
 				var oProp = oMod.getValueControl();
 				var sName = String(oMod.getName());
 				var sKey = sNode + "|" + sName;
-				if(oSeen[sKey]) continue;
-				oSeen[sKey] = true;
-				aMorphs.push({
+				if(oAcc.seenMorph[sKey]) continue;
+				oAcc.seenMorph[sKey] = true;
+				oAcc.morphs.push({
 					node: sNode,
 					nodeLabel: sNodeLabel,
 					label: oProp ? String(oProp.getLabel()) : sName,
@@ -97,12 +442,12 @@ function DthScanMorphs(config){
 			for(var p = 0; p < oNode.getNumProperties(); p++){
 				var oNProp = oNode.getProperty(p);
 				if(!oNProp || !oNProp.inherits("DzFloatProperty")) continue;
-				if(rxSkipGroup.test(String(oNProp.getPath()).replace(/^\//, ""))) continue;
+				if(DTH_RX_SKIP_GROUP.test(String(oNProp.getPath()).replace(/^\//, ""))) continue;
 				var sPName = String(oNProp.getName());
 				var sPKey = sNode + "|" + sPName;
-				if(oSeen[sPKey]) continue;
-				oSeen[sPKey] = true;
-				aMorphs.push({
+				if(oAcc.seenMorph[sPKey]) continue;
+				oAcc.seenMorph[sPKey] = true;
+				oAcc.morphs.push({
 					node: sNode,
 					nodeLabel: sNodeLabel,
 					label: String(oNProp.getLabel()),
@@ -111,30 +456,207 @@ function DthScanMorphs(config){
 			}
 		}
 
-		if(aMorphs.length > iBefore) iNodesWithMorphs++;
+		if(oAcc.morphs.length > iBefore) oAcc.nodesWithMorphs++;
 	}
+}
 
+/** Which generation a figure root belongs to, from its source asset
+ *  (genesis9.dsf, genesis8_1female.dsf, ...). Null when it is not a stock
+ *  Genesis figure the studio knows. */
+function dthDetectGenesis(oNode){
+	var aGenesis = ["G9", "G8.1", "G8", "G3"];
+	var sPath = dthNodeAssetPath(oNode);
+	if(sPath == "") return null;
+	for(var g = 0; g < aGenesis.length; g++){
+		var aFiles = dthGenerationAssetFiles(aGenesis[g]);
+		if(!aFiles) continue;
+		for(var f = 0; f < aFiles.length; f++){
+			if(sPath.indexOf("/" + aFiles[f]) >= 0 || sPath == aFiles[f]) return aGenesis[g];
+		}
+	}
+	return null;
+}
+
+/**
+ * Scan every figure root in the scene into per-generation accumulators, keyed
+ * by detected generation. `oByGen` is reused across calls so a build can scan
+ * one generation's scene at a time and still merge into one index per file.
+ * `sAssumeGenesis` is the build path's ground truth — it has just loaded that
+ * generation's figures into an emptied scene, so a figure whose asset URI can't
+ * be read (an API difference makes dthNodeAssetPath degrade to '') is filed
+ * under it instead of being dropped, which would otherwise lose the whole
+ * generation's index. The open-scene path passes nothing and stays strict.
+ * Returns the number of figure roots whose generation could not be resolved.
+ */
+function dthScanSceneInto(oByGen, sAssumeGenesis){
+	var aFigures = dthSceneFigureRoots();
+	var iUnknown = 0;
+	for(var i = 0; i < aFigures.length; i++){
+		var oFigure = aFigures[i];
+		var sGenesis = dthDetectGenesis(oFigure);
+		if(!sGenesis && sAssumeGenesis) sGenesis = sAssumeGenesis;
+		if(!sGenesis){
+			print("Skipping (not a stock Genesis figure):", oFigure.getLabel());
+			iUnknown++;
+			continue;
+		}
+		if(!oByGen[sGenesis]) oByGen[sGenesis] = dthNewIndexAcc();
+		print("Scanning", oFigure.getLabel(), "as", sGenesis);
+		dthScanFigureInto(oFigure, oByGen[sGenesis]);
+	}
+	return iUnknown;
+}
+
+/**********************************************************************
+ * Output
+ */
+
+/** Write one generation's index. The studio reads `morphs` + `bones` and
+ *  tolerates the rest, so the metadata is for humans debugging a scan. */
+function dthWriteIndex(sOutDir, sGenesis, oAcc){
+	var sPath = String(sOutDir).replace(/\\/g, "/").replace(/\/+$/, "") + "/morphs_" + sGenesis + ".json";
 	var oOut = {
-		version: 2,
-		genesis: config.genesis,
-		figure: sLabel,
+		version: 3,
+		genesis: sGenesis,
+		figures: oAcc.figures,
 		scannedAt: new Date().toString(),
-		morphs: aMorphs,
-		bones: aBones
+		morphs: oAcc.morphs,
+		bones: oAcc.bones
 	};
-	var oFile = new DzFile(config.outPath);
+	var oFile = new DzFile(sPath);
 	// One ORed mode arg - a second open() argument warns on DS6.
 	if(oFile.open(oFile.WriteOnly | oFile.Truncate)){
 		oFile.write(JSON.stringify(oOut, null, 1));
 		oFile.close();
-		MessageBox.information(
-			"Scanned " + aMorphs.length + " morphs on " + iNodesWithMorphs +
-			" nodes and " + aBones.length + " bones.\n\nThe Morph name and bone " +
-			"autocompletes in DTH Character Studio now know them.",
-			"DTH Character Studio", "&OK");
-	} else {
-		MessageBox.information(
-			"Could not write the morph index:\n" + config.outPath,
-			"DTH Character Studio", "&OK");
+		print("Wrote", oAcc.morphs.length, "morphs and", oAcc.bones.length, "bones to", sPath);
+		return true;
 	}
+	print("Could not write the morph index:", sPath);
+	return false;
+}
+
+/**********************************************************************
+ * Progress — fully guarded: a Daz build without DzProgress just runs silently
+ * rather than taking the whole script down with it.
+ */
+function dthProgressStart(sInfo, iSteps){
+	try {
+		if(typeof DzProgress != "undefined") return new DzProgress(sInfo, iSteps);
+	} catch(e){ /* no progress bar */ }
+	return null;
+}
+
+function dthProgressStep(oProgress, sInfo){
+	if(!oProgress) return;
+	try {
+		if(sInfo && typeof oProgress.setInfo == "function") oProgress.setInfo(sInfo);
+		if(typeof oProgress.step == "function") oProgress.step();
+	} catch(e){ /* ignore */ }
+}
+
+function dthProgressFinish(oProgress){
+	if(!oProgress) return;
+	try { if(typeof oProgress.finish == "function") oProgress.finish(); } catch(e){ /* ignore */ }
+}
+
+/**********************************************************************
+ * The whole job. config: { outDir, scriptDir }
+ */
+function DthBuildGenesisIndex(config){
+	var aPlan = dthGenesisBuildPlan();
+	var oByGen = {};
+	var aMissing = [];
+	var iUnknown = 0;
+	var g, f;
+
+	// Scanning the OPEN scene is the escape hatch for everything the stock
+	// figures don't carry (third-party geografts, add-ons, fitted clothing), so
+	// offer it whenever the scene already holds figures - and never clear a
+	// scene the user hasn't agreed to lose.
+	var bScanOpenScene = false;
+	if(dthSceneFigureRoots().length > 0){
+		bScanOpenScene = MessageBox.question(
+			"The open scene already has figures in it.\n\n" +
+			"Scan THOSE figures (keeps everything they wear - third-party " +
+			"geografts, add-ons, fitted clothing - in the index), or build the " +
+			"stock figures for every generation from scratch?\n\n" +
+			"Building replaces the open scene.",
+			"DTH Character Studio",
+			"&Scan open scene", "&Build stock figures") == 0;
+	}
+
+	if(!bScanOpenScene){
+		var bGo = MessageBox.question(
+			"This builds the morph + bone index for every generation:\n\n" +
+			"  Genesis 3, 8 and 8.1 - female + male\n" +
+			"  Genesis 9 - twice, one with Golden Palace, one with Dicktator\n\n" +
+			"It loads them a generation at a time and CLEARS THE SCENE between " +
+			"each, so save your work first. This takes a few minutes.",
+			"DTH Character Studio",
+			"&Build the index", "&Cancel") == 0;
+		if(!bGo) return;
+	}
+
+	if(bScanOpenScene){
+		iUnknown = dthScanSceneInto(oByGen);
+	} else {
+		var oProgress = dthProgressStart("Building the DTH Genesis index...", aPlan.length);
+		var aRoots = dthContentRoots(config["scriptDir"]);
+		print("Content roots:", aRoots.join(" | "));
+		for(g = 0; g < aPlan.length; g++){
+			var oGen = aPlan[g];
+			dthProgressStep(oProgress, "Genesis " + oGen.genesis + "...");
+			dthClearScene();
+			for(f = 0; f < oGen.figures.length; f++){
+				var oSpec = oGen.figures[f];
+				var sAsset = dthResolveAsset(aRoots, oSpec);
+				if(!sAsset){
+					aMissing.push(oSpec.label);
+					continue;
+				}
+				var oFigure = dthLoadFigure(sAsset);
+				if(!oFigure){
+					aMissing.push(oSpec.label);
+					continue;
+				}
+				if(oSpec.graft){
+					var sGraft = dthResolveAsset(aRoots, oSpec.graft);
+					if(!sGraft || !dthLoadGraft(sGraft, oFigure)) aMissing.push(oSpec.graft.name);
+				}
+			}
+			iUnknown += dthScanSceneInto(oByGen, oGen.genesis);
+		}
+		dthProgressFinish(oProgress);
+	}
+
+	// One file per generation that produced anything.
+	var aWritten = [];
+	var aFailed = [];
+	var aGenesis = ["G3", "G8", "G8.1", "G9"];
+	for(g = 0; g < aGenesis.length; g++){
+		var oAcc = oByGen[aGenesis[g]];
+		if(!oAcc) continue;
+		if(dthWriteIndex(config["outDir"], aGenesis[g], oAcc))
+			aWritten.push("Genesis " + aGenesis[g] + ": " + oAcc.morphs.length +
+				" morphs, " + oAcc.bones.length + " bones");
+		else
+			aFailed.push("Genesis " + aGenesis[g]);
+	}
+
+	var sMsg;
+	if(aWritten.length){
+		sMsg = "Indexed:\n\n" + aWritten.join("\n") +
+			"\n\nThe Morph name and bone autocompletes in DTH Character Studio now know them.";
+	} else {
+		sMsg = "Nothing was indexed - no Genesis figure could be built or found in the scene.";
+	}
+	if(aMissing.length)
+		sMsg += "\n\nNot installed (skipped): " + aMissing.join(", ") + ".";
+	if(iUnknown)
+		sMsg += "\n\n" + iUnknown + " figure(s) in the scene were not a Genesis 3/8/8.1/9 " +
+			"figure and were skipped.";
+	if(aFailed.length)
+		sMsg += "\n\nCould not write the index for: " + aFailed.join(", ") +
+			"\n(" + config["outDir"] + ")";
+	MessageBox.information(sMsg, "DTH Character Studio", "&OK");
 }

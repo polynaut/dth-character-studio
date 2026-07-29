@@ -15,10 +15,7 @@ import dthWorkflowRuntime from '../runtime/DthWorkflow.dsa?raw'
 import dthProductsRuntime from '../runtime/DthProducts.dsa?raw'
 import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
 import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
-import scanMorphsG9 from '../runtime/Scan_Morphs_G9.dsa?raw'
-import scanMorphsG81 from '../runtime/Scan_Morphs_G8.1.dsa?raw'
-import scanMorphsG8 from '../runtime/Scan_Morphs_G8.dsa?raw'
-import scanMorphsG3 from '../runtime/Scan_Morphs_G3.dsa?raw'
+import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 
 import { join } from './fs'
@@ -39,8 +36,9 @@ const RUNTIME_FILES: Record<string, string> = {
   // Product-scan runtime — used only by the generated Scan_Products_<Name>.dsa
   // (the Daz Products feature), but installed for every project (harmless when off).
   'DthProducts.dsa': dthProductsRuntime,
-  // Morph-scanner runtime — included by the VISIBLE Scan_Morphs_<Genesis>.dsa
-  // wrappers below; feeds the Morph-name autocomplete's per-generation index.
+  // Morph/bone-index runtime — included by the VISIBLE Build_Genesis_Index.dsa
+  // below; builds the stock figures per generation and scans them into the
+  // per-generation index feeding the Morph-name + bone autocompletes.
   'DthScanMorphs.dsa': dthScanMorphsRuntime,
   // Keyframe-scanner runtime — included by DthWorkflow (debug/scanned-CSV paths)
   // AND by the visible Scan_Frames.dsa wrapper, which exports the open scene's
@@ -52,17 +50,27 @@ const RUNTIME_FILES: Record<string, string> = {
  * The visible scan scripts, installed AS-IS at the DTH-Character-Studio root
  * (they run there, so they include the dot-prefixed runtime directly — no
  * `../../` rewrite), with the studio's app-data folder baked into their output
- * path at install time. Scan_Morphs_<Genesis> feeds the Morph-name
- * autocomplete; Scan_Frames exports the open scene's keyed frames as a CSV for
- * "Import from CSV".
+ * path at install time. Build_Genesis_Index builds + scans every generation's
+ * stock figures into the per-generation morph/bone index behind the Morph-name
+ * and bone autocompletes (it replaced the four per-generation
+ * `Scan_Morphs_<Genesis>` wrappers, which are swept below); Scan_Frames exports
+ * the open scene's keyed frames as a CSV for "Import from CSV".
  */
 const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
-  'Scan_Morphs_G9.dsa': scanMorphsG9,
-  'Scan_Morphs_G8.1.dsa': scanMorphsG81,
-  'Scan_Morphs_G8.dsa': scanMorphsG8,
-  'Scan_Morphs_G3.dsa': scanMorphsG3,
+  'Build_Genesis_Index.dsa': buildGenesisIndexScript,
   'Scan_Frames.dsa': scanFramesScript,
 }
+
+/** Visible scripts earlier versions installed at the root that no longer exist
+ *  — removed on install so a stale copy can't be run against the current
+ *  runtime. The four `Scan_Morphs_<Genesis>` wrappers are folded into
+ *  Build_Genesis_Index.dsa, which does every generation in one run. */
+const RETIRED_VISIBLE_SCRIPTS = [
+  'Scan_Morphs_G9.dsa',
+  'Scan_Morphs_G8.1.dsa',
+  'Scan_Morphs_G8.dsa',
+  'Scan_Morphs_G3.dsa',
+]
 
 /** `<My DAZ 3D Library>/Scripts/DTH-Character-Studio` — the shared install root,
  *  holding the DTH runtime files (installed once) at its top level. */
@@ -154,9 +162,13 @@ export async function copyRuntimeFiles(
     await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
   }
   // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)
-  // the studio installed before runtime files were dot-prefixed. Scan_Morphs
-  // wrappers are exempt — they're MEANT to be visible.
-  for (const legacy of [...Object.keys(RUNTIME_FILES), 'ScanKeyFrames.dsa']) {
+  // the studio installed before runtime files were dot-prefixed, plus the
+  // visible scripts that have since been retired (see above).
+  for (const legacy of [
+    ...Object.keys(RUNTIME_FILES),
+    'ScanKeyFrames.dsa',
+    ...RETIRED_VISIBLE_SCRIPTS,
+  ]) {
     const old = join(destDir, legacy)
     if (await exists(old)) await remove(old)
   }

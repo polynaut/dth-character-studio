@@ -157,7 +157,7 @@ export function JcmModsGrid({
   mods: Array<JcmMorphMod>
   onChange: (mods: Array<JcmMorphMod>) => void
   /** Scanned bones for this generation — enables the bone-name autocomplete when
-   *  a Scan_Morphs_<Genesis> run has produced an index. */
+   *  a Build_Genesis_Index run has produced an index. */
   boneIndex?: Array<BoneIndexEntry>
   /** Requests clearing ALL rules — the host owns the confirm dialog (and what
    *  "all" means on a non-primary scene). Renders the Clear button when set. */

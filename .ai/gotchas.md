@@ -64,6 +64,36 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
   re-running the character's ROM script is enough — no app rebuild needed.
+- **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
+  `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
+  RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from
+  a character script two levels down, fatal for the same file included by a VISIBLE
+  root-level script (`Build_Genesis_Index.dsa`, `Scan_Frames.dsa`), which lives at
+  the runtime root. So the visible wrapper does the includes, in dependency order
+  (`.DthUtils.dsa` first, then the scanner), and the scanner just calls the utils
+  functions as globals. The rewrite is string-blind: even a double-quoted runtime
+  filename in a COMMENT gets repointed.
+- **The stock figure/graft content paths are not what you'd guess** (measured
+  2026-07-29 against a real "My DAZ 3D Library"): the G8 base figures are
+  `People/Genesis 8 <Sex>/Genesis 8 Basic <Sex>.duf` (not `Genesis 8 <Sex>.duf`), and
+  **Genesis 8.1 installs INTO the Genesis 8 folder** —
+  `People/Genesis 8 Female/Genesis 8.1 Basic Female.duf`. G3 and G9 are the plain
+  names (`People/Genesis 3 Female/Genesis 3 Female.duf`, `People/Genesis 9/Genesis 9.duf`).
+  The G9 geografts are **wearable** presets (so the target figure must be SELECTED
+  before `openFile`) under `People/Genesis 9/Anatomy/<product>/00-Manual Setup/`:
+  `2-Golden Palace Graft.duf` and `1-Dicktator.duf`. `Build_Genesis_Index` therefore
+  tries a candidate list, then a bounded depth-2 walk (shortest matching `.duf` wins,
+  which is what prefers the plain graft over `…Smart_Vanilla.duf`) — never one
+  hard-coded path.
+- **`DzContentMgr.findFile(rel, DzContentMgr.AllDirsAndCloud)` is the supported way
+  to resolve a content-relative path** (confirmed against Daz's own shipped scripts
+  under `data/resources/Lesson Strips`, which use exactly that two-arg form). Content
+  ROOTS are less certain, so the index builder derives one guaranteed root from its
+  own install location (`<lib>/Scripts/DTH-Character-Studio` → `<lib>`) and treats
+  the `getNumContentDirectories()`/`getContentDirectoryPath(i)` enumeration as
+  typeof-guarded extra. `DzNewAction` is NOT a scriptable "clear the scene" — it opens
+  the New Scene dialog; use `Scene.clear()` (guarded, with a remove-every-root-node
+  fallback).
 - **"Clean" scene `.duf`s carry stray animation keys** (measured 2026-07-27 on the
   Ita_G9_GP doc assets): the JM Nipple product leaves 5 two-key channels on its
   graft's BONES (keys at frames 0 + 7; four value-flat, one actually changing) in
@@ -289,13 +319,16 @@ current code before relying on details, but assume the *lesson* still holds.
   after the morph-autocomplete a11y work, tests locate those cells by
   `combobox`/`option` roles (rom-sections tests hit this). The JCM **bone** field
   (`bone-name-cell.tsx`) is a second such combobox — same query rule applies.
-- **The `Scan_Morphs_<Genesis>` index feeds TWO autocompletes, from ONE file.**
-  `DthScanMorphs.dsa` writes `morphs_<G>.json` (in app-data) with both a `morphs`
-  array (morph dials) and, since index version 2 / RUNTIME_VERSION 34, a `bones`
-  array (every `DzBone`'s `{ name, label }`). `fetchMorphIndex`/`fetchBoneIndex`
+- **The `Build_Genesis_Index` index feeds TWO autocompletes, from ONE file per
+  generation.** `DthScanMorphs.dsa` writes `morphs_<G>.json` (in app-data) with both
+  a `morphs` array (morph dials) and, since index version 2 / RUNTIME_VERSION 34, a
+  `bones` array (every `DzBone`'s `{ name, label }`). `fetchMorphIndex`/`fetchBoneIndex`
   read the two arrays from that same file, cached separately. Bones are otherwise
   skipped by the morph scan (they carry no morph dials). An old (v1) or
-  never-scanned file just yields empty lists — re-run Scan_Morphs in Daz.
+  never-scanned file just yields empty lists — re-run Build_Genesis_Index in Daz.
+  Since runtime v38 ONE run writes all four generations (index `version: 3`, with a
+  `figures` array naming what was scanned); the readers only ever look at `morphs` +
+  `bones`, so the metadata is free to change.
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
   `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
   `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's

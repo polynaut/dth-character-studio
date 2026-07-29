@@ -273,7 +273,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       // Machine-wide, but edited on the Settings → Project tab (product scanning).
       ...(opts.dimManifestsFolder ? { dimManifestsFolder: opts.dimManifestsFolder } : {}),
     }),
-    // Morph + bone index (a Scan_Morphs_G9.dsa run's output) — feeds the
+    // Morph + bone index (a Build_Genesis_Index.dsa run's output) — feeds the
     // Morph-name autocomplete (and its guide screenshot) and the JCM bone
     // autocomplete.
     [`${P.appData}/morphs_G9.json`]: JSON.stringify({

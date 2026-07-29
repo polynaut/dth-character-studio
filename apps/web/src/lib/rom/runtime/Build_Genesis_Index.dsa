@@ -1,0 +1,26 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - build the morph + bone index for EVERY generation in
+// one run. Nothing to select, nothing to load first: it creates the stock
+// figures itself (Genesis 3/8/8.1 female + male, and Genesis 9 twice - it is
+// gender-neutral, so that pair is differentiated by geograft: Golden Palace on
+// one, Dicktator on the other), scans every figure node in the scene along with
+// everything fitted to it, and writes one index per generation for the studio's
+// Morph-name and bone autocompletes.
+//
+// It CLEARS THE SCENE as it goes (one generation at a time) - it asks first.
+// When the open scene already has figures it offers to scan those instead:
+// that's how you index morphs the stock figures don't carry (third-party
+// geografts, add-ons, fitted clothing).
+//
+// The output path is baked in by the studio when it installs this script.
+
+var sSelfDir = new DzFileInfo(getScriptFileName()).path();
+var dir_self = new DzDir(sSelfDir);
+include(dir_self.filePath(".DthUtils.dsa"));
+include(dir_self.filePath(".DthScanMorphs.dsa"));
+
+DthBuildGenesisIndex({
+	outDir: "__DTH_APPDATA_DIR__",
+	scriptDir: String(sSelfDir)
+});

@@ -35,7 +35,7 @@ function highlightMatch(text: string, q: string): ReactNode {
 
 /**
  * The JCM bone-name input with autocomplete over the scanned bone index
- * (`Scan_Morphs_<Genesis>.dsa` output → the `bones` array). Search hits match the
+ * (`Build_Genesis_Index.dsa` output → the `bones` array). Search hits match the
  * bone's UI label OR its internal name; picking one inserts the LABEL — what the
  * runtime resolves first (findNodeChildByLabel → findNodeChild) and what the
  * field stores by default. Free typing still works exactly like a plain cell

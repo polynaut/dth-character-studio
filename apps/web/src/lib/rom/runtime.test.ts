@@ -26,16 +26,13 @@ const RUNTIME_FILES = [
   'DthProducts.dsa',
   'DthScanMorphs.dsa',
   'DthScanFrames.dsa',
-  'Scan_Morphs_G9.dsa',
-  'Scan_Morphs_G8.1.dsa',
-  'Scan_Morphs_G8.dsa',
-  'Scan_Morphs_G3.dsa',
+  'Build_Genesis_Index.dsa',
   'Scan_Frames.dsa',
 ]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '0962dbd716812039ffcd2715a5117f7e4d3f7c131c55e47f1d50e22145486db6'
+const EXPECTED_RUNTIME_HASH = 'f249fa609c6ccaf67eb4641c1283482764f6ba8914f64bd88ef8da702dfa1bef'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')

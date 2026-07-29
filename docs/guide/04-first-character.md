@@ -341,30 +341,31 @@ suggests matches as you type. The manual route via *Parameter Settings*
 </p>
 
 <details>
-<summary><strong>Recommended: scan your morphs once, then autocomplete</strong> — <code>Scan_Morphs_&lt;Genesis&gt;.dsa</code></summary>
+<summary><strong>Recommended: build the index once, then autocomplete</strong> — <code>Build_Genesis_Index.dsa</code></summary>
 <table><tr><td>
 
-The runtime installation (see [Tools](./tools.md)) puts four visible scan
-scripts into your Daz library at `Scripts/DTH-Character-Studio/`:
-`Scan_Morphs_G9.dsa`, `Scan_Morphs_G8.1.dsa`, `Scan_Morphs_G8.dsa` and
-`Scan_Morphs_G3.dsa`.
+The runtime installation (see [Tools](./tools.md)) puts one visible index script
+into your Daz library at `Scripts/DTH-Character-Studio/`:
+**`Build_Genesis_Index.dsa`**. It covers **every** generation in a single run —
+there is nothing to load or select first:
 
-Run the one matching your generation, once per generation:
-
-1. In Daz Studio, load a **freshly created, unrenamed** figure of that
-   generation (plain *Genesis 9*, say) — plus anything whose morphs you want
-   indexed: geografts, add-ons, fitted clothing. The scan covers the figure
-   **and every node fitted to it**.
-2. Select the figure root and run the scan script from the Content Library
-   (`Scripts/DTH-Character-Studio/Scan_Morphs_<Genesis>`).
+1. In Daz Studio, **save your open scene** (the build clears it), then run
+   `Scripts/DTH-Character-Studio/Build_Genesis_Index` from the Content Library.
+2. Confirm the prompt. It then creates the stock figures itself, one generation
+   at a time — *Genesis 3*, *8* and *8.1* female **and** male, and *Genesis 9*
+   twice: it's gender-neutral, so that pair is differentiated by geograft
+   instead (**Golden Palace** on one, **Dicktator** on the other, when you have
+   them installed). It scans each figure plus everything fitted to it, and
+   writes one index per generation. Takes a few minutes.
 
   <p align="center">
     <img width="960" alt="Running the scan script in Daz" src="https://github.com/user-attachments/assets/1b381f07-38ae-46f2-8e84-d19e9ff65e1d" />
     <br>
-    <sub><em>Select the figure root and run the scan script.</em></sub>
+    <sub><em>Run the index script from the Content Library.</em></sub>
   </p>
 
-3. A summary reports what was found.
+3. A summary reports what was indexed per generation — plus anything it couldn't
+   find, so a missing product is never silent.
 
   <p align="center">
     <img width="342" alt="Scan summary" src="https://github.com/user-attachments/assets/55fba5d5-75ba-4576-b201-f4ea55178f84" />
@@ -372,10 +373,16 @@ Run the one matching your generation, once per generation:
     <sub><em>The scan reports how many morphs were found across how many nodes.</em></sub>
   </p>
 
-The scan indexes **everything dialable** the figure carries — classic morphs
+The scan indexes **everything dialable** each figure carries — classic morphs
 *and* controller dials, across all products installed for that generation.
 Installed new morph products later? Just run it again. Either way the studio
 picks the index up by itself the next time its window gains focus.
+
+**Got a figure the stock build doesn't cover** — a third-party geograft, an
+add-on, fitted clothing whose morphs you dial? Load it in Daz, then run the
+script: with figures already in the scene it offers to **scan the open scene**
+instead of building fresh ones, and indexes exactly what's loaded (merged into
+that generation's index).
 
 From then on, every **Parameter name** field autocompletes after two typed
 characters — searchable by **internal name** *or* **Daz UI label** — and

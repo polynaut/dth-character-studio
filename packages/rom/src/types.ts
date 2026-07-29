@@ -1122,8 +1122,16 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       lives in (`sceneExportSubfolders`) — with the old scene-file-stem
  *       nesting as the run-time fallback for a scene missing from the map.
  *       Bumped so Refresh assets regenerates every script onto the new layout.
+ *  38 — runtime change: one `Build_Genesis_Index.dsa` replaces the four visible
+ *       `Scan_Morphs_<Genesis>.dsa` wrappers. It builds the stock figures for
+ *       every generation itself (G3/G8/G8.1 female + male; Genesis 9 twice —
+ *       gender-neutral, so the pair differs by geograft: Golden Palace vs
+ *       Dicktator), scans every figure root in the scene bucketed by detected
+ *       generation, and writes all four `morphs_<G>.json` indexes in one run
+ *       (now index `version: 3`, with a `figures` array). Bumped so Refresh
+ *       assets reinstalls the runtime and sweeps the retired wrappers.
  */
-export const RUNTIME_VERSION = 37
+export const RUNTIME_VERSION = 38
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
