@@ -380,6 +380,10 @@ function DthExportDialog({
           />
         ))}
       </div>
+      <p className="text-xs text-muted-foreground">
+        Heads up: this takes a long time — Daz Studio plays through the full ROM for every
+        selected scene.
+      </p>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
           Cancel
