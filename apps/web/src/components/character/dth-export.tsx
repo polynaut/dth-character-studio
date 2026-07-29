@@ -201,13 +201,15 @@ export function DthExportAction({
 
 /** One selectable scene row — a simplified Daz scene card: checkbox, `.tip.png`
  *  portrait, name, status hint, and the solo wand. Clicking the row toggles its
- *  checkbox; the daz-card utility supplies the tint/ring via `data-selected`. */
+ *  checkbox, double-clicking selects EVERY row (the wand's counterpart); the
+ *  daz-card utility supplies the tint/ring via `data-selected`. */
 function SceneRow({
   status,
   checked,
   loading,
   onToggle,
   onSolo,
+  onSelectAll,
 }: {
   status: ExecuteSceneStatus
   checked: boolean
@@ -215,6 +217,7 @@ function SceneRow({
   loading: boolean
   onToggle: () => void
   onSolo: () => void
+  onSelectAll: () => void
 }) {
   const fileName = status.scenePath.split(/[\\/]/).pop() ?? status.scenePath
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
@@ -277,13 +280,16 @@ function SceneRow({
         </Button>
       </div>
       {/* Row-wide toggle as a transparent cover (the LinkedAssetCard pattern) —
-          checkbox and wand sit above it with z-10. */}
+          checkbox and wand sit above it with z-10. A DOUBLE click selects all
+          rows: the two single-click toggles fire first and cancel out, then
+          dblclick lands, so the end state is deterministic. */}
       {!disabled && (
         <button
           type="button"
           aria-hidden
           tabIndex={-1}
           onClick={onToggle}
+          onDoubleClick={onSelectAll}
           className="absolute inset-0 rounded-lg"
         />
       )}
@@ -396,7 +402,8 @@ function DthExportDialog({
           DTH Export
           <InfoPopup label="DTH Export — more information">
             Choose the Daz scenes to run through the DTH Exporter Plugin. Scenes that changed
-            since their last export are pre-selected; the wand picks a single scene.
+            since their last export are pre-selected; the wand picks a single scene, a
+            double-click selects all.
           </InfoPopup>
         </span>
       }
@@ -415,6 +422,9 @@ function DthExportDialog({
             loading={status === null}
             onToggle={() => toggle(row.scenePath)}
             onSolo={() => setChecked(new Set([row.scenePath]))}
+            onSelectAll={() =>
+              setChecked(new Set(rows.filter((r) => !r.missing).map((r) => r.scenePath)))
+            }
           />
         ))}
       </div>
