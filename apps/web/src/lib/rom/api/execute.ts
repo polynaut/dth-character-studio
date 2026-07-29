@@ -25,8 +25,9 @@ import type { Character } from '@dth/rom'
 
 // The DTH Export feature: hand the character's ROM/export runs to the DTH
 // Exporter Plugin as a job file (scene path + script path rows) in the Daz
-// library, then start Daz Studio — the plugin finds the file on startup, deletes
-// it (the transfer ack) and works through the rows. Contract:
+// library, starting Daz Studio when it isn't running — the plugin polls for
+// the file (startup + regularly, so a running instance accepts new batches),
+// deletes it (the transfer ack) and works through the rows. Contract:
 // docs/exporter-plugin-job-file.md. The pure parts (CSV text, signatures) live
 // in ../execute-jobs.ts. The scene choice is the export DIALOG's (the studio
 // pre-checks the affected scenes via fetchExecuteScenes); this module takes the
@@ -237,8 +238,8 @@ export interface ExecuteJobsSummary {
   scenes: Array<string>
   /** True when a fresh Daz Studio was started for the jobs. */
   dazLaunched: boolean
-  /** True when Daz was already running — the job file is in place, but the
-   *  plugin only checks at startup, so Daz must be restarted to pick it up. */
+  /** True when Daz was already running — the plugin's regular poll picks the
+   *  job file up in that instance, no restart needed. */
   dazWasRunning: boolean
 }
 
@@ -365,9 +366,8 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     JSON.stringify(nextStamps, null, 2),
   )
 
-  // Start Daz scene-less so the plugin's startup check finds the job file. A
-  // running instance can't be used — the plugin only checks at startup — so we
-  // leave it alone and tell the user to restart Daz instead.
+  // Start Daz scene-less when it isn't running; a running instance needs
+  // nothing — the plugin polls for the job file and picks it up in place.
   const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
   let dazLaunched = false
   if (!dazWasRunning) {

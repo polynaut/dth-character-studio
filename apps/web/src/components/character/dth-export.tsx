@@ -371,16 +371,13 @@ function DthExportDialog({
         // Preserve row order — the jobs run top to bottom.
         data: { projectId, id: character.id, scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath) },
       })
-      if (result.dazWasRunning) {
-        toast.warning(
-          `Jobs written for ${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'}, ` +
-            'but Daz Studio is already running — restart it so the Exporter Plugin picks them up.',
-        )
-      } else {
-        toast.success(
-          `Started Daz Studio — ${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'} queued for export.`,
-        )
-      }
+      const count = `${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'}`
+      toast.success(
+        result.dazWasRunning
+          ? // The plugin polls for the job file, so a running Daz picks it up.
+            `Jobs handed to the running Daz Studio — ${count} queued for export.`
+          : `Started Daz Studio — ${count} queued for export.`,
+      )
       onExported()
       onClose()
     } catch (error) {

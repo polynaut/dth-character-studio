@@ -11,11 +11,12 @@ import type { Character } from '@dth/rom'
  * The DTH Exporter job file — the handoff between the studio's Execute buttons
  * and the DTH Exporter Plugin. The studio writes a small CSV of
  * (daz-scene-path, daz-script-path) rows into the shared
- * `Scripts/DTH-Character-Studio/` root of the Daz library, then starts Daz
- * Studio (scene-less). The plugin checks for the file on startup, parses it,
- * DELETES it (the delete is the "transfer succeeded" ack), and works through
- * the rows: open scene → run script → discard changes → next.
- * Contract spec: docs/exporter-plugin-job-file.md.
+ * `Scripts/DTH-Character-Studio/` root of the Daz library, starting Daz Studio
+ * (scene-less) when it isn't running. The plugin POLLS for the file — on
+ * startup and regularly while Daz runs, so a running instance accepts new
+ * batches — parses it, DELETES it (the delete is the "transfer succeeded"
+ * ack), and works through the rows: open scene → run script → discard
+ * changes → next. Contract spec: docs/exporter-plugin-job-file.md.
  *
  * This module is the pure part (names, CSV text, change signatures) so it stays
  * unit-testable; the I/O lives in api/execute.ts.
