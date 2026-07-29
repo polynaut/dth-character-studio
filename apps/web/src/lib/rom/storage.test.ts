@@ -415,6 +415,109 @@ describe('moveCharacter', () => {
   })
 })
 
+describe('createCharacterAt seeds the Houdini folder + export directory', () => {
+  const PROJECT = '/games/Nova'
+
+  /** A project folder with a `.dcsp` carrying the given behaviour settings. */
+  function seedProject(manifest: Record<string, unknown> = {}): storage.Project {
+    addDir(PROJECT)
+    files.set(
+      `${PROJECT}/Nova.dcsp`,
+      JSON.stringify({
+        schemaVersion: 2,
+        id: 'proj-1',
+        name: 'Nova',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        ...manifest,
+      }),
+    )
+    return { id: 'proj-1', name: 'Nova', path: PROJECT }
+  }
+
+  function fresh(name: string, over: Partial<Character> = {}): Character {
+    return characterSchema.parse({
+      id: newId(),
+      name,
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      ...over,
+    })
+  }
+
+  it('points a new character at its seeded Houdini folder', async () => {
+    const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: true })
+
+    const { character, location } = await storage.createCharacterAt(
+      project,
+      fresh('Kira'),
+      'Kira',
+    )
+
+    expect(location.folderAbs).toBe('/games/Nova/Kira')
+    expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
+    // The export directory starts where the folder picker would have opened.
+    expect(character.exportPath).toBe('/games/Nova/Kira/houdini')
+    // …and it's in the definition on disk, not just the returned record.
+    expect(JSON.parse(files.get('/games/Nova/Kira/Kira.json') as string)).toMatchObject({
+      exportPath: '/games/Nova/Kira/houdini',
+    })
+  })
+
+  it('follows a renamed Houdini subfolder, and the folder auto-suffix', async () => {
+    const project = seedProject({ houdiniSubdir: 'hou/projects', createHoudiniSubdir: true })
+    addDir('/games/Nova/Kira') // taken → the create auto-suffixes
+
+    const { character, location } = await storage.createCharacterAt(
+      project,
+      fresh('Kira'),
+      'Kira',
+    )
+
+    expect(location.folderAbs).toBe('/games/Nova/Kira (2)')
+    // The path follows the folder the create actually landed in — which the
+    // caller could not have predicted.
+    expect(character.exportPath).toBe('/games/Nova/Kira (2)/hou/projects')
+    expect(dirs.has('/games/Nova/Kira (2)/hou/projects')).toBe(true)
+  })
+
+  it('leaves the export directory empty when the seed is switched off', async () => {
+    const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: false })
+
+    const { character } = await storage.createCharacterAt(project, fresh('Kira'), 'Kira')
+
+    // No folder was created, so nothing to point at — the user chooses.
+    expect(dirs.has('/games/Nova/Kira/houdini')).toBe(false)
+    expect(character.exportPath).toBe('')
+  })
+
+  it('never seeds (or points at) anything for a definition dropped in the project root', async () => {
+    const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: true })
+
+    const { character, location } = await storage.createCharacterAt(project, fresh('Kira'), '')
+
+    expect(location.relFolder).toBe('')
+    // A root-level definition owns no folder; a seed here would litter the project.
+    expect(dirs.has('/games/Nova/houdini')).toBe(false)
+    expect(character.exportPath).toBe('')
+  })
+
+  it('keeps an export path the incoming character already carries', async () => {
+    const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: true })
+
+    const { character } = await storage.createCharacterAt(
+      project,
+      fresh('Kira', { exportPath: '/elsewhere/exports' }),
+      'Kira',
+    )
+
+    expect(character.exportPath).toBe('/elsewhere/exports')
+    // The seed folder is still created — that part isn't conditional on the path.
+    expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
+  })
+})
+
 describe('deleteCharacter', () => {
   function seedKira(): Character {
     const c = characterSchema.parse({

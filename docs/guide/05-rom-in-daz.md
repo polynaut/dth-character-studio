@@ -51,7 +51,11 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
   <sub><em>The export directory section on the character page.</em></sub>
 </p>
 
-1. On the character page, set an **Export directory** and Save.
+1. On the character page, check the **Export directory**. A new character
+   already has one: its own **Houdini subfolder** (the empty folder the
+   studio seeds for the character's Houdini project). Change it with
+   **Change…** if you export somewhere else, or **Clear** it to turn the
+   auto-export off.
 2. Run the script in Daz as above — after building the ROM it now runs the
    exporter automatically and writes everything the pipeline needs into your
    export folder: **`<Name>.abc`**, **`<Name>.dth`**, and the **PoseAsset CSV**
