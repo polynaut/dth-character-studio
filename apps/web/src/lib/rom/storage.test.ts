@@ -674,6 +674,24 @@ describe('copyRuntimeFiles', () => {
     // The output folder is baked in at install time — no token survives.
     expect(script).toContain('outDir: "/appdata"')
     expect(script).not.toContain('__DTH_APPDATA_DIR__')
+
+    // Each visible script gets its Content Library artwork beside it, by name —
+    // Daz matches `<script base name>.png` / `.tip.png`, so a rename here
+    // silently reverts the tiles to a broken-image placeholder. Written as real
+    // PNG BYTES (the bundled data URL decoded), not text.
+    for (const icon of [
+      'Build_Genesis_Index.png',
+      'Build_Genesis_Index.tip.png',
+      'Scan_Frames.png',
+      'Scan_Frames.tip.png',
+    ]) {
+      const bytes = files.get(`${root}/${icon}`)
+      expect(bytes, icon).toBeInstanceOf(Uint8Array)
+      // The 8-byte PNG signature — proof the base64 decode produced a real image.
+      expect([...(bytes as Uint8Array).slice(0, 8)], icon).toEqual([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ])
+    }
     for (const stale of [
       'Scan_Morphs_G9.dsa',
       'Scan_Morphs_G8.1.dsa',

@@ -71,6 +71,16 @@ current code before relying on details, but assume the *lesson* still holds.
   reinstall on save and keeps running the older bundled runtime — Tools → Refresh
   assets (which passes `force`) is what actually replaces it. A second fix inside
   the same unreleased version bump therefore looks like "my change had no effect".
+- **A Daz Content Library tile is just a same-named PNG beside the file** —
+  `<base name>.png` at **91×91** for the tile, `<base name>.tip.png` at **256×256**
+  for the hover preview (both verified against the stock `Genesis 9.png` /
+  `Genesis 9.tip.png`). No manifest, no metadata: Daz matches on NAME alone, so
+  renaming a script without renaming its artwork silently reverts the tile to a
+  broken-image placeholder. The studio bundles the four PNGs via Vite `?inline`
+  (base64 data URLs — the app stays one self-contained binary, no asset fetch under
+  the strict CSP) and `writeFile`s the decoded bytes in `copyRuntimeFiles`; they're
+  folded into the runtime hash guard so a changed icon must take a
+  `RUNTIME_VERSION` bump to reach existing installs, like any other runtime file.
 - **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
   `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
   RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from

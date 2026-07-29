@@ -1,4 +1,4 @@
-import { exists, mkdir, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readTextFile, remove, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 
 import { characterScriptName, RUNTIME_VERSION } from '@dth/rom'
 import type { Character } from '@dth/rom'
@@ -17,6 +17,15 @@ import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
 import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
 import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
+// Content Library artwork for the two visible scripts (Daz's own convention:
+// `<name>.png` at 91×91 is the thumbnail, `<name>.tip.png` at 256×256 the hover
+// preview — verified against the stock Genesis 9 assets). `?inline` bundles them
+// as base64 data URLs, so the install needs no asset fetch and the app stays a
+// single self-contained binary.
+import buildGenesisIndexIcon from '../runtime/Build_Genesis_Index.png?inline'
+import buildGenesisIndexTip from '../runtime/Build_Genesis_Index.tip.png?inline'
+import scanFramesIcon from '../runtime/Scan_Frames.png?inline'
+import scanFramesTip from '../runtime/Scan_Frames.tip.png?inline'
 
 import { join } from './fs'
 import { dataDir } from './app-data'
@@ -59,6 +68,29 @@ const RUNTIME_FILES: Record<string, string> = {
 const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   'Build_Genesis_Index.dsa': buildGenesisIndexScript,
   'Scan_Frames.dsa': scanFramesScript,
+}
+
+/**
+ * Content Library artwork for those scripts, installed beside them. Daz picks a
+ * script's thumbnail up purely by NAME — `<script base name>.png` for the 91×91
+ * tile, `.tip.png` for the 256×256 hover preview — so these keys must track the
+ * script names above; without them the tiles render as a generic broken-image
+ * placeholder. Values are the bundled data URLs, decoded to bytes on install.
+ */
+const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
+  'Build_Genesis_Index.png': buildGenesisIndexIcon,
+  'Build_Genesis_Index.tip.png': buildGenesisIndexTip,
+  'Scan_Frames.png': scanFramesIcon,
+  'Scan_Frames.tip.png': scanFramesTip,
+}
+
+/** Decode a bundled `?inline` asset (a `data:…;base64,…` URL) to bytes. */
+function dataUrlBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
 }
 
 /** Visible scripts earlier versions installed at the root that no longer exist
@@ -160,6 +192,17 @@ export async function copyRuntimeFiles(
   // studio reads them (DzFile wants '/').
   for (const [name, raw] of Object.entries(VISIBLE_SCAN_SCRIPTS)) {
     await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
+  }
+  // …and their Content Library artwork beside them, so the scripts show up as
+  // real tiles instead of broken-image placeholders. Best-effort per file: an
+  // icon that won't write is cosmetic, and must not fail the install (or leave
+  // the marker unstamped, which would re-run the whole install forever).
+  for (const [name, dataUrl] of Object.entries(VISIBLE_SCRIPT_ICONS)) {
+    try {
+      await writeFile(join(destDir, name), dataUrlBytes(dataUrl))
+    } catch {
+      // no thumbnail for this script — the script itself still runs
+    }
   }
   // Clean up earlier non-hidden copies (and the now-merged ScanKeyFrames.dsa)
   // the studio installed before runtime files were dot-prefixed, plus the

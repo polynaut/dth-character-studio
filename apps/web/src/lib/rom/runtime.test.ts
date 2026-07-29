@@ -31,9 +31,20 @@ const RUNTIME_FILES = [
   'Scan_Frames.dsa',
 ]
 
+// The visible scripts' Content Library artwork, installed beside them. Hashed as
+// BYTES (no line-ending normalisation) and folded into the same guard: the
+// installed-marker skip means a changed icon only reaches an existing install
+// through a RUNTIME_VERSION bump, exactly like a changed script.
+const RUNTIME_ASSETS = [
+  'Build_Genesis_Index.png',
+  'Build_Genesis_Index.tip.png',
+  'Scan_Frames.png',
+  'Scan_Frames.tip.png',
+]
+
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '450ede325253145786ce266a92f629d4845b45e9685aa38a2f25e0c26a3febb2'
+const EXPECTED_RUNTIME_HASH = '5ef3d5da5a78602af86bb8bd9660cc5aead3d637abeef48f919498b317838298'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -42,6 +53,10 @@ function runtimeHash(): string {
     h.update(file)
     // Normalise CRLF → LF so a line-ending flip on checkout doesn't false-fail.
     h.update(readFileSync(join(dir, file), 'utf8').replace(/\r\n/g, '\n'))
+  }
+  for (const asset of RUNTIME_ASSETS) {
+    h.update(asset)
+    h.update(readFileSync(join(dir, asset))) // binary — hash the bytes as they are
   }
   return h.digest('hex')
 }
