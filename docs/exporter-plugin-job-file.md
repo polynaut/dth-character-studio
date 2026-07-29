@@ -163,6 +163,15 @@ back. If Daz Studio is already running, the studio writes the job file but
 does **not** launch (the plugin only checks at startup) — the user is told to
 restart Daz instead.
 
+**Progress watch (studio-side only — nothing for the plugin to do):** the
+studio keeps the handed-off job list **in memory** (until finished, aborted,
+or dismissed) together with the handoff time, and watches each scene's export
+directory: a scene counts as **delivered** once its PoseAsset CSV
+(`<export dir>/<scene subfolder>/<csv>`) has an mtime **newer than the handoff
+time**. After Daz consumes the job file the button shows the live count
+("Exporting 1/3…") and returns to DTH Export when every scene delivered;
+clicking it merely stops watching (the run in Daz is unaffected).
+
 ## Open points / future versions
 
 - **Modal dialogs during unattended runs:** the generated scripts report hard

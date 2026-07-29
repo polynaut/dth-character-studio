@@ -6,6 +6,7 @@ import {
   EXPORTER_JOB_HEADER,
   characterJobScriptNames,
   executeSceneSignature,
+  expectedSceneCsvRel,
   jobFileCsv,
   normalizeSceneKey,
   parseExecuteStamps,
@@ -61,6 +62,24 @@ describe('characterJobScriptNames', () => {
     expect(
       characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: false })),
     ).toEqual(['ROM_Electra_G9.dsa'])
+  })
+})
+
+describe('expectedSceneCsvRel — where the export watch looks for delivered CSVs', () => {
+  it('maps every linked scene to <its subfolder>/<base csv> under the scenes root', () => {
+    const c = makeCharacter({
+      scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
+      extraScenes: ['X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf'],
+    })
+    const map = expectedSceneCsvRel(c, 'X:/proj/Electra/daz3d')
+    expect(map[normalizeSceneKey(c.scenePath)]).toBe('primary/Electra_pose_asset.csv')
+    expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe('armor/Electra_pose_asset.csv')
+  })
+
+  it('falls back to the scene-file stem without a scenes root (the runtime fallback)', () => {
+    const map = expectedSceneCsvRel(makeCharacter())
+    expect(map[normalizeSceneKey(PRIMARY)]).toBe('Electra/Electra_pose_asset.csv')
+    expect(map[normalizeSceneKey(EXTRA)]).toBe('Electra_Armor/Electra_pose_asset.csv')
   })
 })
 

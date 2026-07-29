@@ -108,11 +108,13 @@ export type { ProductScanFile } from './api/products'
 // --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
 export {
   abortExporterJobs,
+  dismissExportRun,
   executeCharacterJobs,
   exporterJobsPending,
   fetchExecuteScenes,
+  fetchExportRunProgress,
 } from './api/execute'
-export type { ExecuteJobsSummary, ExecuteSceneStatus } from './api/execute'
+export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
 
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {

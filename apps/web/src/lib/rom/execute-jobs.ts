@@ -1,4 +1,9 @@
-import { characterScriptName } from '@dth/rom'
+import {
+  buildSceneCsvMap,
+  characterScriptName,
+  poseAssetFileName,
+  sceneExportSubfolders,
+} from '@dth/rom'
 
 import type { Character } from '@dth/rom'
 
@@ -81,6 +86,33 @@ export function jobFileCsv(jobs: Array<ExporterJob>): string {
  */
 export function characterJobScriptNames(character: Character): Array<string> {
   return [`ROM_${characterScriptName(character)}.dsa`]
+}
+
+/**
+ * Scene key → the export-dir-RELATIVE path of the PoseAsset CSV a bulk run
+ * delivers for that scene: `<scene's export subfolder>/<csv name>`, from the
+ * SAME subfolder map + scene-CSV lookup the generated export block embeds
+ * (subfolder falls back to the scene-file stem exactly like the runtime).
+ * The studio's export watch stats these files — a CSV whose mtime is newer
+ * than the handoff time means that scene finished exporting.
+ */
+export function expectedSceneCsvRel(
+  character: Character,
+  scenesRootAbs?: string,
+): Record<string, string> {
+  const subfolders = sceneExportSubfolders(character, scenesRootAbs)
+  const sceneCsvs = buildSceneCsvMap(character)
+  const baseCsv = poseAssetFileName(character)
+  const map: Record<string, string> = {}
+  for (const scene of [character.scenePath, ...character.extraScenes]) {
+    const key = normalizeSceneKey(scene)
+    if (!key) continue
+    const stem = (key.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
+    const sub = subfolders[key] ?? stem
+    const name = sceneCsvs[key] ?? baseCsv
+    map[key] = sub ? `${sub}/${name}` : name
+  }
+  return map
 }
 
 /** Character fields that don't influence what a ROM run produces (cosmetic,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Ban, Play, Wand } from 'lucide-react'
+import { Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Modal, useRefetchOnFocus } from '@dth/ui'
@@ -8,13 +8,15 @@ import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import {
   abortExporterJobs,
+  dismissExportRun,
   executeCharacterJobs,
   exporterJobsPending,
   fetchExecuteScenes,
+  fetchExportRunProgress,
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
-import type { ExecuteSceneStatus } from '#/lib/rom/api.ts'
+import type { ExecuteSceneStatus, ExportRunProgress } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -36,9 +38,12 @@ import type { Character } from '@dth/rom'
  * While a job file is WAITING for Daz (written but not yet consumed — the
  * plugin deletes it once parsed, so "exists" is "pending") the button turns
  * into **Abort**: clicking deletes the job file (and rolls the aborted scenes'
- * handoff stamps back) and the button returns to DTH Export. The existence
- * check refreshes on window focus and polls lightly while pending, so the
- * button also flips back by itself once Daz picks the jobs up.
+ * handoff stamps back). Once Daz consumes the file, the button becomes a live
+ * **Exporting n/m** state driven by the export watch (api/execute.ts keeps the
+ * handed-off jobs in memory; a scene counts as delivered when its exported
+ * PoseAsset CSV is newer than the handoff) — clicking that stops the watch,
+ * and when every scene delivers it toasts and returns to DTH Export. Status
+ * refreshes on window focus and polls lightly while pending/running.
  */
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
@@ -65,25 +70,45 @@ export function DthExportAction({
   const [open, setOpen] = useState(false)
   // null = not yet checked (renders as the normal export button).
   const [pending, setPending] = useState<boolean | null>(null)
+  const [progress, setProgress] = useState<ExportRunProgress | null>(null)
   const [aborting, setAborting] = useState(false)
 
-  // Refresh the pending state on mount + window focus (tabbing back from Daz),
-  // and poll lightly while pending so the button flips back on its own the
-  // moment the plugin consumes the file.
+  // The one status refresh: is a job file still waiting (→ Abort), and how far
+  // is the in-memory export watch (→ Exporting n/m)? Runs on mount + window
+  // focus (tabbing back from Daz) and polls while either state is live.
+  async function refreshStatus() {
+    const [isPending, run] = await Promise.all([exporterJobsPending(), fetchExportRunProgress()])
+    setPending(isPending)
+    if (run && run.characterId !== character.id) {
+      // Another character's run — not this button's business.
+      setProgress(null)
+      return
+    }
+    if (run?.allDone) {
+      setProgress(null)
+      toast.success(`DTH Export finished — ${run.total} scene${run.total === 1 ? '' : 's'} delivered.`)
+      return
+    }
+    setProgress(run)
+  }
   useRefetchOnFocus(
     () => {
-      void exporterJobsPending().then(setPending)
+      void refreshStatus()
     },
     [],
     { immediate: true },
   )
+  const watching = pending === true || progress !== null
   useEffect(() => {
-    if (pending !== true) return
+    if (!watching) return
     const id = window.setInterval(() => {
-      void exporterJobsPending().then(setPending)
+      void refreshStatus()
     }, 2500)
     return () => window.clearInterval(id)
-  }, [pending])
+    // Re-arm on `watching` alone (ONE interval): refreshStatus only captures
+    // character.id, which is constant for a mounted editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watching])
 
   async function onAbort() {
     setAborting(true)
@@ -107,6 +132,26 @@ export function DthExportAction({
         title="A job file is waiting for Daz Studio — Abort deletes it, nothing will run"
       >
         <Ban /> {aborting ? 'Aborting…' : 'Abort'}
+      </Button>
+    )
+  }
+
+  if (progress) {
+    // Daz consumed the job file and is working through the scenes — the export
+    // watch counts the delivered CSVs. Clicking stops the WATCH only (the run
+    // in Daz can't be stopped from here); that's the escape hatch for a batch
+    // that errored in Daz and will never deliver its remaining scenes.
+    return (
+      <Button
+        variant="outline"
+        className="px-3"
+        onClick={() => {
+          dismissExportRun()
+          setProgress(null)
+        }}
+        title={`Daz Studio is delivering the exports — ${progress.finished} of ${progress.total} scene${progress.total === 1 ? '' : 's'} done. Click to stop watching.`}
+      >
+        <Loader2 className="animate-spin" /> Exporting {progress.finished}/{progress.total}…
       </Button>
     )
   }
@@ -143,7 +188,11 @@ export function DthExportAction({
           projectId={projectId}
           character={character}
           onClose={() => setOpen(false)}
-          onExported={() => setPending(true)}
+          onExported={() => {
+            setPending(true)
+            // Arm the progress view right away (0/n until Daz delivers).
+            void refreshStatus()
+          }}
         />
       )}
     </>

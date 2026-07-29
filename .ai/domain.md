@@ -178,7 +178,12 @@ older runtimes as stale.
   `exportHairAssets` (gate: `if (dthBulkExport)`). A manual run (no argument)
   honors the toggles exactly as before. The job file therefore carries ONE
   ROM-script row per scene — no split Export_ rows, no same-scene session
-  sharing (contract: docs/exporter-plugin-job-file.md).
+  sharing (contract: docs/exporter-plugin-job-file.md). The studio watches the
+  run: the handed-off jobs stay in memory (api/execute.ts `activeRun`) and a
+  scene counts as delivered when its exported PoseAsset CSV
+  (`expectedSceneCsvRel` — export dir + scene subfolder + scene CSV) is newer
+  than the handoff time; the header button shows "Exporting n/m" until all
+  deliver (or the watch is dismissed/aborted).
 
 ## PoseAsset CSV eras & templates
 

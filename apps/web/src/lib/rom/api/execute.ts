@@ -2,18 +2,22 @@ import { exists, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
+import { normalizePathLower } from '#/lib/path.ts'
+import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import * as storage from '../storage'
+import { relativeInside } from '../storage/fs'
 import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   characterJobScriptNames,
   executeSceneSignature,
+  expectedSceneCsvRel,
   jobFileCsv,
   normalizeSceneKey,
   parseExecuteStamps,
   parseJobFileCsv,
 } from '../execute-jobs'
-import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
+import { charScopeInput, charsRoot, dirname, joinPath, locateCharacter, resolveProject } from './core'
 
 import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../execute-jobs'
 import type { CharacterLocation } from '../storage'
@@ -81,6 +85,64 @@ export async function exporterJobsPending(): Promise<boolean> {
 }
 
 /**
+ * The handed-off run, kept IN MEMORY until it finishes or is aborted/dismissed
+ * — the studio knows which scenes are about to export (it wrote the job file)
+ * and watches their export folders: a scene's delivered PoseAsset CSV with an
+ * mtime NEWER than the handoff time means that scene finished exporting.
+ * Per-window state (one run at a time; a new handoff replaces it), gone on a
+ * window close — the watch is a convenience view, not bookkeeping (the
+ * affected-detection stamps are the durable part).
+ */
+interface ActiveExportRun {
+  characterId: string
+  /** `Date.now()` at handoff — the CSV-mtime threshold. */
+  startedAtMs: number
+  scenes: Array<{ scenePath: string; csvAbs: string }>
+}
+let activeRun: ActiveExportRun | null = null
+
+export interface ExportRunProgress {
+  characterId: string
+  total: number
+  /** Scenes whose delivered CSV is newer than the handoff. */
+  finished: number
+  /** Every scene delivered — the watch has ended itself. */
+  allDone: boolean
+}
+
+/**
+ * The active run's live progress (null when none): stat each expected CSV and
+ * count the delivered scenes. When all are delivered the run clears itself —
+ * the caller still receives that final `allDone` snapshot once.
+ */
+export async function fetchExportRunProgress(): Promise<ExportRunProgress | null> {
+  const run = activeRun
+  if (!run) return null
+  const delivered = await Promise.all(
+    run.scenes.map(async ({ csvAbs }) => {
+      if (!csvAbs) return false
+      try {
+        const info = await stat(csvAbs)
+        return (info.mtime?.getTime() ?? 0) > run.startedAtMs
+      } catch {
+        return false
+      }
+    }),
+  )
+  const finished = delivered.filter(Boolean).length
+  const allDone = run.scenes.length > 0 && finished === run.scenes.length
+  if (allDone && activeRun === run) activeRun = null
+  return { characterId: run.characterId, total: run.scenes.length, finished, allDone }
+}
+
+/** Stop watching the active run (the run in Daz is unaffected — the watch is
+ *  an observer only). The escape hatch for a batch that errored in Daz and
+ *  will never deliver its remaining scenes. */
+export function dismissExportRun(): void {
+  activeRun = null
+}
+
+/**
  * Abort a pending handoff: delete the job file before Daz consumes it, and roll
  * the aborted scenes' handoff stamps back on THIS character (they were stamped
  * at handoff; without the rollback they'd read "unchanged" in the next dialog
@@ -101,6 +163,8 @@ export async function abortExporterJobs({ data }: { data: unknown }): Promise<vo
     // scene reads "unchanged" until its next real change or a manual re-check)
   }
   await remove(path)
+  // The aborted handoff will never run — stop the export watch with it.
+  activeRun = null
   if (rows.length === 0) return
   try {
     const { location } = await loadCharacter(projectId, id)
@@ -262,7 +326,32 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     scriptPaths.map((scriptPath) => ({ scenePath: scene, scriptPath })),
   )
   const jobFile = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), EXPORTER_JOB_FILE)
+  const startedAtMs = Date.now()
   await storage.writeTextFileAtomic(jobFile, jobFileCsv(jobs))
+
+  // Arm the export watch: remember the handed-off scenes + their expected
+  // delivered-CSV paths (export dir + the scene's export subfolder + the CSV
+  // the export block delivers — the same lookups the generated script embeds).
+  // The scenes-root resolution mirrors generateCharacterFiles.
+  const primaryDir = dirname(character.scenePath)
+  const primaryRel =
+    normalizePathLower(primaryDir) === normalizePathLower(location.folderAbs)
+      ? ''
+      : relativeInside(location.folderAbs, primaryDir)
+  const scenesRootAbs =
+    primaryRel === null
+      ? undefined
+      : joinPath(location.folderAbs, deriveScenesRootRel(primaryRel, project.dazSubdir))
+  const csvRel = expectedSceneCsvRel(character, scenesRootAbs)
+  const exportDirAbs = character.exportPath.trim()
+  activeRun = {
+    characterId: character.id,
+    startedAtMs,
+    scenes: scenes.map((scene) => {
+      const rel = csvRel[normalizeSceneKey(scene)]
+      return { scenePath: scene, csvAbs: rel ? joinPath(exportDirAbs, rel) : '' }
+    }),
+  }
 
   // Stamp the handoff (merge — untouched scenes keep their stamps).
   const stored = await readStamps(location)

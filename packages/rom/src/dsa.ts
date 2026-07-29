@@ -533,9 +533,10 @@ function buildSceneConfigMap(
  * the open scene's normalized path, matching {@link buildSceneConfigMap}. The
  * export block (in the combined ROM script AND the split Export_ script)
  * resolves the CSV to deliver through this; an identity/groom-only scene isn't
- * here and rides the base CSV.
+ * here and rides the base CSV. Public: the studio's export watch derives each
+ * scene's expected delivered-CSV path from the same lookup.
  */
-function buildSceneCsvMap(character: Character): Record<string, string> {
+export function buildSceneCsvMap(character: Character): Record<string, string> {
   const map: Record<string, string> = {}
   for (const override of activeSceneOverrides(character)) {
     if (!sceneOverrideBuildsRom(character, override)) continue
