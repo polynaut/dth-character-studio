@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Ban, Play, Wand } from 'lucide-react'
+import { Ban, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, Modal, useRefetchOnFocus } from '@dth/ui'
+import dthLogo from '#/assets/dth-logo.webp'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import {
@@ -39,6 +40,13 @@ import type { Character } from '@dth/rom'
  * check refreshes on window focus and polls lightly while pending, so the
  * button also flips back by itself once Daz picks the jobs up.
  */
+/** The DazToHue brand mark as a button icon. The button's automatic icon size
+ *  (`size-4`) only targets SVGs, so the img sizes itself; the host button keeps
+ *  `px-3` by hand for the same reason (`has-[>svg]` doesn't see an img). */
+function DthLogo() {
+  return <img src={dthLogo} alt="" aria-hidden className="size-4 shrink-0 object-contain" />
+}
+
 export function DthExportAction({
   projectId,
   character,
@@ -119,6 +127,7 @@ export function DthExportAction({
     <>
       <Button
         variant="outline"
+        className="px-3"
         onClick={() => setOpen(true)}
         disabled={disabled}
         title={
@@ -126,7 +135,7 @@ export function DthExportAction({
           'Choose scenes and run them through the DTH Exporter Plugin — writes the job file and starts Daz Studio'
         }
       >
-        <Play /> DTH Export
+        <DthLogo /> DTH Export
       </Button>
       {open && (
         <DthExportDialog
@@ -354,11 +363,12 @@ function DthExportDialog({
           Cancel
         </Button>
         <Button
+          className="px-3"
           disabled={busy || checked.size === 0}
           title={checked.size === 0 ? 'Select at least one scene' : undefined}
           onClick={() => void onExport()}
         >
-          <Play /> {busy ? 'Starting…' : 'DTH Export'}
+          <DthLogo /> {busy ? 'Starting…' : 'DTH Export'}
         </Button>
       </div>
     </Modal>
