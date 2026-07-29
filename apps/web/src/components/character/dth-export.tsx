@@ -40,11 +40,12 @@ import type { Character } from '@dth/rom'
  * check refreshes on window focus and polls lightly while pending, so the
  * button also flips back by itself once Daz picks the jobs up.
  */
-/** The DazToHue brand mark as a button icon. The button's automatic icon size
- *  (`size-4`) only targets SVGs, so the img sizes itself; the host button keeps
+/** The DazToHue brand mark as a button icon. The button's automatic icon
+ *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
+ *  the svg default; the mark's fine detail needs it. The host button keeps
  *  `px-3` by hand for the same reason (`has-[>svg]` doesn't see an img). */
 function DthLogo() {
-  return <img src={dthLogo} alt="" aria-hidden className="size-4 shrink-0 object-contain" />
+  return <img src={dthLogo} alt="" aria-hidden className="size-6 shrink-0 object-contain" />
 }
 
 export function DthExportAction({
