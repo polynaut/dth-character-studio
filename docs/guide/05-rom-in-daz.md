@@ -58,13 +58,14 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    (plus a **reference-skeleton FBX** for each **Bone scale** frame, under a
    `Reference Skeletons` subfolder — the CSV already points at each one).
 
-Three switches tune this:
+Every scene exports into its **own subfolder** of the export directory, named
+after the subfolder the scene lives in inside the character folder (the
+primary scene's is `primary`; extra scenes get theirs when they're added) — so
+outfit/scene variants of one character always export side by side. The
+exporter output **and** the PoseAsset CSV land in that subfolder.
 
-- **Generate subfolders based on Daz scenes** — nests each export under a
-  folder named after the scene open in Daz when the script runs, so
-  outfit/scene variants of one character export side by side. The exporter
-  output **and** the PoseAsset CSV land in that scene subfolder; with no scene
-  saved it falls back to the export root.
+Two switches tune this:
+
 - **Run the export with the ROM script** — on (the default), the one
   `ROM_<Name>_G9.dsa` builds the ROM and runs the export. Off, the export
   splits into its own **`Export_<Name>_G9.dsa`** beside the ROM script — run it

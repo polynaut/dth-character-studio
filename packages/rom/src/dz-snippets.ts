@@ -43,18 +43,23 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
 }
 
 /**
- * The "nest the export dir under the OPEN scene's name" DzScript snippet, at
- * base indent 0 (callers re-indent via {@link indentLines}). ONE body for the
- * ROM/Export scripts' export block and the standalone groom export — the two
- * used to carry byte-duplicated copies differing only in indentation.
- * Reads/writes the caller's `dthExportDir` var.
+ * The "nest the export dir under the open scene's OWN subfolder" DzScript
+ * snippet, at base indent 0 (callers re-indent via {@link indentLines}). ONE
+ * body for the ROM/Export scripts' export block and the standalone groom
+ * export. The map (built by `sceneExportSubfolders`) is keyed by normalized
+ * scene path; a scene missing from it falls back to the scene file's stem at
+ * run time — the pre-v37 nesting, kept so an unexpected scene still exports
+ * into its own folder rather than the root. Reads/writes the caller's
+ * `dthExportDir` var.
  */
-export function sceneSubfolderSnippet(): string {
-  return `var dthSceneFile = Scene.getFilename();
-if (dthSceneFile != "") {
-    var dthSceneName = new DzFileInfo(dthSceneFile).completeBaseName();
-    if (dthSceneName != "") dthExportDir = dthExportDir + "/" + dthSceneName;
+export function sceneExportSubfolderSnippet(map: Record<string, string>): string {
+  return `var dthExportSubByScene = ${dazJson(map)};
+var dthExportSceneKey = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthExportSub = dthExportSubByScene[dthExportSceneKey] || "";
+if (dthExportSub == "" && dthExportSceneKey != "") {
+    dthExportSub = new DzFileInfo(Scene.getFilename()).completeBaseName();
 }
+if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
 `
 }
 

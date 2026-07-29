@@ -155,6 +155,19 @@ older runtimes as stale.
   dir when copying the CSV next to the exporter output.
 - No export directory set ⇒ the ROM is still fully generated; ticked Bone scale
   rows are a harmless no-op (no validation links the two).
+- The export block ALWAYS nests each run under the open scene's own subfolder
+  (runtime v37; the old `exportSceneSubfolders` toggle is gone — schema v26):
+  an embedded map — normalized scene path → the scene's folder name below the
+  scenes root (`sceneExportSubfolders` in dsa.ts; the primary's is "primary") —
+  with the scene-file STEM as the run-time fallback for unmapped scenes. The
+  scenes root is HOST-resolved (`deriveScenesRootRel`, web
+  `lib/scene-subfolder.ts` — one rule shared with the scene cards UI and the
+  scenes-folder move) and threaded through `generateAll`. Every linked scene
+  lives in its own subfolder since v26 (primary → "primary" at creation,
+  extras seeded from the sanitized scene name, never empty); the Refresh sweep
+  physically moves legacy root-dwelling scene files into subfolders
+  (`ensureSceneSubfolders`, api/generate.ts — host-side, file moves can't be a
+  pure migration step).
 - `referenceFrames()` (generate.ts) hands the exporter the same absolute frames
   the CSV references — the 1:1 mapping is test-pinned.
 

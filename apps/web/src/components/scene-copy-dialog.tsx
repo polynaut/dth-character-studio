@@ -29,6 +29,7 @@ export function SceneCopyDialog({
   validation,
   confirmDisabled = false,
   confirmDisabledTitle,
+  requireSubfolder = false,
   onCopy,
   onLink,
   onClose,
@@ -57,6 +58,10 @@ export function SceneCopyDialog({
   confirmDisabled?: boolean
   /** Native tooltip on the disabled confirm actions saying why. */
   confirmDisabledTitle?: string
+  /** Require a non-empty subfolder for the COPY action (every scene lives in
+   *  its own subfolder now); Link in place stays available — a linked-in-place
+   *  scene has no in-project folder to name. */
+  requireSubfolder?: boolean
   onCopy: () => void
   onLink: () => void
   onClose: () => void
@@ -117,8 +122,14 @@ export function SceneCopyDialog({
             Link in place
           </Button>
           <Button
-            disabled={busy || confirmDisabled}
-            title={confirmDisabled ? confirmDisabledTitle : undefined}
+            disabled={busy || confirmDisabled || (requireSubfolder && subfolder.trim() === '')}
+            title={
+              confirmDisabled
+                ? confirmDisabledTitle
+                : requireSubfolder && subfolder.trim() === ''
+                  ? 'Enter a subfolder — every scene lives in its own subfolder now'
+                  : undefined
+            }
             onClick={onCopy}
           >
             {busy ? (deleteOriginal ? 'Moving…' : 'Copying…') : copyLabel}

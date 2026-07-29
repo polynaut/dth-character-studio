@@ -9,7 +9,7 @@ import {
   sceneConfigLookupSnippet,
   sceneGuardSnippet,
   sceneCsvLookupSnippet,
-  sceneSubfolderSnippet,
+  sceneExportSubfolderSnippet,
 } from './dz-snippets'
 import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
 import {
@@ -220,10 +220,11 @@ print("Hair items exported: " + dthGroomLabels.length);
  * native Daz API (no DTH runtime needed), so it works both appended to the ROM
  * script and as the body of a standalone Export script. Empty when no export dir
  * is set. The CSV copy is included only when the source folder is known
- * (charFolderAbs); the export nests under the open scene's name when
- * `exportSceneSubfolders` is on (resolved at run time). With `exportHairAssets`
- * on, the Export_Hair per-item pass runs right after the main export (same
- * action, same resolved dir) — in BOTH carriers, since both call this builder.
+ * (charFolderAbs); the export ALWAYS nests under the open scene's own subfolder
+ * ({@link sceneExportSubfolders} — resolved by the embedded map at run time).
+ * With `exportHairAssets` on, the Export_Hair per-item pass runs right after
+ * the main export (same action, same resolved dir) — in BOTH carriers, since
+ * both call this builder.
  */
 function buildExportBlock(
   character: Character,
@@ -232,15 +233,18 @@ function buildExportBlock(
   /** Scene → PoseAsset-CSV-name lookup: the ROM-override scenes whose delivered
    *  CSV is the scene-suffixed one. Empty ⇒ every scene rides the base CSV. */
   sceneCsvMap: Record<string, string> = {},
+  /** The character's scenes-root folder (host-resolved) — see
+   *  {@link sceneExportSubfolders}. Omitted ⇒ stem-per-scene fallback. */
+  scenesRootAbs?: string,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
   const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
-  const sceneSubfolderBlock = character.exportSceneSubfolders
-    ? indentLines(sceneSubfolderSnippet())
-    : ''
+  const sceneSubfolderBlock = indentLines(
+    sceneExportSubfolderSnippet(sceneExportSubfolders(character, scenesRootAbs)),
+  )
   // The CSV to deliver: the base name, or — when some linked scene overrides the
   // ROM — the open scene's scene-suffixed CSV, resolved at run time. Kept
   // self-contained (declares its own dthCsvScene) so the block works both
@@ -369,6 +373,57 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
     const key = record.scenePath.trim().replace(/\\/g, '/').toLowerCase()
     const labels = record.hair.map((n) => n.nodeLabel.trim()).filter((label) => label !== '')
     if (key !== '' && labels.length > 0) map[key] = labels
+  }
+  return map
+}
+
+/**
+ * The per-scene EXPORT subfolder each linked scene's export nests under:
+ * normalized scene path → the scene's own subfolder path below the character's
+ * scenes ROOT (every scene has its own subfolder now — the primary's is
+ * "primary", extras get a name seeded from the sanitized scene name at add
+ * time; nested subfolders mirror as nested export folders). The HOST resolves
+ * `scenesRootAbs` (charFolder + project dazSubdir rules — the pure core can't
+ * know it) and threads it through {@link generateAll}.
+ *
+ * Fallback = the scene's file STEM (the pre-v37 per-scene-name nesting) for a
+ * scene the root can't place: linked in place outside the root, still sitting
+ * DIRECTLY in the root (legacy layout — the Refresh sweep moves those into
+ * subfolders), no root threaded at all, or two scenes sharing one subfolder
+ * (their exports must never overwrite each other). Same key normalization as
+ * {@link groomSceneMap}.
+ */
+export function sceneExportSubfolders(
+  character: Character,
+  scenesRootAbs?: string,
+): Record<string, string> {
+  const norm = (p: string) => p.trim().replace(/\\/g, '/')
+  // Trailing-slash strip as a loop, not a `/\/+$/` regex — CodeQL flags the
+  // regex form as polynomial-time on hostile all-slash inputs (js/polynomial-redos).
+  let rootClean = scenesRootAbs ? norm(scenesRootAbs) : ''
+  while (rootClean.endsWith('/')) rootClean = rootClean.slice(0, -1)
+  const rootPrefix = rootClean ? `${rootClean.toLowerCase()}/` : ''
+  const linked = [character.scenePath, ...character.extraScenes].map(norm).filter(Boolean)
+  // A scene's below-root FOLDER path ('' = directly in the root / outside it).
+  const belowRootDir = (scene: string) => {
+    if (!rootPrefix || !scene.toLowerCase().startsWith(rootPrefix)) return ''
+    // Slice by prefix LENGTH so the original casing survives the lowercase match.
+    return scene.slice(rootPrefix.length).split('/').slice(0, -1).join('/')
+  }
+  // Two scenes in the SAME subfolder would export onto each other — those fall
+  // back to their stems (claims counted case-insensitively, Windows semantics).
+  const claims = new Map<string, number>()
+  for (const scene of linked) {
+    const dir = belowRootDir(scene).toLowerCase()
+    if (dir) claims.set(dir, (claims.get(dir) ?? 0) + 1)
+  }
+  const map: Record<string, string> = {}
+  for (const scene of linked) {
+    const key = scene.toLowerCase()
+    const dir = belowRootDir(scene)
+    const stem = (scene.split('/').pop() ?? scene).replace(/\.[^.]+$/, '')
+    const name = dir && claims.get(dir.toLowerCase()) === 1 ? dir : stem
+    if (key !== '' && name !== '') map[key] = name
   }
   return map
 }
@@ -609,6 +664,9 @@ export function toCharacterScriptDsa(
    */
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
+  /** The character's scenes-root folder (host-resolved) — sizes each scene's
+   *  export subfolder; see {@link sceneExportSubfolders}. */
+  scenesRootAbs?: string,
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, charFolderAbs)
 
@@ -640,7 +698,7 @@ export function toCharacterScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap)
+${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -767,6 +825,8 @@ export function toExportScriptDsa(
   character: Character,
   frames?: PresetFrames,
   charFolderAbs?: string,
+  /** See {@link sceneExportSubfolders}. */
+  scenesRootAbs?: string,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -783,7 +843,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character))
+${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -811,14 +871,17 @@ ${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character)
  * frames: rest + UE5 pose — Houdini's DazToHueGroom Import reads its hair groups
  * from it). Run it on the character's scene with the figure selected; ROM not needed.
  */
-export function toGroomExportScriptDsa(character: Character): GeneratedFile {
+export function toGroomExportScriptDsa(
+  character: Character,
+  scenesRootAbs?: string,
+): GeneratedFile {
   const exportDir = character.exportPath.trim().replace(/\\/g, '/')
   const groomMap = groomSceneMap(character)
   // The same snippet body the ROM/Export export block uses (dz-snippets), at
   // this script's base indent 0.
-  const sceneSubfolderBlock = character.exportSceneSubfolders
-    ? sceneSubfolderSnippet()
-    : ''
+  const sceneSubfolderBlock = sceneExportSubfolderSnippet(
+    sceneExportSubfolders(character, scenesRootAbs),
+  )
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
 // DTH Hair Export for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.
@@ -954,6 +1017,11 @@ export function generateAll(
    *  {@link toCharacterScriptDsa}. A scene's frames also size its per-scene CSV. */
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
+  /** The character's scenes-root folder, host-resolved (charFolder + the
+   *  project's dazSubdir rules) — each scene's export nests under its own
+   *  subfolder below this root; see {@link sceneExportSubfolders}. Omitted ⇒
+   *  every scene falls back to stem-named export subfolders. */
+  scenesRootAbs?: string,
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -979,9 +1047,17 @@ export function generateAll(
       ),
     )
   return [
-    toCharacterScriptDsa(character, romPaths, frames, charFolderAbs, sceneRomPaths, sceneFrames),
-    ...(split ? [toExportScriptDsa(character, frames, charFolderAbs)] : []),
-    ...(groom ? [toGroomExportScriptDsa(character)] : []),
+    toCharacterScriptDsa(
+      character,
+      romPaths,
+      frames,
+      charFolderAbs,
+      sceneRomPaths,
+      sceneFrames,
+      scenesRootAbs,
+    ),
+    ...(split ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs)] : []),
+    ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
     toPoseAssetCsv(character, frames, era),
     ...overrideCsvs,
