@@ -41,12 +41,14 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
+import { PRIMARY_SCENE_SUBFOLDER } from '#/lib/scene-subfolder.ts'
 import { displayPath, normalizePathLower } from '#/lib/path.ts'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import { UnrealProjectsBar } from '#/components/unreal-projects-field.tsx'
 import { NotesEditor } from '#/components/notes-editor.tsx'
+import { ProjectOperations } from '#/components/project-operations.tsx'
 import {
   charactersLinkedScenes,
   genderForScan,
@@ -127,7 +129,9 @@ function ProjectCharactersPage() {
   // Daz scenes scoped to this project). `assetRefresh` reloads the grid after an add.
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<'character' | 'asset'>('character')
-  const [listTab, setListTab] = useState<'characters' | 'assets' | 'notes'>('characters')
+  const [listTab, setListTab] = useState<'characters' | 'assets' | 'notes' | 'operations'>(
+    'characters',
+  )
   const [assetRefresh, setAssetRefresh] = useState(0)
   // "Delete original after copying" for an outside-the-project scene — the
   // panel's toggle beside Copy & Create (turns the copy into a move). The old
@@ -288,14 +292,18 @@ function ProjectCharactersPage() {
       if (copyScene) {
         // Copying brings the scene into the character folder — repoint the
         // stored scenePath at that in-project copy (createCharacter recorded the
-        // original external path). It lands in the project's scenes folder
-        // (Settings → dazSubdir); nested subfolders are an Add-scene affair.
+        // original external path). The primary always lands in its own
+        // "primary" subfolder below the project's scenes folder (Settings →
+        // dazSubdir) — its export nests under that name (lib/scene-subfolder.ts).
         const movedScene = await copyDazScene({
           data: {
             projectId,
             characterId: character.id,
             scenePath: scenePath.trim(),
-            subfolder: project.dazSubdir.split(/[\\/]+/).filter(Boolean).join('/'),
+            subfolder: [
+              ...project.dazSubdir.split(/[\\/]+/).filter(Boolean),
+              PRIMARY_SCENE_SUBFOLDER,
+            ].join('/'),
             deleteOriginal,
           },
         })
@@ -610,8 +618,8 @@ function ProjectCharactersPage() {
             {scenePath.trim() === '' && (
               <p className="text-sm text-muted-foreground">
                 Without a scene the character starts locked: save your Daz scene into its{' '}
-                <code>{project.dazSubdir || 'daz3d'}</code> folder, then link it on the
-                character page to unlock the editor.
+                <code>{`${project.dazSubdir || 'daz3d'}/${PRIMARY_SCENE_SUBFOLDER}`}</code> folder,
+                then link it on the character page to unlock the editor.
               </p>
             )}
 
@@ -693,16 +701,21 @@ function ProjectCharactersPage() {
 
       <Tabs
         value={!assetsEnabled && listTab === 'assets' ? 'characters' : listTab}
-        onValueChange={(v) => setListTab(v as 'characters' | 'assets' | 'notes')}
+        onValueChange={(v) => setListTab(v as 'characters' | 'assets' | 'notes' | 'operations')}
       >
         <TabsList className="mb-6">
           <TabsTrigger value="characters">Characters</TabsTrigger>
           {assetsEnabled && <TabsTrigger value="assets">Attachments</TabsTrigger>}
           <TabsTrigger value="notes">Notes</TabsTrigger>
+          <TabsTrigger value="operations">Operations</TabsTrigger>
         </TabsList>
         <TabsContent value="notes">
           {/* Freeform project notes (markdown + dropped media). */}
           <NotesEditor projectId={projectId} />
+        </TabsContent>
+        <TabsContent value="operations">
+          {/* Project-level danger zone (delete the whole project). */}
+          <ProjectOperations project={project} />
         </TabsContent>
         <TabsContent value="characters">
           {scanProblems.length > 0 && (

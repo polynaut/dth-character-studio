@@ -20,8 +20,10 @@ attach to their scene.
 **Add scene** (or dropping a `.duf` on the cards) links another scene. It's
 validated first — same Genesis generation, one character, empty timeline, and
 the **same GP/DK geograft as the primary**, so every scene produces the
-primary's skeleton (*Add anyway* overrides) — then copied into the character's
-scenes folder or left in place. The **primary** scene can't be unlinked;
+primary's skeleton (*Add anyway* overrides) — then copied into its **own
+subfolder** of the character's scenes folder (the name is suggested from the
+scene's filename and stays editable, but can't be empty — each scene's export
+nests under it) or left in place. The **primary** scene can't be unlinked;
 extras can. Every card has **Open in Daz**. The primary can be **replaced**
 instead: its card's folder button browses for a new scene, runs the same
 validation and copy-vs-link decision as Add scene, then swaps it in — the

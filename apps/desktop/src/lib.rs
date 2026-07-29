@@ -142,6 +142,7 @@ pub fn run() {
             poses::scan_duf_files,
             windows::active_project_file,
             windows::open_project_window,
+            windows::release_project_window,
             windows::sync_renamed_project_window,
             fsutil::probe_locked_files
         ])

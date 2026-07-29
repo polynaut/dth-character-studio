@@ -105,9 +105,15 @@ export function LinkedAssetCard({
         {badge}
       </div>
       <div className="flex min-w-0 flex-1 flex-col text-xs">
-        {/* Top-aligned with the media's upper edge (no push-down). */}
+        {/* Top-aligned with the media's upper edge (no push-down). On a
+            SELECTABLE card the title row stops short of the right edge (mr-8,
+            a MARGIN on purpose): the corner check bubble renders in that strip
+            and must never overlap the title — and because the rename title is
+            z-10 (above the cover button, so clicking the text edits), only a
+            margin leaves the vacated top-right strip clickable for select;
+            padding would still belong to the z-10 hitbox and swallow it. */}
         {onRename ? (
-          <div className="relative z-10 min-w-0">
+          <div className={cn('relative z-10 min-w-0', onSelect && 'mr-8')}>
             <EditableTitle
               name={title}
               onSave={onRename}
@@ -117,7 +123,7 @@ export function LinkedAssetCard({
             />
           </div>
         ) : (
-          <div className="truncate text-base font-medium">{title}</div>
+          <div className={cn('truncate text-base font-medium', onSelect && 'pr-8')}>{title}</div>
         )}
         {/* Sits just under the title (not pinned to the bottom). z-10 lifts it
             above the cover button, so an INTERACTIVE extra (the scene cards'
@@ -171,12 +177,14 @@ export function LinkedAssetCard({
         />
       )}
 
-      {/* Selected corner check (selectable cards only). */}
+      {/* Selected corner check (selectable cards only). Click-transparent so
+          pressing the bubble itself still hits the cover button below —
+          the whole top-right area toggles the selection. */}
       {showCheck && (
         <span
           aria-hidden
           className={cn(
-            'absolute top-2 right-2 flex size-5 items-center justify-center rounded-full text-white shadow-sm ring-2 ring-card',
+            'pointer-events-none absolute top-2 right-2 flex size-5 items-center justify-center rounded-full text-white shadow-sm ring-2 ring-card',
             checkClass,
           )}
         >

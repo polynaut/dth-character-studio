@@ -24,8 +24,9 @@
 
 > [!TIP]
 > **No scene yet?** Skip step 2 and press **Create without scene** — the
-> character's folder (including its scenes subfolder, e.g. `daz3d`) is created
-> for you, so you can save your new scene there straight from Daz Studio. The
+> character's folder (including the primary scene's subfolder, e.g.
+> `daz3d/primary`) is created for you, so you can save your new scene there
+> straight from Daz Studio. The
 > character page stays **locked** until you link that scene as the primary (the
 > Daz scenes panel shows the exact folder and the **Link Daz scene** button);
 > the first link also derives Gender, Genesis and the Genitalia section from

@@ -36,6 +36,11 @@ import {
   sceneNotLinkedRow,
 } from '#/lib/scene-compat.ts'
 import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
+import {
+  PRIMARY_SCENE_SUBFOLDER,
+  deriveScenesRootRel,
+  suggestSceneSubfolder,
+} from '#/lib/scene-subfolder.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 import { detectedHairLabels } from '#/lib/groom-detect.ts'
 import { genesisFromFigureNode, sceneOverrideSchema } from '@dth/rom'
@@ -203,8 +208,10 @@ export function DazSceneField({
   // button becomes "Open now" (which launches a fresh Daz with the scene).
   const [dazStillRunning, setDazStillRunning] = useState(true)
   // A picked scene outside the project pauses here awaiting the copy decision.
+  // The primary always lands in its own "primary" subfolder below the scenes
+  // root — its export nests under that name (see lib/scene-subfolder.ts).
   const [pending, setPending] = useState('')
-  const [subfolder, setSubfolder] = useState(() => defaultSubdir)
+  const [subfolder, setSubfolder] = useState(() => `${defaultSubdir}/${PRIMARY_SCENE_SUBFOLDER}`)
   // A picked *additional* scene awaiting its add dialog — separate from the
   // primary link flow. Its subfolder nests inside the existing scenes folder.
   const [pendingAdd, setPendingAdd] = useState('')
@@ -269,17 +276,12 @@ export function DazSceneField({
     primaryDir && primaryDir.toLowerCase().startsWith(charFolder.toLowerCase() + '/')
       ? primaryDir.slice(charFolder.length + 1)
       : ''
-  // The scenes ROOT (the character's "Daz scenes main folder"): the project's
-  // configured subdir when the primary sits under it — the primary itself may
-  // live in a SUBFOLDER of the root — else the primary's own folder (a
-  // renamed per-character root).
-  const defRel = cleanSub(defaultSubdir)
-  const rootMatchesDefault =
-    primaryDirRel !== '' &&
-    defRel !== '' &&
-    (primaryDirRel.toLowerCase() === defRel.toLowerCase() ||
-      primaryDirRel.toLowerCase().startsWith(`${defRel.toLowerCase()}/`))
-  const scenesRootRel = rootMatchesDefault ? primaryDirRel.slice(0, defRel.length) : primaryDirRel
+  // The scenes ROOT (the character's "Daz scenes main folder") — ONE shared
+  // rule (lib/scene-subfolder.ts): the project's configured subdir when the
+  // primary sits under it, else the primary's folder with its own "primary"
+  // subfolder segment stripped (a renamed root), else the primary's folder
+  // itself (legacy layout).
+  const scenesRootRel = deriveScenesRootRel(primaryDirRel, defaultSubdir)
   const baseDazRel = scenesRootRel || defaultSubdir
 
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
@@ -371,7 +373,12 @@ export function DazSceneField({
   // reads. The dialog ALWAYS opens now — an in-folder scene just skips the copy
   // controls — so the compatibility checks are seen before anything links.
   function startAdd(picked: string, replace = false) {
-    setAddSubfolder('')
+    // Every scene gets its OWN subfolder now: a replacement primary goes to
+    // "primary", an extra scene is seeded from its sanitized filename (the
+    // character name + generation/preset noise stripped) — editable, never empty.
+    setAddSubfolder(
+      replace ? PRIMARY_SCENE_SUBFOLDER : suggestSceneSubfolder(picked, character.name),
+    )
     setDeleteOriginal(false)
     setForceAdd(false)
     setAddScan(null)
@@ -427,6 +434,12 @@ export function DazSceneField({
    *  user kept "Delete the old scene file" on (in-folder copies only). */
   async function applyReplace(scene: string, copyInto: boolean) {
     const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    // Every copied-in scene needs its OWN subfolder below the scenes root (the
+    // dialog disables Copy on empty — this is the backstop).
+    if (copyInto && cleanSub(addSubfolder) === '') {
+      toast.error('Enter a subfolder — every scene lives in its own subfolder now.')
+      return
+    }
     const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
     const oldPrimary = character.scenePath
     // Same up-front duplicate refusal as applyAdd — including the old primary
@@ -505,6 +518,11 @@ export function DazSceneField({
 
   async function applyAdd(scene: string, copyInto: boolean) {
     const sceneName = scene.split(/[\\/]/).pop() ?? scene
+    // See applyReplace — a copied-in scene can't land directly in the root.
+    if (copyInto && cleanSub(addSubfolder) === '') {
+      toast.error('Enter a subfolder — every scene lives in its own subfolder now.')
+      return
+    }
     const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
     // Reject a scene that's already attached, before any copy runs. An in-place add
     // compares the picked path itself; a copy compares its destination inside the
@@ -550,7 +568,7 @@ export function DazSceneField({
     const picked = await pickDufPath('Select the Daz character scene (.duf)')
     if (!picked) return
     if (!insideProject(picked)) {
-      setSubfolder(defaultSubdir)
+      setSubfolder(`${defaultSubdir}/${PRIMARY_SCENE_SUBFOLDER}`)
       setPending(picked)
       return
     }
@@ -647,7 +665,7 @@ export function DazSceneField({
     if (!scene) return
     if (!linked) {
       if (!insideProject(scene)) {
-        setSubfolder(defaultSubdir)
+        setSubfolder(`${defaultSubdir}/${PRIMARY_SCENE_SUBFOLDER}`)
         setPending(scene)
         return
       }
@@ -812,8 +830,9 @@ export function DazSceneField({
     const roots = [scenesRootShown, cut > 0 ? shown.slice(0, cut) : ''].filter(Boolean)
     if (!inside) return <DirPathChip dir={shown} roots={roots} copyPath={displayPath(dir)} />
     // The scenes-root prefix stays fixed (the root itself moves via the
-    // section chip above the cards); an emptied input moves the scene back to
-    // the root, and the vacated subfolder is pruned by the move.
+    // section chip above the cards). An EMPTY input is refused: every scene
+    // lives in its own subfolder now (the export nests under its name), so a
+    // scene can't sit directly in the scenes root anymore.
     const rootLower = sceneDirRel.toLowerCase()
     const underRoot =
       sceneDirRel !== '' &&
@@ -828,12 +847,17 @@ export function DazSceneField({
         editPrefix={underRoot ? displayPath(`./${sceneDirRel}/`) : undefined}
         editLabel="Move to"
         inputWidthClass="w-36"
-        onMove={(next) =>
-          moveLinkedScene(
+        onMove={async (next) => {
+          if (cleanSub(next) === '') {
+            throw new Error(
+              'Every scene lives in its own subfolder now — it can no longer sit directly in the scenes root.',
+            )
+          }
+          await moveLinkedScene(
             scene,
             underRoot ? [sceneDirRel, cleanSub(next)].filter(Boolean).join('/') : next,
           )
-        }
+        }}
         disabled={busy}
       />
     )
@@ -1064,7 +1088,9 @@ export function DazSceneField({
             scenes folder, then link it here — or drop the file anywhere on this panel:
           </p>
           <DirPathChip
-            dir={displayPath(`${charFolder}/${cleanSub(defaultSubdir)}`)}
+            dir={displayPath(
+              `${charFolder}/${cleanSub(defaultSubdir)}/${PRIMARY_SCENE_SUBFOLDER}`,
+            )}
             roots={[displayPath(charFolder), displayPath(location.libraryFolder)]}
           />
           <div>
@@ -1096,7 +1122,7 @@ export function DazSceneField({
             <Label className="mb-1 block">Subfolder</Label>
             <Input
               value={subfolder}
-              placeholder="(character folder root)"
+              placeholder={`e.g. ${defaultSubdir}/${PRIMARY_SCENE_SUBFOLDER}`}
               onChange={(e) => setSubfolder(e.target.value)}
             />
           </div>
@@ -1105,7 +1131,15 @@ export function DazSceneField({
             <Button variant="outline" disabled={busy} onClick={() => void applyLink(pending, false)}>
               Link in place
             </Button>
-            <Button disabled={busy} onClick={() => void applyLink(pending, true)}>
+            <Button
+              disabled={busy || subfolder.trim() === ''}
+              title={
+                subfolder.trim() === ''
+                  ? 'Enter a subfolder — every scene lives in its own subfolder now'
+                  : undefined
+              }
+              onClick={() => void applyLink(pending, true)}
+            >
               {busy ? 'Copying…' : 'Copy & link'}
             </Button>
           </div>
@@ -1173,6 +1207,7 @@ export function DazSceneField({
             extra={replaceOldBlock}
             confirmDisabled={addBlocked}
             confirmDisabledTitle={addBlockedTitle}
+            requireSubfolder
             onCopy={() => void (replaceMode ? applyReplace : applyAdd)(pendingAdd, true)}
             onLink={() => void (replaceMode ? applyReplace : applyAdd)(pendingAdd, false)}
             onClose={() => setPendingAdd('')}

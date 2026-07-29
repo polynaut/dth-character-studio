@@ -112,6 +112,7 @@ export {
   copyRuntimeFiles,
   readScriptRuntimeVersion,
   studioCharScriptsDir,
+  studioProjectScriptsDir,
   studioScriptsDir,
 } from './storage/runtime-install'
 

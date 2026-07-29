@@ -367,6 +367,19 @@ pub fn sync_renamed_project_window(
     }
 }
 
+/// Unpin this window from its project — called after the project is DELETED
+/// (Operations tab): the window→project mapping is dropped, so
+/// `active_project_file` returns '' from here on and the window continues as a
+/// Home (launcher) window; the native title is reset to match. Without this the
+/// deleted `.dcsp` would stay pinned: the title bar keeps the dead project's
+/// name and every cross-project sweep re-resolves the deleted folder as an
+/// "unreachable project".
+#[tauri::command]
+pub fn release_project_window(window: tauri::Window, projects: tauri::State<WindowProjects>) {
+    lock_windows(&projects).remove(window.label());
+    let _ = window.set_title("DTH Character Studio");
+}
+
 // `(async)` runs this on a worker thread, not the main thread. Building a webview
 // window synchronously on the main thread deadlocks (build() waits for the WebView2
 // controller, which needs the very event loop the command is blocking) — the window

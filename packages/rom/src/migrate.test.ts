@@ -920,3 +920,23 @@ describe('characterSchema — v25 exportHairAssets (additive)', () => {
     expect(characterSchema.parse({ ...base, exportHairAssets: true }).exportHairAssets).toBe(true)
   })
 })
+
+// v26 removed `exportSceneSubfolders` (exports now always nest under each
+// scene's own subfolder) - a removed field needs no migrate step; zod strips
+// the retired key when reading an older definition.
+describe('characterSchema - v26 exportSceneSubfolders removed', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('strips the retired toggle from a v25-shaped definition', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        ...base,
+        schemaVersion: 25,
+        exportPath: 'X:/exports/electra',
+        exportSceneSubfolders: true,
+      }),
+    )
+    expect('exportSceneSubfolders' in parsed).toBe(false)
+    expect(parsed.exportPath).toBe('X:/exports/electra')
+  })
+})

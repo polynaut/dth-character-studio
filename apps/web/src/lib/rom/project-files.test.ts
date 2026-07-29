@@ -276,6 +276,53 @@ describe('recent projects', () => {
   })
 })
 
+describe('deleteProject', () => {
+  it('removes the folder, the Daz-script folder, the scans and the recents entry', async () => {
+    // A full project: manifest + a character + meta, remembered in recents…
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    files.set('/games/Nova/Kira/Kira.json', '{}')
+    files.set('/games/Nova/.dcsmeta/images/kira.png', 'png')
+    await storage.rememberRecent('/games/Nova/Nova.dcsp', 'Nova')
+    await storage.rememberRecent('/p/b/B.dcsp', 'B')
+    // …its generated Daz scripts beside the SHARED runtime (which must survive)…
+    files.set('/appdata/settings.json', JSON.stringify({ dazLibraryFolder: '/dazlib' }))
+    files.set('/dazlib/Scripts/DTH-Character-Studio/.DthUtils.dsa', 'runtime')
+    addDir('/dazlib/Scripts/DTH-Character-Studio/Nova/Kira')
+    files.set('/dazlib/Scripts/DTH-Character-Studio/Nova/Kira/Kira_G9.dsa', 'script')
+    // …and its app-data product scans (keyed by the manifest id).
+    const { id } = await storage.readManifest('/games/Nova')
+    addDir(`/appdata/product-scans/${id}/kira`)
+    files.set(`/appdata/product-scans/${id}/kira/scene.csv`, 'csv')
+
+    await api.deleteProject({ data: { projectId: '/games/Nova' } })
+
+    expect(files.has('/games/Nova/Nova.dcsp')).toBe(false)
+    expect(files.has('/games/Nova/Kira/Kira.json')).toBe(false)
+    expect(dirs.has('/games/Nova')).toBe(false)
+    expect(files.has('/dazlib/Scripts/DTH-Character-Studio/Nova/Kira/Kira_G9.dsa')).toBe(false)
+    expect(files.has('/dazlib/Scripts/DTH-Character-Studio/.DthUtils.dsa')).toBe(true)
+    expect(files.has(`/appdata/product-scans/${id}/kira/scene.csv`)).toBe(false)
+    expect((await storage.listRecents()).map((r) => r.path)).toEqual(['/p/b/B.dcsp'])
+  })
+
+  it('drops a recents entry that differs in casing/separators from the route param', async () => {
+    await storage.createProjectManifest('/games/Nova', 'Nova')
+    // The recents path can come from another window / the OS file association
+    // with different casing — cleanup must still find it.
+    await storage.rememberRecent('/GAMES/NOVA/Nova.dcsp', 'Nova')
+    await api.deleteProject({ data: { projectId: '/games/Nova' } })
+    expect(await storage.listRecents()).toEqual([])
+  })
+
+  it('refuses an unreachable project folder (nothing to delete, recents untouched)', async () => {
+    await storage.rememberRecent('/gone/Nova.dcsp', 'Nova')
+    await expect(api.deleteProject({ data: { projectId: '/gone' } })).rejects.toBeInstanceOf(
+      storage.ProjectUnreachableError,
+    )
+    expect((await storage.listRecents()).map((r) => r.path)).toEqual(['/gone/Nova.dcsp'])
+  })
+})
+
 describe('moveCharactersRoot', () => {
   function seedChar(dir: string, name: string, scenePath?: string): void {
     const c = characterSchema.parse({

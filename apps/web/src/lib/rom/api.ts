@@ -28,6 +28,7 @@ export type { ProjectInfo } from './api/core'
 // --- projects: .dcsp lifecycle + per-project settings -----------------------
 export {
   createProject,
+  deleteProject,
   fetchActiveProject,
   fetchProject,
   fetchRecents,

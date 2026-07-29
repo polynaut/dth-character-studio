@@ -881,8 +881,15 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *  25 — added `exportHairAssets` (run the hair/groom export right after the
  *       main export inside the carrying script; additive with a false default —
  *       no migration step).
+ *  26 — removed `exportSceneSubfolders` (no step — zod strips it). Exports now
+ *       ALWAYS nest under a per-scene subfolder, named after the folder each
+ *       linked scene lives in (see `sceneExportSubfolders` in dsa.ts) — every
+ *       scene has its own subfolder now (primary → "primary", extras seeded
+ *       from the sanitized scene name). The Refresh sweep also moves legacy
+ *       root-dwelling scene files into their subfolders (host-side, not a
+ *       migration step — file moves need the fs).
  */
-export const CHARACTER_SCHEMA_VERSION = 25
+export const CHARACTER_SCHEMA_VERSION = 26
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1108,8 +1115,15 @@ export const CHARACTER_SCHEMA_VERSION = 25
  *       character's linked scenes; running Kira's script on Ita's scene used
  *       to apply everything silently. Bumped so Refresh assets regenerates
  *       every existing script with the guard.
+ *  37 — generated-script change only (runtime files untouched): the export
+ *       block ALWAYS nests the export dir under a per-scene subfolder (the
+ *       `exportSceneSubfolders` toggle is gone). The subfolder comes from an
+ *       embedded map — normalized open-scene path → the folder name that scene
+ *       lives in (`sceneExportSubfolders`) — with the old scene-file-stem
+ *       nesting as the run-time fallback for a scene missing from the map.
+ *       Bumped so Refresh assets regenerates every script onto the new layout.
  */
-export const RUNTIME_VERSION = 36
+export const RUNTIME_VERSION = 37
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1324,14 +1338,6 @@ export const characterSchema = z.object({
    * project's character directory.
    */
   exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
-  /**
-   * When `exportPath` is set, also nest the export under a subfolder named after
-   * the Daz scene open in Daz when the script runs (`Scene.getFilename()`), so a
-   * character's scene/outfit variants export side by side. The exporter's own
-   * `<characterName>` subfolder is created inside that. No effect without an
-   * export path, or when no scene is loaded/saved at run time.
-   */
-  exportSceneSubfolders: z.boolean().default(false),
   /**
    * When `exportPath` is set, whether the auto-export runs inside the ROM script
    * (`true`, the default — one combined `<Name>_<Genesis>.dsa`) or is split into

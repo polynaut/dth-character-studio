@@ -43,17 +43,19 @@ test('replace primary: validates, swaps, derives GEN, deletes the old copy', asy
   // The new scene carries no GP/DK geograft — the derivation announces the flip.
   await expect(page.getByText(/Genitalia section disabled/)).toBeVisible()
 
-  // Persisted: scenePath swapped to the in-folder copy, GEN re-derived.
+  // Persisted: scenePath swapped to the in-folder copy — in the primary's own
+  // "primary" subfolder (every scene lives in its own subfolder now) — and GEN
+  // re-derived.
   const json = JSON.parse((await fileContent(page, `${P.charFolder}/Kira.json`))!) as {
     scenePath: string
     sections: { GEN: { enabled: boolean } }
   }
-  expect(json.scenePath).toBe(`${P.charFolder}/daz3d/NewLook_G9.duf`)
+  expect(json.scenePath).toBe(`${P.charFolder}/daz3d/primary/NewLook_G9.duf`)
   expect(json.sections.GEN.enabled).toBe(false)
 
   // Filesystem: the new copy exists, the OLD primary's files are gone.
   const keys = await fileKeys(page)
-  expect(keys).toContain(`${P.charFolder}/daz3d/NewLook_G9.duf`)
+  expect(keys).toContain(`${P.charFolder}/daz3d/primary/NewLook_G9.duf`)
   expect(keys).not.toContain(P.scene)
   expect(keys).not.toContain(`${P.scene}.tip.png`)
 

@@ -6,6 +6,7 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
+import { PRIMARY_SCENE_SUBFOLDER, deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import {
   characterSchema,
   defaultSections,
@@ -253,12 +254,15 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
   }
   // A scene-LESS create (the user will save their scene from Daz afterwards)
   // seeds the Daz-scenes subfolder too — the whole point is giving them the
-  // right folder to save into. With a scene, the folder materializes when the
-  // scene is copied in (or stays wherever a linked-in-place scene lives).
+  // right folder to save into. The primary always lives in its own "primary"
+  // subfolder below the scenes root now (lib/scene-subfolder.ts), so that's
+  // what gets seeded. With a scene, the folder materializes when the scene is
+  // copied in (or stays wherever a linked-in-place scene lives).
   if (!input.scenePath && location.relFolder) {
     try {
       const dazSub = normalizeRelFolder(project.dazSubdir)
-      if (dazSub) await mkdir(joinPath(location.folderAbs, dazSub), { recursive: true })
+      const primarySub = [dazSub, PRIMARY_SCENE_SUBFOLDER].filter(Boolean).join('/')
+      await mkdir(joinPath(location.folderAbs, primarySub), { recursive: true })
     } catch {
       // a missing seed folder shouldn't fail character creation
     }
@@ -621,16 +625,10 @@ export async function moveCharacterScenesFolder({
     throw new Error('The scenes folder lives outside the character folder.')
   }
   // The moved folder is the scenes ROOT, not the primary's own directory —
-  // the primary may sit in a SUBFOLDER of the root (same derivation as the
-  // scenes field: the project's subdir when the primary lives under it, else
-  // the primary's folder).
+  // the primary sits in a SUBFOLDER of the root ("primary"). ONE shared
+  // derivation with the scenes field + generation (lib/scene-subfolder.ts).
   const primaryRel = primaryDir.slice(charFolder.length + 1)
-  const defRel = normalizeRelFolder(project.dazSubdir)
-  const underDefault =
-    defRel !== '' &&
-    (primaryRel.toLowerCase() === defRel.toLowerCase() ||
-      primaryRel.toLowerCase().startsWith(`${defRel.toLowerCase()}/`))
-  const oldDir = `${charFolder}/${underDefault ? primaryRel.slice(0, defRel.length) : primaryRel}`
+  const oldDir = `${charFolder}/${deriveScenesRootRel(primaryRel, project.dazSubdir)}`
   const rel = normalizeRelFolder(newSubdir) // separators, no '..' / absolute / illegal chars
   if (!rel) throw new Error('Enter a subfolder name.')
   const newDir = `${charFolder}/${rel}`

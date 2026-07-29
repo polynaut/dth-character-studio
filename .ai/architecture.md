@@ -120,13 +120,14 @@ derived from the `.dcsp` *filename*, set at creation. Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 28 commands** registered in `generate_handler!` — installs
+**FFI surface: 29 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
-(`open_project_window`/`active_project_file`/`sync_renamed_project_window`; the
-home window opens via the native menu's Rust-side `open_home_window_impl`, no
-command), Daz bridge
+(`open_project_window`/`active_project_file`/`sync_renamed_project_window`/
+`release_project_window` — the last unpins a window after its project is deleted
+so it continues as a Home window; the home window opens via the native menu's
+Rust-side `open_home_window_impl`, no command), Daz bridge
 (`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window` —
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
 see `docs/exporter-plugin-job-file.md`), drives

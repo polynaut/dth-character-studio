@@ -10,6 +10,7 @@ import {
   presetFramesSignature,
   referenceFrames,
   resolveRomPaths,
+  sceneExportSubfolders,
   sectionPresetAvailable,
   templateBakedPoseNames,
   toCharacterScriptDsa,
@@ -1466,25 +1467,63 @@ describe('exporter integration', () => {
     expect(toCharacterScriptDsa(makeCharacter(), {}, FRAMES).content).not.toContain('doExport')
   })
 
-  it('nests the export under the open scene name when exportSceneSubfolders is set', () => {
+  it('always nests the export under the per-scene subfolder map (runtime v37)', () => {
     const character = withReferencePose({
       name: 'Electra',
       exportPath: 'X:\\exports\\electra',
-      exportSceneSubfolders: true,
+      scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
+      extraScenes: ['X:\\proj\\Electra\\daz3d\\Armor\\Electra_Armor.duf'],
     })
-    const content = toCharacterScriptDsa(character, {}, FRAMES).content
-    expect(content).toContain('Scene.getFilename()')
-    expect(content).toContain('new DzFileInfo(dthSceneFile).completeBaseName()')
-    expect(content).toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
+    const content = toCharacterScriptDsa(
+      character,
+      {},
+      FRAMES,
+      undefined,
+      {},
+      {},
+      'X:\\proj\\Electra\\daz3d',
+    ).content
+    // The embedded map carries each scene's OWN subfolder below the scenes root…
+    expect(content).toContain('"x:/proj/electra/daz3d/primary/electra.duf":"primary"')
+    expect(content).toContain('"x:/proj/electra/daz3d/armor/electra_armor.duf":"Armor"')
+    expect(content).toContain('dthExportDir = dthExportDir + "/" + dthExportSub')
+    // …with the scene-stem fallback kept for a scene missing from the map.
+    expect(content).toContain('completeBaseName()')
   })
 
-  it('does not derive a scene subfolder when exportSceneSubfolders is off', () => {
-    // Not "never reads Scene.getFilename()": the wrong-scene guard reads it in
-    // every script now — only the SUBFOLDER derivation must be absent.
-    const character = withReferencePose({ name: 'Electra', exportPath: 'X:\\exports\\electra' })
-    const content = toCharacterScriptDsa(character, {}, FRAMES).content
-    expect(content).not.toContain('completeBaseName()')
-    expect(content).not.toContain('dthExportDir = dthExportDir + "/" + dthSceneName')
+  it('sceneExportSubfolders: root-dwelling and out-of-root scenes fall back to their stem', () => {
+    const character = makeCharacter({
+      scenePath: 'X:\\proj\\Electra\\daz3d\\Electra.duf', // legacy: directly in the root
+      extraScenes: [
+        'X:\\proj\\Electra\\daz3d\\Armor\\Electra_Armor.duf', // in its own subfolder
+        'X:\\elsewhere\\Beach.duf', // linked in place, outside the root
+      ],
+    })
+    expect(sceneExportSubfolders(character, 'X:\\proj\\Electra\\daz3d')).toEqual({
+      'x:/proj/electra/daz3d/electra.duf': 'Electra',
+      'x:/proj/electra/daz3d/armor/electra_armor.duf': 'Armor',
+      'x:/elsewhere/beach.duf': 'Beach',
+    })
+    // No root threaded (pure/legacy callers) → every scene by stem.
+    expect(sceneExportSubfolders(character)).toEqual({
+      'x:/proj/electra/daz3d/electra.duf': 'Electra',
+      'x:/proj/electra/daz3d/armor/electra_armor.duf': 'Electra_Armor',
+      'x:/elsewhere/beach.duf': 'Beach',
+    })
+  })
+
+  it('sceneExportSubfolders: two scenes sharing one subfolder fall back to stems, nesting mirrors', () => {
+    const character = makeCharacter({
+      scenePath: 'X:\\p\\daz3d\\shared\\A.duf',
+      extraScenes: ['X:\\p\\daz3d\\shared\\B.duf', 'X:\\p\\daz3d\\outfits\\beach\\C.duf'],
+    })
+    expect(sceneExportSubfolders(character, 'X:\\p\\daz3d')).toEqual({
+      // Same subfolder would overwrite each other's export — stems instead.
+      'x:/p/daz3d/shared/a.duf': 'A',
+      'x:/p/daz3d/shared/b.duf': 'B',
+      // A nested subfolder mirrors as a nested export path.
+      'x:/p/daz3d/outfits/beach/c.duf': 'outfits/beach',
+    })
   })
 
   it('copies the PoseAsset CSV from the character folder into the resolved export dir', () => {
