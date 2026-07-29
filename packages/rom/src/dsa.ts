@@ -398,7 +398,10 @@ export function sceneExportSubfolders(
   scenesRootAbs?: string,
 ): Record<string, string> {
   const norm = (p: string) => p.trim().replace(/\\/g, '/')
-  const rootClean = scenesRootAbs ? norm(scenesRootAbs).replace(/\/+$/, '') : ''
+  // Trailing-slash strip as a loop, not a `/\/+$/` regex — CodeQL flags the
+  // regex form as polynomial-time on hostile all-slash inputs (js/polynomial-redos).
+  let rootClean = scenesRootAbs ? norm(scenesRootAbs) : ''
+  while (rootClean.endsWith('/')) rootClean = rootClean.slice(0, -1)
   const rootPrefix = rootClean ? `${rootClean.toLowerCase()}/` : ''
   const linked = [character.scenePath, ...character.extraScenes].map(norm).filter(Boolean)
   // A scene's below-root FOLDER path ('' = directly in the root / outside it).
