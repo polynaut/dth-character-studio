@@ -66,6 +66,32 @@ pub fn run_daz_script(script_path: String) -> Result<String, String> {
     }
 }
 
+/// Launch Daz Studio with NO arguments — a plain, scene-less startup. Used by
+/// the Execute feature: the studio writes the exporter job file first, then
+/// starts Daz so the DTH Exporter Plugin finds and runs the jobs on startup.
+/// The caller is expected to check `daz_studio_running` first — launching while
+/// an instance is up only forwards to it (no fresh startup, so the plugin's
+/// startup job check never fires there).
+/// Returns the executable it launched (for logging, like `run_daz_script`).
+// `(async)`: the running-instance/install probes shell out — off the main thread.
+#[tauri::command(async)]
+pub fn launch_daz_studio() -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        let exe = running_daz_exe()
+            .or_else(installed_daz_exe)
+            .ok_or_else(|| "Could not locate the Daz Studio executable.".to_string())?;
+        std::process::Command::new(&exe)
+            .spawn()
+            .map_err(|e| format!("Failed to launch Daz Studio ({exe}): {e}"))?;
+        Ok(exe)
+    }
+    #[cfg(not(windows))]
+    {
+        Err("Launching Daz Studio is only supported on Windows.".to_string())
+    }
+}
+
 /// Full path to the executable of the currently-running `DAZStudio.exe`, via a
 /// CIM query (WMIC is gone on current Windows 11). `None` if Daz isn't running or
 /// the path can't be read.

@@ -18,6 +18,7 @@ export type {
   DthReleaseInfo,
   KnownDrive,
   Project,
+  RunnerStatus,
 } from './storage'
 export { ProjectUnreachableError } from './storage'
 
@@ -105,6 +106,17 @@ export {
 export { clearProductScan, detectDimManifestsFolder, fetchProductScan } from './api/products'
 export type { ProductScanFile } from './api/products'
 
+// --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
+export {
+  abortExporterJobs,
+  dismissExportRun,
+  executeCharacterJobs,
+  exporterJobsPending,
+  fetchExecuteScenes,
+  fetchExportRunProgress,
+} from './api/execute'
+export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
+
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {
   characterStaleTargets,
@@ -134,11 +146,13 @@ export {
   fetchAppDataFolder,
   fetchAppVersion,
   fetchSettings,
+  fetchRunnerStatus,
   installDazAssets,
   installDazMorphs,
   installDazPresets,
   installDthPlugin,
   installDthRelease,
+  installDthRunner,
   installUnrealDthContent,
   unrealDthContentPresent,
   installHoudiniPresets,

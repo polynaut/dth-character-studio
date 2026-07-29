@@ -414,6 +414,7 @@ function CharacterPage() {
       <EditorHeader
         projectId={projectId}
         draft={draft}
+        dazLibraryConfigured={Boolean(settings.dazLibraryFolder)}
         folderChip={folderChip}
         folderMove={folderMove}
         hasRunProblems={runLog.hasRunProblems}

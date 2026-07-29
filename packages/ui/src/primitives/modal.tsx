@@ -1,8 +1,10 @@
 import { Dialog } from 'radix-ui'
 import { X } from 'lucide-react'
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 
 import { Button } from './button.tsx'
+import { closeAllInfoPopups } from './info-popup.tsx'
 import { cn } from '../cn.ts'
 import { isRefocusPointerDown } from '../refocus-click.ts'
 
@@ -39,6 +41,12 @@ export function Modal({
   className?: string
   children: ReactNode
 }) {
+  // A dialog opening sweeps every open InfoPopup: the popups portal ABOVE this
+  // z-50 layer (that's what makes them usable inside dialogs), so one left
+  // open under an opening dialog would float over it.
+  useEffect(() => {
+    if (open) closeAllInfoPopups()
+  }, [open])
   return (
     <Dialog.Root
       open={open}

@@ -1122,8 +1122,17 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       lives in (`sceneExportSubfolders`) — with the old scene-file-stem
  *       nesting as the run-time fallback for a scene missing from the map.
  *       Bumped so Refresh assets regenerates every script onto the new layout.
+ *  38 — generated-script change only (runtime files untouched): the
+ *       "bulk-export" script argument (`BULK_EXPORT_ARG`). The DTH Exporter
+ *       Plugin passes it on every job-file run (the studio's DTH Export
+ *       button); the ROM script then always exports — the export block is now
+ *       embedded even with `exportWithRomScript` off (run-time gated) — and
+ *       the hair pass runs past a disabled `exportHairAssets` too: a bulk job
+ *       exists to deliver the complete export set. A manual run (no argument)
+ *       behaves exactly like the toggles say. Bumped so Refresh assets
+ *       regenerates every script with the argument gate.
  */
-export const RUNTIME_VERSION = 37
+export const RUNTIME_VERSION = 38
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

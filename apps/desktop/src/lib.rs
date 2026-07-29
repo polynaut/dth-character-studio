@@ -128,6 +128,7 @@ pub fn run() {
             github::app_release_tags,
             daz::daz_studio_running,
             daz::run_daz_script,
+            daz::launch_daz_studio,
             foreground::focus_app_window,
             install::install_daz_merge,
             install::install_houdini_presets,
