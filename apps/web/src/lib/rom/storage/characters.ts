@@ -21,9 +21,11 @@ import {
   basename,
   dirname,
   isDir,
+  isLockedPathError,
   isTaken,
   join,
   relativeInside,
+  renameWithRetry,
   uniqueFolder,
   walkFiles,
   walkFilesStrict,
@@ -330,6 +332,45 @@ export async function getCharacter(
 }
 
 /**
+ * Rename a character's folder (or one of the files in it), turning the OS's
+ * unactionable "Access is denied. (os error 5)" into something the user can do
+ * something about.
+ *
+ * Windows refuses to rename a DIRECTORY while any file INSIDE it is held open
+ * by another process — for a character folder that is almost always Daz Studio
+ * still holding the linked `.duf`. The raw plugin-fs error names neither the
+ * cause nor the remedy, so map it; a non-lock failure is rethrown untouched
+ * (its own message is the useful one). Transient holders — an AV scan, the
+ * search indexer — are already absorbed by `renameWithRetry` and never reach
+ * the message.
+ *
+ * In `saveCharacter` the folder rename is the FIRST thing written, so throwing
+ * here leaves the character exactly as it was on disk — never half-renamed.
+ */
+async function renameCharacterPath(
+  from: string,
+  to: string,
+  what: 'folder' | 'definition file' | 'notes file',
+): Promise<void> {
+  try {
+    await renameWithRetry(from, to)
+  } catch (error) {
+    if (!isLockedPathError(error)) throw error
+    throw new Error(
+      [
+        `Could not rename the character's ${what} — ${
+          what === 'folder' ? 'a file inside it is' : 'it is'
+        } open in another program.`,
+        `Close the character's scene in Daz Studio (and any Explorer window showing the folder), then try again.`,
+        from,
+      ].join('\n\n'),
+      // The raw OS error stays reachable for debugging without reaching the toast.
+      { cause: error },
+    )
+  }
+}
+
+/**
  * Find a character by id across every project's library (ids are globally
  * unique). Used by ROM prefill, which can copy from a character in any project.
  */
@@ -413,11 +454,11 @@ export async function saveCharacter(
       const folderAbs = caseOnlyRename
         ? join(dirname(existing.folderAbs), newName)
         : await uniqueFolder(dirname(existing.folderAbs), newName)
-      await rename(existing.folderAbs, folderAbs)
+      await renameCharacterPath(existing.folderAbs, folderAbs, 'folder')
       const movedDefinition = join(folderAbs, basename(existing.definitionAbs))
       definitionAbs = join(folderAbs, definitionFileName(character.name))
       if (movedDefinition !== definitionAbs && (await exists(movedDefinition))) {
-        await rename(movedDefinition, definitionAbs)
+        await renameCharacterPath(movedDefinition, definitionAbs, 'definition file')
       }
       // The notes file travelled with the folder still named after the OLD
       // definition — rename it too, or the editor resolves <NewName>.notes.md
@@ -425,7 +466,7 @@ export async function saveCharacter(
       const movedNotes = notesPathFor(movedDefinition)
       const newNotes = notesPathFor(definitionAbs)
       if (movedNotes !== newNotes && (await exists(movedNotes))) {
-        await rename(movedNotes, newNotes)
+        await renameCharacterPath(movedNotes, newNotes, 'notes file')
       }
       folderMove = { from: existing.folderAbs, to: folderAbs }
       finalFolderAbs = folderAbs
@@ -862,6 +903,8 @@ export async function existingCharacterSubfolders(
 /**
  * Move/rename a folder on disk, creating the destination's parent first.
  * Collisions throw (the destination is user-chosen — never silently merged).
+ * Shares the character rename's lock handling: this is the folder-chip's
+ * edit-to-move, which hits the same open-in-Daz failure.
  */
 export async function moveFolder(oldAbs: string, newAbs: string): Promise<void> {
   if (await isTaken(newAbs)) {
@@ -869,7 +912,7 @@ export async function moveFolder(oldAbs: string, newAbs: string): Promise<void> 
   }
   const parent = newAbs.replace(/[\\/][^\\/]*$/, '')
   if (parent) await mkdir(parent, { recursive: true })
-  await rename(oldAbs, newAbs)
+  await renameCharacterPath(oldAbs, newAbs, 'folder')
 }
 
 /**
