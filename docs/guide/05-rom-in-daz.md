@@ -54,8 +54,8 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
 1. On the character page, check the **Export directory**. A new character
    already has one: its own **Houdini subfolder** (the empty folder the
    studio seeds for the character's Houdini project). Change it with
-   **Change…** if you export somewhere else, or **Clear** it to turn the
-   auto-export off.
+   **Change…** if you export somewhere else — an export directory can only be
+   repointed, never removed (the export pipeline builds on it).
 2. Run the script in Daz as above — after building the ROM it now runs the
    exporter automatically and writes everything the pipeline needs into your
    export folder: **`<Name>.abc`**, **`<Name>.dth`** (extra scenes:
@@ -85,9 +85,10 @@ character.
 
 ### The Houdini project folder
 
-The **Houdini project folder** field (new characters start with
-`<Project>_<Character>`) puts a Houdini-project layer above those scene
-subfolders: everything exports into
+The **Houdini project folder** field (in the **Houdini projects** section;
+new characters start with `<Project>_<Character>`, and the field needs an
+export directory) puts a Houdini-project layer above those scene subfolders:
+everything exports into
 
 ```
 <export dir>/<project folder>/dth-export/<scene subfolder>/
