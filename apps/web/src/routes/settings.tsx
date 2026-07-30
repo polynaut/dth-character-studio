@@ -27,6 +27,7 @@ import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath } from '#/lib/path.ts'
+import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
@@ -470,6 +471,7 @@ function SettingsPage() {
     settings.currentDthExporterVersion !== initial.currentDthExporterVersion ||
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
+    settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders)
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
@@ -890,6 +892,50 @@ function SettingsPage() {
             {houdiniReport && (
               <InstallReportList report={houdiniReport} onClose={() => setHoudiniReport(null)} />
             )}
+          </section>
+
+          {/* "Generate project" prerequisite: hython (from the Houdini install)
+              creates a ready-made DazToHue project — the network is instantiated
+              from the INSTALLED DazToHue HDA (no template scene to rot across
+              Houdini/DazToHue versions), Set Project baked to the character's
+              Houdini project folder. */}
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Generate Houdini Projects</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Used by the character page&apos;s <em>Generate project</em> button: hython
+                creates a new Houdini scene with the DazToHue network (from your installed
+                DazToHue HDA) and <span className="font-mono">Set Project</span> baked in.
+              </p>
+            </div>
+
+            <FolderField
+              label="Houdini installation folder (optional)"
+              value={settings.houdiniInstallFolder}
+              placeholder="C:\Program Files\Side Effects Software\Houdini 22.0.368"
+              onChange={(value) => setSettings((s) => ({ ...s, houdiniInstallFolder: value }))}
+              help={
+                <>
+                  Where Houdini itself is installed — its <code>bin\hython.exe</code> creates the
+                  project. Must have a matching Houdini documents folder configured above
+                  (prefs are per version: <code>Houdini 22.0.x</code> ↔ <code>houdini22.0</code>).
+                </>
+              }
+            />
+            {/* The install ↔ documents pairing is load-bearing: hython gets the
+                MATCHING docs folder as HOUDINI_USER_PREF_DIR — mismatched, the
+                DazToHue otls never load. Warn live; Generate refuses too. */}
+            {settings.houdiniInstallFolder.trim() !== '' &&
+              !matchingHoudiniDocsFolder(settings.houdiniInstallFolder, [
+                settings.houdiniDocsFolder,
+                ...settings.extraHoudiniDocsFolders,
+              ]) && (
+                <p className="text-sm text-destructive">
+                  {houdiniVersionFromInstall(settings.houdiniInstallFolder)
+                    ? `No matching Houdini documents folder for this install — add "…\\Documents\\houdini${houdiniVersionFromInstall(settings.houdiniInstallFolder)}" above, or Generate project cannot load the DazToHue assets.`
+                    : 'No Houdini version found in this path — point it at a versioned install (e.g. "…\\Houdini 22.0.368").'}
+                </p>
+              )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">

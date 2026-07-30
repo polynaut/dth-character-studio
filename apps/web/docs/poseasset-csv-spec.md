@@ -40,9 +40,10 @@ Notes:
   parameters (offset distance, radius) and each pose has an XYZ offset.
 - `file` on GEN/FBM poses = the per-pose **reference skeleton FBX** (an
   absolute path). The studio fills this automatically for a pose flagged **Bone
-  scale**: it emits a `{{DTH_EXPORT_DIR}}` token + the `Reference Skeletons/<Name>_frame_<N>.fbx`
-  tail, and the generated Daz script resolves the token to the real (run-time)
-  export dir when it copies the CSV next to the exporter output.
+  scale**: it emits a `{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_<N>.fbx`
+  token path, and the generated Daz script resolves both tokens — the real
+  (run-time) export dir and the scene-suffixed figure name handed to `doExport`
+  — when it copies the CSV next to the exporter output.
 - **`MIS` rows must leave `file` empty.** The parser reads the column, but the
   node has no matching parameter for Misc mappings, so a non-empty value makes
   the whole import fail (`AttributeError: 'NoneType' object has no attribute

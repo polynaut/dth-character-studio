@@ -138,8 +138,9 @@ export const romPoseSchema = z.object({
    * Whether this pose scales bones (e.g. Torso Length, Proportion Height). Unreal
    * can't drive bone scale from a morph alone, so the DTH Exporter writes a
    * per-frame reference-skeleton FBX for such a frame and the studio fills that
-   * FBX's path into the PoseAsset CSV automatically (a `{{DTH_EXPORT_DIR}}` token
-   * the generated Daz script resolves against the real export dir at run time).
+   * FBX's path into the PoseAsset CSV automatically (`{{DTH_EXPORT_DIR}}` +
+   * `{{DTH_EXPORT_NAME}}` tokens the generated Daz script resolves against the
+   * real export dir and scene-suffixed figure name at run time).
    * Only meaningful in GEN/FBM categories (see {@link REFERENCE_FBX_SECTIONS});
    * ignored everywhere else — generation never emits a reference FBX for other
    * sections (a stray flag on a MIS row would break the HDA's CSV import).
@@ -554,6 +555,11 @@ export const sceneOverrideSchema = z.object({
   /** Per-scene "Modify JCM frames" rules — present = armed, a full replacement
    *  of the base `jcmMorphMods` (empty = "no JCM mods for this scene"). */
   jcm: z.array(jcmMorphModSchema).optional(),
+  /** Per-scene Houdini project folder — present = this scene's export nests
+   *  under ITS OWN `<value>/dth-export/` instead of the character's
+   *  `houdiniProjectFolder` ('' = this scene exports flat into the export dir,
+   *  no project folder). Absent = the scene shares the character's project. */
+  houdiniProjectFolder: z.string().max(MAX_NAME_LENGTH).optional(),
 })
 export type SceneOverride = z.infer<typeof sceneOverrideSchema>
 
@@ -888,8 +894,16 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       from the sanitized scene name). The Refresh sweep also moves legacy
  *       root-dwelling scene files into their subfolders (host-side, not a
  *       migration step — file moves need the fs).
+ *  27 — added `houdiniProjectFolder` (character-level, '' default) + the
+ *       per-scene `sceneOverride.houdiniProjectFolder` (present = overrides,
+ *       like hair it rides its map by presence and never arms). When
+ *       set, exports nest under `<exportPath>/<folder>/dth-export/<scene-sub>/`
+ *       so a Houdini project can Set Project there and import JOB-relative.
+ *       Additive with defaults — no migration step: existing characters read
+ *       as '' and keep today's flat `<exportPath>/<scene-sub>/` layout. Only
+ *       the NEW-character creation flow seeds `<Project>_<Character>`.
  */
-export const CHARACTER_SCHEMA_VERSION = 26
+export const CHARACTER_SCHEMA_VERSION = 27
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1145,8 +1159,41 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       also exports looks different from one that doesn't). Script CONTENT is
  *       unchanged by that, but the artwork only lands on a (re)generate, which
  *       this bump makes Refresh assets do.
+ *  40 — generated-script change only (runtime files untouched): the figure
+ *       name handed to the exporter's `doExport` is scene-suffixed at run time
+ *       — base name + "_" + the open scene's export subfolder, first letter of
+ *       each segment capitalized ("Kira" in "summertide/" exports as
+ *       "Kira_Summertide") — so each subfolder's files carry their scene
+ *       instead of every subfolder holding an identically named export. The
+ *       PRIMARY scene keeps the bare base name ("Kira", never "Kira_Primary")
+ *       while still exporting into its subfolder. The CSV's bone-scale
+ *       reference-FBX paths bake a
+ *       {{DTH_EXPORT_NAME}} token the CSV-copy step substitutes with the same
+ *       run-time name (alongside {{DTH_EXPORT_DIR}}), keeping exporter output
+ *       and CSV pointers in lockstep — and the CSV copy is DELIVERED as
+ *       `<dthExportName>_pose_asset.csv`, the same scene-suffixed base as the
+ *       files beside it (the source CSV keeps its studio name). Also (schema v27): with a
+ *       `houdiniProjectFolder` set, the export dir first nests under
+ *       `<folder>/dth-export` before the scene subfolder — a Houdini project
+ *       Set-Project'd to `<exportPath>/<folder>` imports everything
+ *       JOB-relative. Per-scene overrides resolve through an embedded map
+ *       ('' = that scene exports flat); characters without the folder ('' —
+ *       every pre-v27 character) emit the layout unchanged. Also RETIRES the
+ *       v38 "bulk-export" script argument (it never reached getArguments()
+ *       through the Runner's DzScript::execute) — bulk runs now execute a
+ *       dedicated hidden `.Bulk_ROM_Export.dsa` (the combined script with both
+ *       export toggles forced on; generated whenever an export dir is set),
+ *       and the visible ROM script carries an export block only in combined
+ *       mode again (pre-v38 behavior). And: after a CLEAN ROM build every
+ *       ROM-building script saves the scene as `<stem>_ROM.duf` into the
+ *       hidden `.ROM_Animations/` subfolder beside the source scene (before
+ *       any export) — the generated ROM animation stays reopenable without a
+ *       rebuild. The save-as repoints Scene.getFilename(), so all scene-keyed
+ *       lookups read the `dthOpenSceneFile` capture taken at script start.
+ *       Bumped so Refresh
+ *       assets regenerates every script + CSV onto the new naming.
  */
-export const RUNTIME_VERSION = 39
+export const RUNTIME_VERSION = 40
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1371,6 +1418,20 @@ export const characterSchema = z.object({
    * picker has had a default.)
    */
   exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
+  /**
+   * Name of the HOUDINI PROJECT folder the export nests under (schema v27):
+   * when set, everything exports into
+   * `<exportPath>/<houdiniProjectFolder>/dth-export/<scene-subfolder>/` — so a
+   * Houdini project can "Set Project" to that folder and import everything
+   * JOB-relative (`$JOB/dth-export/primary/Ita_primary.dth`). Empty = no
+   * project folder, exports go straight to `<exportPath>/<scene-subfolder>/`
+   * (the pre-v27 layout). A NEW character seeds `<Project>_<Character>` (host
+   * creation flow — the pure core can't know the project name); existing
+   * characters keep '' via the default, so nothing moves for them. A scene
+   * override record can replace it per scene ({@link sceneOverrideSchema}) —
+   * including with '' to export that scene flat.
+   */
+  houdiniProjectFolder: z.string().max(MAX_NAME_LENGTH).default(''),
   /**
    * When `exportPath` is set, whether the auto-export runs inside the ROM script
    * (`true`, the default — one combined `<Name>_<Genesis>.dsa`) or is split into

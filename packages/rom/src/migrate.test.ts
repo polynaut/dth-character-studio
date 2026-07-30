@@ -940,3 +940,30 @@ describe('characterSchema - v26 exportSceneSubfolders removed', () => {
     expect(parsed.exportPath).toBe('X:/exports/electra')
   })
 })
+
+// v27 added `houdiniProjectFolder` (character + per-scene override) — additive
+// with a '' default / optional, so there is no migrate step. The '' default IS
+// the compatibility story: an existing character reads as "no project folder"
+// and keeps exporting flat into `<exportPath>/<scene-sub>/`; only the
+// NEW-character creation flow seeds `<Project>_<Character>`.
+describe('characterSchema — v27 houdiniProjectFolder (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('fills houdiniProjectFolder with "" for a v26-shaped definition (nothing moves)', () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 26 }).houdiniProjectFolder).toBe('')
+  })
+
+  it('round-trips a stored value and the per-scene override (including "" = flat)', () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      houdiniProjectFolder: 'MyProj_Electra',
+      sceneOverrides: [
+        { scenePath: 'X:/p/daz3d/Beach/Beach.duf', houdiniProjectFolder: '' },
+        { scenePath: 'X:/p/daz3d/Armor/Armor.duf' },
+      ],
+    })
+    expect(parsed.houdiniProjectFolder).toBe('MyProj_Electra')
+    expect(parsed.sceneOverrides[0].houdiniProjectFolder).toBe('') // armed: flat export
+    expect(parsed.sceneOverrides[1].houdiniProjectFolder).toBeUndefined() // shares the base
+  })
+})

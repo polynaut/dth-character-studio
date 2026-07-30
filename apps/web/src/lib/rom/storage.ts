@@ -36,6 +36,9 @@ export {
 } from './storage/settings'
 export type { StudioSettings } from './storage/settings'
 
+// --- houdini.env wiring (DAZ3D_LIB → the My DAZ 3D Library folder) -----------
+export { DAZ_LIB_ENV_VAR, ensureHoudiniEnvDazLib } from './storage/houdini-env'
+
 // --- Character library (scan + CRUD) -----------------------------------------
 export {
   createCharacterAt,

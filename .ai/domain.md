@@ -154,9 +154,88 @@ older runtimes as stale.
 
 - Bone-scale frames make the DTH Exporter write per-frame reference skeletons to
   `<export dir>/Reference Skeletons/<figure>_frame_<N>.fbx`. The HDA wants
-  **absolute** paths in the CSV `file` column, so the studio writes a
-  `{{DTH_EXPORT_DIR}}` token and the generated script substitutes the real export
-  dir when copying the CSV next to the exporter output.
+  **absolute** paths in the CSV `file` column, so the studio writes
+  `{{DTH_EXPORT_DIR}}` + `{{DTH_EXPORT_NAME}}` tokens and the generated script
+  substitutes the real export dir and figure name when copying the CSV next to
+  the exporter output.
+- The figure name handed to `doExport` is **scene-suffixed at run time**
+  (runtime v40): base `exporterFigureName` + `_` + the resolved export
+  subfolder, each segment's first letter capitalized ("Kira" in `summertide/`
+  exports as `Kira_Summertide`; nesting `/` → `_`, `,` → space) — otherwise
+  every scene subfolder holds identically-named files. The PRIMARY scene keeps
+  the bare base name ("Kira", never "Kira_Primary") while still exporting into
+  its subfolder — matched by scene KEY, not by the folder name "primary". The
+  hair pass keeps its own `<slug>_Hair_<item>` names (unique per item
+  already).
+- The **Houdini project folder** (schema v27, `houdiniProjectFolder`) nests the
+  whole export under `<exportPath>/<folder>/dth-export/<scene-subfolder>/` so
+  Houdini Set-Project's `<exportPath>/<folder>` and imports via
+  `$JOB/dth-export/…`. Resolved at RUN time (`houdiniProjectResolution` in
+  dsa.ts): per-scene override map (presence-based like hair — '' is a real
+  value, "this scene exports flat"; hasOwnProperty, never truthiness) →
+  base → '' = the flat pre-v27 layout, emitted byte-identically. NEW
+  characters seed `<Project>_<Character>` (`defaultHoudiniProjectFolder`, the
+  create flow); existing ones stay '' — their layout must not move. The export
+  watch (`expectedSceneCsvRel`) mirrors the same resolution.
+- **Generate Houdini project**: `generateHoudiniProject` (api/houdini.ts) →
+  Rust `create_houdini_project` (houdini.rs) runs
+  `<houdiniInstallFolder>/bin/hython.exe -c` to start a FRESH scene, build
+  the DazToHue network BY RUNNING THE DAZTOHUE SHELF TOOL'S OWN SCRIPT
+  (hou.shelves.tools — the ground truth; measured on 2.x it builds a geo
+  holding the Import→Skin→…→Export SOP chain, and the assets are all
+  SOP-level). Deliberately NO template scene and NO synthetic fallback — a
+  template rots across versions, and a hand-built approximation is a
+  non-working network that looks done; a failed/absent tool leaves the scene
+  EMPTY (half-built nodes destroyed) and the UI says to click the shelf tool.
+  hython gets HOUDINI_USER_PREF_DIR = the version-MATCHED Houdini docs
+  folder (`lib/houdini-version.ts` pairs install `Houdini X.Y.z` ↔ docs
+  `houdiniX.Y`; no match = hard error + live Settings warning) — inherited
+  env resolved the prefs elsewhere and no otls loaded (measured). It bakes
+  `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the
+  programmatic Set Project, saved with the hip) and saves `<name>.hiplc` in
+  the houdini folder NEXT TO the project folder (which is seeded with its
+  dth-export/): `houdini/<name>.hiplc` + `houdini/<folder>/dth-export/`.
+  Generated projects (hip directly in the export dir) are studio-managed:
+  the remove dialog's "Keep houdini files" toggle (default on = unlink only)
+  can delete the scene file + the whole project folder
+  (`removeGeneratedHoudiniProject`, path-guarded); hand-linked projects stay
+  unlink-only. Returns whether the network was created (HDA not visible
+  to hython → empty scene, UI says "add it from the shelf"); the UI
+  (houdini-projects-field "Generate project" dialog, name prefilled
+  `<Project>_<Character>`) links the result as a Houdini card. Fails loud
+  when the scene name already exists or a prerequisite is missing.
+- **`$DAZ3D_LIB` houdini.env wiring**: with a Daz library + Houdini docs
+  folder(s) configured, `DAZ3D_LIB = "<library>"` is upserted into each
+  folder's `houdini.env` (`storage/houdini-env.ts` — pure `upsertHoudiniEnvVar`
+  edits ONLY that assignment line, preserving the rest + CRLF). Ensured on
+  every Settings save (best-effort) AND by Refresh assets (reported in the
+  summary). Never removed — a cleared library folder leaves the last value.
+  Houdini reads the file at startup.
+- **The delivered CSV is renamed on delivery** (runtime v40): the run-time
+  copy writes `<dthExportName>_pose_asset.csv` — the export set's own
+  scene-suffixed base (primary: bare) — so one export folder never mixes
+  naming patterns. SOURCE CSVs in the character folder keep their studio
+  names (`poseAssetFileName`, scene-sluged only for ROM-override scenes) —
+  the scene-CSV lookup picks the right SOURCE, the rename names the
+  DESTINATION. `sceneExportName` (dsa.ts) is the studio-side mirror of the
+  run-time name rule; the export watch builds its expected paths from it.
+- **ROM-scene auto-save** (runtime v40): after a CLEAN ROM build — before any
+  export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
+  as `<stem>_ROM.duf` into `<sceneDir>/.ROM_Animations/`, so the built ROM
+  animation reopens without a rebuild. Bounded: fixed name, overwritten per
+  run. FOOTGUN: the save-as REPOINTS `Scene.getFilename()` — every scene-keyed
+  lookup (subfolder/groom/CSV snippets) reads the `dthOpenSceneFile` capture
+  (`openSceneFileSnippet`, emitted once per carrier) instead of the live
+  filename; a new scene-keyed snippet must do the same.
+- **Export-folder housekeeping**: every generation records the layout's
+  export-relative folders in `.dth_export_folders.json` (character folder) and
+  deletes RECORDED folders that fell out of the layout — a renamed/cleared
+  project folder can't leave its old tree behind. `staleExportFolders`
+  (execute-jobs.ts) is deliberately conservative: same export dir only, plain
+  relative paths only (no `..`/absolute — tamper-safe), parents of kept
+  folders survive, failed deletes stay recorded for retry. Clearing
+  `exportPath` deletes nothing (those are the user's last exports), it only
+  drops the record.
 - No export directory set ⇒ the ROM is still fully generated; ticked Bone scale
   rows are a harmless no-op (no validation links the two).
 - The export block ALWAYS nests each run under the open scene's own subfolder
@@ -174,20 +253,24 @@ older runtimes as stale.
   pure migration step).
 - `referenceFrames()` (generate.ts) hands the exporter the same absolute frames
   the CSV references — the 1:1 mapping is test-pinned.
-- **Bulk runs** (runtime v38): the DTH Exporter Plugin executes job-file scripts
-  with the `bulk-export` argument (`BULK_EXPORT_ARG`, read via the script-side
-  `getArguments()`). With it, the ROM script ALWAYS exports — the export block
-  is embedded even with `exportWithRomScript` off (gate:
-  `dthRomOk === true && dthBulkExport`) and the hair pass runs past a disabled
-  `exportHairAssets` (gate: `if (dthBulkExport)`). A manual run (no argument)
-  honors the toggles exactly as before. The job file therefore carries ONE
-  ROM-script row per scene — no split Export_ rows, no same-scene session
-  sharing (contract: docs/exporter-plugin-job-file.md). The studio watches the
-  run: the handed-off jobs stay in memory (api/execute.ts `activeRun`) and a
-  scene counts as delivered when its exported PoseAsset CSV
-  (`expectedSceneCsvRel` — export dir + scene subfolder + scene CSV) is newer
-  than the handoff time; the header button shows "Exporting n/m" until all
-  deliver (or the watch is dismissed/aborted).
+- **Bulk runs** (runtime v40): every job-file row points at the character's
+  hidden `.Bulk_ROM_Export.dsa` (`BULK_ROM_EXPORT_SCRIPT`,
+  `toBulkRomExportScriptDsa` — the combined script with `exportWithRomScript` +
+  `exportHairAssets` FORCED on; generated whenever an export dir is set,
+  dot-prefixed so the Content Library hides it, swept when the dir clears).
+  It always builds the ROM and always exports everything; the toggles govern
+  only the visible per-character scripts. The v38 `bulk-export` script
+  argument is RETIRED — arguments passed through `DzScript::execute` never
+  reached `getArguments()` (measured; the Runner now executes plainly). The
+  job file (contract v2) is JSON — `{version, type, progress, jobs[]}` — with
+  ONE bulk-script row per scene (docs/exporter-plugin-job-file.md). Lifecycle:
+  the Runner RENAMES it (`running_` prefix) on pickup — the "started" signal;
+  only an un-renamed file is abortable (deletion) — then OWNS `progress` +
+  per-job statuses inside the file. The studio (api/execute.ts) polls the
+  renamed file, shows "Exporting n%", deletes it at progress 100 and toasts
+  the outcome (failed rows + errors); a running file whose Daz exited below
+  100 is a dead run (cleaned + reported). No export-folder watching anymore —
+  the old delivered-CSV mtime watch is gone.
 
 ## PoseAsset CSV eras & templates
 

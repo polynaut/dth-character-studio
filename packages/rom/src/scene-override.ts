@@ -26,7 +26,9 @@ export function sceneRecordEmpty(override: SceneOverride): boolean {
     override.hair.length === 0 &&
     override.identity === undefined &&
     override.preserve === undefined &&
-    override.jcm === undefined
+    override.jcm === undefined &&
+    // '' is a real override here ("this scene exports flat") — only ABSENT is empty.
+    override.houdiniProjectFolder === undefined
   )
 }
 
@@ -115,6 +117,8 @@ export function sceneOverrideSlug(scenePath: string): string {
  *
  * NB `hair` never arms: it rides the groom map by presence, and a hair-only
  * record (e.g. the primary scene's) must not activate an empty override.
+ * `houdiniProjectFolder` doesn't arm either — it rides the export-path map by
+ * presence the same way (`houdiniProjectResolution` in dsa.ts).
  */
 export function activeSceneOverrides(
   character: Pick<Character, 'extraScenes' | 'sceneOverrides'>,

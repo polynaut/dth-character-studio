@@ -1,4 +1,4 @@
-import { FolderOpen, Trash2 } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { GuideLink } from '#/components/guide-link.tsx'
@@ -77,43 +77,22 @@ export function ExportSettingsSection({
         </InfoPopup>
       </h2>
       <div className="flex flex-wrap items-center gap-3">
+        {/* No Clear: an export directory can only be repointed, never removed —
+            new characters start with one (the seeded houdini folder), and the
+            whole export/Houdini pipeline builds on it existing. */}
         <Button type="button" variant="outline" onClick={onPickExportDir}>
           <FolderOpen /> {character.exportPath ? 'Change…' : 'Choose folder…'}
         </Button>
         {character.exportPath && (
-          <>
-            {/* Taller chip so it lines up with the h-9 buttons on either side. */}
-            <PathCode
-              path={displayPath(character.exportPath)}
-              className={tallPathChipClass}
-            />
-            {/* Icon-only destructive button (gray border → red on hover) so Clear
-                reads as a real action next to Change… (matching that chip/button
-                height + weight) rather than a link. Bin glyph, like the preserve
-                rows' delete. */}
-            <Button
-              variant="outline-destructive"
-              size="icon"
-              aria-label="Clear the export directory"
-              onClick={() =>
-                void persistPatch(
-                  { exportPath: '' },
-                  { toast: 'Export folder cleared — script regenerated' },
-                )
-              }
-            >
-              <Trash2 />
-            </Button>
-          </>
+          // Taller chip so it lines up with the h-9 button beside it.
+          <PathCode path={displayPath(character.exportPath)} className={tallPathChipClass} />
         )}
       </div>
-      {/* No subfolder toggle anymore: every linked scene lives in its own
-          subfolder now, and the export always nests under that name (see
-          lib/scene-subfolder.ts + sceneExportSubfolders in @dth/rom). */}
       {character.exportPath && (
         <p className="mt-3 text-xs text-muted-foreground">
           Each scene exports into its own subfolder here, named after the scene&apos;s folder
-          (e.g. <code>primary</code>).
+          (e.g. <code>primary</code>) — with a Houdini project folder set (Houdini projects
+          section) they nest under <code>{'<project folder>/dth-export/'}</code>.
         </p>
       )}
       <div className="mt-4 flex items-center gap-3">

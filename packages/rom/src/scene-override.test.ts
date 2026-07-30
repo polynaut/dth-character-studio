@@ -543,6 +543,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_ElectraG9_G9.dsa',
       'Export_ElectraG9_G9.dsa',
+      '.Bulk_ROM_Export.dsa',
       'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',
     ])

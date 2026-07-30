@@ -95,6 +95,12 @@ export function RefreshAssetsTab() {
           : `Upscaled ${n(result.counts.avatars, 'avatar')} to 768px`,
       )
     if (result.runtime?.ok) lines.push('Re-installed the DTH runtime files')
+    if (result.houdiniEnv && result.houdiniEnv.updated > 0)
+      lines.push(
+        `Wired DAZ3D_LIB into ${n(result.houdiniEnv.updated, 'houdini.env file')} (applies on the next Houdini start)`,
+      )
+    for (const error of result.houdiniEnv?.errors ?? [])
+      lines.push(`houdini.env wiring failed: ${error}`)
     toast.success(`Refreshed ${n(result.regenerated, 'character')}`, {
       description: lines.length ? (
         <ul className="mt-1 list-disc space-y-0.5 pl-4">

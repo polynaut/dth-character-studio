@@ -43,6 +43,22 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
 }
 
 /**
+ * The one "which scene is open" capture every scene-keyed lookup reads:
+ * `dthOpenSceneFile`, taken ONCE at script start. Load-bearing since the
+ * ROM-scene save (dsa.ts `romSceneSaveBlock`): a Daz save-as REPOINTS
+ * `Scene.getFilename()` to the saved copy, and the export block's lookups
+ * (subfolder map, groom list, CSV pick) run AFTER that save — reading live
+ * would key them on `.ROM_Animations/<stem>_ROM.duf` and miss every map.
+ * Every carrier that embeds a scene-keyed snippet MUST emit this first.
+ */
+export function openSceneFileSnippet(): string {
+  return `// The open scene's file, captured ONCE: the ROM-scene save (save-as) repoints
+// Scene.getFilename(), so every scene-keyed lookup reads this capture instead.
+var dthOpenSceneFile = String(Scene.getFilename());
+`
+}
+
+/**
  * The "nest the export dir under the open scene's OWN subfolder" DzScript
  * snippet, at base indent 0 (callers re-indent via {@link indentLines}). ONE
  * body for the ROM/Export scripts' export block and the standalone groom
@@ -50,16 +66,62 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  * scene path; a scene missing from it falls back to the scene file's stem at
  * run time — the pre-v37 nesting, kept so an unexpected scene still exports
  * into its own folder rather than the root. Reads/writes the caller's
- * `dthExportDir` var.
+ * `dthExportDir` var and reads `dthOpenSceneFile` (emit
+ * {@link openSceneFileSnippet} first — never Scene.getFilename() live, the
+ * ROM-scene save repoints it before this runs).
+ *
+ * With `exportName` it also declares `dthExportName` — the name handed to the
+ * exporter's `doExport`: the base {@link exporterFigureName}, suffixed with
+ * the resolved subfolder so every scene's export files carry their scene
+ * ("Kira" in "summertide/" exports as "Kira_Summertide" — each subfolder
+ * segment's first letter capitalized, nesting slashes to underscores, commas
+ * to spaces since a comma would split the CSV column the name lands in).
+ * The PRIMARY scene is the exception: it exports into its subfolder like
+ * every scene, but its files keep the bare base name ("Kira", never
+ * "Kira_Primary") — the primary IS the character.
+ *
+ * With `project` (the character's Houdini project folder + the per-scene
+ * override map — schema v27) the export dir first nests under
+ * `<project>/dth-export` before the scene subfolder, so a Houdini project can
+ * "Set Project" to `<exportPath>/<project>` and import everything JOB-relative
+ * (`$JOB/dth-export/<scene>/…`). Resolution: the open scene's override when
+ * one exists (hasOwnProperty — '' is a REAL value meaning "this scene exports
+ * flat, no project folder"), else the base. Nothing is emitted when the base
+ * is empty and no scene overrides — the pre-v27 layout stays byte-identical.
  */
-export function sceneExportSubfolderSnippet(map: Record<string, string>): string {
+export function sceneExportSubfolderSnippet(
+  map: Record<string, string>,
+  exportName?: { base: string; primarySceneKey: string },
+  project?: { base: string; byScene: Record<string, string> },
+): string {
+  const nameLines =
+    exportName === undefined
+      ? ''
+      : `var dthExportName = ${dazJson(exportName.base)};
+if (dthExportSub != "" && dthExportSceneKey != ${dazJson(exportName.primarySceneKey)}) {
+    var dthExportSuffix = dthExportSub.split(",").join(" ").split("/");
+    for (var dthSfI = 0; dthSfI < dthExportSuffix.length; dthSfI++) {
+        var dthSfSeg = dthExportSuffix[dthSfI];
+        if (dthSfSeg != "") dthExportSuffix[dthSfI] = dthSfSeg.charAt(0).toUpperCase() + dthSfSeg.substring(1);
+    }
+    dthExportName = dthExportName + "_" + dthExportSuffix.join("_");
+}
+`
+  const projectActive =
+    project !== undefined && (project.base !== '' || Object.keys(project.byScene).length > 0)
+  const projectLines = !projectActive
+    ? ''
+    : `var dthExportProjByScene = ${dazJson(project.byScene)};
+var dthExportProj = dthExportProjByScene.hasOwnProperty(dthExportSceneKey) ? dthExportProjByScene[dthExportSceneKey] : ${dazJson(project.base)};
+if (dthExportProj != "") dthExportDir = dthExportDir + "/" + dthExportProj + "/dth-export";
+`
   return `var dthExportSubByScene = ${dazJson(map)};
-var dthExportSceneKey = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthExportSceneKey = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
 var dthExportSub = dthExportSubByScene[dthExportSceneKey] || "";
 if (dthExportSub == "" && dthExportSceneKey != "") {
-    dthExportSub = new DzFileInfo(Scene.getFilename()).completeBaseName();
+    dthExportSub = new DzFileInfo(dthOpenSceneFile).completeBaseName();
 }
-if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
+${nameLines}${projectLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
 `
 }
 
@@ -70,11 +132,12 @@ if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
  * bracket and the standalone groom export (the two used to carry
  * byte-duplicated copies) — a normalization tweak must land in both or the
  * scripts disagree on which scene has a groom list. Base indent 4 (both
- * callers embed at that level).
+ * callers embed at that level). Reads `dthOpenSceneFile` ({@link
+ * openSceneFileSnippet} — this lookup runs after the ROM-scene save).
  */
 export function groomSceneLookupSnippet(groomMap: Record<string, Array<string>>): string {
   return `    var dthGroomByScene = ${dazJson(groomMap)};
-    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+    var dthGroomScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];`
 }
 
@@ -141,11 +204,13 @@ function dthSceneLinkError() {
  * CSV, every other scene rides the base one. Emitted only when at least one
  * linked scene overrides the ROM. Declares `dthCsvName` (the base name),
  * reassigning it when the open scene has an override CSV. Base indent 0.
+ * Reads `dthOpenSceneFile` ({@link openSceneFileSnippet} — this lookup runs
+ * after the ROM-scene save).
  */
 export function sceneCsvLookupSnippet(baseCsvName: string, sceneCsvMap: Record<string, string>): string {
   return `var dthCsvName = ${dazJson(baseCsvName)};
 var dthCsvByScene = ${dazJson(sceneCsvMap, 2)};
-var dthCsvScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthCsvScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
 if (dthCsvByScene[dthCsvScene]) dthCsvName = dthCsvByScene[dthCsvScene];
 `
 }
@@ -195,37 +260,6 @@ export function dazJson(value: unknown, space?: number): string {
  * hair pass) — the snippet's helper names are fixed, so emit it at most ONCE
  * per script.
  */
-/**
- * The bulk-run detection: `var dthBulkExport` is true when the script was
- * executed with the {@link BULK_EXPORT_ARG} argument — the DTH Exporter Plugin
- * passes it for every job-file run (`DzScript::execute(args)`; script-side the
- * arguments surface through the global `getArguments()`). The argument forces
- * the export (and the hair pass) past their toggles — delivering exports is a
- * bulk run's whole point. A manual run has no arguments, so everything behaves
- * exactly like the toggles say. Defensive on purpose: an older Daz without
- * argument support just reads as a manual run.
- */
-export function bulkExportArgSnippet(): string {
-  return `// Bulk-run detection: the DTH Exporter Plugin executes this script with the
-// "${BULK_EXPORT_ARG}" argument when working through a job file (the studio's DTH
-// Export button). The argument forces the export (and the hair pass) past
-// their toggles; a manual run has no arguments and honors the toggles.
-var dthBulkExport = false;
-try {
-    var dthScriptArgs = (typeof getArguments == "function") ? getArguments() : null;
-    if (dthScriptArgs) {
-        for (var dthArgI = 0; dthArgI < dthScriptArgs.length; dthArgI++) {
-            if (String(dthScriptArgs[dthArgI]) == "${BULK_EXPORT_ARG}") { dthBulkExport = true; break; }
-        }
-    }
-} catch (dthArgErr) { /* no argument support - a manual run */ }
-`
-}
-
-/** The script argument the DTH Exporter Plugin passes on job-file runs — the
- *  contract's one mode flag (docs/exporter-plugin-job-file.md). */
-export const BULK_EXPORT_ARG = 'bulk-export'
-
 export function figureAutoSelectSnippet(genesis: GenesisVersion, varName = 'dthFig'): string {
   // The rename-proof figure identity lives in GENERATIONS (one table row per
   // generation) — mirrors the runtime's v28 auto-select, which only the ROM

@@ -1,22 +1,24 @@
 import { exporterFigureName, poseAssetFileName, referenceFrames, toPoseAssetCsv } from './csv'
 import {
-  BULK_EXPORT_ARG,
-  bulkExportArgSnippet,
   commentSafe,
   dazJson,
   figureAutoSelectSnippet,
   groomSceneLookupSnippet,
   hideTreeSnippet,
   indentLines,
+  openSceneFileSnippet,
   sceneConfigLookupSnippet,
   sceneGuardSnippet,
   sceneCsvLookupSnippet,
   sceneExportSubfolderSnippet,
 } from './dz-snippets'
 
-// The bulk-run script argument is part of the public exporter contract
-// (dz-snippets itself is package-internal).
-export { BULK_EXPORT_ARG }
+/** The hidden per-character BULK script the DTH Character Studio Runner
+ *  executes on job-file runs (the studio's DTH Export button): always builds
+ *  the ROM and always exports — skeleton/mesh AND every hair asset — no
+ *  matter the manual-run toggles. Dot-prefixed so Daz's Content Library never
+ *  shows it (docs/exporter-plugin-job-file.md). */
+export const BULK_ROM_EXPORT_SCRIPT = '.Bulk_ROM_Export.dsa'
 import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
 import {
   activeSceneOverrides,
@@ -229,10 +231,8 @@ print("Hair items exported: " + dthGroomLabels.length);
  * (charFolderAbs); the export ALWAYS nests under the open scene's own subfolder
  * ({@link sceneExportSubfolders} — resolved by the embedded map at run time).
  * The Export_Hair per-item pass rides right after the main export (same
- * action, same resolved dir) — in BOTH carriers, since both call this builder:
- * unconditionally with `exportHairAssets` on, gated to bulk runs
- * (`dthBulkExport`) with it off. Both carriers therefore MUST emit
- * {@link bulkExportArgSnippet} before this block.
+ * action, same resolved dir) when `exportHairAssets` is on — the bulk script
+ * forces that toggle before building, so it always carries the pass.
  */
 function buildExportBlock(
   character: Character,
@@ -250,8 +250,20 @@ function buildExportBlock(
   const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
+  // The exporterFigureName base makes the snippet also declare dthExportName:
+  // the doExport name, suffixed with the capitalized scene subfolder so each
+  // scene's files carry their scene ("Kira_Summertide") instead of every
+  // subfolder holding an identically-named "Kira" — except the PRIMARY scene,
+  // whose files keep the bare name ("Kira", never "Kira_Primary").
   const sceneSubfolderBlock = indentLines(
-    sceneExportSubfolderSnippet(sceneExportSubfolders(character, scenesRootAbs)),
+    sceneExportSubfolderSnippet(
+      sceneExportSubfolders(character, scenesRootAbs),
+      {
+        base: exporterFigureName(character),
+        primarySceneKey: character.scenePath.trim().replace(/\\/g, '/').toLowerCase(),
+      },
+      houdiniProjectResolution(character),
+    ),
   )
   // The CSV to deliver: the base name, or — when some linked scene overrides the
   // ROM — the open scene's scene-suffixed CSV, resolved at run time. Kept
@@ -263,21 +275,28 @@ function buildExportBlock(
       : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
   const csvCopyBlock = charFolderAbs
     ? `    // Copy the generated PoseAsset CSV next to the exporter output, resolving
-    // the {{DTH_EXPORT_DIR}} token in any bone-scale reference-FBX path to the
-    // real (run-time) export dir — Houdini's PoseAsset wants absolute paths, and
-    // the dir (scene subfolder included) is only known now. Source is left intact
+    // the {{DTH_EXPORT_DIR}} + {{DTH_EXPORT_NAME}} tokens in any bone-scale
+    // reference-FBX path to the real (run-time) export dir and figure name —
+    // Houdini's PoseAsset wants absolute paths, and the dir and name (scene
+    // subfolder included) are only known now. Source is left intact
     // so the next scene's export can reuse it.
 ${csvNameBlock}
     var dthCsvSrcDir = new DzDir(${dazJson(charFolderAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
         if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
-        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
+        // Delivered under the export set's own base name (dthExportName — the
+        // same scene-suffixed base as the .abc/.dth/.fbx beside it), so one
+        // folder never mixes naming patterns. The SOURCE CSV in the character
+        // folder keeps its studio name.
+        var dthCsvDstName = dthExportName + "_pose_asset.csv";
+        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvDstName);
         var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
         if (dthCsvSrc.open(dthCsvSrc.ReadOnly)) {
             var dthCsvText = String(dthCsvSrc.read());
             dthCsvSrc.close();
             dthCsvText = dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir);
+            dthCsvText = dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName);
             var dthCsvOut = new DzFile(dthCsvDst);
             if (dthCsvOut.open(dthCsvOut.WriteOnly | dthCsvOut.Truncate)) {
                 dthCsvOut.write(dthCsvText);
@@ -291,8 +310,9 @@ ${csvNameBlock}
 `
     : ''
   // The export call + CSV delivery. With groom items listed it is wrapped in the
-  // hide bracket below; without any, the emitted script is unchanged.
-  const exportCore = `    dthExportAction.doExport(dthExportDir, ${dazJson(exporterFigureName(character))}, ${dazJson(refFrames)}, false);
+  // hide bracket below; without any, the emitted script is unchanged. The name
+  // is the run-time dthExportName (scene-suffixed), never the bare base name.
+  const exportCore = `    dthExportAction.doExport(dthExportDir, dthExportName, ${dazJson(refFrames)}, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
   const indentBlock = indentLines
@@ -309,18 +329,9 @@ ${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig
 ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'dthHairFig', action: 'dthExportAction', hideTree: 'dthGroomHideTree', hidden: 'dthGroomHidden' }).trimEnd())))}
         }
 `
-  // The pass always SHIPS; `exportHairAssets` decides who RUNS it: on, every
-  // export run — off, only the plugin's bulk runs (a bulk job delivers the
-  // complete set no matter the toggles). The carrier declares `dthBulkExport`
-  // (bulkExportArgSnippet) before including this block.
-  const hairPassBlock = character.exportHairAssets
-    ? hairPassCore
-    : `        // Hair pass (exportHairAssets is OFF): bulk runs deliver it anyway —
-        // only a manual run honors the toggle and skips it.
-        if (dthBulkExport) {
-${indentBlock(hairPassCore.trimEnd())}
-        }
-`
+  // `exportHairAssets` decides whether the pass ships at all — the bulk
+  // script forces the toggle on before building, so it always carries it.
+  const hairPassBlock = character.exportHairAssets ? hairPassCore : ''
   const exportBody =
     Object.keys(groomMap).length === 0
       ? exportCore
@@ -411,6 +422,79 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
  * (their exports must never overwrite each other). Same key normalization as
  * {@link groomSceneMap}.
  */
+/**
+ * The seed value for a NEW character's `houdiniProjectFolder`:
+ * `<Project>_<Character>` with folder-illegal characters collapsed to spaces
+ * (Windows filename rules — same class exporterFigureName strips). Existing
+ * characters are NEVER seeded — their schema default '' keeps the flat export
+ * layout (schema v27).
+ */
+export function defaultHoudiniProjectFolder(projectName: string, characterName: string): string {
+  const clean = (s: string) =>
+    s
+      .trim()
+      .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  return [clean(projectName), clean(characterName)].filter(Boolean).join('_')
+}
+
+/**
+ * The run-time export base name (`dthExportName`) for ONE scene, given its
+ * resolved export subfolder — the studio-side MIRROR of the snippet's rule
+ * ({@link sceneExportSubfolderSnippet}): base {@link exporterFigureName},
+ * suffixed with the subfolder — each '/'-segment's first letter capitalized,
+ * segments joined by '_', commas to spaces — while the PRIMARY scene (and a
+ * subfolder-less one) keeps the bare base. The export watch derives each
+ * scene's delivered-CSV name from it (`<name>_pose_asset.csv` — the run-time
+ * CSV copy names its destination the same way); a rule change must land in
+ * both or the watch stats files that are never written.
+ */
+export function sceneExportName(
+  character: Pick<Character, 'name' | 'scenePath'>,
+  sceneKey: string,
+  subfolder: string,
+): string {
+  const base = exporterFigureName(character)
+  const primaryKey = character.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+  if (!subfolder || sceneKey === primaryKey) return base
+  const suffix = subfolder
+    .split(',')
+    .join(' ')
+    .split('/')
+    .map((seg) => (seg ? seg.charAt(0).toUpperCase() + seg.slice(1) : seg))
+    .join('_')
+  return `${base}_${suffix}`
+}
+
+/**
+ * The Houdini-project layer of the export path (schema v27), as the run-time
+ * resolution input for {@link sceneExportSubfolderSnippet}: the character's
+ * base `houdiniProjectFolder` + a map of normalized scene path → that scene's
+ * override — where '' is a REAL entry ("this scene exports flat"), so only
+ * scenes with an armed override appear. When the resolved value is non-empty,
+ * the scene exports under `<exportPath>/<value>/dth-export/<scene-subfolder>/`
+ * instead of `<exportPath>/<scene-subfolder>/`. Like hair, the override rides
+ * this map BY PRESENCE — it never arms the record (`activeSceneOverrides`);
+ * an unlinked record's entry is unreachable at run time (the scene guard
+ * refuses unlinked scenes). Public: the studio's export watch mirrors the
+ * same resolution for its expected-CSV paths.
+ */
+export function houdiniProjectResolution(
+  character: Pick<Character, 'houdiniProjectFolder' | 'sceneOverrides'>,
+): {
+  base: string
+  byScene: Record<string, string>
+} {
+  const byScene: Record<string, string> = {}
+  for (const override of character.sceneOverrides) {
+    if (override.houdiniProjectFolder === undefined) continue
+    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    if (key !== '') byScene[key] = override.houdiniProjectFolder.trim()
+  }
+  return { base: character.houdiniProjectFolder.trim(), byScene }
+}
+
 export function sceneExportSubfolders(
   character: Character,
   scenesRootAbs?: string,
@@ -666,6 +750,61 @@ export function toCharacterScriptDsa(
   character: Character,
   romPaths: RomPaths = {},
   frames?: PresetFrames,
+  charFolderAbs?: string,
+  sceneRomPaths: Record<string, RomPaths> = {},
+  sceneFrames: Record<string, PresetFrames> = {},
+  scenesRootAbs?: string,
+): GeneratedFile {
+  return buildRomScriptDsa(
+    character,
+    false,
+    romPaths,
+    frames,
+    charFolderAbs,
+    sceneRomPaths,
+    sceneFrames,
+    scenesRootAbs,
+  )
+}
+
+/**
+ * The hidden BULK variant ({@link BULK_ROM_EXPORT_SCRIPT}) the DTH Character
+ * Studio Runner executes on job-file runs (the studio's DTH Export button):
+ * the SAME one-script build with both export toggles FORCED on — it always
+ * builds the ROM and always exports, skeleton/mesh and every hair asset,
+ * no matter what "Run the export with the ROM script" / "Export hair assets
+ * too" say (those govern the visible per-character scripts only). One builder
+ * ({@link toCharacterScriptDsa}'s), so the two can never drift; dot-prefixed
+ * so Daz's Content Library never shows it. Only meaningful with an export dir
+ * — generateAll emits it exactly then.
+ */
+export function toBulkRomExportScriptDsa(
+  character: Character,
+  romPaths: RomPaths = {},
+  frames?: PresetFrames,
+  charFolderAbs?: string,
+  sceneRomPaths: Record<string, RomPaths> = {},
+  sceneFrames: Record<string, PresetFrames> = {},
+  scenesRootAbs?: string,
+): GeneratedFile {
+  return buildRomScriptDsa(
+    { ...character, exportWithRomScript: true, exportHairAssets: true },
+    true,
+    romPaths,
+    frames,
+    charFolderAbs,
+    sceneRomPaths,
+    sceneFrames,
+    scenesRootAbs,
+  )
+}
+
+function buildRomScriptDsa(
+  character: Character,
+  /** The bulk variant: header + hidden file name differ, nothing else. */
+  bulk: boolean,
+  romPaths: RomPaths = {},
+  frames?: PresetFrames,
   /**
    * Absolute path of the character's folder — where the PoseAsset CSV is written
    * at generation time. When provided (the desktop app), the generated script
@@ -709,34 +848,33 @@ export function toCharacterScriptDsa(
   const sceneSelectBlock =
     Object.keys(sceneConfigMap).length > 0 ? `\n${sceneConfigLookupSnippet(sceneConfigMap)}` : ''
 
-  // Optional auto-export: when an export directory is set, the ROM build is
-  // followed by a DTH Exporter run. The block is embedded even with the export
-  // SPLIT off (exportWithRomScript false) — the plugin's bulk runs execute ONLY
-  // this ROM script (with the "bulk-export" argument) and must still deliver
-  // the export; the run-time gate below decides who exports.
+  // Optional auto-export: when an export directory is set AND the export runs
+  // with the ROM script (the default; the bulk variant forces it), the ROM
+  // build is followed by a DTH Exporter run. Split off (exportWithRomScript
+  // false), the visible ROM script carries no export — that's the standalone
+  // Export_ script's job.
   const exportDir = character.exportPath.trim()
-  const exportBlock = exportDir
-    ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
+  const exportBlock =
+    exportDir && character.exportWithRomScript !== false
+      ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
 ${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
-    : ''
-  // Whether a MANUAL run of this script exports. Since the block is embedded
-  // either way now, this is what actually distinguishes the two scripts that
-  // share the `ROM_<base>.dsa` name — so the run-time gate AND the Content
-  // Library tile both derive from it and cannot disagree.
-  const exportsOnManualRun = exportBlock !== '' && character.exportWithRomScript !== false
-  // Who runs the embedded export: combined (the default) → every clean ROM run;
-  // split → only bulk runs, so a manual ROM run keeps leaving the export to the
-  // standalone Export_ script exactly as before.
-  const exportGate = exportsOnManualRun
-    ? 'dthRomOk === true'
-    : 'dthRomOk === true && dthBulkExport'
+      : ''
+
+  const scriptTitle = bulk
+    ? `// DTH BULK ROM+Export for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.
+// Executed by the DTH Character Studio Runner plugin on job-file runs (the
+// studio's DTH Export button): always builds the ROM and always exports —
+// skeleton/mesh AND every hair asset — no matter the "Run the export with the
+// ROM script" / "Export hair assets too" toggles (those govern the visible
+// per-character scripts only). Dot-prefixed: hidden from the Content Library.`
+    : `// DTH ROM for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.`
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
-// DTH ROM for ${commentSafe(character.name)} (${character.genesis}) — generated by DTH Character Studio${character.studioVersion ? ` v${commentSafe(character.studioVersion)}` : ''}.${sceneSelectBlock ? `
+${scriptTitle}${sceneSelectBlock ? `
 // One script for every linked scene: it applies the open Daz scene's Hair / ROM
 // / Genesis-9 overrides by file name at run time (see dthSceneOverrides below);
 // the primary scene builds the base config.` : ''}
@@ -752,7 +890,8 @@ ${sceneSelectBlock}
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
-${exportBlock ? bulkExportArgSnippet() : ''}// Write a minimal run log so even a catastrophic failure reaches the studio.
+${openSceneFileSnippet()}
+// Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
     try {
         if (!dthCharacterConfig.runLogPath) return;
@@ -825,14 +964,34 @@ if (dthSceneLinkErr) {
         var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
-        if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }${exportBlock ? `
+        if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
+        // Keep the built ROM reopenable: save the scene as <stem>_ROM.duf into
+        // the hidden .ROM_Animations subfolder BESIDE the source scene, BEFORE
+        // any export — the user can open the generated ROM animation any time
+        // later without the (slow) rebuild. Save-as repoints the open scene's
+        // filename, which is why every scene-keyed lookup below reads the
+        // dthOpenSceneFile capture, never Scene.getFilename(). Best effort: a
+        // failed save must not stop the export.
+        if (dthRomOk === true && dthOpenSceneFile != "") {
+            try {
+                var dthRomSceneInfo = new DzFileInfo(dthOpenSceneFile);
+                var dthRomSaveDir = dthRomSceneInfo.path() + "/.ROM_Animations";
+                var dthRomSaveDirObj = new DzDir(dthRomSaveDir);
+                if (!dthRomSaveDirObj.exists()) dthRomSaveDirObj.mkpath(dthRomSaveDir);
+                var dthRomSavePath = dthRomSaveDir + "/" + dthRomSceneInfo.completeBaseName() + "_ROM.duf";
+                if (App.getContentMgr().saveScene(dthRomSavePath)) {
+                    print("ROM scene saved: " + dthRomSavePath);
+                } else {
+                    print("Could not save the ROM scene to " + dthRomSavePath);
+                }
+            } catch (dthSaveErr) {
+                print("ROM-scene save failed: " + dthSaveErr);
+            }
+        }${exportBlock ? `
         // Export only when the ROM built CLEAN (runtime v20: failed morphs count
         // as failure too, not just hard aborts) — a broken ROM must never ship
-        // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.${character.exportWithRomScript === false ? `
-        // The export is SPLIT off: a manual run leaves it to the standalone
-        // Export_ script — only the plugin's bulk runs (the "bulk-export"
-        // argument) force it inline here.` : ''}
-        if (${exportGate}) {
+        // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
+        if (dthRomOk === true) {
 ${exportBlock}        }` : ''}
     } catch (dthErr) {
         // Unexpected exception — ApplyDTHCharacter couldn't log/report it itself.
@@ -841,16 +1000,18 @@ ${exportBlock}        }` : ''}
     }
 }
 `
+  if (bulk) {
+    // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
+    return { fileName: BULK_ROM_EXPORT_SCRIPT, content, target: 'daz' }
+  }
   const baseName = characterScriptName(character)
   return {
     fileName: `ROM_${baseName}.dsa`,
     content,
     target: 'daz',
     // The tile says which of the two this script is, since the file name can't:
-    // ROM_ alone always builds the ROM, but it may or may not also export. Keyed
-    // to a MANUAL run — a bulk run always exports, but that's the plugin driving
-    // it, not this script's identity.
-    icon: exportsOnManualRun ? 'rom-export' : 'rom',
+    // ROM_ alone always builds the ROM, but it may or may not also export.
+    icon: exportBlock !== '' ? 'rom-export' : 'rom',
   }
 }
 
@@ -879,7 +1040,8 @@ export function toExportScriptDsa(
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
 ${sceneGuardSnippet(character)}
-${bulkExportArgSnippet()}${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
+${openSceneFileSnippet()}
+${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
 } else if (!dthFig) {
@@ -921,9 +1083,13 @@ export function toGroomExportScriptDsa(
   const exportDir = character.exportPath.trim().replace(/\\/g, '/')
   const groomMap = groomSceneMap(character)
   // The same snippet body the ROM/Export export block uses (dz-snippets), at
-  // this script's base indent 0.
+  // this script's base indent 0. The Houdini-project layer rides along (no
+  // exportName — hair keeps its own <slug>_Hair_<item> names) so grooms land
+  // beside the main export inside <project>/dth-export/<scene-sub>/.
   const sceneSubfolderBlock = sceneExportSubfolderSnippet(
     sceneExportSubfolders(character, scenesRootAbs),
+    undefined,
+    houdiniProjectResolution(character),
   )
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -936,6 +1102,7 @@ export function toGroomExportScriptDsa(
 // the figure selected; the ROM is NOT needed.
 
 ${sceneGuardSnippet(character)}
+${openSceneFileSnippet()}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
@@ -1101,6 +1268,21 @@ export function generateAll(
       scenesRootAbs,
     ),
     ...(split ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs)] : []),
+    // The hidden bulk script the Runner executes on DTH Export runs — always
+    // ROM + always full export, so it only exists WITH an export dir.
+    ...(character.exportPath.trim() !== ''
+      ? [
+          toBulkRomExportScriptDsa(
+            character,
+            romPaths,
+            frames,
+            charFolderAbs,
+            sceneRomPaths,
+            sceneFrames,
+            scenesRootAbs,
+          ),
+        ]
+      : []),
     ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
     toPoseAssetCsv(character, frames, era),

@@ -9,6 +9,7 @@ import { normalizeRelFolder } from '../library'
 import { PRIMARY_SCENE_SUBFOLDER, deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import {
   characterSchema,
+  defaultHoudiniProjectFolder,
   defaultSections,
   genderSchema,
   genesisVersionSchema,
@@ -186,6 +187,11 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     createdAt: now,
     updatedAt: now,
     sections,
+    // NEW characters seed the Houdini project folder (<Project>_<Character> —
+    // exports nest under it as <folder>/dth-export/<scene-sub>/, Set-Project
+    // ready). Existing characters keep '' via the schema default: their export
+    // layout must not move under them (schema v27).
+    houdiniProjectFolder: defaultHoudiniProjectFolder(project.name, input.name),
     ...prefillExtras,
   }
   // The picked scene's tip thumbnail becomes the avatar, and we record the scene

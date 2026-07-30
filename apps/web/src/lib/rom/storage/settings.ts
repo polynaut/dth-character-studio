@@ -74,6 +74,14 @@ export const studioSettingsSchema = z.object({
    */
   extraHoudiniDocsFolders: stringArray,
   /**
+   * The Houdini INSTALLATION folder (e.g.
+   * `C:/Program Files/Side Effects Software/Houdini 22.0.368`). Optional — its
+   * `bin/hython.exe` powers the character page's "Generate project" (creating
+   * a ready-made DazToHue Houdini project; the network is instantiated from
+   * the INSTALLED DazToHue HDA — no template scene to rot across versions).
+   */
+  houdiniInstallFolder: str,
+  /**
    * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
    * by the Daz Products scan to resolve scene assets to installed products
    * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs

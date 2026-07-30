@@ -54,19 +54,62 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
 1. On the character page, check the **Export directory**. A new character
    already has one: its own **Houdini subfolder** (the empty folder the
    studio seeds for the character's Houdini project). Change it with
-   **Change…** if you export somewhere else, or **Clear** it to turn the
-   auto-export off.
+   **Change…** if you export somewhere else — an export directory can only be
+   repointed, never removed (the export pipeline builds on it).
 2. Run the script in Daz as above — after building the ROM it now runs the
    exporter automatically and writes everything the pipeline needs into your
-   export folder: **`<Name>.abc`**, **`<Name>.dth`**, and the **PoseAsset CSV**
-   (plus a **reference-skeleton FBX** for each **Bone scale** frame, under a
-   `Reference Skeletons` subfolder — the CSV already points at each one).
+   export folder: **`<Name>.abc`**, **`<Name>.dth`** (extra scenes:
+   `<Name>_<Scene>.*`), and the
+   **PoseAsset CSV** (plus a **reference-skeleton FBX** for each **Bone scale**
+   frame, under a `Reference Skeletons` subfolder — the CSV already points at
+   each one).
+
+After a clean ROM build — right before any export — the script also **saves
+the ROM'd scene** as `<scene>_ROM.duf` into a hidden `.ROM_Animations/`
+subfolder next to the scene file. Open it any time later to get the fully
+built ROM animation back without the (slow) rebuild; each run overwrites the
+previous copy.
 
 Every scene exports into its **own subfolder** of the export directory, named
 after the subfolder the scene lives in inside the character folder (the
 primary scene's is `primary`; extra scenes get theirs when they're added) — so
 outfit/scene variants of one character always export side by side. The
-exporter output **and** the PoseAsset CSV land in that subfolder.
+exporter output **and** the PoseAsset CSV land in that subfolder, and the
+export files carry the scene in their name too — `Kira_Summertide.abc` for the
+`summertide` scene (capitalized), not another `Kira.abc` — so files from
+different scenes stay distinguishable after they leave their subfolder
+(Houdini file pickers, recent lists). The **primary scene** is the one
+exception: it exports into its subfolder like every scene, but its files keep
+the plain name (`Kira.abc`, never `Kira_Primary.abc`) — the primary is the
+character.
+
+### The Houdini project folder
+
+The **Houdini project folder** field (in the **Houdini projects** section;
+new characters start with `<Project>_<Character>`, and the field needs an
+export directory) puts a Houdini-project layer above those scene subfolders:
+everything exports into
+
+```
+<export dir>/<project folder>/dth-export/<scene subfolder>/
+```
+
+Point a Houdini project at `<export dir>/<project folder>` with **File → Set
+Project** and every import becomes project-relative —
+`$JOB/dth-export/primary/Kira.dth` ([Into Houdini](./06-into-houdini.md)).
+
+- **Empty the field** and no project folder is created — each scene's subfolder
+  exports directly into the export directory (how it always worked; existing
+  characters keep this until they set a folder).
+- With a **non-primary Daz scene selected** the field overrides **per scene**
+  (the green override mark, like the identity dials): a scene can export into
+  its own project folder — or, overridden to empty, directly into the export
+  directory.
+- **Old folders clean themselves up**: the studio remembers which export
+  folders the current layout uses, and when the layout changes (a renamed or
+  cleared project folder, a moved scene subfolder) the previous run's folders
+  are removed from the export directory on the next save. Clearing the whole
+  export directory never deletes anything.
 
 Two switches tune this:
 

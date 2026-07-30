@@ -504,6 +504,12 @@ function CharacterPage() {
                     location={location}
                     persistPatch={draft.persistPatch}
                     houdiniSubdir={project?.houdiniSubdir ?? 'houdini'}
+                    projectId={projectId}
+                    projectName={project?.name ?? ''}
+                    saving={draft.saving}
+                    overrideEligible={sceneSel.overrideEligible}
+                    sceneOverride={sceneSel.sceneOverride}
+                    effectiveScene={sceneSel.effectiveScene}
                   />
                 </SceneLock>
               </>

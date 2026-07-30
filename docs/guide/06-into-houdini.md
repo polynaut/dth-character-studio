@@ -7,8 +7,11 @@ covers the network in depth; this page is just the hand-off.
 
 - The **Houdini assets** (otls, presets, toolbar) were merged into your Houdini
   documents folder during [setup](./02-setup.md).
-- Your character's **`<Name>_pose_asset.csv`** — in the export folder if you used
-  direct export, otherwise in the character's folder in the project.
+- Your character's **PoseAsset CSV** — delivered into each scene's export
+  folder under the same scene-suffixed base name as everything beside it
+  (`<Name>_<Scene>_pose_asset.csv`; the primary scene's is plain
+  `<Name>_pose_asset.csv`). Without direct export it's in the character's
+  folder in the project (as `<Name>_pose_asset.csv`).
 - The exporter's **`<Name>.abc`** / **`<Name>.dth`** next to it.
 - For any **[Bone scale](./04-first-character.md)** frames, a
   **reference-skeleton FBX** each — the CSV already points at them, nothing to
@@ -19,11 +22,60 @@ covers the network in depth; this page is just the hand-off.
 In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
+> [!TIP]
+> With a **[Houdini project folder](./05-rom-in-daz.md#direct-export-optional-recommended)**
+> set on the character, use Houdini's **File → Set Project** on
+> `<export dir>/<project folder>` — then every import is project-relative:
+> `$JOB/dth-export/primary/<Name>.dth`, and the `.hip` stays portable.
+
+## Generate the Houdini project automatically
+
+With an export directory and a [Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder)
+set, the character page's **Houdini projects → Generate project** creates the
+whole project for you: a new scene named after the character (editable in the
+dialog), saved in the houdini folder **next to** the project folder it
+Set-Projects into (which starts with its `dth-export/` inside), with **Set
+Project already baked in** and the **DazToHue network ready** — open it and
+import.
+
+```
+houdini/
+├─ PlaygroundAssets_Ita.hiplc   ← the generated scene
+└─ PlaygroundAssets_Ita/        ← $JOB (Set Project)
+   └─ dth-export/
+```
+
+Removing a **generated** project asks about its files: with **Keep houdini
+files** on it is only unlinked; turned off, the scene file *and* the project
+folder (including everything exported into it) are deleted. Hand-linked
+projects are always unlink-only.
+
+One one-time Settings entry powers it: the **Houdini installation folder**
+(Houdini's own install directory — its `bin\hython.exe` builds the scene
+headlessly). The DazToHue network is created from your **installed DazToHue
+HDA** at generate time, so it's always the current plugin version — no
+template scene that could rot across Houdini or DazToHue updates. If the HDA
+isn't installed the project still generates (empty scene, Set Project baked)
+and the studio tells you to add the network from the DazToHue shelf.
+
+## `$DAZ3D_LIB` — your Daz library, as a variable
+
+With both **My DAZ 3D Library** and the **Houdini documents folder** set in
+Settings, the studio maintains a `DAZ3D_LIB` variable in each configured
+Houdini version's `houdini.env`, pointing at your Daz library. Reference any
+library file as `$DAZ3D_LIB/…` (textures, geometry, presets) instead of
+hardcoding machine paths — together with `$JOB` imports, the whole project
+stays moveable. It updates automatically when the library path changes in
+Settings, and **Tools → Refresh assets** (re)wires it too — restart Houdini to
+pick up changes.
+
 > [!NOTE]
-> A scene whose [per-scene ROM overrides](./advanced.md#rom-overrides) change the
-> **frame layout** has its own **`<Name>_<Scene>_pose_asset.csv`** — point the
-> PoseAsset import at the CSV for the scene you exported (see
-> [What Save generates](./advanced.md#what-save-generates)).
+> In the export folder, every scene's delivered CSV is scene-suffixed — always
+> point the PoseAsset import at the CSV sitting in the scene subfolder you
+> exported. (In the character's folder, a scene whose
+> [per-scene ROM overrides](./advanced.md#rom-overrides) change the **frame
+> layout** additionally has its own source CSV — see
+> [What Save generates](./advanced.md#what-save-generates).)
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">

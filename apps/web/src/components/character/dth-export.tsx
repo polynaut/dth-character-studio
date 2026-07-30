@@ -35,15 +35,17 @@ import type { Character } from '@dth/rom'
  * disk, which lag unsaved edits), without an export directory (the runs exist
  * to deliver exports), or without a configured Daz library.
  *
- * While a job file is WAITING for Daz (written but not yet consumed — the
- * plugin deletes it once parsed, so "exists" is "pending") the button turns
- * into **Abort**: clicking deletes the job file (and rolls the aborted scenes'
- * handoff stamps back). Once Daz consumes the file, the button becomes a live
- * **Exporting n/m** state driven by the export watch (api/execute.ts keeps the
- * handed-off jobs in memory; a scene counts as delivered when its exported
- * PoseAsset CSV is newer than the handoff) — clicking that stops the watch,
- * and when every scene delivers it toasts and returns to DTH Export. Status
- * refreshes on window focus and polls lightly while pending/running.
+ * While a job file is WAITING for Daz (written but not yet renamed — the
+ * Runner renames it `running_…` when it starts, so "the un-renamed file
+ * exists" is "pending") the button turns into **Abort**: clicking deletes the
+ * job file (and rolls the aborted scenes' handoff stamps back). Once the
+ * Runner renames it, aborting is over and the button becomes a live
+ * **Exporting n%** state — the Runner owns the file's `progress` + per-job
+ * statuses, the studio just polls the file (api/execute.ts). At 100% the
+ * studio deletes the file and toasts the outcome (including per-scene
+ * failures); a run whose Daz exited early toasts a failure instead. Clicking
+ * the progress button stops watching only. Status refreshes on window focus
+ * and polls lightly while pending/running.
  */
 /** The DazToHue brand mark as a button icon. The button's automatic icon
  *  sizing only targets SVGs, so the img sizes itself — `size-6`, larger than
@@ -70,7 +72,9 @@ export function DthExportAction({
   const [open, setOpen] = useState(false)
   // null = not yet checked (renders as the normal export button).
   const [pending, setPending] = useState<boolean | null>(null)
-  const [progress, setProgress] = useState<ExportRunProgress | null>(null)
+  const [progress, setProgress] = useState<Extract<ExportRunProgress, { state: 'running' }> | null>(
+    null,
+  )
   const [aborting, setAborting] = useState(false)
 
   // The one status refresh: is a job file still waiting (→ Abort), and how far
@@ -79,17 +83,32 @@ export function DthExportAction({
   async function refreshStatus() {
     const [isPending, run] = await Promise.all([exporterJobsPending(), fetchExportRunProgress()])
     setPending(isPending)
-    if (run && run.characterId !== character.id) {
-      // Another character's run — not this button's business.
+    if (!run || run.characterId !== character.id) {
+      // No run, or another character's — not this button's business.
       setProgress(null)
       return
     }
-    if (run?.allDone) {
+    if (run.state === 'finished') {
+      // The studio deleted the finished job file — report the outcome.
       setProgress(null)
-      toast.success(`DTH Export finished — ${run.total} scene${run.total === 1 ? '' : 's'} delivered.`)
+      const scenes = `${run.total} scene${run.total === 1 ? '' : 's'}`
+      if (run.failed > 0) {
+        toast.warning(`DTH Export finished — ${run.failed} of ${scenes} failed.`, {
+          description: run.errors.length ? run.errors.join('\n') : undefined,
+        })
+      } else {
+        toast.success(`DTH Export finished — ${scenes} exported.`)
+      }
       return
     }
-    setProgress(run)
+    if (run.state === 'dead') {
+      setProgress(null)
+      toast.error('DTH Export did not finish — Daz Studio is no longer running (or the job file disappeared).')
+      return
+    }
+    // 'pending' renders through the Abort button (isPending); only a live
+    // Runner-owned run shows the progress state.
+    setProgress(run.state === 'running' ? run : null)
   }
   useRefetchOnFocus(
     () => {
@@ -137,10 +156,9 @@ export function DthExportAction({
   }
 
   if (progress) {
-    // Daz consumed the job file and is working through the scenes — the export
-    // watch counts the delivered CSVs. Clicking stops the WATCH only (the run
-    // in Daz can't be stopped from here); that's the escape hatch for a batch
-    // that errored in Daz and will never deliver its remaining scenes.
+    // The Runner renamed the job file and owns its progress — the studio just
+    // polls the file. Clicking stops the WATCH only (the run in Daz can't be
+    // stopped from here); the next handoff cleans the leftover file up.
     return (
       <Button
         variant="outline"
@@ -149,9 +167,9 @@ export function DthExportAction({
           dismissExportRun()
           setProgress(null)
         }}
-        title={`Daz Studio is delivering the exports — ${progress.finished} of ${progress.total} scene${progress.total === 1 ? '' : 's'} done. Click to stop watching.`}
+        title={`Daz Studio is working the batch — ${progress.done + progress.failed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching.`}
       >
-        <Loader2 className="animate-spin" /> Exporting {progress.finished}/{progress.total}…
+        <Loader2 className="animate-spin" /> Exporting {progress.progress}%
       </Button>
     )
   }

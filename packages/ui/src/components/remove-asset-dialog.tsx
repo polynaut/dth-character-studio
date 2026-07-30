@@ -21,6 +21,9 @@ export function RemoveAssetDialog({
   onDeleteFileChange,
   showDeleteFile = true,
   deleteFileDisabled = false,
+  toggleLabel = 'Delete file on disk',
+  invertToggle = false,
+  deleteLabel = 'Delete',
   busy,
   error,
   onConfirm,
@@ -32,9 +35,9 @@ export function RemoveAssetDialog({
   onDeleteFileChange?: (value: boolean) => void
   /**
    * Show the "Delete file on disk" toggle. Turn it off for assets that are only
-   * ever linked in place (e.g. Houdini projects, whose absolute import paths
-   * forbid copying) — there, deleting would hit the user's real file, so the
-   * action is unlink-only.
+   * ever linked in place (e.g. hand-linked Houdini projects, whose absolute
+   * import paths forbid copying) — there, deleting would hit the user's real
+   * file, so the action is unlink-only.
    */
   showDeleteFile?: boolean
   /**
@@ -43,11 +46,20 @@ export function RemoveAssetDialog({
    * rather than hiding the option, so deleting the original is never one tap away.
    */
   deleteFileDisabled?: boolean
+  /** The toggle's label (e.g. "Keep houdini files" with {@link invertToggle}). */
+  toggleLabel?: string
+  /** Show the KEPT state on the switch: checked = keep = NO delete. For
+   *  keep-by-default flows ("Keep houdini files") where safety is the ON
+   *  position; `deleteFile`/`onDeleteFileChange` still speak delete-polarity. */
+  invertToggle?: boolean
+  /** The confirm label while deleting (e.g. "Remove"); unlink stays "Unlink". */
+  deleteLabel?: string
   busy: boolean
   error?: ReactNode
   onConfirm: () => void
   onClose: () => void
 }) {
+  const deleting = deleteFile && !deleteFileDisabled
   return (
     <Modal open onClose={onClose} title={title} dismissible={!busy}>
       <p className="text-sm text-muted-foreground">{description}</p>
@@ -55,12 +67,12 @@ export function RemoveAssetDialog({
         <div>
           <label className="flex w-fit items-center gap-2">
             <Switch
-              checked={deleteFile && !deleteFileDisabled}
-              onCheckedChange={onDeleteFileChange}
+              checked={invertToggle ? !deleting : deleting}
+              onCheckedChange={(value) => onDeleteFileChange(invertToggle ? !value : value)}
               disabled={deleteFileDisabled}
             />
             <span className={cn('text-sm', deleteFileDisabled && 'text-muted-foreground')}>
-              Delete file on disk
+              {toggleLabel}
             </span>
           </label>
           {deleteFileDisabled && (
@@ -76,7 +88,7 @@ export function RemoveAssetDialog({
           Cancel
         </Button>
         <Button variant="destructive" disabled={busy} onClick={onConfirm}>
-          {busy ? 'Removing…' : deleteFile && !deleteFileDisabled ? 'Delete' : 'Unlink'}
+          {busy ? 'Removing…' : deleting ? deleteLabel : 'Unlink'}
         </Button>
       </div>
     </Modal>

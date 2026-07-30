@@ -2,36 +2,36 @@ import { exists, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
-import { normalizePathLower } from '#/lib/path.ts'
-import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import * as storage from '../storage'
-import { relativeInside } from '../storage/fs'
 import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
+  RUNNING_JOB_FILE,
   characterJobScriptNames,
   executeSceneSignature,
-  expectedSceneCsvRel,
-  jobFileCsv,
+  jobFileJson,
   normalizeSceneKey,
   parseExecuteStamps,
-  parseJobFileCsv,
+  parseJobFileJson,
 } from '../execute-jobs'
-import { charScopeInput, charsRoot, dirname, joinPath, locateCharacter, resolveProject } from './core'
+import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../execute-jobs'
 import type { CharacterLocation } from '../storage'
 import type { Character } from '@dth/rom'
 
-// The DTH Export feature: hand the character's ROM/export runs to the DTH
-// Exporter Plugin as a job file (scene path + script path rows) in the Daz
-// library, starting Daz Studio when it isn't running — the plugin polls for
-// the file (startup + regularly, so a running instance accepts new batches),
-// deletes it (the transfer ack) and works through the rows. Contract:
-// docs/exporter-plugin-job-file.md. The pure parts (CSV text, signatures) live
-// in ../execute-jobs.ts. The scene choice is the export DIALOG's (the studio
-// pre-checks the affected scenes via fetchExecuteScenes); this module takes the
-// chosen list verbatim.
+// The DTH Export feature (job-file contract v2): hand the character's
+// ROM+export runs to the DTH Character Studio Runner as a JSON job file in
+// the Daz library, starting Daz Studio when it isn't running. The Runner
+// polls for the file (startup + regularly, so a running instance accepts new
+// batches), RENAMES it (`running_` prefix — the "started" signal; only an
+// un-renamed file can still be aborted by deletion), then works through the
+// rows while updating the file's `progress` + per-job statuses. The studio
+// polls the renamed file, deletes it at progress 100 and toasts the outcome.
+// Contract: docs/exporter-plugin-job-file.md. The pure parts (JSON text,
+// signatures) live in ../execute-jobs.ts. The scene choice is the export
+// DIALOG's (the studio pre-checks the affected scenes via
+// fetchExecuteScenes); this module takes the chosen list verbatim.
 
 /** Resolve the character + its on-disk location for either entry point. */
 async function loadCharacter(
@@ -61,25 +61,28 @@ async function readStamps(location: CharacterLocation): Promise<ExecuteStamps> {
   return { version: 1, scenes: {} }
 }
 
-/** Absolute path of the (one, global) job file — null when the desktop app /
- *  Daz library aren't available, i.e. there can be no job file to speak of. */
-async function exporterJobFilePath(): Promise<string | null> {
+/** Absolute paths of the (one, global) job file pair — the pending file the
+ *  studio writes and the `running_` one the Runner renames it to. Null when
+ *  the desktop app / Daz library aren't available. */
+async function exporterJobFilePaths(): Promise<{ pending: string; running: string } | null> {
   if (!isTauri()) return null
   const settings = await storage.getSettings()
   if (!settings.dazLibraryFolder) return null
-  return joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), EXPORTER_JOB_FILE)
+  const dir = storage.studioScriptsDir(settings.dazLibraryFolder)
+  return { pending: joinPath(dir, EXPORTER_JOB_FILE), running: joinPath(dir, RUNNING_JOB_FILE) }
 }
 
 /**
  * Whether a job file is currently waiting for Daz Studio to pick it up. Drives
- * the header button's Abort state — the plugin deletes the file once parsed,
- * so "exists" IS "pending". Best-effort false on any read problem.
+ * the header button's Abort state — the Runner RENAMES the file when it starts
+ * (contract v2), so "the un-renamed file exists" IS "pending / abortable".
+ * Best-effort false on any read problem.
  */
 export async function exporterJobsPending(): Promise<boolean> {
-  const path = await exporterJobFilePath()
-  if (!path) return false
+  const paths = await exporterJobFilePaths()
+  if (!paths) return false
   try {
-    return await exists(path)
+    return await exists(paths.pending)
   } catch {
     return false
   }
@@ -87,53 +90,98 @@ export async function exporterJobsPending(): Promise<boolean> {
 
 /**
  * The handed-off run, kept IN MEMORY until it finishes or is aborted/dismissed
- * — the studio knows which scenes are about to export (it wrote the job file)
- * and watches their export folders: a scene's delivered PoseAsset CSV with an
- * mtime NEWER than the handoff time means that scene finished exporting.
- * Per-window state (one run at a time; a new handoff replaces it), gone on a
- * window close — the watch is a convenience view, not bookkeeping (the
- * affected-detection stamps are the durable part).
+ * — it scopes the job file's global state to the character whose button
+ * started it. All actual progress lives IN the (renamed) job file, written by
+ * the Runner. Per-window state (one run at a time; a new handoff replaces
+ * it), gone on a window close — a finished `running_` file nobody watched is
+ * cleaned up by the next handoff.
  */
 interface ActiveExportRun {
   characterId: string
-  /** `Date.now()` at handoff — the CSV-mtime threshold. */
-  startedAtMs: number
-  scenes: Array<{ scenePath: string; csvAbs: string }>
+  total: number
 }
 let activeRun: ActiveExportRun | null = null
 
-export interface ExportRunProgress {
-  characterId: string
-  total: number
-  /** Scenes whose delivered CSV is newer than the handoff. */
-  finished: number
-  /** Every scene delivered — the watch has ended itself. */
-  allDone: boolean
-}
+export type ExportRunProgress =
+  /** Daz hasn't picked the file up yet (it can still be aborted). */
+  | { state: 'pending'; characterId: string; total: number }
+  /** The Runner renamed the file and is working — `progress` is its 0–100. */
+  | { state: 'running'; characterId: string; total: number; progress: number; done: number; failed: number }
+  /** progress hit 100 — the studio has DELETED the file; final snapshot. */
+  | { state: 'finished'; characterId: string; total: number; failed: number; errors: Array<string> }
+  /** The run died (Daz gone mid-run / file vanished) — watch ended. */
+  | { state: 'dead'; characterId: string; total: number }
 
 /**
- * The active run's live progress (null when none): stat each expected CSV and
- * count the delivered scenes. When all are delivered the run clears itself —
- * the caller still receives that final `allDone` snapshot once.
+ * The active run's live state (null when none), straight from the job-file
+ * pair: pending file still there → 'pending'; `running_` file there → parse
+ * its Runner-owned progress — at 100 the studio deletes the file and returns
+ * the one 'finished' snapshot (the caller toasts the outcome). A running file
+ * whose Daz has EXITED below 100 is a dead run: deleted + reported 'dead'
+ * once. A torn read (the Runner rewrites the file between rows) just reports
+ * the last state again — the next poll gets a clean parse.
  */
 export async function fetchExportRunProgress(): Promise<ExportRunProgress | null> {
   const run = activeRun
   if (!run) return null
-  const delivered = await Promise.all(
-    run.scenes.map(async ({ csvAbs }) => {
-      if (!csvAbs) return false
-      try {
-        const info = await stat(csvAbs)
-        return (info.mtime?.getTime() ?? 0) > run.startedAtMs
-      } catch {
-        return false
+  const paths = await exporterJobFilePaths()
+  if (!paths) return null
+  try {
+    if (await exists(paths.pending)) {
+      return { state: 'pending', characterId: run.characterId, total: run.total }
+    }
+    if (await exists(paths.running)) {
+      const parsed = parseJobFileJson(await readTextFile(paths.running))
+      if (!parsed) {
+        // Torn read mid-rewrite — report "still running" and retry next poll.
+        return { state: 'running', characterId: run.characterId, total: run.total, progress: 0, done: 0, failed: 0 }
       }
-    }),
-  )
-  const finished = delivered.filter(Boolean).length
-  const allDone = run.scenes.length > 0 && finished === run.scenes.length
-  if (allDone && activeRun === run) activeRun = null
-  return { characterId: run.characterId, total: run.scenes.length, finished, allDone }
+      const done = parsed.jobs.filter((j) => j.status === 'done').length
+      const failed = parsed.jobs.filter((j) => j.status === 'failed').length
+      if (parsed.progress >= 100) {
+        // The batch is complete — the studio owns the cleanup + the toast.
+        try {
+          await remove(paths.running)
+        } catch {
+          // locked file — the next handoff's stale-cleanup retries
+        }
+        if (activeRun === run) activeRun = null
+        return {
+          state: 'finished',
+          characterId: run.characterId,
+          total: parsed.jobs.length || run.total,
+          failed,
+          errors: parsed.jobs.filter((j) => j.error).map((j) => `${j.scenePath}: ${j.error ?? ''}`),
+        }
+      }
+      // Below 100 with Daz gone = the run died (crash / user quit) — it will
+      // never finish; clean up and report once.
+      const dazRunning = await invoke<boolean>('daz_studio_running').catch(() => true)
+      if (!dazRunning) {
+        try {
+          await remove(paths.running)
+        } catch {
+          // best effort
+        }
+        if (activeRun === run) activeRun = null
+        return { state: 'dead', characterId: run.characterId, total: run.total }
+      }
+      return {
+        state: 'running',
+        characterId: run.characterId,
+        total: parsed.jobs.length || run.total,
+        progress: parsed.progress,
+        done,
+        failed,
+      }
+    }
+  } catch {
+    // transient fs error — keep the watch alive, retry next poll
+    return { state: 'pending', characterId: run.characterId, total: run.total }
+  }
+  // Neither file exists: aborted externally or cleaned behind our back.
+  if (activeRun === run) activeRun = null
+  return { state: 'dead', characterId: run.characterId, total: run.total }
 }
 
 /** Stop watching the active run (the run in Daz is unaffected — the watch is
@@ -153,17 +201,17 @@ export function dismissExportRun(): void {
  */
 export async function abortExporterJobs({ data }: { data: unknown }): Promise<void> {
   const { projectId, id } = charScopeInput.parse(data)
-  const path = await exporterJobFilePath()
-  if (!path) return
-  let rows: ReturnType<typeof parseJobFileCsv> = []
+  const paths = await exporterJobFilePaths()
+  if (!paths) return
+  let rows: Array<ExporterJob> = []
   try {
-    if (!(await exists(path))) return
-    rows = parseJobFileCsv(await readTextFile(path))
+    if (!(await exists(paths.pending))) return
+    rows = parseJobFileJson(await readTextFile(paths.pending))?.jobs ?? []
   } catch {
     // unreadable job file — still delete it below; stamps stay (worst case a
     // scene reads "unchanged" until its next real change or a manual re-check)
   }
-  await remove(path)
+  await remove(paths.pending)
   // The aborted handoff will never run — stop the export watch with it.
   activeRun = null
   if (rows.length === 0) return
@@ -261,13 +309,15 @@ async function currentStamp(character: Character, scenePath: string): Promise<Ex
 }
 
 /**
- * Write the DTH Exporter job file for the chosen scenes and start Daz Studio.
+ * Write the DTH Exporter job file (JSON, contract v2) for the chosen scenes
+ * and start Daz Studio.
  *
- * One row per scene: the ROM script — the plugin executes it with the
- * "bulk-export" argument, which makes it always export (the split/hair toggles
- * only govern manual runs). The job file replaces any pending one (last write
- * wins). Scenes are stamped at handoff — the job file is the delivery, the
- * plugin deletes it once parsed.
+ * One row per scene: the hidden bulk script (.Bulk_ROM_Export.dsa) — it
+ * always builds the ROM and always exports everything (the split/hair toggles
+ * only govern the visible per-character scripts). The job file replaces any
+ * pending one (last write wins), and a stale `running_` file from an earlier
+ * unwatched/dead batch is cleaned up first (the Runner never deletes it —
+ * cleanup is the studio's). Scenes are stamped at handoff.
  *
  * Throws with a user-facing message when preconditions fail: no DAZ library
  * configured, no export directory, generated scripts missing (save first), or
@@ -321,38 +371,26 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     stamps.set(scene, await currentStamp(character, scene))
   }
 
-  // One row per (scene, script) in run order — today that's one ROM-script row
-  // per scene (see characterJobScriptNames).
+  // One row per (scene, script) in run order — today that's one bulk-script
+  // row per scene (see characterJobScriptNames).
   const jobs: Array<ExporterJob> = scenes.flatMap((scene) =>
     scriptPaths.map((scriptPath) => ({ scenePath: scene, scriptPath })),
   )
-  const jobFile = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), EXPORTER_JOB_FILE)
-  const startedAtMs = Date.now()
-  await storage.writeTextFileAtomic(jobFile, jobFileCsv(jobs))
-
-  // Arm the export watch: remember the handed-off scenes + their expected
-  // delivered-CSV paths (export dir + the scene's export subfolder + the CSV
-  // the export block delivers — the same lookups the generated script embeds).
-  // The scenes-root resolution mirrors generateCharacterFiles.
-  const primaryDir = dirname(character.scenePath)
-  const primaryRel =
-    normalizePathLower(primaryDir) === normalizePathLower(location.folderAbs)
-      ? ''
-      : relativeInside(location.folderAbs, primaryDir)
-  const scenesRootAbs =
-    primaryRel === null
-      ? undefined
-      : joinPath(location.folderAbs, deriveScenesRootRel(primaryRel, project.dazSubdir))
-  const csvRel = expectedSceneCsvRel(character, scenesRootAbs)
-  const exportDirAbs = character.exportPath.trim()
-  activeRun = {
-    characterId: character.id,
-    startedAtMs,
-    scenes: scenes.map((scene) => {
-      const rel = csvRel[normalizeSceneKey(scene)]
-      return { scenePath: scene, csvAbs: rel ? joinPath(exportDirAbs, rel) : '' }
-    }),
+  const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
+  const jobFile = joinPath(scriptsRoot, EXPORTER_JOB_FILE)
+  // A leftover `running_` file (a finished batch nobody watched, or a dead
+  // one) would block the Runner's rename — the studio owns its cleanup.
+  try {
+    const staleRunning = joinPath(scriptsRoot, RUNNING_JOB_FILE)
+    if (await exists(staleRunning)) await remove(staleRunning)
+  } catch {
+    // best effort — the Runner also clears a stale running file before renaming
   }
+  await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs))
+
+  // Arm the watch: the run's identity only — all live state (progress,
+  // per-job statuses) is Runner-owned inside the renamed job file.
+  activeRun = { characterId: character.id, total: jobs.length }
 
   // Stamp the handoff (merge — untouched scenes keep their stamps).
   const stored = await readStamps(location)
