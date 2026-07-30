@@ -25,6 +25,17 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 > `<export dir>/<project folder>` — then every import is project-relative:
 > `$JOB/dth-export/primary/<Name>_primary.dth`, and the `.hip` stays portable.
 
+## `$DAZ3D_LIB` — your Daz library, as a variable
+
+With both **My DAZ 3D Library** and the **Houdini documents folder** set in
+Settings, the studio maintains a `DAZ3D_LIB` variable in each configured
+Houdini version's `houdini.env`, pointing at your Daz library. Reference any
+library file as `$DAZ3D_LIB/…` (textures, geometry, presets) instead of
+hardcoding machine paths — together with `$JOB` imports, the whole project
+stays moveable. It updates automatically when the library path changes in
+Settings, and **Tools → Refresh assets** (re)wires it too — restart Houdini to
+pick up changes.
+
 > [!NOTE]
 > A scene whose [per-scene ROM overrides](./advanced.md#rom-overrides) change the
 > **frame layout** has its own **`<Name>_<Scene>_pose_asset.csv`** — point the

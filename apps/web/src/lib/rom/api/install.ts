@@ -93,7 +93,16 @@ export async function saveSettings({ data }: { data: unknown }): Promise<StudioS
       baseline: storage.studioSettingsSchema,
     })
     .parse(data)
-  return storage.saveSettings(settings, baseline)
+  const saved = await storage.saveSettings(settings, baseline)
+  // Keep DAZ3D_LIB in the configured houdini.env(s) pointing at the saved Daz
+  // library folder — best effort (Refresh assets re-ensures and reports); the
+  // MERGED result is what's on disk, so wire from that, not the input.
+  try {
+    await storage.ensureHoudiniEnvDazLib(saved)
+  } catch {
+    // never fail a settings save over the env wiring
+  }
+  return saved
 }
 
 /** One-shot corrupt-settings flag for the startup toast (see storage/settings). */

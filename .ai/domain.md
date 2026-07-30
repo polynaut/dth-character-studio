@@ -174,6 +174,13 @@ older runtimes as stale.
   characters seed `<Project>_<Character>` (`defaultHoudiniProjectFolder`, the
   create flow); existing ones stay '' — their layout must not move. The export
   watch (`expectedSceneCsvRel`) mirrors the same resolution.
+- **`$DAZ3D_LIB` houdini.env wiring**: with a Daz library + Houdini docs
+  folder(s) configured, `DAZ3D_LIB = "<library>"` is upserted into each
+  folder's `houdini.env` (`storage/houdini-env.ts` — pure `upsertHoudiniEnvVar`
+  edits ONLY that assignment line, preserving the rest + CRLF). Ensured on
+  every Settings save (best-effort) AND by Refresh assets (reported in the
+  summary). Never removed — a cleared library folder leaves the last value.
+  Houdini reads the file at startup.
 - **Export-folder housekeeping**: every generation records the layout's
   export-relative folders in `.dth_export_folders.json` (character folder) and
   deletes RECORDED folders that fell out of the layout — a renamed/cleared

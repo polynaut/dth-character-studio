@@ -677,6 +677,11 @@ export interface RefreshSummary {
   /** Outcome of force-reinstalling the bundled DTH runtime files (a refresh
    *  always repairs them; null = no DAZ library configured, nothing to copy to). */
   runtime: { ok: boolean; detail?: string } | null
+  /** houdini.env wiring: how many configured Houdini docs folders had their
+   *  DAZ3D_LIB (re)written this run (0 = all were already current), plus
+   *  per-folder failures. Null = prerequisites missing (no Daz library or no
+   *  Houdini docs folder configured). */
+  houdiniEnv: { updated: number; errors: Array<string> } | null
 }
 
 /**
@@ -740,6 +745,13 @@ async function refreshAllAssetsInner(refreshOpts: {
 }): Promise<RefreshSummary> {
   const settings = await storage.getSettings()
   const hasDazLibrary = Boolean(settings.dazLibraryFolder)
+  // houdini.env wiring rides every refresh: existing characters (and machines
+  // configured before the feature) get DAZ3D_LIB without touching Settings —
+  // effective on the next Houdini restart.
+  const houdiniEnv =
+    hasDazLibrary && (settings.houdiniDocsFolder.trim() || settings.extraHoudiniDocsFolders.length)
+      ? await storage.ensureHoudiniEnvDazLib(settings)
+      : null
   const catalog = await fetchPoseAssetsCurrent()
   const activeRelease = catalog.error ? '' : catalog.version
   const opts = { hasDazLibrary, hasDthRelease: activeRelease !== '' }
@@ -992,6 +1004,7 @@ async function refreshAllAssetsInner(refreshOpts: {
     results,
     tooNew,
     runtime,
+    houdiniEnv,
   }
 }
 
