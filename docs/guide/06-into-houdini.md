@@ -19,6 +19,12 @@ covers the network in depth; this page is just the hand-off.
 In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
+> [!TIP]
+> With a **[Houdini project folder](./05-rom-in-daz.md#direct-export-optional-recommended)**
+> set on the character, use Houdini's **File → Set Project** on
+> `<export dir>/<project folder>` — then every import is project-relative:
+> `$JOB/dth-export/primary/<Name>_primary.dth`, and the `.hip` stays portable.
+
 > [!NOTE]
 > A scene whose [per-scene ROM overrides](./advanced.md#rom-overrides) change the
 > **frame layout** has its own **`<Name>_<Scene>_pose_asset.csv`** — point the

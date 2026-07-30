@@ -81,6 +81,32 @@ describe('expectedSceneCsvRel — where the export watch looks for delivered CSV
     expect(map[normalizeSceneKey(PRIMARY)]).toBe('Electra/Electra_pose_asset.csv')
     expect(map[normalizeSceneKey(EXTRA)]).toBe('Electra_Armor/Electra_pose_asset.csv')
   })
+
+  it('prefixes <project>/dth-export/ when a Houdini project folder resolves (schema v27)', () => {
+    const c = makeCharacter({
+      scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
+      extraScenes: [
+        'X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf',
+        'X:\\proj\\Electra\\daz3d\\beach\\Electra_Beach.duf',
+      ],
+      houdiniProjectFolder: 'MyProj_Electra',
+      sceneOverrides: [
+        // Overridden to '' — this scene delivers flat, exactly like pre-v27.
+        {
+          scenePath: 'X:\\proj\\Electra\\daz3d\\beach\\Electra_Beach.duf',
+          houdiniProjectFolder: '',
+        },
+      ],
+    } as Partial<Character>)
+    const map = expectedSceneCsvRel(c, 'X:/proj/Electra/daz3d')
+    expect(map[normalizeSceneKey(c.scenePath)]).toBe(
+      'MyProj_Electra/dth-export/primary/Electra_pose_asset.csv',
+    )
+    expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe(
+      'MyProj_Electra/dth-export/armor/Electra_pose_asset.csv',
+    )
+    expect(map[normalizeSceneKey(c.extraScenes[1])]).toBe('beach/Electra_pose_asset.csv')
+  })
 })
 
 describe('executeSceneSignature', () => {

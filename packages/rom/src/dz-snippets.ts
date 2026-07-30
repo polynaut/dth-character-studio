@@ -59,13 +59,34 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  * every subfolder holds identically-named files. Nesting slashes become
  * underscores; commas become spaces (a comma would split the CSV column the
  * name is substituted into — same guard as exporterFigureName).
+ *
+ * With `project` (the character's Houdini project folder + the per-scene
+ * override map — schema v27) the export dir first nests under
+ * `<project>/dth-export` before the scene subfolder, so a Houdini project can
+ * "Set Project" to `<exportPath>/<project>` and import everything JOB-relative
+ * (`$JOB/dth-export/<scene>/…`). Resolution: the open scene's override when
+ * one exists (hasOwnProperty — '' is a REAL value meaning "this scene exports
+ * flat, no project folder"), else the base. Nothing is emitted when the base
+ * is empty and no scene overrides — the pre-v27 layout stays byte-identical.
  */
-export function sceneExportSubfolderSnippet(map: Record<string, string>, exportName?: string): string {
+export function sceneExportSubfolderSnippet(
+  map: Record<string, string>,
+  exportName?: string,
+  project?: { base: string; byScene: Record<string, string> },
+): string {
   const nameLines =
     exportName === undefined
       ? ''
       : `var dthExportName = ${dazJson(exportName)};
 if (dthExportSub != "") dthExportName = dthExportName + "_" + dthExportSub.split("/").join("_").split(",").join(" ");
+`
+  const projectActive =
+    project !== undefined && (project.base !== '' || Object.keys(project.byScene).length > 0)
+  const projectLines = !projectActive
+    ? ''
+    : `var dthExportProjByScene = ${dazJson(project.byScene)};
+var dthExportProj = dthExportProjByScene.hasOwnProperty(dthExportSceneKey) ? dthExportProjByScene[dthExportSceneKey] : ${dazJson(project.base)};
+if (dthExportProj != "") dthExportDir = dthExportDir + "/" + dthExportProj + "/dth-export";
 `
   return `var dthExportSubByScene = ${dazJson(map)};
 var dthExportSceneKey = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
@@ -73,7 +94,7 @@ var dthExportSub = dthExportSubByScene[dthExportSceneKey] || "";
 if (dthExportSub == "" && dthExportSceneKey != "") {
     dthExportSub = new DzFileInfo(Scene.getFilename()).completeBaseName();
 }
-${nameLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
+${nameLines}${projectLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
 `
 }
 

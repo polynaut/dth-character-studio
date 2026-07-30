@@ -1,6 +1,7 @@
 import {
   buildSceneCsvMap,
   characterScriptName,
+  houdiniProjectResolution,
   poseAssetFileName,
   sceneExportSubfolders,
 } from '@dth/rom'
@@ -91,17 +92,21 @@ export function characterJobScriptNames(character: Character): Array<string> {
 
 /**
  * Scene key → the export-dir-RELATIVE path of the PoseAsset CSV a bulk run
- * delivers for that scene: `<scene's export subfolder>/<csv name>`, from the
- * SAME subfolder map + scene-CSV lookup the generated export block embeds
- * (subfolder falls back to the scene-file stem exactly like the runtime).
- * The studio's export watch stats these files — a CSV whose mtime is newer
- * than the handoff time means that scene finished exporting.
+ * delivers for that scene: `<scene's export subfolder>/<csv name>` — prefixed
+ * with `<houdini project folder>/dth-export/` when one resolves for the scene
+ * (schema v27) — from the SAME subfolder map + project resolution + scene-CSV
+ * lookup the generated export block embeds (subfolder falls back to the
+ * scene-file stem exactly like the runtime; the project override map uses
+ * hasOwn because '' is a real override meaning "flat"). The studio's export
+ * watch stats these files — a CSV whose mtime is newer than the handoff time
+ * means that scene finished exporting.
  */
 export function expectedSceneCsvRel(
   character: Character,
   scenesRootAbs?: string,
 ): Record<string, string> {
   const subfolders = sceneExportSubfolders(character, scenesRootAbs)
+  const project = houdiniProjectResolution(character)
   const sceneCsvs = buildSceneCsvMap(character)
   const baseCsv = poseAssetFileName(character)
   const map: Record<string, string> = {}
@@ -111,7 +116,9 @@ export function expectedSceneCsvRel(
     const stem = (key.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
     const sub = subfolders[key] ?? stem
     const name = sceneCsvs[key] ?? baseCsv
-    map[key] = sub ? `${sub}/${name}` : name
+    const proj = Object.hasOwn(project.byScene, key) ? project.byScene[key] : project.base
+    const rel = sub ? `${sub}/${name}` : name
+    map[key] = proj ? `${proj}/dth-export/${rel}` : rel
   }
   return map
 }

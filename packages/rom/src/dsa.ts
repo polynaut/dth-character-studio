@@ -258,6 +258,7 @@ function buildExportBlock(
     sceneExportSubfolderSnippet(
       sceneExportSubfolders(character, scenesRootAbs),
       exporterFigureName(character),
+      houdiniProjectResolution(character),
     ),
   )
   // The CSV to deliver: the base name, or — when some linked scene overrides the
@@ -421,6 +422,51 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
  * (their exports must never overwrite each other). Same key normalization as
  * {@link groomSceneMap}.
  */
+/**
+ * The seed value for a NEW character's `houdiniProjectFolder`:
+ * `<Project>_<Character>` with folder-illegal characters collapsed to spaces
+ * (Windows filename rules — same class exporterFigureName strips). Existing
+ * characters are NEVER seeded — their schema default '' keeps the flat export
+ * layout (schema v27).
+ */
+export function defaultHoudiniProjectFolder(projectName: string, characterName: string): string {
+  const clean = (s: string) =>
+    s
+      .trim()
+      .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  return [clean(projectName), clean(characterName)].filter(Boolean).join('_')
+}
+
+/**
+ * The Houdini-project layer of the export path (schema v27), as the run-time
+ * resolution input for {@link sceneExportSubfolderSnippet}: the character's
+ * base `houdiniProjectFolder` + a map of normalized scene path → that scene's
+ * override — where '' is a REAL entry ("this scene exports flat"), so only
+ * scenes with an armed override appear. When the resolved value is non-empty,
+ * the scene exports under `<exportPath>/<value>/dth-export/<scene-subfolder>/`
+ * instead of `<exportPath>/<scene-subfolder>/`. Like hair, the override rides
+ * this map BY PRESENCE — it never arms the record (`activeSceneOverrides`);
+ * an unlinked record's entry is unreachable at run time (the scene guard
+ * refuses unlinked scenes). Public: the studio's export watch mirrors the
+ * same resolution for its expected-CSV paths.
+ */
+export function houdiniProjectResolution(
+  character: Pick<Character, 'houdiniProjectFolder' | 'sceneOverrides'>,
+): {
+  base: string
+  byScene: Record<string, string>
+} {
+  const byScene: Record<string, string> = {}
+  for (const override of character.sceneOverrides) {
+    if (override.houdiniProjectFolder === undefined) continue
+    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+    if (key !== '') byScene[key] = override.houdiniProjectFolder.trim()
+  }
+  return { base: character.houdiniProjectFolder.trim(), byScene }
+}
+
 export function sceneExportSubfolders(
   character: Character,
   scenesRootAbs?: string,
@@ -931,9 +977,13 @@ export function toGroomExportScriptDsa(
   const exportDir = character.exportPath.trim().replace(/\\/g, '/')
   const groomMap = groomSceneMap(character)
   // The same snippet body the ROM/Export export block uses (dz-snippets), at
-  // this script's base indent 0.
+  // this script's base indent 0. The Houdini-project layer rides along (no
+  // exportName — hair keeps its own <slug>_Hair_<item> names) so grooms land
+  // beside the main export inside <project>/dth-export/<scene-sub>/.
   const sceneSubfolderBlock = sceneExportSubfolderSnippet(
     sceneExportSubfolders(character, scenesRootAbs),
+    undefined,
+    houdiniProjectResolution(character),
   )
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 

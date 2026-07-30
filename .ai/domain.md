@@ -164,6 +164,16 @@ older runtimes as stale.
   `_`, `,` → space) — otherwise every scene subfolder holds identically-named
   files. The hair pass keeps its own `<slug>_Hair_<item>` names (unique per
   item already).
+- The **Houdini project folder** (schema v27, `houdiniProjectFolder`) nests the
+  whole export under `<exportPath>/<folder>/dth-export/<scene-subfolder>/` so
+  Houdini Set-Project's `<exportPath>/<folder>` and imports via
+  `$JOB/dth-export/…`. Resolved at RUN time (`houdiniProjectResolution` in
+  dsa.ts): per-scene override map (presence-based like hair — '' is a real
+  value, "this scene exports flat"; hasOwnProperty, never truthiness) →
+  base → '' = the flat pre-v27 layout, emitted byte-identically. NEW
+  characters seed `<Project>_<Character>` (`defaultHoudiniProjectFolder`, the
+  create flow); existing ones stay '' — their layout must not move. The export
+  watch (`expectedSceneCsvRel`) mirrors the same resolution.
 - No export directory set ⇒ the ROM is still fully generated; ticked Bone scale
   rows are a harmless no-op (no validation links the two).
 - The export block ALWAYS nests each run under the open scene's own subfolder

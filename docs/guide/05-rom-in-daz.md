@@ -73,6 +73,28 @@ export files carry the scene in their name too — `Ita_Summertide.abc` for the
 stay distinguishable after they leave their subfolder (Houdini file pickers,
 recent lists).
 
+### The Houdini project folder
+
+The **Houdini project folder** field (new characters start with
+`<Project>_<Character>`) puts a Houdini-project layer above those scene
+subfolders: everything exports into
+
+```
+<export dir>/<project folder>/dth-export/<scene subfolder>/
+```
+
+Point a Houdini project at `<export dir>/<project folder>` with **File → Set
+Project** and every import becomes project-relative —
+`$JOB/dth-export/primary/Ita_primary.dth` ([Into Houdini](./06-into-houdini.md)).
+
+- **Empty the field** and no project folder is created — each scene's subfolder
+  exports directly into the export directory (how it always worked; existing
+  characters keep this until they set a folder).
+- With a **non-primary Daz scene selected** the field overrides **per scene**
+  (the green override mark, like the identity dials): a scene can export into
+  its own project folder — or, overridden to empty, directly into the export
+  directory.
+
 Two switches tune this:
 
 - **Run the export with the ROM script** — on (the default), the one

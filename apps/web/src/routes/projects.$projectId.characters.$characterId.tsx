@@ -559,6 +559,9 @@ function CharacterPage() {
         persistPatch={draft.persistPatch}
         location={location}
         houdiniSubdir={project?.houdiniSubdir}
+        overrideEligible={sceneSel.overrideEligible}
+        sceneOverride={sceneSel.sceneOverride}
+        effectiveScene={sceneSel.effectiveScene}
       />
 
       <RomEditorSection

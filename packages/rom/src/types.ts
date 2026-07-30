@@ -555,6 +555,11 @@ export const sceneOverrideSchema = z.object({
   /** Per-scene "Modify JCM frames" rules — present = armed, a full replacement
    *  of the base `jcmMorphMods` (empty = "no JCM mods for this scene"). */
   jcm: z.array(jcmMorphModSchema).optional(),
+  /** Per-scene Houdini project folder — present = this scene's export nests
+   *  under ITS OWN `<value>/dth-export/` instead of the character's
+   *  `houdiniProjectFolder` ('' = this scene exports flat into the export dir,
+   *  no project folder). Absent = the scene shares the character's project. */
+  houdiniProjectFolder: z.string().max(MAX_NAME_LENGTH).optional(),
 })
 export type SceneOverride = z.infer<typeof sceneOverrideSchema>
 
@@ -889,8 +894,16 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       from the sanitized scene name). The Refresh sweep also moves legacy
  *       root-dwelling scene files into their subfolders (host-side, not a
  *       migration step — file moves need the fs).
+ *  27 — added `houdiniProjectFolder` (character-level, '' default) + the
+ *       per-scene `sceneOverride.houdiniProjectFolder` (present = overrides,
+ *       like hair it rides its map by presence and never arms). When
+ *       set, exports nest under `<exportPath>/<folder>/dth-export/<scene-sub>/`
+ *       so a Houdini project can Set Project there and import JOB-relative.
+ *       Additive with defaults — no migration step: existing characters read
+ *       as '' and keep today's flat `<exportPath>/<scene-sub>/` layout. Only
+ *       the NEW-character creation flow seeds `<Project>_<Character>`.
  */
-export const CHARACTER_SCHEMA_VERSION = 26
+export const CHARACTER_SCHEMA_VERSION = 27
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1154,8 +1167,14 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       named export. The CSV's bone-scale reference-FBX paths bake a
  *       {{DTH_EXPORT_NAME}} token the CSV-copy step substitutes with the same
  *       run-time name (alongside {{DTH_EXPORT_DIR}}), keeping exporter output
- *       and CSV pointers in lockstep. Bumped so Refresh assets regenerates
- *       every script + CSV onto the new naming.
+ *       and CSV pointers in lockstep. Also (schema v27): with a
+ *       `houdiniProjectFolder` set, the export dir first nests under
+ *       `<folder>/dth-export` before the scene subfolder — a Houdini project
+ *       Set-Project'd to `<exportPath>/<folder>` imports everything
+ *       JOB-relative. Per-scene overrides resolve through an embedded map
+ *       ('' = that scene exports flat); characters without the folder ('' —
+ *       every pre-v27 character) emit the layout unchanged. Bumped so Refresh
+ *       assets regenerates every script + CSV onto the new naming.
  */
 export const RUNTIME_VERSION = 40
 
@@ -1382,6 +1401,20 @@ export const characterSchema = z.object({
    * picker has had a default.)
    */
   exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
+  /**
+   * Name of the HOUDINI PROJECT folder the export nests under (schema v27):
+   * when set, everything exports into
+   * `<exportPath>/<houdiniProjectFolder>/dth-export/<scene-subfolder>/` — so a
+   * Houdini project can "Set Project" to that folder and import everything
+   * JOB-relative (`$JOB/dth-export/primary/Ita_primary.dth`). Empty = no
+   * project folder, exports go straight to `<exportPath>/<scene-subfolder>/`
+   * (the pre-v27 layout). A NEW character seeds `<Project>_<Character>` (host
+   * creation flow — the pure core can't know the project name); existing
+   * characters keep '' via the default, so nothing moves for them. A scene
+   * override record can replace it per scene ({@link sceneOverrideSchema}) —
+   * including with '' to export that scene flat.
+   */
+  houdiniProjectFolder: z.string().max(MAX_NAME_LENGTH).default(''),
   /**
    * When `exportPath` is set, whether the auto-export runs inside the ROM script
    * (`true`, the default — one combined `<Name>_<Genesis>.dsa`) or is split into
