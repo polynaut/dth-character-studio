@@ -227,6 +227,11 @@ export function ExportSettingsSection({
             <>
               This scene exports into{' '}
               <code>
+                {/* The gray ./<export-dir name> prefix anchors the chip: the
+                    path is relative to the export directory chosen above. */}
+                <span className="opacity-60">
+                  ./{character.exportPath.replace(/\\/g, '/').split('/').filter(Boolean).pop()}/
+                </span>
                 {effectiveProject}/dth-export/{'<scene subfolder>'}/
               </code>
               .
