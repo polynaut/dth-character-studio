@@ -37,6 +37,9 @@ feature PR (with changeset) ──merge──▶ main
   repo's latest release at build time — ship a runner fix by releasing there,
   then cutting any studio release. `tar -xf` extracts the zips (bsdtar);
   a dev checkout runs `pnpm fetch:runner` once by hand.
+  **The tauri-action build steps must pass `GITHUB_TOKEN`** (release.yml env)
+  — the fetch hits the GitHub API, and unauthenticated calls share the hosted
+  runner IP pool's rate limit: the v0.52.0 build-mac 403'd exactly there.
   **Load-test a runner release in Daz Studio BEFORE cutting a studio release
   that bundles it** (the log must say `successfully loaded`): v0.51.1 shipped
   Runner v1.0.0, which Daz refused to load — the studio build can't detect
