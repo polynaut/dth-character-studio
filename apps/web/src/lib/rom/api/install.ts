@@ -161,10 +161,22 @@ export async function installDthPlugin({ data }: { data: unknown }): Promise<Ins
 }
 
 /** The bundled DTH Character Studio Runner plugin's state vs the configured Daz
- *  install — drives the Settings panel (see `storage.runnerStatus`: the DLL has
- *  no version resource, so "up to date" is a byte-compare with the bundled one). */
+ *  install — drives the Settings panel (see `storage.runnerStatus`: "up to
+ *  date" is a byte-compare with the bundled DLL, the installed version is read
+ *  from the DLL's VERSIONINFO resource). */
 export function fetchRunnerStatus(dazInstallFolder: string): Promise<storage.RunnerStatus> {
   return storage.runnerStatus(dazInstallFolder)
+}
+
+/** The Runner gate for the DTH Export dialog, resolved from the saved settings:
+ *  exports run through the Runner plugin in Daz Studio, so a missing or
+ *  outdated install blocks the handoff — the dialog routes the user to Settings
+ *  instead of writing a job file the runner would mishandle (or never pick up). */
+export async function fetchExportRunnerGate(): Promise<storage.RunnerGate> {
+  const s = await storage.getSettings()
+  if (!s.dazInstallFolder.trim())
+    return { blocked: true, reason: 'no-install-folder', bundledVersion: '', installedVersion: '' }
+  return storage.runnerGate(await storage.runnerStatus(s.dazInstallFolder))
 }
 
 /**

@@ -101,6 +101,8 @@ export {
   resolvePluginInstall,
   resolveReleaseInstall,
   resolveRunnerInstall,
+  runnerGate,
+  runnerInstalledNewer,
   runnerStatus,
 } from './storage/releases'
 export type {
@@ -110,6 +112,7 @@ export type {
   DthReleaseInfo,
   PluginInstall,
   ReleaseInstall,
+  RunnerGate,
   RunnerInstall,
   RunnerStatus,
 } from './storage/releases'

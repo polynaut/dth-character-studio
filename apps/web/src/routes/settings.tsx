@@ -22,7 +22,7 @@ import {
   saveSettings,
 } from '#/lib/rom/api.ts'
 import { navOrigin } from '#/lib/nav-origin.ts'
-import { PROJECT_BEHAVIOR_DEFAULTS } from '#/lib/rom/storage.ts'
+import { PROJECT_BEHAVIOR_DEFAULTS, runnerInstalledNewer } from '#/lib/rom/storage.ts'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
@@ -48,14 +48,22 @@ import type { InstallReport, RunnerStatus } from '#/lib/rom/api.ts'
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
   // entry point name the back link (the navigation itself just pops history).
-  validateSearch: (search: Record<string, unknown>): { from?: string } => ({
+  // `tab` deep-links a specific tab (e.g. the export dialog's Runner-update
+  // notice lands on General, not a project window's default Project tab).
+  validateSearch: (search: Record<string, unknown>): { from?: string; tab?: SettingsTab } => ({
     from: typeof search.from === 'string' ? search.from : undefined,
+    tab:
+      search.tab === 'general' || search.tab === 'appdata' || search.tab === 'project'
+        ? search.tab
+        : undefined,
   }),
   // Machine settings + (when this window is on a project) that project's record, so
   // the Project tab can edit the per-project `.dcsp` defaults.
   loader: async () => ({ settings: await fetchSettings(), project: await fetchActiveProject() }),
   component: SettingsPage,
 })
+
+type SettingsTab = 'general' | 'appdata' | 'project'
 
 /**
  * The editable per-project `.dcsp` manifest fields, held on the Project tab as one
@@ -103,6 +111,7 @@ function normalizeProjectSettings(s: ProjectSettings): ProjectSettings {
 
 function SettingsPage() {
   const { settings: initial, project } = Route.useLoaderData()
+  const { tab } = Route.useSearch()
   const router = useRouter()
   const confirm = useConfirm()
 
@@ -615,8 +624,13 @@ function SettingsPage() {
       />
 
       {/* In a project window the Project tab leads (and opens by default) —
-          matching the tab order; General/App Data are machine-wide. */}
-      <Tabs defaultValue={project ? 'project' : 'general'} className="max-w-3xl">
+          matching the tab order; General/App Data are machine-wide. A `tab`
+          search param overrides (guarded: `project` without a project window
+          falls back to the default). */}
+      <Tabs
+        defaultValue={tab && (tab !== 'project' || project) ? tab : project ? 'project' : 'general'}
+        className="max-w-3xl"
+      >
         <TabsList>
           {project && <TabsTrigger value="project">Project</TabsTrigger>}
           <TabsTrigger value="general">General</TabsTrigger>
@@ -1109,10 +1123,25 @@ function SettingsPage() {
                 ) : runnerState.installed === 'current' ? (
                   <p className="flex items-center gap-1.5 text-emerald-500">
                     <CircleCheck className="size-4 shrink-0" />
-                    Already installed — up to date.
+                    Already installed ({runnerState.installedVersion ||
+                      runnerState.bundledVersion ||
+                      '?'}) — up to date.
+                  </p>
+                ) : runnerInstalledNewer(runnerState) ? (
+                  <p>
+                    Installed:{' '}
+                    <strong className="text-foreground">{runnerState.installedVersion}</strong> —
+                    newer than the bundled Runner; updating would replace it.
                   </p>
                 ) : (
-                  <p>A different Runner DLL is installed — updating replaces it.</p>
+                  <p>
+                    Installed:{' '}
+                    <strong className="text-foreground">
+                      {runnerState.installedVersion || 'unknown version'}
+                    </strong>{' '}
+                    → updating to{' '}
+                    <strong className="text-foreground">{runnerState.bundledVersion || '?'}</strong>.
+                  </p>
                 )}
               </div>
             ) : null}

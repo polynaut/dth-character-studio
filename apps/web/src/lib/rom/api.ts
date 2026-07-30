@@ -18,6 +18,7 @@ export type {
   DthReleaseInfo,
   KnownDrive,
   Project,
+  RunnerGate,
   RunnerStatus,
 } from './storage'
 export { ProjectUnreachableError } from './storage'
@@ -149,6 +150,7 @@ export {
   consumeSettingsFileCorrupt,
   fetchAppDataFolder,
   fetchAppVersion,
+  fetchExportRunnerGate,
   fetchSettings,
   fetchRunnerStatus,
   installDazAssets,

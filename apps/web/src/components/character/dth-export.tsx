@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -13,10 +14,11 @@ import {
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  fetchExportRunnerGate,
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
-import type { ExecuteSceneStatus, ExportRunProgress } from '#/lib/rom/api.ts'
+import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -33,7 +35,10 @@ import type { Character } from '@dth/rom'
  *
  * Disabled while the draft is dirty (the export runs the GENERATED scripts on
  * disk, which lag unsaved edits), without an export directory (the runs exist
- * to deliver exports), or without a configured Daz library.
+ * to deliver exports), or without a configured Daz library. Inside the dialog,
+ * Start is additionally gated on the Runner plugin's install state (the export
+ * runs THROUGH the Runner): missing or older-than-bundled blocks with a notice
+ * deep-linking to Settings → General (`fetchExportRunnerGate`).
  *
  * While a job file is WAITING for Daz (written but not yet renamed — the
  * Runner renames it `running_…` when it starts, so "the un-renamed file
@@ -317,6 +322,33 @@ function SceneRow({
   )
 }
 
+/** The dialog's Runner-plugin notice: the export runs through the Runner in
+ *  Daz Studio, so a missing or outdated install blocks Start — this box says
+ *  why and deep-links to Settings → General (where the Runner section lives). */
+function RunnerGateNotice({ gate }: { gate: Extract<RunnerGate, { blocked: true }> }) {
+  return (
+    <div className="space-y-1 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
+      <p>
+        {gate.reason === 'no-install-folder'
+          ? 'Exports run through the Runner plugin in Daz Studio, but no Daz Studio install folder is configured yet.'
+          : gate.reason === 'not-installed'
+            ? 'Exports run through the Runner plugin, which is not installed in this Daz Studio yet.'
+            : `A Runner plugin update is pending — Daz Studio has ${gate.installedVersion || 'an unknown version'} installed, this app bundles ${gate.bundledVersion || 'a newer one'}.`}
+      </p>
+      <p>
+        <Link
+          to="/settings"
+          search={{ tab: 'general' }}
+          className="font-medium text-primary underline underline-offset-2"
+        >
+          {gate.reason === 'update-pending' ? 'Update it in Settings' : 'Set it up in Settings'}
+        </Link>{' '}
+        first, then come back to export.
+      </p>
+    </div>
+  )
+}
+
 function DthExportDialog({
   projectId,
   character,
@@ -334,6 +366,25 @@ function DthExportDialog({
   const [status, setStatus] = useState<Array<ExecuteSceneStatus> | null>(null)
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  // null = still checking (Start stays off for the moment the probe takes).
+  const [runner, setRunner] = useState<RunnerGate | null>(null)
+
+  useEffect(() => {
+    let active = true
+    // A failed probe must not brick exporting — only a definite missing/
+    // outdated verdict blocks (the gate itself already treats unreadable
+    // runner states as unblocked).
+    fetchExportRunnerGate()
+      .then((gate) => {
+        if (active) setRunner(gate)
+      })
+      .catch(() => {
+        if (active) setRunner({ blocked: false })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
   const rows: Array<ExecuteSceneStatus> =
@@ -446,13 +497,20 @@ function DthExportDialog({
           />
         ))}
       </div>
+      {runner?.blocked && <RunnerGateNotice gate={runner} />}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
           Cancel
         </Button>
         <Button
-          disabled={busy || checked.size === 0}
-          title={checked.size === 0 ? 'Select at least one scene' : undefined}
+          disabled={busy || checked.size === 0 || !runner || runner.blocked}
+          title={
+            runner?.blocked
+              ? 'The Runner plugin needs attention in Settings first'
+              : checked.size === 0
+                ? 'Select at least one scene'
+                : undefined
+          }
           onClick={() => void onExport()}
         >
           <Play /> {busy ? 'Starting…' : 'Start'}
