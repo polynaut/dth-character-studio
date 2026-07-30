@@ -359,6 +359,11 @@ export interface ExecuteJobsSummary {
   scenes: Array<string>
   /** True when a fresh Daz Studio was started for the jobs. */
   dazLaunched: boolean
+  /** True when a "running" Daz never claimed the batch — it is most likely
+   *  still shutting down (the process lingers after close). The job file is
+   *  left pending; the UI waits for the exit and starts Daz via
+   *  {@link launchDazForPendingJobs}. */
+  dazClosing?: boolean
   /** True when Daz was already running — the plugin's regular poll picks the
    *  job file up in that instance, no restart needed. */
   dazWasRunning: boolean
@@ -481,11 +486,47 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // nothing — the plugin polls for the job file and picks it up in place.
   const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
   let dazLaunched = false
+  let dazClosing = false
   if (!dazWasRunning) {
     await invoke<string>('launch_daz_studio')
     dazLaunched = true
+  } else {
+    // A "running" Daz may actually be SHUTTING DOWN — the process lingers a
+    // while after close, its Runner poller is already gone, and a fresh launch
+    // now would just die against the dying single instance. A live Runner
+    // claims (renames) the file within one poll interval; when the claim never
+    // comes, report the batch as unclaimed so the UI can wait for the process
+    // to exit and start Daz itself (the job file stays pending — and stays
+    // abortable — until then).
+    const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
+    let pickedUp = false
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
+      if (!(await exists(jobFile).catch(() => true))) {
+        pickedUp = true
+        break
+      }
+    }
+    dazClosing = !pickedUp
   }
-  return { jobFile, scenes, dazLaunched, dazWasRunning }
+  return { jobFile, scenes, dazLaunched, dazWasRunning, dazClosing }
+}
+
+/**
+ * Start Daz Studio for a still-pending export handoff — the waiting modal's
+ * finish, once the closing Daz process is finally gone. No-op when the handoff
+ * disappeared meanwhile (aborted, or claimed after all); a Daz already running
+ * again (the user restarted it themselves) counts as success — its Runner
+ * picks the pending file up on its own.
+ */
+export async function launchDazForPendingJobs(): Promise<boolean> {
+  if (!isTauri()) return false
+  const paths = await exporterJobFilePaths()
+  if (!paths) return false
+  if (!(await exists(paths.pending).catch(() => false))) return false
+  if (await invoke<boolean>('daz_studio_running').catch(() => false)) return true
+  await invoke<string>('launch_daz_studio')
+  return true
 }
 
 const generateRomInput = charScopeInput.extend({

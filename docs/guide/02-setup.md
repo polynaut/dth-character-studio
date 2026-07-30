@@ -59,6 +59,17 @@ automatic direct export.
      <sub><em>Open DTH Character Studio as administrator to install into a protected folder.</em></sub>
    </p>
 
+## Install the DTH Character Studio Runner Plugin
+
+The **Runner plugin** ships **inside the app** — nothing to download. It lets
+the studio drive Daz Studio: the
+[**DTH Export** batch](./05-rom-in-daz.md#batch-export--dth-export) and opening
+scenes in an already-running Daz go through it. With the Daz Studio install
+folder set (above), press **Install** — the panel shows the bundled version,
+the exact version installed in Daz, and says when an update is pending. The
+same admin note as above applies, and Daz must be closed (a running Daz locks
+its plugins).
+
 ## Save
 
 Press **Save** at the top. The studio scans the release's pose presets — you're

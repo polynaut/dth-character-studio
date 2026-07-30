@@ -1,7 +1,12 @@
 # @dth/rom
 
-## 0.53.0
+## 0.54.0
 
+### Patch Changes
+
+- [#603](https://github.com/polynaut/dth-character-studio/pull/603) [`0e8b892`](https://github.com/polynaut/dth-character-studio/commit/0e8b892a106d7aba0f2543aef1cfd71f6f66456a) Thanks [@polynaut](https://github.com/polynaut)! - fix(rom): the ROM-scene auto-save (`.ROM_Animations/<stem>_ROM.duf`) never worked in Daz Studio 6 — DS6 removed `DzContentMgr.saveScene`, so the save threw into the best-effort guard: folder created, scene never written. The generated scripts now feature-detect and use DS6's `Scene.saveScene` when the content-manager call is gone (runtime v42; re-save a character or Tools → Refresh assets to regenerate the scripts).
+
+## 0.53.0
 
 ## 0.52.0
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { detectedHairLabels, groomCandidates } from './groom-detect.ts'
+import { detectedHairLabels, groomCandidates, seedSceneHair } from './groom-detect.ts'
+
+import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 
 const w = (id: string, label: string, conformTarget = '#Genesis9') => ({
   id,
@@ -77,5 +79,42 @@ describe('detectedHairLabels', () => {
       w('top', 'Basket Weave Top'),
     ]
     expect(detectedHairLabels(items)).toEqual([])
+  })
+})
+
+// The rule every scene-linking path shares. It was inlined at creation and the
+// first primary link, and MISSING from "Add scene" — so an added outfit scene
+// (exactly the one that brings its own hair) started with an empty hair list
+// and would have baked that hair into the FBX.
+describe('seedSceneHair', () => {
+  const scan = (items: Array<SceneWearable>, error = '') => ({ items, error })
+  const hairy = [w('cht-sevenly', 'CHT Sevenly Hair'), w('crop-top', 'MM Crop Top')]
+
+  it('mints a record carrying the detected hair', () => {
+    const seeded = seedSceneHair('X:\\scenes\\Armor.duf', scan(hairy), [])
+    expect(seeded).toHaveLength(1)
+    expect(seeded?.[0].scenePath).toBe('X:\\scenes\\Armor.duf')
+    expect(seeded?.[0].hair).toEqual([{ nodeLabel: 'CHT Sevenly Hair' }])
+  })
+
+  it('APPENDS — the other scenes keep their records', () => {
+    const existing = seedSceneHair('X:\\scenes\\Primary.duf', scan(hairy), []) ?? []
+    const seeded = seedSceneHair('X:\\scenes\\Armor.duf', scan(hairy), existing)
+    expect(seeded?.map((o) => o.scenePath)).toEqual(['X:\\scenes\\Primary.duf', 'X:\\scenes\\Armor.duf'])
+  })
+
+  it('never clobbers a scene that already has a record', () => {
+    // Re-adding a scene must not overwrite a hair list the user curated.
+    const existing = seedSceneHair('X:\\scenes\\Armor.duf', scan(hairy), []) ?? []
+    const curated = existing.map((o) => ({ ...o, hair: [] }))
+    expect(seedSceneHair('X:\\scenes\\Armor.duf', scan(hairy), curated)).toBeNull()
+  })
+
+  it('does nothing for a hairless scene or an unreadable scan', () => {
+    expect(seedSceneHair('X:\\a.duf', scan([w('crop-top', 'MM Crop Top')]), [])).toBeNull()
+    // Browser mode / missing file: guessing from an empty read would silently
+    // claim the scene has no hair.
+    expect(seedSceneHair('X:\\a.duf', scan([], 'scene unreadable'), [])).toBeNull()
+    expect(seedSceneHair('X:\\a.duf', scan(hairy, 'scene unreadable'), [])).toBeNull()
   })
 })

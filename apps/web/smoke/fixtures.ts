@@ -158,6 +158,9 @@ export const P = {
   scene2: 'D:/DTH Projects/Demo/Kira/daz3d/KiraSummertide_G9_GP.duf',
   /** A linked Houdini project (inside the char folder → the card chip reads %CHAR%\houdini). */
   houdini: 'D:/DTH Projects/Demo/Kira/houdini/Kira.hip',
+  /** The demo character's export directory — the seeded houdini folder every
+   *  new character starts with (an export path can't be cleared since v0.52). */
+  houdiniDir: 'D:/DTH Projects/Demo/Kira/houdini',
 }
 
 /** The hair item the demo character lists on its primary scene (Hair-items
@@ -203,6 +206,10 @@ export interface SeedOptions {
   unrealProjects?: Array<string>
   /** settings.json: the DIM manifests folder (Settings → Project product config). */
   dimManifestsFolder?: string
+  /** settings.json: the Daz Studio install folder. The DTH Export dialog's
+   *  Runner check needs one configured; the fake can't read a real install,
+   *  and an unreadable Runner state deliberately never blocks the dialog. */
+  dazInstallFolder?: string
   /** What the native picker returns — a path to simulate a pick, else cancelled. */
   dialogPath?: string
   /** The demo scene also carries a Golden Palace geograft item, so a scene read
@@ -244,6 +251,11 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       ? {
           scenePath: P.scene,
           image: AVATAR_FILE,
+          // Stamped on every real save (provenance) — the scripts pane derives
+          // its install-location chip from projectName, so the docs character
+          // carries what a saved character always has.
+          projectName: 'Demo',
+          projectPath: P.project,
           sections: { FBM: FBM_SECTION, GEN: GEN_SECTION },
           jcmMorphMods: JCM_MODS,
           preserveMorphs: PRESERVE_MORPHS,
@@ -253,6 +265,17 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           // the primary scene carries a hair-only record; hair never arms the
           // ROM/panel overrides on its own).
           houdiniProjects: [P.houdini],
+          // The exact export setup a NEW character is created with (matching
+          // api/characters.ts + storage's seedHoudiniFolder): exportPath points
+          // at the seeded houdini subfolder, the project folder is the
+          // `<Project>_<Character>` default (a literal — dsa.ts's
+          // defaultHoudiniProjectFolder can't load under Node's ?raw-less
+          // loader; the generate-dialog shot asserts the app-computed prefill
+          // matches, so a drifted default fails loudly there). The Export
+          // directory panel renders populated, the export switches are live,
+          // and Generate project / DTH Export are available.
+          exportPath: P.houdiniDir,
+          houdiniProjectFolder: 'Demo_Kira',
           sceneOverrides: [
             { scenePath: P.scene, hair: [{ nodeLabel: HAIR_ITEM }] },
             // The outfit scene carries its own style — hair lists are per scene.
@@ -272,6 +295,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
       currentDthVersion: DTH_VERSION,
       // Machine-wide, but edited on the Settings → Project tab (product scanning).
       ...(opts.dimManifestsFolder ? { dimManifestsFolder: opts.dimManifestsFolder } : {}),
+      ...(opts.dazInstallFolder ? { dazInstallFolder: opts.dazInstallFolder } : {}),
     }),
     // Morph + bone index (a Build_Genesis_Index.dsa run's output) — feeds the
     // Morph-name autocomplete (and its guide screenshot) and the JCM bone

@@ -116,6 +116,7 @@ export {
   fetchExecuteScenes,
   fetchExportRunProgress,
   generateRomAnimation,
+  launchDazForPendingJobs,
   openSceneInRunningDaz,
   romAnimationFresh,
 } from './api/execute'
