@@ -33,10 +33,8 @@ test('replace primary: validates, swaps, derives GEN, deletes the old copy', asy
   await page.getByRole('button', { name: 'Replace with another Daz scene…' }).click()
   const dialog = page.getByRole('dialog', { name: 'Replace the primary Daz scene?' })
   await expect(dialog).toBeVisible()
-  // The old primary is an in-folder copy — the cleanup toggle shows, ON.
-  const deleteOld = dialog.getByRole('switch').nth(1)
-  await expect(dialog.getByText('Delete the old primary scene file')).toBeVisible()
-  await expect(deleteOld).toHaveAttribute('data-state', 'checked')
+  // The old primary is an in-folder copy — no toggle, no notice: replacing
+  // always deletes the studio-owned old copy (asserted on the fs below).
 
   await dialog.getByRole('button', { name: 'Copy & replace' }).click()
   await expect(page.getByText('Replaced the primary Daz scene')).toBeVisible()
