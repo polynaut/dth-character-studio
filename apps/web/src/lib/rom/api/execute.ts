@@ -207,9 +207,31 @@ export type ExportRunProgress =
  */
 export async function fetchExportRunProgress(): Promise<ExportRunProgress | null> {
   const run = activeRun
-  if (!run) return null
   const paths = await exporterJobFilePaths()
   if (!paths) return null
+  if (!run) {
+    // No in-memory watch — a scene-card ROM-animation generate (which arms
+    // none), another window's run, or a reloaded window. The Runner is ONE
+    // global resource, so a live batch should still show on the button:
+    // adopt it for DISPLAY only (`characterId: ''` — every editor may show
+    // it, none toasts an outcome). A finished/foreign file is left alone —
+    // its owner (or the next handoff's sweep) cleans up.
+    try {
+      if (!(await exists(paths.running))) return null
+      const parsed = parseJobFileJson(await readTextFile(paths.running))
+      if (!parsed || parsed.type !== 'bulk-export' || parsed.progress >= 100) return null
+      return {
+        state: 'running',
+        characterId: '',
+        total: parsed.jobs.length,
+        progress: parsed.progress,
+        done: parsed.jobs.filter((j) => j.status === 'done').length,
+        failed: parsed.jobs.filter((j) => j.status === 'failed').length,
+      }
+    } catch {
+      return null
+    }
+  }
   try {
     if (await exists(paths.pending)) {
       return { state: 'pending', characterId: run.characterId, total: run.total }

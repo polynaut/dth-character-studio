@@ -105,8 +105,10 @@ export function DthExportAction({
   async function refreshStatus() {
     const [isPending, run] = await Promise.all([exporterJobsPending(), fetchExportRunProgress()])
     setPending(isPending)
-    if (!run || run.characterId !== character.id) {
-      // No run, or another character's — not this button's business.
+    // '' = a batch adopted for display only (a scene-card ROM generate, or a
+    // run this window didn't start): the Runner is busy either way, so every
+    // editor's button shows the live progress — outcomes stay owner-only.
+    if (!run || (run.characterId !== '' && run.characterId !== character.id)) {
       setProgress(null)
       return
     }
