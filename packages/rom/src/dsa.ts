@@ -250,8 +250,15 @@ function buildExportBlock(
   const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
+  // The exporterFigureName base makes the snippet also declare dthExportName:
+  // the doExport name, suffixed with the resolved scene subfolder so each
+  // scene's files carry their scene ("Ita_Summertide") instead of every
+  // subfolder holding an identically-named "Ita".
   const sceneSubfolderBlock = indentLines(
-    sceneExportSubfolderSnippet(sceneExportSubfolders(character, scenesRootAbs)),
+    sceneExportSubfolderSnippet(
+      sceneExportSubfolders(character, scenesRootAbs),
+      exporterFigureName(character),
+    ),
   )
   // The CSV to deliver: the base name, or — when some linked scene overrides the
   // ROM — the open scene's scene-suffixed CSV, resolved at run time. Kept
@@ -263,9 +270,10 @@ function buildExportBlock(
       : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
   const csvCopyBlock = charFolderAbs
     ? `    // Copy the generated PoseAsset CSV next to the exporter output, resolving
-    // the {{DTH_EXPORT_DIR}} token in any bone-scale reference-FBX path to the
-    // real (run-time) export dir — Houdini's PoseAsset wants absolute paths, and
-    // the dir (scene subfolder included) is only known now. Source is left intact
+    // the {{DTH_EXPORT_DIR}} + {{DTH_EXPORT_NAME}} tokens in any bone-scale
+    // reference-FBX path to the real (run-time) export dir and figure name —
+    // Houdini's PoseAsset wants absolute paths, and the dir and name (scene
+    // subfolder included) are only known now. Source is left intact
     // so the next scene's export can reuse it.
 ${csvNameBlock}
     var dthCsvSrcDir = new DzDir(${dazJson(charFolderAbs.replace(/\\/g, '/'))});
@@ -278,6 +286,7 @@ ${csvNameBlock}
             var dthCsvText = String(dthCsvSrc.read());
             dthCsvSrc.close();
             dthCsvText = dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir);
+            dthCsvText = dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName);
             var dthCsvOut = new DzFile(dthCsvDst);
             if (dthCsvOut.open(dthCsvOut.WriteOnly | dthCsvOut.Truncate)) {
                 dthCsvOut.write(dthCsvText);
@@ -291,8 +300,9 @@ ${csvNameBlock}
 `
     : ''
   // The export call + CSV delivery. With groom items listed it is wrapped in the
-  // hide bracket below; without any, the emitted script is unchanged.
-  const exportCore = `    dthExportAction.doExport(dthExportDir, ${dazJson(exporterFigureName(character))}, ${dazJson(refFrames)}, false);
+  // hide bracket below; without any, the emitted script is unchanged. The name
+  // is the run-time dthExportName (scene-suffixed), never the bare base name.
+  const exportCore = `    dthExportAction.doExport(dthExportDir, dthExportName, ${dazJson(refFrames)}, false);
 ${csvCopyBlock}`
   const groomMap = groomSceneMap(character)
   const indentBlock = indentLines

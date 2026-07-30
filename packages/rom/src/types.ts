@@ -138,8 +138,9 @@ export const romPoseSchema = z.object({
    * Whether this pose scales bones (e.g. Torso Length, Proportion Height). Unreal
    * can't drive bone scale from a morph alone, so the DTH Exporter writes a
    * per-frame reference-skeleton FBX for such a frame and the studio fills that
-   * FBX's path into the PoseAsset CSV automatically (a `{{DTH_EXPORT_DIR}}` token
-   * the generated Daz script resolves against the real export dir at run time).
+   * FBX's path into the PoseAsset CSV automatically (`{{DTH_EXPORT_DIR}}` +
+   * `{{DTH_EXPORT_NAME}}` tokens the generated Daz script resolves against the
+   * real export dir and scene-suffixed figure name at run time).
    * Only meaningful in GEN/FBM categories (see {@link REFERENCE_FBX_SECTIONS});
    * ignored everywhere else — generation never emits a reference FBX for other
    * sections (a stray flag on a MIS row would break the HDA's CSV import).
@@ -1145,8 +1146,18 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       also exports looks different from one that doesn't). Script CONTENT is
  *       unchanged by that, but the artwork only lands on a (re)generate, which
  *       this bump makes Refresh assets do.
+ *  40 — generated-script change only (runtime files untouched): the figure
+ *       name handed to the exporter's `doExport` is scene-suffixed at run time
+ *       — base name + "_" + the open scene's export subfolder ("Ita" in
+ *       "Summertide/" exports as "Ita_Summertide") — so each subfolder's files
+ *       carry their scene instead of every subfolder holding an identically
+ *       named export. The CSV's bone-scale reference-FBX paths bake a
+ *       {{DTH_EXPORT_NAME}} token the CSV-copy step substitutes with the same
+ *       run-time name (alongside {{DTH_EXPORT_DIR}}), keeping exporter output
+ *       and CSV pointers in lockstep. Bumped so Refresh assets regenerates
+ *       every script + CSV onto the new naming.
  */
-export const RUNTIME_VERSION = 39
+export const RUNTIME_VERSION = 40
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

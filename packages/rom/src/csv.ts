@@ -112,21 +112,28 @@ export function sanitizePoseName(name: string): string {
 }
 
 /**
- * The figure name handed to the DTH Exporter's `doExport` — and baked into the
- * CSV's reference-FBX paths — as ONE value, so the exporter's output file names
- * and the CSV's pointers can't diverge (a comma/newline in the character name
- * was previously stripped on the CSV side only, leaving the CSV pointing at a
- * file the exporter never writes). Consumed by dsa.ts's export block AND
- * {@link customPoseAssetRows} — package-internal, not part of the index API.
+ * The BASE of the figure name handed to the DTH Exporter's `doExport`. The
+ * actual name is resolved at RUN time — base + "_" + the open scene's export
+ * subfolder ("Ita" in "Summertide/" exports as "Ita_Summertide"; see
+ * `sceneExportSubfolderSnippet`), so each scene's export files carry their
+ * scene. The CSV's reference-FBX paths bake a `{{DTH_EXPORT_NAME}}` token that
+ * the generated script substitutes with the SAME run-time value when it copies
+ * the CSV — one value, so the exporter's output file names and the CSV's
+ * pointers can't diverge (a comma/newline in the character name was once
+ * stripped on the CSV side only, leaving the CSV pointing at a file the
+ * exporter never writes). Consumed by dsa.ts's export block —
+ * package-internal, not part of the index API.
  */
 export function exporterFigureName(character: Pick<Character, 'name'>): string {
   // Beyond csvSafe's comma/newline guard, strip the characters Windows forbids
   // in file names (`< > : " / \ | ? *`): this name is BOTH handed to
   // the exporter's doExport — which writes `<name>_frame_<N>.fbx` to disk — and
-  // baked into the CSV `file` column that points at it. An illegal char makes
-  // the FBX write fail/mangle while the CSV still references the clean name, so
-  // the HDA import breaks. Runs collapse to one space; a name with none of these
-  // (e.g. "A B") is unchanged, so valid-character output stays byte-identical.
+  // substituted into the CSV `file` column that points at it. An illegal char
+  // makes the FBX write fail/mangle while the CSV still references the clean
+  // name, so the HDA import breaks. Runs collapse to one space; a name with
+  // none of these (e.g. "A B") is unchanged. The run-time subfolder suffix is
+  // sanitized by the snippet itself (it exists as a folder, so only "," and
+  // the "/" nesting separator need mapping).
   return character.name.replace(/[\r\n,<>:"/\\|?*]+/g, ' ')
 }
 
@@ -154,15 +161,14 @@ function customPoseAssetRows(character: Character, lastPresetFrame: number): Arr
     // in the custom sequence (both artifacts derive from THIS shared offset).
     const frame = lastPresetFrame + 1 + relativeFrame
     const name = sanitizePoseName(pose.name)
-    // A bone-scale frame's reference FBX: the studio can't know the absolute path
-    // at generation time (the export dir — scene subfolder included — is resolved
-    // in Daz at run time), so it writes a {{DTH_EXPORT_DIR}} token that the
-    // generated script substitutes when it copies the CSV. The filename matches
-    // what the DTH Exporter writes: <ExportDir>/Reference Skeletons/<Name>_frame_<N>.fbx.
+    // A bone-scale frame's reference FBX: the studio can't know the absolute
+    // path OR the figure name at generation time (export dir and name both
+    // carry the scene subfolder, resolved in Daz at run time), so it writes
+    // {{DTH_EXPORT_DIR}}/{{DTH_EXPORT_NAME}} tokens that the generated script
+    // substitutes when it copies the CSV. The result matches what the DTH
+    // Exporter writes: <ExportDir>/Reference Skeletons/<Name>_frame_<N>.fbx.
     const refFbx = isBoneScaleRefPose(section, pose)
-      ? csvSafe(
-          `{{DTH_EXPORT_DIR}}/Reference Skeletons/${exporterFigureName(character)}_frame_${frame}.fbx`,
-        )
+      ? csvSafe(`{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_${frame}.fbx`)
       : ''
     if (section === 'FBM' || section === 'MISC') {
       rows.push(`${section === 'MISC' ? 'MIS' : 'FBM'},${frame},${name},${refFbx}`)

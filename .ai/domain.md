@@ -154,9 +154,16 @@ older runtimes as stale.
 
 - Bone-scale frames make the DTH Exporter write per-frame reference skeletons to
   `<export dir>/Reference Skeletons/<figure>_frame_<N>.fbx`. The HDA wants
-  **absolute** paths in the CSV `file` column, so the studio writes a
-  `{{DTH_EXPORT_DIR}}` token and the generated script substitutes the real export
-  dir when copying the CSV next to the exporter output.
+  **absolute** paths in the CSV `file` column, so the studio writes
+  `{{DTH_EXPORT_DIR}}` + `{{DTH_EXPORT_NAME}}` tokens and the generated script
+  substitutes the real export dir and figure name when copying the CSV next to
+  the exporter output.
+- The figure name handed to `doExport` is **scene-suffixed at run time**
+  (runtime v40): base `exporterFigureName` + `_` + the resolved export
+  subfolder ("Ita" in `Summertide/` exports as `Ita_Summertide`; nesting `/` →
+  `_`, `,` → space) — otherwise every scene subfolder holds identically-named
+  files. The hair pass keeps its own `<slug>_Hair_<item>` names (unique per
+  item already).
 - No export directory set ⇒ the ROM is still fully generated; ticked Bone scale
   rows are a harmless no-op (no validation links the two).
 - The export block ALWAYS nests each run under the open scene's own subfolder

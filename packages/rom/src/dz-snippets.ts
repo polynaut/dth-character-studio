@@ -51,15 +51,29 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  * run time — the pre-v37 nesting, kept so an unexpected scene still exports
  * into its own folder rather than the root. Reads/writes the caller's
  * `dthExportDir` var.
+ *
+ * With `exportName` (the character's base {@link exporterFigureName}) it also
+ * declares `dthExportName` — the name handed to the exporter's `doExport`,
+ * suffixed with the resolved subfolder so every scene's export files carry
+ * their scene ("Ita" in "Summertide/" exports as "Ita_Summertide"): otherwise
+ * every subfolder holds identically-named files. Nesting slashes become
+ * underscores; commas become spaces (a comma would split the CSV column the
+ * name is substituted into — same guard as exporterFigureName).
  */
-export function sceneExportSubfolderSnippet(map: Record<string, string>): string {
+export function sceneExportSubfolderSnippet(map: Record<string, string>, exportName?: string): string {
+  const nameLines =
+    exportName === undefined
+      ? ''
+      : `var dthExportName = ${dazJson(exportName)};
+if (dthExportSub != "") dthExportName = dthExportName + "_" + dthExportSub.split("/").join("_").split(",").join(" ");
+`
   return `var dthExportSubByScene = ${dazJson(map)};
 var dthExportSceneKey = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
 var dthExportSub = dthExportSubByScene[dthExportSceneKey] || "";
 if (dthExportSub == "" && dthExportSceneKey != "") {
     dthExportSub = new DzFileInfo(Scene.getFilename()).completeBaseName();
 }
-if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
+${nameLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
 `
 }
 

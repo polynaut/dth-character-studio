@@ -1271,22 +1271,26 @@ describe('toPoseAssetCsv', () => {
     expect(characterConfig(content).characterName).toContain('Kira')
   })
 
-  it('the exporter call and the CSV reference paths share one sanitized figure name', () => {
+  it('the exporter call and the CSV reference paths share one run-time figure name', () => {
     const sections = makeSections()
     sections.JCM.enabled = false
     sections.GEN.enabled = false
     sections.FBM.groups[0].poses[0].boneScaleRef = true
     const character = makeCharacter({ name: 'A,B', sections, exportPath: 'D:/Exports' })
-    // CSV side: the comma is normalized to a space in the reference-FBX path…
+    // CSV side: the reference-FBX path carries the name TOKEN — the real name
+    // (scene-suffixed) is only known in Daz at run time.
     const csv = toPoseAssetCsv(character, FRAMES).content
-    expect(csv).toContain('Reference Skeletons/A B_frame_')
-    // …and doExport receives the SAME name, so the exporter writes the file the
-    // CSV points at (previously it got the raw "A,B" and the paths diverged).
+    expect(csv).toContain('Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_')
+    // Script side: the comma is normalized to a space in the base name, doExport
+    // receives the run-time dthExportName built from it, and the CSV copy
+    // substitutes the token with the SAME value — so the exporter writes the
+    // file the CSV points at (previously the raw "A,B" made the paths diverge).
     const script = toCharacterScriptDsa(character, {}, FRAMES).content
-    expect(script).toContain('doExport(dthExportDir, "A B",')
+    expect(script).toContain('var dthExportName = "A B";')
+    expect(script).toContain('doExport(dthExportDir, dthExportName,')
   })
 
-  it('strips Windows-illegal filename chars from the reference-FBX figure name', () => {
+  it('strips Windows-illegal filename chars from the exporter base name', () => {
     const sections = makeSections()
     sections.JCM.enabled = false
     sections.GEN.enabled = false
@@ -1295,14 +1299,11 @@ describe('toPoseAssetCsv', () => {
     // name — the exporter's `<name>_frame_N.fbx` write would fail/mangle while the
     // CSV pointed at the clean name.
     const character = makeCharacter({ name: 'Kira "Beach": v2', sections, exportPath: 'D:/Exports' })
-    const csv = toPoseAssetCsv(character, FRAMES).content
-    const ref = csv.split('\n').find((l) => l.includes('Reference Skeletons/')) ?? ''
-    expect(ref).not.toMatch(/["<>:*?|\\]/)
-    // The CSV path and the doExport name still match (single source).
-    const figure = ref.match(/Reference Skeletons\/(.+)_frame_/)?.[1] ?? ''
-    expect(toCharacterScriptDsa(character, {}, FRAMES).content).toContain(
-      `doExport(dthExportDir, "${figure}",`,
-    )
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    // Each illegal char collapses to a space (original spaces survive beside it).
+    const base = content.match(/var dthExportName = "([^"]*)";/)?.[1] ?? ''
+    expect(base).toBe('Kira  Beach  v2')
+    expect(base).not.toMatch(/["<>:*?|\\]/)
   })
 
   it('a custom PHY section flags the CSV experimental (physics payload not modeled)', () => {
@@ -1346,8 +1347,10 @@ describe('toPoseAssetCsv', () => {
       .filter((r) => r.startsWith('FBM,'))
     const ref = fbmRows.find((r) => r.includes('{{DTH_EXPORT_DIR}}')) ?? ''
     const frame = ref.split(',')[1]
-    // Filename matches what the DTH Exporter writes, under a Reference Skeletons subdir.
-    expect(ref).toContain(`{{DTH_EXPORT_DIR}}/Reference Skeletons/Karen_frame_${frame}.fbx`)
+    // Both tokens: dir AND name resolve in Daz at run time (the name is
+    // scene-suffixed there), matching what the DTH Exporter writes under a
+    // Reference Skeletons subdir.
+    expect(ref).toContain(`{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_${frame}.fbx`)
     // Non-bone-scale FBM rows keep an empty file column.
     expect(fbmRows.filter((r) => r.endsWith(',')).length).toBeGreaterThan(0)
   })
@@ -1523,7 +1526,22 @@ describe('exporter integration', () => {
     const refs = referenceFrames(character, FRAMES).join(' ')
     expect(content).toContain('findAction("DazToHueExporterAction")')
     expect(content).toContain('var dthExportDir = "X:/exports/electra";')
-    expect(content).toContain(`dthExportAction.doExport(dthExportDir, "Electra", "${refs}", false)`)
+    expect(content).toContain(`dthExportAction.doExport(dthExportDir, dthExportName, "${refs}", false)`)
+  })
+
+  it('scene-suffixes the doExport figure name at run time (runtime v40)', () => {
+    const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Ita').content
+    // Base name declared from the sanitized character name…
+    expect(content).toContain('var dthExportName = "Ita";')
+    // …suffixed with the resolved export subfolder ("Ita" in "Summertide/"
+    // exports as "Ita_Summertide"; nesting slashes → "_", commas → " ")…
+    expect(content).toContain(
+      'if (dthExportSub != "") dthExportName = dthExportName + "_" + dthExportSub.split("/").join("_").split(",").join(" ");',
+    )
+    // …and the CSV copy resolves the name token with the SAME value, right
+    // beside the dir token.
+    expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName)')
   })
 
   it('omits the export call when no export path is set', () => {
@@ -1643,6 +1661,9 @@ describe('exporter integration', () => {
     expect(exportScript.content).not.toContain('ApplyDTHCharacter(') // no ROM rebuild
     expect(exportScript.content).toContain('doExport')
     expect(exportScript.content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir)')
+    // The standalone script resolves the scene-suffixed name the same way.
+    expect(exportScript.content).toContain('var dthExportName = "Electra";')
+    expect(exportScript.content).toContain('dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName)')
 
     expect(generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
