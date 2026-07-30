@@ -228,10 +228,8 @@ export function ExportSettingsSection({
               This scene exports into{' '}
               <code>
                 {effectiveProject}/dth-export/{'<scene subfolder>'}/
-              </code>{' '}
-              — Set Project a Houdini project to{' '}
-              <code>{displayPath(`${character.exportPath}/${effectiveProject}`)}</code> and
-              import via <code>$JOB/dth-export/…</code>.
+              </code>
+              .
             </>
           ) : (
             <>
