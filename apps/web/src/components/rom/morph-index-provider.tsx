@@ -8,7 +8,7 @@ import { EMPTY_MORPH_INDEX, MorphIndexContext } from './contexts.ts'
 import type { IndexedMorphEntry } from './contexts.ts'
 
 /**
- * Provides the scanned morph index (`Scan_Morphs_<Genesis>.dsa` output) to the
+ * Provides the scanned morph index (`Build_Genesis_Index.dsa` output) to the
  * Morph-name autocomplete ({@link MorphNameCell}), which reads it from context so
  * the deeply nested table cells don't have to thread it. Search keys are
  * lowercased ONCE here (the index can hold thousands of morphs), so the

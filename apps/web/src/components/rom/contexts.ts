@@ -2,7 +2,7 @@ import { createContext } from 'react'
 
 import type { MorphIndexEntry } from '#/lib/rom/api.ts'
 
-// The machine-wide morph index (Scan_Morphs_<Genesis>.dsa output) that powers the
+// The machine-wide morph index (Build_Genesis_Index.dsa output) that powers the
 // Morph-name autocomplete. A context so the deeply nested cells can reach it
 // without threading through the editor/group/table layers.
 

@@ -722,13 +722,17 @@ ${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs)
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
     : ''
+  // Whether a MANUAL run of this script exports. Since the block is embedded
+  // either way now, this is what actually distinguishes the two scripts that
+  // share the `ROM_<base>.dsa` name — so the run-time gate AND the Content
+  // Library tile both derive from it and cannot disagree.
+  const exportsOnManualRun = exportBlock !== '' && character.exportWithRomScript !== false
   // Who runs the embedded export: combined (the default) → every clean ROM run;
   // split → only bulk runs, so a manual ROM run keeps leaving the export to the
   // standalone Export_ script exactly as before.
-  const exportGate =
-    character.exportWithRomScript !== false
-      ? 'dthRomOk === true'
-      : 'dthRomOk === true && dthBulkExport'
+  const exportGate = exportsOnManualRun
+    ? 'dthRomOk === true'
+    : 'dthRomOk === true && dthBulkExport'
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -838,7 +842,16 @@ ${exportBlock}        }` : ''}
 }
 `
   const baseName = characterScriptName(character)
-  return { fileName: `ROM_${baseName}.dsa`, content, target: 'daz' }
+  return {
+    fileName: `ROM_${baseName}.dsa`,
+    content,
+    target: 'daz',
+    // The tile says which of the two this script is, since the file name can't:
+    // ROM_ alone always builds the ROM, but it may or may not also export. Keyed
+    // to a MANUAL run — a bulk run always exports, but that's the plugin driving
+    // it, not this script's identity.
+    icon: exportsOnManualRun ? 'rom-export' : 'rom',
+  }
 }
 
 /**
@@ -881,6 +894,7 @@ ${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character)
     fileName: `Export_${characterScriptName(character)}.dsa`,
     content,
     target: 'daz',
+    icon: 'export',
   }
 }
 
@@ -945,6 +959,7 @@ ${indentLines(indentLines(hairExportLoopSnippet(character, { fig: 'dthFig', acti
     fileName: `Export_Hair_${characterScriptName(character)}.dsa`,
     content,
     target: 'daz',
+    icon: 'export-hair',
   }
 }
 /** Inputs for the per-character product-scan script — both supplied by the host

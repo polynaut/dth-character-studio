@@ -29,7 +29,7 @@ function highlightMatch(text: string, q: string): ReactNode {
 
 /**
  * The Morph-name input with autocomplete over the scanned morph index
- * (Scan_Morphs_<Genesis>.dsa output). Search hits match the internal name OR the
+ * (Build_Genesis_Index.dsa output). Search hits match the internal name OR the
  * Daz UI label; each entry shows which field matched and the node the morph
  * lives on — picking one sets BOTH the internal name and the node on the morph.
  * Free typing still works exactly like a plain cell (committed on blur).

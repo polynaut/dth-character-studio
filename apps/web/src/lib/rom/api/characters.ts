@@ -774,9 +774,9 @@ async function doSyncAvatarWithScene(
   return saveAvatarFields({ image, imageScene: source })
 }
 
-// --- Morph index (Scan_Morphs_<Genesis>.dsa output) -------------------------
+// --- Morph index (Build_Genesis_Index.dsa output) ---------------------------
 
-/** One scanned morph from a Scan_Morphs_<Genesis>.dsa run in Daz. */
+/** One scanned morph from a Build_Genesis_Index.dsa run in Daz. */
 export interface MorphIndexEntry {
   /** Scene node id, instance-suffix-stripped (Genesis9, GoldenPalace_G9, …). */
   node: string
@@ -789,8 +789,8 @@ export interface MorphIndexEntry {
 
 /**
  * The machine-wide morph index for a generation — written into app-data by the
- * Scan_Morphs_<Genesis>.dsa scripts installed at the DTH-Character-Studio
- * scripts root. Feeds the Morph-name autocomplete. A missing/broken file just
+ * Build_Genesis_Index.dsa script installed at the DTH-Character-Studio scripts
+ * root (one run writes all four generations). Feeds the Morph-name autocomplete. A missing/broken file just
  * yields an empty index (the autocomplete stays quiet). Strictly the character's
  * own generation: the scan is empirical, so cross-compatible morphs already land
  * in the right file (Daz auto-loads Genesis 8 morphs onto a scanned 8.1 figure);
@@ -841,9 +841,9 @@ export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<Mo
   return out
 }
 
-// --- Bone index (same Scan_Morphs_<Genesis>.dsa output) ---------------------
+// --- Bone index (same Build_Genesis_Index.dsa output) -----------------------
 
-/** One scanned bone from a Scan_Morphs_<Genesis>.dsa run in Daz — a JCM rule
+/** One scanned bone from a Build_Genesis_Index.dsa run in Daz — a JCM rule
  *  keys off a bone's rotation, so the "Modify JCM frames" editor autocompletes
  *  the bone field from these. */
 export interface BoneIndexEntry {
@@ -858,9 +858,9 @@ export interface BoneIndexEntry {
 /**
  * The figure's bones for a generation — written into the SAME per-generation
  * scan index as the morphs (`morphs_<G>.json`'s `bones` array, index version 2+)
- * by the Scan_Morphs_<Genesis>.dsa scripts. Feeds the bone autocomplete in the
- * JCM editor. A missing/old (v1, no `bones`) or broken file just yields an empty
- * list (the autocomplete stays quiet until the user re-runs the scan in Daz).
+ * by Build_Genesis_Index.dsa. Feeds the bone autocomplete in the JCM editor. A
+ * missing/old (v1, no `bones`) or broken file just yields an empty list (the
+ * autocomplete stays quiet until the user re-runs the scan in Daz).
  */
 export async function fetchBoneIndex(genesis: GenesisVersion): Promise<Array<BoneIndexEntry>> {
   // Same cheap stat-then-cache dance as fetchMorphIndex, keyed on the file's

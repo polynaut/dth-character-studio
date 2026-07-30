@@ -4,7 +4,7 @@ import { P, buildSeed } from './fixtures.ts'
 import { installTauriMock } from './tauri-mock.ts'
 
 // The "Modify JCM frames" bone field autocompletes from the scanned bone index
-// (the `bones` array in the same morphs_<G>.json a Scan_Morphs run writes).
+// (the `bones` array in the same morphs_<G>.json a Build_Genesis_Index run writes).
 test('JCM: the bone field autocompletes from the scanned bone index', async ({ page }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
   await page.addInitScript(installTauriMock, seed)

@@ -50,8 +50,12 @@ offsets byte-identically — if a generation change moves them, the change is wr
 - `ROM_<Name>_<Genesis>.dsa` — self-contained apply script: inline `config` object
   → `include('../../.DthWorkflow.dsa')` → `ApplyDTHCharacter(config)`. Installed to
   `<Daz library>/Scripts/DTH-Character-Studio/<project>/<character>/`; the shared
-  **DTH runtime** (`.DthWorkflow.dsa`, `.DthUtils.dsa`, scan scripts) is co-installed
-  once at that root (`copyRuntimeFiles` in `apps/web/src/lib/rom/storage.ts`).
+  **DTH runtime** (`.DthWorkflow.dsa`, `.DthUtils.dsa`, …) is co-installed once at
+  that root (`copyRuntimeFiles` in `apps/web/src/lib/rom/storage.ts`), along with
+  the two VISIBLE user-run scripts + their Content Library artwork:
+  **`Build_Genesis_Index.dsa`** (builds the stock figures of every generation and
+  scans them into the per-generation morph + bone index behind the autocompletes)
+  and **`Scan_Frames.dsa`** (open scene's keyed frames → CSV for Import from CSV).
 - `<name>_pose_asset.csv` — the Houdini PoseAsset CSV, written next to the
   character JSON and copied into the export dir by the ROM script's export block.
 - Optional: `Export_<Name>_<Genesis>.dsa` (split export), `Export_Hair_…` (one

@@ -1131,8 +1131,22 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       exists to deliver the complete export set. A manual run (no argument)
  *       behaves exactly like the toggles say. Bumped so Refresh assets
  *       regenerates every script with the argument gate.
+ *  39 — runtime change: one `Build_Genesis_Index.dsa` replaces the four visible
+ *       `Scan_Morphs_<Genesis>.dsa` wrappers. It builds the stock figures for
+ *       every generation itself (G3/G8/G8.1 female + male; Genesis 9 twice —
+ *       gender-neutral, so the pair differs by geograft: Golden Palace vs
+ *       Dicktator), scans every figure root in the scene bucketed by detected
+ *       generation, and writes all four `morphs_<G>.json` indexes in one run
+ *       (now index `version: 3`, with a `figures` array). Bumped so Refresh
+ *       assets reinstalls the runtime and sweeps the retired wrappers.
+ *       Also: every Daz script the studio installs now carries Content Library
+ *       artwork beside it — the two visible runtime scripts, and each generated
+ *       per-character script (its `icon` tag picks the art; a ROM script that
+ *       also exports looks different from one that doesn't). Script CONTENT is
+ *       unchanged by that, but the artwork only lands on a (re)generate, which
+ *       this bump makes Refresh assets do.
  */
-export const RUNTIME_VERSION = 38
+export const RUNTIME_VERSION = 39
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

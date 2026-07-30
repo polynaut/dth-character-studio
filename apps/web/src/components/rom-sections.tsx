@@ -67,10 +67,10 @@ interface RomSectionsProps {
   /** Measured preset-block frame lengths; null while unmeasurable (assets unread). */
   presetFrames: PresetFrames | null
   /** Scanned morphs for this character's generation — enables the Morph-name
-   *  autocomplete when a Scan_Morphs_<Genesis> run has produced an index. */
+   *  autocomplete when a Build_Genesis_Index run has produced an index. */
   morphIndex?: Array<MorphIndexEntry>
   /** Scanned bones for this generation — enables the bone-name autocomplete in
-   *  the "Modify JCM frames" editor (same Scan_Morphs_<Genesis> index). */
+   *  the "Modify JCM frames" editor (same Build_Genesis_Index index). */
   boneIndex?: Array<BoneIndexEntry>
   /** Absolute frames whose morphs failed in the last ROM run (from the run log) —
    *  matching pose rows are marked red. */

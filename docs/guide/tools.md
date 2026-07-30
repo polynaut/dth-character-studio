@@ -16,7 +16,7 @@ Exporter; Tools is for the extras beyond that.
 
 > [!NOTE]
 > Everything the Daz side needs ships **with the studio** — the runtime and the
-> visible scan scripts (`Scan_Morphs_<Genesis>`, `Scan_Frames`) install into
+> visible scan scripts (`Build_Genesis_Index`, `Scan_Frames`) install into
 > `Scripts/DTH-Character-Studio` automatically on Save / Refresh assets. There is
 > no separate scripts download anymore.
 

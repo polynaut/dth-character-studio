@@ -73,7 +73,93 @@ current code before relying on details, but assume the *lesson* still holds.
   scripts alone; that's why the studio ships an Open_Scene script instead.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
-  re-running the character's ROM script is enough — no app rebuild needed.
+  re-running the character's ROM script is enough — no app rebuild needed. (Only
+  the dot-prefixed name needs matching; a runtime file that references no sibling
+  runtime by name needs no `../../` rewrite either — see the install-rewrite rule
+  above.) **Iterating twice within ONE `RUNTIME_VERSION` is where this bites:**
+  `.dth-runtime-installed` still matches, so even a rebuilt app SKIPS the whole
+  reinstall on save and keeps running the older bundled runtime — Tools → Refresh
+  assets (which passes `force`) is what actually replaces it. A second fix inside
+  the same unreleased version bump therefore looks like "my change had no effect".
+- **A Daz Content Library tile is just a same-named PNG beside the file** —
+  `<base name>.png` at **91×91** for the tile, `<base name>.tip.png` at **256×256**
+  for the hover preview (both verified against the stock `Genesis 9.png` /
+  `Genesis 9.tip.png`). No manifest, no metadata: Daz matches on NAME alone, so
+  renaming a script without renaming its artwork silently reverts the tile to a
+  broken-image placeholder. The studio bundles the four PNGs via Vite `?inline`
+  (base64 data URLs — the app stays one self-contained binary, no asset fetch under
+  the strict CSP) and `writeFile`s the decoded bytes in `copyRuntimeFiles`; they're
+  folded into the runtime hash guard so a changed icon must take a
+  `RUNTIME_VERSION` bump to reach existing installs, like any other runtime file.
+- **Artwork for a GENERATED script has to survive the stale-artifact sweep.**
+  `generateCharacterFiles` sweeps the character's script folder by listing every
+  name the character COULD have and removing what wasn't just written — and
+  `<script>.png`/`.tip.png` are on that list, so unless `writeScriptIcons`'
+  return value is folded into the written set, the sweep deletes the tiles the
+  line above just wrote. That two-way listing is also what retires them
+  correctly: turn the split export off and `Export_<base>.png` goes with
+  `Export_<base>.dsa`. Which art a script gets is decided in the PURE core (the
+  `icon` tag on a `GeneratedFile`) because it follows a rule the core owns —
+  `ROM_<base>.dsa` is one file name for two different scripts, one that also runs
+  the export and one that doesn't — while the bytes stay in the host
+  (`storage/script-icons.ts`, keyed by the `ScriptIcon` union so the map can't
+  drift from the tags).
+- **A hidden runtime `.dsa` must never `include()` a sibling runtime by name.**
+  `copyRuntimeFiles` blindly rewrites every `"<Dep>.dsa"` string inside a
+  RUNTIME_FILES entry to `"../../.<Dep>.dsa"` — correct for an include resolved from
+  a character script two levels down, fatal for the same file included by a VISIBLE
+  root-level script (`Build_Genesis_Index.dsa`, `Scan_Frames.dsa`), which lives at
+  the runtime root. So the visible wrapper does the includes, in dependency order
+  (`.DthUtils.dsa` first, then the scanner), and the scanner just calls the utils
+  functions as globals. The rewrite is string-blind: even a double-quoted runtime
+  filename in a COMMENT gets repointed.
+- **The stock figure/graft content paths are not what you'd guess** (measured
+  2026-07-29 against a real "My DAZ 3D Library"): the G8 base figures are
+  `People/Genesis 8 <Sex>/Genesis 8 Basic <Sex>.duf` (not `Genesis 8 <Sex>.duf`), and
+  **Genesis 8.1 installs INTO the Genesis 8 folder** —
+  `People/Genesis 8 Female/Genesis 8.1 Basic Female.duf`. G3 and G9 are the plain
+  names (`People/Genesis 3 Female/Genesis 3 Female.duf`, `People/Genesis 9/Genesis 9.duf`).
+  The G9 geografts are **wearable** presets (so the target figure must be SELECTED
+  before `openFile`), and they are third-party — they reship under new names and
+  folders, so `Build_Genesis_Index` does NOT trust a path for them (see the scored
+  glob below).
+- **A name glob for a geograft product finds the OTHER GENERATIONS' versions too, so
+  the pick has to be generation-scored.** Measured over a full library (14,902 `.duf`
+  under `People`, 2026-07-29): `*Dicktator*` also returns
+  `People/Genesis 8 Male/Anatomy/Dicktator v3/1_Dicktator Genitalia 0.3.duf`, and
+  `*Golden*Palace*` returns `…/Genesis 8 Female/Anatomy/Golden Palace v2/1-GoldenPalace_Genitalia_v2.duf`
+  — fitting either to a Genesis 9 figure would be wrong. `dthPickAsset` therefore
+  scores candidates with the generation term DOMINANT (`genesis 9` +100 vs
+  `genesis 2..8` −100) over the completeness terms (`smart` +50, `graft|genitalia`
+  +20), rejects the neighbours outright by name (`DTH_PICK_REJECT`: shells, UV fixes,
+  rigidity, material/pose/shape presets, hair loaders), and requires a POSITIVE
+  score — so a library with only the G8 products resolves to nothing and reports "not
+  installed" instead of loading the wrong graft. Ties break on shorter file name then
+  shorter path, never on directory-listing order. The ranking is CI-pinned against
+  that measured candidate set in `runtime.test.ts`, which loads the `.dsa` itself via
+  `new Function` (the runtime is plain ECMAScript — it only touches Daz APIs from
+  inside functions, which makes its pure logic directly unit-testable).
+- **Load the geograft's SMART preset, not its `00-Manual Setup` graft — only the
+  Smart one brings the geoshells.** Measured by reading the DSON (2026-07-29):
+  `00-Manual Setup/2-Golden Palace Graft.duf` and `00-Manual Setup/1-Dicktator.duf`
+  add the graft node alone, while `2a-Golden Palace Smart_Vanilla.duf` also adds
+  `GoldenPalace_G9_Shell_Minora`/`_Shell_Majora` and `1-Dicktator_Smart.duf` adds
+  `DicktatorG9_Shell`/`DicktatorG9_ForeskinShell`. Every one of those nodes declares
+  `parent: "name://@selection:"`, so with the figure selected at load time the shells
+  become CHILDREN of the figure and `getNodeChildren(true)` scans them — pick the
+  manual graft and the shells are simply absent from the scene (that shipped in the
+  first cut of the index builder, and shows up as "no geoshells under the figure").
+  The Smart preset also rigs slightly more bones (`l_shin`/`r_shin`/`spine2`), so it
+  yields a richer bone index too.
+- **`DzContentMgr.findFile(rel, DzContentMgr.AllDirsAndCloud)` is the supported way
+  to resolve a content-relative path** (confirmed against Daz's own shipped scripts
+  under `data/resources/Lesson Strips`, which use exactly that two-arg form). Content
+  ROOTS are less certain, so the index builder derives one guaranteed root from its
+  own install location (`<lib>/Scripts/DTH-Character-Studio` → `<lib>`) and treats
+  the `getNumContentDirectories()`/`getContentDirectoryPath(i)` enumeration as
+  typeof-guarded extra. `DzNewAction` is NOT a scriptable "clear the scene" — it opens
+  the New Scene dialog; use `Scene.clear()` (guarded, with a remove-every-root-node
+  fallback).
 - **"Clean" scene `.duf`s carry stray animation keys** (measured 2026-07-27 on the
   Ita_G9_GP doc assets): the JM Nipple product leaves 5 two-key channels on its
   graft's BONES (keys at frames 0 + 7; four value-flat, one actually changing) in
@@ -299,13 +385,16 @@ current code before relying on details, but assume the *lesson* still holds.
   after the morph-autocomplete a11y work, tests locate those cells by
   `combobox`/`option` roles (rom-sections tests hit this). The JCM **bone** field
   (`bone-name-cell.tsx`) is a second such combobox — same query rule applies.
-- **The `Scan_Morphs_<Genesis>` index feeds TWO autocompletes, from ONE file.**
-  `DthScanMorphs.dsa` writes `morphs_<G>.json` (in app-data) with both a `morphs`
-  array (morph dials) and, since index version 2 / RUNTIME_VERSION 34, a `bones`
-  array (every `DzBone`'s `{ name, label }`). `fetchMorphIndex`/`fetchBoneIndex`
+- **The `Build_Genesis_Index` index feeds TWO autocompletes, from ONE file per
+  generation.** `DthScanMorphs.dsa` writes `morphs_<G>.json` (in app-data) with both
+  a `morphs` array (morph dials) and, since index version 2 / RUNTIME_VERSION 34, a
+  `bones` array (every `DzBone`'s `{ name, label }`). `fetchMorphIndex`/`fetchBoneIndex`
   read the two arrays from that same file, cached separately. Bones are otherwise
   skipped by the morph scan (they carry no morph dials). An old (v1) or
-  never-scanned file just yields empty lists — re-run Scan_Morphs in Daz.
+  never-scanned file just yields empty lists — re-run Build_Genesis_Index in Daz.
+  Since runtime v39 ONE run writes all four generations (index `version: 3`, with a
+  `figures` array naming what was scanned); the readers only ever look at `morphs` +
+  `bones`, so the metadata is free to change.
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
   `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
   `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's

@@ -628,6 +628,69 @@ describe('generateAll', () => {
       'Scan_Products_ElectraG9.dsa',
     )
   })
+
+  // Daz shows a script's Content Library tile by name (`<base>.png`), and the host
+  // writes those bytes — but WHICH artwork a script gets follows a rule the core
+  // owns: `ROM_<base>.dsa` is one name for two different scripts, one that also
+  // runs the export and one that doesn't. So the core tags it.
+  describe('script icon tags', () => {
+    const icons = (character: Parameters<typeof generateAll>[0]) =>
+      generateAll(character, {}, FRAMES)
+        .filter((f) => f.target === 'daz')
+        .map((f) => [f.fileName, f.icon])
+
+    it('tags a ROM-only script `rom` when no export directory is set', () => {
+      expect(icons(makeCharacter())).toEqual([['ROM_ElectraG9_G9.dsa', 'rom']])
+    })
+
+    it('tags it `rom-export` once the export rides along (the default)', () => {
+      expect(icons(makeCharacter({ exportPath: 'D:/exports' }))).toEqual([
+        ['ROM_ElectraG9_G9.dsa', 'rom-export'],
+      ])
+    })
+
+    it('splitting the export moves the export tag onto the Export_ script', () => {
+      // The ROM script drops back to `rom` — it no longer exports — and the
+      // standalone script carries `export`. Both tiles change with one toggle.
+      expect(
+        icons(makeCharacter({ exportPath: 'D:/exports', exportWithRomScript: false })),
+      ).toEqual([
+        ['ROM_ElectraG9_G9.dsa', 'rom'],
+        ['Export_ElectraG9_G9.dsa', 'export'],
+      ])
+    })
+
+    it('tags the standalone groom script `export-hair`', () => {
+      // The groom script rides on a scene override that lists hair items
+      // (groomSceneMap) — the rest of the override defaults in via the schema.
+      const character = characterSchema.parse({
+        ...makeCharacter({ exportPath: 'D:/exports' }),
+        scenePath: 'D:/proj/Electra/daz3d/primary/Electra.duf',
+        sceneOverrides: [
+          {
+            scenePath: 'D:/proj/Electra/daz3d/primary/Electra.duf',
+            hair: [{ nodeLabel: 'Ponytail' }],
+          },
+        ],
+      })
+      expect(icons(character)).toEqual([
+        ['ROM_ElectraG9_G9.dsa', 'rom-export'],
+        ['Export_Hair_ElectraG9_G9.dsa', 'export-hair'],
+      ])
+    })
+
+    it('leaves the product-scan script untagged — it has no artwork of its own', () => {
+      const files = generateAll(makeCharacter(), {}, FRAMES, undefined, undefined, {
+        dimManifestPath: 'E:/DIM/ManifestFiles',
+        outputDir: 'C:/data/product-scans/proj/char',
+        dazLibraryFolder: 'D:/DAZ 3D/My DAZ 3D Library',
+      })
+      const scan = files.find((f) => f.fileName.startsWith('Scan_Products_'))
+      expect(scan?.icon).toBeUndefined()
+      // …and the CSV, which isn't a Daz script at all.
+      expect(files.find((f) => f.target === 'houdini')?.icon).toBeUndefined()
+    })
+  })
 })
 
 describe('resolveRomPaths', () => {

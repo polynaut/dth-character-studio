@@ -278,7 +278,7 @@ function CharacterPage() {
     { immediate: true },
   )
 
-  // The scanned morph index for this generation (Scan_Morphs_<Genesis>.dsa →
+  // The scanned morph index for this generation (Build_Genesis_Index.dsa →
   // app-data JSON) powering the Morph-name autocomplete. Loaded on mount and
   // re-read on window focus, so a scan just run in Daz is offered immediately.
   const [morphIndex, setMorphIndex] = useState<Array<MorphIndexEntry>>([])
@@ -297,7 +297,7 @@ function CharacterPage() {
     { immediate: true },
   )
 
-  // The scanned bones for this generation (same Scan_Morphs_<Genesis> index as
+  // The scanned bones for this generation (same Build_Genesis_Index index as
   // the morphs), powering the bone autocomplete in the JCM editor. Same
   // load-on-focus + content-compare rationale as the morph index above.
   const [boneIndex, setBoneIndex] = useState<Array<BoneIndexEntry>>([])

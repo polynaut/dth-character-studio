@@ -190,6 +190,19 @@ export async function writeFilesToFolder(
   await Promise.all(files.map((file) => writeTextFile(join(folder, file.fileName), file.content)))
 }
 
+/**
+ * Decode a bundled `?inline` asset (a `data:…;base64,…` URL) to bytes. Vite
+ * inlines the studio's Daz artwork that way, so installing it needs no asset
+ * fetch — which the app's strict CSP would block anyway.
+ */
+export function dataUrlBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
 /** Remove the named files from a folder if present (no error when missing). */
 export async function removeFilesFromFolder(
   folder: string,
