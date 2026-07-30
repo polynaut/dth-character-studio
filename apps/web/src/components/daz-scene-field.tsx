@@ -42,8 +42,8 @@ import {
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
-import { detectedHairLabels } from '#/lib/groom-detect.ts'
-import { genesisFromFigureNode, sceneOverrideSchema } from '@dth/rom'
+import { seedSceneHair } from '#/lib/groom-detect.ts'
+import { genesisFromFigureNode } from '@dth/rom'
 
 import type { CharacterLocation, SceneWearables } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -556,7 +556,21 @@ export function DazSceneField({
               },
             })
           : scene
-        return { extraScenes: [...character.extraScenes, finalScene] }
+        const patch: Partial<Character> = {
+          extraScenes: [...character.extraScenes, finalScene],
+        }
+        // Pre-select the added scene's own hair, exactly like creation and the
+        // first primary link. An outfit variant is THE case that brings its own
+        // hair, so skipping it here left every added scene one manual wand-click
+        // away from leaking that hair into the FBX. Scanned on the FINAL path —
+        // the record keys on it, and a copy-in changes it.
+        const seeded = seedSceneHair(
+          finalScene,
+          await sceneWearables({ data: { scenePath: finalScene } }),
+          character.sceneOverrides,
+        )
+        if (seeded) patch.sceneOverrides = seeded
+        return patch
       },
       { toast: 'Added Daz scene' },
     )
@@ -632,19 +646,9 @@ export function DazSceneField({
             patch.genesis = detected.genesis
             toast.info(`Genesis set to ${detected.genesis} — read from the linked scene.`)
           }
-          // Pre-select the scene's detected hair (same heuristic as creation)
-          // so the export excludes it from day one — trim in the editor if the
-          // guess overshoots.
-          const hair = scan.error === '' ? detectedHairLabels(scan.items) : []
-          if (hair.length > 0 && !character.sceneOverrides.some((o) => o.scenePath === finalScene)) {
-            patch.sceneOverrides = [
-              ...character.sceneOverrides,
-              {
-                ...sceneOverrideSchema.parse({ scenePath: finalScene }),
-                hair: hair.map((nodeLabel) => ({ nodeLabel })),
-              },
-            ]
-          }
+          // Pre-select the scene's detected hair, the one shared rule.
+          const seeded = seedSceneHair(finalScene, scan, character.sceneOverrides)
+          if (seeded) patch.sceneOverrides = seeded
         }
         return patch
       },

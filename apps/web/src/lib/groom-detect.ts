@@ -1,11 +1,14 @@
+import { sceneOverrideSchema } from '@dth/rom'
+
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
+import type { SceneOverride } from '@dth/rom'
 
 /**
  * The groom-candidate heuristic over a scene's `scene_wearables` read, shared
- * by the editor's hair picker (groom-fields) and character creation (which
- * pre-selects the primary scene's detected hair). Pure — the scene `.duf`
- * only gives us labels, so "hair" is a best-effort label match, not
- * authoritative.
+ * by the editor's hair picker (groom-fields) and every path that links a scene
+ * to a character (which pre-selects that scene's detected hair — see
+ * {@link seedSceneHair}). Pure — the scene `.duf` only gives us labels, so
+ * "hair" is a best-effort label match, not authoritative.
  */
 
 /** Hair-ish labels — also floats these to the top of the groom suggestions.
@@ -48,7 +51,41 @@ export function groomCandidates(items: Array<SceneWearable>): Array<string> {
 }
 
 /** The candidates that read as hair — what "Select all detected hair items"
- *  picks, and what creation pre-selects from the primary scene. */
+ *  picks, and what a newly linked scene pre-selects. */
 export function detectedHairLabels(items: Array<SceneWearable>): Array<string> {
   return groomCandidates(items).filter((label) => HAIRISH.test(label))
+}
+
+/**
+ * THE single rule for pre-selecting a newly linked scene's hair — used by all
+ * three ways a scene reaches a character: creation (api/characters), the
+ * first link of a primary, and ADDING an extra scene. It used to be inlined at
+ * the first two and simply missing at the third, which is the one where it
+ * matters most: an outfit variant is exactly the scene that brings its own
+ * hair, and unlisted hair rides into the FBX.
+ *
+ * Returns the scene's new `sceneOverrides` array, or **null** when there is
+ * nothing to do — an unreadable scan, no detected hair, or a record that
+ * already exists for this scene (never clobber a list the user curated, or one
+ * a re-add would overwrite).
+ *
+ * Best-effort by nature: the `.duf` only yields labels, so the guess can
+ * overshoot — the editor's picker is where it gets trimmed.
+ */
+export function seedSceneHair(
+  scenePath: string,
+  scan: { items: Array<SceneWearable>; error: string },
+  existing: ReadonlyArray<SceneOverride>,
+): Array<SceneOverride> | null {
+  if (scan.error !== '') return null
+  if (existing.some((o) => o.scenePath === scenePath)) return null
+  const hair = detectedHairLabels(scan.items)
+  if (hair.length === 0) return null
+  return [
+    ...existing,
+    {
+      ...sceneOverrideSchema.parse({ scenePath }),
+      hair: hair.map((nodeLabel) => ({ nodeLabel })),
+    },
+  ]
 }
