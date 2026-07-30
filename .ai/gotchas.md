@@ -279,6 +279,21 @@ current code before relying on details, but assume the *lesson* still holds.
   `LongPathsEnabled` registry bit is set** — which is why the walkers ALSO count
   unreadable entries (`read_errors`) and dedup refuses to quarantine any group
   whose scan was incomplete.
+- **Windows refuses to rename a DIRECTORY while any file INSIDE it is open in
+  another process** — `ERROR_ACCESS_DENIED (os error 5)`, not the sharing
+  violation you'd expect, and it names neither the open file nor the process.
+  A character-folder rename hits this constantly: the linked `.duf` is usually
+  still open in Daz Studio. Measured from a report on a Perforce workspace; the
+  studio itself was NOT the holder (scene previews and avatars are `readFile`'d
+  into data URLs — `api/avatars.ts` — so the webview keeps no handle, and the
+  Rust crate has no watcher and never `set_current_dir`s). Detection keys off
+  the `(os error 5|32)` suffix, never the message text: `std::io::Error`'s
+  wording is localized by Windows, so "Access is denied" only appears on an
+  English install (`isLockedPathError`, `storage/fs.ts`). Transient holders (AV,
+  search indexer) clear within a few hundred ms, so `renameWithRetry` absorbs
+  them; a persistent one gets the mapped "close it in Daz Studio" message from
+  `renameCharacterPath` (`storage/characters.ts`). The rename is the FIRST write
+  in `saveCharacter`, so a failure aborts the save cleanly — never half-renamed.
 
 ## Web app
 

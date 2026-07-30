@@ -150,6 +150,56 @@ export async function walkFilesStrict(
 }
 
 /**
+ * Whether a failed fs call is Windows refusing because something else holds the
+ * path (or a file INSIDE it, for a directory) open.
+ *
+ * Matched on the raw OS error NUMBER, not the message: `std::io::Error`'s text
+ * is localized by Windows, so "Access is denied" only appears on an
+ * English install — the `(os error N)` suffix Rust appends is not. 5 =
+ * ERROR_ACCESS_DENIED (the usual one for a directory whose descendant is open),
+ * 32 = ERROR_SHARING_VIOLATION (the usual one for a single locked file). The
+ * English texts stay as a fallback in case a future plugin version reformats
+ * the error and drops the numeric suffix.
+ */
+export function isLockedPathError(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error)
+  return (
+    /\(os error (?:5|32)\)/.test(text) ||
+    /access is denied|being used by another process|sharing violation/i.test(text)
+  )
+}
+
+/**
+ * Rename that survives a TRANSIENT lock. An antivirus scan, the Windows Search
+ * indexer or a sync client can hold a file for a few hundred milliseconds, and
+ * `std::fs::rename` (what plugin-fs calls) fails outright when it does — so
+ * retry a locked rename a couple of times before giving up. A NON-lock failure
+ * (destination exists, path too long, …) throws on the first attempt: retrying
+ * it would only delay the same error.
+ *
+ * The error a caller finally sees is untouched — mapping it to something
+ * user-facing is the caller's job, since only the caller knows WHAT was being
+ * renamed (see `renameCharacterPath` in ./characters).
+ *
+ * `delaysMs` is injectable so tests don't actually wait.
+ */
+export async function renameWithRetry(
+  from: string,
+  to: string,
+  delaysMs: ReadonlyArray<number> = [120, 300],
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(from, to)
+      return
+    } catch (error) {
+      if (attempt >= delaysMs.length || !isLockedPathError(error)) throw error
+      await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]))
+    }
+  }
+}
+
+/**
  * Durably replace a text file: write the content to a temp file in the SAME
  * directory, then rename it over the target — a crash or lost network share
  * mid-write can no longer leave a half-written (torn) file where a good one
