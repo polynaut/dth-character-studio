@@ -336,9 +336,11 @@ export function HoudiniProjectsField({
       label="Drop Houdini project(s) to link"
       className="rounded-lg"
     >
-      <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1`}>
+      {/* Same title treatment as the "Daz scenes" section — the two section
+          headers sit stacked in the scenes tab and must read as peers. */}
+      <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1 text-xl font-semibold`}>
         Houdini projects
-        <InfoPopup label="Houdini projects — more information" className="-translate-y-px">
+        <InfoPopup label="Houdini projects — more information">
           Linked in place (not copied) — a Houdini project keeps absolute import paths that a
           copy would break. Drag <code>.hip</code> files here or use the button.
         </InfoPopup>
