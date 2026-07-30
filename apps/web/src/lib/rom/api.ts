@@ -115,7 +115,9 @@ export {
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  generateRomAnimation,
   openSceneInRunningDaz,
+  romAnimationFresh,
 } from './api/execute'
 export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
 

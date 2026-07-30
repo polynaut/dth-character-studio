@@ -14,7 +14,9 @@ import {
   openSceneJobFileJson,
   parseExecuteStamps,
   parseJobFileJson,
+  romAnimationPath,
 } from '../execute-jobs'
+import { BUILD_ROM_ANIMATION_SCRIPT } from '@dth/rom'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../execute-jobs'
@@ -484,4 +486,85 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     dazLaunched = true
   }
   return { jobFile, scenes, dazLaunched, dazWasRunning }
+}
+
+const generateRomInput = charScopeInput.extend({
+  /** The linked scene to build + save the ROM animation for. */
+  scenePath: z.string().min(1),
+})
+
+/**
+ * Hand a ROM-ANIMATION build for ONE scene to the Runner: a one-row
+ * bulk-export batch pointing at the hidden ROM-only script
+ * ({@link BUILD_ROM_ANIMATION_SCRIPT}, runtime v43) — it builds the ROM and
+ * saves the reopenable `.ROM_Animations/<stem>_ROM.duf`, exporting nothing.
+ * The scene card polls for that file (its path is returned) and opens it when
+ * it appears. Same handoff mechanics as {@link executeCharacterJobs} — stale
+ * `running_` cleanup, Daz launched when closed — but NO handoff stamps: this
+ * run delivers no export, so it must not mark the scene "exported".
+ */
+export async function generateRomAnimation({
+  data,
+}: {
+  data: unknown
+}): Promise<{ romPath: string; dazWasRunning: boolean; startedAt: number }> {
+  const { projectId, id, scenePath } = generateRomInput.parse(data)
+  if (!isTauri()) throw new Error('Generating a ROM animation needs the desktop app.')
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) {
+    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the generated scripts live there.')
+  }
+  const { project, character } = await loadCharacter(projectId, id)
+  const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  const scene = linked.find((s) => normalizeSceneKey(s) === normalizeSceneKey(scenePath))
+  if (!scene) throw new Error(`The scene is not linked to this character anymore:\n${scenePath}`)
+  const scriptPath = joinPath(
+    storage.studioCharScriptsDir(settings.dazLibraryFolder, project.name, character.name),
+    BUILD_ROM_ANIMATION_SCRIPT,
+  )
+  if (!(await exists(scriptPath))) {
+    throw new Error(
+      `The generated script is missing:\n${scriptPath}\nSave the character to regenerate it, then try again.`,
+    )
+  }
+  const paths = await exporterJobFilePaths()
+  if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  // One global job file, one batch at a time — never clobber an export handoff.
+  if (await exists(paths.pending)) {
+    throw new Error('An export batch is waiting for Daz Studio — let it start (or abort it) first.')
+  }
+  if (await exists(paths.running)) {
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      // Unreadable or torn: assume a live batch — refusing is the safe guess.
+      .catch(() => false)
+    if (!finished) {
+      throw new Error('Daz Studio is working through an export batch — try again when it finishes.')
+    }
+    await remove(paths.running).catch(() => {})
+  }
+  await storage.writeTextFileAtomic(paths.pending, jobFileJson([{ scenePath: scene, scriptPath }]))
+  const startedAt = Date.now()
+  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
+  if (!dazWasRunning) await invoke<string>('launch_daz_studio')
+  return { romPath: romAnimationPath(scene), dazWasRunning, startedAt }
+}
+
+/**
+ * Whether the saved ROM animation at `romPath` is FRESH — written at/after
+ * `sinceMs`. The generate flow polls this instead of bare existence, because a
+ * regenerate OVERWRITES an existing file: only a new mtime means the Daz run
+ * saved. Best-effort false (missing file, unreadable stat).
+ */
+export async function romAnimationFresh({ data }: { data: unknown }): Promise<boolean> {
+  const { romPath, sinceMs } = z
+    .object({ romPath: z.string().min(1), sinceMs: z.number() })
+    .parse(data)
+  if (!isTauri()) return false
+  try {
+    const info = await stat(romPath)
+    return (info.mtime?.getTime() ?? 0) >= sinceMs
+  } catch {
+    return false
+  }
 }

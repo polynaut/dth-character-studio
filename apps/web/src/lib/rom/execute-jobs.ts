@@ -137,6 +137,23 @@ export function openSceneJobFileJson(scenePath: string): string {
 }
 
 /**
+ * Where a scene's saved ROM animation lives:
+ * `<scene dir>/.ROM_Animations/<stem>_ROM.duf` — the copy every ROM-building
+ * script saves after a clean build (runtime v42, `DzFileInfo.completeBaseName`
+ * semantics: everything before the LAST dot). One computation shared by the
+ * scene card's probe/open and the generate flow.
+ */
+export function romAnimationPath(scenePath: string): string {
+  const norm = scenePath.replace(/\\/g, '/')
+  const slash = norm.lastIndexOf('/')
+  const dir = slash >= 0 ? norm.slice(0, slash) : '.'
+  const file = norm.slice(slash + 1)
+  const dot = file.lastIndexOf('.')
+  const stem = dot > 0 ? file.slice(0, dot) : file
+  return `${dir}/.ROM_Animations/${stem}_ROM.duf`
+}
+
+/**
  * The generated script(s) a scene must run, in run order — always just the
  * hidden BULK script ({@link BULK_ROM_EXPORT_SCRIPT}, runtime v40): it selects
  * the open scene's overrides itself and always builds the ROM AND exports

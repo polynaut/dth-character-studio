@@ -7,7 +7,7 @@ import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, Switch, useModifierHeld } from '@dth/ui'
+import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, Switch, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -19,14 +19,19 @@ import {
   dazStudioRunning,
   deleteFiles,
   fetchCharactersWithProblems,
+  fetchExecuteScenes,
+  fileExists,
+  generateRomAnimation,
   moveCharacterScenesFolder,
   openScene,
   openSceneInRunningDaz,
   renameDazScene,
   revealPath,
   relinkScene,
+  romAnimationFresh,
   sceneWearables,
 } from '#/lib/rom/api.ts'
+import { romAnimationPath } from '#/lib/rom/execute-jobs.ts'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
 import {
   charactersLinkedScenes,
@@ -149,6 +154,74 @@ function SceneCard({
       selected={selected}
       onSelect={onSelect}
     />
+  )
+}
+
+/**
+ * The tiny two-entry menu under a scene card's Open button: "Open Original"
+ * (the scene itself) and the ROM-animation entry — "Open ROM Animation" when
+ * the saved `.ROM_Animations/<stem>_ROM.duf` exists and is current, "Open and
+ * Generate ROM Animation" when it is missing, STALE (the scene is affected
+ * since its last handoff), or Ctrl is held (force a rebuild — the save
+ * overwrites). Closes on outside click / Escape.
+ */
+function SceneOpenMenu({
+  onOpenOriginal,
+  onOpenRom,
+  onGenerateRom,
+  romReady,
+  generating,
+  onClose,
+}: {
+  onOpenOriginal: () => void
+  onOpenRom: () => void
+  onGenerateRom: () => void
+  /** The saved ROM animation exists, is current, and Ctrl isn't held. */
+  romReady: boolean
+  generating: boolean
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+  const item =
+    'block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:hover:bg-transparent'
+  return (
+    <div
+      ref={ref}
+      className="absolute right-1 top-full z-30 mt-1 w-max rounded-md border bg-popover p-1 shadow-md"
+    >
+      <button type="button" className={item} onClick={onOpenOriginal}>
+        Open Original
+      </button>
+      {romReady ? (
+        <button type="button" className={item} onClick={onOpenRom}>
+          Open ROM Animation
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={item}
+          disabled={generating}
+          title="Opens the scene in Daz Studio, builds the ROM and saves it as the reopenable ROM animation"
+          onClick={onGenerateRom}
+        >
+          {generating ? 'Generating ROM Animation…' : 'Open and Generate ROM Animation'}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -285,6 +358,81 @@ export function DazSceneField({
   const scenesRootRel = deriveScenesRootRel(primaryDirRel, defaultSubdir)
   const baseDazRel = scenesRootRel || defaultSubdir
 
+  // ── Open-in-Daz dropdown: Original vs ROM animation ─────────────────────
+  // The card's open button shows a two-entry menu (Alt+click keeps the direct
+  // Explorer reveal). The second entry opens the scene's saved
+  // `.ROM_Animations/<stem>_ROM.duf` when it exists AND is current — a scene
+  // "affected" since its last handoff has a STALE saved ROM, and Ctrl forces a
+  // rebuild — otherwise it reads "Open and Generate ROM Animation": a one-row
+  // Runner batch on the hidden ROM-only script, then the fresh file opens by
+  // itself.
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [romSet, setRomSet] = useState<ReadonlySet<string>>(new Set())
+  const [affectedSet, setAffectedSet] = useState<ReadonlySet<string>>(new Set())
+  const [generatingRom, setGeneratingRom] = useState('')
+  const ctrlHeld = useModifierHeld('Control')
+  const romScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  const romScenesKey = romScenes.join('|')
+  useRefetchOnFocus(
+    () => {
+      void (async () => {
+        const checks = await Promise.all(
+          romScenes.map(
+            async (s) => [s, await fileExists({ data: { path: romAnimationPath(s) } })] as const,
+          ),
+        )
+        setRomSet(new Set(checks.filter(([, ok]) => ok).map(([s]) => s)))
+        try {
+          const status = await fetchExecuteScenes({ data: { projectId, id: character.id } })
+          setAffectedSet(new Set(status.filter((s) => s.affected).map((s) => s.scenePath)))
+        } catch {
+          // Stamps unreadable — treat nothing as affected; the saved ROM still opens.
+        }
+      })()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [romScenesKey],
+    { immediate: true },
+  )
+
+  function onOpenClick(scenePath: string, e?: React.MouseEvent) {
+    if (e?.altKey) {
+      void onOpen(scenePath, e) // the reveal shortcut stays direct
+      return
+    }
+    setMenuFor((current) => (current === scenePath ? null : scenePath))
+  }
+
+  async function onGenerateRom(scene: string) {
+    setMenuFor(null)
+    setGeneratingRom(scene)
+    try {
+      const { romPath, dazWasRunning, startedAt } = await generateRomAnimation({
+        data: { projectId, id: character.id, scenePath: scene },
+      })
+      toast.success(
+        dazWasRunning
+          ? 'Daz Studio is building the ROM animation — it opens by itself once saved.'
+          : 'Started Daz Studio — the ROM animation opens by itself once saved.',
+      )
+      // Freshness (mtime ≥ handoff), not existence: a regenerate OVERWRITES.
+      const deadline = Date.now() + 30 * 60_000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        if (await romAnimationFresh({ data: { romPath, sinceMs: startedAt } })) {
+          setRomSet((prev) => new Set(prev).add(scene))
+          await onOpen(romPath)
+          return
+        }
+      }
+      toast.warning('The ROM animation never appeared — check the run in Daz Studio.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setGeneratingRom('')
+    }
+  }
+
   // Alt+click = the app-wide "show in Explorer" hotkey (same as path chips
   // and the Unreal cards); plain click opens the scene in Daz.
   async function onOpen(scenePath: string, e?: React.MouseEvent) {
@@ -319,6 +467,14 @@ export function DazSceneField({
         } catch (err) {
           toast.dismiss(handing)
           throw err
+        }
+        // No pickup. A "running" Daz that ignored the handoff is often one
+        // that was CLOSING when we looked (the process lingers a while after
+        // close) — if it is gone by now, just launch fresh instead of showing
+        // the "close Daz first" dialog for a Daz that already closed.
+        if (!(await dazStudioRunning())) {
+          await openScene({ data: { scenePath } })
+          return
         }
         setDazWarn(scenePath)
         return
@@ -1046,21 +1202,43 @@ export function DazSceneField({
             <div className="mb-2 text-xs">{sceneDirChip}</div>
             <div ref={cardsRef} className="flex flex-wrap items-stretch gap-3">
               {ready ? (
-                <SceneCard
-                  scenePath={character.scenePath}
-                  name={character.name}
-                  onOpen={(e) => void onOpen(character.scenePath, e)}
-                  onRename={
-                    insideCharFolder(character.scenePath)
-                      ? (next) => renameLinkedScene(character.scenePath, next)
-                      : undefined
-                  }
-                  onReplace={busy ? undefined : () => void onReplacePick()}
-                  primary
-                  selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
-                  onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
-                  pathChip={sceneLocationChip(character.scenePath)}
-                />
+                <div className="relative">
+                  <SceneCard
+                    scenePath={character.scenePath}
+                    name={character.name}
+                    onOpen={(e) => onOpenClick(character.scenePath, e)}
+                    onRename={
+                      insideCharFolder(character.scenePath)
+                        ? (next) => renameLinkedScene(character.scenePath, next)
+                        : undefined
+                    }
+                    onReplace={busy ? undefined : () => void onReplacePick()}
+                    primary
+                    selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
+                    onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
+                    pathChip={sceneLocationChip(character.scenePath)}
+                  />
+                  {menuFor === character.scenePath && (
+                    <SceneOpenMenu
+                      onOpenOriginal={() => {
+                        setMenuFor(null)
+                        void onOpen(character.scenePath)
+                      }}
+                      onOpenRom={() => {
+                        setMenuFor(null)
+                        void onOpen(romAnimationPath(character.scenePath))
+                      }}
+                      onGenerateRom={() => void onGenerateRom(character.scenePath)}
+                      romReady={
+                        romSet.has(character.scenePath) &&
+                        !affectedSet.has(character.scenePath) &&
+                        !ctrlHeld
+                      }
+                      generating={generatingRom === character.scenePath}
+                      onClose={() => setMenuFor(null)}
+                    />
+                  )}
+                </div>
               ) : (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 py-8 text-sm text-muted-foreground">
                   Primary scene missing.
@@ -1070,19 +1248,36 @@ export function DazSceneField({
                 </div>
               )}
               {character.extraScenes.map((scene) => (
-                <SceneCard
-                  key={scene}
-                  scenePath={scene}
-                  name={character.name}
-                  onOpen={(e) => void onOpen(scene, e)}
-                  onRename={
-                    insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
-                  }
-                  onRemove={() => askRemove(scene)}
-                  selected={selectedScene !== undefined ? selectedScene === scene : undefined}
-                  onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
-                  pathChip={sceneLocationChip(scene)}
-                />
+                <div key={scene} className="relative">
+                  <SceneCard
+                    scenePath={scene}
+                    name={character.name}
+                    onOpen={(e) => onOpenClick(scene, e)}
+                    onRename={
+                      insideCharFolder(scene) ? (next) => renameLinkedScene(scene, next) : undefined
+                    }
+                    onRemove={() => askRemove(scene)}
+                    selected={selectedScene !== undefined ? selectedScene === scene : undefined}
+                    onSelect={onSelectScene ? () => onSelectScene(scene) : undefined}
+                    pathChip={sceneLocationChip(scene)}
+                  />
+                  {menuFor === scene && (
+                    <SceneOpenMenu
+                      onOpenOriginal={() => {
+                        setMenuFor(null)
+                        void onOpen(scene)
+                      }}
+                      onOpenRom={() => {
+                        setMenuFor(null)
+                        void onOpen(romAnimationPath(scene))
+                      }}
+                      onGenerateRom={() => void onGenerateRom(scene)}
+                      romReady={romSet.has(scene) && !affectedSet.has(scene) && !ctrlHeld}
+                      generating={generatingRom === scene}
+                      onClose={() => setMenuFor(null)}
+                    />
+                  )}
+                </div>
               ))}
             </div>
             <Button
