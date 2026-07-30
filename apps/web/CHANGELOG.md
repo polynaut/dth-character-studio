@@ -1,5 +1,25 @@
 # @dth/web
 
+## 0.55.0
+
+### Minor Changes
+
+- [#612](https://github.com/polynaut/dth-character-studio/pull/612) [`86bf55e`](https://github.com/polynaut/dth-character-studio/commit/86bf55e19e1b5db6b168da839259c626de044295) Thanks [@polynaut](https://github.com/polynaut)! - feat(rom,web): the scene card's **Open in Daz** now offers the saved ROM animation. Clicking the open button shows a small menu: **Open Original**, and **Open ROM Animation** when the scene's saved `.ROM_Animations/<stem>_ROM.duf` exists and is current — when it's missing, stale (the scene changed since its last handoff) or **Ctrl** is held, the entry reads **Open and Generate ROM Animation**: the Runner opens the scene, builds the ROM through the new hidden ROM-only script (`.Build_ROM_Animation.dsa`, runtime v43 — no export), and the freshly saved animation opens by itself. Also: an open-scene handoff whose Daz turned out to be closing now launches Daz directly once the process is gone, instead of showing the close-Daz dialog.
+
+### Patch Changes
+
+- [#608](https://github.com/polynaut/dth-character-studio/pull/608) [`9847855`](https://github.com/polynaut/dth-character-studio/commit/984785532cf87390343a96f8ae65c1ecfb009322) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): **an added Daz scene now pre-selects its own hair items.** Creating a character and linking its first scene both filled the hair list from what the scene actually carries — but _Add scene_ didn't, so every outfit variant started empty. That is the case where it matters most: an outfit scene is usually the one bringing its own hair, and hair that isn't listed rides straight into the FBX instead of being hidden for the ROM export. Adding a scene now seeds the same detected list, ready to trim in the editor.
+
+  Re-adding a scene that already has a hair list never overwrites it, and an unreadable scene still seeds nothing rather than claiming the scene is hairless.
+
+- [#613](https://github.com/polynaut/dth-character-studio/pull/613) [`db03ed0`](https://github.com/polynaut/dth-character-studio/commit/db03ed0636fd62dc33befa01a40d8f71c08cc3f9) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the header avatar follows a replaced primary scene again. A scene-snapshot avatar whose source scene left the linked list (a replaced primary whose tip copy failed at relink time, a renamed extra) made the focus-driven avatar sync bail forever — the scene card showed the new look while the header kept the old one. The sync now adopts the primary and re-derives (the same self-heal as lost provenance; uploads stay untouched), and a scene rename repoints the avatar's provenance for extra scenes too, not just the primary.
+
+- [#610](https://github.com/polynaut/dth-character-studio/pull/610) [`51850d5`](https://github.com/polynaut/dth-character-studio/commit/51850d51f4e44cc0fba33ca4564760c3bbd80eea) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): DTH Export no longer strands the batch when Daz Studio is still shutting down. Pressing Start while the just-closed Daz process lingers used to hand the jobs to an instance that would never pick them up (and a fresh launch would die against the dying single instance) — nothing happened. The studio now watches for the Runner's claim; when it doesn't come, a "Waiting for Daz Studio to close…" dialog takes over and starts Daz automatically the moment the process is really gone — the queued batch begins by itself. The batch stays abortable throughout.
+
+- Updated dependencies [[`86bf55e`](https://github.com/polynaut/dth-character-studio/commit/86bf55e19e1b5db6b168da839259c626de044295)]:
+  - @dth/rom@0.55.0
+  - @dth/ui@0.55.0
+
 ## 0.54.0
 
 ### Minor Changes
