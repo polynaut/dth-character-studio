@@ -743,7 +743,14 @@ async function doSyncAvatarWithScene(
     source &&
     !linked.some((scene) => normalizePathLower(scene) === normalizePathLower(source))
   ) {
-    return null
+    // The source LEFT the linked list — a replaced primary whose tip copy
+    // failed at relink time, a renamed/unlinked extra. A scene-SNAPSHOT
+    // avatar ('sc') must not die with its provenance (the sync would bail
+    // here forever while the header shows the old look): adopt the primary
+    // and fall through to the drift rewrite, the same self-heal as the
+    // no-provenance case below. Uploads/external images are never touched.
+    if (parseAvatarName(character.image)?.kind !== 'sc' || !character.scenePath) return null
+    source = character.scenePath
   }
   if (!source) {
     const avatar = await readAvatar()
