@@ -181,8 +181,19 @@ let activeRun: ActiveExportRun | null = null
 export type ExportRunProgress =
   /** Daz hasn't picked the file up yet (it can still be aborted). */
   | { state: 'pending'; characterId: string; total: number }
-  /** The Runner renamed the file and is working — `progress` is its 0–100. */
-  | { state: 'running'; characterId: string; total: number; progress: number; done: number; failed: number }
+  /** The Runner renamed the file and is working. `processed` = rows already
+   *  worked (done + failed; the Runner-written `jobsDone` when present) — what
+   *  the button shows as "Exporting 1/2". `progress` (0–100) stays the finish
+   *  signal only. */
+  | {
+      state: 'running'
+      characterId: string
+      total: number
+      progress: number
+      processed: number
+      done: number
+      failed: number
+    }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
       state: 'finished'
@@ -220,13 +231,16 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
       if (!(await exists(paths.running))) return null
       const parsed = parseJobFileJson(await readTextFile(paths.running))
       if (!parsed || parsed.type !== 'bulk-export' || parsed.progress >= 100) return null
+      const done = parsed.jobs.filter((j) => j.status === 'done').length
+      const failed = parsed.jobs.filter((j) => j.status === 'failed').length
       return {
         state: 'running',
         characterId: '',
         total: parsed.jobs.length,
         progress: parsed.progress,
-        done: parsed.jobs.filter((j) => j.status === 'done').length,
-        failed: parsed.jobs.filter((j) => j.status === 'failed').length,
+        processed: parsed.jobsDone ?? done + failed,
+        done,
+        failed,
       }
     } catch {
       return null
@@ -240,7 +254,15 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
       const parsed = parseJobFileJson(await readTextFile(paths.running))
       if (!parsed) {
         // Torn read mid-rewrite — report "still running" and retry next poll.
-        return { state: 'running', characterId: run.characterId, total: run.total, progress: 0, done: 0, failed: 0 }
+        return {
+          state: 'running',
+          characterId: run.characterId,
+          total: run.total,
+          progress: 0,
+          processed: 0,
+          done: 0,
+          failed: 0,
+        }
       }
       const done = parsed.jobs.filter((j) => j.status === 'done').length
       const failed = parsed.jobs.filter((j) => j.status === 'failed').length
@@ -278,6 +300,7 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
         characterId: run.characterId,
         total: parsed.jobs.length || run.total,
         progress: parsed.progress,
+        processed: parsed.jobsDone ?? done + failed,
         done,
         failed,
       }

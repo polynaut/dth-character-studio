@@ -84,7 +84,12 @@ content directory** for that relative path and process the first file it finds.
   types: treat as foreign (log, leave).
 - `progress` is the whole-batch progress **0–100**. The studio writes `0`;
   after the rename (below) the **plugin owns it** and updates it as rows
-  complete. The studio only ever reads it.
+  complete. The studio only ever reads it — as the FINISH signal (delete at
+  100); its UI shows `jobsDone` instead.
+- `jobsDone` (Runner v1.1.1+) — rows already processed (done + failed),
+  written by the plugin on every rewrite, computed from the row statuses so
+  the two can never disagree. Absent on the studio-written pending file and
+  from older Runners; a reader without it derives the count from the statuses.
 - `jobs` is the ordered row array — run top to bottom. Per row:
   - `scenePath`: absolute `.duf` to open (full replace, never saving) — or
     **empty**, meaning the script runs in a **new empty scene** the plugin must

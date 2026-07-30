@@ -80,8 +80,13 @@ export interface ExporterJobFile {
   version: 1
   /** What this batch does — see {@link ExporterJobType}. */
   type: ExporterJobType
-  /** Whole-batch progress 0–100, Runner-owned after the rename. */
+  /** Whole-batch progress 0–100, Runner-owned after the rename. Kept as the
+   *  finish signal (the studio deletes at 100); the UI shows {@link jobsDone}. */
   progress: number
+  /** Rows already processed (done + failed) — Runner-written (v1.1.1+) on
+   *  every rewrite; absent on the studio-written pending file and on older
+   *  Runners (the reader then derives it from the row statuses). */
+  jobsDone?: number
   jobs: Array<ExporterJobEntry>
 }
 
@@ -388,7 +393,13 @@ export function parseJobFileJson(text: string): ExporterJobFile | null {
       })
     }
     const progress = typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0
-    return { version: 1, type, progress, jobs }
+    // The Runner-written processed counter (v1.1.1+) — older files derive it
+    // from the row statuses at the call site.
+    const jobsDone =
+      typeof raw.jobsDone === 'number'
+        ? Math.max(0, Math.min(jobs.length, Math.floor(raw.jobsDone)))
+        : undefined
+    return { version: 1, type, progress, ...(jobsDone !== undefined ? { jobsDone } : {}), jobs }
   } catch {
     return null
   }

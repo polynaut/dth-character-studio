@@ -30,6 +30,7 @@ import {
   launchDazForPendingJobs,
   openScene,
 } from '#/lib/rom/api.ts'
+import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
@@ -162,6 +163,13 @@ export function DthExportAction({
     // character.id, which is constant for a mounted editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watching])
+  // While the Runner works the batch, the whole app carries the OS progress
+  // cursor — "it's working" is visible wherever the mouse is.
+  const running = progress !== null
+  useEffect(() => {
+    if (!running) return
+    return holdBusyCursor()
+  }, [running])
 
   async function onAbort() {
     setAborting(true)
@@ -201,9 +209,11 @@ export function DthExportAction({
           dismissExportRun()
           setProgress(null)
         }}
-        title={`Daz Studio is working the batch — ${progress.done + progress.failed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching.`}
+        title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching.`}
       >
-        <Loader2 className="animate-spin" /> Exporting {progress.progress}%
+        {/* Processed count, not the percent — the % only moved in row-sized
+            jumps anyway (the Runner's progress is rows ÷ total). */}
+        <Loader2 className="animate-spin" /> Exporting {progress.processed}/{progress.total}
       </Button>
     )
   }

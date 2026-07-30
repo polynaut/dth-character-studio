@@ -25,3 +25,20 @@ export async function withBusyCursor<T>(work: Promise<T>): Promise<T> {
     update()
   }
 }
+
+/**
+ * Hold the busy cursor for a long-lived STATE rather than one promise — a
+ * Runner export batch being watched, say. Returns the release; calling it more
+ * than once is safe (React effect cleanups can be paranoid).
+ */
+export function holdBusyCursor(): () => void {
+  active += 1
+  update()
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    active -= 1
+    update()
+  }
+}
