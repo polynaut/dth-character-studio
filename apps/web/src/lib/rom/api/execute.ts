@@ -702,6 +702,79 @@ export async function generateRomAnimation({
   return { romPath: romAnimationPath(scene), dazWasRunning, startedAt }
 }
 
+/** A file's mtime in ms, or 0 when it doesn't exist / can't be stat'ed. */
+async function mtimeOf(path: string): Promise<number> {
+  try {
+    return (await stat(path)).mtime?.getTime() ?? 0
+  } catch {
+    return 0
+  }
+}
+
+/** One scene's saved ROM animation — what the scene card's open menu offers. */
+export interface RomAnimationStatus {
+  scenePath: string
+  /** Where the saved ROM animation lives (whether or not it exists). */
+  romPath: string
+  /** A `.ROM_Animations/<stem>_ROM.duf` exists for this scene. */
+  exists: boolean
+  /**
+   * …and was built from the CURRENT inputs: its mtime is at/after both the
+   * source `.duf` and the character's generated ROM script (rewritten on every
+   * save, so it dates the definition the ROM would be built from now). Stale ⇒
+   * the card offers "Open and Generate" instead of opening a ROM that no
+   * longer matches the definition.
+   */
+  current: boolean
+}
+
+/**
+ * Every linked scene's saved-ROM-animation state, derived from the FILES alone
+ * — no stamps, so it re-reads correctly on every window focus.
+ *
+ * This deliberately does NOT use the export-handoff stamps
+ * ({@link fetchExecuteScenes}'s `affected`): those record the last EXPORT, an
+ * unrelated event. A ROM-animation build writes no stamp, so a freshly built
+ * animation still read "affected" (stale) forever — and a character that never
+ * exported had every scene stale from the start.
+ */
+export async function fetchRomAnimations({
+  data,
+}: {
+  data: unknown
+}): Promise<Array<RomAnimationStatus>> {
+  const { projectId, id } = charScopeInput.parse(data)
+  if (!isTauri()) return []
+  const { project, character } = await loadCharacter(projectId, id)
+  const settings = await storage.getSettings()
+  // The generated ROM-only script IS the compiled ROM inputs — its mtime dates
+  // the definition. Missing library/script (never generated) ⇒ 0, i.e. only the
+  // scene file gates freshness.
+  const scriptMtime = settings.dazLibraryFolder
+    ? await mtimeOf(
+        joinPath(
+          storage.studioCharScriptsDir(settings.dazLibraryFolder, project.name, character.name),
+          BUILD_ROM_ANIMATION_SCRIPT,
+        ),
+      )
+    : 0
+  const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  return Promise.all(
+    linked.map(async (scenePath) => {
+      const romPath = romAnimationPath(scenePath)
+      const romMtime = await mtimeOf(romPath)
+      if (romMtime === 0) return { scenePath, romPath, exists: false, current: false }
+      const sceneMtime = await mtimeOf(scenePath)
+      return {
+        scenePath,
+        romPath,
+        exists: true,
+        current: romMtime >= sceneMtime && romMtime >= scriptMtime,
+      }
+    }),
+  )
+}
+
 /**
  * Whether the saved ROM animation at `romPath` is FRESH — written at/after
  * `sinceMs`. The generate flow polls this instead of bare existence, because a
