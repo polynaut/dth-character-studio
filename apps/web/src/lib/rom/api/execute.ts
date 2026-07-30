@@ -115,9 +115,39 @@ const OPEN_SCENE_POLL_MS = 400
  *
  * Claimed only means the Runner started — the scene load itself happens after
  * we return (a big `.duf` takes a while, and blocking the click on it would be
- * worse than useless). The finished `running_` file is swept by the next
- * handoff, exactly like a batch nobody watched.
+ * worse than useless). A detached watcher deletes the finished `running_` file
+ * ({@link sweepFinishedOpenScene}); one that outlives the window is swept by
+ * the next handoff.
  */
+/**
+ * Detached completion sweep for a CLAIMED open-scene handoff: the contract has
+ * the STUDIO delete the finished file, and nothing else watches this batch
+ * kind — without the sweep the done `running_` file sits as litter until the
+ * next handoff. Export batches are never touched (their own watch deletes at
+ * 100); a Runner cancel (v1.1.3 Save Changes prompt) deletes the file itself,
+ * which simply ends this watch early.
+ */
+function sweepFinishedOpenScene(runningPath: string): void {
+  void (async () => {
+    const deadline = Date.now() + 10 * 60_000
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      try {
+        if (!(await exists(runningPath))) return // cancelled in Daz, or already swept
+        const parsed = parseJobFileJson(await readTextFile(runningPath))
+        if (!parsed) continue // torn rewrite — retry next tick
+        if (parsed.type !== 'open-scene') return // a newer batch took the slot over
+        if (parsed.progress >= 100) {
+          await remove(runningPath).catch(() => {})
+          return
+        }
+      } catch {
+        // transient fs error — retry next tick
+      }
+    }
+  })()
+}
+
 export async function openSceneInRunningDaz({
   data,
 }: {
@@ -153,7 +183,10 @@ export async function openSceneInRunningDaz({
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
     // The rename IS the claim (contract v2 lifecycle, shared by every type).
-    if (!(await exists(paths.pending).catch(() => true))) return { pickedUp: true }
+    if (!(await exists(paths.pending).catch(() => true))) {
+      sweepFinishedOpenScene(paths.running)
+      return { pickedUp: true }
+    }
   }
   // Nobody claimed it — take the file back so it can't be picked up minutes
   // later, out of nowhere, and yank the user's scene out from under them.
@@ -181,8 +214,19 @@ let activeRun: ActiveExportRun | null = null
 export type ExportRunProgress =
   /** Daz hasn't picked the file up yet (it can still be aborted). */
   | { state: 'pending'; characterId: string; total: number }
-  /** The Runner renamed the file and is working — `progress` is its 0–100. */
-  | { state: 'running'; characterId: string; total: number; progress: number; done: number; failed: number }
+  /** The Runner renamed the file and is working. `processed` = rows already
+   *  worked (done + failed; the Runner-written `jobsDone` when present) — what
+   *  the button shows as "Exporting 1/2". `progress` (0–100) stays the finish
+   *  signal only. */
+  | {
+      state: 'running'
+      characterId: string
+      total: number
+      progress: number
+      processed: number
+      done: number
+      failed: number
+    }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
       state: 'finished'
@@ -220,13 +264,16 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
       if (!(await exists(paths.running))) return null
       const parsed = parseJobFileJson(await readTextFile(paths.running))
       if (!parsed || parsed.type !== 'bulk-export' || parsed.progress >= 100) return null
+      const done = parsed.jobs.filter((j) => j.status === 'done').length
+      const failed = parsed.jobs.filter((j) => j.status === 'failed').length
       return {
         state: 'running',
         characterId: '',
         total: parsed.jobs.length,
         progress: parsed.progress,
-        done: parsed.jobs.filter((j) => j.status === 'done').length,
-        failed: parsed.jobs.filter((j) => j.status === 'failed').length,
+        processed: parsed.jobsDone ?? done + failed,
+        done,
+        failed,
       }
     } catch {
       return null
@@ -240,7 +287,15 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
       const parsed = parseJobFileJson(await readTextFile(paths.running))
       if (!parsed) {
         // Torn read mid-rewrite — report "still running" and retry next poll.
-        return { state: 'running', characterId: run.characterId, total: run.total, progress: 0, done: 0, failed: 0 }
+        return {
+          state: 'running',
+          characterId: run.characterId,
+          total: run.total,
+          progress: 0,
+          processed: 0,
+          done: 0,
+          failed: 0,
+        }
       }
       const done = parsed.jobs.filter((j) => j.status === 'done').length
       const failed = parsed.jobs.filter((j) => j.status === 'failed').length
@@ -278,6 +333,7 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
         characterId: run.characterId,
         total: parsed.jobs.length || run.total,
         progress: parsed.progress,
+        processed: parsed.jobsDone ?? done + failed,
         done,
         failed,
       }
