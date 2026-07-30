@@ -184,6 +184,14 @@ older runtimes as stale.
   every Settings save (best-effort) AND by Refresh assets (reported in the
   summary). Never removed — a cleared library folder leaves the last value.
   Houdini reads the file at startup.
+- **The delivered CSV is renamed on delivery** (runtime v40): the run-time
+  copy writes `<dthExportName>_pose_asset.csv` — the export set's own
+  scene-suffixed base (primary: bare) — so one export folder never mixes
+  naming patterns. SOURCE CSVs in the character folder keep their studio
+  names (`poseAssetFileName`, scene-sluged only for ROM-override scenes) —
+  the scene-CSV lookup picks the right SOURCE, the rename names the
+  DESTINATION. `sceneExportName` (dsa.ts) is the studio-side mirror of the
+  run-time name rule; the export watch builds its expected paths from it.
 - **ROM-scene auto-save** (runtime v40): after a CLEAN ROM build — before any
   export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
   as `<stem>_ROM.duf` into `<sceneDir>/.ROM_Animations/`, so the built ROM

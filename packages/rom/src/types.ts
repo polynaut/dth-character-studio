@@ -1170,7 +1170,9 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       reference-FBX paths bake a
  *       {{DTH_EXPORT_NAME}} token the CSV-copy step substitutes with the same
  *       run-time name (alongside {{DTH_EXPORT_DIR}}), keeping exporter output
- *       and CSV pointers in lockstep. Also (schema v27): with a
+ *       and CSV pointers in lockstep — and the CSV copy is DELIVERED as
+ *       `<dthExportName>_pose_asset.csv`, the same scene-suffixed base as the
+ *       files beside it (the source CSV keeps its studio name). Also (schema v27): with a
  *       `houdiniProjectFolder` set, the export dir first nests under
  *       `<folder>/dth-export` before the scene subfolder — a Houdini project
  *       Set-Project'd to `<exportPath>/<folder>` imports everything

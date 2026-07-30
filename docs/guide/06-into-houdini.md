@@ -7,8 +7,11 @@ covers the network in depth; this page is just the hand-off.
 
 - The **Houdini assets** (otls, presets, toolbar) were merged into your Houdini
   documents folder during [setup](./02-setup.md).
-- Your character's **`<Name>_pose_asset.csv`** — in the export folder if you used
-  direct export, otherwise in the character's folder in the project.
+- Your character's **PoseAsset CSV** — delivered into each scene's export
+  folder under the same scene-suffixed base name as everything beside it
+  (`<Name>_<Scene>_pose_asset.csv`; the primary scene's is plain
+  `<Name>_pose_asset.csv`). Without direct export it's in the character's
+  folder in the project (as `<Name>_pose_asset.csv`).
 - The exporter's **`<Name>.abc`** / **`<Name>.dth`** next to it.
 - For any **[Bone scale](./04-first-character.md)** frames, a
   **reference-skeleton FBX** each — the CSV already points at them, nothing to
@@ -37,10 +40,12 @@ Settings, and **Tools → Refresh assets** (re)wires it too — restart Houdini 
 pick up changes.
 
 > [!NOTE]
-> A scene whose [per-scene ROM overrides](./advanced.md#rom-overrides) change the
-> **frame layout** has its own **`<Name>_<Scene>_pose_asset.csv`** — point the
-> PoseAsset import at the CSV for the scene you exported (see
-> [What Save generates](./advanced.md#what-save-generates)).
+> In the export folder, every scene's delivered CSV is scene-suffixed — always
+> point the PoseAsset import at the CSV sitting in the scene subfolder you
+> exported. (In the character's folder, a scene whose
+> [per-scene ROM overrides](./advanced.md#rom-overrides) change the **frame
+> layout** additionally has its own source CSV — see
+> [What Save generates](./advanced.md#what-save-generates).)
 
 <!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">

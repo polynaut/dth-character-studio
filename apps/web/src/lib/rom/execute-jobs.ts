@@ -1,8 +1,7 @@
 import {
   BULK_ROM_EXPORT_SCRIPT,
-  buildSceneCsvMap,
   houdiniProjectResolution,
-  poseAssetFileName,
+  sceneExportName,
   sceneExportSubfolders,
 } from '@dth/rom'
 
@@ -104,38 +103,38 @@ export function characterJobScriptNames(_character: Character): Array<string> {
 function sceneExportFolderRel(
   character: Character,
   scenesRootAbs?: string,
-): Record<string, string> {
+): Record<string, { folder: string; sub: string }> {
   const subfolders = sceneExportSubfolders(character, scenesRootAbs)
   const project = houdiniProjectResolution(character)
-  const map: Record<string, string> = {}
+  const map: Record<string, { folder: string; sub: string }> = {}
   for (const scene of [character.scenePath, ...character.extraScenes]) {
     const key = normalizeSceneKey(scene)
     if (!key) continue
     const stem = (key.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
     const sub = subfolders[key] ?? stem
     const proj = Object.hasOwn(project.byScene, key) ? project.byScene[key] : project.base
-    map[key] = proj ? `${proj}/dth-export${sub ? `/${sub}` : ''}` : sub
+    map[key] = { folder: proj ? `${proj}/dth-export${sub ? `/${sub}` : ''}` : sub, sub }
   }
   return map
 }
 
 /**
  * Scene key → the export-dir-RELATIVE path of the PoseAsset CSV a bulk run
- * delivers for that scene: {@link sceneExportFolderRel} + the scene's CSV name
- * (a ROM-override scene has its scene-suffixed one). The studio's export
- * watch stats these files — a CSV whose mtime is newer than the handoff time
- * means that scene finished exporting.
+ * delivers for that scene: {@link sceneExportFolderRel} + the DELIVERED CSV
+ * name — `<sceneExportName>_pose_asset.csv`, the export set's own
+ * scene-suffixed base (the run-time copy renames the CSV on delivery; the
+ * source CSV in the character folder keeps its studio name). The studio's
+ * export watch stats these files — a CSV whose mtime is newer than the
+ * handoff time means that scene finished exporting.
  */
 export function expectedSceneCsvRel(
   character: Character,
   scenesRootAbs?: string,
 ): Record<string, string> {
   const folders = sceneExportFolderRel(character, scenesRootAbs)
-  const sceneCsvs = buildSceneCsvMap(character)
-  const baseCsv = poseAssetFileName(character)
   const map: Record<string, string> = {}
-  for (const [key, folder] of Object.entries(folders)) {
-    const name = sceneCsvs[key] ?? baseCsv
+  for (const [key, { folder, sub }] of Object.entries(folders)) {
+    const name = `${sceneExportName(character, key, sub)}_pose_asset.csv`
     map[key] = folder ? `${folder}/${name}` : name
   }
   return map
@@ -165,7 +164,7 @@ export function expectedSceneExportFolders(
 ): Array<string> {
   const out: Array<string> = []
   const seen = new Set<string>()
-  for (const folder of Object.values(sceneExportFolderRel(character, scenesRootAbs))) {
+  for (const { folder } of Object.values(sceneExportFolderRel(character, scenesRootAbs))) {
     if (!folder) continue
     const norm = folder.toLowerCase()
     if (seen.has(norm)) continue

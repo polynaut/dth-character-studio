@@ -285,7 +285,12 @@ ${csvNameBlock}
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
         if (!dthCsvDstDir.exists()) dthCsvDstDir.mkpath(dthExportDir);
-        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvName);
+        // Delivered under the export set's own base name (dthExportName — the
+        // same scene-suffixed base as the .abc/.dth/.fbx beside it), so one
+        // folder never mixes naming patterns. The SOURCE CSV in the character
+        // folder keeps its studio name.
+        var dthCsvDstName = dthExportName + "_pose_asset.csv";
+        var dthCsvDst = dthCsvDstDir.absoluteFilePath(dthCsvDstName);
         var dthCsvSrc = new DzFile(dthCsvSrcDir.absoluteFilePath(dthCsvName));
         if (dthCsvSrc.open(dthCsvSrc.ReadOnly)) {
             var dthCsvText = String(dthCsvSrc.read());
@@ -432,6 +437,34 @@ export function defaultHoudiniProjectFolder(projectName: string, characterName: 
       .replace(/\s+/g, ' ')
       .trim()
   return [clean(projectName), clean(characterName)].filter(Boolean).join('_')
+}
+
+/**
+ * The run-time export base name (`dthExportName`) for ONE scene, given its
+ * resolved export subfolder — the studio-side MIRROR of the snippet's rule
+ * ({@link sceneExportSubfolderSnippet}): base {@link exporterFigureName},
+ * suffixed with the subfolder — each '/'-segment's first letter capitalized,
+ * segments joined by '_', commas to spaces — while the PRIMARY scene (and a
+ * subfolder-less one) keeps the bare base. The export watch derives each
+ * scene's delivered-CSV name from it (`<name>_pose_asset.csv` — the run-time
+ * CSV copy names its destination the same way); a rule change must land in
+ * both or the watch stats files that are never written.
+ */
+export function sceneExportName(
+  character: Pick<Character, 'name' | 'scenePath'>,
+  sceneKey: string,
+  subfolder: string,
+): string {
+  const base = exporterFigureName(character)
+  const primaryKey = character.scenePath.trim().replace(/\\/g, '/').toLowerCase()
+  if (!subfolder || sceneKey === primaryKey) return base
+  const suffix = subfolder
+    .split(',')
+    .join(' ')
+    .split('/')
+    .map((seg) => (seg ? seg.charAt(0).toUpperCase() + seg.slice(1) : seg))
+    .join('_')
+  return `${base}_${suffix}`
 }
 
 /**

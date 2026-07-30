@@ -69,20 +69,24 @@ describe('characterJobScriptNames — every job row runs the hidden bulk script'
 })
 
 describe('expectedSceneCsvRel — where the export watch looks for delivered CSVs', () => {
-  it('maps every linked scene to <its subfolder>/<base csv> under the scenes root', () => {
+  it('maps every linked scene to <its subfolder>/<delivered csv> under the scenes root', () => {
     const c = makeCharacter({
       scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
       extraScenes: ['X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf'],
     })
     const map = expectedSceneCsvRel(c, 'X:/proj/Electra/daz3d')
+    // Delivered CSVs carry the export set's scene-suffixed base name — the
+    // primary keeps the bare one, extras get their capitalized subfolder.
     expect(map[normalizeSceneKey(c.scenePath)]).toBe('primary/Electra_pose_asset.csv')
-    expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe('armor/Electra_pose_asset.csv')
+    expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe('armor/Electra_Armor_pose_asset.csv')
   })
 
   it('falls back to the scene-file stem without a scenes root (the runtime fallback)', () => {
     const map = expectedSceneCsvRel(makeCharacter())
     expect(map[normalizeSceneKey(PRIMARY)]).toBe('Electra/Electra_pose_asset.csv')
-    expect(map[normalizeSceneKey(EXTRA)]).toBe('Electra_Armor/Electra_pose_asset.csv')
+    expect(map[normalizeSceneKey(EXTRA)]).toBe(
+      'Electra_Armor/Electra_Electra_Armor_pose_asset.csv',
+    )
   })
 
   it('prefixes <project>/dth-export/ when a Houdini project folder resolves (schema v27)', () => {
@@ -106,9 +110,9 @@ describe('expectedSceneCsvRel — where the export watch looks for delivered CSV
       'MyProj_Electra/dth-export/primary/Electra_pose_asset.csv',
     )
     expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe(
-      'MyProj_Electra/dth-export/armor/Electra_pose_asset.csv',
+      'MyProj_Electra/dth-export/armor/Electra_Armor_pose_asset.csv',
     )
-    expect(map[normalizeSceneKey(c.extraScenes[1])]).toBe('beach/Electra_pose_asset.csv')
+    expect(map[normalizeSceneKey(c.extraScenes[1])]).toBe('beach/Electra_Beach_pose_asset.csv')
   })
 })
 

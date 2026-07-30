@@ -12,6 +12,7 @@ import {
   presetFramesSignature,
   referenceFrames,
   resolveRomPaths,
+  sceneExportName,
   sceneExportSubfolders,
   sectionPresetAvailable,
   templateBakedPoseNames,
@@ -1704,9 +1705,22 @@ describe('exporter integration', () => {
     // export, and the {{DTH_EXPORT_DIR}} token resolves to the real run-time dir.
     expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir)')
     expect(content).not.toContain('.move(')
-    // Destination is the resolved export dir (dthExportDir), so the scene
-    // subfolder is included when that option is on.
-    expect(content).toContain('dthCsvDstDir.absoluteFilePath(dthCsvName)')
+    // Delivered under the export set's own scene-suffixed base name, into the
+    // resolved export dir (scene subfolder included).
+    expect(content).toContain('var dthCsvDstName = dthExportName + "_pose_asset.csv";')
+    expect(content).toContain('dthCsvDstDir.absoluteFilePath(dthCsvDstName)')
+  })
+
+  it('sceneExportName mirrors the run-time dthExportName rule', () => {
+    const c = { name: 'Kira', scenePath: 'X:\\p\\daz3d\\primary\\Kira.duf' }
+    // Primary and subfolder-less scenes keep the bare base name.
+    expect(sceneExportName(c, 'x:/p/daz3d/primary/kira.duf', 'primary')).toBe('Kira')
+    expect(sceneExportName(c, 'x:/elsewhere/x.duf', '')).toBe('Kira')
+    // Non-primary: capitalized subfolder, nested '/' → '_' per segment.
+    expect(sceneExportName(c, 'x:/p/daz3d/summertide/s.duf', 'summertide')).toBe('Kira_Summertide')
+    expect(sceneExportName(c, 'x:/p/daz3d/outfits/beach/c.duf', 'outfits/beach')).toBe(
+      'Kira_Outfits_Beach',
+    )
   })
 
   it('omits the CSV copy when the character folder is unknown', () => {
