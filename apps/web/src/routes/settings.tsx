@@ -27,6 +27,7 @@ import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath } from '#/lib/path.ts'
+import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
@@ -916,10 +917,25 @@ function SettingsPage() {
               help={
                 <>
                   Where Houdini itself is installed — its <code>bin\hython.exe</code> creates the
-                  project.
+                  project. Must have a matching Houdini documents folder configured above
+                  (prefs are per version: <code>Houdini 22.0.x</code> ↔ <code>houdini22.0</code>).
                 </>
               }
             />
+            {/* The install ↔ documents pairing is load-bearing: hython gets the
+                MATCHING docs folder as HOUDINI_USER_PREF_DIR — mismatched, the
+                DazToHue otls never load. Warn live; Generate refuses too. */}
+            {settings.houdiniInstallFolder.trim() !== '' &&
+              !matchingHoudiniDocsFolder(settings.houdiniInstallFolder, [
+                settings.houdiniDocsFolder,
+                ...settings.extraHoudiniDocsFolders,
+              ]) && (
+                <p className="text-sm text-destructive">
+                  {houdiniVersionFromInstall(settings.houdiniInstallFolder)
+                    ? `No matching Houdini documents folder for this install — add "…\\Documents\\houdini${houdiniVersionFromInstall(settings.houdiniInstallFolder)}" above, or Generate project cannot load the DazToHue assets.`
+                    : 'No Houdini version found in this path — point it at a versioned install (e.g. "…\\Houdini 22.0.368").'}
+                </p>
+              )}
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">

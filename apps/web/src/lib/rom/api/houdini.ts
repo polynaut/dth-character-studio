@@ -3,6 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import * as storage from '../storage'
+import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
@@ -102,11 +103,26 @@ export async function generateHoudiniProject({
   // Same literal as the generated scripts' <project>/dth-export nesting.
   await mkdir(joinPath(projectDir, 'dth-export'), { recursive: true })
 
-  // The Houdini documents folder doubles as HOUDINI_USER_PREF_DIR for hython —
-  // without it, hython inherits the studio's environment and can resolve the
-  // prefs elsewhere, never loading the DazToHue otls (measured: same leak
-  // that hid the DazToHue shelf from studio-launched Houdini).
-  const houdiniPrefDir = settings.houdiniDocsFolder.trim()
+  // The matching Houdini documents folder doubles as HOUDINI_USER_PREF_DIR
+  // for hython — without it, hython inherits the studio's environment and can
+  // resolve the prefs elsewhere, never loading the DazToHue otls (measured:
+  // the same leak that hid the DazToHue shelf from studio-launched Houdini).
+  // MATCHING by version is mandatory: prefs are per major.minor, so the
+  // install `Houdini 22.0.x` must pair with a configured `houdini22.0` docs
+  // folder (primary or extra) or hython would load another version's — or
+  // no — otls.
+  const houdiniPrefDir = matchingHoudiniDocsFolder(installDir, [
+    settings.houdiniDocsFolder,
+    ...settings.extraHoudiniDocsFolders,
+  ])
+  if (!houdiniPrefDir) {
+    const version = houdiniVersionFromInstall(installDir)
+    throw new Error(
+      version
+        ? `The Houdini installation (${version}) has no matching documents folder — add "…\\Documents\\houdini${version}" as a Houdini documents folder in Settings.`
+        : `Could not read a Houdini version from the installation folder:\n${installDir}\nPoint it at a versioned install (e.g. "…\\Houdini 22.0.368").`,
+    )
+  }
 
   // zod-parsed, not a bare invoke<T>() cast (primitive "<created>|<visible>"
   // report — no fixture needed).
