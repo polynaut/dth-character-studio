@@ -185,6 +185,11 @@ export async function openSceneInRunningDaz({
     // The rename IS the claim (contract v2 lifecycle, shared by every type).
     if (!(await exists(paths.pending).catch(() => true))) {
       sweepFinishedOpenScene(paths.running)
+      // The Runner raises the Daz window itself, but Windows usually DENIES
+      // that (only the foreground process may hand focus over) — so the
+      // studio, which holds that right at click time, pulls Daz forward the
+      // moment the handoff is claimed (same helper as the Explorer-open flow).
+      void invoke('focus_app_window', { exeNames: ['DAZStudio.exe'] }).catch(() => {})
       return { pickedUp: true }
     }
   }
