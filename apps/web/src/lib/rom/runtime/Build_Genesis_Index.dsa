@@ -8,7 +8,8 @@
 // everything fitted to it, and writes one index per generation for the studio's
 // Morph-name and bone autocompletes.
 //
-// It CLEARS THE SCENE as it goes (one generation at a time) - it asks first.
+// It CLEARS THE SCENE as it goes (one generation at a time) and leaves it empty
+// when it finishes - it asks first.
 // When the open scene already has figures it offers to scan those instead:
 // that's how you index morphs the stock figures don't carry (third-party
 // geografts, add-ons, fitted clothing).

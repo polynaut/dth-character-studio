@@ -369,7 +369,8 @@ There is nothing to load or select first:
    instead (**Golden Palace** on one, **Dicktator** on the other, when you have
    them installed — loaded via their *Smart* preset, so the geoshells are
    indexed too). It scans each figure plus everything fitted to it, and writes
-   one index per generation. Takes a few minutes.
+   one index per generation. Takes a few minutes, and finishes on an **empty
+   scene** — nothing it built is left behind for you to clean up.
 3. A summary reports what was indexed per generation, which geograft file it
    picked, and anything it couldn't find — so a missing product, or an
    unexpected pick after a product update, is never silent.
@@ -391,7 +392,8 @@ window gains focus.
 add-on, fitted clothing whose morphs you dial? Load it in Daz, then run the
 script: with figures already in the scene it offers to **scan the open scene**
 instead of building fresh ones, and indexes exactly what's loaded (merged into
-that generation's index).
+that generation's index). That path never touches your scene — it's only the
+*build* that clears.
 
 From then on, every **Parameter name** field autocompletes after two typed
 characters — searchable by **internal name** *or* **Daz UI label** — and
