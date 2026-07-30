@@ -355,6 +355,13 @@ There is nothing to load or select first:
 
 1. In Daz Studio, **save your open scene** (the build clears it), then run
    `Scripts/DTH-Character-Studio/Build_Genesis_Index` from the Content Library.
+
+   <p align="center">
+     <img width="564" alt="Build_Genesis_Index in the Daz Content Library" src="https://github.com/user-attachments/assets/b0ad36d5-7983-4632-b842-3df0b6a8e531" />
+     <br>
+     <sub><em>The index script in Daz's Content Library, under Scripts/DTH-Character-Studio.</em></sub>
+   </p>
+
 2. Confirm the prompt — it lists exactly which generations it found installed
    and what it will skip. It then creates the stock figures itself, one generation
    at a time — *Genesis 3*, *8* and *8.1* female **and** male, and *Genesis 9*
@@ -363,16 +370,15 @@ There is nothing to load or select first:
    them installed — loaded via their *Smart* preset, so the geoshells are
    indexed too). It scans each figure plus everything fitted to it, and writes
    one index per generation. Takes a few minutes.
-
-   <img width="564" height="789" alt="Screenshot 2026-07-30 080406" src="https://github.com/user-attachments/assets/b0ad36d5-7983-4632-b842-3df0b6a8e531" />
-
-
 3. A summary reports what was indexed per generation, which geograft file it
    picked, and anything it couldn't find — so a missing product, or an
    unexpected pick after a product update, is never silent.
 
-<img width="508" height="281" alt="Screenshot 2026-07-30 080734" src="https://github.com/user-attachments/assets/7dd80317-3cbc-4a3e-b33d-ae398e81882c" />
-
+   <p align="center">
+     <img width="508" alt="Build_Genesis_Index run summary dialog" src="https://github.com/user-attachments/assets/7dd80317-3cbc-4a3e-b33d-ae398e81882c" />
+     <br>
+     <sub><em>The run summary: morphs and bones indexed per generation, and the geograft file each pick settled on.</em></sub>
+   </p>
 
 The scan indexes **everything dialable** each figure carries — classic morphs
 *and* controller dials, across all products installed for that generation —
