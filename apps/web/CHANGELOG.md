@@ -1,5 +1,29 @@
 # @dth/web
 
+## 0.54.0
+
+### Minor Changes
+
+- [#602](https://github.com/polynaut/dth-character-studio/pull/602) [`c890079`](https://github.com/polynaut/dth-character-studio/commit/c8900791390a75a05d93ec8898b5745eea7e3bc2) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): **Open in Daz now works while Daz Studio is already running.** Daz drops a forwarded command-line open once a scene is loaded, so clicking a scene card used to stop at a dialog asking you to close Daz first. The studio now hands the scene to the **Runner plugin** instead — a new one-row, script-less `open-scene` job (contract v3) that opens the scene in the running instance and raises the Daz window, which the studio can't do from outside.
+
+  The old dialog is still the fallback, and it arrives on its own: a Runner too old to know the job type treats it as a foreign file and leaves it alone, so the studio takes the job back after a few seconds and behaves exactly as before. No plugin version check, nothing to configure — update the Runner (Settings → General) and the dialog simply stops appearing. Opening with Daz closed still launches it fresh, unchanged.
+
+  A scene open is refused while an export batch is waiting or running: there is one job file and the Runner works one batch at a time.
+
+### Patch Changes
+
+- [#601](https://github.com/polynaut/dth-character-studio/pull/601) [`c46c792`](https://github.com/polynaut/dth-character-studio/commit/c46c79267f113fb24c34a7870641455f4fa69690) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): **renaming a character no longer dies on "Access is denied. (os error 5)".** Windows refuses to rename a folder while any file inside it is open in another program — for a character folder that is almost always Daz Studio still holding the linked scene — and the raw OS error named neither the cause nor the fix. A rename now retries briefly first, so a passing antivirus scan or search-indexer touch no longer costs you the rename at all; if something really is holding it, the message says which folder and what to close instead of surfacing the plugin's error text. Applies to both rename paths: the character's name and the folder chip's edit-to-move. A failed rename still leaves the character exactly as it was — the folder move is the first thing a save writes, so nothing ends up half-renamed.
+
+- [#607](https://github.com/polynaut/dth-character-studio/pull/607) [`cbfa3c9`](https://github.com/polynaut/dth-character-studio/commit/cbfa3c9754693b27e069e603eac8ab3e9212725c) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the two export switches ("Run the export with the ROM script", "Export hair assets too") move from the Export directory panel to the "Daz scripts generated" section — they shape which scripts generate and what the export pass covers, not the folder.
+
+- [#606](https://github.com/polynaut/dth-character-studio/pull/606) [`86620e9`](https://github.com/polynaut/dth-character-studio/commit/86620e9dc91c72ce1c2733cd5d6d913626408f4f) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): a Houdini project can no longer be generated over an existing one — the Generate dialog validates the name live (already-linked project or `<name>.hiplc` on disk → Generate disabled with an inline message, re-checked at click time), so a collision reads as form validation instead of an error toast. The dialog blurb also shrinks to the essentials ("Creates `<name>.hiplc` into `.\houdini` next to the project folder").
+
+- [#605](https://github.com/polynaut/dth-character-studio/pull/605) [`fb4bfd3`](https://github.com/polynaut/dth-character-studio/commit/fb4bfd3d7725b914e851a4b592e21f6255216c6b) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): declutter the Houdini projects section — the title gets the same size as "Daz scenes" (the two headers stack in the scenes tab and read as one pile at label size), and the Houdini project folder input moves back into the Export directory panel, next to the layout it actually configures. Its per-scene override behaviour is unchanged.
+
+- Updated dependencies [[`0e8b892`](https://github.com/polynaut/dth-character-studio/commit/0e8b892a106d7aba0f2543aef1cfd71f6f66456a)]:
+  - @dth/rom@0.54.0
+  - @dth/ui@0.54.0
+
 ## 0.53.0
 
 ### Minor Changes
