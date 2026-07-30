@@ -115,6 +115,7 @@ export {
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  openSceneInRunningDaz,
 } from './api/execute'
 export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
 

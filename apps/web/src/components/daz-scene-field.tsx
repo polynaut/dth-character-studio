@@ -21,6 +21,7 @@ import {
   fetchCharactersWithProblems,
   moveCharacterScenesFolder,
   openScene,
+  openSceneInRunningDaz,
   renameDazScene,
   revealPath,
   relinkScene,
@@ -297,10 +298,28 @@ export function DazSceneField({
         await revealPath({ data: { path: scenePath } })
         return
       }
-      // The studio can't switch the scene of an already-running Daz (a forwarded
-      // open is dropped once a scene is loaded) — warn and point at the per-character
-      // open script. With Daz closed, opening launches it fresh, which works.
+      // The studio can't switch the scene of an already-running Daz itself (a
+      // forwarded open is dropped once a scene is loaded) — but the Runner
+      // plugin, living inside Daz, can: hand it an `open-scene` job, which also
+      // raises the Daz window. A Runner too old to know the job type leaves the
+      // file alone; that non-pickup is the signal to fall back to the dialog
+      // (which waits for the user to close Daz). With Daz closed, opening
+      // launches it fresh, which has always worked.
       if (await dazStudioRunning()) {
+        // The handshake waits out one of the Runner's poll intervals, so it can
+        // take a few seconds — say so rather than leaving the click silent.
+        const handing = toast.loading('Handing the scene to Daz Studio…')
+        try {
+          const { pickedUp } = await openSceneInRunningDaz({ data: { scenePath } })
+          if (pickedUp) {
+            toast.success('Opening the scene in Daz Studio…', { id: handing })
+            return
+          }
+          toast.dismiss(handing)
+        } catch (err) {
+          toast.dismiss(handing)
+          throw err
+        }
         setDazWarn(scenePath)
         return
       }

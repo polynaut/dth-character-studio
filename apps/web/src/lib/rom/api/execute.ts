@@ -11,6 +11,7 @@ import {
   executeSceneSignature,
   jobFileJson,
   normalizeSceneKey,
+  openSceneJobFileJson,
   parseExecuteStamps,
   parseJobFileJson,
 } from '../execute-jobs'
@@ -86,6 +87,76 @@ export async function exporterJobsPending(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** How long to wait for the Runner to claim an `open-scene` handoff, and how
+ *  often to look. The plugin polls "every few seconds", so this has to cover a
+ *  full poll interval plus slack — but it is also a user waiting on a click, so
+ *  it can't be generous. ~10s: long enough that a working Runner always wins,
+ *  short enough that the fallback dialog doesn't feel hung. */
+const OPEN_SCENE_PICKUP_TIMEOUT_MS = 10_000
+const OPEN_SCENE_POLL_MS = 400
+
+/**
+ * Ask a RUNNING Daz Studio to open `scenePath`, via the Runner's `open-scene`
+ * job (contract v3 — docs/exporter-plugin-job-file.md). Daz drops a forwarded
+ * command-line open once a scene is loaded, so this is the only way to switch
+ * the scene of an instance that is already up; the Runner also raises the Daz
+ * window, which the studio can't do from outside (Windows blocks
+ * SetForegroundWindow for a background process).
+ *
+ * Returns whether the Runner CLAIMED the job — the caller falls back to the
+ * "Daz is already open" dialog when it didn't. Non-pickup is the expected path
+ * on an old or missing Runner: an unknown `type` is foreign to it, so it leaves
+ * the file alone and we take it back. That is the whole capability handshake;
+ * there is no version check.
+ *
+ * Claimed only means the Runner started — the scene load itself happens after
+ * we return (a big `.duf` takes a while, and blocking the click on it would be
+ * worse than useless). The finished `running_` file is swept by the next
+ * handoff, exactly like a batch nobody watched.
+ */
+export async function openSceneInRunningDaz({
+  data,
+}: {
+  data: unknown
+}): Promise<{ pickedUp: boolean }> {
+  const { scenePath } = z.object({ scenePath: z.string().min(1) }).parse(data)
+  if (!isTauri()) throw new Error('Opening a scene in a running Daz needs the desktop app.')
+  const paths = await exporterJobFilePaths()
+  if (!paths) {
+    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file lives there.')
+  }
+  if (!(await exists(scenePath))) throw new Error(`The scene file is missing:\n${scenePath}`)
+  // One global job file, and the Runner works one batch at a time: never
+  // overwrite an export handoff with a scene open.
+  if (await exists(paths.pending)) {
+    throw new Error('An export batch is waiting for Daz Studio — let it start (or abort it) first.')
+  }
+  if (await exists(paths.running)) {
+    // A batch in flight owns the Runner; a FINISHED one (progress 100) is just
+    // litter nobody swept, so clear that and continue.
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      // Unreadable or torn: assume a live batch — refusing is the safe guess.
+      .catch(() => false)
+    if (!finished) {
+      throw new Error('Daz Studio is working through an export batch — try again when it finishes.')
+    }
+    await remove(paths.running).catch(() => {})
+  }
+
+  await storage.writeTextFileAtomic(paths.pending, openSceneJobFileJson(scenePath))
+  const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
+    // The rename IS the claim (contract v2 lifecycle, shared by every type).
+    if (!(await exists(paths.pending).catch(() => true))) return { pickedUp: true }
+  }
+  // Nobody claimed it — take the file back so it can't be picked up minutes
+  // later, out of nowhere, and yank the user's scene out from under them.
+  await remove(paths.pending).catch(() => {})
+  return { pickedUp: false }
 }
 
 /**
