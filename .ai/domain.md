@@ -271,6 +271,13 @@ older runtimes as stale.
   the outcome (failed rows + errors); a running file whose Daz exited below
   100 is a dead run (cleaned + reported). No export-folder watching anymore —
   the old delivered-CSV mtime watch is gone.
+- **Runner gate**: the export dialog blocks Start while the installed Runner
+  DLL is missing or OLDER than the bundled one (`runnerGate` in
+  storage/releases.ts, `fetchExportRunnerGate`), deep-linking to Settings →
+  General (`/settings?tab=general`). The installed version is read from the
+  DLL's VERSIONINFO (the runner carries one since v1.0.3); "up to date" stays
+  a byte-compare. A NEWER installed runner, or an unreadable state, never
+  blocks.
 
 ## PoseAsset CSV eras & templates
 

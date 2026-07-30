@@ -136,18 +136,12 @@ async function findExporterDll(folder: string): Promise<string | null> {
 }
 
 /**
- * Read a Windows DLL/EXE FileVersion from its `VS_FIXEDFILEINFO` resource by
+ * A Windows DLL/EXE FileVersion from its `VS_FIXEDFILEINFO` resource, found by
  * scanning the bytes for the `0xFEEF04BD` signature (no full PE parse needed).
  * The two 32-bit words after the signature+struct-version encode the version as
  * major.minor.build.revision. Returns a dotted string, or '' when absent.
  */
-async function readDllFileVersion(path: string): Promise<string> {
-  let bytes: Uint8Array
-  try {
-    bytes = await readFile(path)
-  } catch {
-    return ''
-  }
+export function fileVersionFromBytes(bytes: Uint8Array): string {
   for (let i = 0; i + 16 <= bytes.length; i++) {
     // 0xFEEF04BD, little-endian on disk → bytes BD 04 EF FE.
     if (bytes[i] === 0xbd && bytes[i + 1] === 0x04 && bytes[i + 2] === 0xef && bytes[i + 3] === 0xfe) {
@@ -158,6 +152,14 @@ async function readDllFileVersion(path: string): Promise<string> {
     }
   }
   return ''
+}
+
+async function readDllFileVersion(path: string): Promise<string> {
+  try {
+    return fileVersionFromBytes(await readFile(path))
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -444,9 +446,11 @@ export async function installedExporterVersion(dazInstallFolder: string): Promis
 // for the DTH Export job file and runs the batches unattended. Its DLLs ship
 // INSIDE the app as Tauri resources, staged at build time by
 // scripts/fetch-runner.mjs under resources/dth-runner/{version.txt,ds4/,ds6/}.
-// The DLL carries no Windows VERSIONINFO, so "installed"/"up to date" comes
-// from BYTE-comparing the installed DLL against the bundled one; the display
-// version is the staged release tag (version.txt).
+// "Installed"/"up to date" comes from BYTE-comparing the installed DLL against
+// the bundled one (exact, and works for every runner version); the INSTALLED
+// display version is read from the DLL's VERSIONINFO resource (the runner
+// carries one since v1.0.3 — '' for older DLLs), the bundled one is the staged
+// release tag (version.txt).
 
 export type DazFlavor = 'ds4' | 'ds6'
 
@@ -502,6 +506,12 @@ async function bundledRunnerVersion(): Promise<string> {
   }
 }
 
+/** The runner DLL's 4-part FileVersion trimmed to the release-tag format —
+ *  "1.0.3.4" → "1.0.3" (the 4th component is an internal build counter). */
+function runnerDisplayVersion(fileVersion: string): string {
+  return fileVersion.split('.').slice(0, 3).join('.')
+}
+
 export interface RunnerStatus {
   /** The runner release shipped inside this build ('' when absent). */
   bundledVersion: string
@@ -510,19 +520,25 @@ export interface RunnerStatus {
   /** none = no runner DLL in the plugins folder; current = byte-identical to
    *  the bundled DLL; differs = present but different bytes (older or newer). */
   installed: 'none' | 'current' | 'differs'
+  /** The installed DLL's version, read from its VERSIONINFO resource and
+   *  trimmed to the tag format ('' when none is installed or the DLL predates
+   *  the version resource, i.e. runner < 1.0.3). */
+  installedVersion: string
   error: string | null
 }
 
 /** The bundled-vs-installed runner state driving the Settings panel. */
 export async function runnerStatus(dazInstallFolder: string): Promise<RunnerStatus> {
   const bundledVersion = await bundledRunnerVersion()
-  if (!dazInstallFolder) return { bundledVersion, flavor: null, installed: 'none', error: null }
+  if (!dazInstallFolder)
+    return { bundledVersion, flavor: null, installed: 'none', installedVersion: '', error: null }
   const flavor = await detectDazFlavor(dazInstallFolder)
   if (!flavor) {
     return {
       bundledVersion,
       flavor: null,
       installed: 'none',
+      installedVersion: '',
       error:
         'Could not detect the Daz Studio version — the install folder has no readable DAZStudio*.exe.',
     }
@@ -535,6 +551,7 @@ export async function runnerStatus(dazInstallFolder: string): Promise<RunnerStat
       bundledVersion,
       flavor,
       installed: 'none',
+      installedVersion: '',
       error:
         'This build carries no bundled Runner plugin — reinstall the app (dev checkout: run `pnpm fetch:runner`).',
     }
@@ -547,13 +564,54 @@ export async function runnerStatus(dazInstallFolder: string): Promise<RunnerStat
   }
   const installed =
     installedBytes === null ? 'none' : bytesEqual(installedBytes, bundled) ? 'current' : 'differs'
-  return { bundledVersion, flavor, installed, error: null }
+  const installedVersion = installedBytes
+    ? runnerDisplayVersion(fileVersionFromBytes(installedBytes))
+    : ''
+  return { bundledVersion, flavor, installed, installedVersion, error: null }
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
   return true
+}
+
+/** True when the installed DLL identifies as NEWER than the bundled release —
+ *  a runner build ahead of this app; updating would downgrade it, and exporting
+ *  through it is fine (the job-file contract is kept backward-compatible). */
+export function runnerInstalledNewer(status: RunnerStatus): boolean {
+  if (status.installed !== 'differs' || !status.installedVersion || !status.bundledVersion)
+    return false
+  return compareVersions(parseVersion(status.installedVersion), parseVersion(status.bundledVersion)) > 0
+}
+
+/** Whether (and why) a DTH Export handoff is blocked on the Runner plugin's
+ *  state — the export dialog's gate. A missing runner would take the job file
+ *  nowhere; an outdated one would run it with stale behaviour.
+ *  `no-install-folder` is produced by the api layer (which resolves settings),
+ *  never by {@link runnerGate} itself. */
+export type RunnerGate =
+  | { blocked: false }
+  | {
+      blocked: true
+      reason: 'no-install-folder' | 'not-installed' | 'update-pending'
+      bundledVersion: string
+      installedVersion: string
+    }
+
+export function runnerGate(status: RunnerStatus): RunnerGate {
+  // An unreadable state (undetectable flavor, no bundled DLL, …) must not brick
+  // exporting — the Settings panel surfaces the error; the gate only acts on
+  // definite verdicts.
+  if (status.error !== null) return { blocked: false }
+  const versions = {
+    bundledVersion: status.bundledVersion,
+    installedVersion: status.installedVersion,
+  }
+  if (status.installed === 'none') return { blocked: true, reason: 'not-installed', ...versions }
+  if (status.installed === 'differs' && !runnerInstalledNewer(status))
+    return { blocked: true, reason: 'update-pending', ...versions }
+  return { blocked: false }
 }
 
 /** Resolved paths for the bundled Runner plugin install (DLL → Daz install). */
