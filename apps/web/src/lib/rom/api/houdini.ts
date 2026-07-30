@@ -6,12 +6,14 @@ import * as storage from '../storage'
 import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
 
 // "Generate project": create a ready-made DazToHue Houdini project for a
-// character. hython loads the user's template scene (a saved DazToHue
-// network), bakes $JOB to <exportPath>/<houdiniProjectFolder> — the folder the
-// bulk export delivers into as $JOB/dth-export/<scene>/ — and saves it as
-// <name>.hiplc at the project root, so every import in the template stays
-// JOB-relative and the project is moveable. Path resolution lives here; the
-// folder-create + hython run are native (create_houdini_project, houdini.rs).
+// character. hython starts a fresh scene, bakes $JOB to
+// <exportPath>/<houdiniProjectFolder> — the folder the bulk export delivers
+// into as $JOB/dth-export/<scene>/ — creates the DazToHue network FROM THE
+// USER'S INSTALLED HDA (no template scene: a template would rot against newer
+// Houdini/DazToHue versions; instantiating the installed asset is always
+// current) and saves <name>.hiplc at the project root. Path resolution lives
+// here; the folder-create + hython run are native (create_houdini_project,
+// houdini.rs).
 
 const generateInput = charScopeInput.extend({
   /** The new scene's name (dialog input, prefilled `<Project>_<Character>`). */
@@ -33,6 +35,10 @@ export interface GeneratedHoudiniProject {
   scenePath: string
   /** The project folder `$JOB` was baked to. */
   projectDir: string
+  /** Whether the DazToHue network was created from the installed HDA (false =
+   *  hython couldn't see the HDA — the scene saved empty, `$JOB` still baked;
+   *  the user adds the network from the DazToHue shelf). */
+  networkAdded: boolean
 }
 
 export async function generateHoudiniProject({
@@ -52,16 +58,6 @@ export async function generateHoudiniProject({
   if (!(await exists(hythonPath))) {
     throw new Error(`hython was not found:\n${hythonPath}\nCheck the Houdini installation folder in Settings.`)
   }
-  const templatePath = settings.houdiniTemplateScene.trim()
-  if (!templatePath) {
-    throw new Error(
-      'Set the DazToHue template scene in Settings first — save any working DazToHue scene once and point the setting at it.',
-    )
-  }
-  if (!(await exists(templatePath))) {
-    throw new Error(`The template scene was not found:\n${templatePath}\nCheck the setting.`)
-  }
-
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
   const location = await locateCharacter(lib, id)
@@ -89,8 +85,9 @@ export async function generateHoudiniProject({
     )
   }
 
-  await invoke('create_houdini_project', {
-    request: { hythonPath, templatePath, projectDir, scenePath },
-  })
-  return { scenePath, projectDir }
+  // zod-parsed, not a bare invoke<T>() cast (primitive shape — no fixture needed).
+  const networkAdded = z
+    .boolean()
+    .parse(await invoke('create_houdini_project', { request: { hythonPath, projectDir, scenePath } }))
+  return { scenePath, projectDir, networkAdded }
 }

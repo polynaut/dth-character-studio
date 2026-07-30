@@ -179,13 +179,18 @@ older runtimes as stale.
   watch (`expectedSceneCsvRel`) mirrors the same resolution.
 - **Generate Houdini project**: `generateHoudiniProject` (api/houdini.ts) →
   Rust `create_houdini_project` (houdini.rs) runs
-  `<houdiniInstallFolder>/bin/hython.exe -c` to load the user's
-  `houdiniTemplateScene` (both Settings fields), bake
-  `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the programmatic
-  Set Project, saved with the hip) and save `<name>.hiplc` at the project
-  root; the UI (houdini-projects-field "Generate project" dialog, name
-  prefilled `<Project>_<Character>`) links the result as a Houdini card.
-  Fails loud when the scene name already exists or a prerequisite is missing.
+  `<houdiniInstallFolder>/bin/hython.exe -c` to start a FRESH scene, create
+  the DazToHue network from the INSTALLED HDA (discovered among Object-level
+  node types by core name — exact `daztohue` beats substring matches, so the
+  main asset wins over DazToHueImport-style sub-assets; deliberately NO
+  template scene — a template would rot across Houdini/DazToHue versions),
+  bake `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the
+  programmatic Set Project, saved with the hip) and save `<name>.hiplc` at
+  the project root. Returns whether the network was created (HDA not visible
+  to hython → empty scene, UI says "add it from the shelf"); the UI
+  (houdini-projects-field "Generate project" dialog, name prefilled
+  `<Project>_<Character>`) links the result as a Houdini card. Fails loud
+  when the scene name already exists or a prerequisite is missing.
 - **`$DAZ3D_LIB` houdini.env wiring**: with a Daz library + Houdini docs
   folder(s) configured, `DAZ3D_LIB = "<library>"` is upserted into each
   folder's `houdini.env` (`storage/houdini-env.ts` — pure `upsertHoudiniEnvVar`

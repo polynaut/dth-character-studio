@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { CircleCheck, Download, FolderOpen, Plus } from 'lucide-react'
+import { CircleCheck, Download, Plus } from 'lucide-react'
 
 import { Button, Field, InfoPopup, Input, Label, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
@@ -27,7 +27,6 @@ import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
 import { displayPath } from '#/lib/path.ts'
-import { pickHipPath } from '#/lib/desktop.ts'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
 import { FolderField, InstallReportList } from '#/components/install-controls.tsx'
@@ -472,7 +471,6 @@ function SettingsPage() {
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
-    settings.houdiniTemplateScene !== initial.houdiniTemplateScene ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders)
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
@@ -895,16 +893,18 @@ function SettingsPage() {
             )}
           </section>
 
-          {/* "Generate project" prerequisites: hython (from the Houdini install)
-              creates a ready-made DazToHue project from the template scene, with
-              Set Project baked to the character's Houdini project folder. */}
+          {/* "Generate project" prerequisite: hython (from the Houdini install)
+              creates a ready-made DazToHue project — the network is instantiated
+              from the INSTALLED DazToHue HDA (no template scene to rot across
+              Houdini/DazToHue versions), Set Project baked to the character's
+              Houdini project folder. */}
           <section className="space-y-4 rounded-lg border bg-card p-5">
             <div>
               <h2 className="font-semibold">Generate Houdini Projects</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Used by the character page&apos;s <em>Generate project</em> button: hython
-                creates a new Houdini scene from your DazToHue template, with{' '}
-                <span className="font-mono">Set Project</span> baked in.
+                creates a new Houdini scene with the DazToHue network (from your installed
+                DazToHue HDA) and <span className="font-mono">Set Project</span> baked in.
               </p>
             </div>
 
@@ -920,41 +920,6 @@ function SettingsPage() {
                 </>
               }
             />
-
-            <div>
-              <Label className="mb-1 flex w-fit items-center gap-1">
-                DazToHue template scene (optional)
-                <InfoPopup
-                  label="DazToHue template scene — more information"
-                  className="-translate-y-px"
-                >
-                  A Houdini scene with your prepared DazToHue network — save one once from any
-                  working scene. <em>Generate project</em> copies it as the new project&apos;s
-                  scene (with <code>$JOB</code> re-baked), so every generated project starts with
-                  the network ready.
-                </InfoPopup>
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  value={displayPath(settings.houdiniTemplateScene)}
-                  placeholder="D:\Templates\DazToHue_Template.hiplc"
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, houdiniTemplateScene: e.target.value }))
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={async () => {
-                    const picked = await pickHipPath('Select the DazToHue template scene (.hip)')
-                    if (picked) setSettings((s) => ({ ...s, houdiniTemplateScene: picked }))
-                  }}
-                >
-                  <FolderOpen /> Browse
-                </Button>
-              </div>
-            </div>
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">

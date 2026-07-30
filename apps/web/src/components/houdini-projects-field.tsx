@@ -395,8 +395,13 @@ export function HoudiniProjectsField({
           character={character}
           projectName={projectName}
           onClose={() => setGenerateOpen(false)}
-          onGenerated={(scenePath) =>
-            addProjects([scenePath], 'Houdini project generated — DazToHue network and Set Project are baked in')
+          onGenerated={(scenePath, networkAdded) =>
+            addProjects(
+              [scenePath],
+              networkAdded
+                ? 'Houdini project generated — DazToHue network and Set Project are baked in'
+                : 'Houdini project generated (Set Project baked in) — add the DazToHue network from the shelf; the HDA was not visible to hython',
+            )
           }
         />
       )}
@@ -419,12 +424,13 @@ export function HoudiniProjectsField({
 /**
  * "Generate project": one required name input (prefilled
  * `<Project>_<Character>`), then hython creates the ready-made DazToHue
- * project — template loaded, `$JOB` baked to the character's
- * `<export dir>/<Houdini project folder>` (the programmatic File → Set
- * Project), saved as `<name>.hiplc` at that folder's root — and the new scene
- * is linked as a Houdini project card. Needs the Houdini installation folder
- * and the DazToHue template scene in Settings (api/houdini.ts reports either
- * gap as a precise error).
+ * project — a fresh scene with the DazToHue network instantiated from the
+ * INSTALLED HDA (no template file to rot across Houdini/DazToHue versions),
+ * `$JOB` baked to the character's `<export dir>/<Houdini project folder>`
+ * (the programmatic File → Set Project), saved as `<name>.hiplc` at that
+ * folder's root — and the new scene is linked as a Houdini project card.
+ * Needs the Houdini installation folder in Settings (api/houdini.ts reports
+ * every gap as a precise error).
  */
 function GenerateProjectDialog({
   projectId,
@@ -438,7 +444,7 @@ function GenerateProjectDialog({
   projectName: string
   onClose: () => void
   /** Links the generated `.hiplc` (the caller owns the persist + toast). */
-  onGenerated: (scenePath: string) => Promise<void>
+  onGenerated: (scenePath: string, networkAdded: boolean) => Promise<void>
 }) {
   const [name, setName] = useState(defaultHoudiniProjectFolder(projectName, character.name))
   const [busy, setBusy] = useState(false)
@@ -452,7 +458,7 @@ function GenerateProjectDialog({
       const result = await generateHoudiniProject({
         data: { projectId, id: character.id, sceneName: name },
       })
-      await onGenerated(result.scenePath)
+      await onGenerated(result.scenePath, result.networkAdded)
       onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -469,10 +475,11 @@ function GenerateProjectDialog({
         <span className="flex items-center gap-1.5">
           Generate Houdini project
           <InfoPopup label="Generate Houdini project — more information">
-            Creates a new Houdini scene from your DazToHue template (Settings), with{' '}
-            <em>Set Project</em> baked to the character&apos;s Houdini project folder — every
-            import resolves as <code>$JOB/dth-export/…</code>, so the project stays moveable.
-            Runs Houdini&apos;s <code>hython</code>; the first start can take a moment.
+            Creates a new Houdini scene with the DazToHue network (instantiated from your
+            installed DazToHue HDA — always the current version) and <em>Set Project</em> baked
+            to the character&apos;s Houdini project folder — every import resolves as{' '}
+            <code>$JOB/dth-export/…</code>, so the project stays moveable. Runs Houdini&apos;s{' '}
+            <code>hython</code>; the first start can take a moment.
           </InfoPopup>
         </span>
       }
