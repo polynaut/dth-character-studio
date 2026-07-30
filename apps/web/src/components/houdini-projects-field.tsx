@@ -519,7 +519,7 @@ function GenerateProjectDialog({
         )}
       </div>
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
+        <Button variant="ghost" disabled={busy} onClick={onClose}>
           Cancel
         </Button>
         <Button

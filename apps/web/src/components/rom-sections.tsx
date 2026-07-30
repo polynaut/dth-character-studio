@@ -1110,7 +1110,7 @@ export const RomSections = memo(function RomSections({
             Nothing is saved until you save the character.
           </p>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" className="mr-auto" onClick={() => setClearRequest(null)}>
+            <Button variant="ghost" onClick={() => setClearRequest(null)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={onClearConfirmed}>

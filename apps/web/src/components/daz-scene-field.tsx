@@ -7,7 +7,7 @@ import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { FolderMoveChip } from '#/components/folder-move-chip.tsx'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { Portrait } from '#/components/portrait.tsx'
-import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, Switch, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
+import { Button, InfoPopup, Input, Label, LinkedAssetCard, Modal, RemoveAssetDialog, useModifierHeld, useRefetchOnFocus } from '@dth/ui'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
@@ -318,10 +318,10 @@ export function DazSceneField({
   const [removeDeleteFile, setRemoveDeleteFile] = useState(false)
   // The Add-scene dialog machinery doubles as the primary's REPLACE flow: same
   // validation, same copy-vs-link decision — but the confirm swaps `scenePath`
-  // instead of appending an extra, and offers deleting the OLD primary's file
-  // (only when it is an in-folder copy; a linked-in-place original is kept).
+  // instead of appending an extra. The OLD primary's files are ALWAYS cleaned
+  // up when they are an in-folder copy (replacing means replacing — no toggle);
+  // a linked-in-place original is the user's file and is only ever unlinked.
   const [replaceMode, setReplaceMode] = useState(false)
-  const [replaceDeleteOld, setReplaceDeleteOld] = useState(false)
   // Guards onOpen against a double-click launching Daz twice (a ref, so it takes
   // effect synchronously within the same tick — a state flag would lag a render).
   const openingRef = useRef(false)
@@ -562,9 +562,6 @@ export function DazSceneField({
     setAddScan(null)
     setAddOwners(null)
     setReplaceMode(replace)
-    // Default to cleaning up an in-folder old primary (it is "ours" — a copy);
-    // a linked-in-place primary is the user's original and never deletable.
-    setReplaceDeleteOld(replace && insideCharFolder(character.scenePath))
     setPendingAdd(picked)
     const scanId = (addScanId.current += 1)
     const primary = character.scenePath
@@ -676,7 +673,7 @@ export function DazSceneField({
       setPendingAdd('')
       // Persist FIRST, delete after (the remove flow's order) — a failed save
       // must never leave the character pointing at already-deleted files.
-      if (replaceDeleteOld && oldPrimary && insideCharFolder(oldPrimary)) {
+      if (oldPrimary && insideCharFolder(oldPrimary)) {
         try {
           const noDuf = oldPrimary.replace(/\.duf$/i, '')
           await deleteFiles({
@@ -951,21 +948,16 @@ export function DazSceneField({
     : addHardBlocked
       ? 'This scene already belongs to a character — pick a different scene'
       : `A validation check failed — see the table above (or flip “${replaceMode ? 'Replace' : 'Add'} anyway”)`
-  // The replace flow's old-file decision, slotted into both dialog variants: an
-  // in-folder old primary is "ours" (a copy) and defaults to cleanup; a
-  // linked-in-place one is the user's original and is only ever unlinked.
-  const replaceOldBlock = replaceMode ? (
-    insideCharFolder(character.scenePath) ? (
-      <label className="flex w-fit items-center gap-2 text-sm">
-        <Switch checked={replaceDeleteOld} onCheckedChange={setReplaceDeleteOld} disabled={busy} />
-        Delete the old primary scene file
-      </label>
-    ) : (
+  // The replace flow's old-file handling needs no controls: an in-folder old
+  // primary is "ours" (a copy) and is always cleaned up — replacing means
+  // replacing. Only the linked-in-place case gets a notice (the user's
+  // original is only ever unlinked, never touched).
+  const replaceOldBlock =
+    replaceMode && !insideCharFolder(character.scenePath) ? (
       <p className="text-xs text-muted-foreground">
         The old primary is linked in place — your original file is kept.
       </p>
-    )
-  ) : null
+    ) : null
 
   // Two-tone path chip for the scenes ROOT: everything through the CHARACTER
   // folder is dimmed — we're already inside the character here, so only the
@@ -1390,7 +1382,7 @@ export function DazSceneField({
             {replaceOldBlock}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" className="mr-auto" disabled={busy} onClick={() => setPendingAdd('')}>
+              <Button variant="ghost" disabled={busy} onClick={() => setPendingAdd('')}>
                 Cancel
               </Button>
               <Button

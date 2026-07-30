@@ -82,7 +82,7 @@ export function CsvImportDialog({
         )}
       </p>
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" className="mr-auto" onClick={onClose}>
+        <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
         <Button disabled={!valid || count === 0} onClick={submit}>

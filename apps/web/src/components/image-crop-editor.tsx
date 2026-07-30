@@ -162,7 +162,7 @@ export function ImageCropEditor({
         </label>
       )}
       <div className="flex w-full items-center justify-end gap-2">
-        <Button variant="ghost" className="mr-auto" onClick={onCancel} disabled={busy}>
+        <Button variant="ghost" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
         <span className="text-xs text-muted-foreground">

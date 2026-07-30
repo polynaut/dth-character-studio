@@ -104,7 +104,7 @@ export function SceneCopyDialog({
         {extra}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
+          <Button variant="ghost" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
           <Button
