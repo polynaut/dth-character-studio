@@ -323,9 +323,27 @@ export async function openScene({ data }: { data: unknown }): Promise<void> {
   ) {
     await openSceneInRunningDaz(scenePath)
   } else {
-    await shellOpen(scenePath)
+    await openLikeExplorer(scenePath)
   }
   await focusOpenedApp(scenePath)
+}
+
+/**
+ * Open a local file exactly like an Explorer double-click: the Rust command
+ * delegates to the running shell (explorer.exe), so the launched app inherits
+ * the pristine user-session environment — NOT the studio's. Opening through
+ * our own process (the shell plugin) leaks the studio's environment into the
+ * child: launched from a dev shell that set HOME/HOUDINI_*, Houdini resolved
+ * its preferences dir elsewhere and the DazToHue shelf silently vanished from
+ * studio-opened projects while Explorer-opened ones were fine. Falls back to
+ * the shell plugin where delegation isn't available.
+ */
+async function openLikeExplorer(path: string): Promise<void> {
+  try {
+    await invoke('shell_open_file', { path })
+  } catch {
+    await shellOpen(path)
+  }
 }
 
 /** The app executables that could own the window for an opened file, by type —

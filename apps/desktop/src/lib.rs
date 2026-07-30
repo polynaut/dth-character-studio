@@ -14,6 +14,7 @@ mod housekeeping;
 mod install;
 mod poses;
 mod report;
+mod shellopen;
 #[cfg(test)]
 mod testutil;
 mod uninstall;
@@ -130,6 +131,7 @@ pub fn run() {
             daz::run_daz_script,
             daz::launch_daz_studio,
             foreground::focus_app_window,
+            shellopen::shell_open_file,
             install::install_daz_merge,
             install::install_houdini_presets,
             install::install_unreal_dth,

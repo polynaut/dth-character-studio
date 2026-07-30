@@ -179,6 +179,15 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Never create a webview window from a synchronous `#[tauri::command]`** — it
   deadlocks (white frozen window). Use `#[tauri::command(async)]` and
   `tauri::async_runtime::spawn` (the single-instance handler does this).
+- **Apps launched via the shell plugin's `open()` inherit the STUDIO's process
+  environment** — not the user session's. Measured 2026-07-30: a `.hiplc`
+  opened from the studio started Houdini WITHOUT the DazToHue shelf (Houdini
+  resolved its preferences dir from leaked `HOME`/`HOUDINI_*` of the studio's
+  parent shell), while an Explorer double-click was fine. Fix: `shell_open_file`
+  (shellopen.rs) delegates the open to `explorer.exe <file>` — the child is
+  then spawned by the SHELL with the pristine session environment, identical
+  to a double-click by construction. `openScene` (attachments.ts) routes
+  file opens through it (shell-plugin fallback); URL opens keep the plugin.
 - **The Rust crate version (`apps/desktop/Cargo.toml`, `0.1.0`) is cosmetic.**
   The product version lives in `apps/desktop/package.json`
   (`tauri.conf.json` has `"version": "package.json"`); Changesets bumps only the
