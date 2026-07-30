@@ -2,19 +2,17 @@ use serde::Deserialize;
 
 /// Create a ready-made Houdini project for a character: `hython` starts a
 /// fresh scene, bakes `$JOB` to the project folder (`hou.putenv` — the
-/// programmatic File → Set Project, saved with the hip), drops in a DazToHue
-/// network CREATED FROM THE USER'S INSTALLED HDA, and saves the scene.
+/// programmatic File → Set Project, saved with the hip), builds the DazToHue
+/// network by RUNNING THE DAZTOHUE SHELF TOOL'S OWN SCRIPT, and saves the
+/// scene.
 ///
-/// No template scene on purpose: a shipped/user template would rot against
-/// newer Houdini builds and newer DazToHue releases. Building the node at
-/// generate time always instantiates the CURRENTLY installed DazToHue asset,
-/// and the hip is written by the user's own Houdini version. The HDA is
-/// discovered among the installed Object-level node types by its core name
-/// (exact `daztohue` preferred, else the shortest name containing it — the
-/// main asset beats sub-assets like DazToHueImport); when the HDA isn't
-/// visible to hython the project still generates with an empty scene and the
-/// command reports `false` so the UI can say "add the network from the
-/// shelf".
+/// No template scene and no synthetic network on purpose: a template would
+/// rot against newer Houdini/DazToHue releases, and a hand-built
+/// approximation risks a NON-WORKING network that looks done. The shelf
+/// tool's script is the ground truth of what the network is — executing it
+/// dynamically tracks every DazToHue release automatically, and when it
+/// can't run the scene stays EMPTY (the UI says to add the network from the
+/// shelf).
 ///
 /// Path resolution happens in TS (api/houdini.ts); this command only creates
 /// the folder and drives hython. `hython -c` keeps it script-file-free; args
@@ -39,23 +37,27 @@ pub struct CreateHoudiniProjectRequest {
     pub houdini_pref_dir: String,
 }
 
-/// Returns `"<created>|<visible>"`: the created node type ('none' when the
-/// HDA wasn't found — the scene saved empty, `$JOB` still baked), and every
-/// DazToHue-ish node type hython could see across ALL categories
-/// (comma-joined, 'none' when zero) — the UI surfaces the list so a missing
-/// network is diagnosable (otls not loading vs the main asset living at an
-/// unexpected level).
+/// Returns `"<created>|<visible>"`: `Shelf/<tool>` when the shelf tool built
+/// the network ('none' when it couldn't — the scene saved empty, `$JOB`
+/// still baked), and every DazToHue-ish node type hython could see across
+/// ALL categories (comma-joined, 'none' when zero) — the UI surfaces the
+/// list so a missing network is diagnosable (otls not loading vs the shelf
+/// tool failing headless).
 #[tauri::command(async)]
 pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<String, String> {
     std::fs::create_dir_all(&request.project_dir)
         .map_err(|e| format!("Could not create the project folder: {e}"))?;
     let escape = |s: &str| s.replace('\\', "/").replace('\'', "\\'");
-    // The DazToHue "network" is a SOP-level asset (measured on DazToHue 2.x:
-    // hython lists Sop/DazToHue + its Sop/DazToHue* sub-assets, nothing at
-    // Object level) — the shelf's /obj "DazToHue" node is a Geometry object
-    // holding that SOP. Recreate exactly that: a `geo` named DazToHue with
-    // the main SOP asset inside (display/render-flagged). An Object-level
-    // asset is still preferred if a future DazToHue ships one.
+    // ONE creation strategy: run the DazToHue SHELF TOOL's own script
+    // (hou.shelves.tools) — the ground truth of what "the DazToHue network"
+    // is (measured on DazToHue 2.x: a geo holding the Import → Skin →
+    // Skeleton → … → Export chain), and version-proof by construction (a new
+    // DazToHue ships a new tool script, and we execute whatever it says).
+    // Deliberately NO synthetic fallback: hand-building an approximation
+    // leaves the user with a NON-WORKING network that looks done — when the
+    // tool can't run (headless hou.ui touch, tool missing) any half-built
+    // nodes are destroyed and the scene saves EMPTY ($JOB still baked); the
+    // UI says to add the network from the shelf.
     let python = format!(
         concat!(
             "import hou\n",
@@ -63,42 +65,35 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "hou.putenv('JOB', '{job}')\n",
             "added = ''\n",
             "visible = []\n",
-            "def dth_pick(cat):\n",
-            "    best = None\n",
-            "    best_key = None\n",
-            "    for name, t in cat.nodeTypes().items():\n",
-            "        core = t.nameComponents()[2].lower()\n",
-            "        if 'daztohue' not in core:\n",
-            "            continue\n",
-            "        key = (0 if core == 'daztohue' else 1, len(core))\n",
-            "        if best is None or key < best_key:\n",
-            "            best, best_key = t, key\n",
-            "    return best\n",
             "try:\n",
             "    for cat in hou.nodeTypeCategories().values():\n",
             "        for name, t in cat.nodeTypes().items():\n",
             "            if 'daztohue' in t.nameComponents()[2].lower():\n",
             "                visible.append(cat.name() + '/' + t.name())\n",
-            "    obj_type = dth_pick(hou.objNodeTypeCategory())\n",
-            "    if obj_type is not None:\n",
-            "        node = hou.node('/obj').createNode(obj_type.name())\n",
-            "        node.moveToGoodPosition()\n",
-            "        added = 'Object/' + obj_type.name()\n",
-            "    else:\n",
-            "        sop_type = dth_pick(hou.sopNodeTypeCategory())\n",
-            "        if sop_type is not None:\n",
-            "            geo = hou.node('/obj').createNode('geo', 'DazToHue')\n",
-            "            for child in geo.children():\n",
-            "                child.destroy()\n",
-            "            sop = geo.createNode(sop_type.name(), 'DazToHue')\n",
-            "            try:\n",
-            "                sop.setDisplayFlag(True)\n",
-            "                sop.setRenderFlag(True)\n",
-            "            except Exception:\n",
-            "                pass\n",
-            "            sop.moveToGoodPosition()\n",
-            "            geo.moveToGoodPosition()\n",
-            "            added = 'Sop/' + sop_type.name()\n",
+            "    tool = None\n",
+            "    for name, t in hou.shelves.tools().items():\n",
+            "        label = (t.label() or '').lower().replace(' ', '')\n",
+            "        if label == 'daztohue' or name.lower() == 'daztohue':\n",
+            "            tool = t\n",
+            "            break\n",
+            "    if tool is not None:\n",
+            "        before = set(hou.node('/obj').children())\n",
+            "        ok = True\n",
+            "        try:\n",
+            "            exec(tool.script(), {{'hou': hou, 'kwargs': {{}}}})\n",
+            "        except Exception:\n",
+            "            ok = False\n",
+            "        new = [n for n in hou.node('/obj').children() if n not in before]\n",
+            "        if ok and new:\n",
+            "            for n in new:\n",
+            "                n.moveToGoodPosition()\n",
+            "            added = 'Shelf/' + tool.name()\n",
+            "        else:\n",
+            "            for n in new:\n",
+            "                try:\n",
+            "                    n.destroy()\n",
+            "                except Exception:\n",
+            "                    pass\n",
             "except Exception:\n",
             "    added = ''\n",
             "hou.hipFile.save('{scene}')\n",

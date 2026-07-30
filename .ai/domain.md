@@ -179,13 +179,20 @@ older runtimes as stale.
   watch (`expectedSceneCsvRel`) mirrors the same resolution.
 - **Generate Houdini project**: `generateHoudiniProject` (api/houdini.ts) →
   Rust `create_houdini_project` (houdini.rs) runs
-  `<houdiniInstallFolder>/bin/hython.exe -c` to start a FRESH scene, create
-  the DazToHue network from the INSTALLED HDA (discovered among Object-level
-  node types by core name — exact `daztohue` beats substring matches, so the
-  main asset wins over DazToHueImport-style sub-assets; deliberately NO
-  template scene — a template would rot across Houdini/DazToHue versions),
-  bake `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the
-  programmatic Set Project, saved with the hip) and save `<name>.hiplc` in
+  `<houdiniInstallFolder>/bin/hython.exe -c` to start a FRESH scene, build
+  the DazToHue network BY RUNNING THE DAZTOHUE SHELF TOOL'S OWN SCRIPT
+  (hou.shelves.tools — the ground truth; measured on 2.x it builds a geo
+  holding the Import→Skin→…→Export SOP chain, and the assets are all
+  SOP-level). Deliberately NO template scene and NO synthetic fallback — a
+  template rots across versions, and a hand-built approximation is a
+  non-working network that looks done; a failed/absent tool leaves the scene
+  EMPTY (half-built nodes destroyed) and the UI says to click the shelf tool.
+  hython gets HOUDINI_USER_PREF_DIR = the version-MATCHED Houdini docs
+  folder (`lib/houdini-version.ts` pairs install `Houdini X.Y.z` ↔ docs
+  `houdiniX.Y`; no match = hard error + live Settings warning) — inherited
+  env resolved the prefs elsewhere and no otls loaded (measured). It bakes
+  `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the
+  programmatic Set Project, saved with the hip) and saves `<name>.hiplc` in
   the houdini folder NEXT TO the project folder (which is seeded with its
   dth-export/): `houdini/<name>.hiplc` + `houdini/<folder>/dth-export/`.
   Generated projects (hip directly in the export dir) are studio-managed:

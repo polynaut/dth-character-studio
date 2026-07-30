@@ -484,13 +484,13 @@ export function HoudiniProjectsField({
             )
             if (!networkAdded) {
               // Diagnosis for the missing network: no types at all = the otls
-              // never loaded in hython; types visible but creation failed =
-              // something in the asset's own creation scripts threw — the
-              // list makes the report actionable.
+              // never loaded in hython; types visible = the DazToHue shelf
+              // tool itself couldn't run headless (or wasn't found) — nothing
+              // synthetic is built in its place, the scene stays empty.
               toast.info(
                 visibleTypes.length === 0
                   ? 'hython saw no DazToHue node types — the DazToHue otls did not load (check the Houdini documents folder in Settings).'
-                  : `hython saw ${visibleTypes.length} DazToHue node types but could not create the network — please report: ${visibleTypes.join(', ')}`,
+                  : 'The DazToHue shelf tool could not run in hython — open the generated project and click the DazToHue shelf tool once.',
               )
             }
           }}
@@ -582,11 +582,12 @@ function GenerateProjectDialog({
         <span className="flex items-center gap-1.5">
           Generate Houdini project
           <InfoPopup label="Generate Houdini project — more information">
-            Creates a new Houdini scene with the DazToHue network (instantiated from your
-            installed DazToHue HDA — always the current version) and <em>Set Project</em> baked
-            to the character&apos;s Houdini project folder — every import resolves as{' '}
-            <code>$JOB/dth-export/…</code>, so the project stays moveable. Runs Houdini&apos;s{' '}
-            <code>hython</code>; the first start can take a moment.
+            Creates a new Houdini scene with the DazToHue network — built by running your
+            installed DazToHue <em>shelf tool</em>, so it always matches the current plugin —
+            and <em>Set Project</em> baked to the character&apos;s Houdini project folder:
+            every import resolves as <code>$JOB/dth-export/…</code>, so the project stays
+            moveable. Runs Houdini&apos;s <code>hython</code>; the first start can take a
+            moment.
           </InfoPopup>
         </span>
       }
