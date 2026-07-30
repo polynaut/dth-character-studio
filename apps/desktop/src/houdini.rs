@@ -50,6 +50,12 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
     std::fs::create_dir_all(&request.project_dir)
         .map_err(|e| format!("Could not create the project folder: {e}"))?;
     let escape = |s: &str| s.replace('\\', "/").replace('\'', "\\'");
+    // The DazToHue "network" is a SOP-level asset (measured on DazToHue 2.x:
+    // hython lists Sop/DazToHue + its Sop/DazToHue* sub-assets, nothing at
+    // Object level) — the shelf's /obj "DazToHue" node is a Geometry object
+    // holding that SOP. Recreate exactly that: a `geo` named DazToHue with
+    // the main SOP asset inside (display/render-flagged). An Object-level
+    // asset is still preferred if a future DazToHue ships one.
     let python = format!(
         concat!(
             "import hou\n",
@@ -57,24 +63,42 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<St
             "hou.putenv('JOB', '{job}')\n",
             "added = ''\n",
             "visible = []\n",
-            "try:\n",
-            "    for cat in hou.nodeTypeCategories().values():\n",
-            "        for name, t in cat.nodeTypes().items():\n",
-            "            if 'daztohue' in t.nameComponents()[2].lower():\n",
-            "                visible.append(cat.name() + '/' + t.name())\n",
+            "def dth_pick(cat):\n",
             "    best = None\n",
             "    best_key = None\n",
-            "    for name, t in hou.objNodeTypeCategory().nodeTypes().items():\n",
+            "    for name, t in cat.nodeTypes().items():\n",
             "        core = t.nameComponents()[2].lower()\n",
             "        if 'daztohue' not in core:\n",
             "            continue\n",
             "        key = (0 if core == 'daztohue' else 1, len(core))\n",
             "        if best is None or key < best_key:\n",
             "            best, best_key = t, key\n",
-            "    if best is not None:\n",
-            "        node = hou.node('/obj').createNode(best.name())\n",
+            "    return best\n",
+            "try:\n",
+            "    for cat in hou.nodeTypeCategories().values():\n",
+            "        for name, t in cat.nodeTypes().items():\n",
+            "            if 'daztohue' in t.nameComponents()[2].lower():\n",
+            "                visible.append(cat.name() + '/' + t.name())\n",
+            "    obj_type = dth_pick(hou.objNodeTypeCategory())\n",
+            "    if obj_type is not None:\n",
+            "        node = hou.node('/obj').createNode(obj_type.name())\n",
             "        node.moveToGoodPosition()\n",
-            "        added = best.name()\n",
+            "        added = 'Object/' + obj_type.name()\n",
+            "    else:\n",
+            "        sop_type = dth_pick(hou.sopNodeTypeCategory())\n",
+            "        if sop_type is not None:\n",
+            "            geo = hou.node('/obj').createNode('geo', 'DazToHue')\n",
+            "            for child in geo.children():\n",
+            "                child.destroy()\n",
+            "            sop = geo.createNode(sop_type.name(), 'DazToHue')\n",
+            "            try:\n",
+            "                sop.setDisplayFlag(True)\n",
+            "                sop.setRenderFlag(True)\n",
+            "            except Exception:\n",
+            "                pass\n",
+            "            sop.moveToGoodPosition()\n",
+            "            geo.moveToGoodPosition()\n",
+            "            added = 'Sop/' + sop_type.name()\n",
             "except Exception:\n",
             "    added = ''\n",
             "hou.hipFile.save('{scene}')\n",

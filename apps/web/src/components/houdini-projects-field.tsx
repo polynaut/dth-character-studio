@@ -484,12 +484,13 @@ export function HoudiniProjectsField({
             )
             if (!networkAdded) {
               // Diagnosis for the missing network: no types at all = the otls
-              // never loaded in hython; SOP-only types = the main asset isn't
-              // an Object-level HDA (the shelf tool builds it another way).
+              // never loaded in hython; types visible but creation failed =
+              // something in the asset's own creation scripts threw — the
+              // list makes the report actionable.
               toast.info(
                 visibleTypes.length === 0
                   ? 'hython saw no DazToHue node types — the DazToHue otls did not load (check the Houdini documents folder in Settings).'
-                  : `DazToHue types visible to hython: ${visibleTypes.join(', ')} — none is an Object-level asset; please report this list.`,
+                  : `hython saw ${visibleTypes.length} DazToHue node types but could not create the network — please report: ${visibleTypes.join(', ')}`,
               )
             }
           }}
