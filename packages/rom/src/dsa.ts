@@ -1023,13 +1023,17 @@ if (dthSceneLinkErr) {
                 // DS4 saves through the content manager; DS6 dropped that
                 // method and moved save-as onto Scene (probe-measured
                 // 2026-07-30 — DzContentMgr.saveScene is a TypeError there).
-                var dthRomSaveOk = false;
+                // Two return conventions: the content manager answers a plain
+                // bool, DzScene::saveScene a DzError where 0 IS success (SDK
+                // header, both variants) — a truthiness test on that logged
+                // every successful DS6 save as a failure.
+                var dthRomSaveRc = null;
                 if (typeof App.getContentMgr().saveScene == "function") {
-                    dthRomSaveOk = App.getContentMgr().saveScene(dthRomSavePath);
+                    dthRomSaveRc = App.getContentMgr().saveScene(dthRomSavePath);
                 } else if (typeof Scene.saveScene == "function") {
-                    dthRomSaveOk = Scene.saveScene(dthRomSavePath);
+                    dthRomSaveRc = Scene.saveScene(dthRomSavePath);
                 }
-                if (dthRomSaveOk) {
+                if (dthRomSaveRc === true || dthRomSaveRc === 0) {
                     print("ROM scene saved: " + dthRomSavePath);
                 } else {
                     print("Could not save the ROM scene to " + dthRomSavePath);

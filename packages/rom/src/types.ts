@@ -1241,8 +1241,15 @@ export const CHARACTER_SCHEMA_VERSION = 28
  *       warning, never a run-log failure (a scene without that clothing is an
  *       expected state). Refresh assets to regenerate scripts onto the new
  *       runtime.
+ *  45 — generated-script fix (runtime files untouched): the ROM-scene save
+ *       reported success by TRUTHINESS, but `DzScene::saveScene` returns a
+ *       **DzError** — where 0 IS success (SDK header, DS4 + DS6) — so every
+ *       successful DS6 save logged "Could not save the ROM scene". Only
+ *       `App.getContentMgr().saveScene` answers a plain bool; the check now
+ *       accepts either convention. Bumped so Refresh assets regenerates the
+ *       scripts whose log line lies.
  */
-export const RUNTIME_VERSION = 44
+export const RUNTIME_VERSION = 45
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

@@ -115,12 +115,18 @@ export {
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  fetchRomAnimations,
   generateRomAnimation,
   launchDazForPendingJobs,
   openSceneInRunningDaz,
   romAnimationFresh,
 } from './api/execute'
-export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
+export type {
+  ExecuteJobsSummary,
+  ExecuteSceneStatus,
+  ExportRunProgress,
+  RomAnimationStatus,
+} from './api/execute'
 
 // --- houdini: Generate project (hython, DazToHue network from the HDA) -------
 export {

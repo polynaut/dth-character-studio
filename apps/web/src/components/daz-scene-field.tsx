@@ -19,8 +19,7 @@ import {
   dazStudioRunning,
   deleteFiles,
   fetchCharactersWithProblems,
-  fetchExecuteScenes,
-  fileExists,
+  fetchRomAnimations,
   generateRomAnimation,
   moveCharacterScenesFolder,
   openScene,
@@ -364,34 +363,26 @@ export function DazSceneField({
   // ── Open-in-Daz dropdown: Original vs ROM animation ─────────────────────
   // The card's open button shows a two-entry menu (Alt+click keeps the direct
   // Explorer reveal). The second entry opens the scene's saved
-  // `.ROM_Animations/<stem>_ROM.duf` when it exists AND is current — a scene
-  // "affected" since its last handoff has a STALE saved ROM, and Ctrl forces a
-  // rebuild — otherwise it reads "Open and Generate ROM Animation": a one-row
-  // Runner batch on the hidden ROM-only script, then the fresh file opens by
-  // itself.
+  // `.ROM_Animations/<stem>_ROM.duf` when it exists AND was built from the
+  // current inputs (`fetchRomAnimations` — file mtimes, no stamps, so a focus
+  // re-read always tells the truth); Ctrl forces a rebuild. Otherwise it reads
+  // "Open and Generate ROM Animation": a one-row Runner batch on the hidden
+  // ROM-only script, then the fresh file opens by itself.
   const [menuFor, setMenuFor] = useState<string | null>(null)
-  const [romSet, setRomSet] = useState<ReadonlySet<string>>(new Set())
-  const [affectedSet, setAffectedSet] = useState<ReadonlySet<string>>(new Set())
+  const [romReadySet, setRomReadySet] = useState<ReadonlySet<string>>(new Set())
   const [generatingRom, setGeneratingRom] = useState('')
   const ctrlHeld = useModifierHeld('Control')
   const romScenes = [character.scenePath, ...character.extraScenes].filter(Boolean)
   const romScenesKey = romScenes.join('|')
   useRefetchOnFocus(
     () => {
-      void (async () => {
-        const checks = await Promise.all(
-          romScenes.map(
-            async (s) => [s, await fileExists({ data: { path: romAnimationPath(s) } })] as const,
-          ),
+      void fetchRomAnimations({ data: { projectId, id: character.id } })
+        .then((status) =>
+          setRomReadySet(new Set(status.filter((s) => s.current).map((s) => s.scenePath))),
         )
-        setRomSet(new Set(checks.filter(([, ok]) => ok).map(([s]) => s)))
-        try {
-          const status = await fetchExecuteScenes({ data: { projectId, id: character.id } })
-          setAffectedSet(new Set(status.filter((s) => s.affected).map((s) => s.scenePath)))
-        } catch {
-          // Stamps unreadable — treat nothing as affected; the saved ROM still opens.
-        }
-      })()
+        // Best-effort: an unreadable project share leaves the last answer in
+        // place (worst case one needless rebuild), never an unhandled rejection.
+        .catch(() => {})
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [romScenesKey],
@@ -423,7 +414,9 @@ export function DazSceneField({
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 3000))
         if (await romAnimationFresh({ data: { romPath, sinceMs: startedAt } })) {
-          setRomSet((prev) => new Set(prev).add(scene))
+          // Just built from the current definition — ready without waiting for
+          // the next focus re-read.
+          setRomReadySet((prev) => new Set(prev).add(scene))
           await onOpen(romPath)
           return
         }
@@ -1230,11 +1223,7 @@ export function DazSceneField({
                         void onOpen(romAnimationPath(character.scenePath))
                       }}
                       onGenerateRom={() => void onGenerateRom(character.scenePath)}
-                      romReady={
-                        romSet.has(character.scenePath) &&
-                        !affectedSet.has(character.scenePath) &&
-                        !ctrlHeld
-                      }
+                      romReady={romReadySet.has(character.scenePath) && !ctrlHeld}
                       generating={generatingRom === character.scenePath}
                       onClose={() => setMenuFor(null)}
                     />
@@ -1273,7 +1262,7 @@ export function DazSceneField({
                         void onOpen(romAnimationPath(scene))
                       }}
                       onGenerateRom={() => void onGenerateRom(scene)}
-                      romReady={romSet.has(scene) && !affectedSet.has(scene) && !ctrlHeld}
+                      romReady={romReadySet.has(scene) && !ctrlHeld}
                       generating={generatingRom === scene}
                       onClose={() => setMenuFor(null)}
                     />
