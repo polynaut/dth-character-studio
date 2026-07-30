@@ -183,6 +183,15 @@ after the last row:
   a no-save replace IS the discard between rows. (The generated script itself
   saves its own `_ROM.duf` copy into `.ROM_Animations/` beside the scene —
   that's the script's business, not the plugin's.)
+- **…but it never silently discards the USER'S scene either (Runner v1.1.2+):**
+  the batch's FIRST scene load — and every `open-scene` job — replaces
+  whatever the user had open. When that scene has unsaved changes
+  (`assetNeedSave`), the plugin raises the Daz window and shows Daz's own
+  Save Changes choice (Yes runs the regular File → Save, Save As included).
+  Cancel — or cancelling the save — cancels the batch: the unprocessed rows
+  are marked `failed` ("cancelled — unsaved changes in the open scene"),
+  progress goes to 100 and the studio reports it like any failure. Later rows
+  replace only the previous row's throwaway keyframes and never prompt.
 - **Per-row failure policy:** a missing scene file, a missing script file, or a
   script that errors → log it and continue with the next row. The generated
   scripts write a per-character run log the studio reads back, so fine-grained
