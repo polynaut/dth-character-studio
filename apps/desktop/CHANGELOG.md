@@ -1,5 +1,29 @@
 # @dth/desktop
 
+## 0.51.2
+
+### Patch Changes
+
+- [#591](https://github.com/polynaut/dth-character-studio/pull/591) [`2ab11bd`](https://github.com/polynaut/dth-character-studio/commit/2ab11bd2d135210ffe24c850cc8191a2113ed4b3) Thanks [@polynaut](https://github.com/polynaut)! - fix(desktop): bundle the first **loadable** DTH Character Studio Runner (v1.0.3). v0.51.1 shipped with Runner v1.0.0, which Daz Studio refused to load — the SDK's Windows plugin macro exports C++-mangled entry points while Daz resolves plain C names, and the DLL was built against an SDK newer than released Studios (Daz rejects plugin SDK > studio build). Both are fixed in the Runner repo (v1.0.3: `extern "C"` entry points, built against the oldest supported 6.25 SDK); this release just re-bundles. If Settings → Install DTH Character Studio Runner Plugin previously installed v1.0.0 for you, install again after updating — the panel will show the bundled version differs.
+
+## 0.51.1
+
+### Patch Changes
+
+- [#589](https://github.com/polynaut/dth-character-studio/pull/589) [`dd31bb0`](https://github.com/polynaut/dth-character-studio/commit/dd31bb0afed52bbf2d265b0661507912ace11db2) Thanks [@polynaut](https://github.com/polynaut)! - fix(release): the Runner-DLL fetch step broke the release build — `beforeBuildCommand` runs from `apps/desktop`, where the root `fetch:runner` script isn't visible (`pnpm -w` now), and the fetch script's skip path crashed Node on Windows via `process.exit()` with undici handles still open. No user-facing change; this re-cuts the release that v0.51.0 failed to build.
+
+## 0.51.0
+
+### Minor Changes
+
+- [#584](https://github.com/polynaut/dth-character-studio/pull/584) [`88e47ac`](https://github.com/polynaut/dth-character-studio/commit/88e47ac55e81ec54a1960cf4a5e30753b3bd7ac8) Thanks [@polynaut](https://github.com/polynaut)! - feat(web,desktop,rom): **DTH Export** in the character editor header — hand the ROM+export runs to the DTH Exporter Plugin. The button opens a scene-picker dialog listing every linked Daz scene as a checkable card; scenes whose `.duf` or definition inputs changed since their last handoff come pre-checked (first run: all), and a per-row wand solos one scene. Confirming writes a `dth_exporter_jobs.csv` (one ROM-script row per scene) into the `Scripts/DTH-Character-Studio` root and starts a scene-less Daz Studio when it isn't running (new `launch_daz_studio` command); the plugin polls for the file (startup + regularly — a running Daz accepts new batches in place), deletes it as the transfer ack, and works through the rows (contract: `docs/exporter-plugin-job-file.md`). While the job file is still waiting for Daz, the button shows **Abort** — clicking deletes the file (and re-flags the aborted scenes as changed) and returns to DTH Export.
+
+  Runtime v38: generated scripts understand the **`bulk-export` script argument** the plugin passes on job runs — with it, the ROM script always exports (export block embedded even with "Run the export with the ROM script" off, hair pass past a disabled "Export hair assets"); a manual run keeps honoring the toggles. Also: InfoPopups now work inside modal dialogs — opening a Modal/SidePanel closes any open popup, and the popup layer moved above the dialogs.
+
+  The app now **ships the DTH Character Studio Runner plugin** (our own Daz plugin implementing the job-file contract, [polynaut/dth-character-studio-runner](https://github.com/polynaut/dth-character-studio-runner)): its DLLs are fetched from that repo's latest release at build time and bundled as app resources, and the new **Settings → Install DTH Character Studio Runner Plugin** panel installs the right DLL (Daz Studio 4 vs 6, detected from the install folder's DAZStudio exe) into `<Daz install>/plugins` — no folder picking, with dry run, up-to-date detection and the usual install report.
+
+- [#583](https://github.com/polynaut/dth-character-studio/pull/583) [`58803cc`](https://github.com/polynaut/dth-character-studio/commit/58803ccb811b7d4fa544114d73e8f86cafdc1a36) Thanks [@polynaut](https://github.com/polynaut)! - feat(web,desktop): project **Operations** tab with a danger zone. Its one action, **Delete**, permanently removes the whole project after a confirm: the project folder (characters, scenes, generated files, notes), the project's generated Daz-script folder in the Daz library, its app-data product scans, and its Recents entry. A file open in Daz Studio / Houdini aborts the delete before anything is touched. Afterwards the window continues as a Home window (new `release_project_window` command unpins it).
+
 ## 0.50.1
 
 ### Patch Changes

@@ -27,14 +27,29 @@ const GAP = 4
 /** Minimum breathing room the popup keeps from the viewport edges. */
 const EDGE = 8
 
+/** Every OPEN popup registers a close callback here so the overlay layers can
+ *  sweep them — see {@link closeAllInfoPopups}. */
+const openPopups = new Set<() => void>()
+
+/**
+ * Close every currently-open InfoPopup (pinned or peeked). The popup portal
+ * sits ABOVE the modal layers (`z-[60]` vs the dialogs' z-50 — that is what
+ * makes an InfoPopup INSIDE a dialog work), so an overlay opening under a
+ * still-open popup must sweep it first or the stale popup would float over the
+ * new layer. Modal and SidePanel call this the moment they open.
+ */
+export function closeAllInfoPopups() {
+  for (const close of [...openPopups]) close()
+}
+
 /**
  * The overflow padding for flip/shift: the usual {@link EDGE} on every side,
- * PLUS the live sticky-header height on top. The sticky page header (z-40) now
- * sits ABOVE this popup's z-30 portal, so a `placement:"top"` popup with no room
- * above the header would be hidden BEHIND it — the header inset makes it flip
- * below and stay visible instead. Read from the CSS var each compute (it's a
- * derivable) so it tracks the header collapsing on scroll; absent (a plain page)
- * it's 0.
+ * PLUS the live sticky-header height on top. The popup portal (`z-[60]`)
+ * renders ABOVE the sticky page header (z-40), so without the inset a
+ * `placement:"top"` popup with no room above the header would float OVER it —
+ * the header inset makes it flip below and leave the header readable instead.
+ * Read from the CSS var each compute (it's a derivable) so it tracks the
+ * header collapsing on scroll; absent (a plain page) it's 0.
  */
 function overflowPadding() {
   let headerH = 0
@@ -135,6 +150,21 @@ export function InfoPopup({
 
   const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss, role])
 
+  // While open, register with the overlay sweep: an opening Modal/SidePanel
+  // closes every popup so none floats over the new layer (the popup portal
+  // renders above those layers — see closeAllInfoPopups).
+  React.useEffect(() => {
+    if (!open) return
+    const close = () => {
+      setOpen(false)
+      setPinned(false)
+    }
+    openPopups.add(close)
+    return () => {
+      openPopups.delete(close)
+    }
+  }, [open])
+
   // Opacity-only fade — the floating element's positioning already owns its
   // `transform`, so the transition must not also animate transform.
   const { isMounted, styles: transitionStyles } = useTransitionStyles(context, { duration: 150 })
@@ -222,10 +252,11 @@ export function InfoPopup({
             <div
               ref={refs.setFloating}
               style={{ ...floatingStyles, ...transitionStyles }}
-              // z-30: below the sticky page header (z-40, so a popup that reaches
-              // into the header is covered, not floating over it) and below modal
-              // dialogs (z-50); still above page content via its body portal.
-              className="z-30 max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
+              // z-[60]: above modal dialogs and side panels (z-50) so popups
+              // work INSIDE them — safe because those layers sweep any open
+              // popup when they appear (closeAllInfoPopups), so nothing stale
+              // ever floats over a fresh overlay. Below the tooltips (z-[100]).
+              className="z-[60] max-w-xs rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-neutral-100 shadow-2xl [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_em]:italic [&_strong]:font-semibold"
               {...getFloatingProps({ onClick: onContentClick })}
             >
               {children}

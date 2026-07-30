@@ -16,6 +16,7 @@
     "dev:desktop": "pnpm --filter @dth/desktop tauri dev",
     "build": "pnpm --filter @dth/web build",
     "build:desktop": "pnpm --filter @dth/desktop tauri build",
+    "fetch:runner": "node scripts/fetch-runner.mjs",
     "generate-routes": "pnpm --filter @dth/web generate-routes",
     "screenshots": "pnpm --filter @dth/web screenshots",
     "clips": "pnpm --filter @dth/web clips",

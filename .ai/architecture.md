@@ -73,9 +73,11 @@ a plain browser with native features as no-ops):
   function takes `{ data }` and zod-parses it at entry. Modules: `core.ts`
   (shared state: active project dir, pose catalog, caches), `characters.ts`
   (CRUD/imports/run-log), `projects.ts` (`.dcsp` lifecycle), `generate.ts`
-  (artifact generation + `resolvePresetFrames` + staleness sweep), `install.ts`,
-  `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`, `products.ts`,
-  `native-types.ts` (the FFI zod schemas).
+  (artifact generation + `resolvePresetFrames` + staleness sweep), `execute.ts`
+  (the DTH Exporter job-file handoff + Daz launch — pure parts in
+  `lib/rom/execute-jobs.ts`, contract in `docs/exporter-plugin-job-file.md`),
+  `install.ts`, `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`,
+  `products.ts`, `native-types.ts` (the FFI zod schemas).
 - `lib/rom/storage/` — filesystem persistence (plugin-fs): `settings.ts`
   (**`studioSettingsSchema`** — THE app-global settings definition),
   `projects.ts` (**`DcspManifest`** + recents), `characters.ts` (scan/CRUD +
@@ -118,7 +120,7 @@ derived from the `.dcsp` *filename*, set at creation. Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 25 commands** registered in `generate_handler!` — installs
+**FFI surface: 29 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
@@ -126,7 +128,9 @@ scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `release_project_window` — the last unpins a window after its project is deleted
 so it continues as a Home window; the home window opens via the native menu's
 Rust-side `open_home_window_impl`, no command), Daz bridge
-(`daz_studio_running`/`run_daz_script`/`focus_app_window`), drives
+(`daz_studio_running`/`run_daz_script`/`launch_daz_studio`/`focus_app_window` —
+`launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
+see `docs/exporter-plugin-job-file.md`), drives
 (`unc_for_path`/`ensure_network_drives`), `housekeeping_sweep`,
 `app_release_tags`, `unreal_dth_present`. Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
@@ -135,7 +139,12 @@ by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).
 Window creation must never run on the main thread from a sync command
 (deadlock) — `windows.rs` documents the pattern. `tauri.conf.json`:
 `"version": "package.json"`, `.dcsp` file association, NSIS bundle, updater
-config + pubkey, strict CSP, `fs.requireLiteralLeadingDot: false`.
+config + pubkey, strict CSP, `fs.requireLiteralLeadingDot: false`, and
+`bundle.resources` shipping the **DTH Character Studio Runner** plugin DLLs
+(`resources/dth-runner/` — staged at build time from the
+polynaut/dth-character-studio-runner repo's latest release by
+`scripts/fetch-runner.mjs` via `beforeBuildCommand`; installed from Settings
+into `<Daz install>/plugins`, DS4 vs DS6 detected from the DAZStudio exe).
 
 ## The projects model
 

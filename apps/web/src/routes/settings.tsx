@@ -9,9 +9,11 @@ import {
   fetchActiveProject,
   fetchAppDataFolder,
   fetchPoseAssets,
+  fetchRunnerStatus,
   fetchSettings,
   installDthPlugin,
   installDthRelease,
+  installDthRunner,
   installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
@@ -40,7 +42,7 @@ import type {
   ExporterReleasesState,
   ReleasesState,
 } from '#/components/settings/release-pickers.tsx'
-import type { InstallReport } from '#/lib/rom/api.ts'
+import type { InstallReport, RunnerStatus } from '#/lib/rom/api.ts'
 
 export const Route = createFileRoute('/settings')({
   // Settings is reachable from several places; an optional `from` label lets the
@@ -427,17 +429,35 @@ function SettingsPage() {
       setInstalledExporter(version)
   }, [])
 
-  // Debounced so typing the install path doesn't re-read the DLL on every
+  // The bundled Runner plugin's state vs the same Daz install folder — same
+  // cancel-aware reader pattern as loadInstalledExporter above.
+  const [runnerState, setRunnerState] = useState<RunnerStatus | null>(null)
+  const [runnerInstalling, setRunnerInstalling] = useState(false)
+  const [runnerReport, setRunnerReport] = useState<InstallReport | null>(null)
+  const runnerReadSeq = useRef(0)
+  const loadRunnerStatus = useCallback(async () => {
+    const seq = ++runnerReadSeq.current
+    const folder = dazInstallFolderRef.current
+    const status = await fetchRunnerStatus(folder)
+    if (seq === runnerReadSeq.current && folder === dazInstallFolderRef.current)
+      setRunnerState(status)
+  }, [])
+
+  // Debounced so typing the install path doesn't re-read the DLLs on every
   // keystroke (an emptied folder clears immediately). The timer only guards the
-  // START of a read — in-flight staleness is the helper's own validity check.
+  // START of a read — in-flight staleness is each helper's own validity check.
   useEffect(() => {
     if (!settings.dazInstallFolder) {
       void loadInstalledExporter()
+      void loadRunnerStatus()
       return
     }
-    const timer = setTimeout(() => void loadInstalledExporter(), 350)
+    const timer = setTimeout(() => {
+      void loadInstalledExporter()
+      void loadRunnerStatus()
+    }, 350)
     return () => clearTimeout(timer)
-  }, [settings.dazInstallFolder, loadInstalledExporter])
+  }, [settings.dazInstallFolder, loadInstalledExporter, loadRunnerStatus])
 
   // Scoped to the machine-setting fields the General tab edits. Save still writes the
   // full settings object, but the Tools-page fields are untouched here so they never
@@ -523,6 +543,16 @@ function SettingsPage() {
   const pluginBlockers: Array<string> = []
   if (!exporterReady) pluginBlockers.push('a DTH Exporter Plugin')
   if (!settings.dazInstallFolder) pluginBlockers.push('the Daz Studio install folder')
+
+  // The Runner ships with the app — only the Daz install folder gates it (plus
+  // a readable status: flavor detected, bundled DLL present).
+  const canInstallRunner = !!settings.dazInstallFolder && !!runnerState && !runnerState.error
+  const runnerInstallLabel =
+    runnerState?.installed === 'none'
+      ? 'Install'
+      : runnerState?.installed === 'current'
+        ? 'Reinstall'
+        : 'Update'
 
   // Compare the release's exporter version with the one already in the plugins
   // folder to drive the status line + button label (Install / Update / Reinstall).
@@ -993,6 +1023,87 @@ function SettingsPage() {
               <p className="text-sm text-destructive">
                 Install failed — close all Daz and Houdini apps and restart DTH Character Studio as
                 administrator, then try again.
+              </p>
+            )}
+          </section>
+
+          {/* The Runner plugin ships INSIDE the app (fetched from
+              polynaut/dth-character-studio-runner at build time) — no source
+              folder to pick; only the Daz install folder above matters, and the
+              DS4-vs-DS6 DLL is chosen from its DAZStudio exe version. */}
+          <section className="space-y-4 rounded-lg border bg-card p-5">
+            <div>
+              <h2 className="font-semibold">Install DTH Character Studio Runner Plugin</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Runs DTH Export batches in Daz Studio unattended: the plugin polls for the job file
+                the character editor's <strong>DTH Export</strong> button writes and works through
+                it scene by scene. It ships with this app — installing copies the right DLL (Daz
+                Studio 4 vs 6, detected from the install folder above) into Daz Studio's
+                <span className="font-mono"> plugins</span> folder.
+              </p>
+            </div>
+
+            {!settings.dazInstallFolder ? (
+              <p className="text-sm text-muted-foreground">
+                Set the Daz Studio install folder above to enable the install.
+              </p>
+            ) : runnerState?.error ? (
+              <p className="text-sm text-destructive">{runnerState.error}</p>
+            ) : runnerState ? (
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Bundled Runner{' '}
+                  <strong className="text-foreground">{runnerState.bundledVersion || '?'}</strong>
+                  {runnerState.flavor && (
+                    <> — {runnerState.flavor === 'ds6' ? 'Daz Studio 6' : 'Daz Studio 4'} detected.</>
+                  )}
+                </p>
+                {runnerState.installed === 'none' ? (
+                  <p>Not installed in this Daz Studio yet.</p>
+                ) : runnerState.installed === 'current' ? (
+                  <p className="flex items-center gap-1.5 text-emerald-500">
+                    <CircleCheck className="size-4 shrink-0" />
+                    Already installed — up to date.
+                  </p>
+                ) : (
+                  <p>A different Runner DLL is installed — updating replaces it.</p>
+                )}
+              </div>
+            ) : null}
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => runInstall(installDthRunner, true, setRunnerInstalling, setRunnerReport)}
+                disabled={!canInstallRunner || runnerInstalling}
+              >
+                {runnerInstalling ? 'Working…' : 'Dry run'}
+              </Button>
+              <Button
+                onClick={() =>
+                  runInstall(
+                    installDthRunner,
+                    false,
+                    setRunnerInstalling,
+                    setRunnerReport,
+                    () => void loadRunnerStatus(),
+                  )
+                }
+                disabled={!canInstallRunner || runnerInstalling}
+              >
+                <Download /> {runnerInstalling ? 'Installing…' : runnerInstallLabel}
+              </Button>
+            </div>
+
+            {runnerReport && (
+              <InstallReportList report={runnerReport} onClose={() => setRunnerReport(null)} />
+            )}
+
+            {runnerReport?.steps.some((step) => step.status === 'error') && (
+              <p className="text-sm text-destructive">
+                Install failed — close all Daz apps and restart DTH Character Studio as
+                administrator, then try again. (A running Daz Studio locks its loaded plugin
+                DLLs.)
               </p>
             )}
           </section>

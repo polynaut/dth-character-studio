@@ -5,6 +5,16 @@ current code before relying on details, but assume the *lesson* still holds.
 
 ## Generation core
 
+- **Export outputs are never housekept by the studio.** Everything under the
+  character's export directory is written Daz-side at script run time (the
+  Exporter Plugin's `.abc`/`.fbx`/`Reference Skeletons/`, the script-copied
+  CSV). A layout change — renaming a scene's subfolder (which renames its
+  export subfolder), or the runtime-v37 always-subfolder switch itself — only
+  changes where FUTURE runs land; previous outputs stay at the old spot, so
+  layouts can coexist until the user cleans up. Deliberate so far: exports are
+  user deliverables (large, possibly open in Houdini) — don't auto-move/delete
+  them without an explicit user action.
+
 - **Frame math returns -1, not 0, for "no preset block"** — `presetEndFrame` is
   designed so the first custom pose lands at frame 0. Clamping to 0 introduces an
   off-by-one that `generate.test.ts` guards explicitly.
@@ -382,7 +392,7 @@ current code before relying on details, but assume the *lesson* still holds.
   read the two arrays from that same file, cached separately. Bones are otherwise
   skipped by the morph scan (they carry no morph dials). An old (v1) or
   never-scanned file just yields empty lists — re-run Build_Genesis_Index in Daz.
-  Since runtime v38 ONE run writes all four generations (index `version: 3`, with a
+  Since runtime v39 ONE run writes all four generations (index `version: 3`, with a
   `figures` array naming what was scanned); the readers only ever look at `morphs` +
   `bones`, so the metadata is free to change.
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
@@ -456,3 +466,16 @@ current code before relying on details, but assume the *lesson* still holds.
   not accessible by integration" despite `contents: write`). The publish job runs
   on the `RELEASE_PAT` secret — if publishing ever 403s/401s again, **check the
   PAT's expiry first** before diagnosing anything else. See `.ai/release.md`.
+- **`beforeBuildCommand` runs with CWD = `apps/desktop`** (the tauri config
+  dir), not the repo root — a ROOT package.json script must be invoked as
+  `pnpm -w <script>` or pnpm resolves it recursively and fails with
+  "Command not found" (broke the v0.51.0 release build; the PR-CI rust job
+  never runs the hook, so only a real release surfaces it).
+- **`process.exit()` in a Node script that used `fetch` can crash on Windows**
+  (Node 24 libuv assertion `!(handle->flags & UV_HANDLE_CLOSING)`, exit
+  0xC0000409) — undici's handles are still winding down. Let the script end
+  naturally instead (measured in scripts/fetch-runner.mjs's skip path).
+- **tauri-build hard-fails on a `bundle.resources` glob that matches nothing**
+  — a gitignored, build-time-staged resource dir needs a build.rs seed (see
+  the dth-runner placeholder in apps/desktop/build.rs) or plain
+  `cargo check`/`clippy` breaks on fresh clones and CI.

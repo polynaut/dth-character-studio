@@ -1615,11 +1615,15 @@ describe('exporter integration', () => {
     expect(rom.fileName).toBe('ROM_Electra_G9.dsa')
     expect(rom.content).toContain('ApplyDTHCharacter(')
     expect(rom.content).toContain('doExport')
+    // Combined: every clean ROM run exports — no bulk condition on the gate.
+    expect(rom.content).toContain('if (dthRomOk === true) {')
+    // The bulk-run detection ships with every export-carrying script (v38).
+    expect(rom.content).toContain('var dthBulkExport = false;')
     const files = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra')
     expect(files.map((f) => f.fileName)).toEqual(['ROM_Electra_G9.dsa', 'Electra_pose_asset.csv'])
   })
 
-  it('split (exportWithRomScript off): ROM_ script builds, Export_ script exports', () => {
+  it('split (exportWithRomScript off): the ROM script exports on BULK runs only, Export_ script for manual', () => {
     const character = withReferencePose({
       name: 'Electra',
       exportPath: 'X:\\exports\\electra',
@@ -1628,7 +1632,11 @@ describe('exporter integration', () => {
     const rom = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra')
     expect(rom.fileName).toBe('ROM_Electra_G9.dsa')
     expect(rom.content).toContain('ApplyDTHCharacter(')
-    expect(rom.content).not.toContain('doExport') // ROM only, no export
+    // v38: the export block is embedded even in split mode, but gated to the
+    // plugin's bulk runs — a manual run still builds the ROM only.
+    expect(rom.content).toContain('doExport')
+    expect(rom.content).toContain('if (dthRomOk === true && dthBulkExport) {')
+    expect(rom.content).toContain('var dthBulkExport = false;')
 
     const exportScript = toExportScriptDsa(character, FRAMES, 'D:\\lib\\Electra')
     expect(exportScript.fileName).toBe('Export_Electra_G9.dsa')
@@ -1641,6 +1649,13 @@ describe('exporter integration', () => {
       'Export_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+
+  it('no export dir → no export block and no bulk-run detection', () => {
+    const character = withReferencePose({ name: 'Electra' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra').content
+    expect(content).not.toContain('doExport')
+    expect(content).not.toContain('dthBulkExport')
   })
 
   it('split has no effect without an export path (stays one combined script)', () => {
@@ -1907,7 +1922,7 @@ describe('exportHairAssets — the hair pass rides the main export', () => {
     )
   })
 
-  it('split mode: the standalone Export_ script carries the pass instead', () => {
+  it('split mode: both carriers get the pass — the ROM script bulk-gated', () => {
     const character = makeCharacter({
       ...HAIR_SCENE,
       exportPath: 'X:/exports',
@@ -1915,18 +1930,36 @@ describe('exportHairAssets — the hair pass rides the main export', () => {
       exportHairAssets: true,
     })
     expect(toExportScriptDsa(character, FRAMES).content).toContain('doExportAlembicGroomPoses')
-    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain(
+    // v38: the ROM script embeds the export block (with the pass) for bulk runs.
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).toContain(
       'doExportAlembicGroomPoses',
     )
   })
 
-  it('off by default — no groom pass in either carrier (the standalone Export_Hair still has it)', () => {
+  it('off by default — the pass still ships in both carriers, gated to bulk runs', () => {
     const character = makeCharacter({ ...HAIR_SCENE, exportPath: 'X:/exports' })
-    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain(
+    // The toggle only governs MANUAL runs now: the pass is embedded but wrapped
+    // in the bulk gate, so a manual run skips it and a bulk run delivers it.
+    for (const content of [
+      toCharacterScriptDsa(character, {}, FRAMES).content,
+      toExportScriptDsa(character, FRAMES).content,
+    ]) {
+      expect(content).toContain('doExportAlembicGroomPoses')
+      const gateAt = content.indexOf('if (dthBulkExport) {')
+      expect(gateAt).toBeGreaterThan(-1)
+      expect(content.indexOf('doExportAlembicGroomPoses')).toBeGreaterThan(gateAt)
+    }
+    // Toggle ON = unconditional (no bulk gate around the pass).
+    const on = toCharacterScriptDsa(
+      makeCharacter({ ...HAIR_SCENE, exportPath: 'X:/exports', exportHairAssets: true }),
+      {},
+      FRAMES,
+    ).content
+    expect(on).toContain('doExportAlembicGroomPoses')
+    expect(on).not.toContain('if (dthBulkExport) {')
+    expect(toGroomExportScriptDsa(makeCharacter({ ...HAIR_SCENE, exportPath: 'X:/exports' })).content).toContain(
       'doExportAlembicGroomPoses',
     )
-    expect(toExportScriptDsa(character, FRAMES).content).not.toContain('doExportAlembicGroomPoses')
-    expect(toGroomExportScriptDsa(character).content).toContain('doExportAlembicGroomPoses')
   })
 
   it('no hair lists → nothing to export, the pass is not emitted', () => {

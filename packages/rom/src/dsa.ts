@@ -1,5 +1,7 @@
 import { exporterFigureName, poseAssetFileName, referenceFrames, toPoseAssetCsv } from './csv'
 import {
+  BULK_EXPORT_ARG,
+  bulkExportArgSnippet,
   commentSafe,
   dazJson,
   figureAutoSelectSnippet,
@@ -11,6 +13,10 @@ import {
   sceneCsvLookupSnippet,
   sceneExportSubfolderSnippet,
 } from './dz-snippets'
+
+// The bulk-run script argument is part of the public exporter contract
+// (dz-snippets itself is package-internal).
+export { BULK_EXPORT_ARG }
 import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
 import {
   activeSceneOverrides,
@@ -222,9 +228,11 @@ print("Hair items exported: " + dthGroomLabels.length);
  * is set. The CSV copy is included only when the source folder is known
  * (charFolderAbs); the export ALWAYS nests under the open scene's own subfolder
  * ({@link sceneExportSubfolders} — resolved by the embedded map at run time).
- * With `exportHairAssets` on, the Export_Hair per-item pass runs right after
- * the main export (same action, same resolved dir) — in BOTH carriers, since
- * both call this builder.
+ * The Export_Hair per-item pass rides right after the main export (same
+ * action, same resolved dir) — in BOTH carriers, since both call this builder:
+ * unconditionally with `exportHairAssets` on, gated to bulk runs
+ * (`dthBulkExport`) with it off. Both carriers therefore MUST emit
+ * {@link bulkExportArgSnippet} before this block.
  */
 function buildExportBlock(
   character: Character,
@@ -292,9 +300,8 @@ ${csvCopyBlock}`
   // main export, inside the groom bracket (it needs this scene's labels). The
   // figure resolves under its OWN name — the standalone Export_ script already
   // declares `dthFig`, and this block must work in both carriers.
-  const hairPassBlock = character.exportHairAssets
-    ? `        // Export hair assets too (exportHairAssets): the Export_Hair pass, right
-        // after the main export — same action, same (scene-resolved) export dir.
+  const hairPassCore = `        // Export hair assets too: the Export_Hair pass, right after the main
+        // export — same action, same (scene-resolved) export dir.
 ${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig').trimEnd()))}
         if (!dthHairFig) {
             print("No ${character.genesis} figure found - hair export skipped.");
@@ -302,7 +309,18 @@ ${indentBlock(indentBlock(figureAutoSelectSnippet(character.genesis, 'dthHairFig
 ${indentBlock(indentBlock(indentBlock(hairExportLoopSnippet(character, { fig: 'dthHairFig', action: 'dthExportAction', hideTree: 'dthGroomHideTree', hidden: 'dthGroomHidden' }).trimEnd())))}
         }
 `
-    : ''
+  // The pass always SHIPS; `exportHairAssets` decides who RUNS it: on, every
+  // export run — off, only the plugin's bulk runs (a bulk job delivers the
+  // complete set no matter the toggles). The carrier declares `dthBulkExport`
+  // (bulkExportArgSnippet) before including this block.
+  const hairPassBlock = character.exportHairAssets
+    ? hairPassCore
+    : `        // Hair pass (exportHairAssets is OFF): bulk runs deliver it anyway —
+        // only a manual run honors the toggle and skips it.
+        if (dthBulkExport) {
+${indentBlock(hairPassCore.trimEnd())}
+        }
+`
   const exportBody =
     Object.keys(groomMap).length === 0
       ? exportCore
@@ -515,9 +533,10 @@ function buildSceneConfigMap(
  * the open scene's normalized path, matching {@link buildSceneConfigMap}. The
  * export block (in the combined ROM script AND the split Export_ script)
  * resolves the CSV to deliver through this; an identity/groom-only scene isn't
- * here and rides the base CSV.
+ * here and rides the base CSV. Public: the studio's export watch derives each
+ * scene's expected delivered-CSV path from the same lookup.
  */
-function buildSceneCsvMap(character: Character): Record<string, string> {
+export function buildSceneCsvMap(character: Character): Record<string, string> {
   const map: Record<string, string> = {}
   for (const override of activeSceneOverrides(character)) {
     if (!sceneOverrideBuildsRom(character, override)) continue
@@ -691,18 +710,29 @@ export function toCharacterScriptDsa(
     Object.keys(sceneConfigMap).length > 0 ? `\n${sceneConfigLookupSnippet(sceneConfigMap)}` : ''
 
   // Optional auto-export: when an export directory is set, the ROM build is
-  // followed by a DTH Exporter run. With `exportWithRomScript` (the default) that
-  // export block is appended here — one combined script. Otherwise it's split off
-  // into a standalone Export_ script (see toExportScriptDsa).
+  // followed by a DTH Exporter run. The block is embedded even with the export
+  // SPLIT off (exportWithRomScript false) — the plugin's bulk runs execute ONLY
+  // this ROM script (with the "bulk-export" argument) and must still deliver
+  // the export; the run-time gate below decides who exports.
   const exportDir = character.exportPath.trim()
-  const exportBlock =
-    exportDir && character.exportWithRomScript !== false
-      ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
+  const exportBlock = exportDir
+    ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
 ${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
-      : ''
+    : ''
+  // Whether a MANUAL run of this script exports. Since the block is embedded
+  // either way now, this is what actually distinguishes the two scripts that
+  // share the `ROM_<base>.dsa` name — so the run-time gate AND the Content
+  // Library tile both derive from it and cannot disagree.
+  const exportsOnManualRun = exportBlock !== '' && character.exportWithRomScript !== false
+  // Who runs the embedded export: combined (the default) → every clean ROM run;
+  // split → only bulk runs, so a manual ROM run keeps leaving the export to the
+  // standalone Export_ script exactly as before.
+  const exportGate = exportsOnManualRun
+    ? 'dthRomOk === true'
+    : 'dthRomOk === true && dthBulkExport'
 
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -722,7 +752,7 @@ ${sceneSelectBlock}
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
-// Write a minimal run log so even a catastrophic failure reaches the studio.
+${exportBlock ? bulkExportArgSnippet() : ''}// Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
     try {
         if (!dthCharacterConfig.runLogPath) return;
@@ -798,8 +828,11 @@ if (dthSceneLinkErr) {
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }${exportBlock ? `
         // Export only when the ROM built CLEAN (runtime v20: failed morphs count
         // as failure too, not just hard aborts) — a broken ROM must never ship
-        // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
-        if (dthRomOk === true) {
+        // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.${character.exportWithRomScript === false ? `
+        // The export is SPLIT off: a manual run leaves it to the standalone
+        // Export_ script — only the plugin's bulk runs (the "bulk-export"
+        // argument) force it inline here.` : ''}
+        if (${exportGate}) {
 ${exportBlock}        }` : ''}
     } catch (dthErr) {
         // Unexpected exception — ApplyDTHCharacter couldn't log/report it itself.
@@ -814,8 +847,10 @@ ${exportBlock}        }` : ''}
     content,
     target: 'daz',
     // The tile says which of the two this script is, since the file name can't:
-    // ROM_ alone always builds the ROM, but it may or may not also export.
-    icon: exportBlock ? 'rom-export' : 'rom',
+    // ROM_ alone always builds the ROM, but it may or may not also export. Keyed
+    // to a MANUAL run — a bulk run always exports, but that's the plugin driving
+    // it, not this script's identity.
+    icon: exportsOnManualRun ? 'rom-export' : 'rom',
   }
 }
 
@@ -844,7 +879,7 @@ export function toExportScriptDsa(
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
 ${sceneGuardSnippet(character)}
-${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
+${bulkExportArgSnippet()}${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
 } else if (!dthFig) {

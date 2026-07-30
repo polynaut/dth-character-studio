@@ -90,19 +90,25 @@ export type { DazAsset } from './storage/assets'
 // --- DTH release / Exporter Plugin scanning + install plans -------------------
 export {
   ZIP_RELEASE_WARNING,
+  detectDazFlavor,
   installedExporterVersion,
   listDthExporterReleases,
   listDthReleases,
   resolveActiveReleaseRoot,
   resolvePluginInstall,
   resolveReleaseInstall,
+  resolveRunnerInstall,
+  runnerStatus,
 } from './storage/releases'
 export type {
   ActiveReleaseEntry,
+  DazFlavor,
   DthExporterReleaseInfo,
   DthReleaseInfo,
   PluginInstall,
   ReleaseInstall,
+  RunnerInstall,
+  RunnerStatus,
 } from './storage/releases'
 
 // --- Pose-asset catalog (live scan of the active release) ---------------------

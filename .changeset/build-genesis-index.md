@@ -11,4 +11,4 @@ Everything resolves **before** the scene is touched, so the confirm dialog lists
 
 Every Daz script the studio installs now ships **Content Library artwork** (a 91x91 tile plus a 256x256 hover preview, named the way Daz names its own), so scripts show up as real items instead of broken-image placeholders: the two visible runtime scripts, and each generated per-character script — ROM, the split Export, and the hair export, with the ROM script's tile saying whether the export rides along with it or not.
 
-With figures already in the open scene it offers to scan **those** instead — that's how third-party geografts, add-ons and fitted clothing get indexed. Runtime v38: Refresh assets reinstalls the runtime and removes the retired wrappers.
+With figures already in the open scene it offers to scan **those** instead — that's how third-party geografts, add-ons and fitted clothing get indexed. Runtime v39: Refresh assets reinstalls the runtime, removes the retired wrappers, and regenerates the per-character scripts (which is what lands their artwork).

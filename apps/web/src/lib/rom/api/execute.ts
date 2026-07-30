@@ -1,0 +1,378 @@
+import { exists, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { z } from 'zod'
+
+import { normalizePathLower } from '#/lib/path.ts'
+import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
+import * as storage from '../storage'
+import { relativeInside } from '../storage/fs'
+import {
+  EXECUTE_STAMPS_FILE,
+  EXPORTER_JOB_FILE,
+  characterJobScriptNames,
+  executeSceneSignature,
+  expectedSceneCsvRel,
+  jobFileCsv,
+  normalizeSceneKey,
+  parseExecuteStamps,
+  parseJobFileCsv,
+} from '../execute-jobs'
+import { charScopeInput, charsRoot, dirname, joinPath, locateCharacter, resolveProject } from './core'
+
+import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../execute-jobs'
+import type { CharacterLocation } from '../storage'
+import type { Character } from '@dth/rom'
+
+// The DTH Export feature: hand the character's ROM/export runs to the DTH
+// Exporter Plugin as a job file (scene path + script path rows) in the Daz
+// library, starting Daz Studio when it isn't running — the plugin polls for
+// the file (startup + regularly, so a running instance accepts new batches),
+// deletes it (the transfer ack) and works through the rows. Contract:
+// docs/exporter-plugin-job-file.md. The pure parts (CSV text, signatures) live
+// in ../execute-jobs.ts. The scene choice is the export DIALOG's (the studio
+// pre-checks the affected scenes via fetchExecuteScenes); this module takes the
+// chosen list verbatim.
+
+/** Resolve the character + its on-disk location for either entry point. */
+async function loadCharacter(
+  projectId: string,
+  id: string,
+): Promise<{
+  project: Awaited<ReturnType<typeof resolveProject>>
+  location: CharacterLocation
+  character: Character
+}> {
+  const project = await resolveProject(projectId)
+  const lib = charsRoot(project)
+  const location = await locateCharacter(lib, id)
+  const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
+  if (!location || !character) throw new Error(`Character ${id} not found`)
+  return { project, location, character }
+}
+
+/** Read a character's stored handoff stamps (missing/corrupt = empty). */
+async function readStamps(location: CharacterLocation): Promise<ExecuteStamps> {
+  const stampsPath = joinPath(location.folderAbs, EXECUTE_STAMPS_FILE)
+  try {
+    if (await exists(stampsPath)) return parseExecuteStamps(await readTextFile(stampsPath))
+  } catch {
+    // unreadable stamps = no stamps — worst case a scene re-runs needlessly
+  }
+  return { version: 1, scenes: {} }
+}
+
+/** Absolute path of the (one, global) job file — null when the desktop app /
+ *  Daz library aren't available, i.e. there can be no job file to speak of. */
+async function exporterJobFilePath(): Promise<string | null> {
+  if (!isTauri()) return null
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) return null
+  return joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), EXPORTER_JOB_FILE)
+}
+
+/**
+ * Whether a job file is currently waiting for Daz Studio to pick it up. Drives
+ * the header button's Abort state — the plugin deletes the file once parsed,
+ * so "exists" IS "pending". Best-effort false on any read problem.
+ */
+export async function exporterJobsPending(): Promise<boolean> {
+  const path = await exporterJobFilePath()
+  if (!path) return false
+  try {
+    return await exists(path)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The handed-off run, kept IN MEMORY until it finishes or is aborted/dismissed
+ * — the studio knows which scenes are about to export (it wrote the job file)
+ * and watches their export folders: a scene's delivered PoseAsset CSV with an
+ * mtime NEWER than the handoff time means that scene finished exporting.
+ * Per-window state (one run at a time; a new handoff replaces it), gone on a
+ * window close — the watch is a convenience view, not bookkeeping (the
+ * affected-detection stamps are the durable part).
+ */
+interface ActiveExportRun {
+  characterId: string
+  /** `Date.now()` at handoff — the CSV-mtime threshold. */
+  startedAtMs: number
+  scenes: Array<{ scenePath: string; csvAbs: string }>
+}
+let activeRun: ActiveExportRun | null = null
+
+export interface ExportRunProgress {
+  characterId: string
+  total: number
+  /** Scenes whose delivered CSV is newer than the handoff. */
+  finished: number
+  /** Every scene delivered — the watch has ended itself. */
+  allDone: boolean
+}
+
+/**
+ * The active run's live progress (null when none): stat each expected CSV and
+ * count the delivered scenes. When all are delivered the run clears itself —
+ * the caller still receives that final `allDone` snapshot once.
+ */
+export async function fetchExportRunProgress(): Promise<ExportRunProgress | null> {
+  const run = activeRun
+  if (!run) return null
+  const delivered = await Promise.all(
+    run.scenes.map(async ({ csvAbs }) => {
+      if (!csvAbs) return false
+      try {
+        const info = await stat(csvAbs)
+        return (info.mtime?.getTime() ?? 0) > run.startedAtMs
+      } catch {
+        return false
+      }
+    }),
+  )
+  const finished = delivered.filter(Boolean).length
+  const allDone = run.scenes.length > 0 && finished === run.scenes.length
+  if (allDone && activeRun === run) activeRun = null
+  return { characterId: run.characterId, total: run.scenes.length, finished, allDone }
+}
+
+/** Stop watching the active run (the run in Daz is unaffected — the watch is
+ *  an observer only). The escape hatch for a batch that errored in Daz and
+ *  will never deliver its remaining scenes. */
+export function dismissExportRun(): void {
+  activeRun = null
+}
+
+/**
+ * Abort a pending handoff: delete the job file before Daz consumes it, and roll
+ * the aborted scenes' handoff stamps back on THIS character (they were stamped
+ * at handoff; without the rollback they'd read "unchanged" in the next dialog
+ * despite never having run). Rows belonging to another character's handoff
+ * simply don't match this character's stamp keys — the file still goes away,
+ * which is what Abort promises.
+ */
+export async function abortExporterJobs({ data }: { data: unknown }): Promise<void> {
+  const { projectId, id } = charScopeInput.parse(data)
+  const path = await exporterJobFilePath()
+  if (!path) return
+  let rows: ReturnType<typeof parseJobFileCsv> = []
+  try {
+    if (!(await exists(path))) return
+    rows = parseJobFileCsv(await readTextFile(path))
+  } catch {
+    // unreadable job file — still delete it below; stamps stay (worst case a
+    // scene reads "unchanged" until its next real change or a manual re-check)
+  }
+  await remove(path)
+  // The aborted handoff will never run — stop the export watch with it.
+  activeRun = null
+  if (rows.length === 0) return
+  try {
+    const { location } = await loadCharacter(projectId, id)
+    const stored = await readStamps(location)
+    const aborted = new Set(rows.map((row) => normalizeSceneKey(row.scenePath)))
+    const scenes = Object.fromEntries(
+      Object.entries(stored.scenes).filter(([key]) => !aborted.has(key)),
+    )
+    await storage.writeTextFileAtomic(
+      joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
+      JSON.stringify({ version: 1, scenes }, null, 2),
+    )
+  } catch {
+    // stamp rollback is best-effort — the abort itself (the delete) succeeded
+  }
+}
+
+/** One linked scene's state for the DTH Export dialog. */
+export interface ExecuteSceneStatus {
+  scenePath: string
+  primary: boolean
+  /** Inputs changed since the last handoff (or never handed off) — the dialog's
+   *  default check. Always false when the `.duf` is missing. */
+  affected: boolean
+  /** The `.duf` can't be read — the row can't be exported. */
+  missing: boolean
+}
+
+/**
+ * Every linked scene with its affected-state — what the DTH Export dialog
+ * pre-checks. Per-scene tolerant: an unreadable `.duf` reports `missing`
+ * instead of throwing (the dialog disables that row).
+ */
+export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<Array<ExecuteSceneStatus>> {
+  const { projectId, id } = charScopeInput.parse(data)
+  if (!isTauri()) return []
+  const { location, character } = await loadCharacter(projectId, id)
+  const stored = await readStamps(location)
+  const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  return Promise.all(
+    linked.map(async (scenePath, index) => {
+      const primary = index === 0
+      let info: Awaited<ReturnType<typeof stat>>
+      try {
+        info = await stat(scenePath)
+      } catch {
+        return { scenePath, primary, affected: false, missing: true }
+      }
+      const prev = stored.scenes[normalizeSceneKey(scenePath)]
+      const affected =
+        prev === undefined ||
+        prev.mtimeMs !== (info.mtime?.getTime() ?? 0) ||
+        prev.size !== info.size ||
+        prev.signature !== executeSceneSignature(character, scenePath)
+      return { scenePath, primary, affected, missing: false }
+    }),
+  )
+}
+
+const executeInput = charScopeInput.extend({
+  /** The scenes to enqueue, chosen in the DTH Export dialog — each must be one
+   *  of the character's linked scenes. */
+  scenes: z.array(z.string().min(1)).min(1),
+})
+
+export interface ExecuteJobsSummary {
+  /** Absolute path of the job file written. */
+  jobFile: string
+  /** Scenes whose jobs were enqueued, in job order. */
+  scenes: Array<string>
+  /** True when a fresh Daz Studio was started for the jobs. */
+  dazLaunched: boolean
+  /** True when Daz was already running — the plugin's regular poll picks the
+   *  job file up in that instance, no restart needed. */
+  dazWasRunning: boolean
+}
+
+/** A scene's current stamp: the `.duf` file identity + the definition signature. */
+async function currentStamp(character: Character, scenePath: string): Promise<ExecuteStamp> {
+  let info: Awaited<ReturnType<typeof stat>>
+  try {
+    info = await stat(scenePath)
+  } catch {
+    throw new Error(
+      `The Daz scene file could not be read:\n${scenePath}\nRelink or restore the scene, then try again.`,
+    )
+  }
+  return {
+    mtimeMs: info.mtime?.getTime() ?? 0,
+    size: info.size,
+    signature: executeSceneSignature(character, scenePath),
+  }
+}
+
+/**
+ * Write the DTH Exporter job file for the chosen scenes and start Daz Studio.
+ *
+ * One row per scene: the ROM script — the plugin executes it with the
+ * "bulk-export" argument, which makes it always export (the split/hair toggles
+ * only govern manual runs). The job file replaces any pending one (last write
+ * wins). Scenes are stamped at handoff — the job file is the delivery, the
+ * plugin deletes it once parsed.
+ *
+ * Throws with a user-facing message when preconditions fail: no DAZ library
+ * configured, no export directory, generated scripts missing (save first), or
+ * a scene file that can't be read.
+ */
+export async function executeCharacterJobs({ data }: { data: unknown }): Promise<ExecuteJobsSummary> {
+  const { projectId, id, scenes: chosen } = executeInput.parse(data)
+  if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
+
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) {
+    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the generated scripts live there.')
+  }
+
+  const { project, location, character } = await loadCharacter(projectId, id)
+  if (!character.scenePath) {
+    throw new Error('No primary Daz scene is linked — link one before exporting.')
+  }
+  // The runs exist to deliver exports — without an export directory the ROM
+  // would build and export nothing. The UI disables the button; backstop here.
+  if (!character.exportPath.trim()) {
+    throw new Error('DTH Export needs an export directory — set one in the Export directory panel.')
+  }
+
+  // Resolve each chosen scene to its linked spelling (the dialog passes them
+  // verbatim, but be tolerant of separator/case differences).
+  const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  const scenes = chosen.map((scene) => {
+    const match = linked.find((s) => normalizeSceneKey(s) === normalizeSceneKey(scene))
+    if (!match) throw new Error(`The scene is not linked to this character anymore:\n${scene}`)
+    return match
+  })
+
+  // The generated scripts must exist on disk — the export runs what generation
+  // wrote, so an unsaved/never-generated character has nothing to hand off.
+  const scriptsDir = storage.studioCharScriptsDir(
+    settings.dazLibraryFolder,
+    project.name,
+    character.name,
+  )
+  const scriptPaths = characterJobScriptNames(character).map((name) => joinPath(scriptsDir, name))
+  for (const path of scriptPaths) {
+    if (!(await exists(path))) {
+      throw new Error(`The generated script is missing:\n${path}\nSave the character to regenerate it, then try again.`)
+    }
+  }
+
+  // Current stamps for every chosen scene (also validates the .duf files exist).
+  const stamps = new Map<string, ExecuteStamp>()
+  for (const scene of scenes) {
+    stamps.set(scene, await currentStamp(character, scene))
+  }
+
+  // One row per (scene, script) in run order — today that's one ROM-script row
+  // per scene (see characterJobScriptNames).
+  const jobs: Array<ExporterJob> = scenes.flatMap((scene) =>
+    scriptPaths.map((scriptPath) => ({ scenePath: scene, scriptPath })),
+  )
+  const jobFile = joinPath(storage.studioScriptsDir(settings.dazLibraryFolder), EXPORTER_JOB_FILE)
+  const startedAtMs = Date.now()
+  await storage.writeTextFileAtomic(jobFile, jobFileCsv(jobs))
+
+  // Arm the export watch: remember the handed-off scenes + their expected
+  // delivered-CSV paths (export dir + the scene's export subfolder + the CSV
+  // the export block delivers — the same lookups the generated script embeds).
+  // The scenes-root resolution mirrors generateCharacterFiles.
+  const primaryDir = dirname(character.scenePath)
+  const primaryRel =
+    normalizePathLower(primaryDir) === normalizePathLower(location.folderAbs)
+      ? ''
+      : relativeInside(location.folderAbs, primaryDir)
+  const scenesRootAbs =
+    primaryRel === null
+      ? undefined
+      : joinPath(location.folderAbs, deriveScenesRootRel(primaryRel, project.dazSubdir))
+  const csvRel = expectedSceneCsvRel(character, scenesRootAbs)
+  const exportDirAbs = character.exportPath.trim()
+  activeRun = {
+    characterId: character.id,
+    startedAtMs,
+    scenes: scenes.map((scene) => {
+      const rel = csvRel[normalizeSceneKey(scene)]
+      return { scenePath: scene, csvAbs: rel ? joinPath(exportDirAbs, rel) : '' }
+    }),
+  }
+
+  // Stamp the handoff (merge — untouched scenes keep their stamps).
+  const stored = await readStamps(location)
+  const nextStamps: ExecuteStamps = { version: 1, scenes: { ...stored.scenes } }
+  for (const scene of scenes) {
+    const stamp = stamps.get(scene)
+    if (stamp) nextStamps.scenes[normalizeSceneKey(scene)] = stamp
+  }
+  await storage.writeTextFileAtomic(
+    joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
+    JSON.stringify(nextStamps, null, 2),
+  )
+
+  // Start Daz scene-less when it isn't running; a running instance needs
+  // nothing — the plugin polls for the job file and picks it up in place.
+  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
+  let dazLaunched = false
+  if (!dazWasRunning) {
+    await invoke<string>('launch_daz_studio')
+    dazLaunched = true
+  }
+  return { jobFile, scenes, dazLaunched, dazWasRunning }
+}

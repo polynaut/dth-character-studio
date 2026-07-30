@@ -28,6 +28,20 @@ feature PR (with changeset) ──merge──▶ main
   `scripts/release-notes.mjs`, not from commit subjects.
 - **build-mac** is opt-in via the `ENABLE_MAC_RELEASE` repo variable
   (arm64-only, Developer-ID-signed + notarized).
+- **Bundled Runner plugin**: `beforeBuildCommand` (tauri.conf.json) runs
+  `pnpm -w fetch:runner` (`scripts/fetch-runner.mjs`; `-w` because the hook's
+  CWD is apps/desktop, not the root) before every desktop build —
+  it stages the LATEST `polynaut/dth-character-studio-runner` release's DLLs
+  into `apps/desktop/resources/dth-runner/` (gitignored; bundled via
+  `bundle.resources`). So the installer's Runner version floats with that
+  repo's latest release at build time — ship a runner fix by releasing there,
+  then cutting any studio release. `tar -xf` extracts the zips (bsdtar);
+  a dev checkout runs `pnpm fetch:runner` once by hand.
+  **Load-test a runner release in Daz Studio BEFORE cutting a studio release
+  that bundles it** (the log must say `successfully loaded`): v0.51.1 shipped
+  Runner v1.0.0, which Daz refused to load — the studio build can't detect
+  that, only Daz can. The plugin-SDK footguns live in the runner repo's
+  README + pluginmain.cpp.
 
 ## Signing (the human gate)
 

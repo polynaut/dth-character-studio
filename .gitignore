@@ -20,3 +20,6 @@ playwright-report/
 
 # Generated at deploy time by scripts/build-guide-site.mjs (pages.yml)
 site/guide/
+
+# Staged at build time by scripts/fetch-runner.mjs (bundled Runner plugin DLLs)
+apps/desktop/resources/dth-runner/

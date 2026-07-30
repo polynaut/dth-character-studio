@@ -487,6 +487,12 @@ export async function saveCharacter(
  * character (`<Name>.json`). Returns the stamped character AND where it landed
  * (the caller shouldn't have to re-scan the library to find the folder it
  * just created).
+ *
+ * It also seeds the project's Houdini subfolder inside the new character folder
+ * and points the character's `exportPath` at it — see seedHoudiniFolder. Both
+ * live here because this is where the final folder path is decided (the
+ * auto-suffix means the caller can't predict it), and doing them here keeps the
+ * create to a single definition write.
  */
 export async function createCharacterAt(
   project: Project,
@@ -530,10 +536,56 @@ export async function createCharacterAt(
     }
   }
 
-  await writeTextFileAtomic(definitionAbs, JSON.stringify(stamped, null, 2) + '\n')
+  const seeded = await seedHoudiniFolder(project, stamped, folderAbs, charRelFolder)
+  await writeTextFileAtomic(definitionAbs, JSON.stringify(seeded, null, 2) + '\n')
   return {
-    character: stamped,
+    character: seeded,
     location: { definitionAbs, folderAbs, relFolder: charRelFolder, libraryFolder: lib },
+  }
+}
+
+/**
+ * Seed the empty Houdini folder (named from the project manifest) inside a new
+ * character's folder, and start the character's **export directory** pointed at
+ * it — returning the character to write.
+ *
+ * The folder exists to nudge the user into creating the character's Houdini
+ * project there, and that is also where its exports belong, so pre-filling
+ * `exportPath` saves every new character a trip through the folder picker. It's
+ * the same folder that picker would have opened in (`defaultExportDir` in
+ * `export-settings-section.tsx`) — keep the two in step.
+ *
+ * Best-effort and only for characters that own a folder: never scatter a seed
+ * folder into the project root, and never let a hostile manifest value fail a
+ * create that already resolved its destination. A create that skips the seed
+ * (`createHoudiniSubdir` off, or no subdir configured) leaves `exportPath` empty
+ * — pointing it at a folder that was deliberately not created would be worse
+ * than leaving the user to choose.
+ *
+ * The two settings are read from the `.dcsp` here rather than taken from the
+ * caller's project record: the manifest is this layer's own source of truth, so
+ * the seeded folder and the export path can't disagree with what's on disk.
+ */
+async function seedHoudiniFolder(
+  project: Project,
+  character: Character,
+  folderAbs: string,
+  relFolder: string,
+): Promise<Character> {
+  if (!relFolder) return character
+  try {
+    const manifest = await readManifest(project.path)
+    if (!manifest.createHoudiniSubdir) return character
+    const houSub = normalizeRelFolder(manifest.houdiniSubdir)
+    if (!houSub) return character
+    const houAbs = join(folderAbs, houSub)
+    await mkdir(houAbs, { recursive: true })
+    // A prefilled/imported definition that already carries an export path keeps it.
+    if (character.exportPath.trim()) return character
+    return { ...character, exportPath: houAbs }
+  } catch {
+    // No seed folder → no export path either; the character itself is fine.
+    return character
   }
 }
 

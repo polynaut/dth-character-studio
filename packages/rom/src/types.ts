@@ -1122,7 +1122,16 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       lives in (`sceneExportSubfolders`) — with the old scene-file-stem
  *       nesting as the run-time fallback for a scene missing from the map.
  *       Bumped so Refresh assets regenerates every script onto the new layout.
- *  38 — runtime change: one `Build_Genesis_Index.dsa` replaces the four visible
+ *  38 — generated-script change only (runtime files untouched): the
+ *       "bulk-export" script argument (`BULK_EXPORT_ARG`). The DTH Exporter
+ *       Plugin passes it on every job-file run (the studio's DTH Export
+ *       button); the ROM script then always exports — the export block is now
+ *       embedded even with `exportWithRomScript` off (run-time gated) — and
+ *       the hair pass runs past a disabled `exportHairAssets` too: a bulk job
+ *       exists to deliver the complete export set. A manual run (no argument)
+ *       behaves exactly like the toggles say. Bumped so Refresh assets
+ *       regenerates every script with the argument gate.
+ *  39 — runtime change: one `Build_Genesis_Index.dsa` replaces the four visible
  *       `Scan_Morphs_<Genesis>.dsa` wrappers. It builds the stock figures for
  *       every generation itself (G3/G8/G8.1 female + male; Genesis 9 twice —
  *       gender-neutral, so the pair differs by geograft: Golden Palace vs
@@ -1137,7 +1146,7 @@ export const CHARACTER_SCHEMA_VERSION = 26
  *       unchanged by that, but the artwork only lands on a (re)generate, which
  *       this bump makes Refresh assets do.
  */
-export const RUNTIME_VERSION = 38
+export const RUNTIME_VERSION = 39
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1347,9 +1356,19 @@ export const characterSchema = z.object({
   /**
    * Export directory for the DTH Exporter plugin (v1.8.1+). When set, the
    * generated Daz script runs the exporter (`doExport`) into this folder after
-   * building the ROM — empty = no auto-export. The exporter creates its own
-   * `<characterName>` subfolder here, so this should be a folder OUTSIDE the
-   * project's character directory.
+   * building the ROM — empty = no auto-export. Every scene exports into its OWN
+   * subfolder of this dir, named after the subfolder the scene lives in inside
+   * the character folder (`sceneExportSubfolders`), and the PoseAsset CSV is
+   * copied in beside the exporter output.
+   *
+   * A new character starts with this pointed at its seeded Houdini subfolder
+   * inside the character folder (`seedHoudiniFolder`, web storage layer) — which
+   * is where the character's Houdini project lives, so it's where the export
+   * belongs. (An earlier comment here said this should be a folder OUTSIDE the
+   * character directory, on the since-removed assumption that the exporter adds
+   * its own `<characterName>` level; the nesting is per-SCENE and the studio's
+   * own default has been the in-folder Houdini subdir for as long as the folder
+   * picker has had a default.)
    */
   exportPath: z.string().max(MAX_PATH_LENGTH).default(''),
   /**
