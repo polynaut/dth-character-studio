@@ -1192,8 +1192,14 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       lookups read the `dthOpenSceneFile` capture taken at script start.
  *       Bumped so Refresh
  *       assets regenerates every script + CSV onto the new naming.
+ *  41 — runtime change: `Build_Genesis_Index` CLEARS THE SCENE when it finishes,
+ *       not just between generations — the last generation's figures are wiped
+ *       once they're scanned, so a build ends on an empty scene instead of
+ *       leaving stock figures loaded. Build path only; scanning the OPEN scene
+ *       still never touches it. No change to any GENERATED script — bumped so
+ *       Refresh assets reinstalls the updated scanner.
  */
-export const RUNTIME_VERSION = 40
+export const RUNTIME_VERSION = 41
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

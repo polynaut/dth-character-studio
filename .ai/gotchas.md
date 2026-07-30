@@ -406,7 +406,10 @@ current code before relying on details, but assume the *lesson* still holds.
   never-scanned file just yields empty lists — re-run Build_Genesis_Index in Daz.
   Since runtime v39 ONE run writes all four generations (index `version: 3`, with a
   `figures` array naming what was scanned); the readers only ever look at `morphs` +
-  `bones`, so the metadata is free to change.
+  `bones`, so the metadata is free to change. The BUILD path owns the scene — it
+  clears between generations and again after the last one (v41), so a run ends
+  empty; the "scan the open scene" branch must never clear, it is the user's own
+  scene and the only way third-party grafts/clothing get indexed.
 - **The shell.open scope regex is anchored by the PLUGIN, not the config.**
   `tauri-plugin-shell` wraps the configured `plugins.shell.open` validator as
   `^{validator}$` before compiling (see the plugin's `lib.rs`), so the app's

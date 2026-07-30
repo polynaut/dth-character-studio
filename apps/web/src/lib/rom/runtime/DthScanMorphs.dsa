@@ -12,7 +12,9 @@
 //      (G3/G8/G8.1 female + male; Genesis 9 twice — it is gender-neutral, so the
 //      pair is differentiated by geograft instead: Golden Palace on one,
 //      Dicktator on the other), clearing the scene between generations so only
-//      two figures are ever loaded at once, and
+//      two figures are ever loaded at once — and once more when the last
+//      generation is scanned, so the run ends on an empty scene instead of
+//      leaving whatever it built last behind, and
 //   2. scans EVERY figure root in the scene — the figure plus every descendant
 //      node (geografts, nipples/navel add-ons, fitted clothing all carry morphs
 //      of their own) — bucketing what it finds by the figure's generation, and
@@ -883,13 +885,15 @@ function DthBuildGenesisIndex(config){
 			sPlanMsg += "\nGeograft not installed, skipped: " +
 				oReport.missingGrafts.join(", ") + "\n";
 		sPlanMsg += "\nIt loads them a generation at a time and CLEARS THE SCENE " +
-			"between each, so save your work first. This takes a few minutes.";
+			"between each - and leaves it empty when it is done - so save your " +
+			"work first. This takes a few minutes.";
 
 		if(MessageBox.question(sPlanMsg, "DTH Character Studio",
 			"&Build the index", "&Cancel") != 0) return;
 
+		// One step per generation, plus the final clear-down below.
 		var oProgress = dthProgressStart("Building the DTH Genesis index...",
-			oReport.buildable.length);
+			oReport.buildable.length + 1);
 		for(g = 0; g < oReport.buildable.length; g++){
 			var oGen = oReport.buildable[g];
 			dthProgressStep(oProgress, dthGenesisLabel(oGen.genesis) + "...");
@@ -908,6 +912,14 @@ function DthBuildGenesisIndex(config){
 			}
 			iUnknown += dthScanSceneInto(oByGen, oGen.genesis);
 		}
+		// Everything is scanned into oByGen by now, so the last generation's
+		// figures have no further use — clear them too rather than dumping the
+		// user back into a scene full of stock figures they never asked for.
+		// Only ever on the BUILD path — it already cleared the scene once with
+		// the user's consent. The open-scene branch is the user's OWN scene and
+		// must be left exactly as it was found.
+		dthProgressStep(oProgress, "Clearing the scene...");
+		dthClearScene();
 		dthProgressFinish(oProgress);
 	}
 
