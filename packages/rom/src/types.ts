@@ -1198,8 +1198,16 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       leaving stock figures loaded. Build path only; scanning the OPEN scene
  *       still never touches it. No change to any GENERATED script — bumped so
  *       Refresh assets reinstalls the updated scanner.
+ *  42 — generated-script change only: the v40 ROM-scene auto-save never worked
+ *       in DS6 — `DzContentMgr.saveScene` does not exist there (TypeError,
+ *       swallowed by the best-effort guard: the `.ROM_Animations/` folder was
+ *       created, the `.duf` never written). The save now feature-detects: the
+ *       DS4 content-manager call when present, else DS6's `Scene.saveScene`
+ *       (probe-measured 2026-07-30, saves silently incl. the `.tip.png`
+ *       thumbnail). Bumped so Refresh assets regenerates every script with the
+ *       working save.
  */
-export const RUNTIME_VERSION = 41
+export const RUNTIME_VERSION = 42
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

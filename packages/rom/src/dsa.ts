@@ -979,7 +979,16 @@ if (dthSceneLinkErr) {
                 var dthRomSaveDirObj = new DzDir(dthRomSaveDir);
                 if (!dthRomSaveDirObj.exists()) dthRomSaveDirObj.mkpath(dthRomSaveDir);
                 var dthRomSavePath = dthRomSaveDir + "/" + dthRomSceneInfo.completeBaseName() + "_ROM.duf";
-                if (App.getContentMgr().saveScene(dthRomSavePath)) {
+                // DS4 saves through the content manager; DS6 dropped that
+                // method and moved save-as onto Scene (probe-measured
+                // 2026-07-30 — DzContentMgr.saveScene is a TypeError there).
+                var dthRomSaveOk = false;
+                if (typeof App.getContentMgr().saveScene == "function") {
+                    dthRomSaveOk = App.getContentMgr().saveScene(dthRomSavePath);
+                } else if (typeof Scene.saveScene == "function") {
+                    dthRomSaveOk = Scene.saveScene(dthRomSavePath);
+                }
+                if (dthRomSaveOk) {
                     print("ROM scene saved: " + dthRomSavePath);
                 } else {
                     print("Could not save the ROM scene to " + dthRomSavePath);
