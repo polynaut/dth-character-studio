@@ -9,7 +9,6 @@ import {
   Input,
   Label,
   OverrideMark,
-  Switch,
   cn,
   overrideLabelClass,
 } from '@dth/ui'
@@ -39,8 +38,9 @@ function cleanFolderName(value: string): string {
 }
 
 /**
- * The "Export directory" pane: the directory itself, the Houdini project
- * folder (a layer of that directory's layout), and the two export switches.
+ * The "Export directory" pane: the directory itself and the Houdini project
+ * folder (a layer of that directory's layout). The two export SWITCHES live in
+ * the "Daz scripts generated" section — they shape the scripts, not the folder.
  * Export settings only take effect once the script is regenerated (the export
  * block is emitted at generation time), so every control persists + regenerates
  * immediately via `persistPatch` — like the inline rename — instead of leaving
@@ -238,49 +238,6 @@ export function ExportSettingsSection({
             )}
           </p>
         )}
-      </div>
-      <div className="mt-4 flex items-center gap-3">
-        <Switch
-          checked={character.exportWithRomScript}
-          disabled={!character.exportPath || saving}
-          onCheckedChange={(exportWithRomScript) =>
-            void persistPatch(
-              { exportWithRomScript },
-              {
-                toast: exportWithRomScript
-                  ? 'Combined ROM + export script'
-                  : 'Separate ROM and Export scripts',
-              },
-            )
-          }
-        />
-        <span
-          className={`text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
-        >
-          Run the export with the ROM script
-        </span>
-      </div>
-      <div className="mt-4 flex items-center gap-3">
-        <Switch
-          checked={character.exportHairAssets}
-          disabled={!character.exportPath || saving}
-          onCheckedChange={(exportHairAssets) =>
-            void persistPatch(
-              { exportHairAssets },
-              {
-                toast: exportHairAssets
-                  ? 'Hair assets export with the main export — script regenerated'
-                  : 'Hair export off — script regenerated',
-              },
-            )
-          }
-        />
-        <span
-          className={`text-sm${character.exportPath ? '' : ' text-muted-foreground'}`}
-          title="After the main export, each of the open scene's hair items is exported on its own (the Export_Hair pass) — in the combined ROM script and the split Export script alike"
-        >
-          Export hair assets too
-        </span>
       </div>
     </section>
   )
