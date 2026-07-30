@@ -1,15 +1,25 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DirPathChip, displayDirOf } from '#/components/dir-path-chip.tsx'
 import { Portrait } from '#/components/portrait.tsx'
 import { FileDropZone } from '#/components/file-drop-zone.tsx'
-import { Button, InfoPopup, Label, LinkedAssetCard, RemoveAssetDialog, useModifierHeld } from '@dth/ui'
+import {
+  Button,
+  Input,
+  InfoPopup,
+  Label,
+  LinkedAssetCard,
+  Modal,
+  RemoveAssetDialog,
+  useModifierHeld,
+} from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
-import { openScene, revealPath } from '#/lib/rom/api.ts'
+import { generateHoudiniProject, openScene, revealPath } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
+import { defaultHoudiniProjectFolder } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -82,6 +92,8 @@ export function HoudiniProjectsField({
   location,
   persistPatch,
   houdiniSubdir = '',
+  projectId,
+  projectName,
 }: {
   character: Character
   location: CharacterLocation
@@ -91,9 +103,13 @@ export function HoudiniProjectsField({
   /** The project's Houdini subfolder (seeded at creation) — shown as the
    *  folder chip while no project is linked yet. */
   houdiniSubdir?: string
+  projectId: string
+  /** The studio project's name — seeds the Generate dialog's project name. */
+  projectName: string
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [generateOpen, setGenerateOpen] = useState(false)
   // A project pending the unlink confirm. Houdini projects are only ever linked
   // in place (absolute import paths forbid copying), so removing is unlink-only —
   // never a file delete, which would hit the user's real .hip.
@@ -101,6 +117,8 @@ export function HoudiniProjectsField({
 
   const projects = character.houdiniProjects
   const hasProjects = projects.length > 0
+  const canGenerate =
+    character.exportPath.trim() !== '' && character.houdiniProjectFolder.trim() !== ''
   // The character's own folder — projects linked inside it show a "%CHAR%" prefix.
   const charFolder = parentDir(location.definitionAbs)
   // A Houdini project has no thumbnail — use a gender-based placeholder avatar.
@@ -137,8 +155,9 @@ export function HoudiniProjectsField({
   }
 
   // Houdini projects are linked in place — store each `.hip` path as-is, skipping
-  // any already linked. Shared by the Browse button and OS drag-and-drop.
-  async function addProjects(paths: Array<string>) {
+  // any already linked. Shared by the Browse button, OS drag-and-drop and the
+  // Generate dialog (which passes its own success toast).
+  async function addProjects(paths: Array<string>, toastTitle?: string) {
     // De-dupe case-insensitively on the normalised path (Windows): dropping
     // `d:/x.hip` after `D:\x.hip` was picked must not link the same project twice.
     const linked = new Set(character.houdiniProjects.map((p) => normalizePath(p).toLowerCase()))
@@ -150,7 +169,8 @@ export function HoudiniProjectsField({
       { houdiniProjects: [...character.houdiniProjects, ...fresh] },
       {
         toast:
-          fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`,
+          toastTitle ??
+          (fresh.length === 1 ? 'Linked Houdini project' : `Linked ${fresh.length} Houdini projects`),
       },
     )
     setBusy(false)
@@ -206,16 +226,40 @@ export function HoudiniProjectsField({
           ))}
         </div>
       )}
-      <Button
-        variant="outline"
-        size="sm"
-        className={hasProjects ? 'mt-3' : ''}
-        disabled={busy}
-        onClick={() => void onAddPick()}
-      >
-        <Plus /> {busy ? 'Linking…' : 'Add project'}
-      </Button>
+      <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => void onAddPick()}>
+          <Plus /> {busy ? 'Linking…' : 'Add project'}
+        </Button>
+        {/* Generate: hython creates a ready-made DazToHue project from the
+            user's template, with $JOB baked to <exportDir>/<projectFolder> —
+            possible only once that layout exists. */}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy || !canGenerate}
+          title={
+            canGenerate
+              ? undefined
+              : 'Set an export directory and a Houdini project folder first (Export directory panel)'
+          }
+          onClick={() => setGenerateOpen(true)}
+        >
+          <Sparkles /> Generate project
+        </Button>
+      </div>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+
+      {generateOpen && (
+        <GenerateProjectDialog
+          projectId={projectId}
+          character={character}
+          projectName={projectName}
+          onClose={() => setGenerateOpen(false)}
+          onGenerated={(scenePath) =>
+            addProjects([scenePath], 'Houdini project generated — DazToHue network and Set Project are baked in')
+          }
+        />
+      )}
 
       {pendingRemove && (
         <RemoveAssetDialog
@@ -229,5 +273,103 @@ export function HoudiniProjectsField({
         />
       )}
     </FileDropZone>
+  )
+}
+
+/**
+ * "Generate project": one required name input (prefilled
+ * `<Project>_<Character>`), then hython creates the ready-made DazToHue
+ * project — template loaded, `$JOB` baked to the character's
+ * `<export dir>/<Houdini project folder>` (the programmatic File → Set
+ * Project), saved as `<name>.hiplc` at that folder's root — and the new scene
+ * is linked as a Houdini project card. Needs the Houdini installation folder
+ * and the DazToHue template scene in Settings (api/houdini.ts reports either
+ * gap as a precise error).
+ */
+function GenerateProjectDialog({
+  projectId,
+  character,
+  projectName,
+  onClose,
+  onGenerated,
+}: {
+  projectId: string
+  character: Character
+  projectName: string
+  onClose: () => void
+  /** Links the generated `.hiplc` (the caller owns the persist + toast). */
+  onGenerated: (scenePath: string) => Promise<void>
+}) {
+  const [name, setName] = useState(defaultHoudiniProjectFolder(projectName, character.name))
+  const [busy, setBusy] = useState(false)
+  const projectDir = displayPath(
+    `${character.exportPath.trim().replace(/\\/g, '/')}/${character.houdiniProjectFolder.trim()}`,
+  )
+
+  async function onGenerate() {
+    setBusy(true)
+    try {
+      const result = await generateHoudiniProject({
+        data: { projectId, id: character.id, sceneName: name },
+      })
+      await onGenerated(result.scenePath)
+      onClose()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-1.5">
+          Generate Houdini project
+          <InfoPopup label="Generate Houdini project — more information">
+            Creates a new Houdini scene from your DazToHue template (Settings), with{' '}
+            <em>Set Project</em> baked to the character&apos;s Houdini project folder — every
+            import resolves as <code>$JOB/dth-export/…</code>, so the project stays moveable.
+            Runs Houdini&apos;s <code>hython</code>; the first start can take a moment.
+          </InfoPopup>
+        </span>
+      }
+      dismissible={!busy}
+    >
+      <p className="text-xs text-muted-foreground">
+        Saves <code>{(name.trim() || '<name>') + '.hiplc'}</code> into <code>{projectDir}</code>{' '}
+        with the DazToHue network ready to go.
+      </p>
+      <div>
+        <Label htmlFor="generate-houdini-name" className="mb-1">
+          Project name
+        </Label>
+        <Input
+          id="generate-houdini-name"
+          className="w-full"
+          value={name}
+          disabled={busy}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && name.trim() !== '' && !busy) void onGenerate()
+          }}
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          disabled={busy || name.trim() === ''}
+          title={name.trim() === '' ? 'The project name cannot be empty' : undefined}
+          onClick={() => void onGenerate()}
+        >
+          <Sparkles /> {busy ? 'Generating…' : 'Generate'}
+        </Button>
+      </div>
+    </Modal>
   )
 }

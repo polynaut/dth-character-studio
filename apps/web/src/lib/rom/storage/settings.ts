@@ -74,6 +74,20 @@ export const studioSettingsSchema = z.object({
    */
   extraHoudiniDocsFolders: stringArray,
   /**
+   * The Houdini INSTALLATION folder (e.g.
+   * `C:/Program Files/Side Effects Software/Houdini 22.0.368`). Optional — its
+   * `bin/hython.exe` powers the character page's "Generate project" (creating
+   * a ready-made DazToHue Houdini project).
+   */
+  houdiniInstallFolder: str,
+  /**
+   * A template Houdini scene (`.hip`/`.hiplc`) with a prepared DazToHue
+   * network — "Generate project" loads it, bakes `$JOB` to the character's
+   * Houdini project folder and saves it as the new project's scene. Save one
+   * once from any working DazToHue scene.
+   */
+  houdiniTemplateScene: str,
+  /**
    * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
    * by the Daz Products scan to resolve scene assets to installed products
    * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs

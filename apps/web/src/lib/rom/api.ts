@@ -117,6 +117,10 @@ export {
 } from './api/execute'
 export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
 
+// --- houdini: Generate project (hython + DazToHue template) ------------------
+export { generateHoudiniProject } from './api/houdini'
+export type { GeneratedHoudiniProject } from './api/houdini'
+
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {
   characterStaleTargets,

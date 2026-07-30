@@ -10,6 +10,7 @@ mod drives;
 mod foreground;
 mod fsutil;
 mod github;
+mod houdini;
 mod housekeeping;
 mod install;
 mod poses;
@@ -131,6 +132,7 @@ pub fn run() {
             daz::run_daz_script,
             daz::launch_daz_studio,
             foreground::focus_app_window,
+            houdini::create_houdini_project,
             shellopen::shell_open_file,
             install::install_daz_merge,
             install::install_houdini_presets,

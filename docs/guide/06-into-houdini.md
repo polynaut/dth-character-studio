@@ -28,6 +28,22 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 > `<export dir>/<project folder>` — then every import is project-relative:
 > `$JOB/dth-export/primary/<Name>.dth`, and the `.hip` stays portable.
 
+## Generate the Houdini project automatically
+
+With an export directory and a [Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder)
+set, the character page's **Houdini projects → Generate project** creates the
+whole project for you: a new scene named after the character (editable in the
+dialog), saved at the project folder's root, with **Set Project already baked
+in** and your **DazToHue network ready** — open it and import.
+
+Two one-time Settings entries power it:
+
+- **Houdini installation folder** — Houdini's own install directory (its
+  `bin\hython.exe` builds the scene headlessly).
+- **DazToHue template scene** — any working scene with your DazToHue network
+  arranged the way you like; save one once and point the setting at it. Every
+  generated project starts from this template.
+
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 
 With both **My DAZ 3D Library** and the **Houdini documents folder** set in
