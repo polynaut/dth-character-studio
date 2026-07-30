@@ -364,20 +364,15 @@ There is nothing to load or select first:
    indexed too). It scans each figure plus everything fitted to it, and writes
    one index per generation. Takes a few minutes.
 
-<!-- SHOT 1 (Daz, needs re-taking): Content Library at
-     Scripts/DTH-Character-Studio, showing the Build_Genesis_Index tile with its
-     icon. The old shot here showed a per-generation Scan_Morphs script with a
-     figure selected — a flow that no longer exists. Paste the new
-     user-attachments URL into the <img src> below and delete this comment. -->
+   <img width="564" height="789" alt="Screenshot 2026-07-30 080406" src="https://github.com/user-attachments/assets/b0ad36d5-7983-4632-b842-3df0b6a8e531" />
+
 
 3. A summary reports what was indexed per generation, which geograft file it
    picked, and anything it couldn't find — so a missing product, or an
    unexpected pick after a product update, is never silent.
 
-<!-- SHOT 2 (Daz, needs re-taking): the run summary dialog — the per-generation
-     "Indexed:" list with its morph + bone counts, the geograft it picked, and any
-     skips. The old shot showed the single-figure "Scanned N morphs on M nodes"
-     dialog, which no longer exists. -->
+<img width="508" height="281" alt="Screenshot 2026-07-30 080734" src="https://github.com/user-attachments/assets/7dd80317-3cbc-4a3e-b33d-ae398e81882c" />
+
 
 The scan indexes **everything dialable** each figure carries — classic morphs
 *and* controller dials, across all products installed for that generation —
