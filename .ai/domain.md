@@ -185,8 +185,14 @@ older runtimes as stale.
   main asset wins over DazToHueImport-style sub-assets; deliberately NO
   template scene — a template would rot across Houdini/DazToHue versions),
   bake `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the
-  programmatic Set Project, saved with the hip) and save `<name>.hiplc` at
-  the project root. Returns whether the network was created (HDA not visible
+  programmatic Set Project, saved with the hip) and save `<name>.hiplc` in
+  the houdini folder NEXT TO the project folder (which is seeded with its
+  dth-export/): `houdini/<name>.hiplc` + `houdini/<folder>/dth-export/`.
+  Generated projects (hip directly in the export dir) are studio-managed:
+  the remove dialog's "Keep houdini files" toggle (default on = unlink only)
+  can delete the scene file + the whole project folder
+  (`removeGeneratedHoudiniProject`, path-guarded); hand-linked projects stay
+  unlink-only. Returns whether the network was created (HDA not visible
   to hython → empty scene, UI says "add it from the shelf"); the UI
   (houdini-projects-field "Generate project" dialog, name prefilled
   `<Project>_<Character>`) links the result as a Houdini card. Fails loud

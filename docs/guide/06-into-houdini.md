@@ -33,8 +33,22 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 With an export directory and a [Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder)
 set, the character page's **Houdini projects → Generate project** creates the
 whole project for you: a new scene named after the character (editable in the
-dialog), saved at the project folder's root, with **Set Project already baked
-in** and the **DazToHue network ready** — open it and import.
+dialog), saved in the houdini folder **next to** the project folder it
+Set-Projects into (which starts with its `dth-export/` inside), with **Set
+Project already baked in** and the **DazToHue network ready** — open it and
+import.
+
+```
+houdini/
+├─ PlaygroundAssets_Ita.hiplc   ← the generated scene
+└─ PlaygroundAssets_Ita/        ← $JOB (Set Project)
+   └─ dth-export/
+```
+
+Removing a **generated** project asks about its files: with **Keep houdini
+files** on it is only unlinked; turned off, the scene file *and* the project
+folder (including everything exported into it) are deleted. Hand-linked
+projects are always unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene
