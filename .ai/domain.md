@@ -235,14 +235,15 @@ older runtimes as stale.
   only the visible per-character scripts. The v38 `bulk-export` script
   argument is RETIRED — arguments passed through `DzScript::execute` never
   reached `getArguments()` (measured; the Runner now executes plainly). The
-  job file carries ONE bulk-script row per scene — no split Export_ rows, no
-  same-scene session sharing (contract: docs/exporter-plugin-job-file.md).
-  The studio watches the
-  run: the handed-off jobs stay in memory (api/execute.ts `activeRun`) and a
-  scene counts as delivered when its exported PoseAsset CSV
-  (`expectedSceneCsvRel` — export dir + scene subfolder + scene CSV) is newer
-  than the handoff time; the header button shows "Exporting n/m" until all
-  deliver (or the watch is dismissed/aborted).
+  job file (contract v2) is JSON — `{version, type, progress, jobs[]}` — with
+  ONE bulk-script row per scene (docs/exporter-plugin-job-file.md). Lifecycle:
+  the Runner RENAMES it (`running_` prefix) on pickup — the "started" signal;
+  only an un-renamed file is abortable (deletion) — then OWNS `progress` +
+  per-job statuses inside the file. The studio (api/execute.ts) polls the
+  renamed file, shows "Exporting n%", deletes it at progress 100 and toasts
+  the outcome (failed rows + errors); a running file whose Daz exited below
+  100 is a dead run (cleaned + reported). No export-folder watching anymore —
+  the old delivered-CSV mtime watch is gone.
 
 ## PoseAsset CSV eras & templates
 

@@ -3,16 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { characterSchema, type Character } from '@dth/rom'
 
 import {
-  EXPORTER_JOB_HEADER,
+  EXPORTER_JOB_FILE,
+  RUNNING_JOB_FILE,
   characterJobScriptNames,
   executeSceneSignature,
-  expectedSceneCsvRel,
   expectedSceneExportFolders,
-  jobFileCsv,
+  jobFileJson,
   normalizeSceneKey,
   parseExecuteStamps,
   parseExportFoldersRecord,
-  parseJobFileCsv,
+  parseJobFileJson,
   staleExportFolders,
 } from './execute-jobs'
 
@@ -33,24 +33,87 @@ function makeCharacter(over: Partial<Character> = {}): Character {
 const PRIMARY = 'X:\\proj\\Electra\\daz3d\\Electra.duf'
 const EXTRA = 'X:\\proj\\Electra\\daz3d\\Electra_Armor.duf'
 
-describe('jobFileCsv', () => {
-  it('writes the header plus one row per job, LF-terminated', () => {
-    const csv = jobFileCsv([
-      { scenePath: 'X:\\scenes\\A.duf', scriptPath: 'X:\\lib\\Scripts\\ROM_A.dsa' },
-      { scenePath: 'X:\\scenes\\B.duf', scriptPath: 'X:\\lib\\Scripts\\ROM_B.dsa' },
-    ])
-    expect(csv).toBe(
-      `${EXPORTER_JOB_HEADER}\n` +
-        'X:\\scenes\\A.duf,X:\\lib\\Scripts\\ROM_A.dsa\n' +
-        'X:\\scenes\\B.duf,X:\\lib\\Scripts\\ROM_B.dsa\n',
-    )
+describe('the JSON job file (contract v2)', () => {
+  it('the running file is the pending name with the running_ prefix', () => {
+    expect(EXPORTER_JOB_FILE).toBe('dth_exporter_jobs.json')
+    expect(RUNNING_JOB_FILE).toBe('running_dth_exporter_jobs.json')
   })
 
-  it('quotes fields containing commas or quotes (RFC 4180)', () => {
-    const csv = jobFileCsv([
-      { scenePath: 'X:\\my, scenes\\A.duf', scriptPath: 'X:\\lib\\"quoted".dsa' },
+  it('jobFileJson: version/type/progress 0 + one pending row per job', () => {
+    const text = jobFileJson([
+      { scenePath: 'X:\\scenes\\A.duf', scriptPath: 'X:\\lib\\Scripts\\.Bulk_ROM_Export.dsa' },
+      { scenePath: 'X:\\scenes\\B.duf', scriptPath: 'X:\\lib\\Scripts\\.Bulk_ROM_Export.dsa' },
     ])
-    expect(csv.split('\n')[1]).toBe('"X:\\my, scenes\\A.duf","X:\\lib\\""quoted"".dsa"')
+    expect(text.endsWith('\n')).toBe(true)
+    expect(JSON.parse(text)).toEqual({
+      version: 1,
+      type: 'bulk-export',
+      progress: 0,
+      jobs: [
+        {
+          scenePath: 'X:\\scenes\\A.duf',
+          scriptPath: 'X:\\lib\\Scripts\\.Bulk_ROM_Export.dsa',
+          status: 'pending',
+        },
+        {
+          scenePath: 'X:\\scenes\\B.duf',
+          scriptPath: 'X:\\lib\\Scripts\\.Bulk_ROM_Export.dsa',
+          status: 'pending',
+        },
+      ],
+    })
+  })
+
+  it('round-trips through parseJobFileJson', () => {
+    const jobs = [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa' }]
+    const parsed = parseJobFileJson(jobFileJson(jobs))
+    expect(parsed).toEqual({
+      version: 1,
+      type: 'bulk-export',
+      progress: 0,
+      jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' }],
+    })
+  })
+
+  it('parseJobFileJson reads Runner-updated progress + statuses + errors', () => {
+    const parsed = parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 50,
+        jobs: [
+          { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'done' },
+          { scenePath: 'X:\\b.duf', scriptPath: 'X:\\s.dsa', status: 'failed', error: 'scene not found' },
+        ],
+      }),
+    )
+    expect(parsed?.progress).toBe(50)
+    expect(parsed?.jobs[0].status).toBe('done')
+    expect(parsed?.jobs[1]).toEqual({
+      scenePath: 'X:\\b.duf',
+      scriptPath: 'X:\\s.dsa',
+      status: 'failed',
+      error: 'scene not found',
+    })
+  })
+
+  it('tolerates garbage: torn reads, foreign files, future versions → null', () => {
+    expect(parseJobFileJson('')).toBeNull()
+    expect(parseJobFileJson('{"version":1,"type":"bulk-export","progress":4')).toBeNull() // torn
+    expect(parseJobFileJson('{"version":2,"jobs":[]}')).toBeNull()
+    expect(parseJobFileJson('not json at all')).toBeNull()
+    // Rows missing paths drop; unknown statuses read as pending; progress clamps.
+    const parsed = parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        progress: 250,
+        jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'sideways' }, { nope: true }],
+      }),
+    )
+    expect(parsed?.progress).toBe(100)
+    expect(parsed?.jobs).toEqual([
+      { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+    ])
   })
 })
 
@@ -65,54 +128,6 @@ describe('characterJobScriptNames — every job row runs the hidden bulk script'
     expect(
       characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: false })),
     ).toEqual(['.Bulk_ROM_Export.dsa'])
-  })
-})
-
-describe('expectedSceneCsvRel — where the export watch looks for delivered CSVs', () => {
-  it('maps every linked scene to <its subfolder>/<delivered csv> under the scenes root', () => {
-    const c = makeCharacter({
-      scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
-      extraScenes: ['X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf'],
-    })
-    const map = expectedSceneCsvRel(c, 'X:/proj/Electra/daz3d')
-    // Delivered CSVs carry the export set's scene-suffixed base name — the
-    // primary keeps the bare one, extras get their capitalized subfolder.
-    expect(map[normalizeSceneKey(c.scenePath)]).toBe('primary/Electra_pose_asset.csv')
-    expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe('armor/Electra_Armor_pose_asset.csv')
-  })
-
-  it('falls back to the scene-file stem without a scenes root (the runtime fallback)', () => {
-    const map = expectedSceneCsvRel(makeCharacter())
-    expect(map[normalizeSceneKey(PRIMARY)]).toBe('Electra/Electra_pose_asset.csv')
-    expect(map[normalizeSceneKey(EXTRA)]).toBe(
-      'Electra_Armor/Electra_Electra_Armor_pose_asset.csv',
-    )
-  })
-
-  it('prefixes <project>/dth-export/ when a Houdini project folder resolves (schema v27)', () => {
-    const c = makeCharacter({
-      scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
-      extraScenes: [
-        'X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf',
-        'X:\\proj\\Electra\\daz3d\\beach\\Electra_Beach.duf',
-      ],
-      houdiniProjectFolder: 'MyProj_Electra',
-      sceneOverrides: [
-        // Overridden to '' — this scene delivers flat, exactly like pre-v27.
-        {
-          scenePath: 'X:\\proj\\Electra\\daz3d\\beach\\Electra_Beach.duf',
-          houdiniProjectFolder: '',
-        },
-      ],
-    } as Partial<Character>)
-    const map = expectedSceneCsvRel(c, 'X:/proj/Electra/daz3d')
-    expect(map[normalizeSceneKey(c.scenePath)]).toBe(
-      'MyProj_Electra/dth-export/primary/Electra_pose_asset.csv',
-    )
-    expect(map[normalizeSceneKey(c.extraScenes[0])]).toBe(
-      'MyProj_Electra/dth-export/armor/Electra_Armor_pose_asset.csv',
-    )
-    expect(map[normalizeSceneKey(c.extraScenes[1])]).toBe('beach/Electra_Beach_pose_asset.csv')
   })
 })
 
@@ -241,26 +256,6 @@ describe('executeSceneSignature', () => {
     const forwardSlashUpper = EXTRA.replace(/\\/g, '/').toUpperCase()
     expect(normalizeSceneKey(forwardSlashUpper)).toBe(normalizeSceneKey(EXTRA))
     expect(executeSceneSignature(c, forwardSlashUpper)).toBe(executeSceneSignature(c, EXTRA))
-  })
-})
-
-describe('parseJobFileCsv', () => {
-  it('round-trips jobFileCsv output, including quoted fields', () => {
-    const jobs = [
-      { scenePath: 'X:\\scenes\\A.duf', scriptPath: 'X:\\lib\\ROM_A.dsa' },
-      { scenePath: 'X:\\my, scenes\\B.duf', scriptPath: 'X:\\lib\\"quoted".dsa' },
-    ]
-    expect(parseJobFileCsv(jobFileCsv(jobs))).toEqual(jobs)
-  })
-
-  it('accepts CRLF line endings and ignores extra columns', () => {
-    const text = `${EXPORTER_JOB_HEADER},future-column\r\nX:\\a.duf,X:\\a.dsa,ignored\r\n`
-    expect(parseJobFileCsv(text)).toEqual([{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\a.dsa' }])
-  })
-
-  it('skips blank/short rows and yields nothing for an empty file', () => {
-    expect(parseJobFileCsv('')).toEqual([])
-    expect(parseJobFileCsv(`${EXPORTER_JOB_HEADER}\n\nonly-one-field\n`)).toEqual([])
   })
 })
 

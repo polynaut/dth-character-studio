@@ -1,32 +1,41 @@
 import {
   BULK_ROM_EXPORT_SCRIPT,
   houdiniProjectResolution,
-  sceneExportName,
   sceneExportSubfolders,
 } from '@dth/rom'
 
 import type { Character } from '@dth/rom'
 
 /**
- * The DTH Exporter job file — the handoff between the studio's Execute buttons
- * and the DTH Exporter Plugin. The studio writes a small CSV of
- * (daz-scene-path, daz-script-path) rows into the shared
- * `Scripts/DTH-Character-Studio/` root of the Daz library, starting Daz Studio
- * (scene-less) when it isn't running. The plugin POLLS for the file — on
- * startup and regularly while Daz runs, so a running instance accepts new
- * batches — parses it, DELETES it (the delete is the "transfer succeeded"
- * ack), and works through the rows: open scene → run script → discard
- * changes → next. Contract spec: docs/exporter-plugin-job-file.md.
+ * The DTH Exporter job file — the handoff between the studio's DTH Export
+ * button and the DTH Character Studio Runner plugin (contract v2). The studio
+ * writes a JSON job file ({@link ExporterJobFile}: type, whole-batch progress,
+ * the job rows) into the shared `Scripts/DTH-Character-Studio/` root of the
+ * Daz library, starting Daz Studio (scene-less) when it isn't running. The
+ * plugin POLLS for it — on startup and regularly while Daz runs, so a running
+ * instance accepts new batches — and on pickup RENAMES it (`running_` prefix,
+ * the "started" signal; only an un-renamed file can still be aborted by
+ * deletion). From then on the plugin OWNS the file: it updates `progress` and
+ * the per-job statuses as it works (open scene → run script → discard →
+ * next). The studio just polls the renamed file for progress, deletes it once
+ * `progress` reaches 100, and toasts the outcome. Contract spec:
+ * docs/exporter-plugin-job-file.md.
  *
- * This module is the pure part (names, CSV text, change signatures) so it stays
- * unit-testable; the I/O lives in api/execute.ts.
+ * This module is the pure part (names, JSON text, change signatures) so it
+ * stays unit-testable; the I/O lives in api/execute.ts.
  */
 
 /** Job-file name inside `Scripts/DTH-Character-Studio/` (the studio scripts root). */
-export const EXPORTER_JOB_FILE = 'dth_exporter_jobs.csv'
+export const EXPORTER_JOB_FILE = 'dth_exporter_jobs.json'
 
-/** The job file's fixed header row — two columns, in this order. */
-export const EXPORTER_JOB_HEADER = 'daz-scene-path,daz-script-path'
+/** The prefix the Runner RENAMES the job file to when it starts working on it
+ *  — the rename IS the "started" signal (an un-renamed file can still be
+ *  aborted by deletion; a renamed one is in progress and carries the
+ *  plugin-owned `progress`). */
+export const RUNNING_JOB_PREFIX = 'running_'
+
+/** The renamed (in-progress) job file the studio polls for progress. */
+export const RUNNING_JOB_FILE = `${RUNNING_JOB_PREFIX}${EXPORTER_JOB_FILE}`
 
 /** Per-character stamp file (character folder, dot-prefixed like the run log):
  *  what Execute last handed off per scene, so Execute all can skip unchanged
@@ -38,6 +47,28 @@ export interface ExporterJob {
   scenePath: string
   /** Absolute path of the `.dsa` script to run in that scene. */
   scriptPath: string
+}
+
+/** One job row in the JSON job file — the Runner updates `status`/`error` as
+ *  it works (the studio writes every row as `pending`). */
+export interface ExporterJobEntry extends ExporterJob {
+  status: 'pending' | 'running' | 'done' | 'failed'
+  /** Set by the Runner on a failed row (missing scene/script, script error). */
+  error?: string
+}
+
+/** The JSON job file (contract v2 — docs/exporter-plugin-job-file.md): the
+ *  studio writes it with `progress: 0`; the Runner renames it
+ *  (`running_` prefix) on pickup and OWNS `progress` + the per-job statuses
+ *  from then on; the studio deletes the renamed file once progress hits 100. */
+export interface ExporterJobFile {
+  version: 1
+  /** What this batch does — today always 'bulk-export' (per-scene ROM + full
+   *  export via the hidden .Bulk_ROM_Export.dsa). */
+  type: 'bulk-export'
+  /** Whole-batch progress 0–100, Runner-owned after the rename. */
+  progress: number
+  jobs: Array<ExporterJobEntry>
 }
 
 /** What a scene looked like when its jobs were last written: the `.duf` stamp
@@ -60,21 +91,20 @@ export function normalizeSceneKey(scenePath: string): string {
   return scenePath.trim().replace(/\\/g, '/').toLowerCase()
 }
 
-/** Quote a CSV field per RFC 4180 — only when it needs it (comma, quote, newline). */
-function csvField(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
-
 /**
- * The job file's full text: header + one row per job, LF line endings, trailing
- * newline. Paths are written as-is (absolute, Windows separators allowed) —
- * quoting only kicks in for the rare comma/quote in a path.
+ * The job file's full text (pretty JSON + trailing newline): every row starts
+ * `pending`, whole-batch `progress` starts 0 — the Runner owns both once it
+ * renames the file. Paths are written as-is (absolute, Windows separators
+ * allowed; JSON escaping handles everything).
  */
-export function jobFileCsv(jobs: Array<ExporterJob>): string {
-  return [
-    EXPORTER_JOB_HEADER,
-    ...jobs.map((job) => `${csvField(job.scenePath)},${csvField(job.scriptPath)}`),
-  ].join('\n') + '\n'
+export function jobFileJson(jobs: Array<ExporterJob>): string {
+  const file: ExporterJobFile = {
+    version: 1,
+    type: 'bulk-export',
+    progress: 0,
+    jobs: jobs.map((job) => ({ ...job, status: 'pending' as const })),
+  }
+  return `${JSON.stringify(file, null, 2)}\n`
 }
 
 /**
@@ -114,28 +144,6 @@ function sceneExportFolderRel(
     const sub = subfolders[key] ?? stem
     const proj = Object.hasOwn(project.byScene, key) ? project.byScene[key] : project.base
     map[key] = { folder: proj ? `${proj}/dth-export${sub ? `/${sub}` : ''}` : sub, sub }
-  }
-  return map
-}
-
-/**
- * Scene key → the export-dir-RELATIVE path of the PoseAsset CSV a bulk run
- * delivers for that scene: {@link sceneExportFolderRel} + the DELIVERED CSV
- * name — `<sceneExportName>_pose_asset.csv`, the export set's own
- * scene-suffixed base (the run-time copy renames the CSV on delivery; the
- * source CSV in the character folder keeps its studio name). The studio's
- * export watch stats these files — a CSV whose mtime is newer than the
- * handoff time means that scene finished exporting.
- */
-export function expectedSceneCsvRel(
-  character: Character,
-  scenesRootAbs?: string,
-): Record<string, string> {
-  const folders = sceneExportFolderRel(character, scenesRootAbs)
-  const map: Record<string, string> = {}
-  for (const [key, { folder, sub }] of Object.entries(folders)) {
-    const name = `${sceneExportName(character, key, sub)}_pose_asset.csv`
-    map[key] = folder ? `${folder}/${name}` : name
   }
   return map
 }
@@ -299,46 +307,39 @@ export function executeSceneSignature(character: Character, scenePath: string): 
 }
 
 /**
- * Parse a job file back into its rows — the studio's own reader, used by Abort
- * to learn which scenes a pending (deleted) handoff carried so their stamps can
- * roll back. RFC-4180 tolerant like the contract asks of the plugin: quoted
- * fields, LF or CRLF, extra columns ignored, the header row skipped.
+ * Parse a (pending or running) job file, tolerating garbage: a torn read (the
+ * Runner rewrites the running file after every row), a foreign file, or a
+ * future version all return null — the caller just retries on its next poll.
+ * Rows are kept tolerant too: entries missing paths are dropped; missing/
+ * unknown statuses read as 'pending' (a v1-shaped writer stays readable).
  */
-export function parseJobFileCsv(text: string): Array<ExporterJob> {
-  const rows: Array<Array<string>> = []
-  let field = ''
-  let row: Array<string> = []
-  let inQuotes = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"'
-          i++
-        } else inQuotes = false
-      } else field += ch
-    } else if (ch === '"') {
-      inQuotes = true
-    } else if (ch === ',') {
-      row.push(field)
-      field = ''
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++
-      row.push(field)
-      field = ''
-      rows.push(row)
-      row = []
-    } else field += ch
+export function parseJobFileJson(text: string): ExporterJobFile | null {
+  try {
+    const raw = JSON.parse(text) as Partial<ExporterJobFile> | null
+    if (!raw || raw.version !== 1 || !Array.isArray(raw.jobs)) return null
+    const statuses: ReadonlySet<ExporterJobEntry['status']> = new Set([
+      'pending',
+      'running',
+      'done',
+      'failed',
+    ])
+    const isStatus = (value: unknown): value is ExporterJobEntry['status'] =>
+      typeof value === 'string' && statuses.has(value as ExporterJobEntry['status'])
+    const jobs: Array<ExporterJobEntry> = []
+    for (const job of raw.jobs) {
+      if (!job || typeof job.scenePath !== 'string' || typeof job.scriptPath !== 'string') continue
+      jobs.push({
+        scenePath: job.scenePath,
+        scriptPath: job.scriptPath,
+        status: isStatus(job.status) ? job.status : 'pending',
+        ...(typeof job.error === 'string' && job.error !== '' ? { error: job.error } : {}),
+      })
+    }
+    const progress = typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0
+    return { version: 1, type: 'bulk-export', progress, jobs }
+  } catch {
+    return null
   }
-  if (field !== '' || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-  return rows
-    .slice(1) // the fixed header row
-    .filter((r) => r.length >= 2 && r[0].trim() !== '')
-    .map((r) => ({ scenePath: r[0], scriptPath: r[1] }))
 }
 
 /** Parse a stored stamps file, tolerating garbage (a bad file = no stamps = the
