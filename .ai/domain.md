@@ -184,6 +184,14 @@ older runtimes as stale.
   every Settings save (best-effort) AND by Refresh assets (reported in the
   summary). Never removed — a cleared library folder leaves the last value.
   Houdini reads the file at startup.
+- **ROM-scene auto-save** (runtime v40): after a CLEAN ROM build — before any
+  export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
+  as `<stem>_ROM.duf` into `<sceneDir>/.ROM_Animations/`, so the built ROM
+  animation reopens without a rebuild. Bounded: fixed name, overwritten per
+  run. FOOTGUN: the save-as REPOINTS `Scene.getFilename()` — every scene-keyed
+  lookup (subfolder/groom/CSV snippets) reads the `dthOpenSceneFile` capture
+  (`openSceneFileSnippet`, emitted once per carrier) instead of the live
+  filename; a new scene-keyed snippet must do the same.
 - **Export-folder housekeeping**: every generation records the layout's
   export-relative folders in `.dth_export_folders.json` (character folder) and
   deletes RECORDED folders that fell out of the layout — a renamed/cleared

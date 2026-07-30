@@ -1182,7 +1182,13 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       dedicated hidden `.Bulk_ROM_Export.dsa` (the combined script with both
  *       export toggles forced on; generated whenever an export dir is set),
  *       and the visible ROM script carries an export block only in combined
- *       mode again (pre-v38 behavior). Bumped so Refresh
+ *       mode again (pre-v38 behavior). And: after a CLEAN ROM build every
+ *       ROM-building script saves the scene as `<stem>_ROM.duf` into the
+ *       hidden `.ROM_Animations/` subfolder beside the source scene (before
+ *       any export) — the generated ROM animation stays reopenable without a
+ *       rebuild. The save-as repoints Scene.getFilename(), so all scene-keyed
+ *       lookups read the `dthOpenSceneFile` capture taken at script start.
+ *       Bumped so Refresh
  *       assets regenerates every script + CSV onto the new naming.
  */
 export const RUNTIME_VERSION = 40

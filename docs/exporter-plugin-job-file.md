@@ -130,10 +130,12 @@ after the last row:
     discard the open scene's changes (new empty scene, never save)
 ```
 
-- **Never save a scene.** The script keys hundreds of timeline frames into the
-  open scene; those changes are working state for the exporter only and are
-  always thrown away. Opening the next row's scene with a no-save replace IS
-  the discard between rows.
+- **The plugin never saves a scene.** The script keys hundreds of timeline
+  frames into the open scene; those changes are working state for the exporter
+  and are always thrown away by the plugin — opening the next row's scene with
+  a no-save replace IS the discard between rows. (The generated script itself
+  saves its own `_ROM.duf` copy into `.ROM_Animations/` beside the scene —
+  that's the script's business, not the plugin's.)
 - **Per-row failure policy:** a missing scene file, a missing script file, or a
   script that errors → log it and continue with the next row. The generated
   scripts write a per-character run log the studio reads back, so fine-grained

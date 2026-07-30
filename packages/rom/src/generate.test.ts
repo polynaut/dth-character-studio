@@ -1793,6 +1793,31 @@ describe('exporter integration', () => {
     ])
   })
 
+  it('saves the ROM scene into .ROM_Animations before any export (runtime v40)', () => {
+    const character = withReferencePose({ name: 'Kira', exportPath: 'X:\\exports\\kira' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Kira').content
+    // The scene file is captured ONCE at script start — the save-as repoints
+    // Scene.getFilename(), so the export lookups must never read it live.
+    expect(content).toContain('var dthOpenSceneFile = String(Scene.getFilename());')
+    expect(content).not.toMatch(/dthExportSceneKey = String\(Scene\.getFilename\(\)\)/)
+    // The save: <sceneDir>/.ROM_Animations/<stem>_ROM.duf, clean builds only.
+    expect(content).toContain('if (dthRomOk === true && dthOpenSceneFile != "") {')
+    expect(content).toContain('"/.ROM_Animations"')
+    expect(content).toContain('completeBaseName() + "_ROM.duf"')
+    // …and it happens BEFORE the export runs.
+    expect(content.indexOf('App.getContentMgr().saveScene(dthRomSavePath)')).toBeLessThan(
+      content.indexOf('doExport('),
+    )
+    // Every ROM-building carrier saves: without an export dir too ("or not"),
+    // and the hidden bulk script alike.
+    expect(
+      toCharacterScriptDsa(withReferencePose({ name: 'Kira' }), {}, FRAMES).content,
+    ).toContain('"/.ROM_Animations"')
+    expect(toBulkRomExportScriptDsa(character, {}, FRAMES).content).toContain('"/.ROM_Animations"')
+    // The ROM-less carrier does not — Export_ never rebuilds, never saves.
+    expect(toExportScriptDsa(character, FRAMES).content).not.toContain('.ROM_Animations')
+  })
+
   it('no export dir → no export block and no bulk-run detection', () => {
     const character = withReferencePose({ name: 'Electra' })
     const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Electra').content
@@ -1907,7 +1932,7 @@ describe('groom items (hair kept out of the export)', () => {
     // match and the groom list resolves to [] for every scene.
     expect(script.content).toContain(
       '    var dthGroomByScene = {"x:/scenes/karen.duf":["dForce Black Tie Cap"]};\n' +
-        '    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();\n' +
+        '    var dthGroomScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();\n' +
         '    var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];',
     )
     // Per-item: loops the open scene's hair list, exporting each on its own as

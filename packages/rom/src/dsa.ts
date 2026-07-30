@@ -6,6 +6,7 @@ import {
   groomSceneLookupSnippet,
   hideTreeSnippet,
   indentLines,
+  openSceneFileSnippet,
   sceneConfigLookupSnippet,
   sceneGuardSnippet,
   sceneCsvLookupSnippet,
@@ -856,6 +857,7 @@ ${sceneSelectBlock}
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
+${openSceneFileSnippet()}
 // Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
     try {
@@ -929,7 +931,30 @@ if (dthSceneLinkErr) {
         var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
-        if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }${exportBlock ? `
+        if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
+        // Keep the built ROM reopenable: save the scene as <stem>_ROM.duf into
+        // the hidden .ROM_Animations subfolder BESIDE the source scene, BEFORE
+        // any export — the user can open the generated ROM animation any time
+        // later without the (slow) rebuild. Save-as repoints the open scene's
+        // filename, which is why every scene-keyed lookup below reads the
+        // dthOpenSceneFile capture, never Scene.getFilename(). Best effort: a
+        // failed save must not stop the export.
+        if (dthRomOk === true && dthOpenSceneFile != "") {
+            try {
+                var dthRomSceneInfo = new DzFileInfo(dthOpenSceneFile);
+                var dthRomSaveDir = dthRomSceneInfo.path() + "/.ROM_Animations";
+                var dthRomSaveDirObj = new DzDir(dthRomSaveDir);
+                if (!dthRomSaveDirObj.exists()) dthRomSaveDirObj.mkpath(dthRomSaveDir);
+                var dthRomSavePath = dthRomSaveDir + "/" + dthRomSceneInfo.completeBaseName() + "_ROM.duf";
+                if (App.getContentMgr().saveScene(dthRomSavePath)) {
+                    print("ROM scene saved: " + dthRomSavePath);
+                } else {
+                    print("Could not save the ROM scene to " + dthRomSavePath);
+                }
+            } catch (dthSaveErr) {
+                print("ROM-scene save failed: " + dthSaveErr);
+            }
+        }${exportBlock ? `
         // Export only when the ROM built CLEAN (runtime v20: failed morphs count
         // as failure too, not just hard aborts) — a broken ROM must never ship
         // a PoseAsset CSV/FBX as if it were good. Fix the problem and re-run.
@@ -982,6 +1007,7 @@ export function toExportScriptDsa(
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
 ${sceneGuardSnippet(character)}
+${openSceneFileSnippet()}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
@@ -1043,6 +1069,7 @@ export function toGroomExportScriptDsa(
 // the figure selected; the ROM is NOT needed.
 
 ${sceneGuardSnippet(character)}
+${openSceneFileSnippet()}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {

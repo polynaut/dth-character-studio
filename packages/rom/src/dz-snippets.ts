@@ -43,6 +43,22 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
 }
 
 /**
+ * The one "which scene is open" capture every scene-keyed lookup reads:
+ * `dthOpenSceneFile`, taken ONCE at script start. Load-bearing since the
+ * ROM-scene save (dsa.ts `romSceneSaveBlock`): a Daz save-as REPOINTS
+ * `Scene.getFilename()` to the saved copy, and the export block's lookups
+ * (subfolder map, groom list, CSV pick) run AFTER that save — reading live
+ * would key them on `.ROM_Animations/<stem>_ROM.duf` and miss every map.
+ * Every carrier that embeds a scene-keyed snippet MUST emit this first.
+ */
+export function openSceneFileSnippet(): string {
+  return `// The open scene's file, captured ONCE: the ROM-scene save (save-as) repoints
+// Scene.getFilename(), so every scene-keyed lookup reads this capture instead.
+var dthOpenSceneFile = String(Scene.getFilename());
+`
+}
+
+/**
  * The "nest the export dir under the open scene's OWN subfolder" DzScript
  * snippet, at base indent 0 (callers re-indent via {@link indentLines}). ONE
  * body for the ROM/Export scripts' export block and the standalone groom
@@ -50,7 +66,9 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  * scene path; a scene missing from it falls back to the scene file's stem at
  * run time — the pre-v37 nesting, kept so an unexpected scene still exports
  * into its own folder rather than the root. Reads/writes the caller's
- * `dthExportDir` var.
+ * `dthExportDir` var and reads `dthOpenSceneFile` (emit
+ * {@link openSceneFileSnippet} first — never Scene.getFilename() live, the
+ * ROM-scene save repoints it before this runs).
  *
  * With `exportName` it also declares `dthExportName` — the name handed to the
  * exporter's `doExport`: the base {@link exporterFigureName}, suffixed with
@@ -98,10 +116,10 @@ var dthExportProj = dthExportProjByScene.hasOwnProperty(dthExportSceneKey) ? dth
 if (dthExportProj != "") dthExportDir = dthExportDir + "/" + dthExportProj + "/dth-export";
 `
   return `var dthExportSubByScene = ${dazJson(map)};
-var dthExportSceneKey = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthExportSceneKey = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
 var dthExportSub = dthExportSubByScene[dthExportSceneKey] || "";
 if (dthExportSub == "" && dthExportSceneKey != "") {
-    dthExportSub = new DzFileInfo(Scene.getFilename()).completeBaseName();
+    dthExportSub = new DzFileInfo(dthOpenSceneFile).completeBaseName();
 }
 ${nameLines}${projectLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
 `
@@ -114,11 +132,12 @@ ${nameLines}${projectLines}if (dthExportSub != "") dthExportDir = dthExportDir +
  * bracket and the standalone groom export (the two used to carry
  * byte-duplicated copies) — a normalization tweak must land in both or the
  * scripts disagree on which scene has a groom list. Base indent 4 (both
- * callers embed at that level).
+ * callers embed at that level). Reads `dthOpenSceneFile` ({@link
+ * openSceneFileSnippet} — this lookup runs after the ROM-scene save).
  */
 export function groomSceneLookupSnippet(groomMap: Record<string, Array<string>>): string {
   return `    var dthGroomByScene = ${dazJson(groomMap)};
-    var dthGroomScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+    var dthGroomScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
     var dthGroomLabels = dthGroomByScene[dthGroomScene] || [];`
 }
 
@@ -185,11 +204,13 @@ function dthSceneLinkError() {
  * CSV, every other scene rides the base one. Emitted only when at least one
  * linked scene overrides the ROM. Declares `dthCsvName` (the base name),
  * reassigning it when the open scene has an override CSV. Base indent 0.
+ * Reads `dthOpenSceneFile` ({@link openSceneFileSnippet} — this lookup runs
+ * after the ROM-scene save).
  */
 export function sceneCsvLookupSnippet(baseCsvName: string, sceneCsvMap: Record<string, string>): string {
   return `var dthCsvName = ${dazJson(baseCsvName)};
 var dthCsvByScene = ${dazJson(sceneCsvMap, 2)};
-var dthCsvScene = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+var dthCsvScene = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
 if (dthCsvByScene[dthCsvScene]) dthCsvName = dthCsvByScene[dthCsvScene];
 `
 }

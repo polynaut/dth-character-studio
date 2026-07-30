@@ -64,6 +64,12 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    frame, under a `Reference Skeletons` subfolder — the CSV already points at
    each one).
 
+After a clean ROM build — right before any export — the script also **saves
+the ROM'd scene** as `<scene>_ROM.duf` into a hidden `.ROM_Animations/`
+subfolder next to the scene file. Open it any time later to get the fully
+built ROM animation back without the (slow) rebuild; each run overwrites the
+previous copy.
+
 Every scene exports into its **own subfolder** of the export directory, named
 after the subfolder the scene lives in inside the character folder (the
 primary scene's is `primary`; extra scenes get theirs when they're added) — so
