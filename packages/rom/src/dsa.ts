@@ -251,13 +251,17 @@ function buildExportBlock(
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
   // The exporterFigureName base makes the snippet also declare dthExportName:
-  // the doExport name, suffixed with the resolved scene subfolder so each
-  // scene's files carry their scene ("Ita_Summertide") instead of every
-  // subfolder holding an identically-named "Ita".
+  // the doExport name, suffixed with the capitalized scene subfolder so each
+  // scene's files carry their scene ("Kira_Summertide") instead of every
+  // subfolder holding an identically-named "Kira" — except the PRIMARY scene,
+  // whose files keep the bare name ("Kira", never "Kira_Primary").
   const sceneSubfolderBlock = indentLines(
     sceneExportSubfolderSnippet(
       sceneExportSubfolders(character, scenesRootAbs),
-      exporterFigureName(character),
+      {
+        base: exporterFigureName(character),
+        primarySceneKey: character.scenePath.trim().replace(/\\/g, '/').toLowerCase(),
+      },
       houdiniProjectResolution(character),
     ),
   )

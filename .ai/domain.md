@@ -160,10 +160,13 @@ older runtimes as stale.
   the exporter output.
 - The figure name handed to `doExport` is **scene-suffixed at run time**
   (runtime v40): base `exporterFigureName` + `_` + the resolved export
-  subfolder ("Ita" in `Summertide/` exports as `Ita_Summertide`; nesting `/` →
-  `_`, `,` → space) — otherwise every scene subfolder holds identically-named
-  files. The hair pass keeps its own `<slug>_Hair_<item>` names (unique per
-  item already).
+  subfolder, each segment's first letter capitalized ("Kira" in `summertide/`
+  exports as `Kira_Summertide`; nesting `/` → `_`, `,` → space) — otherwise
+  every scene subfolder holds identically-named files. The PRIMARY scene keeps
+  the bare base name ("Kira", never "Kira_Primary") while still exporting into
+  its subfolder — matched by scene KEY, not by the folder name "primary". The
+  hair pass keeps its own `<slug>_Hair_<item>` names (unique per item
+  already).
 - The **Houdini project folder** (schema v27, `houdiniProjectFolder`) nests the
   whole export under `<exportPath>/<folder>/dth-export/<scene-subfolder>/` so
   Houdini Set-Project's `<exportPath>/<folder>` and imports via

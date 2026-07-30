@@ -58,7 +58,8 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    auto-export off.
 2. Run the script in Daz as above — after building the ROM it now runs the
    exporter automatically and writes everything the pipeline needs into your
-   export folder: **`<Name>_<scene>.abc`**, **`<Name>_<scene>.dth`**, and the
+   export folder: **`<Name>.abc`**, **`<Name>.dth`** (extra scenes:
+   `<Name>_<Scene>.*`), and the
    **PoseAsset CSV** (plus a **reference-skeleton FBX** for each **Bone scale**
    frame, under a `Reference Skeletons` subfolder — the CSV already points at
    each one).
@@ -68,10 +69,13 @@ after the subfolder the scene lives in inside the character folder (the
 primary scene's is `primary`; extra scenes get theirs when they're added) — so
 outfit/scene variants of one character always export side by side. The
 exporter output **and** the PoseAsset CSV land in that subfolder, and the
-export files carry the scene in their name too — `Ita_Summertide.abc` for the
-`Summertide` scene, not another `Ita.abc` — so files from different scenes
-stay distinguishable after they leave their subfolder (Houdini file pickers,
-recent lists).
+export files carry the scene in their name too — `Kira_Summertide.abc` for the
+`summertide` scene (capitalized), not another `Kira.abc` — so files from
+different scenes stay distinguishable after they leave their subfolder
+(Houdini file pickers, recent lists). The **primary scene** is the one
+exception: it exports into its subfolder like every scene, but its files keep
+the plain name (`Kira.abc`, never `Kira_Primary.abc`) — the primary is the
+character.
 
 ### The Houdini project folder
 
@@ -85,7 +89,7 @@ subfolders: everything exports into
 
 Point a Houdini project at `<export dir>/<project folder>` with **File → Set
 Project** and every import becomes project-relative —
-`$JOB/dth-export/primary/Ita_primary.dth` ([Into Houdini](./06-into-houdini.md)).
+`$JOB/dth-export/primary/Kira.dth` ([Into Houdini](./06-into-houdini.md)).
 
 - **Empty the field** and no project folder is created — each scene's subfolder
   exports directly into the export directory (how it always worked; existing

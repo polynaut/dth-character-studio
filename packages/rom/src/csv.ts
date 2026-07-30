@@ -114,7 +114,8 @@ export function sanitizePoseName(name: string): string {
 /**
  * The BASE of the figure name handed to the DTH Exporter's `doExport`. The
  * actual name is resolved at RUN time — base + "_" + the open scene's export
- * subfolder ("Ita" in "Summertide/" exports as "Ita_Summertide"; see
+ * subfolder, capitalized ("Kira" in "summertide/" exports as
+ * "Kira_Summertide"; the primary scene keeps the bare base — see
  * `sceneExportSubfolderSnippet`), so each scene's export files carry their
  * scene. The CSV's reference-FBX paths bake a `{{DTH_EXPORT_NAME}}` token that
  * the generated script substitutes with the SAME run-time value when it copies

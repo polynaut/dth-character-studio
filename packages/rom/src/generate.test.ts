@@ -1532,15 +1532,24 @@ describe('exporter integration', () => {
   })
 
   it('scene-suffixes the doExport figure name at run time (runtime v40)', () => {
-    const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
-    const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Ita').content
+    const character = withReferencePose({
+      name: 'Kira',
+      exportPath: 'X:\\exports\\kira',
+      scenePath: 'X:\\p\\daz3d\\primary\\Kira.duf',
+    })
+    const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Kira').content
     // Base name declared from the sanitized character name…
-    expect(content).toContain('var dthExportName = "Ita";')
-    // …suffixed with the resolved export subfolder ("Ita" in "Summertide/"
-    // exports as "Ita_Summertide"; nesting slashes → "_", commas → " ")…
+    expect(content).toContain('var dthExportName = "Kira";')
+    // …suffixed with the resolved export subfolder — EXCEPT for the primary
+    // scene, whose files keep the bare base name ("Kira", not "Kira_Primary")
+    // while still exporting into its subfolder.
     expect(content).toContain(
-      'if (dthExportSub != "") dthExportName = dthExportName + "_" + dthExportSub.split("/").join("_").split(",").join(" ");',
+      'if (dthExportSub != "" && dthExportSceneKey != "x:/p/daz3d/primary/kira.duf") {',
     )
+    // Each subfolder segment is capitalized ("summertide" → "Summertide";
+    // nesting "/" → "_", commas → " " — a comma would split the CSV column).
+    expect(content).toContain('dthSfSeg.charAt(0).toUpperCase() + dthSfSeg.substring(1)')
+    expect(content).toContain('dthExportName = dthExportName + "_" + dthExportSuffix.join("_");')
     // …and the CSV copy resolves the name token with the SAME value, right
     // beside the dir token.
     expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName)')

@@ -52,13 +52,15 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  * into its own folder rather than the root. Reads/writes the caller's
  * `dthExportDir` var.
  *
- * With `exportName` (the character's base {@link exporterFigureName}) it also
- * declares `dthExportName` — the name handed to the exporter's `doExport`,
- * suffixed with the resolved subfolder so every scene's export files carry
- * their scene ("Ita" in "Summertide/" exports as "Ita_Summertide"): otherwise
- * every subfolder holds identically-named files. Nesting slashes become
- * underscores; commas become spaces (a comma would split the CSV column the
- * name is substituted into — same guard as exporterFigureName).
+ * With `exportName` it also declares `dthExportName` — the name handed to the
+ * exporter's `doExport`: the base {@link exporterFigureName}, suffixed with
+ * the resolved subfolder so every scene's export files carry their scene
+ * ("Kira" in "summertide/" exports as "Kira_Summertide" — each subfolder
+ * segment's first letter capitalized, nesting slashes to underscores, commas
+ * to spaces since a comma would split the CSV column the name lands in).
+ * The PRIMARY scene is the exception: it exports into its subfolder like
+ * every scene, but its files keep the bare base name ("Kira", never
+ * "Kira_Primary") — the primary IS the character.
  *
  * With `project` (the character's Houdini project folder + the per-scene
  * override map — schema v27) the export dir first nests under
@@ -71,14 +73,21 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  */
 export function sceneExportSubfolderSnippet(
   map: Record<string, string>,
-  exportName?: string,
+  exportName?: { base: string; primarySceneKey: string },
   project?: { base: string; byScene: Record<string, string> },
 ): string {
   const nameLines =
     exportName === undefined
       ? ''
-      : `var dthExportName = ${dazJson(exportName)};
-if (dthExportSub != "") dthExportName = dthExportName + "_" + dthExportSub.split("/").join("_").split(",").join(" ");
+      : `var dthExportName = ${dazJson(exportName.base)};
+if (dthExportSub != "" && dthExportSceneKey != ${dazJson(exportName.primarySceneKey)}) {
+    var dthExportSuffix = dthExportSub.split(",").join(" ").split("/");
+    for (var dthSfI = 0; dthSfI < dthExportSuffix.length; dthSfI++) {
+        var dthSfSeg = dthExportSuffix[dthSfI];
+        if (dthSfSeg != "") dthExportSuffix[dthSfI] = dthSfSeg.charAt(0).toUpperCase() + dthSfSeg.substring(1);
+    }
+    dthExportName = dthExportName + "_" + dthExportSuffix.join("_");
+}
 `
   const projectActive =
     project !== undefined && (project.base !== '' || Object.keys(project.byScene).length > 0)

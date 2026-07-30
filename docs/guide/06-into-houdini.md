@@ -23,7 +23,7 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 > With a **[Houdini project folder](./05-rom-in-daz.md#direct-export-optional-recommended)**
 > set on the character, use Houdini's **File → Set Project** on
 > `<export dir>/<project folder>` — then every import is project-relative:
-> `$JOB/dth-export/primary/<Name>_primary.dth`, and the `.hip` stays portable.
+> `$JOB/dth-export/primary/<Name>.dth`, and the `.hip` stays portable.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 

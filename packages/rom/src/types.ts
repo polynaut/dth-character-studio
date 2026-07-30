@@ -1161,10 +1161,13 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       this bump makes Refresh assets do.
  *  40 — generated-script change only (runtime files untouched): the figure
  *       name handed to the exporter's `doExport` is scene-suffixed at run time
- *       — base name + "_" + the open scene's export subfolder ("Ita" in
- *       "Summertide/" exports as "Ita_Summertide") — so each subfolder's files
- *       carry their scene instead of every subfolder holding an identically
- *       named export. The CSV's bone-scale reference-FBX paths bake a
+ *       — base name + "_" + the open scene's export subfolder, first letter of
+ *       each segment capitalized ("Kira" in "summertide/" exports as
+ *       "Kira_Summertide") — so each subfolder's files carry their scene
+ *       instead of every subfolder holding an identically named export. The
+ *       PRIMARY scene keeps the bare base name ("Kira", never "Kira_Primary")
+ *       while still exporting into its subfolder. The CSV's bone-scale
+ *       reference-FBX paths bake a
  *       {{DTH_EXPORT_NAME}} token the CSV-copy step substitutes with the same
  *       run-time name (alongside {{DTH_EXPORT_DIR}}), keeping exporter output
  *       and CSV pointers in lockstep. Also (schema v27): with a
