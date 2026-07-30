@@ -39,6 +39,10 @@ export interface GeneratedHoudiniProject {
    *  hython couldn't see the HDA — the scene saved empty, `$JOB` still baked;
    *  the user adds the network from the DazToHue shelf). */
   networkAdded: boolean
+  /** Every DazToHue-ish node type hython could see (`<category>/<type>`) —
+   *  diagnosis when `networkAdded` is false: empty means the otls didn't load
+   *  at all; SOP-only entries mean the main asset isn't an Object-level HDA. */
+  visibleTypes: Array<string>
 }
 
 export async function generateHoudiniProject({
@@ -98,11 +102,26 @@ export async function generateHoudiniProject({
   // Same literal as the generated scripts' <project>/dth-export nesting.
   await mkdir(joinPath(projectDir, 'dth-export'), { recursive: true })
 
-  // zod-parsed, not a bare invoke<T>() cast (primitive shape — no fixture needed).
-  const networkAdded = z
-    .boolean()
-    .parse(await invoke('create_houdini_project', { request: { hythonPath, projectDir, scenePath } }))
-  return { scenePath, projectDir, networkAdded }
+  // The Houdini documents folder doubles as HOUDINI_USER_PREF_DIR for hython —
+  // without it, hython inherits the studio's environment and can resolve the
+  // prefs elsewhere, never loading the DazToHue otls (measured: same leak
+  // that hid the DazToHue shelf from studio-launched Houdini).
+  const houdiniPrefDir = settings.houdiniDocsFolder.trim()
+
+  // zod-parsed, not a bare invoke<T>() cast (primitive "<created>|<visible>"
+  // report — no fixture needed).
+  const report = z.string().parse(
+    await invoke('create_houdini_project', {
+      request: { hythonPath, projectDir, scenePath, houdiniPrefDir },
+    }),
+  )
+  const [created = 'none', visible = 'none'] = report.split('|')
+  return {
+    scenePath,
+    projectDir,
+    networkAdded: created !== 'none',
+    visibleTypes: visible === 'none' ? [] : visible.split(',').filter(Boolean),
+  }
 }
 
 const removeInput = charScopeInput.extend({

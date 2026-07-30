@@ -28,14 +28,25 @@ pub struct CreateHoudiniProjectRequest {
     pub hython_path: String,
     /// The project folder `$JOB` is baked to (created if missing).
     pub project_dir: String,
-    /// The new scene file to save (inside the project folder).
+    /// The new scene file to save.
     pub scene_path: String,
+    /// The Houdini user-prefs folder (Settings' Houdini documents folder,
+    /// e.g. `D:/Documents/houdini22.0`) — set as HOUDINI_USER_PREF_DIR on the
+    /// hython process. Load-bearing: hython inherits the STUDIO's environment,
+    /// and a wrong HOME/pref resolution means the user's otls (the DazToHue
+    /// HDA!) never load — the same leak that hid the DazToHue shelf from
+    /// studio-launched Houdini. Empty = inherit (no override).
+    pub houdini_pref_dir: String,
 }
 
-/// Returns whether the DazToHue network was created (false = HDA not found —
-/// the scene saved empty, `$JOB` still baked).
+/// Returns `"<created>|<visible>"`: the created node type ('none' when the
+/// HDA wasn't found — the scene saved empty, `$JOB` still baked), and every
+/// DazToHue-ish node type hython could see across ALL categories
+/// (comma-joined, 'none' when zero) — the UI surfaces the list so a missing
+/// network is diagnosable (otls not loading vs the main asset living at an
+/// unexpected level).
 #[tauri::command(async)]
-pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<bool, String> {
+pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<String, String> {
     std::fs::create_dir_all(&request.project_dir)
         .map_err(|e| format!("Could not create the project folder: {e}"))?;
     let escape = |s: &str| s.replace('\\', "/").replace('\'', "\\'");
@@ -45,7 +56,12 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<bo
             "hou.hipFile.clear(suppress_save_prompt=True)\n",
             "hou.putenv('JOB', '{job}')\n",
             "added = ''\n",
+            "visible = []\n",
             "try:\n",
+            "    for cat in hou.nodeTypeCategories().values():\n",
+            "        for name, t in cat.nodeTypes().items():\n",
+            "            if 'daztohue' in t.nameComponents()[2].lower():\n",
+            "                visible.append(cat.name() + '/' + t.name())\n",
             "    best = None\n",
             "    best_key = None\n",
             "    for name, t in hou.objNodeTypeCategory().nodeTypes().items():\n",
@@ -63,13 +79,22 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<bo
             "    added = ''\n",
             "hou.hipFile.save('{scene}')\n",
             "print('DTH_NETWORK=' + (added or 'none'))\n",
+            "print('DTH_TYPES=' + (','.join(visible) or 'none'))\n",
         ),
         job = escape(&request.project_dir),
         scene = escape(&request.scene_path),
     );
-    let output = std::process::Command::new(&request.hython_path)
-        .arg("-c")
-        .arg(python)
+    let mut command = std::process::Command::new(&request.hython_path);
+    command.arg("-c").arg(python);
+    if !request.houdini_pref_dir.is_empty() {
+        // Point hython at the REAL user prefs (otls, packages, houdini.env) —
+        // inherited env can resolve them elsewhere (see the struct docs).
+        command.env(
+            "HOUDINI_USER_PREF_DIR",
+            request.houdini_pref_dir.replace('\\', "/").trim_end_matches('/'),
+        );
+    }
+    let output = command
         .output()
         .map_err(|e| format!("Could not start hython: {e}"))?;
     if !output.status.success() {
@@ -91,11 +116,12 @@ pub fn create_houdini_project(request: CreateHoudiniProjectRequest) -> Result<bo
         });
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let network_added = stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.trim().strip_prefix("DTH_NETWORK="))
-        .map(|value| value != "none")
-        .unwrap_or(false);
-    Ok(network_added)
+    let marker = |prefix: &str| {
+        stdout
+            .lines()
+            .rev()
+            .find_map(|line| line.trim().strip_prefix(prefix).map(str::to_string))
+            .unwrap_or_else(|| "none".to_string())
+    };
+    Ok(format!("{}|{}", marker("DTH_NETWORK="), marker("DTH_TYPES=")))
 }

@@ -475,14 +475,24 @@ export function HoudiniProjectsField({
           character={character}
           projectName={projectName}
           onClose={() => setGenerateOpen(false)}
-          onGenerated={(scenePath, networkAdded) =>
-            addProjects(
+          onGenerated={async (scenePath, networkAdded, visibleTypes) => {
+            await addProjects(
               [scenePath],
               networkAdded
                 ? 'Houdini project generated — DazToHue network and Set Project are baked in'
-                : 'Houdini project generated (Set Project baked in) — add the DazToHue network from the shelf; the HDA was not visible to hython',
+                : 'Houdini project generated (Set Project baked in) — add the DazToHue network from the shelf',
             )
-          }
+            if (!networkAdded) {
+              // Diagnosis for the missing network: no types at all = the otls
+              // never loaded in hython; SOP-only types = the main asset isn't
+              // an Object-level HDA (the shelf tool builds it another way).
+              toast.info(
+                visibleTypes.length === 0
+                  ? 'hython saw no DazToHue node types — the DazToHue otls did not load (check the Houdini documents folder in Settings).'
+                  : `DazToHue types visible to hython: ${visibleTypes.join(', ')} — none is an Object-level asset; please report this list.`,
+              )
+            }
+          }}
         />
       )}
 
@@ -537,7 +547,11 @@ function GenerateProjectDialog({
   projectName: string
   onClose: () => void
   /** Links the generated `.hiplc` (the caller owns the persist + toast). */
-  onGenerated: (scenePath: string, networkAdded: boolean) => Promise<void>
+  onGenerated: (
+    scenePath: string,
+    networkAdded: boolean,
+    visibleTypes: Array<string>,
+  ) => Promise<void>
 }) {
   const [name, setName] = useState(defaultHoudiniProjectFolder(projectName, character.name))
   const [busy, setBusy] = useState(false)
@@ -550,7 +564,7 @@ function GenerateProjectDialog({
       const result = await generateHoudiniProject({
         data: { projectId, id: character.id, sceneName: name },
       })
-      await onGenerated(result.scenePath, result.networkAdded)
+      await onGenerated(result.scenePath, result.networkAdded, result.visibleTypes)
       onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
