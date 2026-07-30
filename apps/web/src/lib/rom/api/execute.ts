@@ -115,9 +115,39 @@ const OPEN_SCENE_POLL_MS = 400
  *
  * Claimed only means the Runner started — the scene load itself happens after
  * we return (a big `.duf` takes a while, and blocking the click on it would be
- * worse than useless). The finished `running_` file is swept by the next
- * handoff, exactly like a batch nobody watched.
+ * worse than useless). A detached watcher deletes the finished `running_` file
+ * ({@link sweepFinishedOpenScene}); one that outlives the window is swept by
+ * the next handoff.
  */
+/**
+ * Detached completion sweep for a CLAIMED open-scene handoff: the contract has
+ * the STUDIO delete the finished file, and nothing else watches this batch
+ * kind — without the sweep the done `running_` file sits as litter until the
+ * next handoff. Export batches are never touched (their own watch deletes at
+ * 100); a Runner cancel (v1.1.3 Save Changes prompt) deletes the file itself,
+ * which simply ends this watch early.
+ */
+function sweepFinishedOpenScene(runningPath: string): void {
+  void (async () => {
+    const deadline = Date.now() + 10 * 60_000
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      try {
+        if (!(await exists(runningPath))) return // cancelled in Daz, or already swept
+        const parsed = parseJobFileJson(await readTextFile(runningPath))
+        if (!parsed) continue // torn rewrite — retry next tick
+        if (parsed.type !== 'open-scene') return // a newer batch took the slot over
+        if (parsed.progress >= 100) {
+          await remove(runningPath).catch(() => {})
+          return
+        }
+      } catch {
+        // transient fs error — retry next tick
+      }
+    }
+  })()
+}
+
 export async function openSceneInRunningDaz({
   data,
 }: {
@@ -153,7 +183,10 @@ export async function openSceneInRunningDaz({
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
     // The rename IS the claim (contract v2 lifecycle, shared by every type).
-    if (!(await exists(paths.pending).catch(() => true))) return { pickedUp: true }
+    if (!(await exists(paths.pending).catch(() => true))) {
+      sweepFinishedOpenScene(paths.running)
+      return { pickedUp: true }
+    }
   }
   // Nobody claimed it — take the file back so it can't be picked up minutes
   // later, out of nowhere, and yank the user's scene out from under them.
