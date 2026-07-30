@@ -3,7 +3,18 @@ import { Link } from '@tanstack/react-router'
 import { Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button, InfoPopup, Modal, useRefetchOnFocus } from '@dth/ui'
+import {
+  Button,
+  InfoPopup,
+  Label,
+  Modal,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  useRefetchOnFocus,
+} from '@dth/ui'
 import dthLogo from '#/assets/dth-logo.webp'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
@@ -17,6 +28,7 @@ import {
   fetchExportRunProgress,
   fetchExportRunnerGate,
   launchDazForPendingJobs,
+  openScene,
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
@@ -93,8 +105,10 @@ export function DthExportAction({
   async function refreshStatus() {
     const [isPending, run] = await Promise.all([exporterJobsPending(), fetchExportRunProgress()])
     setPending(isPending)
-    if (!run || run.characterId !== character.id) {
-      // No run, or another character's — not this button's business.
+    // '' = a batch adopted for display only (a scene-card ROM generate, or a
+    // run this window didn't start): the Runner is busy either way, so every
+    // editor's button shows the live progress — outcomes stay owner-only.
+    if (!run || (run.characterId !== '' && run.characterId !== character.id)) {
       setProgress(null)
       return
     }
@@ -108,6 +122,16 @@ export function DthExportAction({
         })
       } else {
         toast.success(`DTH Export finished — ${scenes} exported.`)
+      }
+      // The dialog's after-export pick: open the Houdini project the fresh
+      // exports belong to — unless EVERY scene failed (nothing new to look at).
+      if (run.openHoudiniProject && run.failed < run.total) {
+        toast.info('Opening the Houdini project…')
+        void openScene({ data: { scenePath: run.openHoudiniProject } }).catch((err: unknown) => {
+          toast.error(
+            `Couldn't open the Houdini project: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        })
       }
       return
     }
@@ -443,6 +467,9 @@ function DthExportDialog({
   const [status, setStatus] = useState<Array<ExecuteSceneStatus> | null>(null)
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  // The optional after-export pick ('' = open nothing) — one of the
+  // character's linked Houdini projects, opened when the batch FINISHES.
+  const [openHoudini, setOpenHoudini] = useState('')
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
 
@@ -521,7 +548,12 @@ function DthExportDialog({
     try {
       const result = await executeCharacterJobs({
         // Preserve row order — the jobs run top to bottom.
-        data: { projectId, id: character.id, scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath) },
+        data: {
+          projectId,
+          id: character.id,
+          scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath),
+          openHoudiniProject: openHoudini || undefined,
+        },
       })
       onExported()
       onClose()
@@ -579,6 +611,28 @@ function DthExportDialog({
           />
         ))}
       </div>
+      {character.houdiniProjects.length > 0 && (
+        <div>
+          <Label className="mb-1">Open Houdini project after export</Label>
+          <Select
+            value={openHoudini || 'none'}
+            onValueChange={(value) => setOpenHoudini(value === 'none' ? '' : value)}
+          >
+            <SelectTrigger className="w-72">
+              {/* Radix Select forbids a ""-valued item — 'none' is the sentinel. */}
+              <SelectValue placeholder="Don't open" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Don&apos;t open</SelectItem>
+              {character.houdiniProjects.map((hip) => (
+                <SelectItem key={hip} value={hip}>
+                  {(hip.split(/[\\/]/).pop() ?? hip).replace(/\.[^./\\]+$/, '')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {runner?.blocked && <RunnerGateNotice gate={runner} />}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
