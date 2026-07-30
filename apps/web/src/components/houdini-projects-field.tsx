@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -12,10 +12,7 @@ import {
   Label,
   LinkedAssetCard,
   Modal,
-  OverrideMark,
   RemoveAssetDialog,
-  cn,
-  overrideLabelClass,
   useModifierHeld,
   useRefetchOnFocus,
 } from '@dth/ui'
@@ -29,21 +26,11 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
-import { defaultHoudiniProjectFolder, sceneOverrideSchema, sceneRecordEmpty } from '@dth/rom'
+import { defaultHoudiniProjectFolder } from '@dth/rom'
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
-import type { Character, SceneOverride } from '@dth/rom'
-
-/** Folder-name-safe: the Windows-illegal characters collapse to one space
- *  (mirrors defaultHoudiniProjectFolder's cleaning in @dth/rom). */
-function cleanFolderName(value: string): string {
-  return value
-    .trim()
-    .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+import type { Character } from '@dth/rom'
 
 /** A linked Houdini project: the Houdini logo (no preview image), the filename,
  *  and its folder — the corner icon opens it in Houdini. A Houdini project has no
@@ -114,10 +101,6 @@ export function HoudiniProjectsField({
   houdiniSubdir = '',
   projectId,
   projectName,
-  saving,
-  overrideEligible,
-  sceneOverride,
-  effectiveScene,
 }: {
   character: Character
   location: CharacterLocation
@@ -130,13 +113,6 @@ export function HoudiniProjectsField({
   projectId: string
   /** The studio project's name — seeds the Generate dialog's project name. */
   projectName: string
-  saving: boolean
-  /** True while an extra (non-primary) Daz scene is selected — the Houdini
-   *  project folder can then be overridden per scene (useSceneSelection). */
-  overrideEligible: boolean
-  sceneOverride: SceneOverride | undefined
-  /** The selected scene's path (keys the override record). */
-  effectiveScene: string
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -147,54 +123,6 @@ export function HoudiniProjectsField({
   // hand-linked ones stay unlink-only like before.
   const [keepFiles, setKeepFiles] = useState(true)
 
-  // The Houdini project folder under the implicit-override model: with a
-  // non-primary scene selected the field edits that scene's record — a value
-  // differing from the base IS the override ('' included: "this scene exports
-  // flat"). Committed on blur/Enter through persistPatch (the folder only
-  // takes effect at generation time). Active only WITH an export directory —
-  // the folder is a layer of the export layout.
-  const projectOverridden = overrideEligible && sceneOverride?.houdiniProjectFolder !== undefined
-  const effectiveProject = projectOverridden
-    ? (sceneOverride?.houdiniProjectFolder ?? '')
-    : character.houdiniProjectFolder
-  const [projectDraft, setProjectDraft] = useState(effectiveProject)
-  // Resync the local text when the effective value changes under it (scene
-  // selection moved, a persist settled, another window saved).
-  useEffect(() => setProjectDraft(effectiveProject), [effectiveProject, effectiveScene])
-
-  function commitProjectFolder(raw: string) {
-    const value = cleanFolderName(raw)
-    setProjectDraft(value)
-    if (value === effectiveProject) return
-    if (!overrideEligible) {
-      void persistPatch(
-        { houdiniProjectFolder: value },
-        {
-          toast: value
-            ? 'Houdini project folder set — script regenerated'
-            : 'Houdini project folder cleared — exports go directly into the export directory',
-        },
-      )
-      return
-    }
-    const record = sceneOverride ?? sceneOverrideSchema.parse({ scenePath: effectiveScene })
-    const next: SceneOverride = {
-      ...record,
-      houdiniProjectFolder: value === character.houdiniProjectFolder ? undefined : value,
-    }
-    const others = character.sceneOverrides.filter((o) => o.scenePath !== effectiveScene)
-    void persistPatch(
-      { sceneOverrides: sceneRecordEmpty(next) ? others : [...others, next] },
-      {
-        toast:
-          next.houdiniProjectFolder === undefined
-            ? "Scene follows the character's Houdini project folder — script regenerated"
-            : value
-              ? 'Scene exports into its own Houdini project folder — script regenerated'
-              : 'Scene exports directly into the export directory — script regenerated',
-      },
-    )
-  }
   // A project pending the unlink confirm. Houdini projects are only ever linked
   // in place (absolute import paths forbid copying), so removing is unlink-only —
   // never a file delete, which would hit the user's real .hip.
@@ -336,80 +264,16 @@ export function HoudiniProjectsField({
       label="Drop Houdini project(s) to link"
       className="rounded-lg"
     >
-      <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1`}>
+      {/* Same title treatment as the "Daz scenes" section — the two section
+          headers sit stacked in the scenes tab and must read as peers. */}
+      <Label className={`${hasProjects ? 'mb-1' : 'mb-2'} flex w-fit items-center gap-1 text-xl font-semibold`}>
         Houdini projects
-        <InfoPopup label="Houdini projects — more information" className="-translate-y-px">
+        <InfoPopup label="Houdini projects — more information">
           Linked in place (not copied) — a Houdini project keeps absolute import paths that a
           copy would break. Drag <code>.hip</code> files here or use the button.
         </InfoPopup>
       </Label>
-      {projectDirChip && <p className="mb-2 text-xs">{projectDirChip}</p>}
-
-      {/* The Houdini project folder (schema v27): when set, everything exports
-          into <folder>/dth-export/<scene subfolder>/ so a Houdini project can
-          "Set Project" there and import JOB-relative. Overridable per Daz
-          scene under the implicit model (like the identity dials). Active only
-          with an export directory — the folder is a layer of that layout. */}
-      <div className="mb-3">
-        <Label
-          htmlFor="houdini-project-folder"
-          className={cn('mb-1', overrideLabelClass(projectOverridden, overrideEligible))}
-        >
-          Houdini project folder
-          {overrideEligible && (
-            <OverrideMark
-              overridden={projectOverridden}
-              onReset={() => commitProjectFolder(character.houdiniProjectFolder)}
-            />
-          )}
-          <InfoPopup label="Houdini project folder — more information">
-            When set, everything exports into{' '}
-            <code>{'<folder>/dth-export/<scene subfolder>/'}</code> inside the export
-            directory — use Houdini&apos;s <em>Set Project</em> on that folder and import
-            JOB-relative (<code>$JOB/dth-export/…</code>), or let{' '}
-            <em>Generate project</em> below build the whole project for you. Leave it empty
-            to export each scene&apos;s subfolder directly into the export directory. With a
-            non-primary Daz scene selected the field overrides per scene — including
-            emptied, for a scene that should export flat.
-          </InfoPopup>
-        </Label>
-        <Input
-          id="houdini-project-folder"
-          className={cn(
-            'w-72',
-            projectOverridden && 'border-daz-green',
-            overrideEligible && !projectOverridden && 'text-muted-foreground',
-          )}
-          placeholder="No project folder — export directly"
-          disabled={!character.exportPath.trim() || saving || busy}
-          title={
-            character.exportPath.trim()
-              ? undefined
-              : 'Set an export directory first (Export directory panel)'
-          }
-          value={projectDraft}
-          onChange={(e) => setProjectDraft(e.target.value)}
-          onBlur={() => commitProjectFolder(projectDraft)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur()
-            if (e.key === 'Escape') setProjectDraft(effectiveProject)
-          }}
-        />
-        {character.exportPath.trim() !== '' && effectiveProject && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            This scene exports into{' '}
-            <code>
-              {/* The gray ./<export-dir name> prefix anchors the chip: the path
-                  is relative to the configured export directory. */}
-              <span className="opacity-60">
-                ./{character.exportPath.replace(/\\/g, '/').split('/').filter(Boolean).pop()}/
-              </span>
-              {effectiveProject}/dth-export/{'<scene subfolder>'}/
-            </code>
-            .
-          </p>
-        )}
-      </div>
+      {projectDirChip && <p className="mb-3 text-xs">{projectDirChip}</p>}
 
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
