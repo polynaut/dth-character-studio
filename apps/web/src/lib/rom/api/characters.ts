@@ -16,7 +16,6 @@ import {
   newId,
   posesFromDazCsv,
   romSectionSchema,
-  sceneOverrideSchema,
 } from '@dth/rom'
 import { fillSectionsFrom, filledSections } from '#/lib/fill-sections.ts'
 import { normalizePath, normalizePathLower, parentDir } from '#/lib/path.ts'
@@ -39,13 +38,13 @@ import {
 } from './core'
 import { copyTipImage, findTipImage, removeCharacterAvatars, writeAvatarBytes } from './avatars'
 import { sceneWearables } from './generate'
-import { detectedHairLabels } from '#/lib/groom-detect.ts'
+import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { primarySceneDerivation } from '#/lib/scene-compat.ts'
 import { avatarSourceName, parseAvatarName } from '../avatar-names'
 import { assertMovable } from './move'
 import { isExternalImage } from '../image'
 
-import type { Character, GenesisVersion, ImportedPose } from '@dth/rom'
+import type { Character, GenesisVersion, ImportedPose, SceneOverride } from '@dth/rom'
 
 // --- Characters (scoped to a project) -------------------------------------
 
@@ -212,20 +211,15 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     })
     if (derived.gender) base.gender = derived.gender
     if (derived.sections) base.sections = derived.sections
-    // The primary scene's detected hair comes pre-selected (same heuristic as
-    // the editor's "Select all detected hair items" wand), so the export
-    // excludes it from day one — trim the list in the editor if the guess
-    // overshoots. Seeded only from a readable scan; the record rides on the
-    // scene path, which the create flow repoints if it copies the scene in.
-    const hair = scan.error === '' ? detectedHairLabels(scan.items) : []
-    if (hair.length > 0) {
-      base.sceneOverrides = [
-        {
-          ...sceneOverrideSchema.parse({ scenePath: input.scenePath }),
-          hair: hair.map((nodeLabel) => ({ nodeLabel })),
-        },
-      ]
-    }
+    // The primary scene's detected hair comes pre-selected (the one shared rule
+    // — same heuristic as the editor's "Select all detected hair items" wand),
+    // so the export excludes it from day one. The record rides on the scene
+    // path, which the create flow repoints if it copies the scene in.
+    // `base` is an untyped bag until the schema parse below; a ROM prefill can
+    // have put overrides in it already.
+    const existingOverrides = (base.sceneOverrides as Array<SceneOverride> | undefined) ?? []
+    const seeded = seedSceneHair(input.scenePath, scan, existingOverrides)
+    if (seeded) base.sceneOverrides = seeded
     const image = await copyTipImage(id, input.scenePath)
     if (image) {
       base.image = image
