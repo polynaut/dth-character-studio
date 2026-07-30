@@ -263,11 +263,11 @@ async function currentStamp(character: Character, scenePath: string): Promise<Ex
 /**
  * Write the DTH Exporter job file for the chosen scenes and start Daz Studio.
  *
- * One row per scene: the ROM script — the plugin executes it with the
- * "bulk-export" argument, which makes it always export (the split/hair toggles
- * only govern manual runs). The job file replaces any pending one (last write
- * wins). Scenes are stamped at handoff — the job file is the delivery, the
- * plugin deletes it once parsed.
+ * One row per scene: the hidden bulk script (.Bulk_ROM_Export.dsa) — it
+ * always builds the ROM and always exports everything (the split/hair toggles
+ * only govern the visible per-character scripts). The job file replaces any
+ * pending one (last write wins). Scenes are stamped at handoff — the job file
+ * is the delivery, the plugin deletes it once parsed.
  *
  * Throws with a user-facing message when preconditions fail: no DAZ library
  * configured, no export directory, generated scripts missing (save first), or

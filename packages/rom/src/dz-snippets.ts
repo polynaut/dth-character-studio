@@ -239,37 +239,6 @@ export function dazJson(value: unknown, space?: number): string {
  * hair pass) — the snippet's helper names are fixed, so emit it at most ONCE
  * per script.
  */
-/**
- * The bulk-run detection: `var dthBulkExport` is true when the script was
- * executed with the {@link BULK_EXPORT_ARG} argument — the DTH Exporter Plugin
- * passes it for every job-file run (`DzScript::execute(args)`; script-side the
- * arguments surface through the global `getArguments()`). The argument forces
- * the export (and the hair pass) past their toggles — delivering exports is a
- * bulk run's whole point. A manual run has no arguments, so everything behaves
- * exactly like the toggles say. Defensive on purpose: an older Daz without
- * argument support just reads as a manual run.
- */
-export function bulkExportArgSnippet(): string {
-  return `// Bulk-run detection: the DTH Exporter Plugin executes this script with the
-// "${BULK_EXPORT_ARG}" argument when working through a job file (the studio's DTH
-// Export button). The argument forces the export (and the hair pass) past
-// their toggles; a manual run has no arguments and honors the toggles.
-var dthBulkExport = false;
-try {
-    var dthScriptArgs = (typeof getArguments == "function") ? getArguments() : null;
-    if (dthScriptArgs) {
-        for (var dthArgI = 0; dthArgI < dthScriptArgs.length; dthArgI++) {
-            if (String(dthScriptArgs[dthArgI]) == "${BULK_EXPORT_ARG}") { dthBulkExport = true; break; }
-        }
-    }
-} catch (dthArgErr) { /* no argument support - a manual run */ }
-`
-}
-
-/** The script argument the DTH Exporter Plugin passes on job-file runs — the
- *  contract's one mode flag (docs/exporter-plugin-job-file.md). */
-export const BULK_EXPORT_ARG = 'bulk-export'
-
 export function figureAutoSelectSnippet(genesis: GenesisVersion, varName = 'dthFig'): string {
   // The rename-proof figure identity lives in GENERATIONS (one table row per
   // generation) — mirrors the runtime's v28 auto-select, which only the ROM

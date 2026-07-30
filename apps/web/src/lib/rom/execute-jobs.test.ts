@@ -54,17 +54,17 @@ describe('jobFileCsv', () => {
   })
 })
 
-describe('characterJobScriptNames', () => {
-  it('is always the one ROM script — bulk runs export via the script argument', () => {
-    expect(characterJobScriptNames(makeCharacter())).toEqual(['ROM_Electra_G9.dsa'])
+describe('characterJobScriptNames — every job row runs the hidden bulk script', () => {
+  it('is always .Bulk_ROM_Export.dsa — the toggles only govern the visible scripts', () => {
+    expect(characterJobScriptNames(makeCharacter())).toEqual(['.Bulk_ROM_Export.dsa'])
     expect(
       characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: true })),
-    ).toEqual(['ROM_Electra_G9.dsa'])
-    // Even with the export split off: the plugin passes "bulk-export", which
-    // makes the ROM script export inline — no Export_ row needed.
+    ).toEqual(['.Bulk_ROM_Export.dsa'])
+    // Even with the export split off: the bulk script always builds + exports
+    // everything itself — no Export_ row needed.
     expect(
       characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: false })),
-    ).toEqual(['ROM_Electra_G9.dsa'])
+    ).toEqual(['.Bulk_ROM_Export.dsa'])
   })
 })
 

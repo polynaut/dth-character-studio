@@ -1,6 +1,6 @@
 import {
+  BULK_ROM_EXPORT_SCRIPT,
   buildSceneCsvMap,
-  characterScriptName,
   houdiniProjectResolution,
   poseAssetFileName,
   sceneExportSubfolders,
@@ -79,15 +79,16 @@ export function jobFileCsv(jobs: Array<ExporterJob>): string {
 }
 
 /**
- * The generated script(s) a scene must run, in run order — always just the ONE
- * ROM script: it selects the open scene's overrides itself, and the plugin
- * executes it with the "bulk-export" argument (runtime v38), which makes it
- * ALWAYS build AND export — the export/hair toggles (`exportWithRomScript`,
- * `exportHairAssets`) only govern manual runs. Kept as an array for forward
- * compatibility (a future job kind may need multiple rows per scene).
+ * The generated script(s) a scene must run, in run order — always just the
+ * hidden BULK script ({@link BULK_ROM_EXPORT_SCRIPT}, runtime v40): it selects
+ * the open scene's overrides itself and always builds the ROM AND exports
+ * everything — the export/hair toggles (`exportWithRomScript`,
+ * `exportHairAssets`) only govern the visible per-character scripts. Kept as
+ * an array for forward compatibility (a future job kind may need multiple
+ * rows per scene).
  */
-export function characterJobScriptNames(character: Character): Array<string> {
-  return [`ROM_${characterScriptName(character)}.dsa`]
+export function characterJobScriptNames(_character: Character): Array<string> {
+  return [BULK_ROM_EXPORT_SCRIPT]
 }
 
 /**

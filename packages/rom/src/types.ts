@@ -1176,7 +1176,13 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       Set-Project'd to `<exportPath>/<folder>` imports everything
  *       JOB-relative. Per-scene overrides resolve through an embedded map
  *       ('' = that scene exports flat); characters without the folder ('' —
- *       every pre-v27 character) emit the layout unchanged. Bumped so Refresh
+ *       every pre-v27 character) emit the layout unchanged. Also RETIRES the
+ *       v38 "bulk-export" script argument (it never reached getArguments()
+ *       through the Runner's DzScript::execute) — bulk runs now execute a
+ *       dedicated hidden `.Bulk_ROM_Export.dsa` (the combined script with both
+ *       export toggles forced on; generated whenever an export dir is set),
+ *       and the visible ROM script carries an export block only in combined
+ *       mode again (pre-v38 behavior). Bumped so Refresh
  *       assets regenerates every script + CSV onto the new naming.
  */
 export const RUNTIME_VERSION = 40
