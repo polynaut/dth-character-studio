@@ -1,5 +1,22 @@
 # @dth/web
 
+## 0.53.0
+
+### Minor Changes
+
+- [#600](https://github.com/polynaut/dth-character-studio/pull/600) [`a03581b`](https://github.com/polynaut/dth-character-studio/commit/a03581b945f029de71bc3c9341163afab4d53bea) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): show the exact installed Runner plugin version and gate DTH Export on it.
+
+  - The Settings Runner section now reads the installed DLL's version resource and shows it like the Exporter Plugin's ("Installed: 1.0.3 → updating to 1.0.5"), instead of just "a different Runner DLL is installed".
+  - The DTH Export dialog blocks Start while the Runner plugin is missing or older than the bundled one — the jobs would run with stale behaviour (or never get picked up). A notice explains the state and deep-links to Settings → General; a Runner NEWER than the bundle does not block.
+
+### Patch Changes
+
+- [#598](https://github.com/polynaut/dth-character-studio/pull/598) [`26538db`](https://github.com/polynaut/dth-character-studio/commit/26538db39407fe9e40098fafdb4de9cec55bad14) Thanks [@polynaut](https://github.com/polynaut)! - fix(web,rom): **`Build_Genesis_Index` leaves an empty scene behind.** It already cleared between generations; now it clears once more after the last one is scanned, so a build no longer ends with the final generation's stock figures still loaded. Only the build path clears — scanning the open scene is still non-destructive, which is what makes it safe for indexing third-party geografts, add-ons and fitted clothing. Runtime v41: Refresh assets reinstalls the updated scanner.
+
+- Updated dependencies [[`26538db`](https://github.com/polynaut/dth-character-studio/commit/26538db39407fe9e40098fafdb4de9cec55bad14)]:
+  - @dth/rom@0.53.0
+  - @dth/ui@0.53.0
+
 ## 0.52.0
 
 ### Minor Changes
