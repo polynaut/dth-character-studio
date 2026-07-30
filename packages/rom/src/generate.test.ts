@@ -1818,8 +1818,12 @@ describe('exporter integration', () => {
     expect(content).toContain('if (dthRomOk === true && dthOpenSceneFile != "") {')
     expect(content).toContain('"/.ROM_Animations"')
     expect(content).toContain('completeBaseName() + "_ROM.duf"')
-    // …and it happens BEFORE the export runs.
-    expect(content.indexOf('App.getContentMgr().saveScene(dthRomSavePath)')).toBeLessThan(
+    // …feature-detected — DS4's content-manager call when present, else DS6's
+    // Scene.saveScene (DzContentMgr.saveScene does not exist in DS6; measured
+    // 2026-07-30, runtime v42) — and it happens BEFORE the export runs.
+    expect(content).toContain('App.getContentMgr().saveScene(dthRomSavePath)')
+    expect(content.indexOf('Scene.saveScene(dthRomSavePath)')).toBeGreaterThan(-1)
+    expect(content.indexOf('Scene.saveScene(dthRomSavePath)')).toBeLessThan(
       content.indexOf('doExport('),
     )
     // Every ROM-building carrier saves: without an export dir too ("or not"),

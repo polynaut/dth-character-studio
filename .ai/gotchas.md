@@ -68,6 +68,14 @@ current code before relying on details, but assume the *lesson* still holds.
   throws `URIError: Legacy Include` (regression-guarded in `generate.test.ts`).
 - **`App.openFile(path, false)` replaces the current scene without a save
   prompt** — the generated per-character `Open_Scene` script warns the user first.
+- **DS6 removed `DzContentMgr.saveScene`** (probe-measured 2026-07-30: calling it
+  is a TypeError) — the script-side scene save-as moved to **`Scene.saveScene(path)`**,
+  which saves silently and writes the `.tip.png` thumbnail beside the `.duf`.
+  Generated scripts feature-detect (`typeof … == "function"`): the DS4
+  content-manager call first, `Scene.saveScene` as the DS6 path (runtime v42 —
+  the v40/v41 ROM-scene auto-save silently skipped on DS6 because of this,
+  leaving `.ROM_Animations/` created but empty). Same removal family as
+  `App.getExportMgr()`, which DS6 also dropped.
 - **Command-line forwarding to a running Daz instance stops working once a scene
   is loaded** — full "open in running instance" automation isn't possible from
   scripts alone; that's why the studio ships an Open_Scene script instead.
