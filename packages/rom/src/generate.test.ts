@@ -612,6 +612,7 @@ describe('generateAll', () => {
     const files = generateAll(makeCharacter(), {}, FRAMES)
     expect(files.map((f) => [f.fileName, f.target])).toEqual([
       ['ROM_ElectraG9_G9.dsa', 'daz'],
+      ['.Build_ROM_Animation.dsa', 'daz'],
       ['ElectraG9_pose_asset.csv', 'houdini'],
     ])
   })
@@ -624,6 +625,7 @@ describe('generateAll', () => {
     })
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
       'Scan_Products_ElectraG9.dsa',
       'ElectraG9_pose_asset.csv',
     ])
@@ -644,7 +646,12 @@ describe('generateAll', () => {
         .map((f) => [f.fileName, f.icon])
 
     it('tags a ROM-only script `rom` when no export directory is set', () => {
-      expect(icons(makeCharacter())).toEqual([['ROM_ElectraG9_G9.dsa', 'rom']])
+      // The hidden ROM-animation script rides along untagged (dot-prefixed,
+      // no Content Library tile) — like the bulk script below.
+      expect(icons(makeCharacter())).toEqual([
+        ['ROM_ElectraG9_G9.dsa', 'rom'],
+        ['.Build_ROM_Animation.dsa', undefined],
+      ])
     })
 
     it('tags it `rom-export` once the export rides along (the default)', () => {
@@ -653,6 +660,7 @@ describe('generateAll', () => {
       expect(icons(makeCharacter({ exportPath: 'D:/exports' }))).toEqual([
         ['ROM_ElectraG9_G9.dsa', 'rom-export'],
         ['.Bulk_ROM_Export.dsa', undefined],
+        ['.Build_ROM_Animation.dsa', undefined],
       ])
     })
 
@@ -665,6 +673,7 @@ describe('generateAll', () => {
         ['ROM_ElectraG9_G9.dsa', 'rom'],
         ['Export_ElectraG9_G9.dsa', 'export'],
         ['.Bulk_ROM_Export.dsa', undefined],
+        ['.Build_ROM_Animation.dsa', undefined],
       ])
     })
 
@@ -684,6 +693,7 @@ describe('generateAll', () => {
       expect(icons(character)).toEqual([
         ['ROM_ElectraG9_G9.dsa', 'rom-export'],
         ['.Bulk_ROM_Export.dsa', undefined],
+        ['.Build_ROM_Animation.dsa', undefined],
         ['Export_Hair_ElectraG9_G9.dsa', 'export-hair'],
       ])
     })
@@ -1743,6 +1753,7 @@ describe('exporter integration', () => {
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
   })
@@ -1773,7 +1784,11 @@ describe('exporter integration', () => {
     expect(bulk?.content).not.toContain('dthBulkExport')
     // No export dir → no bulk script at all (DTH Export needs one anyway).
     const files = generateAll(withReferencePose({ name: 'Electra' }), {}, FRAMES)
-    expect(files.map((f) => f.fileName)).toEqual(['ROM_Electra_G9.dsa', 'Electra_pose_asset.csv'])
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_Electra_G9.dsa',
+      '.Build_ROM_Animation.dsa',
+      'Electra_pose_asset.csv',
+    ])
   })
 
   it('split (exportWithRomScript off): the ROM script builds only, Export_ script for manual export', () => {
@@ -1803,6 +1818,7 @@ describe('exporter integration', () => {
       'ROM_Electra_G9.dsa',
       'Export_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
   })
@@ -1849,6 +1865,7 @@ describe('exporter integration', () => {
     expect(rom.fileName).toBe('ROM_Electra_G9.dsa')
     expect(generateAll(character, {}, FRAMES).map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
+      '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
   })
@@ -1921,11 +1938,13 @@ describe('groom items (hair kept out of the export)', () => {
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Build_ROM_Animation.dsa',
       'Export_Hair_Electra_G9.dsa',
       'Electra_pose_asset.csv',
     ])
     expect(generateAll(groomChar({ exportPath: '' }), {}, FRAMES).map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
+      '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
   })

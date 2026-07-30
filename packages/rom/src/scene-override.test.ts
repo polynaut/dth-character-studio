@@ -491,6 +491,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
     const files = generateAll(withScene(), {}, FRAMES)
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
       'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',
     ])
@@ -512,7 +513,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
       'BeachDress',
     ])
     // The scene's own CSV reflects the merged rows, not the base ones.
-    const csv = files[2].content
+    const csv = files.find((f) => f.fileName === 'ElectraG9_ElectraBeach_pose_asset.csv')!.content
     expect(csv).toContain('BeachBodyTone')
     expect(csv).toContain('BeachDress')
     expect(csv).not.toContain('FBM,328,BodyTone')
@@ -544,6 +545,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
       'ROM_ElectraG9_G9.dsa',
       'Export_ElectraG9_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Build_ROM_Animation.dsa',
       'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',
     ])
@@ -593,6 +595,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
     // that overrides the ROM (Houdini has no runtime to pick frames).
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
       'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',
       'ElectraG9_ElectraOffice_pose_asset.csv',
@@ -622,7 +625,11 @@ describe('generateAll — scene overrides folded into the one script', () => {
       FRAMES,
     )
     // Base ROM script + base CSV only — no scene-suffixed CSV (frames unchanged).
-    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
+      'ElectraG9_pose_asset.csv',
+    ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
     expect(delta).toMatchObject({ FACsDetailStrength: 0.5, FlexionStrength: 0.5, bApplyUE5TearUV: true })
     expect(delta.extraFrames).toBeUndefined()
@@ -675,7 +682,11 @@ describe('generateAll — scene overrides folded into the one script', () => {
       FRAMES,
     )
     // Frames unchanged → no scene-suffixed CSV.
-    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
+      'ElectraG9_pose_asset.csv',
+    ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
     expect(delta.preserveMorphs).toEqual([{ name: 'body_ctrl_BreastsUp-Down', keepValue: 0.6 }])
     // The empty list is emitted so it OVERRIDES the base's [Left Eye] (delete-all).
@@ -722,7 +733,11 @@ describe('generateAll — scene overrides folded into the one script', () => {
     const ov = makeOverride({ scenePath: scene, rom: { GEN: { owned: ownedGenConfig({ artDirection: [artB] }) } } })
     const files = generateAll(genFemale({ sceneOverrides: [ov] }), {}, FRAMES)
     // Art direction doesn't change the frame layout → no scene-suffixed CSV.
-    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
+      'ElectraG9_pose_asset.csv',
+    ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
     expect(delta.gpArtDirection).toBeDefined()
     expect(delta.extraFrames).toBeUndefined()
@@ -734,7 +749,11 @@ describe('generateAll — scene overrides folded into the one script', () => {
       jcm: [{ id: 'r1', boneLabel: 'Left Thigh', axis: 'XRotate', drives: [] }],
     })
     const files = generateAll(makeCharacter({ extraScenes: [scene], sceneOverrides: [ov] }), {}, FRAMES)
-    expect(files.map((f) => f.fileName)).toEqual(['ROM_ElectraG9_G9.dsa', 'ElectraG9_pose_asset.csv'])
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
+      'ElectraG9_pose_asset.csv',
+    ])
     const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
     expect(delta.jcmMorphMods).toEqual([{ boneLabel: 'Left Thigh', axis: 'XRotate', positive: [], negative: [] }])
     expect(delta.extraFrames).toBeUndefined()

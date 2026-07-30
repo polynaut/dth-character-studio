@@ -1206,8 +1206,14 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       (probe-measured 2026-07-30, saves silently incl. the `.tip.png`
  *       thumbnail). Bumped so Refresh assets regenerates every script with the
  *       working save.
+ *  43 — generated-script addition: every character now also gets the hidden
+ *       `.Build_ROM_Animation.dsa` — the ROM-only mirror of the bulk script
+ *       (export forced OFF): builds the ROM and saves the reopenable
+ *       `.ROM_Animations/<stem>_ROM.duf`, nothing else. Backs the scene
+ *       card's "Open and Generate ROM Animation". Needs no export dir.
+ *       Bumped so Refresh assets generates it for existing characters.
  */
-export const RUNTIME_VERSION = 42
+export const RUNTIME_VERSION = 43
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

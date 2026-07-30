@@ -19,6 +19,12 @@ import {
  *  matter the manual-run toggles. Dot-prefixed so Daz's Content Library never
  *  shows it (docs/exporter-plugin-job-file.md). */
 export const BULK_ROM_EXPORT_SCRIPT = '.Bulk_ROM_Export.dsa'
+/** The hidden per-character ROM-ONLY script ("Open and Generate ROM
+ *  Animation" on a scene card): builds the ROM and saves the reopenable
+ *  `.ROM_Animations/<stem>_ROM.duf` copy (runtime v42), but never exports —
+ *  the mirror image of {@link BULK_ROM_EXPORT_SCRIPT}, which forces the
+ *  export ON. Dot-prefixed so Daz's Content Library never shows it. */
+export const BUILD_ROM_ANIMATION_SCRIPT = '.Build_ROM_Animation.dsa'
 import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
 import {
   activeSceneOverrides,
@@ -799,6 +805,37 @@ export function toBulkRomExportScriptDsa(
   )
 }
 
+/**
+ * The hidden ROM-ONLY variant ({@link BUILD_ROM_ANIMATION_SCRIPT}) the Runner
+ * executes for a scene card's "Open and Generate ROM Animation": the same
+ * one-script build with the export forced OFF — it builds the ROM and (runtime
+ * v42) saves the reopenable `.ROM_Animations/<stem>_ROM.duf`, nothing else.
+ * One builder ({@link toCharacterScriptDsa}'s), so it can never drift from the
+ * visible ROM script; needs no export directory (the save doesn't either).
+ */
+export function toBuildRomAnimationScriptDsa(
+  character: Character,
+  romPaths: RomPaths = {},
+  frames?: PresetFrames,
+  charFolderAbs?: string,
+  sceneRomPaths: Record<string, RomPaths> = {},
+  sceneFrames: Record<string, PresetFrames> = {},
+  scenesRootAbs?: string,
+): GeneratedFile {
+  const file = buildRomScriptDsa(
+    { ...character, exportWithRomScript: false, exportHairAssets: false },
+    false,
+    romPaths,
+    frames,
+    charFolderAbs,
+    sceneRomPaths,
+    sceneFrames,
+    scenesRootAbs,
+  )
+  // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
+  return { fileName: BUILD_ROM_ANIMATION_SCRIPT, content: file.content, target: 'daz' }
+}
+
 function buildRomScriptDsa(
   character: Character,
   /** The bulk variant: header + hidden file name differ, nothing else. */
@@ -1292,6 +1329,18 @@ export function generateAll(
           ),
         ]
       : []),
+    // The hidden ROM-only script ("Open and Generate ROM Animation"): builds
+    // the ROM + saves the .ROM_Animations copy, never exports — so it exists
+    // for every character (the save needs no export dir).
+    toBuildRomAnimationScriptDsa(
+      character,
+      romPaths,
+      frames,
+      charFolderAbs,
+      sceneRomPaths,
+      sceneFrames,
+      scenesRootAbs,
+    ),
     ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),
     toPoseAssetCsv(character, frames, era),

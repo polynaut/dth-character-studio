@@ -115,8 +115,10 @@ export {
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
+  generateRomAnimation,
   launchDazForPendingJobs,
   openSceneInRunningDaz,
+  romAnimationFresh,
 } from './api/execute'
 export type { ExecuteJobsSummary, ExecuteSceneStatus, ExportRunProgress } from './api/execute'
 
