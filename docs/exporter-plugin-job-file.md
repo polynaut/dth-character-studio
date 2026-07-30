@@ -237,7 +237,12 @@ scene**, always the character's hidden `.Bulk_ROM_Export.dsa` (it selects the
 open scene's overrides itself and always builds + exports). When Daz
 Studio is **not running** the studio also starts it scene-less (plain
 `DAZStudio.exe`, no arguments); when it **is** running, nothing to do — the
-plugin's poll picks the file up in the same instance.
+plugin's poll picks the file up in the same instance. A "running" Daz that
+never CLAIMS the batch (no rename within ~10s) is most likely **shutting
+down** (the process lingers after close, and a fresh launch would die against
+the dying single instance) — the studio then shows a waiting dialog and, the
+moment the process is really gone, starts Daz itself; the still-pending file
+is picked up on launch.
 
 While the un-renamed job file exists the button shows **Abort**: it deletes
 the file and rolls the aborted scenes' handoff stamps back. Once the plugin

@@ -9,12 +9,14 @@ import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import {
   abortExporterJobs,
+  dazStudioRunning,
   dismissExportRun,
   executeCharacterJobs,
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
   fetchExportRunnerGate,
+  launchDazForPendingJobs,
 } from '#/lib/rom/api.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
@@ -81,6 +83,9 @@ export function DthExportAction({
     null,
   )
   const [aborting, setAborting] = useState(false)
+  // A handoff written against a SHUTTING-DOWN Daz (running process, batch
+  // never claimed) — the modal below waits out the exit and relaunches.
+  const [dazClosing, setDazClosing] = useState(false)
 
   // The one status refresh: is a job file still waiting (→ Abort), and how far
   // is the in-memory export watch (→ Exporting n/m)? Runs on mount + window
@@ -216,9 +221,77 @@ export function DthExportAction({
             // Arm the progress view right away (0/n until Daz delivers).
             void refreshStatus()
           }}
+          onDazClosing={() => setDazClosing(true)}
+        />
+      )}
+      {dazClosing && (
+        <WaitForDazCloseModal
+          onDone={(started) => {
+            setDazClosing(false)
+            if (started) toast.success('Daz Studio started — the export begins now.')
+            void refreshStatus()
+          }}
+          onCancel={() => setDazClosing(false)}
         />
       )}
     </>
+  )
+}
+
+/**
+ * The handoff was written while Daz Studio was still SHUTTING DOWN (the
+ * process lingers after close, its Runner never claims the batch, and a fresh
+ * launch would die against the dying single instance). This modal watches the
+ * process and, the moment it is really gone, starts Daz itself — the pending
+ * job file is then picked up on launch. Closing the modal only stops the
+ * watch: the batch stays queued (the header button still aborts it), and it
+ * vanishes on its own when the batch gets claimed after all or is aborted.
+ */
+function WaitForDazCloseModal({
+  onDone,
+  onCancel,
+}: {
+  /** The wait resolved: `started` = Daz was launched (or runs again) for the
+   *  pending batch; false = the handoff disappeared (aborted / claimed late). */
+  onDone: (started: boolean) => void
+  onCancel: () => void
+}) {
+  useEffect(() => {
+    let active = true
+    let settled = false
+    const id = window.setInterval(() => {
+      void (async () => {
+        const pendingExists = await exporterJobsPending()
+        if (!active || settled) return
+        if (!pendingExists) {
+          settled = true
+          onDone(false)
+          return
+        }
+        const running = await dazStudioRunning()
+        if (!active || settled || running) return
+        settled = true
+        onDone(await launchDazForPendingJobs())
+      })()
+    }, 1000)
+    return () => {
+      active = false
+      window.clearInterval(id)
+    }
+    // Mount-only: the callbacks are stable enough for this modal's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <Modal open onClose={onCancel} title="Waiting for Daz Studio to close…" dismissible>
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 shrink-0 animate-spin" />
+        <span>
+          Daz Studio didn&apos;t pick the export up — it&apos;s probably still closing. As soon
+          as the process is gone, Daz Studio starts again by itself and runs the export.
+          Closing this keeps the batch queued (the header button aborts it).
+        </span>
+      </p>
+    </Modal>
   )
 }
 
@@ -354,12 +427,16 @@ function DthExportDialog({
   character,
   onClose,
   onExported,
+  onDazClosing,
 }: {
   projectId: string
   character: Character
   onClose: () => void
   /** A handoff was written — the header button flips to Abort. */
   onExported: () => void
+  /** The handoff went to a Daz that is still shutting down — the caller shows
+   *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
+  onDazClosing: () => void
 }) {
   // Rows render immediately from the linked scenes; the affected-detection
   // (one stat + signature per scene) fills in and pre-checks the changed ones.
@@ -446,6 +523,13 @@ function DthExportDialog({
         // Preserve row order — the jobs run top to bottom.
         data: { projectId, id: character.id, scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath) },
       })
+      onExported()
+      onClose()
+      if (result.dazClosing) {
+        // No toast — the wait modal explains what happens next.
+        onDazClosing()
+        return
+      }
       const count = `${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'}`
       toast.success(
         result.dazWasRunning
@@ -453,8 +537,6 @@ function DthExportDialog({
             `Jobs handed to the running Daz Studio — ${count} queued for export.`
           : `Started Daz Studio — ${count} queued for export.`,
       )
-      onExported()
-      onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
