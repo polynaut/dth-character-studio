@@ -174,6 +174,15 @@ older runtimes as stale.
   characters seed `<Project>_<Character>` (`defaultHoudiniProjectFolder`, the
   create flow); existing ones stay '' — their layout must not move. The export
   watch (`expectedSceneCsvRel`) mirrors the same resolution.
+- **Export-folder housekeeping**: every generation records the layout's
+  export-relative folders in `.dth_export_folders.json` (character folder) and
+  deletes RECORDED folders that fell out of the layout — a renamed/cleared
+  project folder can't leave its old tree behind. `staleExportFolders`
+  (execute-jobs.ts) is deliberately conservative: same export dir only, plain
+  relative paths only (no `..`/absolute — tamper-safe), parents of kept
+  folders survive, failed deletes stay recorded for retry. Clearing
+  `exportPath` deletes nothing (those are the user's last exports), it only
+  drops the record.
 - No export directory set ⇒ the ROM is still fully generated; ticked Bone scale
   rows are a harmless no-op (no validation links the two).
 - The export block ALWAYS nests each run under the open scene's own subfolder

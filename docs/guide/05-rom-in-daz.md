@@ -94,6 +94,11 @@ Project** and every import becomes project-relative —
   (the green override mark, like the identity dials): a scene can export into
   its own project folder — or, overridden to empty, directly into the export
   directory.
+- **Old folders clean themselves up**: the studio remembers which export
+  folders the current layout uses, and when the layout changes (a renamed or
+  cleared project folder, a moved scene subfolder) the previous run's folders
+  are removed from the export directory on the next save. Clearing the whole
+  export directory never deletes anything.
 
 Two switches tune this:
 

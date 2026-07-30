@@ -7,10 +7,13 @@ import {
   characterJobScriptNames,
   executeSceneSignature,
   expectedSceneCsvRel,
+  expectedSceneExportFolders,
   jobFileCsv,
   normalizeSceneKey,
   parseExecuteStamps,
+  parseExportFoldersRecord,
   parseJobFileCsv,
+  staleExportFolders,
 } from './execute-jobs'
 
 function makeCharacter(over: Partial<Character> = {}): Character {
@@ -106,6 +109,89 @@ describe('expectedSceneCsvRel — where the export watch looks for delivered CSV
       'MyProj_Electra/dth-export/armor/Electra_pose_asset.csv',
     )
     expect(map[normalizeSceneKey(c.extraScenes[1])]).toBe('beach/Electra_pose_asset.csv')
+  })
+})
+
+describe('export-folder housekeeping (the record + the delete set)', () => {
+  const layoutChar = (over: Partial<Character> = {}) =>
+    makeCharacter({
+      scenePath: 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf',
+      extraScenes: ['X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf'],
+      ...over,
+    })
+
+  it('expectedSceneExportFolders: flat layout = the scene subfolders', () => {
+    expect(expectedSceneExportFolders(layoutChar(), 'X:/proj/Electra/daz3d')).toEqual([
+      'primary',
+      'armor',
+    ])
+  })
+
+  it('expectedSceneExportFolders: project layout nests under <proj>/dth-export, deduped', () => {
+    const c = layoutChar({
+      houdiniProjectFolder: 'MyProj_Electra',
+      sceneOverrides: [
+        {
+          scenePath: 'X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf',
+          houdiniProjectFolder: '',
+        },
+      ],
+    } as Partial<Character>)
+    expect(expectedSceneExportFolders(c, 'X:/proj/Electra/daz3d')).toEqual([
+      'MyProj_Electra/dth-export/primary',
+      'armor',
+    ])
+  })
+
+  it('staleExportFolders: the layout change delete set — recorded minus expected', () => {
+    const recorded = {
+      version: 1 as const,
+      exportDir: 'X:/exports/electra',
+      folders: ['primary', 'armor'],
+    }
+    // Moved into a project folder: the old flat scene folders are stale.
+    expect(
+      staleExportFolders(recorded, 'X:\\exports\\electra\\', [
+        'MyProj_Electra/dth-export/primary',
+        'MyProj_Electra/dth-export/armor',
+      ]),
+    ).toEqual(['primary', 'armor'])
+    // Same layout → nothing to delete (case-insensitive match).
+    expect(staleExportFolders(recorded, 'X:/exports/electra', ['Primary', 'ARMOR'])).toEqual([])
+  })
+
+  it('staleExportFolders: a changed export dir disables deletion entirely', () => {
+    const recorded = { version: 1 as const, exportDir: 'X:/old/place', folders: ['primary'] }
+    expect(staleExportFolders(recorded, 'X:/new/place', [])).toEqual([])
+  })
+
+  it('staleExportFolders: never deletes escapes, absolutes, or parents of kept folders', () => {
+    const recorded = {
+      version: 1 as const,
+      exportDir: 'X:/exports/electra',
+      folders: [
+        '../outside', // escape
+        'C:/windows', // absolute/drive
+        '/root', // absolute
+        'a/../b', // dot-dot segment
+        '', // empty
+        'MyProj', // PARENT of a kept folder — deleting it would kill the export
+        'gone',
+      ],
+    }
+    expect(
+      staleExportFolders(recorded, 'X:/exports/electra', ['MyProj/dth-export/primary']),
+    ).toEqual(['gone'])
+  })
+
+  it('parseExportFoldersRecord: tolerates garbage, keeps only string entries', () => {
+    expect(parseExportFoldersRecord('not json')).toBeNull()
+    expect(parseExportFoldersRecord('{"version":2,"exportDir":"x","folders":[]}')).toBeNull()
+    expect(
+      parseExportFoldersRecord(
+        '{"version":1,"exportDir":"X:/e","folders":["a",42,null,"b/c"]}',
+      ),
+    ).toEqual({ version: 1, exportDir: 'X:/e', folders: ['a', 'b/c'] })
   })
 })
 

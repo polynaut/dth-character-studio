@@ -1,6 +1,13 @@
-import { exists, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
+
+import {
+  EXPORT_FOLDERS_FILE,
+  expectedSceneExportFolders,
+  parseExportFoldersRecord,
+  staleExportFolders,
+} from '../execute-jobs.ts'
 
 import { normalizePathLower } from '#/lib/path.ts'
 import {
@@ -459,7 +466,75 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       scriptsError = error instanceof Error ? error.message : String(error)
     }
   }
+  await housekeepExportFolders(versioned, outDir, scenesRootAbs)
   return { outDir, files, scriptsDir, scriptsError }
+}
+
+/**
+ * Export-folder housekeeping: the definition knows exactly which export
+ * folders its layout comprises, so every generation records them
+ * ({@link EXPORT_FOLDERS_FILE} in the character folder) and deletes the
+ * previously recorded ones that fell OUT of the layout — a renamed/cleared
+ * Houdini project folder or a changed scene subfolder must not leave its old
+ * export tree behind. Only ever deletes RECORDED folders inside the CURRENT
+ * export dir ({@link staleExportFolders} — a changed export dir orphans its
+ * folders rather than reaching into a location the character no longer points
+ * at), then prunes emptied parent chains. Best effort: a failure here must
+ * never fail the generation that triggered it.
+ */
+async function housekeepExportFolders(
+  character: Character,
+  charFolderAbs: string,
+  scenesRootAbs?: string,
+): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const exportDirAbs = character.exportPath.trim()
+    const recordPath = joinPath(charFolderAbs, EXPORT_FOLDERS_FILE)
+    const recorded = (await exists(recordPath))
+      ? parseExportFoldersRecord(await readTextFile(recordPath))
+      : null
+    if (!exportDirAbs) {
+      // Export turned off: nothing may be deleted (the folders are the user's
+      // last exports, not stale layout), and the record itself is app data
+      // with no referent anymore — drop it.
+      if (recorded) await remove(recordPath)
+      return
+    }
+    const expected = expectedSceneExportFolders(character, scenesRootAbs)
+    // A stale folder whose delete fails (open in Explorer, permissions) stays
+    // in the record, so the next generation retries it instead of forgetting it.
+    const leftovers: Array<string> = []
+    if (recorded) {
+      for (const rel of staleExportFolders(recorded, exportDirAbs, expected)) {
+        try {
+          const abs = joinPath(exportDirAbs, rel)
+          if (await exists(abs)) await remove(abs, { recursive: true })
+          // A removed leaf can empty its parents (<proj>/dth-export/) — prune
+          // upward until a non-empty (or missing) dir stops the walk.
+          const segments = rel.split('/').slice(0, -1)
+          while (segments.length > 0) {
+            const dir = joinPath(exportDirAbs, segments.join('/'))
+            if ((await readDir(dir)).length > 0) break
+            await remove(dir)
+            segments.pop()
+          }
+        } catch {
+          leftovers.push(rel)
+        }
+      }
+    }
+    await storage.writeTextFileAtomic(
+      recordPath,
+      `${JSON.stringify(
+        { version: 1, exportDir: exportDirAbs, folders: [...expected, ...leftovers] },
+        null,
+        2,
+      )}\n`,
+    )
+  } catch {
+    // best effort — never fail generation over housekeeping
+  }
 }
 
 /**
