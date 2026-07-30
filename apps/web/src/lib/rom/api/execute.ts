@@ -172,6 +172,9 @@ export async function openSceneInRunningDaz({
 interface ActiveExportRun {
   characterId: string
   total: number
+  /** Linked Houdini project (`.hip`) to open once the batch finishes — the
+   *  dialog's "Open Houdini project after export" pick ('' = none). */
+  openHoudiniProject: string
 }
 let activeRun: ActiveExportRun | null = null
 
@@ -181,7 +184,15 @@ export type ExportRunProgress =
   /** The Runner renamed the file and is working — `progress` is its 0–100. */
   | { state: 'running'; characterId: string; total: number; progress: number; done: number; failed: number }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
-  | { state: 'finished'; characterId: string; total: number; failed: number; errors: Array<string> }
+  | {
+      state: 'finished'
+      characterId: string
+      total: number
+      failed: number
+      errors: Array<string>
+      /** The run's after-export Houdini project ('' = none picked). */
+      openHoudiniProject: string
+    }
   /** The run died (Daz gone mid-run / file vanished) — watch ended. */
   | { state: 'dead'; characterId: string; total: number }
 
@@ -225,6 +236,7 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
           total: parsed.jobs.length || run.total,
           failed,
           errors: parsed.jobs.filter((j) => j.error).map((j) => `${j.scenePath}: ${j.error ?? ''}`),
+          openHoudiniProject: run.openHoudiniProject,
         }
       }
       // Below 100 with Daz gone = the run died (crash / user quit) — it will
@@ -350,6 +362,9 @@ const executeInput = charScopeInput.extend({
   /** The scenes to enqueue, chosen in the DTH Export dialog — each must be one
    *  of the character's linked scenes. */
   scenes: z.array(z.string().min(1)).min(1),
+  /** Linked Houdini project to open once the batch FINISHES (the dialog's
+   *  optional pick); omitted/empty = open nothing. */
+  openHoudiniProject: z.string().optional(),
 })
 
 export interface ExecuteJobsSummary {
@@ -402,7 +417,7 @@ async function currentStamp(character: Character, scenePath: string): Promise<Ex
  * a scene file that can't be read.
  */
 export async function executeCharacterJobs({ data }: { data: unknown }): Promise<ExecuteJobsSummary> {
-  const { projectId, id, scenes: chosen } = executeInput.parse(data)
+  const { projectId, id, scenes: chosen, openHoudiniProject } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
   const settings = await storage.getSettings()
@@ -428,6 +443,19 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     if (!match) throw new Error(`The scene is not linked to this character anymore:\n${scene}`)
     return match
   })
+
+  // The after-export Houdini project must be one of the character's LINKED
+  // projects (the dialog only offers those; backstop against a stale pick).
+  const openHoudini = openHoudiniProject?.trim()
+    ? character.houdiniProjects.find(
+        (p) => normalizeSceneKey(p) === normalizeSceneKey(openHoudiniProject),
+      )
+    : undefined
+  if (openHoudiniProject?.trim() && !openHoudini) {
+    throw new Error(
+      `The Houdini project is not linked to this character anymore:\n${openHoudiniProject}`,
+    )
+  }
 
   // The generated scripts must exist on disk — the export runs what generation
   // wrote, so an unsaved/never-generated character has nothing to hand off.
@@ -468,7 +496,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
 
   // Arm the watch: the run's identity only — all live state (progress,
   // per-job statuses) is Runner-owned inside the renamed job file.
-  activeRun = { characterId: character.id, total: jobs.length }
+  activeRun = { characterId: character.id, total: jobs.length, openHoudiniProject: openHoudini ?? '' }
 
   // Stamp the handoff (merge — untouched scenes keep their stamps).
   const stored = await readStamps(location)

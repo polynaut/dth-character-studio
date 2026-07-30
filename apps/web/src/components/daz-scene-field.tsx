@@ -197,11 +197,14 @@ function SceneOpenMenu({
     }
   }, [onClose])
   const item =
-    'block w-full rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:hover:bg-transparent'
+    'block w-full rounded-sm px-3 py-2 text-left text-sm font-medium hover:bg-daz-green/15 disabled:opacity-50 disabled:hover:bg-transparent'
   return (
+    // `daz-card` (the scene cards' green tint + border — an opaque color-mix,
+    // nothing shines through) makes the menu read as part of the card it
+    // belongs to; the heavy shadow lifts it off the page.
     <div
       ref={ref}
-      className="absolute right-1 top-full z-30 mt-1 w-max rounded-md border bg-popover p-1 shadow-md"
+      className="daz-card absolute right-1 top-full z-30 mt-1 w-max rounded-md border p-1 shadow-lg shadow-black/50"
     >
       <button type="button" className={item} onClick={onOpenOriginal}>
         Open Original
