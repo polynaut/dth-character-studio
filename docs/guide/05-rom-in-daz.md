@@ -8,13 +8,11 @@
    **Scripts → DTH-Character-Studio → \<Project\> → \<Character\>**.
 3. Double-click **`ROM_<Name>_G9`**.
 
-<!-- SCREENSHOT — paste the image URL into src below, then delete this comment line and the closing one
 <p align="center">
-  <img width="900" alt="daz content library, character script" src="ADD_IMAGE_URL" />
+  <img width="560" height="867" alt="Screenshot 2026-07-30 081115" src="https://github.com/user-attachments/assets/88beba1f-59b7-41da-bb35-a784a58878f9" />
   <br>
   <sub><em>The character's ROM script in Daz's Content Library.</em></sub>
 </p>
--->
 
 The script builds the entire ROM on the timeline — every section you enabled,
 every morph on its exact frame. This takes a moment on a big ROM; the script
