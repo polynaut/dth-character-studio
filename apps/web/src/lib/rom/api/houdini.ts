@@ -31,6 +31,16 @@ function cleanFileName(value: string): string {
     .trim()
 }
 
+/** The `.hiplc` path a dialog name generates to ('' when either part is
+ *  empty). ONE computation shared by the generate itself and the dialog's
+ *  live name-collision check — the two must never disagree on the target. */
+export function generatedHoudiniScenePath(exportDir: string, sceneName: string): string {
+  const name = cleanFileName(sceneName)
+  const dir = exportDir.trim().replace(/\\/g, '/')
+  if (!name || !dir) return ''
+  return joinPath(dir, `${name}.hiplc`)
+}
+
 export interface GeneratedHoudiniProject {
   /** Absolute path of the saved `.hiplc` — the caller links it. */
   scenePath: string
@@ -79,9 +89,6 @@ export async function generateHoudiniProject({
     )
   }
 
-  const name = cleanFileName(sceneName)
-  if (!name) throw new Error('The project name cannot be empty.')
-
   // Layout: the scene FILE lives in the houdini folder (the export dir),
   // NEXT TO the project folder it Set-Projects into — the project folder
   // itself holds only project data (dth-export/…):
@@ -90,7 +97,8 @@ export async function generateHoudiniProject({
   //   houdini/<projectFolder>/dth-export/
   const exportDirNorm = exportDir.replace(/\\/g, '/')
   const projectDir = joinPath(exportDirNorm, projectFolder)
-  const scenePath = joinPath(exportDirNorm, `${name}.hiplc`)
+  const scenePath = generatedHoudiniScenePath(exportDir, sceneName)
+  if (!scenePath) throw new Error('The project name cannot be empty.')
   if (await exists(scenePath)) {
     throw new Error(
       `A scene with that name already exists:\n${scenePath}\nPick a different name, or open the existing project instead.`,
