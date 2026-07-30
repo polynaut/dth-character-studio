@@ -322,6 +322,37 @@ test('character-export-directory', async ({ page }) => {
   await shoot(page, join(OUT, 'character-export-directory.png'), card(page, 'Export directory'))
 })
 
+test('character-scripts-section', async ({ page }) => {
+  await openCharacter(page)
+  // "Daz scripts generated": the install-location chip + the two export
+  // switches (they moved here from the Export directory panel — they shape the
+  // generated scripts, not the folder).
+  await shoot(page, join(OUT, 'character-scripts-section.png'), card(page, 'Daz scripts generated'))
+})
+
+test('houdini-generate-dialog', async ({ page }) => {
+  await openCharacter(page)
+  // The demo character carries the new-character export setup (seeded export
+  // dir + `<Project>_<Character>` project folder), so Generate project is
+  // available; the dialog opens prefilled with the same default name.
+  await page.getByRole('button', { name: 'Generate project' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByLabel('Project name')).toHaveValue('Demo_Kira')
+  await shoot(page, join(OUT, 'houdini-generate-dialog.png'), dialog)
+})
+
+test('dth-export-dialog', async ({ page }) => {
+  // A configured Daz install folder lets the dialog's Runner-update check
+  // settle open (the fake holds no readable install, and an unreadable Runner
+  // state deliberately never blocks exporting).
+  await openCharacter(page, { dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6' })
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  const dialog = page.getByRole('dialog')
+  // The affected-detection settles: the never-exported scene reads "changed".
+  await dialog.getByText('Changed since the last export').waitFor()
+  await shoot(page, join(OUT, 'dth-export-dialog.png'), dialog)
+})
+
 test('character-advanced-options', async ({ page }) => {
   await openCharacter(page)
   // "Advanced options" is a plain always-open section now (preserve morphs + node

@@ -83,7 +83,7 @@ character.
 
 ### The Houdini project folder
 
-The **Houdini project folder** field (in the **Houdini projects** section;
+The **Houdini project folder** field (in the **Export directory** panel;
 new characters start with `<Project>_<Character>`, and the field needs an
 export directory) puts a Houdini-project layer above those scene subfolders:
 everything exports into
@@ -109,7 +109,8 @@ Project** and every import becomes project-relative —
   are removed from the export directory on the next save. Clearing the whole
   export directory never deletes anything.
 
-Two switches tune this:
+Two switches (in the **Daz scripts generated** box on the character page)
+tune this:
 
 - **Run the export with the ROM script** — on (the default), the one
   `ROM_<Name>_G9.dsa` builds the ROM and runs the export. Off, the export
@@ -122,6 +123,32 @@ Two switches tune this:
   pass as the standalone `Export_Hair_…` script), into the same export folder.
   Works in both modes: with the combined ROM script and with the split
   `Export_…` script. Scenes without a hair list skip the pass.
+
+## Batch export — DTH Export
+
+Running the script yourself (above) is one way — the **DTH Export** button in
+the character header does the whole thing for you:
+
+<p align="center">
+  <img width="900" alt="the DTH Export dialog — pick the scenes to export" src="screenshots/dth-export-dialog.png" />
+  <br>
+  <sub><em>The DTH Export dialog: pick the scenes, Start hands the batch to Daz Studio.</em></sub>
+</p>
+
+Pick the linked scenes to export (scenes that changed since their last export
+come pre-checked) and press **Start**: the batch is handed to Daz Studio,
+where the bundled
+[**Runner plugin**](./02-setup.md#install-the-dth-character-studio-runner-plugin)
+works through it unattended — every scene gets its full ROM build, export and
+delivered CSV, exactly as if you had run the scripts by hand. A closed Daz is
+started; a running one picks the batch up by itself. While the batch is still
+waiting the button reads **Abort**; once Daz starts working it shows live
+progress, and the studio reports the outcome — including any per-scene
+failures — when the batch finishes.
+
+The dialog refuses to start while the Runner plugin is missing or older than
+the one bundled with the app — the notice links straight to Settings to update
+it first.
 
 &nbsp;
 
