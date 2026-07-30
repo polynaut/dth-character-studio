@@ -278,6 +278,22 @@ older runtimes as stale.
   DLL's VERSIONINFO (the runner carries one since v1.0.3); "up to date" stays
   a byte-compare. A NEWER installed runner, or an unreadable state, never
   blocks.
+- **`type: 'open-scene'` (contract v3) is the second job kind** — one row, NO
+  script, used to open a scene in a Daz that is ALREADY running (a forwarded
+  command-line open is dropped once a scene is loaded) and to raise its window,
+  which the studio can't do itself: Windows blocks `SetForegroundWindow` from a
+  background process. For this type only, the Runner must skip its end-of-batch
+  `newEmptyScene()` — the scene staying loaded IS the feature. **The `type`
+  field is the capability handshake**: a Runner that predates a type rejects the
+  file as foreign and never renames it, so `openSceneInRunningDaz`
+  (api/execute.ts) writes the job, watches ~10s for the rename, and on
+  non-pickup takes the file back and falls back to the old "Daz is already
+  open" dialog. Deliberately NOT gated on the installed version the way the
+  export dialog is (`runnerGate`, above): the handshake already self-describes,
+  and an open that quietly degrades to the previous behaviour beats one blocked
+  behind an update prompt. One global job file + one batch at a time, so an
+  open-scene request is REFUSED while an export batch is pending or genuinely
+  running.
 
 ## PoseAsset CSV eras & templates
 

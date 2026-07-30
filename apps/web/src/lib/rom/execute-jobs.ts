@@ -42,10 +42,25 @@ export const RUNNING_JOB_FILE = `${RUNNING_JOB_PREFIX}${EXPORTER_JOB_FILE}`
  *  scenes. Machine-friendly bookkeeping, not user content. */
 export const EXECUTE_STAMPS_FILE = '.dth_execute_stamps.json'
 
+/**
+ * What a batch does. The `type` field IS the capability handshake: a Runner
+ * that predates a type rejects the whole file as foreign (logs, leaves it, never
+ * renames), so the studio can write a newer type and detect non-pickup instead
+ * of negotiating versions. See docs/exporter-plugin-job-file.md.
+ */
+export type ExporterJobType =
+  /** Per-scene ROM build + full export via the hidden `.Bulk_ROM_Export.dsa`. */
+  | 'bulk-export'
+  /** Contract v3: open ONE scene in the running Daz and raise its window. No
+   *  script runs, and the Runner must NOT reset to an empty scene afterwards —
+   *  the scene staying loaded is the entire point. */
+  | 'open-scene'
+
 export interface ExporterJob {
   /** Absolute path of the Daz scene (`.duf`) to open. */
   scenePath: string
-  /** Absolute path of the `.dsa` script to run in that scene. */
+  /** Absolute path of the `.dsa` script to run in that scene. Empty only on an
+   *  `open-scene` row, where nothing is executed. */
   scriptPath: string
 }
 
@@ -63,9 +78,8 @@ export interface ExporterJobEntry extends ExporterJob {
  *  from then on; the studio deletes the renamed file once progress hits 100. */
 export interface ExporterJobFile {
   version: 1
-  /** What this batch does — today always 'bulk-export' (per-scene ROM + full
-   *  export via the hidden .Bulk_ROM_Export.dsa). */
-  type: 'bulk-export'
+  /** What this batch does — see {@link ExporterJobType}. */
+  type: ExporterJobType
   /** Whole-batch progress 0–100, Runner-owned after the rename. */
   progress: number
   jobs: Array<ExporterJobEntry>
@@ -97,14 +111,29 @@ export function normalizeSceneKey(scenePath: string): string {
  * renames the file. Paths are written as-is (absolute, Windows separators
  * allowed; JSON escaping handles everything).
  */
-export function jobFileJson(jobs: Array<ExporterJob>): string {
+export function jobFileJson(
+  jobs: Array<ExporterJob>,
+  type: ExporterJobType = 'bulk-export',
+): string {
   const file: ExporterJobFile = {
     version: 1,
-    type: 'bulk-export',
+    type,
     progress: 0,
     jobs: jobs.map((job) => ({ ...job, status: 'pending' as const })),
   }
   return `${JSON.stringify(file, null, 2)}\n`
+}
+
+/**
+ * The one-row `open-scene` job file: hand `scenePath` to a Daz that is already
+ * running (which ignores a forwarded command-line open once a scene is loaded)
+ * and let the Runner raise the window. `scriptPath` is deliberately empty —
+ * nothing is executed, and for THIS type the Runner also skips its usual
+ * end-of-batch reset to an empty scene. A Runner that predates the type leaves
+ * the file untouched, which is exactly the signal the caller falls back on.
+ */
+export function openSceneJobFileJson(scenePath: string): string {
+  return jobFileJson([{ scenePath, scriptPath: '' }], 'open-scene')
 }
 
 /**
@@ -308,15 +337,21 @@ export function executeSceneSignature(character: Character, scenePath: string): 
 
 /**
  * Parse a (pending or running) job file, tolerating garbage: a torn read (the
- * Runner rewrites the running file after every row), a foreign file, or a
- * future version all return null — the caller just retries on its next poll.
- * Rows are kept tolerant too: entries missing paths are dropped; missing/
- * unknown statuses read as 'pending' (a v1-shaped writer stays readable).
+ * Runner rewrites the running file after every row), a foreign file, a future
+ * version or an unknown `type` all return null — the caller just retries on its
+ * next poll. Rows are kept tolerant too: entries missing a scene path are
+ * dropped, a missing `scriptPath` reads as '' (legal on an `open-scene` row),
+ * and missing/unknown statuses read as 'pending'.
  */
 export function parseJobFileJson(text: string): ExporterJobFile | null {
+  const types: ReadonlySet<ExporterJobType> = new Set<ExporterJobType>(['bulk-export', 'open-scene'])
   try {
     const raw = JSON.parse(text) as Partial<ExporterJobFile> | null
     if (!raw || raw.version !== 1 || !Array.isArray(raw.jobs)) return null
+    // An absent type reads as the default (matches the Runner's own parser); an
+    // unknown one is somebody else's file and must not be touched.
+    const type: ExporterJobType = raw.type ?? 'bulk-export'
+    if (!types.has(type)) return null
     const statuses: ReadonlySet<ExporterJobEntry['status']> = new Set([
       'pending',
       'running',
@@ -327,16 +362,16 @@ export function parseJobFileJson(text: string): ExporterJobFile | null {
       typeof value === 'string' && statuses.has(value as ExporterJobEntry['status'])
     const jobs: Array<ExporterJobEntry> = []
     for (const job of raw.jobs) {
-      if (!job || typeof job.scenePath !== 'string' || typeof job.scriptPath !== 'string') continue
+      if (!job || typeof job.scenePath !== 'string') continue
       jobs.push({
         scenePath: job.scenePath,
-        scriptPath: job.scriptPath,
+        scriptPath: typeof job.scriptPath === 'string' ? job.scriptPath : '',
         status: isStatus(job.status) ? job.status : 'pending',
         ...(typeof job.error === 'string' && job.error !== '' ? { error: job.error } : {}),
       })
     }
     const progress = typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0
-    return { version: 1, type: 'bulk-export', progress, jobs }
+    return { version: 1, type, progress, jobs }
   } catch {
     return null
   }

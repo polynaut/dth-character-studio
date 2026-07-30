@@ -10,6 +10,7 @@ import {
   expectedSceneExportFolders,
   jobFileJson,
   normalizeSceneKey,
+  openSceneJobFileJson,
   parseExecuteStamps,
   parseExportFoldersRecord,
   parseJobFileJson,
@@ -114,6 +115,57 @@ describe('the JSON job file (contract v2)', () => {
     expect(parsed?.jobs).toEqual([
       { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
     ])
+  })
+})
+
+// Contract v3 (docs/exporter-plugin-job-file.md): a one-row, script-less batch
+// that just opens a scene in the ALREADY-RUNNING Daz and raises its window —
+// the thing a forwarded command-line open can't do once a scene is loaded.
+describe('open-scene jobs', () => {
+  it('openSceneJobFileJson: one row, the type, and no script to run', () => {
+    const parsed = JSON.parse(openSceneJobFileJson('X:\\scenes\\Ita.duf')) as unknown
+    expect(parsed).toEqual({
+      version: 1,
+      type: 'open-scene',
+      progress: 0,
+      jobs: [{ scenePath: 'X:\\scenes\\Ita.duf', scriptPath: '', status: 'pending' }],
+    })
+  })
+
+  it('round-trips its type instead of collapsing to bulk-export', () => {
+    // Regression: the parser used to hard-code `type: 'bulk-export'`, so the
+    // studio could not tell its own scene handoff from an export batch.
+    expect(parseJobFileJson(openSceneJobFileJson('X:\\a.duf'))?.type).toBe('open-scene')
+    expect(parseJobFileJson(jobFileJson([{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa' }]))?.type).toBe(
+      'bulk-export',
+    )
+  })
+
+  it('keeps a script-less row (it is legal for this type)', () => {
+    // The Runner rewrites the file with statuses as it works; reading that back
+    // must not drop the very row the batch is about.
+    const parsed = parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        type: 'open-scene',
+        progress: 100,
+        jobs: [{ scenePath: 'X:\\a.duf', status: 'done' }],
+      }),
+    )
+    expect(parsed?.jobs).toEqual([{ scenePath: 'X:\\a.duf', scriptPath: '', status: 'done' }])
+  })
+
+  it('an ABSENT type still reads as bulk-export, matching the Runner parser', () => {
+    expect(
+      parseJobFileJson(JSON.stringify({ version: 1, progress: 0, jobs: [] }))?.type,
+    ).toBe('bulk-export')
+  })
+
+  it('an UNKNOWN type is foreign → null', () => {
+    // This is load-bearing for the fallback: an old Runner treats an unknown
+    // type as foreign and never renames the file, and the studio must read a
+    // future type the same way rather than acting on it.
+    expect(parseJobFileJson(JSON.stringify({ version: 1, type: 'teleport', jobs: [] }))).toBeNull()
   })
 })
 

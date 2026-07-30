@@ -251,6 +251,78 @@ Studio is no longer running is a dead run: the studio cleans it up and
 reports the failure. A stale `running_` file nobody watched is removed by the
 next handoff (both sides also clear it defensively).
 
+## `type: "open-scene"` — hand a scene to a RUNNING Daz (contract v3)
+
+Everything above describes `type: "bulk-export"`. There is one more batch kind,
+and it exists for a completely different reason.
+
+**The problem.** Daz Studio drops a forwarded command-line open once a scene is
+loaded, so the studio cannot switch the scene of an already-running Daz. Until
+now the "Open in Daz" card handled that by refusing: a dialog explained that Daz
+is already open and offered to wait until the user closes it. But a plugin
+sitting inside the Daz process can open the scene directly — and, unlike the
+studio, it can raise the Daz window (Windows blocks `SetForegroundWindow` from a
+background process, so this half is only possible plugin-side).
+
+**Format** — the same envelope, one row, no script:
+
+```json
+{
+  "version": 1,
+  "type": "open-scene",
+  "progress": 0,
+  "jobs": [
+    {
+      "scenePath": "X:\\Projects\\Sol\\Electra\\daz3d\\primary\\Electra.duf",
+      "status": "pending"
+    }
+  ]
+}
+```
+
+Differences from `bulk-export`, all of them normative:
+
+- **`scriptPath` is absent (or empty) and that is legal FOR THIS TYPE.** The
+  "never empty, skip the row" rule above applies to `bulk-export` only. Nothing
+  is executed here; the batch exists purely to load a scene.
+- **Exactly one row.** More than one is invalid — treat the file as foreign
+  (log, leave). An empty `scenePath` is invalid too: "open nothing" is not a
+  request, and the `bulk-export` meaning (new empty scene) does not carry over.
+- **Do NOT start a new empty scene when the batch finishes.** The whole point is
+  that the scene stays loaded for the user. This is the one place `finishBatch`'s
+  usual "discard the throwaway ROM keyframes" cleanup must be skipped — there
+  are no throwaway keyframes, no script ran.
+- **Raise the Daz Studio main window** after the scene is open, so the user lands
+  in Daz rather than having to alt-tab to a window that silently changed.
+
+Everything else is unchanged: same file name and location, same rename-on-pickup
+signal, same status/progress bookkeeping (`done` + `progress: 100` on success,
+`failed` + `error` if the `.duf` is missing or won't open), and the studio still
+deletes the file once it reads `progress: 100`.
+
+**The plugin loop for this type:**
+
+```
+rename the job file to running_dth_exporter_jobs.json (started signal)
+open jobs[0].scenePath, REPLACING the current scene without saving
+raise / activate the Daz Studio main window
+mark the row done (or failed + error), write progress: 100
+LEAVE the scene loaded — no new empty scene
+```
+
+**Version negotiation is the `type` field itself, deliberately.** A plugin that
+predates this section already rejects an unknown `type` as foreign: it logs,
+leaves the file, and never renames it. So the studio writes the job, watches for
+the `running_` rename for a few seconds, and — if the rename never comes — takes
+the file back (deletes it) and falls back to the old "Daz is already open"
+dialog. No version handshake, no capability field: an old plugin degrades to the
+previous behaviour on its own. This is why unknown types MUST be left alone
+rather than best-effort executed.
+
+**Contention:** the job file is a single global handoff and the plugin runs one
+batch at a time, so the studio refuses an open-scene request while an export
+batch is pending or running rather than overwriting it.
+
 ## Open points / future versions
 
 - **Modal dialogs during unattended runs:** the generated scripts report hard
