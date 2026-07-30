@@ -957,13 +957,15 @@ export function DazSceneField({
     await persistPatch(
       {
         ...(isPrimary
-          ? {
-              scenePath: moved,
-              ...(character.imageScene && normalizePath(character.imageScene).toLowerCase() === target
-                ? { imageScene: moved }
-                : {}),
-            }
+          ? { scenePath: moved }
           : { extraScenes: character.extraScenes.map(repoint) }),
+        // The avatar's provenance follows its scene through a rename/move — for
+        // EXTRA scenes too (the avatar can be snapshotted from any linked
+        // scene), or the sync would see the old path as gone and re-derive
+        // from the primary.
+        ...(character.imageScene && normalizePath(character.imageScene).toLowerCase() === target
+          ? { imageScene: moved }
+          : {}),
         sceneOverrides: character.sceneOverrides.map((o) => ({
           ...o,
           scenePath: repoint(o.scenePath),

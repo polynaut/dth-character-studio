@@ -220,6 +220,41 @@ describe('syncAvatarWithScene', () => {
     expect(changed).toEqual({ imageScene: `${PROJECT}/Mara/daz3d/Mara.duf` })
   })
 
+  it("an 'sc' avatar whose source LEFT the linked list adopts the primary", async () => {
+    // The replaced-primary case: imageScene still points at the departed scene
+    // (a relink whose tip copy failed left it stale) — the sync used to bail
+    // here forever while the header kept the old look.
+    const image = avatarFileName('c5', 'sc', 100, 'png')
+    seed({
+      id: 'c5',
+      name: 'Ilse',
+      imageScene: 'X:/old-library/Step06_Ilse.duf',
+      image,
+      tipBytes: 'REPLACED-PRIMARY-TIP',
+      avatarBytes: 'OLD-PRIMARY-TIP',
+    })
+    const changed = await syncAvatarWithScene({ data: { projectId: PROJECT, id: 'c5' } })
+    expect(changed).not.toBeNull()
+    expect(changed!.imageScene).toBe(`${PROJECT}/Ilse/daz3d/Ilse.duf`)
+    const dir = `${PROJECT}/.dcsmeta/images`
+    expect(new TextDecoder().decode(files.get(`${dir}/${changed!.image!}`) as Uint8Array)).toBe(
+      'REPLACED-PRIMARY-TIP',
+    )
+  })
+
+  it("an upload ('up' kind) whose source left the linked list stays untouched", async () => {
+    const image = avatarFileName('c6', 'up', 100, 'png')
+    seed({
+      id: 'c6',
+      name: 'Oda',
+      imageScene: 'X:/old-library/Step06_Oda.duf',
+      image,
+      tipBytes: 'SCENE-TIP',
+      avatarBytes: 'USERS-UPLOAD',
+    })
+    expect(await syncAvatarWithScene({ data: { projectId: PROJECT, id: 'c6' } })).toBeNull()
+  })
+
   it("an upload ('up' kind) without provenance is never touched", async () => {
     const image = avatarFileName('c4', 'up', 100, 'png')
     seed({
