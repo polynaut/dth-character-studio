@@ -162,6 +162,11 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # beforeBuildCommand runs fetch-runner.mjs, which hits the GitHub API
+          # for the latest Runner release — unauthenticated it shares the
+          # hosted-runner IP pool's rate limit and 403s (broke the v0.52.0 mac
+          # build); the script uses this token when present.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -226,6 +231,9 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # As in build-win: fetch-runner.mjs needs the token or the hosted
+          # runner's anonymous GitHub-API rate limit 403s the build.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
           args: --target aarch64-apple-darwin --bundles app,dmg
