@@ -601,7 +601,12 @@ function CharacterPage() {
         />
       </section>
 
-      <ScriptsSection character={character} scriptsPath={scriptsPath} />
+      <ScriptsSection
+        character={character}
+        scriptsPath={scriptsPath}
+        saving={draft.saving}
+        persistPatch={draft.persistPatch}
+      />
       </SceneLock>
 
       {/* NOT inside the lock: Delete must stay reachable for an abandoned
