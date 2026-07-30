@@ -33,10 +33,16 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 With an export directory and a [Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder)
 set, the character page's **Houdini projects → Generate project** creates the
 whole project for you: a new scene named after the character (editable in the
-dialog), saved in the houdini folder **next to** the project folder it
-Set-Projects into (which starts with its `dth-export/` inside), with **Set
-Project already baked in** and the **DazToHue network ready** — open it and
-import.
+dialog, which refuses a name that already exists), saved in the houdini folder
+**next to** the project folder it Set-Projects into (which starts with its
+`dth-export/` inside), with **Set Project already baked in** and the
+**DazToHue network ready** — open it and import.
+
+<p align="center">
+  <img width="900" alt="the Generate Houdini project dialog" src="screenshots/houdini-generate-dialog.png" />
+  <br>
+  <sub><em>Generate project: one name, prefilled — the studio builds the scene, Set Project and the DazToHue network.</em></sub>
+</p>
 
 ```
 houdini/
@@ -52,11 +58,14 @@ projects are always unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene
-headlessly). The DazToHue network is created from your **installed DazToHue
-HDA** at generate time, so it's always the current plugin version — no
-template scene that could rot across Houdini or DazToHue updates. If the HDA
-isn't installed the project still generates (empty scene, Set Project baked)
-and the studio tells you to add the network from the DazToHue shelf.
+headlessly). Its version must have a **matching Houdini documents folder**
+configured (`Houdini 22.0.x` ↔ `…\Documents\houdini22.0`) so the DazToHue
+assets load — Settings warns live when the pair doesn't match. The DazToHue
+network is created from your **installed DazToHue HDA** at generate time, so
+it's always the current plugin version — no template scene that could rot
+across Houdini or DazToHue updates. If the HDA isn't installed the project
+still generates (empty scene, Set Project baked) and the studio tells you to
+add the network from the DazToHue shelf.
 
 ## `$DAZ3D_LIB` — your Daz library, as a variable
 

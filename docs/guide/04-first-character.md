@@ -68,11 +68,15 @@ G9 characters also get the **Genesis 9 specific** dials in the sidebar:
   scenes pass the same checks as at creation — plus the **same GP/DK geograft
   as the primary**, so every scene produces the primary's skeleton — and are
   copied into the character's folder or left in place. The original scene
-  can't be unlinked; extras can. Each scene has **Open in Daz** — when Daz
-  already has a scene loaded, the studio walks you through closing it first.
+  can't be unlinked; extras can. Each scene has **Open in Daz** — a running
+  Daz Studio opens it right away (handed over via the bundled
+  [Runner plugin](./02-setup.md#install-the-dth-character-studio-runner-plugin)),
+  otherwise Daz is started with it.
 - **Houdini projects** — drop `.hip`/`.hiplc` files to link the character's
-  Houdini project(s). Click one to open it in Houdini, **Alt+click** to reveal
-  its folder.
+  Houdini project(s), or let
+  [**Generate project**](./06-into-houdini.md#generate-the-houdini-project-automatically)
+  build one. Click a card to open it in Houdini, **Alt+click** to reveal its
+  folder.
 
 </td></tr></table>
 </details>
@@ -90,12 +94,22 @@ G9 characters also get the **Genesis 9 specific** dials in the sidebar:
 The **Daz scripts generated** box shows where the generated `ROM_…` (and, with
 split export, `Export_…`) scripts install on Save:
 `<My DAZ 3D Library>/Scripts/DTH-Character-Studio/<project>/<character>/`
-("My DAZ 3D Library" comes from [Settings](./02-setup.md)).
+("My DAZ 3D Library" comes from [Settings](./02-setup.md)). It also holds the
+two **export switches** — combined vs split export, and the hair pass —
+detailed in [Build the ROM in Daz](./05-rom-in-daz.md#direct-export-optional-recommended).
+
+<p align="center">
+  <img width="900" alt="the Daz scripts generated box — install location and the export switches" src="screenshots/character-scripts-section.png" />
+  <br>
+  <sub><em>The Daz scripts generated box: the install location and the two export switches.</em></sub>
+</p>
 
 The **Export directory** section drives [direct export](./05-rom-in-daz.md#direct-export-optional-recommended):
-**Choose folder…** sets it, **Clear** turns direct export off again. With no
-export directory the studio generates the ROM only — **Bone scale** flags are
-then no-ops until you set one.
+a new character starts with one — its seeded **houdini subfolder** — and
+**Change…** repoints it (an export directory can only be repointed, never
+removed). The **Houdini project folder** field beneath it layers the export
+for Houdini — see
+[the Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder).
 
 <details>
 <summary><strong>Advanced options — preserve morphs &amp; node transforms</strong></summary>
