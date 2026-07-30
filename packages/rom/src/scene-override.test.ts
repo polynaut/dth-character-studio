@@ -695,6 +695,44 @@ describe('generateAll — scene overrides folded into the one script', () => {
     expect(sceneOverrideBuildsRom(makeCharacter(), preserveOverride)).toBe(false)
   })
 
+  it('a frame-0-only override full-replaces the base list (empty overrides too), NO scene CSV', () => {
+    const base = {
+      extraScenes: [scene],
+      frameZeroMorphs: [{ name: 'base_expand', value: 1 }],
+    }
+    const frameZeroOverride = makeOverride({
+      scenePath: scene,
+      frameZero: [{ name: 'Expand All', value: 0.8 }],
+    })
+    const files = generateAll(
+      makeCharacter({ ...base, sceneOverrides: [frameZeroOverride] }),
+      {},
+      FRAMES,
+    )
+    // Frames unchanged → no scene-suffixed CSV.
+    expect(files.map((f) => f.fileName)).toEqual([
+      'ROM_ElectraG9_G9.dsa',
+      '.Build_ROM_Animation.dsa',
+      'ElectraG9_pose_asset.csv',
+    ])
+    // The base list rides dthCharacterConfig; the scene's replacement rides the delta.
+    expect(grabObject(files[0].content, 'dthCharacterConfig').frameZeroMorphs).toEqual([
+      { name: 'base_expand', value: 1 },
+    ])
+    const delta = grabObject(files[0].content, 'dthSceneOverrides')[sceneKey]
+    expect(delta.frameZeroMorphs).toEqual([{ name: 'Expand All', value: 0.8 }])
+    expect(sceneOverrideBuildsRom(makeCharacter(), frameZeroOverride)).toBe(false)
+
+    // An armed-but-EMPTY list still emits, so it overrides the base (delete-all).
+    const cleared = makeOverride({ scenePath: scene, frameZero: [] })
+    const clearedFiles = generateAll(
+      makeCharacter({ ...base, sceneOverrides: [cleared] }),
+      {},
+      FRAMES,
+    )
+    expect(grabObject(clearedFiles[0].content, 'dthSceneOverrides')[sceneKey].frameZeroMorphs).toEqual([])
+  })
+
   // ── per-scene CONFIG overrides (mode / preset / art direction / jcm) ──────────
   // A female character whose GEN preset is ON → the base config includes the GP block.
   const genFemale = (extra: Partial<Character> = {}): Character =>

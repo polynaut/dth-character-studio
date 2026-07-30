@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 import { sceneOverrideSchema, sceneRecordEmpty } from '@dth/rom'
 import type { Character, SceneOverride } from '@dth/rom'
 
-import { preserveMorphsKey, preserveNodesKey } from './preserve-diff.ts'
+import { frameZeroMorphsKey, preserveMorphsKey, preserveNodesKey } from './preserve-diff.ts'
 
 /**
  * The character editor's page-local Daz-scene selection (the scene cards) and the
@@ -116,6 +116,30 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     ],
   )
 
+  /**
+   * Write the per-scene "Add morphs on frame 0" list under the same
+   * implicit-override model as the preserve lists: the `frameZero` block exists
+   * exactly while the list differs from the base (compared as the same canonical
+   * multiset), and an otherwise-empty record is dropped. No-op on the primary
+   * scene (edits there go to the base).
+   */
+  const writeFrameZero = useCallback(
+    (next: NonNullable<SceneOverride['frameZero']>) => {
+      if (!overrideEligible) return
+      const same = frameZeroMorphsKey(next) === frameZeroMorphsKey(character.frameZeroMorphs)
+      const existing = character.sceneOverrides.find((o) => o.scenePath === effectiveScene)
+      const record = existing ?? sceneOverrideSchema.parse({ scenePath: effectiveScene })
+      writeRecord({ ...record, frameZero: same ? undefined : next })
+    },
+    [
+      character.sceneOverrides,
+      character.frameZeroMorphs,
+      effectiveScene,
+      overrideEligible,
+      writeRecord,
+    ],
+  )
+
   return {
     /** The effective selection (falls back to the primary scene). */
     effectiveScene,
@@ -128,5 +152,7 @@ export function useSceneSelection(character: Character, patch: (p: Partial<Chara
     writeIdentity,
     /** Implicit-override writer for the preserve lists (see above). */
     writePreserve,
+    /** Implicit-override writer for the frame-0 morph list (see above). */
+    writeFrameZero,
   }
 }

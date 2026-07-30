@@ -967,3 +967,27 @@ describe('characterSchema — v27 houdiniProjectFolder (additive)', () => {
     expect(parsed.sceneOverrides[1].houdiniProjectFolder).toBeUndefined() // shares the base
   })
 })
+
+// v28 added `frameZeroMorphs` (character) + the per-scene `frameZero` block —
+// additive with a [] default / optional, so there is no migrate step.
+describe('characterSchema — v28 frameZeroMorphs (additive)', () => {
+  const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+
+  it('fills frameZeroMorphs with [] for a v27-shaped definition', () => {
+    expect(characterSchema.parse({ ...base, schemaVersion: 27 }).frameZeroMorphs).toEqual([])
+  })
+
+  it('round-trips a stored list and the per-scene override (including [] = add nothing)', () => {
+    const parsed = characterSchema.parse({
+      ...base,
+      frameZeroMorphs: [{ name: 'Expand All', value: 1 }],
+      sceneOverrides: [
+        { scenePath: 'X:/p/daz3d/Beach/Beach.duf', frameZero: [] },
+        { scenePath: 'X:/p/daz3d/Armor/Armor.duf' },
+      ],
+    })
+    expect(parsed.frameZeroMorphs).toEqual([{ name: 'Expand All', value: 1 }])
+    expect(parsed.sceneOverrides[0].frameZero).toEqual([]) // armed: add nothing here
+    expect(parsed.sceneOverrides[1].frameZero).toBeUndefined() // shares the base
+  })
+})

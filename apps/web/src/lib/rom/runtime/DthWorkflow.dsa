@@ -147,6 +147,11 @@ function ApplyDTHWorkflow(options){
 	// Restore node transforms that were overwritten by ROM loading (JCM, DK, GP, Physics)
 	restoreNodeTransforms(oNodeRoot, options.preserveNodeTransforms);
 
+	// "Add morphs on frame 0" — set + key each listed morph at frame 0 across the
+	// whole figure tree (clothing fit morphs like "Expand All"; with no other
+	// keys the value holds across the whole ROM, so the export sees it everywhere).
+	applyFrameZeroMorphs(oNodeRoot, options.frameZeroMorphs);
+
 	/** ****************************************************************/
 	print("Creating FrameDatas from the inline config");
 	var startFrame = Scene.getAnimRange().end / Scene.getTimeStep();
@@ -429,7 +434,7 @@ function ApplyDTHCharacter(config){
 		"FACsDetailStrength", "FlexionStrength", "presetFrames",
 		"jcmRomPath", "mouthRomPath", "gpRomPath", "dkRomPath", "physRomPath",
 		"aGPFenceOffsets", "aDK9FenceOffsets",
-		"preserveMorphs", "preserveNodeTransforms", "jcmMorphMods"
+		"preserveMorphs", "preserveNodeTransforms", "jcmMorphMods", "frameZeroMorphs"
 	];
 	for(var i = 0; i < keys.length; i++){
 		if(config[keys[i]] !== undefined) options[keys[i]] = config[keys[i]];

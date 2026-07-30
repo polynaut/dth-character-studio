@@ -36,7 +36,10 @@ var options = {
 	preserveMorphs: [],
 	// Node transforms to preserve after ROM loading. Example: [{ nodeLabel: "Left Eye" }]
 	preserveNodeTransforms: [],
-	jcmMorphMods: []
+	jcmMorphMods: [],
+	// Morphs set + keyed at frame 0, on every figure-tree node that carries the
+	// name (clothing fit morphs). Example: [{ name: "Expand All", value: 1 }]
+	frameZeroMorphs: []
 };
 
 
