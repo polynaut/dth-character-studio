@@ -17,9 +17,10 @@ import {
   cn,
   overrideLabelClass,
   useModifierHeld,
+  useRefetchOnFocus,
 } from '@dth/ui'
 import houdiniLogo from '#/assets/houdini-logo.svg'
-import { generateHoudiniProject, openScene, revealPath } from '#/lib/rom/api.ts'
+import { fileExists, generateHoudiniProject, openScene, revealPath } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
 import { defaultHoudiniProjectFolder, sceneOverrideSchema, sceneRecordEmpty } from '@dth/rom'
@@ -192,6 +193,25 @@ export function HoudiniProjectsField({
   const hasProjects = projects.length > 0
   const canGenerate =
     character.exportPath.trim() !== '' && character.houdiniProjectFolder.trim() !== ''
+
+  // A linked `.hip` deleted/moved on disk must not keep masquerading as a
+  // healthy card — probe each link and re-probe on window focus (tabbing back
+  // from Explorer/Houdini is exactly when files change).
+  const [missingSet, setMissingSet] = useState<ReadonlySet<string>>(new Set())
+  const projectsKey = projects.join('|')
+  useRefetchOnFocus(
+    () => {
+      void (async () => {
+        const checks = await Promise.all(
+          projects.map(async (p) => [p, await fileExists({ data: { path: p } })] as const),
+        )
+        setMissingSet(new Set(checks.filter(([, ok]) => !ok).map(([p]) => p)))
+      })()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectsKey],
+    { immediate: true },
+  )
   // The character's own folder — projects linked inside it show a "%CHAR%" prefix.
   const charFolder = parentDir(location.definitionAbs)
   // A Houdini project has no thumbnail — use a gender-based placeholder avatar.
@@ -355,15 +375,37 @@ export function HoudiniProjectsField({
 
       {hasProjects && (
         <div className="flex flex-wrap items-start gap-3">
-          {projects.map((hip) => (
-            <HoudiniCard
-              key={hip}
-              hipPath={hip}
-              avatarSrc={placeholderSrc}
-              onOpen={(e) => void onOpen(hip, e)}
-              onRemove={() => askRemove(hip)}
-            />
-          ))}
+          {projects.map((hip) =>
+            missingSet.has(hip) ? (
+              // The file is gone on disk (deleted/moved outside the studio) —
+              // same dashed-destructive treatment as a missing Daz scene.
+              <div
+                key={hip}
+                className="flex items-center gap-3 rounded-lg border border-dashed border-destructive/50 p-3 text-sm text-muted-foreground"
+              >
+                <span>
+                  <code>{hip.split(/[\\/]/).pop()}</code> is missing on disk — deleted or moved
+                  outside the studio?
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => askRemove(hip)}
+                >
+                  Unlink
+                </Button>
+              </div>
+            ) : (
+              <HoudiniCard
+                key={hip}
+                hipPath={hip}
+                avatarSrc={placeholderSrc}
+                onOpen={(e) => void onOpen(hip, e)}
+                onRemove={() => askRemove(hip)}
+              />
+            ),
+          )}
         </div>
       )}
       <div className={`flex flex-wrap gap-2 ${hasProjects ? 'mt-3' : ''}`}>
