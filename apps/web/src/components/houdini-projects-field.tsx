@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -19,6 +19,7 @@ import {
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import {
   fileExists,
+  generatedHoudiniScenePath,
   generateHoudiniProject,
   openScene,
   removeGeneratedHoudiniProject,
@@ -420,12 +421,46 @@ function GenerateProjectDialog({
 }) {
   const [name, setName] = useState(defaultHoudiniProjectFolder(projectName, character.name))
   const [busy, setBusy] = useState(false)
-  const exportDir = displayPath(character.exportPath.trim())
-  const projectFolder = character.houdiniProjectFolder.trim()
+  // The export dir shown relative (".\houdini") — the full path is on the
+  // section's chip already; the dialog only needs the WHERE in one word.
+  const exportDirName = character.exportPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
+
+  // Live name-collision check: the api layer hard-refuses an existing target
+  // (generatedHoudiniScenePath is the SAME computation), but the dialog should
+  // say so upfront instead of letting Generate run into the error. Linked
+  // projects answer synchronously; the disk probe debounces behind typing.
+  const target = generatedHoudiniScenePath(character.exportPath, name)
+  const linkedTaken =
+    target !== '' &&
+    character.houdiniProjects.some((p) => normalizePath(p).toLowerCase() === target.toLowerCase())
+  const [diskTaken, setDiskTaken] = useState(false)
+  useEffect(() => {
+    setDiskTaken(false)
+    if (target === '' || linkedTaken) return
+    let active = true
+    const timer = setTimeout(() => {
+      void fileExists({ data: { path: target } }).then((exists) => {
+        if (active) setDiskTaken(exists)
+      })
+    }, 250)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [target, linkedTaken])
+  const taken = linkedTaken || diskTaken
 
   async function onGenerate() {
     setBusy(true)
     try {
+      // Re-probe at click time (the debounced check may not have landed, or
+      // the file appeared meanwhile): a name collision always renders as FORM
+      // VALIDATION under the input — never as an error toast. Every other
+      // failure (missing hython, no docs folder, …) stays a toast.
+      if (linkedTaken || (target !== '' && (await fileExists({ data: { path: target } })))) {
+        setDiskTaken(true)
+        return
+      }
       const result = await generateHoudiniProject({
         data: { projectId, id: character.id, sceneName: name },
       })
@@ -458,9 +493,8 @@ function GenerateProjectDialog({
       dismissible={!busy}
     >
       <p className="text-xs text-muted-foreground">
-        Saves <code>{(name.trim() || '<name>') + '.hiplc'}</code> into <code>{exportDir}</code>,
-        next to the project folder <code>{projectFolder}</code> it Set-Projects into — with the
-        DazToHue network ready to go.
+        Creates <code>{(name.trim() || '<name>') + '.hiplc'}</code> into{' '}
+        <code>{`.\\${exportDirName}`}</code> next to the project folder.
       </p>
       <div>
         <Label htmlFor="generate-houdini-name" className="mb-1">
@@ -474,17 +508,29 @@ function GenerateProjectDialog({
           autoFocus
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && name.trim() !== '' && !busy) void onGenerate()
+            if (e.key === 'Enter' && name.trim() !== '' && !busy && !taken) void onGenerate()
           }}
         />
+        {taken && (
+          <p className="mt-1 text-xs text-destructive">
+            A project with this name already exists — choose another name, or remove the
+            existing project first.
+          </p>
+        )}
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" className="mr-auto" disabled={busy} onClick={onClose}>
           Cancel
         </Button>
         <Button
-          disabled={busy || name.trim() === ''}
-          title={name.trim() === '' ? 'The project name cannot be empty' : undefined}
+          disabled={busy || name.trim() === '' || taken}
+          title={
+            taken
+              ? 'A project with this name already exists'
+              : name.trim() === ''
+                ? 'The project name cannot be empty'
+                : undefined
+          }
           onClick={() => void onGenerate()}
         >
           <Sparkles /> {busy ? 'Generating…' : 'Generate'}
