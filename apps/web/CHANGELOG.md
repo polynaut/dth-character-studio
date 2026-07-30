@@ -1,5 +1,35 @@
 # @dth/web
 
+## 0.56.0
+
+### Minor Changes
+
+- [#619](https://github.com/polynaut/dth-character-studio/pull/619) [`381a2ad`](https://github.com/polynaut/dth-character-studio/commit/381a2ad141039962799bf9feb0da89e9e659f2e6) Thanks [@polynaut](https://github.com/polynaut)! - feat: "Add morphs on frame 0" — a new character panel listing morphs (name + value) the generated script sets and keys at frame 0, on every node of the figure tree that carries the morph (the figure and each fitted item) — so one clothing row like "Expand All" reaches whichever outfit pieces the open scene wears. Overridable per Daz scene (a full-replacement list, presence-armed like the preserve lists), and deliberately unvalidated: a scene without a listed morph just skips it. Schema v28, runtime v44 — Refresh assets regenerates existing scripts.
+
+- [#614](https://github.com/polynaut/dth-character-studio/pull/614) [`c20d2b1`](https://github.com/polynaut/dth-character-studio/commit/c20d2b13d5feee067e40ed7e437d2f18007da648) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): the DTH Export dialog gains an optional **Open Houdini project after export** select (empty by default) listing the character's linked Houdini projects — when picked, the studio opens that project automatically the moment the export batch finishes (skipped when every scene failed).
+
+### Patch Changes
+
+- [#617](https://github.com/polynaut/dth-character-studio/pull/617) [`174970b`](https://github.com/polynaut/dth-character-studio/commit/174970bd5e48c28a01a9408d7d0a894038c4d0b4) Thanks [@polynaut](https://github.com/polynaut)! - fix(web,ui): every modal dialog's **Cancel** button moves from the far left into the right-aligned button group, always as its first item — one footer layout across the app.
+
+- [#620](https://github.com/polynaut/dth-character-studio/pull/620) [`6afb183`](https://github.com/polynaut/dth-character-studio/commit/6afb18353e61767f262abee2001c694b94f9f1b1) Thanks [@polynaut](https://github.com/polynaut)! - feat(web): new Content Library artwork for the `Export_Hair_…` script (tile + tooltip). Regenerated characters pick it up on the next save / Refresh assets.
+
+- [#616](https://github.com/polynaut/dth-character-studio/pull/616) [`26d246b`](https://github.com/polynaut/dth-character-studio/commit/26d246b4a67a17b8d952395edced278d08c865e4) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the export button reads **"Exporting 1/2"** (processed scenes / total) instead of the percent, which only ever moved in whole-row jumps — and the whole app carries the OS **progress cursor** while a batch runs. The Runner (v1.1.1) writes a `jobsDone` counter into the job file on every rewrite; older Runners work identically (the count derives from the row statuses).
+
+- [#614](https://github.com/polynaut/dth-character-studio/pull/614) [`c20d2b1`](https://github.com/polynaut/dth-character-studio/commit/c20d2b13d5feee067e40ed7e437d2f18007da648) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the DTH Export button shows the progress of ANY live Runner batch — including a scene card's ROM-animation generate and runs started in another window (previously only the run its own Start click armed). Display only: outcome toasts stay with the window that started the run.
+
+- [#618](https://github.com/polynaut/dth-character-studio/pull/618) [`60ce75d`](https://github.com/polynaut/dth-character-studio/commit/60ce75d0a893b30b7f7be1329f0b6a2718bd2729) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the Daz Studio window comes to the front when a scene is opened in a running instance. The Runner raises it plugin-side, but Windows denies that while the studio holds the foreground — the studio now pulls Daz forward itself the moment the handoff is claimed (the same focus helper the Explorer-open flow uses).
+
+- [#616](https://github.com/polynaut/dth-character-studio/pull/616) [`26d246b`](https://github.com/polynaut/dth-character-studio/commit/26d246b4a67a17b8d952395edced278d08c865e4) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): a finished open-scene handoff's job file is deleted by the studio right away (a detached completion watch), instead of lingering until the next handoff sweeps it. And the bundled Runner is now v1.1.3: pressing **Cancel** in the Save Changes prompt deletes the job file — a deliberate cancel is not an outcome to report.
+
+- [#617](https://github.com/polynaut/dth-character-studio/pull/617) [`174970b`](https://github.com/polynaut/dth-character-studio/commit/174970bd5e48c28a01a9408d7d0a894038c4d0b4) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the Replace-primary dialog drops the "Delete the old primary scene file" toggle — replacing always deletes the outgoing in-folder copy (that's what replacing means); a linked-in-place original is still only unlinked, never touched.
+
+- [#614](https://github.com/polynaut/dth-character-studio/pull/614) [`c20d2b1`](https://github.com/polynaut/dth-character-studio/commit/c20d2b13d5feee067e40ed7e437d2f18007da648) Thanks [@polynaut](https://github.com/polynaut)! - fix(web): the scene card's Open-in-Daz menu now stands out — the Daz-green card tint and border (the `daz-card` treatment) with a heavier shadow and green hover states, so it reads as part of the card it belongs to.
+
+- Updated dependencies [[`174970b`](https://github.com/polynaut/dth-character-studio/commit/174970bd5e48c28a01a9408d7d0a894038c4d0b4), [`381a2ad`](https://github.com/polynaut/dth-character-studio/commit/381a2ad141039962799bf9feb0da89e9e659f2e6)]:
+  - @dth/ui@0.56.0
+  - @dth/rom@0.56.0
+
 ## 0.55.0
 
 ### Minor Changes
