@@ -421,6 +421,19 @@ export const preserveMorphSchema = z.object({
 })
 export type PreserveMorph = z.infer<typeof preserveMorphSchema>
 
+/**
+ * A morph set + keyed at FRAME 0 of the ROM — name + the value to set. The
+ * runtime applies it on EVERY node of the figure tree that carries the name
+ * (the figure and each fitted item), so one row like a clothing "Expand All"
+ * reaches whichever outfit pieces the open scene wears — deliberately
+ * unvalidated: a scene without the morph just skips it (Daz-log warning only).
+ */
+export const frameZeroMorphSchema = z.object({
+  name: z.string().max(MAX_NAME_LENGTH),
+  value: z.number(),
+})
+export type FrameZeroMorph = z.infer<typeof frameZeroMorphSchema>
+
 /** A node whose transform is memorized before and restored after the ROM load. */
 export const preserveNodeTransformSchema = z.object({ nodeLabel: z.string().max(MAX_NAME_LENGTH) })
 export type PreserveNodeTransform = z.infer<typeof preserveNodeTransformSchema>
@@ -555,6 +568,9 @@ export const sceneOverrideSchema = z.object({
   /** Per-scene "Modify JCM frames" rules — present = armed, a full replacement
    *  of the base `jcmMorphMods` (empty = "no JCM mods for this scene"). */
   jcm: z.array(jcmMorphModSchema).optional(),
+  /** Per-scene "Add morphs on frame 0" list — present = armed, a full
+   *  replacement of the base `frameZeroMorphs` (empty = "add nothing here"). */
+  frameZero: z.array(frameZeroMorphSchema).optional(),
   /** Per-scene Houdini project folder — present = this scene's export nests
    *  under ITS OWN `<value>/dth-export/` instead of the character's
    *  `houdiniProjectFolder` ('' = this scene exports flat into the export dir,
@@ -902,8 +918,12 @@ export function jcmMorphModForRuntime(mod: JcmMorphMod): {
  *       Additive with defaults — no migration step: existing characters read
  *       as '' and keep today's flat `<exportPath>/<scene-sub>/` layout. Only
  *       the NEW-character creation flow seeds `<Project>_<Character>`.
+ *  28 — added `frameZeroMorphs` (morphs set + keyed at frame 0, applied across
+ *       the whole figure tree — clothing fit morphs like "Expand All") and the
+ *       per-scene `sceneOverride.frameZero` replacement list (present = armed,
+ *       like `preserve`/`jcm`). Additive with defaults — no migration step.
  */
-export const CHARACTER_SCHEMA_VERSION = 27
+export const CHARACTER_SCHEMA_VERSION = 28
 
 /**
  * Version of the generated **script runtime** — the bundled DTH `.dsa` runtime
@@ -1212,8 +1232,17 @@ export const CHARACTER_SCHEMA_VERSION = 27
  *       `.ROM_Animations/<stem>_ROM.duf`, nothing else. Backs the scene
  *       card's "Open and Generate ROM Animation". Needs no export dir.
  *       Bumped so Refresh assets generates it for existing characters.
+ *  44 — runtime change: "Add morphs on frame 0" (config/options.frameZeroMorphs,
+ *       [{name, value}]). After the ROM blocks + preserve restores, each listed
+ *       morph is set + keyed at frame 0 on EVERY node of the figure tree that
+ *       carries it (figure, geografts, fitted clothing — one "Expand All" row
+ *       reaches every outfit piece of the open scene); with no other keys the
+ *       value holds across the whole ROM. A morph no node carries is a Daz-log
+ *       warning, never a run-log failure (a scene without that clothing is an
+ *       expected state). Refresh assets to regenerate scripts onto the new
+ *       runtime.
  */
-export const RUNTIME_VERSION = 43
+export const RUNTIME_VERSION = 44
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
@@ -1405,6 +1434,11 @@ export const characterSchema = z.object({
   preserveMorphs: z.array(preserveMorphSchema).default([]),
   /** Node transforms memorized before and restored after ROM loading (e.g. eyes). */
   preserveNodeTransforms: z.array(preserveNodeTransformSchema).default([]),
+  /** Morphs set + keyed at frame 0 of the ROM (schema v28) — applied on every
+   *  node of the figure tree that carries the name, so clothing fit morphs
+   *  (e.g. "Expand All") reach whatever the open scene wears. A scene override
+   *  record can replace the list per scene ({@link sceneOverrideSchema}). */
+  frameZeroMorphs: z.array(frameZeroMorphSchema).default([]),
   jcmMorphMods: z.array(jcmMorphModSchema).default([]),
   // Function form: a value default would hand every parsed character THE SAME
   // mutable sections object.

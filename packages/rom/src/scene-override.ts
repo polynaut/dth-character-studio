@@ -27,6 +27,7 @@ export function sceneRecordEmpty(override: SceneOverride): boolean {
     override.identity === undefined &&
     override.preserve === undefined &&
     override.jcm === undefined &&
+    override.frameZero === undefined &&
     // '' is a real override here ("this scene exports flat") — only ABSENT is empty.
     override.houdiniProjectFolder === undefined
   )
@@ -108,7 +109,7 @@ export function sceneOverrideSlug(scenePath: string): string {
 
 /**
  * The records that feed generation: at least one panel armed (a `rom` entry, or
- * a present `identity`/`preserve`/`jcm` block) AND still pointing at a linked
+ * a present `identity`/`preserve`/`jcm`/`frameZero` block) AND still pointing at a linked
  * EXTRA scene (a record for an unlinked scene stays stored but inert; the
  * primary scene is by definition the base). THE single gate — the one character
  * script's per-scene config map, stale-artifact cleanup and save validation all
@@ -128,7 +129,8 @@ export function activeSceneOverrides(
       (sceneRomArmed(override) ||
         override.identity !== undefined ||
         override.preserve !== undefined ||
-        override.jcm !== undefined) &&
+        override.jcm !== undefined ||
+        override.frameZero !== undefined) &&
       character.extraScenes.includes(override.scenePath),
   )
 }

@@ -541,7 +541,7 @@ export function sceneExportSubfolders(
  * → the `dthCharacterConfig` fields the open scene overrides. Section-derived fields
  * (includes, extra frames, art direction, preset paths/lengths) come from DIFFING the
  * scene's full {@link buildCharacterConfig} against the base; identity dials, preserve
- * lists and JCM mods are emitted explicitly (so a cleared list still overrides). A
+ * lists, JCM mods and frame-0 morphs are emitted explicitly (so a cleared list still overrides). A
  * scene with no field to change is dropped. Same key normalization as {@link groomSceneMap}.
  */
 // Config keys that are DERIVED from the (merged) sections — diffed per scene against
@@ -612,6 +612,9 @@ function buildSceneConfigMap(
     // JCM "Modify frames" — full replacement, emitted even empty (delete-all); excluded
     // from the section diff above so a cleared list still overrides the base's.
     if (override.jcm) delta.jcmMorphMods = override.jcm.map(jcmMorphModForRuntime)
+    // Frame-0 morphs — full replacement, emitted even empty (delete-all), the same
+    // contract as the preserve lists.
+    if (override.frameZero) delta.frameZeroMorphs = override.frameZero
     if (Object.keys(delta).length > 0) map[key] = delta
   }
   return map
@@ -727,6 +730,7 @@ export function buildCharacterConfig(
   if (character.preserveMorphs.length) config.preserveMorphs = character.preserveMorphs
   if (character.preserveNodeTransforms.length)
     config.preserveNodeTransforms = character.preserveNodeTransforms
+  if (character.frameZeroMorphs.length) config.frameZeroMorphs = character.frameZeroMorphs
   // Split each rule's signed drives[] back into the positive/negative lists the
   // runtime consumes (the stored model dropped the redundant selector).
   if (character.jcmMorphMods.length)

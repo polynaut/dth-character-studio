@@ -23,6 +23,7 @@ import {
 import { CharacterProductsTab } from '#/components/character-products-tab.tsx'
 import { EditorHeader } from '#/components/character/editor-header.tsx'
 import { ExportSettingsSection } from '#/components/character/export-settings-section.tsx'
+import { FrameZeroFields } from '#/components/character/frame-zero-fields.tsx'
 import { GroomFields } from '#/components/character/groom-fields.tsx'
 import { IdentitySection } from '#/components/character/identity-section.tsx'
 import { PreserveFields } from '#/components/character/preserve-fields.tsx'
@@ -580,6 +581,26 @@ function CharacterPage() {
         scenePath={sceneSel.effectiveScene}
         sceneOverride={sceneSel.sceneOverride}
       />
+
+      <section className="mb-8 rounded-lg border bg-card p-5">
+        <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">
+          Add morphs on frame 0
+          <InfoPopup label="Add morphs on frame 0 — more information">
+            Each morph is set to its value at frame 0 of the ROM, on every node that carries it —
+            the figure and every fitted item. One row like a clothing &quot;Expand All&quot; reaches
+            whichever outfit pieces the open scene wears; a scene without the morph simply skips
+            it. Overridable per Daz scene.
+          </InfoPopup>
+        </h2>
+        <FrameZeroFields
+          character={character}
+          patch={patch}
+          overrideEligible={sceneSel.overrideEligible}
+          sceneOverride={sceneSel.sceneOverride}
+          writeFrameZero={sceneSel.writeFrameZero}
+          morphIndex={morphIndex}
+        />
+      </section>
 
       <section className="mb-8 rounded-lg border bg-card p-5">
         <h2 className="mb-3 flex w-fit items-center gap-1 text-xl font-semibold">

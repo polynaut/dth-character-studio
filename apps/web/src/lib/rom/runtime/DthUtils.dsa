@@ -1127,6 +1127,54 @@ function restorePreservedMorphs(oNodeRoot, preserveMorphs) {
     }
 }
 
+// Applies options.frameZeroMorphs — [{ name: "Expand All", value: 1 }, ...] —
+// at frame 0, on EVERY node of the figure tree that carries the morph: the
+// figure root plus each descendant (geografts, add-ons, fitted clothing all
+// carry dials of their own, and one name like "Expand All" may exist on
+// several items at once — each gets the value). With no other keys on the
+// property the value holds across the whole ROM. A name no node carries is a
+// Daz-log warning only, never a run-log failure: a scene without that clothing
+// is an expected state (a per-scene override in the studio can clear the list).
+function applyFrameZeroMorphs(oNodeRoot, frameZeroMorphs) {
+    if (!frameZeroMorphs || frameZeroMorphs.length === 0) {
+        return;
+    }
+    print("Applying", frameZeroMorphs.length, "frame-0 morph(s) across the figure tree");
+
+    var aNodes = [oNodeRoot].concat(oNodeRoot.getNodeChildren(true));
+    for (var i = 0; i < frameZeroMorphs.length; i++) {
+        var config = frameZeroMorphs[i];
+        if (!config.name) continue;
+        var fValue = (config.value === undefined) ? 0 : config.value;
+
+        var iHits = 0;
+        for (var n = 0; n < aNodes.length; n++) {
+            var oNode = aNodes[n];
+            // Morph modifiers first (most reliable for morphs — see applyKeyData),
+            // then plain/controller properties by name and by UI label.
+            var oProp = getMorphPropFromNode(oNode, config.name);
+            if (!oProp) {
+                oProp = oNode.findProperty(config.name);
+            }
+            if (!oProp) {
+                oProp = oNode.findPropertyByLabel(config.name);
+            }
+            if (!oProp) continue;
+
+            // DAZ Studio 6 pops a "keep limits?" dialog when a value exceeds the
+            // property's min/max — disable clamping first (guarded, the method
+            // name may differ; same dance as applyKeyData).
+            if (typeof oProp.setIsClamped === "function") oProp.setIsClamped(false);
+            oProp.setValue(0, fValue);
+            iHits++;
+            print("Frame-0 morph:", config.name, "=", fValue, "on", oNode.getLabel());
+        }
+        if (iHits === 0) {
+            print("WARNING: frame-0 morph not found on any node:", config.name);
+        }
+    }
+}
+
 // Returns the rotation control for a bone node given an axis string.
 // axis: "XRotate", "YRotate", or "ZRotate"
 function getRotationControl(oNode, axis) {
