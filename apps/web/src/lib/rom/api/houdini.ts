@@ -1,4 +1,4 @@
-import { exists } from '@tauri-apps/plugin-fs'
+import { exists, mkdir } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -84,6 +84,12 @@ export async function generateHoudiniProject({
       `A scene with that name already exists:\n${scenePath}\nPick a different name, or open the existing project instead.`,
     )
   }
+
+  // The project's dth-export/ folder exists from generation on — the bulk
+  // export delivers into it later, but browsing the fresh project (and wiring
+  // $JOB/dth-export/... imports) shouldn't have to wait for a first export.
+  // Same literal as the generated scripts' <project>/dth-export nesting.
+  await mkdir(joinPath(projectDir, 'dth-export'), { recursive: true })
 
   // zod-parsed, not a bare invoke<T>() cast (primitive shape — no fixture needed).
   const networkAdded = z
