@@ -188,6 +188,9 @@ current code before relying on details, but assume the *lesson* still holds.
   then spawned by the SHELL with the pristine session environment, identical
   to a double-click by construction. `openScene` (attachments.ts) routes
   file opens through it (shell-plugin fallback); URL opens keep the plugin.
+  FOOTGUN: explorer.exe accepts BACKSLASH paths only — a '/'-joined path
+  makes it silently open a folder window instead of the file's association
+  (shell_open_file converts before spawning).
 - **The Rust crate version (`apps/desktop/Cargo.toml`, `0.1.0`) is cosmetic.**
   The product version lives in `apps/desktop/package.json`
   (`tauri.conf.json` has `"version": "package.json"`); Changesets bumps only the

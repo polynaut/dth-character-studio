@@ -19,8 +19,13 @@
 pub fn shell_open_file(path: String) -> Result<(), String> {
     #[cfg(windows)]
     {
+        // explorer.exe accepts BACKSLASH paths only — handed a forward-slash
+        // path it silently opens a folder window instead of launching the
+        // file's association (measured: a generated '/'-joined .hiplc opened
+        // Explorer, the same file with '\' opened Houdini).
+        let windows_path = path.replace('/', "\\");
         std::process::Command::new("explorer.exe")
-            .arg(&path)
+            .arg(&windows_path)
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
