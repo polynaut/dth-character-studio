@@ -177,6 +177,19 @@ older runtimes as stale.
   `exportPath: ''` survives only as "not resolved yet" (a loose root-level
   definition, or a definition read outside the desktop app). Exports are FLAT
   under it: `<exportPath>/<scene-subfolder>/`.
+- The v29 migration MOVES the already-exported files (`migrateExportRoot`,
+  api/characters.ts → Rust `move_exports`, exports.rs). Its trigger needs no
+  version flag: it fires while the stored path still differs from the derived
+  one, which the save then fixes — idempotent by construction. What moves is
+  exactly `EXPORT_FOLDERS_FILE`'s recorded folders, NEVER the whole old
+  directory (the default old path WAS the Houdini folder, `.hiplc` files
+  included), each losing its dead `<project>/dth-export/` prefix via
+  `migratedExportFolder`. The record is dropped afterwards (it names the old
+  dir; a stale one would aim the housekeeping's delete at the wrong tree).
+  Best-effort: a failure leaves the files put and the next save retries.
+  `fsutil::move_tree` (shared with dedup's quarantine) does the work — rename
+  fast-path, cross-volume copy-then-delete, link-safe, and it never deletes a
+  source without a complete copy in hand.
 - Schema v27's **Houdini project folder** is GONE (v29), and with it the
   `<folder>/dth-export/` nesting, `houdiniProjectResolution`, the per-scene
   override and the run-time `dthExportProj` block. The export directory owes

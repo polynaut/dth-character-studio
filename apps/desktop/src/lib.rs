@@ -7,6 +7,7 @@ mod contract_tests;
 mod daz;
 mod dedup;
 mod drives;
+mod exports;
 mod foreground;
 mod fsutil;
 mod github;
@@ -135,6 +136,7 @@ pub fn run() {
             foreground::focus_app_window,
             houdini::create_houdini_project,
             junction::create_junction,
+            exports::move_exports,
             shellopen::shell_open_file,
             install::install_daz_merge,
             install::install_houdini_presets,

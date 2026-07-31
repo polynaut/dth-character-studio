@@ -9,8 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::archive::{walk_zip_content, InflateBudget, TempFile, ZipWalkState, NESTED_ZIP_DEPTH};
 use crate::content::find_content_level;
 use crate::fsutil::{
-    copy_dir, folder_name, path_contains, rail_target, rel_key, unsafe_recursive_target,
-    walk_dir, DirVisitor,
+    folder_name, move_tree, path_contains, rail_target, rel_key, walk_dir, DirVisitor,
 };
 
 // --- "Dedup" action: resolve duplicate assets + conflicting shared files ------
@@ -109,88 +108,6 @@ fn uf_union(parent: &mut [usize], a: usize, b: usize) {
     if ra != rb {
         parent[ra] = rb;
     }
-}
-
-/// Move `src` to `dst`, falling back to copy-then-delete when a plain rename fails
-/// (e.g. the quarantine folder is on a different drive). `Ok` means the asset was
-/// FULLY moved; `Err` carries why it wasn't (and what state it was left in) —
-/// silence here used to hide half-done quarantines from the report.
-fn move_to_quarantine(src: &Path, dst: &Path) -> Result<(), String> {
-    // A junction/symlink AS the asset root: move the LINK itself, never its
-    // target. `is_dir()` follows links, so without this check the cross-drive
-    // fallback would deep-copy the link TARGET's gigabytes and then delete —
-    // rename moves the reparse point on the same volume; across volumes we
-    // refuse rather than materialize the target.
-    let is_link =
-        fs::symlink_metadata(src).map(|m| m.file_type().is_symlink()).unwrap_or(false);
-    if is_link {
-        if let Some(p) = dst.parent() {
-            fs::create_dir_all(p).map_err(|e| format!("create {}: {e}", p.display()))?;
-        }
-        return fs::rename(src, dst).map_err(|e| {
-            format!(
-                "the asset is a directory link/junction and moving the link itself failed: {e} — \
-                 links are never deep-copied (that would materialize the target); move it manually"
-            )
-        });
-    }
-    let is_dir = src.is_dir();
-    // Rail: quarantining a folder can end in a recursive delete (the copy-then-
-    // delete fallback). Refuse a root/too-shallow source, judged on the CANONICAL
-    // path so a junction or `..`-laden spelling can't dress a dangerous target up
-    // as a safe-looking one. (An asset directly in a drive/share root trips this —
-    // the reason is surfaced instead of silently skipping it.)
-    if is_dir {
-        if let Some(reason) = unsafe_recursive_target(&rail_target(src)) {
-            return Err(format!("refused: {reason}"));
-        }
-    }
-    if let Some(p) = dst.parent() {
-        fs::create_dir_all(p).map_err(|e| format!("create {}: {e}", p.display()))?;
-    }
-    if fs::rename(src, dst).is_ok() {
-        return Ok(());
-    }
-    // Cross-drive fallback: copy, then delete the source.
-    let copied: Result<(), String> = if is_dir {
-        match copy_dir(src, dst) {
-            // A dir link inside is never followed while copying, so a copy-based
-            // move would silently drop it — refuse rather than lose the link.
-            Ok(stats) if stats.skipped_links > 0 => Err(format!(
-                "{} linked folder(s) inside (links are never followed, so a copy-based move would lose them)",
-                stats.skipped_links
-            )),
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    } else {
-        fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
-    };
-    if let Err(reason) = copied {
-        // The COPY failed — `dst` is partial/garbage. Roll it back so the
-        // next run's name-collision loop doesn't mint " (1)" duplicates from it.
-        // The source is untouched, so nothing is lost.
-        if is_dir {
-            let _ = fs::remove_dir_all(dst);
-        } else {
-            let _ = fs::remove_file(dst);
-        }
-        return Err(format!("copy to quarantine failed: {reason}"));
-    }
-    // Copy succeeded — `dst` is now a COMPLETE copy. Delete the source. If that
-    // fails (e.g. Daz holds a file open, so `remove_dir_all` deletes some children
-    // and then errors), DO NOT roll back `dst`: after a partial source delete it is
-    // the only intact copy of the asset, and removing it would lose the user's
-    // downloaded asset entirely. Keep it and report the failure — the (now partial)
-    // source is left for the user to clean up, never destroyed alongside its backup.
-    let removed = if is_dir { fs::remove_dir_all(src) } else { fs::remove_file(src) };
-    removed.map_err(|e| {
-        format!(
-            "a complete quarantine copy was made at {}, but deleting the source failed: {e} — \
-             the source may be partially deleted; clean it up manually (the quarantine copy is intact)",
-            dst.display()
-        )
-    })
 }
 
 /// Rank a source folder by its Genesis number so newer wins (e.g. "_genesis 9" →
@@ -726,7 +643,7 @@ pub fn dedup_daz_assets(request: DedupRequest) -> DedupReport {
                         target = qdir.join(format!("{} ({n})", assets[i].label));
                         n += 1;
                     }
-                    match move_to_quarantine(&assets[i].asset_path, &target) {
+                    match move_tree(&assets[i].asset_path, &target) {
                         Ok(()) => {
                             assets_quarantined += 1;
                             member_state.insert(i, (true, String::new()));
@@ -821,7 +738,7 @@ mod tests {
     }
 
     #[test]
-    fn move_to_quarantine_leaves_no_debris_when_the_move_fails() {
+    fn move_tree_leaves_no_debris_when_the_move_fails() {
         let base = unique_temp_dir("quarantine_fail");
         fs::create_dir_all(&base).unwrap();
         // A vanished source (e.g. deleted mid-scan): rename and copy both fail —
@@ -830,18 +747,18 @@ mod tests {
         // duplicates.
         let missing = base.join("not-there.zip");
         let dst = base.join("q").join("not-there.zip");
-        let err = move_to_quarantine(&missing, &dst).unwrap_err();
-        assert!(err.contains("copy to quarantine failed"), "reason surfaces: {err}");
+        let err = move_tree(&missing, &dst).unwrap_err();
+        assert!(err.contains("copy failed"), "reason surfaces: {err}");
         assert!(!dst.exists(), "a failed move must not leave a quarantine copy");
         let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
-    fn move_to_quarantine_refuses_a_shallow_source_with_a_reason() {
+    fn move_tree_refuses_a_shallow_source_with_a_reason() {
         // An asset directly in a drive/share root used to be silently
         // unquarantinable — the rail's refusal must surface as a reason now.
         // C:\Users exists and has fewer than two Normal segments.
-        let err = move_to_quarantine(Path::new("C:\\Users"), Path::new("C:\\q\\Users")).unwrap_err();
+        let err = move_tree(Path::new("C:\\Users"), Path::new("C:\\q\\Users")).unwrap_err();
         assert!(err.starts_with("refused:"), "reason surfaces: {err}");
     }
 
@@ -867,7 +784,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn move_to_quarantine_moves_a_link_root_itself_never_the_target() {
+    fn move_tree_moves_a_link_root_itself_never_the_target() {
         // A junction AS the asset root: the LINK moves, its target is untouched —
         // the old path followed the link (`is_dir()`), and a cross-drive
         // quarantine would deep-copy the target's content and then delete.
@@ -888,7 +805,7 @@ mod tests {
             return; // junction creation unavailable in this environment
         }
         let dst = base.join("q").join("LinkedAsset");
-        move_to_quarantine(&link, &dst).unwrap();
+        move_tree(&link, &dst).unwrap();
         assert!(fs::symlink_metadata(&link).is_err(), "the link itself moved away");
         assert!(
             fs::symlink_metadata(&dst).unwrap().file_type().is_symlink(),

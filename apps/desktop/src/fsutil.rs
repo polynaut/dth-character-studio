@@ -192,6 +192,90 @@ pub(crate) fn path_contains(outer: &Path, inner: &Path) -> bool {
 /// "not found" handling). Segment counting still works on the canonical form:
 /// the Windows `\\?\` verbatim prefix is a `Prefix`/`RootDir` component, never a
 /// `Normal` one, so it adds no phantom segments.
+/// Move `src` to `dst`, falling back to copy-then-delete when a plain rename
+/// fails (a different volume). `Ok` means it was FULLY moved; `Err` carries why
+/// it wasn't AND what state it was left in — silence here used to hide half-done
+/// moves from the caller's report.
+///
+/// Shared by asset quarantine (dedup) and the export-root migration: both move a
+/// user-visible tree that may be gigabytes and may sit on another drive, and
+/// both must never destroy the source without a complete copy in hand.
+pub(crate) fn move_tree(src: &Path, dst: &Path) -> Result<(), String> {
+    // A junction/symlink AS the root: move the LINK itself, never its target.
+    // `is_dir()` follows links, so without this check the cross-drive fallback
+    // would deep-copy the link TARGET's gigabytes and then delete — rename moves
+    // the reparse point on the same volume; across volumes we refuse rather than
+    // materialize the target.
+    let is_link = fs::symlink_metadata(src).map(|m| m.file_type().is_symlink()).unwrap_or(false);
+    if is_link {
+        if let Some(p) = dst.parent() {
+            fs::create_dir_all(p).map_err(|e| format!("create {}: {e}", p.display()))?;
+        }
+        return fs::rename(src, dst).map_err(|e| {
+            format!(
+                "it is a directory link/junction and moving the link itself failed: {e} — \
+                 links are never deep-copied (that would materialize the target); move it manually"
+            )
+        });
+    }
+    let is_dir = src.is_dir();
+    // Rail: this can end in a recursive delete (the copy-then-delete fallback).
+    // Refuse a root/too-shallow source, judged on the CANONICAL path so a
+    // junction or `..`-laden spelling can't dress a dangerous target up as a
+    // safe-looking one.
+    if is_dir {
+        if let Some(reason) = unsafe_recursive_target(&rail_target(src)) {
+            return Err(format!("refused: {reason}"));
+        }
+    }
+    if let Some(p) = dst.parent() {
+        fs::create_dir_all(p).map_err(|e| format!("create {}: {e}", p.display()))?;
+    }
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    // Cross-drive fallback: copy, then delete the source.
+    let copied: Result<(), String> = if is_dir {
+        match copy_dir(src, dst) {
+            // A dir link inside is never followed while copying, so a copy-based
+            // move would silently drop it — refuse rather than lose the link.
+            Ok(stats) if stats.skipped_links > 0 => Err(format!(
+                "{} linked folder(s) inside (links are never followed, so a copy-based move would lose them)",
+                stats.skipped_links
+            )),
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    } else {
+        fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
+    };
+    if let Err(reason) = copied {
+        // The COPY failed — `dst` is partial/garbage. Roll it back so a caller's
+        // name-collision loop doesn't mint " (1)" duplicates from it. The source
+        // is untouched, so nothing is lost.
+        if is_dir {
+            let _ = fs::remove_dir_all(dst);
+        } else {
+            let _ = fs::remove_file(dst);
+        }
+        return Err(format!("copy failed: {reason}"));
+    }
+    // Copy succeeded — `dst` is now a COMPLETE copy. Delete the source. If that
+    // fails (e.g. an app holds a file open, so `remove_dir_all` deletes some
+    // children and then errors), DO NOT roll back `dst`: after a partial source
+    // delete it is the only intact copy, and removing it would lose the user's
+    // data entirely. Keep it and report — the (now partial) source is left for
+    // the user to clean up, never destroyed alongside its backup.
+    let removed = if is_dir { fs::remove_dir_all(src) } else { fs::remove_file(src) };
+    removed.map_err(|e| {
+        format!(
+            "a complete copy was made at {}, but deleting the source failed: {e} — \
+             the source may be partially deleted; clean it up manually (the copy is intact)",
+            dst.display()
+        )
+    })
+}
+
 pub(crate) fn rail_target(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }

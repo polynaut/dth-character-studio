@@ -9,6 +9,7 @@ import {
   jobSceneForMode,
   jobScriptForMode,
   expectedSceneExportFolders,
+  migratedExportFolder,
   jobFileJson,
   normalizeSceneKey,
   openSceneJobFileJson,
@@ -200,6 +201,18 @@ describe('export-folder housekeeping (the record + the delete set)', () => {
       'primary',
       'armor',
     ])
+  })
+
+  it('migratedExportFolder: the v27 <project>/dth-export/ nesting is stripped, nesting kept', () => {
+    // The v27 layout → the scene subfolder it always ended in.
+    expect(migratedExportFolder('MyProj_Electra/dth-export/primary')).toBe('primary')
+    // A NESTED scene subfolder survives whole — it names the export files.
+    expect(migratedExportFolder('MyProj_Electra/dth-export/outfits/armor')).toBe('outfits/armor')
+    // Already flat (pre-v27 / no project folder): unchanged.
+    expect(migratedExportFolder('primary')).toBe('primary')
+    expect(migratedExportFolder('outfits/armor')).toBe('outfits/armor')
+    // A scene subfolder that merely CONTAINS the word is not a prefix match.
+    expect(migratedExportFolder('dth-export-backup')).toBe('dth-export-backup')
   })
 
   it('staleExportFolders: the layout change delete set — recorded minus expected', () => {

@@ -217,6 +217,18 @@ export function sceneExportFolderRel(
   return map
 }
 
+/**
+ * Where a RECORDED export folder belongs under the fixed v29 export root: the
+ * retired `<houdini project folder>/dth-export/` nesting stripped off, the rest
+ * kept verbatim so a nested scene subfolder survives the move. A folder
+ * recorded under the flat layout has no prefix and is already its own
+ * destination. Used by the one-time export-root migration (api/characters.ts);
+ * exported so its mapping is testable without the filesystem.
+ */
+export function migratedExportFolder(rel: string): string {
+  return rel.replace(/^.*?\/dth-export\//, '')
+}
+
 /** Per-character export-folder record (character folder, dot-prefixed like the
  *  run log): the export-dir-relative folders the last GENERATED layout
  *  comprises — what the housekeeping may delete once they fall out of it. */

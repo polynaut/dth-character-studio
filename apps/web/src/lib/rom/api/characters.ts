@@ -1,4 +1,5 @@
 import { exists, mkdir, readDir, readFile, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { withBusyCursor } from '../../busy-cursor.ts'
@@ -6,6 +7,11 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
+import {
+  EXPORT_FOLDERS_FILE,
+  migratedExportFolder,
+  parseExportFoldersRecord,
+} from '../execute-jobs.ts'
 import {
   PRIMARY_SCENE_SUBFOLDER,
   characterExportRoot,
@@ -404,14 +410,77 @@ export async function saveCharacter({ data }: { data: unknown }): Promise<Charac
   const { projectId, character } = saveInput.parse(data)
   const project = await resolveProject(projectId)
   const lib = charsRoot(project)
+  const parsed = characterSchema.parse(character)
+  await migrateExportRoot(project, parsed, lib)
   // The save resolves (and, on a rename, moves) the character's folder itself
   // and reports where it landed — prime the session cache with that POST-save
   // location instead of blanket-clearing it, which forced the save+generate
   // pair into a second full library walk on every save. The entry is keyed by
   // id, so a rename simply overwrites the stale old-path entry.
-  const saved = await storage.saveCharacter(project, characterSchema.parse(character), lib)
+  const saved = await storage.saveCharacter(project, parsed, lib)
   cacheCharacterLocation(lib, saved.character.id, saved.location)
   return saved.character
+}
+
+/**
+ * Carry a pre-v29 character's already-exported files into the fixed export root
+ * before the save repoints `exportPath` at it — otherwise the migration would
+ * silently strand them (often gigabytes) at the old, user-chosen location.
+ *
+ * Runs at most once per character, and needs no version flag to know: it fires
+ * only while the STORED path still differs from the derived one, which the save
+ * itself then fixes. Idempotent by construction.
+ *
+ * What moves is exactly what the studio recorded as its own export folders
+ * ({@link EXPORT_FOLDERS_FILE}) — never the whole old directory, which for the
+ * default layout WAS the character's Houdini folder and holds the user's
+ * `.hiplc` files. Each recorded folder loses its dead v27
+ * `<project>/dth-export/` prefix and keeps the rest, so nested scene subfolders
+ * survive. Best-effort throughout: a failed move leaves the files where they
+ * are (the Rust side never deletes a source without a complete copy), and the
+ * save proceeds either way — a blocked migration must not block editing.
+ */
+async function migrateExportRoot(
+  project: { path: string; dazSubdir?: string },
+  character: Character,
+  lib: string,
+): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const oldRoot = character.exportPath.trim().replace(/\\/g, '/')
+    if (!oldRoot) return
+    const location = await locateCharacter(lib, character.id)
+    if (!location?.relFolder) return
+    const newRoot = characterExportRoot(location.folderAbs, project.dazSubdir)
+    if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return
+
+    const recordPath = joinPath(location.folderAbs, EXPORT_FOLDERS_FILE)
+    if (!(await exists(recordPath))) return
+    const recorded = parseExportFoldersRecord(await readTextFile(recordPath))
+    // A record written for a DIFFERENT export dir describes folders that aren't
+    // at `oldRoot` — the same guard the housekeeping's delete side applies.
+    if (!recorded || normalizePathLower(recorded.exportDir) !== normalizePathLower(oldRoot)) return
+
+    const moves = recorded.folders
+      .map((rel) => ({
+        from: joinPath(oldRoot, rel),
+        to: joinPath(newRoot, migratedExportFolder(rel)),
+      }))
+      .filter((m) => normalizePathLower(m.from) !== normalizePathLower(m.to))
+    if (moves.length === 0) return
+
+    const failures = z.array(z.string()).parse(await invoke('move_exports', { request: { moves } }))
+    if (failures.length > 0) {
+      console.warn(`Export migration left ${failures.length} folder(s) behind:\n${failures.join('\n')}`)
+    }
+    // The record still names the OLD dir + the old nesting. Drop it: the next
+    // generation writes a fresh one for the layout that now exists, and a stale
+    // record would aim the housekeeping's delete at the wrong tree.
+    await remove(recordPath)
+  } catch {
+    // Never fail a save over the migration — the files stay where they are and
+    // the next save retries (the trigger is still true until they move).
+  }
 }
 
 const deleteCharacterInput = charScopeInput.extend({

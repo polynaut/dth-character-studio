@@ -128,6 +128,15 @@ later one reuses it, so all of a character's projects open with the same
 the current layout uses, and when a scene's subfolder is renamed or moved, the
 previous run's folders are removed from the export directory on the next save.
 
+&nbsp;
+
+> [!NOTE]
+> **Upgrading from an older version?** Characters that had a hand-picked export
+> directory move to the new one automatically the next time they're saved — and
+> their already-exported files come along, so nothing is left behind (**Tools →
+> Refresh assets** migrates every character in one go). Only the folders the
+> studio wrote are moved; anything else you kept in that directory stays put.
+
 Two switches (in the **Daz scripts generated** box on the character page)
 tune this:
 
