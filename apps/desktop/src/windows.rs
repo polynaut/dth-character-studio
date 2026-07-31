@@ -100,13 +100,14 @@ impl ProjectMapping {
     }
 }
 
-/// A project window's title: `"<.dcsp stem> — DTH Character Studio"`.
+/// A project window's title: `"<.dcsp stem> — DTH Character Studio"`, carrying
+/// the `Administrator:` prefix when the session is elevated (see elevation.rs).
 fn project_window_title(path: &str) -> String {
     let stem = Path::new(path)
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    format!("{stem} — DTH Character Studio")
+    crate::elevation::window_title(&format!("{stem} — DTH Character Studio"))
 }
 
 /// Whether two `.dcsp` spellings identify the same project file — the one-shot
@@ -301,7 +302,7 @@ pub(crate) fn open_home_window_impl(app: &tauri::AppHandle, new_project: bool) -
     let url = if new_project { "index.html?new=1" } else { "index.html" };
     let label = unique_window_label(app, "home");
     WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
-        .title("DTH Character Studio")
+        .title(crate::elevation::window_title("DTH Character Studio"))
         .inner_size(1440.0, 920.0)
         .min_inner_size(960.0, 640.0)
         .theme(Some(tauri::Theme::Dark))
@@ -377,7 +378,7 @@ pub fn sync_renamed_project_window(
 #[tauri::command]
 pub fn release_project_window(window: tauri::Window, projects: tauri::State<WindowProjects>) {
     lock_windows(&projects).remove(window.label());
-    let _ = window.set_title("DTH Character Studio");
+    let _ = window.set_title(&crate::elevation::window_title("DTH Character Studio"));
 }
 
 // `(async)` runs this on a worker thread, not the main thread. Building a webview

@@ -127,7 +127,15 @@ junctions — std has none), `exports.rs` (moving a character's exported files t
 the fixed export root), `report.rs`, `contract_tests.rs`.
 
 A project window's **native title is `"<.dcsp stem> — DTH Character Studio"`** —
-derived from the `.dcsp` *filename*, set at creation. Renaming a project
+derived from the `.dcsp` *filename*, set at creation. An **elevated** session
+prefixes every title with `Administrator: ` (`elevation.rs`, Windows' own
+convention — a prefix survives truncation in the taskbar/Alt-Tab where a suffix
+would not). It matters because an elevated session behaves differently in ways
+nothing else shows: mapped network drives are per-session so its drive letters
+are absent (drives.rs), and files it creates get an elevated owner. Every title
+goes through `window_title()`, which is idempotent — the startup pass re-titles
+the config's `main` window from its CURRENT title (that one never passes through
+the builders), and a rename re-titles an already-marked window. Renaming a project
 (`api/projects.renameProject`) therefore renames the `.dcsp` file too
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).

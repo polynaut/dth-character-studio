@@ -7,6 +7,7 @@ mod contract_tests;
 mod daz;
 mod dedup;
 mod drives;
+mod elevation;
 mod exports;
 mod foreground;
 mod fsutil;
@@ -55,6 +56,17 @@ pub fn run() {
                 let mapping = ProjectMapping::new(dcsp);
                 let projects = app.state::<WindowProjects>();
                 lock_windows(&projects).insert("main".into(), mapping);
+            }
+            // The config's `main` window takes its title from tauri.conf.json,
+            // so it never passes through window_title() — mark it here. Reads
+            // each window's CURRENT title rather than assuming one, and
+            // window_title is idempotent, so this can't stack prefixes.
+            if crate::elevation::is_elevated() {
+                for (_, window) in app.webview_windows() {
+                    if let Ok(current) = window.title() {
+                        let _ = window.set_title(&crate::elevation::window_title(&current));
+                    }
+                }
             }
             Ok(())
         });
