@@ -223,6 +223,19 @@ older runtimes as stale.
   the UI (houdini-projects-field "Generate project" dialog, name prefilled
   `<Project>_<Character>`) links the result as a Houdini card. Fails loud
   when the scene name already exists or a prerequisite is missing.
+- **The project folder is DELIBERATELY empty** (bar the junction), and that is
+  not an oversight to fix. `hou.putenv` sets the `$JOB` VARIABLE and nothing
+  else; Houdini's File → Set Project additionally materializes the standard
+  skeleton (geo/render/tex/…), but that half is compiled into the GUI — `hou`
+  exposes no project API whatsoever (measured: the only matches on /project/i
+  are `cameraProjection` and `imageLayerProjection`), and `MainMenuCommon.xml`
+  registers the menu entry as a bare `h.set_project` action ID with no script
+  behind it. hython cannot invoke it, so a skeleton would have to be a
+  hand-rolled folder list of ours that drifts from SideFX's. Don't. The empty
+  folder is what the user wants (pre-made folders are noise), and every ROP that
+  writes there creates its own output folder on first use via its Create
+  Intermediate Directories toggle — the absence of an API is itself the hint
+  that Houdini expects exactly that.
 - **The `dth-exports` junction** — the ONE link between the two sides, and a
   pure convenience. `linkExportsIntoProject` (api/houdini.ts) → Rust
   `create_junction` (junction.rs) puts an NTFS directory junction named
