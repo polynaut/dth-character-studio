@@ -1818,14 +1818,21 @@ describe('exporter integration', () => {
     expect(content).not.toContain('dthRomSaveRc')
   })
 
-  it('a missing exporter action is LOUD, not just a log line (v49)', () => {
+  it('a skipped export is LOUD, and tells the two causes apart (v49)', () => {
     const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
     const content = toCharacterScriptDsa(character, {}, FRAMES).content
     // It used to only print(), so the ROM finished "successfully" and the user
     // was told nothing about the export never running.
     expect(content).toContain('MessageBox.critical("The ROM was built, but the export did NOT run.')
-    // …and it names the real cause: the plugin build must match THIS Daz.
-    expect(content).toContain('Daz Studio 4 and 6 use different exporter plugins')
+    // Daz 4 registers the exporter under another name, so a class-only lookup
+    // reported "not installed" for a plugin that was right there.
+    expect(content).toContain('dthCandidateName == "DazToHue_Action"')
+    // Presence is NOT capability: the DS4 build exposes no doExport at all, so
+    // that — not the lookup — decides whether the export can run.
+    expect(content).toContain('typeof dthExportAction.doExport == "function"')
+    // Three states, three messages: exportable, present-but-unscriptable, absent.
+    expect(content).toContain('no scripted export')
+    expect(content).toContain('No DazToHue Exporter is registered')
   })
 
   it('saves the ROM scene into rom-animations before any export (runtime v40/v48)', () => {

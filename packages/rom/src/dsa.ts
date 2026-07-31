@@ -448,18 +448,43 @@ ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
 ${hairPassBlock}    }
     }
 `
+  // Resolving the exporter takes TWO lookups, and the difference between them
+  // is the difference between two very different failures.
+  //
+  // Daz Studio 6's plugin registers class `DazToHueExporterAction`, which
+  // findAction (a CLASS-name lookup) finds. Daz Studio 4's plugin registers
+  // class `ExporterAction`, name `DazToHue_Action` — so findAction misses it and
+  // the script used to conclude "not installed" for a plugin sitting right
+  // there. Worse, it then said nothing at all (measured on a live DS4 run: one
+  // DEBUG line in Daz's log, and a ROM that reported success).
+  //
+  // Finding it by NAME is not enough to export, though: the DS4 action exposes
+  // only inherited DzAction members — 28 of them, none named doExport (measured).
+  // Its scripted export API simply isn't there; `trigger()` opens the dialog for
+  // manual use. So the capability test is `typeof doExport == "function"`, never
+  // the action's presence, and the three states get three different answers.
   return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
-if (dthExportAction) {
+if (!dthExportAction) {
+    // Daz Studio 4 names it differently — find it so "installed but not
+    // scriptable" can be told apart from "not installed".
+    var dthActionMgr = MainWindow.getActionMgr();
+    var dthActionCount = dthActionMgr.getNumActions();
+    for (var dthAi = 0; dthAi < dthActionCount; dthAi++) {
+        var dthCandidate = dthActionMgr.getAction(dthAi);
+        if (!dthCandidate) continue;
+        var dthCandidateName = "";
+        try { dthCandidateName = String(dthCandidate.name); } catch (dthNameErr) {}
+        if (dthCandidateName == "DazToHue_Action") { dthExportAction = dthCandidate; break; }
+    }
+}
+if (dthExportAction && typeof dthExportAction.doExport == "function") {
     var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
-${sceneSubfolderBlock}${exportBody}} else {
-    // LOUD, not a log line. This used to print and return, so the ROM finished
-    // "successfully" and the user was told nothing at all about the export
-    // never running — the failure only existed in Daz's log. The plugin being
-    // installed is not enough either: it must be the build matching THIS Daz
-    // (DS4 and DS6 ship different exporter DLLs), which is exactly the case
-    // that produced a silent skip.
-    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin for this Daz version.");
-    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nDaz Studio " + App.version + " has no DazToHue Exporter action registered.\\n\\nInstall the DTH Exporter Plugin build that matches THIS Daz version (Daz Studio 4 and 6 use different exporter plugins), restart Daz, and run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
+${sceneSubfolderBlock}${exportBody}} else if (dthExportAction) {
+    print("The DazToHue Exporter in this Daz version has no scripted export API — export skipped.");
+    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this Daz version's build offers no scripted export — the studio cannot drive it, only you can, through the exporter's own dialog.\\n\\nRun the ROM script from Daz Studio 6 to have the export run automatically, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
+} else {
+    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin.");
+    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
 }
 `
 }
