@@ -59,6 +59,33 @@ var dthOpenSceneFile = String(Scene.getFilename());
 }
 
 /**
+ * Resolves an open SAVED ROM ANIMATION back to the scene it was built from,
+ * rewriting the {@link openSceneFileSnippet} capture in place — so everything
+ * keyed on the open scene (the wrong-scene guard, the per-scene config delta,
+ * the hair list, the export subfolder + name, the CSV pick) resolves as if the
+ * source scene were open. It effectively is: a ROM animation IS that scene with
+ * the ROM baked onto its timeline.
+ *
+ * DTH Export's "Export only" mode is what opens those files (its job rows point
+ * at `.ROM_Animations/<stem>_ROM.duf`), but every generated script carries this
+ * — running any of them on a ROM animation by hand behaves the same way, where
+ * it used to abort as a foreign scene. Map from {@link romAnimationSourceMap};
+ * emit right after {@link openSceneFileSnippet}, before any lookup or the
+ * guard CALL. Base indent 0.
+ */
+export function romAnimationSourceSnippet(romSourceMap: Record<string, string>): string {
+  return `// A saved ROM animation (.ROM_Animations/<stem>_ROM.duf) stands in for the scene
+// it was built from — resolve it back, so every scene-keyed lookup below matches.
+var dthRomSourceScenes = ${dazJson(romSourceMap, 2)};
+var dthRomSourceHit = dthRomSourceScenes[String(dthOpenSceneFile).split("\\\\").join("/").toLowerCase()];
+if (dthRomSourceHit) {
+    print("DTH: the open file is the saved ROM animation of " + dthRomSourceHit);
+    dthOpenSceneFile = dthRomSourceHit;
+}
+`
+}
+
+/**
  * The "nest the export dir under the open scene's OWN subfolder" DzScript
  * snippet, at base indent 0 (callers re-indent via {@link indentLines}). ONE
  * body for the ROM/Export scripts' export block and the standalone groom
@@ -188,7 +215,11 @@ export function sceneGuardSnippet(
   return `var dthLinkedScenes = ${dazJson(keys, 2)};
 function dthSceneLinkError() {
     if (dthLinkedScenes.length == 0) return "";
-    var dthOpenPath = String(Scene.getFilename()).split("\\\\").join("/").toLowerCase();
+    // The CAPTURE (dthOpenSceneFile), never Scene.getFilename(): a saved ROM
+    // animation has already been resolved back to its source scene there
+    // (romAnimationSourceSnippet), and it is a legitimate stand-in for that
+    // scene — the live filename would read as foreign and refuse to run.
+    var dthOpenPath = String(dthOpenSceneFile).split("\\\\").join("/").toLowerCase();
     for (var dthLsI = 0; dthLsI < dthLinkedScenes.length; dthLsI++) {
         if (dthLinkedScenes[dthLsI] == dthOpenPath) return "";
     }

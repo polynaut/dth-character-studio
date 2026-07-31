@@ -545,6 +545,7 @@ describe('generateAll — scene overrides folded into the one script', () => {
       'ROM_ElectraG9_G9.dsa',
       'Export_ElectraG9_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Bulk_Export_Only.dsa',
       '.Build_ROM_Animation.dsa',
       'ElectraG9_pose_asset.csv',
       'ElectraG9_ElectraBeach_pose_asset.csv',

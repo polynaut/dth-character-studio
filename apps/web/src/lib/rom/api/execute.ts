@@ -6,18 +6,24 @@ import * as storage from '../storage'
 import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
+  EXPORT_MODES,
   RUNNING_JOB_FILE,
-  characterJobScriptNames,
   executeSceneSignature,
   jobFileJson,
+  jobSceneForMode,
+  jobScriptForMode,
   normalizeSceneKey,
   openSceneJobFileJson,
   parseExecuteStamps,
   parseJobFileJson,
   romAnimationPath,
+  sceneExportFolderRel,
 } from '../execute-jobs'
-import { BUILD_ROM_ANIMATION_SCRIPT } from '@dth/rom'
-import { charScopeInput, charsRoot, joinPath, locateCharacter, resolveProject } from './core'
+import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
+import { normalizePathLower } from '#/lib/path.ts'
+import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
+import { relativeInside } from '../storage/fs'
+import { charScopeInput, charsRoot, dirname, joinPath, locateCharacter, resolveProject } from './core'
 
 import type { ExecuteStamp, ExecuteStamps, ExporterJob } from '../execute-jobs'
 import type { CharacterLocation } from '../storage'
@@ -51,6 +57,30 @@ async function loadCharacter(
   const character = location ? await storage.getCharacter(lib, id, location.definitionAbs) : null
   if (!location || !character) throw new Error(`Character ${id} not found`)
   return { project, location, character }
+}
+
+/**
+ * The character's scenes ROOT — the folder each scene's export subfolder is
+ * derived below (the same rule generation feeds `sceneExportSubfolders`, so
+ * both compute the same export paths). Undefined when the primary lives
+ * outside the character folder: the subfolder then falls back to the scene
+ * stem, exactly like the runtime.
+ */
+function characterScenesRoot(
+  character: Character,
+  location: CharacterLocation,
+  dazSubdir: string,
+): string | undefined {
+  if (!character.scenePath) return undefined
+  const charFolder = location.folderAbs
+  const primaryDir = dirname(character.scenePath)
+  const primaryRel =
+    normalizePathLower(primaryDir) === normalizePathLower(charFolder)
+      ? ''
+      : relativeInside(charFolder, primaryDir)
+  if (primaryRel === null) return undefined
+  const rootRel = deriveScenesRootRel(primaryRel, dazSubdir)
+  return rootRel ? joinPath(charFolder, rootRel) : charFolder
 }
 
 /** Read a character's stored handoff stamps (missing/corrupt = empty). */
@@ -408,35 +438,76 @@ export interface ExecuteSceneStatus {
   affected: boolean
   /** The `.duf` can't be read — the row can't be exported. */
   missing: boolean
+  /** A saved ROM animation exists — "Export only" has something to export
+   *  (rows without one are disabled in that mode). */
+  romExists: boolean
+  /**
+   * …and it is NEWER than what that scene last delivered into the export dir
+   * — a ROM (re)built or hand-edited in Daz since the last export. What "Export
+   * only" pre-checks: exactly the scenes whose saved ROM hasn't been exported
+   * as it now stands. False without a ROM animation.
+   */
+  romUnexported: boolean
 }
 
 /**
- * Every linked scene with its affected-state — what the DTH Export dialog
- * pre-checks. Per-scene tolerant: an unreadable `.duf` reports `missing`
- * instead of throwing (the dialog disables that row).
+ * Every linked scene with its affected-state + saved-ROM state — what the DTH
+ * Export dialog pre-checks (per mode). Per-scene tolerant: an unreadable `.duf`
+ * reports `missing` instead of throwing (the dialog disables that row).
  */
 export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<Array<ExecuteSceneStatus>> {
   const { projectId, id } = charScopeInput.parse(data)
   if (!isTauri()) return []
-  const { location, character } = await loadCharacter(projectId, id)
+  const { project, location, character } = await loadCharacter(projectId, id)
   const stored = await readStamps(location)
   const linked = [character.scenePath, ...character.extraScenes].filter(Boolean)
+  // Where each scene's export lands, for the "has this ROM been exported as it
+  // now stands?" compare below. The delivered PoseAsset CSV is the marker: the
+  // run-time copy writes exactly one per scene, named after that scene's export
+  // set — so its mtime IS that scene's last successful export.
+  const scenesRootAbs = characterScenesRoot(character, location, project.dazSubdir ?? 'daz3d')
+  const folders = sceneExportFolderRel(character, scenesRootAbs)
+  const exportDir = character.exportPath.trim()
   return Promise.all(
     linked.map(async (scenePath, index) => {
       const primary = index === 0
+      const key = normalizeSceneKey(scenePath)
+      const romMtime = await mtimeOf(romAnimationPath(scenePath))
+      let romUnexported = false
+      if (romMtime > 0 && exportDir) {
+        const { folder, sub } = folders[key] ?? { folder: '', sub: '' }
+        const name = sceneExportName(character, key, sub)
+        const delivered = joinPath(exportDir, folder, `${name}_pose_asset.csv`)
+        // Never exported (no delivered CSV, mtime 0) counts as unexported.
+        romUnexported = romMtime > (await mtimeOf(delivered))
+      }
       let info: Awaited<ReturnType<typeof stat>>
       try {
         info = await stat(scenePath)
       } catch {
-        return { scenePath, primary, affected: false, missing: true }
+        return {
+          scenePath,
+          primary,
+          affected: false,
+          missing: true,
+          romExists: romMtime > 0,
+          romUnexported,
+        }
       }
-      const prev = stored.scenes[normalizeSceneKey(scenePath)]
+      const prev = stored.scenes[key]
       const affected =
         prev === undefined ||
         prev.mtimeMs !== (info.mtime?.getTime() ?? 0) ||
         prev.size !== info.size ||
         prev.signature !== executeSceneSignature(character, scenePath)
-      return { scenePath, primary, affected, missing: false }
+      return {
+        scenePath,
+        primary,
+        affected,
+        missing: false,
+        romExists: romMtime > 0,
+        romUnexported,
+      }
     }),
   )
 }
@@ -445,6 +516,9 @@ const executeInput = charScopeInput.extend({
   /** The scenes to enqueue, chosen in the DTH Export dialog — each must be one
    *  of the character's linked scenes. */
   scenes: z.array(z.string().min(1)).min(1),
+  /** What the run does — the dialog's first step. Defaults to the full
+   *  ROM + export run (see {@link ExportMode}). */
+  mode: z.enum(EXPORT_MODES).default('rom-export'),
   /** Linked Houdini project to open once the batch FINISHES (the dialog's
    *  optional pick); omitted/empty = open nothing. */
   openHoudiniProject: z.string().optional(),
@@ -500,7 +574,7 @@ async function currentStamp(character: Character, scenePath: string): Promise<Ex
  * a scene file that can't be read.
  */
 export async function executeCharacterJobs({ data }: { data: unknown }): Promise<ExecuteJobsSummary> {
-  const { projectId, id, scenes: chosen, openHoudiniProject } = executeInput.parse(data)
+  const { projectId, id, scenes: chosen, mode, openHoudiniProject } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
   const settings = await storage.getSettings()
@@ -512,9 +586,11 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   if (!character.scenePath) {
     throw new Error('No primary Daz scene is linked — link one before exporting.')
   }
-  // The runs exist to deliver exports — without an export directory the ROM
-  // would build and export nothing. The UI disables the button; backstop here.
-  if (!character.exportPath.trim()) {
+  // The exporting runs exist to deliver exports — without an export directory
+  // they would build and export nothing. The UI disables the button; backstop
+  // here. A ROM-only run writes its `.ROM_Animations` scene beside the source
+  // scene, so it needs no export dir at all.
+  if (mode !== 'rom-only' && !character.exportPath.trim()) {
     throw new Error('DTH Export needs an export directory — set one in the Export directory panel.')
   }
 
@@ -547,11 +623,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     project.name,
     character.name,
   )
-  const scriptPaths = characterJobScriptNames(character).map((name) => joinPath(scriptsDir, name))
-  for (const path of scriptPaths) {
-    if (!(await exists(path))) {
-      throw new Error(`The generated script is missing:\n${path}\nSave the character to regenerate it, then try again.`)
-    }
+  const scriptPath = joinPath(scriptsDir, jobScriptForMode(mode))
+  if (!(await exists(scriptPath))) {
+    throw new Error(`The generated script is missing:\n${scriptPath}\nSave the character to regenerate it, then try again.`)
   }
 
   // Current stamps for every chosen scene (also validates the .duf files exist).
@@ -560,11 +634,21 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     stamps.set(scene, await currentStamp(character, scene))
   }
 
-  // One row per (scene, script) in run order — today that's one bulk-script
-  // row per scene (see characterJobScriptNames).
-  const jobs: Array<ExporterJob> = scenes.flatMap((scene) =>
-    scriptPaths.map((scriptPath) => ({ scenePath: scene, scriptPath })),
-  )
+  // One row per scene, in run order. "Export only" opens each scene's SAVED ROM
+  // animation instead of the scene itself — that is where the built ROM lives,
+  // and the script maps the file back to its source scene for every scene-keyed
+  // lookup. Without one there is nothing to export, so say so rather than
+  // handing Daz a row that can only fail.
+  const jobs: Array<ExporterJob> = []
+  for (const scene of scenes) {
+    const jobScene = jobSceneForMode(mode, scene)
+    if (mode === 'export-only' && !(await exists(jobScene))) {
+      throw new Error(
+        `No saved ROM animation for this scene yet:\n${scene}\nRun a ROM build for it first (DTH Export → ROM + Export or ROM only), then export.`,
+      )
+    }
+    jobs.push({ scenePath: jobScene, scriptPath })
+  }
   const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
   const jobFile = joinPath(scriptsRoot, EXPORTER_JOB_FILE)
   // A leftover `running_` file (a finished batch nobody watched, or a dead
@@ -581,17 +665,24 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   // per-job statuses) is Runner-owned inside the renamed job file.
   activeRun = { characterId: character.id, total: jobs.length, openHoudiniProject: openHoudini ?? '' }
 
-  // Stamp the handoff (merge — untouched scenes keep their stamps).
-  const stored = await readStamps(location)
-  const nextStamps: ExecuteStamps = { version: 1, scenes: { ...stored.scenes } }
-  for (const scene of scenes) {
-    const stamp = stamps.get(scene)
-    if (stamp) nextStamps.scenes[normalizeSceneKey(scene)] = stamp
+  // Stamp the handoff (merge — untouched scenes keep their stamps), but ONLY
+  // for the full run: a stamp claims "this definition, as it stands, has been
+  // exported". A ROM-only run exports nothing, and an export-only run ships
+  // whatever the saved ROM holds — which may predate the current definition.
+  // Stamping either would make the dialog report scenes as up to date when
+  // their current inputs never reached Houdini.
+  if (mode === 'rom-export') {
+    const stored = await readStamps(location)
+    const nextStamps: ExecuteStamps = { version: 1, scenes: { ...stored.scenes } }
+    for (const scene of scenes) {
+      const stamp = stamps.get(scene)
+      if (stamp) nextStamps.scenes[normalizeSceneKey(scene)] = stamp
+    }
+    await storage.writeTextFileAtomic(
+      joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
+      JSON.stringify(nextStamps, null, 2),
+    )
   }
-  await storage.writeTextFileAtomic(
-    joinPath(location.folderAbs, EXECUTE_STAMPS_FILE),
-    JSON.stringify(nextStamps, null, 2),
-  )
 
   // Start Daz scene-less when it isn't running; a running instance needs
   // nothing — the plugin polls for the job file and picks it up in place.

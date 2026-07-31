@@ -1248,8 +1248,20 @@ export const CHARACTER_SCHEMA_VERSION = 28
  *       `App.getContentMgr().saveScene` answers a plain bool; the check now
  *       accepts either convention. Bumped so Refresh assets regenerates the
  *       scripts whose log line lies.
+ *  46 — generated-script change: DTH Export's three modes. A new hidden
+ *       `.Bulk_Export_Only.dsa` (emitted with an export dir, beside
+ *       `.Bulk_ROM_Export.dsa`) runs the exporter + hair pass over the ROM
+ *       already on the timeline — no rebuild — for job rows that open a SAVED
+ *       ROM animation. To make that work, every generated script now embeds
+ *       `dthRomSourceScenes` (ROM-animation path → source scene) right after
+ *       the open-scene capture and resolves the capture through it, and the
+ *       wrong-scene guard reads that capture instead of `Scene.getFilename()`
+ *       — so a run on a `.ROM_Animations/<stem>_ROM.duf` resolves its
+ *       per-scene config, hair list, export subfolder and CSV as the source
+ *       scene, where it used to be refused as a foreign scene. Refresh assets
+ *       to regenerate.
  */
-export const RUNTIME_VERSION = 45
+export const RUNTIME_VERSION = 46
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

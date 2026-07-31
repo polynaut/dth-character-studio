@@ -127,12 +127,30 @@ tune this:
 ## Batch export — DTH Export
 
 Running the script yourself (above) is one way — the **DTH Export** button in
-the character header does the whole thing for you:
+the character header does the whole thing for you. It asks what the run should
+do first:
+
+<p align="center">
+  <img width="900" alt="the DTH Export dialog — choose what the run does" src="screenshots/dth-export-modes.png" />
+  <br>
+  <sub><em>Step one: ROM + Export, ROM only, or Export only.</em></sub>
+</p>
+
+- **ROM + Export** — the full run: a fresh ROM, the saved ROM animation scene,
+  and the export of everything (skeletal mesh and hair).
+- **ROM only** — build the ROM and save the `.ROM_Animations` scene (above),
+  skipping the export. Needs no export directory.
+- **Export only** — export the saved ROM animations as they stand, hair
+  included, without rebuilding them. This is the one for a ROM you tweaked by
+  hand in Daz: it pre-selects exactly the scenes whose ROM animation is newer
+  than their last export, and skips scenes that have no ROM animation yet.
+
+Then pick the scenes:
 
 <p align="center">
   <img width="900" alt="the DTH Export dialog — pick the scenes to export" src="screenshots/dth-export-dialog.png" />
   <br>
-  <sub><em>The DTH Export dialog: pick the scenes, Start hands the batch to Daz Studio.</em></sub>
+  <sub><em>Step two: pick the scenes, Start hands the batch to Daz Studio.</em></sub>
 </p>
 
 Pick the linked scenes to export (scenes that changed since their last export

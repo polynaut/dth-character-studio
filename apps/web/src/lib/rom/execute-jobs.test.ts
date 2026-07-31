@@ -5,8 +5,9 @@ import { characterSchema, type Character } from '@dth/rom'
 import {
   EXPORTER_JOB_FILE,
   RUNNING_JOB_FILE,
-  characterJobScriptNames,
   executeSceneSignature,
+  jobSceneForMode,
+  jobScriptForMode,
   expectedSceneExportFolders,
   jobFileJson,
   normalizeSceneKey,
@@ -169,17 +170,20 @@ describe('open-scene jobs', () => {
   })
 })
 
-describe('characterJobScriptNames — every job row runs the hidden bulk script', () => {
-  it('is always .Bulk_ROM_Export.dsa — the toggles only govern the visible scripts', () => {
-    expect(characterJobScriptNames(makeCharacter())).toEqual(['.Bulk_ROM_Export.dsa'])
-    expect(
-      characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: true })),
-    ).toEqual(['.Bulk_ROM_Export.dsa'])
-    // Even with the export split off: the bulk script always builds + exports
-    // everything itself — no Export_ row needed.
-    expect(
-      characterJobScriptNames(makeCharacter({ exportPath: 'X:\\out', exportWithRomScript: false })),
-    ).toEqual(['.Bulk_ROM_Export.dsa'])
+describe('job rows per export mode — which hidden script, on which scene file', () => {
+  it('each mode runs its own hidden script (the visible toggles never matter)', () => {
+    expect(jobScriptForMode('rom-export')).toBe('.Bulk_ROM_Export.dsa')
+    expect(jobScriptForMode('rom-only')).toBe('.Build_ROM_Animation.dsa')
+    expect(jobScriptForMode('export-only')).toBe('.Bulk_Export_Only.dsa')
+  })
+
+  it('export-only opens the SAVED ROM animation, the other modes the scene itself', () => {
+    const scene = 'X:\\proj\\Electra\\daz3d\\primary\\Electra.duf'
+    expect(jobSceneForMode('rom-export', scene)).toBe(scene)
+    expect(jobSceneForMode('rom-only', scene)).toBe(scene)
+    expect(jobSceneForMode('export-only', scene)).toBe(
+      'X:/proj/Electra/daz3d/primary/.ROM_Animations/Electra_ROM.duf',
+    )
   })
 })
 

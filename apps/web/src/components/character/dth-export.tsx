@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
@@ -34,6 +34,7 @@ import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
+import type { ExportMode } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -335,6 +336,7 @@ function WaitForDazCloseModal({
  *  daz-card utility supplies the tint/ring via `data-selected`. */
 function SceneRow({
   status,
+  mode,
   checked,
   loading,
   onToggle,
@@ -342,6 +344,9 @@ function SceneRow({
   onSelectAll,
 }: {
   status: ExecuteSceneStatus
+  /** The chosen run — decides what the row's hint reports and whether it can
+   *  run at all (Export only needs a saved ROM animation). */
+  mode: ExportMode
   checked: boolean
   /** Affected-detection still running — checkboxes are settling, keep quiet. */
   loading: boolean
@@ -351,14 +356,25 @@ function SceneRow({
 }) {
   const fileName = status.scenePath.split(/[\\/]/).pop() ?? status.scenePath
   const displayName = fileName.replace(/\.[^./\\]+$/, '')
-  const disabled = status.missing
+  // Export only runs off the SAVED ROM animation, so a scene without one has
+  // nothing to export — disabled, like a missing scene file.
+  const noRom = mode === 'export-only' && !loading && !status.romExists
+  const disabled = status.missing || noRom
+  // Each mode reports the state that decides ITS pre-selection.
+  const highlight = mode === 'export-only' ? status.romUnexported : status.affected
   const hint = status.missing
     ? 'Scene file missing — relink it in the editor'
     : loading
       ? 'Checking for changes…'
-      : status.affected
-        ? 'Changed since the last export'
-        : 'Unchanged since the last export'
+      : noRom
+        ? 'No ROM animation yet — run a ROM build for this scene first'
+        : mode === 'export-only'
+          ? status.romUnexported
+            ? 'ROM animation changed since its last export'
+            : 'ROM animation already exported as it stands'
+          : status.affected
+            ? 'Changed since the last export'
+            : 'Unchanged since the last export'
   return (
     <div className="group/card relative w-full">
       <div
@@ -389,9 +405,11 @@ function SceneRow({
             className={`mt-0.5 text-xs ${
               status.missing
                 ? 'text-destructive'
-                : status.affected && !loading
-                  ? 'text-daz-green'
-                  : 'text-muted-foreground'
+                : noRom
+                  ? 'text-amber-500'
+                  : highlight && !loading
+                    ? 'text-daz-green'
+                    : 'text-muted-foreground'
             }`}
           >
             {hint}
@@ -425,6 +443,48 @@ function SceneRow({
       )}
       {/* Left accent bar, over the cover button like the scene cards. */}
       <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-daz-green" />
+    </div>
+  )
+}
+
+/** What each run does, in the user's words — the dialog's first step. Order is
+ *  the offer order; `rom-export` leads because it is the default full run. */
+const MODE_CHOICES: ReadonlyArray<{ mode: ExportMode; title: string; blurb: string }> = [
+  {
+    mode: 'rom-export',
+    title: 'ROM + Export',
+    blurb:
+      'Build a fresh ROM, save the ROM animation scene, then export everything — skeletal mesh and hair.',
+  },
+  {
+    mode: 'rom-only',
+    title: 'ROM only',
+    blurb:
+      'Build the ROM and save the ROM animation scene, skipping the export. Needs no export directory.',
+  },
+  {
+    mode: 'export-only',
+    title: 'Export only',
+    blurb:
+      'Export the saved ROM animations as they stand — hair included — without rebuilding. For ROMs you edited by hand in Daz.',
+  },
+]
+
+/** Step 1: what the run should do. Picking a card advances to the scenes. */
+function ModeStep({ onPick }: { onPick: (mode: ExportMode) => void }) {
+  return (
+    <div className="space-y-2">
+      {MODE_CHOICES.map((choice) => (
+        <button
+          key={choice.mode}
+          type="button"
+          onClick={() => onPick(choice.mode)}
+          className="daz-card block w-full rounded-lg border p-3 text-left transition-colors hover:border-daz-green/60"
+        >
+          <span className="block text-base font-medium">{choice.title}</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">{choice.blurb}</span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -477,6 +537,11 @@ function DthExportDialog({
   const [status, setStatus] = useState<Array<ExecuteSceneStatus> | null>(null)
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  // Step 1 picks WHAT the run does; null = still on that step. The ref lets the
+  // scene probe (kicked off at mount, in parallel with step 1) seed the right
+  // pre-selection whenever it lands — before or after the pick.
+  const [mode, setMode] = useState<ExportMode | null>(null)
+  const modeRef = useRef<ExportMode | null>(null)
   // The optional after-export pick ('' = open nothing) — one of the
   // character's linked Houdini projects, opened when the batch FINISHES.
   const [openHoudini, setOpenHoudini] = useState('')
@@ -508,7 +573,21 @@ function DthExportDialog({
       primary: index === 0,
       affected: false,
       missing: false,
+      romExists: false,
+      romUnexported: false,
     }))
+
+  /** Which scenes a mode pre-checks: the ones whose work is outstanding for
+   *  THAT run — changed inputs for a ROM build, an unexported saved ROM for
+   *  the export-only pass (which can only run where a ROM animation exists). */
+  const preChecked = (scenes: Array<ExecuteSceneStatus>, forMode: ExportMode): Set<string> =>
+    new Set(
+      scenes
+        .filter((s) =>
+          forMode === 'export-only' ? s.romExists && s.romUnexported : s.affected && !s.missing,
+        )
+        .map((s) => s.scenePath),
+    )
 
   useEffect(() => {
     let active = true
@@ -516,7 +595,9 @@ function DthExportDialog({
       .then((scenes) => {
         if (!active) return
         setStatus(scenes)
-        setChecked(new Set(scenes.filter((s) => s.affected).map((s) => s.scenePath)))
+        // The mode may already be picked (the probe outlives step 1) — seed the
+        // checks for whichever run is chosen, defaulting to the full one.
+        setChecked(preChecked(scenes, modeRef.current ?? 'rom-export'))
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -530,6 +611,10 @@ function DthExportDialog({
               primary: index === 0,
               affected: false,
               missing: false,
+              // Unknown, not "absent": leaving rows selectable keeps a manual
+              // export-only pick possible when the probe failed.
+              romExists: true,
+              romUnexported: false,
             })),
         )
         toast.error(error instanceof Error ? error.message : String(error))
@@ -553,6 +638,20 @@ function DthExportDialog({
     })
   }
 
+  /** Step 1 → step 2: the pick decides which scenes start checked (each mode
+   *  has its own "outstanding work" rule), so re-picking re-seeds them. */
+  function pickMode(next: ExportMode) {
+    modeRef.current = next
+    setMode(next)
+    if (status) setChecked(preChecked(status, next))
+  }
+
+  // Back to step 1 clears the pick so a re-pick re-seeds the checks.
+  function backToModes() {
+    modeRef.current = null
+    setMode(null)
+  }
+
   async function onExport() {
     setBusy(true)
     try {
@@ -562,6 +661,7 @@ function DthExportDialog({
           projectId,
           id: character.id,
           scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath),
+          mode: mode ?? 'rom-export',
           openHoudiniProject: openHoudini || undefined,
         },
       })
@@ -573,11 +673,12 @@ function DthExportDialog({
         return
       }
       const count = `${result.scenes.length} scene${result.scenes.length === 1 ? '' : 's'}`
+      const what = mode === 'rom-only' ? 'queued for a ROM build' : 'queued for export'
       toast.success(
         result.dazWasRunning
           ? // The plugin polls for the job file, so a running Daz picks it up.
-            `Jobs handed to the running Daz Studio — ${count} queued for export.`
-          : `Started Daz Studio — ${count} queued for export.`,
+            `Jobs handed to the running Daz Studio — ${count} ${what}.`
+          : `Started Daz Studio — ${count} ${what}.`,
       )
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -592,36 +693,47 @@ function DthExportDialog({
       onClose={onClose}
       title={
         <span className="flex items-center gap-1.5">
-          DTH Export
+          {mode ? `DTH Export — ${MODE_CHOICES.find((c) => c.mode === mode)?.title}` : 'DTH Export'}
           <InfoPopup label="DTH Export — more information">
-            Choose the Daz scenes to run through the DTH Exporter Plugin. Scenes that changed
-            since their last export are pre-selected; the wand picks a single scene, a
-            double-click selects all.
+            Choose what the run does, then the Daz scenes it runs on. Scenes with outstanding
+            work are pre-selected; the wand picks a single scene, a double-click selects all.
           </InfoPopup>
         </span>
       }
       dismissible={!busy}
     >
+      {mode === null ? (
+        <ModeStep onPick={pickMode} />
+      ) : (
+        <>
       <p className="text-xs text-muted-foreground">
-        Heads up: this takes a long time — Daz Studio plays through the full ROM for every
-        selected scene.
+        {mode === 'export-only'
+          ? 'Exports each selected scene’s saved ROM animation as it stands — no rebuild, so this is the quick one.'
+          : 'Heads up: this takes a long time — Daz Studio plays through the full ROM for every selected scene.'}
       </p>
       <div className="space-y-2">
         {rows.map((row) => (
           <SceneRow
             key={normalizeSceneKey(row.scenePath)}
             status={row}
+            mode={mode}
             checked={checked.has(row.scenePath)}
             loading={status === null}
             onToggle={() => toggle(row.scenePath)}
             onSolo={() => setChecked(new Set([row.scenePath]))}
             onSelectAll={() =>
-              setChecked(new Set(rows.filter((r) => !r.missing).map((r) => r.scenePath)))
+              setChecked(
+                new Set(
+                  rows
+                    .filter((r) => !r.missing && (mode !== 'export-only' || r.romExists))
+                    .map((r) => r.scenePath),
+                ),
+              )
             }
           />
         ))}
       </div>
-      {character.houdiniProjects.length > 0 && (
+      {mode !== 'rom-only' && character.houdiniProjects.length > 0 && (
         <div>
           <Label className="mb-1">Open Houdini project after export</Label>
           <Select
@@ -648,6 +760,9 @@ function DthExportDialog({
         <Button variant="ghost" disabled={busy} onClick={onClose}>
           Cancel
         </Button>
+        <Button variant="ghost" disabled={busy} onClick={backToModes}>
+          Back
+        </Button>
         <Button
           disabled={busy || checked.size === 0 || !runner || runner.blocked}
           title={
@@ -662,6 +777,8 @@ function DthExportDialog({
           <Play /> {busy ? 'Starting…' : 'Start'}
         </Button>
       </div>
+        </>
+      )}
     </Modal>
   )
 }

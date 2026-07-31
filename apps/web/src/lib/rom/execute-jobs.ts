@@ -1,6 +1,9 @@
 import {
+  BUILD_ROM_ANIMATION_SCRIPT,
+  BULK_EXPORT_ONLY_SCRIPT,
   BULK_ROM_EXPORT_SCRIPT,
   houdiniProjectResolution,
+  romAnimationPath,
   sceneExportSubfolders,
 } from '@dth/rom'
 
@@ -143,32 +146,48 @@ export function openSceneJobFileJson(scenePath: string): string {
 
 /**
  * Where a scene's saved ROM animation lives:
- * `<scene dir>/.ROM_Animations/<stem>_ROM.duf` — the copy every ROM-building
- * script saves after a clean build (runtime v42, `DzFileInfo.completeBaseName`
- * semantics: everything before the LAST dot). One computation shared by the
- * scene card's probe/open and the generate flow.
+ * `<scene dir>/.ROM_Animations/<stem>_ROM.duf`. Re-exported from @dth/rom,
+ * which owns the rule — generation embeds the same paths so an export-only run
+ * can map an open ROM animation back to its source scene.
  */
-export function romAnimationPath(scenePath: string): string {
-  const norm = scenePath.replace(/\\/g, '/')
-  const slash = norm.lastIndexOf('/')
-  const dir = slash >= 0 ? norm.slice(0, slash) : '.'
-  const file = norm.slice(slash + 1)
-  const dot = file.lastIndexOf('.')
-  const stem = dot > 0 ? file.slice(0, dot) : file
-  return `${dir}/.ROM_Animations/${stem}_ROM.duf`
+export { romAnimationPath }
+
+/**
+ * What a DTH Export run does, chosen in the dialog's first step:
+ *
+ * - `rom-export` — build a fresh ROM, save the ROM animation, export
+ *   everything (skeletal mesh + hair). The default, and the only mode that
+ *   stamps the scenes as exported (see {@link ExecuteStamp}).
+ * - `rom-only` — build the ROM and save the `.ROM_Animations` scene, skip the
+ *   export. Needs no export directory.
+ * - `export-only` — export the SAVED ROM animation as it stands (hair
+ *   included), rebuilding nothing: the mode for a ROM that was hand-edited in
+ *   Daz. Its job rows open the ROM animation, not the source scene.
+ */
+export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only'] as const
+export type ExportMode = (typeof EXPORT_MODES)[number]
+
+/**
+ * The hidden generated script a mode's job rows run — each selects the open
+ * scene's overrides itself, so one script serves every scene:
+ * {@link BULK_ROM_EXPORT_SCRIPT} (ROM + full export),
+ * {@link BUILD_ROM_ANIMATION_SCRIPT} (ROM + save, no export) or
+ * {@link BULK_EXPORT_ONLY_SCRIPT} (full export, no ROM build).
+ */
+export function jobScriptForMode(mode: ExportMode): string {
+  if (mode === 'rom-only') return BUILD_ROM_ANIMATION_SCRIPT
+  if (mode === 'export-only') return BULK_EXPORT_ONLY_SCRIPT
+  return BULK_ROM_EXPORT_SCRIPT
 }
 
 /**
- * The generated script(s) a scene must run, in run order — always just the
- * hidden BULK script ({@link BULK_ROM_EXPORT_SCRIPT}, runtime v40): it selects
- * the open scene's overrides itself and always builds the ROM AND exports
- * everything — the export/hair toggles (`exportWithRomScript`,
- * `exportHairAssets`) only govern the visible per-character scripts. Kept as
- * an array for forward compatibility (a future job kind may need multiple
- * rows per scene).
+ * The scene file a mode's job row OPENS for `scenePath`: the saved ROM
+ * animation for `export-only` (that is where the built ROM lives — the
+ * generated script maps it back to this scene for every scene-keyed lookup),
+ * the scene itself otherwise.
  */
-export function characterJobScriptNames(_character: Character): Array<string> {
-  return [BULK_ROM_EXPORT_SCRIPT]
+export function jobSceneForMode(mode: ExportMode, scenePath: string): string {
+  return mode === 'export-only' ? romAnimationPath(scenePath) : scenePath
 }
 
 /**
@@ -181,7 +200,7 @@ export function characterJobScriptNames(_character: Character): Array<string> {
  * is a real override meaning "flat"). '' = that scene exports into the export
  * dir itself. The one folder rule the export watch AND the housekeeping share.
  */
-function sceneExportFolderRel(
+export function sceneExportFolderRel(
   character: Character,
   scenesRootAbs?: string,
 ): Record<string, { folder: string; sub: string }> {
