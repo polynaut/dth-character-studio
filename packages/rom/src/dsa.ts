@@ -473,12 +473,54 @@ ${hairPassBlock}    }
   // anywhere — `trigger()` just opens the dialog for manual use.
   // So the gate is the CAPABILITY (`typeof doExport == "function"`), never the
   // action's presence, and the three states get three answers.
-  // ONE alert channel for the whole export block. Interactive runs get a dialog
-  // (a log line is invisible — that is how a skipped export went unnoticed);
-  // the Runner's unattended carriers print only, because a modal there blocks
-  // the batch on a click nobody is there to make.
-  const alertHelper = `var dthExportAlert = function (dthAlertMsg) {
-    print(dthAlertMsg);${
+  // ONE alert channel for the whole export block, with two outputs.
+  //
+  // The RUN LOG always. A dialog reaches whoever is sitting there; the studio's
+  // report reaches them whenever they come back, and it is the ONLY channel the
+  // Runner's unattended carriers have — without it a bulk run on a Daz that
+  // cannot export completes every scene, exports nothing, and says nothing.
+  // Written here rather than through the runtime's logRunError because the
+  // split Export_ carriers don't include the runtime at all.
+  //
+  // The DIALOG only when a human ran it. A modal inside a Runner carrier warns
+  // nobody and blocks the batch on a click that never comes.
+  const runLogPath = charFolderAbs
+    ? `${charFolderAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
+    : ''
+  const alertHelper = `var dthExportLogPath = ${dazJson(runLogPath)};
+// Append a problem to the studio's run log, preserving whatever the ROM run
+// already recorded there (its ok flag, frame count and failed morphs).
+var dthExportLogProblem = function (dthLogMsg) {
+    if (dthExportLogPath == "") return;
+    try {
+        var dthLogRec = null;
+        var dthLogIn = new DzFile(dthExportLogPath);
+        if (dthLogIn.exists() && dthLogIn.open(dthLogIn.ReadOnly)) {
+            var dthLogTxt = String(dthLogIn.read());
+            dthLogIn.close();
+            try { dthLogRec = JSON.parse(dthLogTxt); } catch (dthLogParseErr) { dthLogRec = null; }
+        }
+        if (!dthLogRec || typeof dthLogRec != "object") {
+            // No ROM ran this time — an export-only carrier. Nothing succeeded,
+            // so the run itself is the failure.
+            dthLogRec = { logVersion: 1, character: ${dazJson(character.name)}, ok: false, errors: [], failedMorphs: [] };
+        }
+        if (!dthLogRec.errors) dthLogRec.errors = [];
+        dthLogRec.errors.push(String(dthLogMsg));
+        dthLogRec.finishedAt = new Date().toString();
+        dthLogRec.finishedAtMs = new Date().getTime();
+        var dthLogOut = new DzFile(dthExportLogPath);
+        if (dthLogOut.open(dthLogOut.WriteOnly | dthLogOut.Truncate)) {
+            dthLogOut.write(JSON.stringify(dthLogRec, null, 2));
+            dthLogOut.close();
+        }
+    } catch (dthLogErr) {
+        print("Could not record the export problem in the run log: " + dthLogErr);
+    }
+};
+var dthExportAlert = function (dthAlertMsg) {
+    print(dthAlertMsg);
+    dthExportLogProblem(dthAlertMsg);${
       unattended
         ? ''
         : `

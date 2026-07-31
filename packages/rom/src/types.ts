@@ -1301,7 +1301,15 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       doExport* anywhere. The gate is therefore
  *       `typeof doExport == "function"`, with three distinct messages:
  *       exportable, present-but-unscriptable (run from DS6 / export by hand),
- *       and absent.
+ *       and absent. Every alert goes through one emitted `dthExportAlert`,
+ *       which ALWAYS records the problem in the studio's run log and raises a
+ *       dialog only in a hand-run carrier — a modal inside the Runner's hidden
+ *       scripts blocks the batch on a click nobody is there to make, so the run
+ *       log is those carriers' only channel. It appends to the existing log
+ *       rather than overwriting, so a successful ROM keeps its ok flag, frame
+ *       count and failed morphs; with no log at all (an export-only run) it
+ *       writes one with ok:false. Self-contained because the split `Export_`
+ *       carriers do not include the runtime.
  *       (b) The ROM-scene save is verified by STATTING THE FILE, never by the
  *       return value. Every Daz build disagrees about that value — plain bool,
  *       DzError-where-0-is-success (DS6, the v45 fix), and void in DS4, which

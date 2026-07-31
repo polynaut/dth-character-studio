@@ -12,6 +12,8 @@ Two problems found on a live Daz Studio 4.24 run.
 
 **"Could not save the ROM scene" when the save worked.** The script judged the save by `saveScene`'s return value, and every Daz build disagrees about what that is — a bool, a `DzError` where `0` means success (Daz 6, fixed in runtime v45), and nothing at all in Daz 4. So a perfectly good save was logged as a failure while Daz's own log said "Saved Scene". It now checks whether the file is actually on disk, which no Daz version can disagree about.
 
-One exception, deliberately: the hidden scripts the **Runner** executes stay silent and log instead. A dialog there doesn't warn anyone — it stops an unattended batch on a click nobody is present to make, with every remaining scene queued behind it. (That applies to the "hair item not found" alert too, which had that problem already.)
+One exception, deliberately: the hidden scripts the **Runner** executes raise no dialog. A modal there doesn't warn anyone — it stops an unattended batch on a click nobody is present to make, with every remaining scene queued behind it. (That applies to the "hair item not found" alert too, which had that problem already.)
+
+Instead — and for interactive runs as well — **the problem is recorded in the character's run log**, so it shows up in the studio's run report the moment you come back. Without that, a bulk export against a Daz that can't export would complete every scene, export nothing, and tell you nothing. It appends rather than overwrites, so a successful ROM keeps its result; an export-only run that had no ROM gets a log of its own.
 
 Runtime v49 — Refresh assets regenerates the scripts.

@@ -1821,12 +1821,18 @@ describe('exporter integration', () => {
 
   it('a skipped export is LOUD, and tells the two causes apart (v49)', () => {
     const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
-    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    // charFolderAbs matters here — it is where the run-log path comes from.
+    const content = toCharacterScriptDsa(character, {}, FRAMES, 'X:\\p\\Ita').content
     // It used to only print(), so the ROM finished "successfully" and the user
     // was told nothing about the export never running.
     expect(content).toContain('dthExportAlert("The ROM was built, but the export did NOT run.')
-    // Interactive carriers raise a real dialog through the shared channel.
+    // Interactive carriers raise a real dialog through the shared channel…
     expect(content).toContain('MessageBox.critical(dthAlertMsg, "DTH Character Studio", "&OK")')
+    // …and STILL record it, so the studio's report shows it when the user
+    // switches back, and an existing ROM result is preserved rather than
+    // overwritten (the log keeps its ok flag, frames and failed morphs).
+    expect(content).toContain('dthExportLogProblem(dthAlertMsg)')
+    expect(content).toContain('dthLogRec.errors.push(String(dthLogMsg))')
     // Daz 4 registers the exporter under another name, so a class-only lookup
     // reported "not installed" for a plugin that was right there.
     expect(content).toContain('dthCandidateName == "DazToHue_Action"')
@@ -1848,11 +1854,15 @@ describe('exporter integration', () => {
     // it stops the batch on a click that never comes, and every remaining scene
     // waits behind it. Same alerts, print-only.
     for (const script of [
-      toBulkRomExportScriptDsa(character, {}, FRAMES),
-      toBulkExportOnlyScriptDsa(character, FRAMES),
+      toBulkRomExportScriptDsa(character, {}, FRAMES, 'X:\\p\\Ita'),
+      toBulkExportOnlyScriptDsa(character, FRAMES, 'X:\\p\\Ita'),
     ]) {
       expect(script.content).toContain('dthExportAlert("The ROM was built, but the export did NOT run.')
       expect(script.content).not.toContain('MessageBox.critical(dthAlertMsg')
+      // The run log is their ONLY channel — without it a bulk run on a Daz that
+      // cannot export completes every scene, exports nothing, and says nothing.
+      expect(script.content).toContain('dthExportLogProblem(dthAlertMsg)')
+      expect(script.content).toContain('dth_rom_run_log.json')
     }
     // …while the hand-run carriers keep the dialog.
     expect(toCharacterScriptDsa(character, {}, FRAMES).content).toContain(
