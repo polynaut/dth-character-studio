@@ -1,5 +1,61 @@
 # @dth/web
 
+## 0.58.0
+
+### Minor Changes
+
+- [#630](https://github.com/polynaut/dth-character-studio/pull/630) [`498a615`](https://github.com/polynaut/dth-character-studio/commit/498a61563680bead4dfd64868162d6ecb03e18ba) Thanks [@polynaut](https://github.com/polynaut)! - feat: every new character gets a final **export** folder
+
+  Alongside its Daz (`daz3d`) and Houdini (`houdini`) folders, a new character now also gets an **`export`** folder — where the files Houdini generates for Unreal land. That's the end of the pipeline, and it's yours to organise; the studio only creates it.
+
+  Not to be confused with `dth-exports`, which lives _inside_ the Daz folder and holds the Daz→Houdini intermediate the DTH Exporter writes.
+
+  The name is a per-project setting like the other two — **Settings → Project → Final export subfolder** — so a project can call it something else, or nest it (`unreal/incoming`). Existing characters get theirs on the next generation, so nobody has to create it by hand.
+
+- [#636](https://github.com/polynaut/dth-character-studio/pull/636) [`dd50848`](https://github.com/polynaut/dth-character-studio/commit/dd50848d32da1780a6a9276b9e6f594b873e1a5a) Thanks [@polynaut](https://github.com/polynaut)! - **New Daz script: Fix graft shell surfaces.** Fitting a nipple or navel geograft
+  (STX and friends) to a figure that already wears **Golden Palace** or **Dicktator**
+  adds that graft's surfaces to the genital shells — switched **on** — so the shell
+  renders over the new graft and you get shell material where the graft should be.
+  The fix has been to hunt down each `stx_…_Body` row in the shell's
+  _Shell › Visibility › Surfaces_ list and switch it off by hand, on every shell, in
+  every scene.
+
+  `Fix_Graft_Shell_Surfaces` now does it in one run: open the scene, run the script
+  from **Scripts › DTH-Character-Studio** in the Content Library, and it switches off
+  every foreign-graft surface on the GP/DK shells. Nothing to select, and it is safe
+  to re-run — only rows that are still on get written.
+
+  It is deliberately narrow: other geoshells (skin overlays, tattoos, nail shells) are
+  left alone, since those legitimately want the graft surfaces visible, and a shell's
+  own graft always keeps its rows. A scene with no GP/DK shell is a no-op. If the
+  script cannot tell which graft a shell belongs to it reports that shell as skipped
+  rather than guessing — guessing wrong would blank the shell itself.
+
+  Run **Tools → Refresh assets** once to install the new script (and its icon) into an
+  existing scripts folder.
+
+- [#629](https://github.com/polynaut/dth-character-studio/pull/629) [`d497ab1`](https://github.com/polynaut/dth-character-studio/commit/d497ab180aba0a3a55fc2652a72cec9227df5baf) Thanks [@polynaut](https://github.com/polynaut)! - feat: the saved-ROM folder is `rom-animations`, and `dth-exports` can't be taken by a scene
+
+  The folder holding your saved ROM animations was hidden and called `.ROM_Animations` — odd for a folder whose whole purpose is scenes you open by hand. It's now a normal visible `rom-animations/`, matching the naming of the other studio folders (`dth-exports`, `houdini-project`). An existing `.ROM_Animations` beside a linked scene is renamed for you the next time the character is saved, so nothing already saved is orphaned; if both folders somehow exist, the old one is left alone rather than merged.
+
+  Scene subfolders can no longer be named **`dth-exports`**. That name belongs to the character's export root, which sits at exactly the level scene subfolders do, so a scene moved there would have fought the studio for the same directory. It's refused wherever a subfolder is chosen — adding or replacing a scene with a copy, and renaming one from its card. (`rom-animations` needs no such rule: it lives inside each scene's own subfolder, one level below where a collision could happen.)
+
+  Runtime v48 — Refresh assets regenerates the scripts and performs the rename.
+
+### Patch Changes
+
+- [#634](https://github.com/polynaut/dth-character-studio/pull/634) [`3b45f7a`](https://github.com/polynaut/dth-character-studio/commit/3b45f7a33152092c792428cd2f4891e4aac989c6) Thanks [@polynaut](https://github.com/polynaut)! - fix: old ROM animations are cleaned up, and the folder rename actually happens
+
+  Two problems with saved ROM animations.
+
+  **Renaming a Daz scene left its ROM animation behind forever.** The saved file is named after the scene it came from, so a rename just starts writing a new one beside the old — and Daz saves two thumbnails with each, so every rename stranded three files. They're retired on the next save now. Only files the studio itself wrote are touched, and only next to scenes the character still uses.
+
+  **The `.ROM_Animations` → `rom-animations` rename didn't run.** It renamed the folder onto itself, which did nothing at all — so anything already saved stayed in the old hidden folder while Daz started filling the new one beside it. Fixed, and the migration now moves those files across as intended.
+
+- Updated dependencies [[`03c72ed`](https://github.com/polynaut/dth-character-studio/commit/03c72ed9a196cddde78f6737a6302b29fe9fa701), [`dd50848`](https://github.com/polynaut/dth-character-studio/commit/dd50848d32da1780a6a9276b9e6f594b873e1a5a), [`3b45f7a`](https://github.com/polynaut/dth-character-studio/commit/3b45f7a33152092c792428cd2f4891e4aac989c6), [`d497ab1`](https://github.com/polynaut/dth-character-studio/commit/d497ab180aba0a3a55fc2652a72cec9227df5baf), [`3c180ab`](https://github.com/polynaut/dth-character-studio/commit/3c180ab523b8bb8fd278f515aa57b384ccb6a633)]:
+  - @dth/rom@0.58.0
+  - @dth/ui@0.58.0
+
 ## 0.57.0
 
 ### Minor Changes
