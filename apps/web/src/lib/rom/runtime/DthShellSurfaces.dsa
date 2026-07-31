@@ -1,0 +1,284 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - geoshell surface hygiene.
+//
+// A geoshell carries one visibility switch per SURFACE of the figure it shells,
+// under /Shell/Visibility/Surfaces, named "material_group_<label>_vis". Fitting
+// another geograft adds ITS surfaces to that list switched ON - so a Golden
+// Palace shell renders over an STX nipple or navel graft that was fitted after
+// it. The manual fix is to switch those rows off by hand, on every GP/DK shell,
+// in every scene. DthFixGraftShellSurfaces does it in one pass.
+//
+// SCOPE: only the genital-graft shells listed in DTH_SHELL_FAMILIES. Other
+// geoshells (skin overlays, tattoos, nail shells) are deliberately LEFT ALONE:
+// those legitimately want the graft surfaces ON, so that a tattoo covers the
+// nipple graft too. No GP/DK shell in the scene = nothing to do.
+//
+// MEASURED (DS 6.0, Genesis 9 + Golden Palace + STX nipples/navel, 2026-07-31):
+//   - a geoshell node is class DzGeometryShellNode; its surface switches are
+//     DzBoolProperty on the NODE at path "/Shell/Visibility/Surfaces"
+//   - a switch's LABEL is "<graftNodeName>_<materialName>" for a graft-
+//     contributed surface ("stx_gen_9_nipples_feminine_Body") and the plain
+//     "<materialName>" for the base figure's own (Body, Head, Legs, ...)
+//   - the shell's "/Shell" > "Shell Node" property points at the shelled FIGURE
+//     (Genesis9), never at the graft the shell belongs to - so a shell's own
+//     graft is resolved by product family, with a name-prefix fallback
+//   - DzFigure.isGraftingActive() and DzFacetMesh.getGraft() are NOT exposed to
+//     DAZ Script in DS6, so geografts cannot be detected through the API at all;
+//     the surface labels above are the identification
+//
+// The logic functions below are PURE (no Daz API at load time or inside them),
+// which is what lets runtime.test.ts drive them directly - keep them that way.
+
+/** The shells this runs on. A shell belongs to a family when its node name or
+ *  label contains one of the patterns; its OWN graft is the fitted figure that
+ *  matches the same family. Adding a product = one entry. */
+var DTH_SHELL_FAMILIES = [
+	{ family: "Golden Palace", patterns: ["goldenpalace"] },
+	{ family: "Dicktator", patterns: ["dicktator"] }
+];
+
+/** Fallback owner detection when no fitted figure matches the shell's family (a
+ *  graft node the user renamed): longest common name prefix, this many chars
+ *  minimum, and it must be unique. Below that the shell is skipped, never
+ *  guessed - picking the wrong owner would blank the shell itself. */
+var DTH_SHELL_MIN_OWNER_PREFIX = 6;
+
+/** Lowercase, keep only letters and digits - so "GoldenPalace_G9_Shell_Minora",
+ *  "Golden Palace G9" and "golden-palace" all compare on the same stem. */
+function dthShellNorm(sIn){
+	var s = String(sIn == undefined ? "" : sIn).toLowerCase();
+	var sOut = "";
+	for (var i = 0; i < s.length; i++) {
+		var c = s.charAt(i);
+		if ((c >= "a" && c <= "z") || (c >= "0" && c <= "9")) sOut += c;
+	}
+	return sOut;
+}
+
+/** The DTH_SHELL_FAMILIES family whose pattern appears in `sName` or `sLabel`,
+ *  or "" for anything else (a tattoo shell, a nail shell, the base figure). */
+function dthShellFamilyFor(sName, sLabel){
+	var sN = dthShellNorm(sName), sL = dthShellNorm(sLabel);
+	for (var f = 0; f < DTH_SHELL_FAMILIES.length; f++) {
+		var aPat = DTH_SHELL_FAMILIES[f].patterns;
+		for (var p = 0; p < aPat.length; p++) {
+			var sPat = dthShellNorm(aPat[p]);
+			if (sPat.length == 0) continue;
+			if (sN.indexOf(sPat) >= 0 || sL.indexOf(sPat) >= 0) return DTH_SHELL_FAMILIES[f].family;
+		}
+	}
+	return "";
+}
+
+/** Which fitted figure contributed a surface switch, read off its label:
+ *  "<contributor name>_<material>". Returns "" for the base figure's own
+ *  surfaces (no contributor prefix) - those are never touched. The LONGEST
+ *  matching name wins, so a graft whose name prefixes another's cannot steal
+ *  its rows. */
+function dthShellSurfaceOwner(sSurfaceLabel, aContribNames){
+	var sLabel = String(sSurfaceLabel == undefined ? "" : sSurfaceLabel);
+	var sBest = "";
+	for (var i = 0; i < aContribNames.length; i++) {
+		var sName = String(aContribNames[i]);
+		if (sName.length == 0) continue;
+		var sPrefix = sName + "_";
+		if (sLabel.length <= sPrefix.length) continue;
+		if (sLabel.indexOf(sPrefix) != 0) continue;
+		if (sName.length > sBest.length) sBest = sName;
+	}
+	return sBest;
+}
+
+/** Longest common prefix length of two strings. */
+function dthShellPrefixLen(a, b){
+	var sA = String(a), sB = String(b);
+	var n = Math.min(sA.length, sB.length);
+	for (var i = 0; i < n; i++) if (sA.charAt(i) != sB.charAt(i)) return i;
+	return n;
+}
+
+/** Fallback owner pick: the contributor whose name shares the longest leading
+ *  run with the shell's node name. Returns { name, best, runnerUp }; `name` is
+ *  "" when the winner is too short or tied (caller then skips the shell). */
+function dthShellOwnerByPrefix(sShellName, aContribNames){
+	var sWinner = "", nBest = 0, nRunnerUp = 0;
+	for (var i = 0; i < aContribNames.length; i++) {
+		var nLen = dthShellPrefixLen(sShellName, aContribNames[i]);
+		if (nLen > nBest) { nRunnerUp = nBest; nBest = nLen; sWinner = String(aContribNames[i]); }
+		else if (nLen > nRunnerUp) { nRunnerUp = nLen; }
+	}
+	if (sWinner.length == 0 || nBest < DTH_SHELL_MIN_OWNER_PREFIX || nBest == nRunnerUp) {
+		return { name: "", best: nBest, runnerUp: nRunnerUp };
+	}
+	return { name: sWinner, best: nBest, runnerUp: nRunnerUp };
+}
+
+/** Decide one shell's surface switches from already-read data - the whole
+ *  policy in one pure function, so the tests drive the real thing:
+ *    aSurfaces      : [{ label, on }] as read off the shell
+ *    aContribNames  : node names of the figures fitted to the shelled figure
+ *    sOwnerName     : the shell's own graft (its rows stay ON)
+ *  Returns the labels to switch OFF: currently ON, contributed by a graft, and
+ *  not the shell's own. */
+function dthShellSurfacesToClear(aSurfaces, aContribNames, sOwnerName){
+	var aOut = [];
+	for (var i = 0; i < aSurfaces.length; i++) {
+		var oSurf = aSurfaces[i];
+		if (!oSurf || !oSurf.on) continue;
+		var sFrom = dthShellSurfaceOwner(oSurf.label, aContribNames);
+		if (sFrom.length == 0) continue;          // base-figure surface - leave it
+		if (sFrom == String(sOwnerName)) continue; // the shell's own graft - leave it
+		aOut.push({ label: oSurf.label, from: sFrom });
+	}
+	return aOut;
+}
+
+/*********************************************************************
+ * The Daz-facing driver. Everything above is pure; everything below
+ * touches the scene.
+ ********************************************************************/
+
+function dthShellSafe(fn, fallback){ try { return fn(); } catch(e) { return fallback; } }
+function dthShellNodeName(o){ return dthShellSafe(function(){ return String(o.getName()); }, ""); }
+function dthShellNodeLabel(o){ return dthShellSafe(function(){ return String(o.getLabel()); }, ""); }
+
+/** Every DzGeometryShellNode in the scene. */
+function dthFindGeoshells(){
+	var aOut = [];
+	for (var i = 0; i < Scene.getNumNodes(); i++) {
+		var oNode = Scene.getNode(i);
+		if (oNode && dthShellSafe(function(){ return oNode.inherits("DzGeometryShellNode"); }, false)) aOut.push(oNode);
+	}
+	return aOut;
+}
+
+/** The figure a shell is applied to - its "Shell Node" property, falling back to
+ *  the shell's parent (where the Smart presets park it). */
+function dthShelledFigure(oShell){
+	var oProp = dthShellSafe(function(){ return oShell.findProperty("Shell Node"); }, null);
+	var oTarget = oProp ? dthShellSafe(function(){ return oProp.getValue(); }, null) : null;
+	if (oTarget && dthShellSafe(function(){ return oTarget.inherits("DzNode"); }, false)) return oTarget;
+	return dthShellSafe(function(){ return oShell.getNodeParent(); }, null);
+}
+
+/** Figures fitted to `oFigure` that can contribute surfaces to a shell: every
+ *  descendant DzFigure that is not itself a geoshell. */
+function dthShellContributors(oFigure){
+	var aOut = [];
+	if (!oFigure) return aOut;
+	var aKids = dthShellSafe(function(){ return oFigure.getNodeChildren(true); }, []);
+	for (var i = 0; i < aKids.length; i++) {
+		var oKid = aKids[i];
+		if (!oKid) continue;
+		if (!dthShellSafe(function(){ return oKid.inherits("DzFigure"); }, false)) continue;
+		if (dthShellSafe(function(){ return oKid.inherits("DzGeometryShellNode"); }, false)) continue;
+		aOut.push(oKid);
+	}
+	return aOut;
+}
+
+/** A shell's surface switches: DzBoolProperty at /Shell/Visibility/Surfaces. */
+function dthShellSurfaceProps(oShell){
+	var aOut = [];
+	var n = dthShellSafe(function(){ return oShell.getNumProperties(); }, 0);
+	for (var i = 0; i < n; i++) {
+		var oProp = dthShellSafe(function(){ return oShell.getProperty(i); }, null);
+		if (!oProp) continue;
+		if (!dthShellSafe(function(){ return oProp.inherits("DzBoolProperty"); }, false)) continue;
+		if (dthShellSafe(function(){ return String(oProp.getPath()); }, "") != "/Shell/Visibility/Surfaces") continue;
+		aOut.push(oProp);
+	}
+	return aOut;
+}
+
+/**
+ * Switch off the foreign-geograft surfaces on every Golden Palace / Dicktator
+ * geoshell in the scene. Changes nothing else - base-figure surfaces and the
+ * shell's own graft's surfaces are never touched, and only rows that are
+ * currently ON are written.
+ *
+ * Returns { shells, matched, changed: [{shell, surface, from}],
+ *           skipped: [{shell, reason}], failed: [{shell, surface}] }.
+ */
+function DthFixGraftShellSurfaces(options){
+	var oOpt = options || {};
+	var oReport = { shells: 0, matched: 0, changed: [], skipped: [], failed: [] };
+
+	var aShells = dthFindGeoshells();
+	oReport.shells = aShells.length;
+
+	// Only the genital-graft shells. No GP/DK shell = nothing to do, and we bail
+	// before reading anything else out of the scene.
+	var aMatched = [];
+	for (var i = 0; i < aShells.length; i++) {
+		var sFam = dthShellFamilyFor(dthShellNodeName(aShells[i]), dthShellNodeLabel(aShells[i]));
+		if (sFam.length) aMatched.push({ shell: aShells[i], family: sFam });
+	}
+	oReport.matched = aMatched.length;
+	if (aMatched.length == 0) {
+		print("DTH shell surfaces: no Golden Palace / Dicktator geoshell in the scene - nothing to do.");
+		return oReport;
+	}
+
+	for (var s = 0; s < aMatched.length; s++) {
+		var oShell = aMatched[s].shell;
+		var sShellLabel = dthShellNodeLabel(oShell);
+		var sShellName = dthShellNodeName(oShell);
+		var aContrib = dthShellContributors(dthShelledFigure(oShell));
+
+		var aNames = [];
+		for (var c = 0; c < aContrib.length; c++) aNames.push(dthShellNodeName(aContrib[c]));
+
+		// The shell's own graft: the fitted figure in the SAME family beats any
+		// name heuristic. The prefix route only covers a renamed graft node.
+		var sOwner = "";
+		for (var k = 0; k < aContrib.length; k++) {
+			if (dthShellFamilyFor(aNames[k], dthShellNodeLabel(aContrib[k])) == aMatched[s].family) {
+				sOwner = aNames[k];
+				break;
+			}
+		}
+		if (sOwner.length == 0) {
+			var oPick = dthShellOwnerByPrefix(sShellName, aNames);
+			sOwner = oPick.name;
+			if (sOwner.length == 0) {
+				var sWhy = "no " + aMatched[s].family + " graft fitted to this figure, and no clear name match"
+					+ " (best prefix " + oPick.best + ", runner-up " + oPick.runnerUp + ")";
+				print("DTH shell surfaces: SKIPPED", sShellLabel, "-", sWhy);
+				oReport.skipped.push({ shell: sShellLabel, reason: sWhy });
+				continue;
+			}
+		}
+
+		var aProps = dthShellSurfaceProps(oShell);
+		var aSurfaces = [];
+		for (var p = 0; p < aProps.length; p++) {
+			aSurfaces.push({
+				label: dthShellNodeLabel(aProps[p]),
+				on: !!dthShellSafe(function(){ return aProps[p].getValue(); }, false)
+			});
+		}
+
+		var aClear = dthShellSurfacesToClear(aSurfaces, aNames, sOwner);
+		for (var q = 0; q < aClear.length; q++) {
+			// aSurfaces[] is index-aligned with aProps[], but the clear list is
+			// filtered - match back by label.
+			for (var r = 0; r < aProps.length; r++) {
+				if (aSurfaces[r].label != aClear[q].label) continue;
+				var oProp = aProps[r];
+				dthShellSafe(function(){ oProp.setValue(false); return true; }, false);
+				if (dthShellSafe(function(){ return oProp.getValue(); }, true)) {
+					print("DTH shell surfaces: FAILED to switch off", aClear[q].label, "on", sShellLabel);
+					oReport.failed.push({ shell: sShellLabel, surface: aClear[q].label });
+				} else {
+					print("DTH shell surfaces: switched OFF", aClear[q].label, "on", sShellLabel,
+						"(from " + aClear[q].from + ")");
+					oReport.changed.push({ shell: sShellLabel, surface: aClear[q].label, from: aClear[q].from });
+				}
+				break;
+			}
+		}
+	}
+	return oReport;
+}

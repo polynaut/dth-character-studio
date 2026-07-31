@@ -229,4 +229,39 @@ it first.
 
 &nbsp;
 
+---
+
+## Geografts under a Golden Palace / Dicktator shell
+
+Fit a **nipple** or **navel** geograft to a figure that already wears **Golden
+Palace** or **Dicktator**, and the genital shell covers it: you get shell
+material where the graft should be. It is not a fitting problem. A geoshell
+carries one visibility switch per **surface** of the figure it shells, and a
+newly fitted graft adds *its* surfaces to that list **switched on** — so the
+shell now draws over the graft.
+
+Fixing it by hand means finding each of those rows (`stx_…_Body` and friends) in
+the shell's *Parameters ▸ Shell ▸ Visibility ▸ Surfaces* list and switching it
+off — on **every** GP/DK shell (Golden Palace has two), in **every** scene.
+
+The bundled **`Fix_Graft_Shell_Surfaces`** script does it in one run. Open the
+scene, then run it from **Scripts › DTH-Character-Studio** in the Content
+Library. Nothing to select. It reports what it switched off, and it is safe to
+re-run — only rows that are still on get written.
+
+What it will **not** touch:
+
+- **Other geoshells.** Skin overlays, tattoo and nail shells keep their graft
+  surfaces on — a body tattoo *should* cover the nipple graft.
+- **The shell's own graft.** Golden Palace's own surfaces stay visible on the
+  Golden Palace shells; only the *other* grafts' rows go off.
+- **The figure's own surfaces** (`Body`, `Head`, `Legs`…), which the shell
+  already controls however its product intends.
+
+A scene without a GP/DK shell is a no-op. If the script cannot tell which graft
+a shell belongs to — a renamed graft node, say — it reports that shell as
+**skipped** instead of guessing, and you fix that one by hand.
+
+&nbsp;
+
 [← Your first character](./04-first-character.md) · [Next: Into Houdini →](./06-into-houdini.md)

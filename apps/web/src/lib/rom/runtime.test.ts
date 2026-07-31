@@ -27,8 +27,10 @@ const RUNTIME_FILES = [
   'DthProducts.dsa',
   'DthScanMorphs.dsa',
   'DthScanFrames.dsa',
+  'DthShellSurfaces.dsa',
   'Build_Genesis_Index.dsa',
   'Scan_Frames.dsa',
+  'Fix_Graft_Shell_Surfaces.dsa',
 ]
 
 // The visible scripts' Content Library artwork, installed beside them. Hashed as
@@ -40,11 +42,13 @@ const RUNTIME_ASSETS = [
   'Build_Genesis_Index.tip.png',
   'Scan_Frames.png',
   'Scan_Frames.tip.png',
+  'Fix_Graft_Shell_Surfaces.png',
+  'Fix_Graft_Shell_Surfaces.tip.png',
 ]
 
 // Bump this together with RUNTIME_VERSION whenever a runtime file legitimately
 // changes (this run prints the new value in the failure message).
-const EXPECTED_RUNTIME_HASH = '3c63d74885aa8ba4d27d005ba38506f6e017f82d9ac0a42c4ec3a542bef4c064'
+const EXPECTED_RUNTIME_HASH = 'b317bf2ff37a0d628e8d4b1ef9e5148a252bb0c0dca99398c6268558550eaa08'
 
 function runtimeHash(): string {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
@@ -434,5 +438,166 @@ describe('Build_Genesis_Index pre-flight', () => {
       'Genesis 8.1',
       'Genesis 9',
     ])
+  })
+})
+
+/**
+ * Geoshell surface hygiene (DthShellSurfaces.dsa). The decision logic is pure —
+ * which shells are in scope, which fitted figure contributed a surface row, and
+ * which rows get switched off — so it is driven here directly, exactly as it
+ * runs in Daz.
+ *
+ * The fixtures are the REAL surface labels measured off a Genesis 9 + Golden
+ * Palace + STX nipples/navel scene (DS 6, 2026-07-31): the shell exposes one
+ * DzBoolProperty per surface, labelled `<graftNodeName>_<materialName>` for a
+ * graft-contributed row and the bare `<materialName>` for the figure's own.
+ */
+interface ShellModule {
+  dthShellNorm: (s: string) => string
+  dthShellFamilyFor: (name: string, label: string) => string
+  dthShellSurfaceOwner: (surfaceLabel: string, contribNames: Array<string>) => string
+  dthShellOwnerByPrefix: (
+    shellName: string,
+    contribNames: Array<string>,
+  ) => { name: string; best: number; runnerUp: number }
+  dthShellSurfacesToClear: (
+    surfaces: Array<{ label: string; on: boolean }>,
+    contribNames: Array<string>,
+    ownerName: string,
+  ) => Array<{ label: string; from: string }>
+}
+
+const SHELL_EXPORTS =
+  'dthShellNorm, dthShellFamilyFor, dthShellSurfaceOwner, dthShellOwnerByPrefix, dthShellSurfacesToClear'
+
+function loadShellSurfaces(): ShellModule {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
+  const src = readFileSync(join(dir, 'DthShellSurfaces.dsa'), 'utf8')
+  // Same canary as loadScanner: a sandbox with only `print`, so a Daz API called
+  // at load time throws here instead of failing silently in Daz.
+  return runInNewContext(`${src}\n;({ ${SHELL_EXPORTS} })`, { print: () => {} }) as ShellModule
+}
+
+// The fitted figures in the measured scene, by node name.
+const CONTRIB = [
+  'Genesis9Tear',
+  'Genesis9Eyes',
+  'Genesis9Mouth',
+  'stx_gen_9_nipples_feminine',
+  'stx_genesis_9_navel_71',
+  'GoldenPalace_G9_9694',
+]
+
+// The 15 surface rows of GoldenPalaceG9_Shell_Minora, with the values a FRESH
+// (unfixed) scene has: the GP rows on, the base figure's own off, and the two
+// STX rows on — which is the bug this fixes.
+const MINORA_SURFACES = [
+  { label: 'Legs', on: false },
+  { label: 'Arms', on: false },
+  { label: 'Fingernails', on: false },
+  { label: 'Toenails', on: false },
+  { label: 'Mouth Cavity', on: false },
+  { label: 'Head', on: false },
+  { label: 'Body', on: false },
+  { label: 'GoldenPalace_G9_9694_GP_Torso', on: true },
+  { label: 'GoldenPalace_G9_9694_GP_Torso_Back', on: true },
+  { label: 'GoldenPalace_G9_9694_GP_Vagina', on: true },
+  { label: 'GoldenPalace_G9_9694_GP_Labia Minora', on: true },
+  { label: 'GoldenPalace_G9_9694_GP_Rectum', on: true },
+  { label: 'GoldenPalace_G9_9694_GP_Urethra', on: true },
+  { label: 'stx_gen_9_nipples_feminine_Body', on: true },
+  { label: 'stx_genesis_9_navel_71_Body', on: true },
+]
+
+describe('geoshell surface hygiene (DthShellSurfaces.dsa)', () => {
+  const shell = loadShellSurfaces()
+
+  it('matches a shell to its product family across naming styles', () => {
+    for (const name of [
+      'GoldenPalace_G9_Shell_Minora',
+      'GoldenPalaceG9_Shell_Majora',
+      'Golden Palace G9 Shell',
+      'golden-palace shell',
+    ]) {
+      expect(shell.dthShellFamilyFor(name, '')).toBe('Golden Palace')
+    }
+    expect(shell.dthShellFamilyFor('DicktatorG9_Shell', '')).toBe('Dicktator')
+    expect(shell.dthShellFamilyFor('DicktatorG9_ForeskinShell', '')).toBe('Dicktator')
+    // The label alone is enough — a renamed node still matches on what Daz shows.
+    expect(shell.dthShellFamilyFor('Shell_3', 'GoldenPalace Shell')).toBe('Golden Palace')
+  })
+
+  it('leaves every OTHER geoshell out of scope — a tattoo shell wants the graft surfaces on', () => {
+    expect(shell.dthShellFamilyFor('Tattoo_Shell', 'Tattoo Shell')).toBe('')
+    expect(shell.dthShellFamilyFor('Genesis9_Nails_Shell', 'Nails')).toBe('')
+    expect(shell.dthShellFamilyFor('Genesis9', 'Genesis 9')).toBe('')
+  })
+
+  it('reads a surface row back to the figure that contributed it', () => {
+    expect(shell.dthShellSurfaceOwner('stx_gen_9_nipples_feminine_Body', CONTRIB)).toBe(
+      'stx_gen_9_nipples_feminine',
+    )
+    expect(shell.dthShellSurfaceOwner('GoldenPalace_G9_9694_GP_Labia Minora', CONTRIB)).toBe(
+      'GoldenPalace_G9_9694',
+    )
+    // The base figure's own surfaces carry no contributor prefix.
+    expect(shell.dthShellSurfaceOwner('Body', CONTRIB)).toBe('')
+    expect(shell.dthShellSurfaceOwner('Mouth Cavity', CONTRIB)).toBe('')
+  })
+
+  it('gives a row to the LONGEST matching name, so a name that prefixes another cannot steal it', () => {
+    const names = ['stx_navel', 'stx_navel_71']
+    expect(shell.dthShellSurfaceOwner('stx_navel_71_Body', names)).toBe('stx_navel_71')
+    expect(shell.dthShellSurfaceOwner('stx_navel_Body', names)).toBe('stx_navel')
+  })
+
+  it('clears exactly the foreign-graft rows on the GP shell — its own and the figure\u2019s stay', () => {
+    const cleared = shell.dthShellSurfacesToClear(MINORA_SURFACES, CONTRIB, 'GoldenPalace_G9_9694')
+    expect(cleared.map((c) => c.label)).toEqual([
+      'stx_gen_9_nipples_feminine_Body',
+      'stx_genesis_9_navel_71_Body',
+    ])
+    expect(cleared.map((c) => c.from)).toEqual([
+      'stx_gen_9_nipples_feminine',
+      'stx_genesis_9_navel_71',
+    ])
+  })
+
+  it('is a no-op on an already-fixed scene — only rows that are ON get written', () => {
+    const fixed = MINORA_SURFACES.map((s) =>
+      s.label.startsWith('stx_') ? { ...s, on: false } : s,
+    )
+    expect(shell.dthShellSurfacesToClear(fixed, CONTRIB, 'GoldenPalace_G9_9694')).toEqual([])
+  })
+
+  it('never clears a row when the shell itself is the owner of everything foreign', () => {
+    // A DK shell on a figure carrying GP too: each shell only keeps its own.
+    const dkContrib = ['DicktatorG9_1234', 'GoldenPalace_G9_9694']
+    const surfaces = [
+      { label: 'DicktatorG9_1234_DK_Shaft', on: true },
+      { label: 'GoldenPalace_G9_9694_GP_Torso', on: true },
+    ]
+    expect(
+      shell.dthShellSurfacesToClear(surfaces, dkContrib, 'DicktatorG9_1234').map((c) => c.label),
+    ).toEqual(['GoldenPalace_G9_9694_GP_Torso'])
+  })
+
+  it('falls back to a name-prefix owner, and refuses to guess when it is short or tied', () => {
+    // A renamed GP graft node still shares the shell's leading run.
+    expect(
+      shell.dthShellOwnerByPrefix('GoldenPalace_G9_Shell_Minora', [
+        'GoldenPalace_G9_renamed',
+        'stx_genesis_9_navel_71',
+      ]).name,
+    ).toBe('GoldenPalace_G9_renamed')
+    // Two equally-good candidates: no answer, so the caller skips the shell.
+    expect(
+      shell.dthShellOwnerByPrefix('GoldenPalace_G9_Shell_Minora', [
+        'GoldenPalace_G9_a',
+        'GoldenPalace_G9_b',
+      ]).name,
+    ).toBe('')
+    // Nothing close enough to be evidence.
+    expect(shell.dthShellOwnerByPrefix('GP_Shell', ['stx_genesis_9_navel_71']).name).toBe('')
   })
 })

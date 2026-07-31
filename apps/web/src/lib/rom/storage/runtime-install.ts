@@ -15,9 +15,11 @@ import dthWorkflowRuntime from '../runtime/DthWorkflow.dsa?raw'
 import dthProductsRuntime from '../runtime/DthProducts.dsa?raw'
 import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
 import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
+import dthShellSurfacesRuntime from '../runtime/DthShellSurfaces.dsa?raw'
 import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
-// Content Library artwork for the two visible scripts (Daz's own convention:
+import fixGraftShellSurfacesScript from '../runtime/Fix_Graft_Shell_Surfaces.dsa?raw'
+// Content Library artwork for the visible scripts (Daz's own convention:
 // `<name>.png` at 91×91 is the thumbnail, `<name>.tip.png` at 256×256 the hover
 // preview — verified against the stock Genesis 9 assets). `?inline` bundles them
 // as base64 data URLs, so the install needs no asset fetch and the app stays a
@@ -26,6 +28,8 @@ import buildGenesisIndexIcon from '../runtime/Build_Genesis_Index.png?inline'
 import buildGenesisIndexTip from '../runtime/Build_Genesis_Index.tip.png?inline'
 import scanFramesIcon from '../runtime/Scan_Frames.png?inline'
 import scanFramesTip from '../runtime/Scan_Frames.tip.png?inline'
+import fixGraftShellSurfacesIcon from '../runtime/Fix_Graft_Shell_Surfaces.png?inline'
+import fixGraftShellSurfacesTip from '../runtime/Fix_Graft_Shell_Surfaces.tip.png?inline'
 
 import { dataUrlBytes, join } from './fs'
 import { dataDir } from './app-data'
@@ -53,6 +57,10 @@ const RUNTIME_FILES: Record<string, string> = {
   // AND by the visible Scan_Frames.dsa wrapper, which exports the open scene's
   // keyed frames as a CSV for the studio's "Import from CSV".
   'DthScanFrames.dsa': dthScanFramesRuntime,
+  // Geoshell surface hygiene — included by the visible Fix_Graft_Shell_Surfaces.dsa
+  // below. Switches off the surfaces a later geograft (STX nipples/navel) adds,
+  // switched ON, to an existing Golden Palace / Dicktator shell.
+  'DthShellSurfaces.dsa': dthShellSurfacesRuntime,
 }
 
 /**
@@ -68,6 +76,10 @@ const RUNTIME_FILES: Record<string, string> = {
 const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   'Build_Genesis_Index.dsa': buildGenesisIndexScript,
   'Scan_Frames.dsa': scanFramesScript,
+  // Scene hygiene rather than a scan: switches off the foreign-geograft surfaces
+  // on a Golden Palace / Dicktator geoshell (see DthShellSurfaces.dsa). Bakes in
+  // no path — it reads and writes the open scene only.
+  'Fix_Graft_Shell_Surfaces.dsa': fixGraftShellSurfacesScript,
 }
 
 /**
@@ -82,6 +94,8 @@ const VISIBLE_SCRIPT_ICONS: Record<string, string> = {
   'Build_Genesis_Index.tip.png': buildGenesisIndexTip,
   'Scan_Frames.png': scanFramesIcon,
   'Scan_Frames.tip.png': scanFramesTip,
+  'Fix_Graft_Shell_Surfaces.png': fixGraftShellSurfacesIcon,
+  'Fix_Graft_Shell_Surfaces.tip.png': fixGraftShellSurfacesTip,
 }
 
 
