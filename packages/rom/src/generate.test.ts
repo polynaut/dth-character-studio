@@ -14,6 +14,9 @@ import {
   sceneExportSubfolders,
   sectionPresetAvailable,
   templateBakedPoseNames,
+  LEGACY_ROM_ANIMATIONS_FOLDER,
+  orphanedRomAnimations,
+  ROM_ANIMATIONS_FOLDER,
   toBulkExportOnlyScriptDsa,
   toBulkRomExportScriptDsa,
   toCharacterScriptDsa,
@@ -1807,6 +1810,43 @@ describe('exporter integration', () => {
       '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
+  })
+
+  it('LEGACY_ROM_ANIMATIONS_FOLDER must differ from the new name, or the migration is a no-op', () => {
+    // Shipped equal by a bulk rename in #629: the host renames `from` -> `to`,
+    // so identical values silently stranded every already-saved ROM animation
+    // in the old hidden folder while Daz began filling the new one.
+    expect(LEGACY_ROM_ANIMATIONS_FOLDER).toBe('.ROM_Animations')
+    expect(ROM_ANIMATIONS_FOLDER).toBe('rom-animations')
+    expect(LEGACY_ROM_ANIMATIONS_FOLDER).not.toBe(ROM_ANIMATIONS_FOLDER)
+  })
+
+  it('orphanedRomAnimations: retires ROM animations whose scene was renamed', () => {
+    // Measured on a real folder: renaming ItaDefault_G9_GP -> Ita_G9_GP left the
+    // old trio behind, since a ROM animation is named after its source stem.
+    const listing = [
+      'ItaDefault_G9_GP_ROM.duf',
+      'ItaDefault_G9_GP_ROM.duf.png',
+      'ItaDefault_G9_GP_ROM.tip.png',
+      'Ita_G9_GP_ROM.duf',
+      'Ita_G9_GP_ROM.duf.png',
+      'Ita_G9_GP_ROM.tip.png',
+    ]
+    expect(orphanedRomAnimations(listing, ['Ita_G9_GP'])).toEqual([
+      'ItaDefault_G9_GP_ROM.duf',
+      'ItaDefault_G9_GP_ROM.duf.png',
+      'ItaDefault_G9_GP_ROM.tip.png',
+    ])
+    // Two scenes CAN share one folder — both stems are expected.
+    expect(orphanedRomAnimations(listing, ['Ita_G9_GP', 'ItaDefault_G9_GP'])).toEqual([])
+  })
+
+  it('orphanedRomAnimations: never touches what the studio did not write', () => {
+    const listing = ['notes.txt', 'Ita_G9_GP.duf', 'render_ROM_final.png', 'Backup.zip']
+    // Only <stem>_ROM.<ext> is ours; the folder is the user's to keep things in.
+    expect(orphanedRomAnimations(listing, ['Ita_G9_GP'])).toEqual([])
+    // Case-insensitive (Windows): a differently-cased stem is NOT an orphan.
+    expect(orphanedRomAnimations(['ITA_G9_GP_rom.duf'], ['Ita_G9_GP'])).toEqual([])
   })
 
   it('verifies the ROM save by the file TIMESTAMP moving, not the return value (v49/v50)', () => {
