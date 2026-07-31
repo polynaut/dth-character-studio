@@ -314,6 +314,13 @@ function buildExportBlock(
   /** The character's scenes-root folder (host-resolved) — see
    *  {@link sceneExportSubfolders}. Omitted ⇒ stem-per-scene fallback. */
   scenesRootAbs?: string,
+  /**
+   * This block is going into a script the RUNNER executes unattended (the
+   * hidden bulk carriers). A modal dialog there does not warn anybody — it
+   * blocks the batch on a click nobody is present to make, and every remaining
+   * scene waits behind it. Unattended alerts therefore print only.
+   */
+  unattended = false,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -430,8 +437,7 @@ ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
     }
     if (dthGroomMissing != "") {
         // A typo must not silently ship a hair-polluted export - fail loud, fix, re-run.
-        print("Hair item not found: " + dthGroomMissing + " - export skipped.");
-        MessageBox.critical("The hair item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Hair list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.", "DTH Character Studio", "&OK");
+        dthExportAlert("The hair item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Hair list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.");
     } else {
         for (var dthGd = 0; dthGd < dthGroomNodes.length; dthGd++) dthGroomHideTree(dthGroomNodes[dthGd]);
         print("Hair nodes hidden for the export: " + dthGroomHidden.length);
@@ -467,7 +473,20 @@ ${hairPassBlock}    }
   // anywhere — `trigger()` just opens the dialog for manual use.
   // So the gate is the CAPABILITY (`typeof doExport == "function"`), never the
   // action's presence, and the three states get three answers.
-  return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
+  // ONE alert channel for the whole export block. Interactive runs get a dialog
+  // (a log line is invisible — that is how a skipped export went unnoticed);
+  // the Runner's unattended carriers print only, because a modal there blocks
+  // the batch on a click nobody is there to make.
+  const alertHelper = `var dthExportAlert = function (dthAlertMsg) {
+    print(dthAlertMsg);${
+      unattended
+        ? ''
+        : `
+    MessageBox.critical(dthAlertMsg, "DTH Character Studio", "&OK");`
+    }
+};
+`
+  return `${alertHelper}var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 if (!dthExportAction) {
     // Daz Studio 4 names it differently — find it so "installed but not
     // scriptable" can be told apart from "not installed".
@@ -484,11 +503,9 @@ if (!dthExportAction) {
 if (dthExportAction && typeof dthExportAction.doExport == "function") {
     var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}${exportBody}} else if (dthExportAction) {
-    print("The installed DazToHue Exporter exposes no scripted export (a Daz Studio 6 plugin feature) — export skipped.");
-    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it. Being callable from Daz script is a feature of the Daz Studio 6 exporter plugin (1.8.1+).\\n\\nRun the ROM script from Daz Studio 6, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
+    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it. Being callable from Daz script is a feature of the Daz Studio 6 exporter plugin (1.8.1+).\\n\\nRun the ROM script from Daz Studio 6, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine — only the export was skipped.");
 } else {
-    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin.");
-    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
+    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.");
 }
 `
 }
@@ -952,7 +969,7 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs)
+${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1139,6 +1156,9 @@ export function toExportScriptDsa(
   charFolderAbs?: string,
   /** See {@link sceneExportSubfolders}. */
   scenesRootAbs?: string,
+  /** Emitted for the Runner's unattended export-only carrier — suppresses the
+   *  modal alerts, which would block a batch (see {@link buildExportBlock}). */
+  unattended = false,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1156,7 +1176,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs)
+${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1193,6 +1213,8 @@ export function toBulkExportOnlyScriptDsa(
     frames,
     charFolderAbs,
     scenesRootAbs,
+    // The Runner executes this one — no modals.
+    true,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }

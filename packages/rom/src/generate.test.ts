@@ -14,6 +14,7 @@ import {
   sceneExportSubfolders,
   sectionPresetAvailable,
   templateBakedPoseNames,
+  toBulkExportOnlyScriptDsa,
   toBulkRomExportScriptDsa,
   toCharacterScriptDsa,
   toExportScriptDsa,
@@ -1823,7 +1824,9 @@ describe('exporter integration', () => {
     const content = toCharacterScriptDsa(character, {}, FRAMES).content
     // It used to only print(), so the ROM finished "successfully" and the user
     // was told nothing about the export never running.
-    expect(content).toContain('MessageBox.critical("The ROM was built, but the export did NOT run.')
+    expect(content).toContain('dthExportAlert("The ROM was built, but the export did NOT run.')
+    // Interactive carriers raise a real dialog through the shared channel.
+    expect(content).toContain('MessageBox.critical(dthAlertMsg, "DTH Character Studio", "&OK")')
     // Daz 4 registers the exporter under another name, so a class-only lookup
     // reported "not installed" for a plugin that was right there.
     expect(content).toContain('dthCandidateName == "DazToHue_Action"')
@@ -1833,6 +1836,31 @@ describe('exporter integration', () => {
     // Three states, three messages: exportable, present-but-unscriptable, absent.
     expect(content).toContain('Daz Studio 6 exporter plugin (1.8.1+)')
     expect(content).toContain('No DazToHue Exporter is registered')
+  })
+
+  it('the UNATTENDED carriers never raise a modal — it would block the batch (v49)', () => {
+    const character = withReferencePose({
+      name: 'Ita',
+      exportPath: 'X:\\exports\\ita',
+      scenePath: 'X:\\p\\daz3d\\primary\\Ita.duf',
+    })
+    // The Runner executes these with nobody present: a dialog does not warn,
+    // it stops the batch on a click that never comes, and every remaining scene
+    // waits behind it. Same alerts, print-only.
+    for (const script of [
+      toBulkRomExportScriptDsa(character, {}, FRAMES),
+      toBulkExportOnlyScriptDsa(character, FRAMES),
+    ]) {
+      expect(script.content).toContain('dthExportAlert("The ROM was built, but the export did NOT run.')
+      expect(script.content).not.toContain('MessageBox.critical(dthAlertMsg')
+    }
+    // …while the hand-run carriers keep the dialog.
+    expect(toCharacterScriptDsa(character, {}, FRAMES).content).toContain(
+      'MessageBox.critical(dthAlertMsg',
+    )
+    expect(toExportScriptDsa(character, FRAMES).content).toContain(
+      'MessageBox.critical(dthAlertMsg',
+    )
   })
 
   it('saves the ROM scene into rom-animations before any export (runtime v40/v48)', () => {
