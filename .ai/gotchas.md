@@ -262,6 +262,21 @@ current code before relying on details, but assume the *lesson* still holds.
   operation's root: `is_dir()` FOLLOWS links, so a mover must check
   `symlink_metadata` first and move the reparse point itself (cross-volume:
   refuse) — or it deep-copies the target's gigabytes and deletes the link.
+- **The DTH Exporter is only scriptable in Daz Studio 6.** Driving it needs
+  `MainWindow.getActionMgr().findAction("DazToHueExporterAction")` →
+  `doExport(dir, name, referenceFrames, saveSettings)` — introduced with the DS6
+  exporter plugin 1.8.1. The **Daz Studio 4 build has no scripted export at
+  all**: measured on a DS4 install whose exporter dialog reports 2.0.1, its
+  action is class `ExporterAction` / name `DazToHue_Action` (so the class lookup
+  misses it entirely), carries 28 methods that are all inherited DzAction/QAction
+  members, and a sweep of ALL 912 registered actions plus the global script scope
+  found no `doExport*` anywhere. `trigger()` only opens the dialog.
+  Consequences: (1) never treat finding the action as proof it can export — gate
+  on `typeof doExport == "function"`; (2) the DLL version is no guide, the DS4
+  build stamps FileVersion 1.0.0.1 while reporting 2.0.1 in its UI, and the DS6
+  build has no version resource at all; (3) automated export — the ROM script's
+  export block and the whole bulk DTH Export flow — is DS6-only, even though the
+  Runner plugin itself does load in DS4.
 - **Creating a directory link on Windows: junction, not symlink.** A junction
   (`IO_REPARSE_TAG_MOUNT_POINT`) needs NO elevation; a directory SYMLINK needs
   `SeCreateSymbolicLinkPrivilege` (admin) or Developer Mode plus

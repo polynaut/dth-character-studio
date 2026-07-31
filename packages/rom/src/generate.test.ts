@@ -1831,7 +1831,7 @@ describe('exporter integration', () => {
     // expose no doExport, so THAT decides whether the export can run.
     expect(content).toContain('typeof dthExportAction.doExport == "function"')
     // Three states, three messages: exportable, present-but-unscriptable, absent.
-    expect(content).toContain('exposes no scripted export')
+    expect(content).toContain('Daz Studio 6 exporter plugin (1.8.1+)')
     expect(content).toContain('No DazToHue Exporter is registered')
   })
 

@@ -458,13 +458,15 @@ ${hairPassBlock}    }
   // there. Worse, it then said nothing at all (measured on a live DS4 run: one
   // DEBUG line in Daz's log, and a ROM that reported success).
   //
-  // Finding it is not enough to export, though. Some builds register the action
-  // normally while exposing only inherited DzAction members — measured on a Daz
-  // Studio 4 install whose exporter reports 2.0.1 in its own dialog: 28 methods,
-  // none named doExport, `trigger()` merely opening the dialog for manual use.
+  // Finding it is not enough to export, though. Being callable from Daz script
+  // is a DAZ STUDIO 6 plugin feature (announced with exporter 1.8.1); the Daz
+  // Studio 4 build registers its action normally and exposes only inherited
+  // DzAction members. Measured on a DS4 install reporting 2.0.1 in its own
+  // dialog: the action carries 28 methods, none named doExport, and a sweep of
+  // ALL 912 registered actions plus the global script scope found no doExport*
+  // anywhere — `trigger()` just opens the dialog for manual use.
   // So the gate is the CAPABILITY (`typeof doExport == "function"`), never the
-  // action's presence. The middle state's message deliberately does NOT blame a
-  // version: the studio can see THAT the API is absent, never why.
+  // action's presence, and the three states get three answers.
   return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 if (!dthExportAction) {
     // Daz Studio 4 names it differently — find it so "installed but not
@@ -482,8 +484,8 @@ if (!dthExportAction) {
 if (dthExportAction && typeof dthExportAction.doExport == "function") {
     var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}${exportBody}} else if (dthExportAction) {
-    print("The installed DazToHue Exporter exposes no scripted export — export skipped.");
-    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it.\\n\\nExport by hand from the DazToHue Exporter dialog, or use a Daz install whose Exporter Plugin supports scripted export.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
+    print("The installed DazToHue Exporter exposes no scripted export (a Daz Studio 6 plugin feature) — export skipped.");
+    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it. Being callable from Daz script is a feature of the Daz Studio 6 exporter plugin (1.8.1+).\\n\\nRun the ROM script from Daz Studio 6, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
 } else {
     print("DazToHue Exporter Action not found — install the DTH Exporter Plugin.");
     MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
