@@ -28,6 +28,7 @@ import {
   genRomIncludes,
   jcmIsBaseRom,
   LEGACY_ROM_ANIMATIONS_FOLDER,
+  orphanedRomAnimations,
   ROM_ANIMATIONS_FOLDER,
   mergeSceneOverride,
   poseAssetFileName,
@@ -500,6 +501,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     // an absent export folder is a nuisance, never a reason to fail a generate
   }
   await migrateRomAnimationFolders(versioned)
+  await housekeepRomAnimations(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)
   return { outDir, files, scriptsDir, scriptsError }
 }
@@ -536,6 +538,56 @@ async function migrateRomAnimationFolders(character: Character): Promise<void> {
       await rename(from, to)
     } catch {
       // a locked / in-use folder just keeps the old name until the next run
+    }
+  }
+}
+
+/**
+ * ROM-animation housekeeping: retire saved ROM animations whose source scene no
+ * longer goes by that name.
+ *
+ * A ROM animation is named after its source scene's stem, so renaming a scene
+ * doesn't rename it — the next run writes a new one beside the old and the old
+ * lingers forever (measured: one character folder holding both
+ * `ItaDefault_G9_GP_ROM.*` and `Ita_G9_GP_ROM.*`, three files each, because Daz
+ * saves two thumbnails alongside every scene).
+ *
+ * Scoped tightly, because this deletes: only inside a `rom-animations` folder
+ * the studio owns, only files matching the studio's own `<stem>_ROM.<ext>`
+ * naming, and only beside scenes the character STILL links. A scene the user
+ * unlinked is never reached — its folder is orphaned rather than swept, the
+ * same posture the export housekeeping takes toward a changed export dir.
+ * Grouped by folder because two scenes can legitimately share one.
+ */
+async function housekeepRomAnimations(character: Character): Promise<void> {
+  if (!isTauri()) return
+  const byDir = new Map<string, { dir: string; stems: Array<string> }>()
+  for (const scene of [character.scenePath, ...character.extraScenes]) {
+    const norm = scene.trim().replace(/\\/g, '/')
+    const slash = norm.lastIndexOf('/')
+    if (slash < 0) continue
+    const dir = norm.slice(0, slash)
+    const stem = norm.slice(slash + 1).replace(/\.[^.]+$/, '')
+    if (!dir || !stem) continue
+    const key = dir.toLowerCase()
+    const entry = byDir.get(key) ?? { dir, stems: [] }
+    entry.stems.push(stem)
+    byDir.set(key, entry)
+  }
+  for (const { dir, stems } of byDir.values()) {
+    const folder = `${dir}/${ROM_ANIMATIONS_FOLDER}`
+    try {
+      if (!(await exists(folder))) continue
+      const names = (await readDir(folder)).filter((e) => e.isFile).map((e) => e.name)
+      for (const name of orphanedRomAnimations(names, stems)) {
+        try {
+          await remove(`${folder}/${name}`)
+        } catch {
+          // locked/open in Daz — it retires on a later run
+        }
+      }
+    } catch {
+      // an unreadable folder is never worth failing a generation over
     }
   }
 }

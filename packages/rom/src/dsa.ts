@@ -47,9 +47,12 @@ export const BULK_EXPORT_ONLY_SCRIPT = '.Bulk_Export_Only.dsa'
  */
 export const ROM_ANIMATIONS_FOLDER = 'rom-animations'
 
-/** The pre-v48 name of the folder above. Kept ONLY so the host can rename an
- *  existing one on the next generation — nothing writes it any more. */
-export const LEGACY_ROM_ANIMATIONS_FOLDER = 'rom-animations'
+/** The pre-v48 name of the folder above — hidden, and underscore-cased. Kept
+ *  ONLY so the host can rename an existing one on the next generation; nothing
+ *  writes it any more. It must NEVER equal {@link ROM_ANIMATIONS_FOLDER}: the
+ *  migration renames `from` → `to`, so identical values make it a silent no-op
+ *  and strand every already-saved ROM animation in the old folder. */
+export const LEGACY_ROM_ANIMATIONS_FOLDER = '.ROM_Animations'
 
 /**
  * Where a scene's saved ROM animation lives:
@@ -59,6 +62,36 @@ export const LEGACY_ROM_ANIMATIONS_FOLDER = 'rom-animations'
  * source scene) and the host stats it (the scene card's open menu, the export
  * handoff).
  */
+/**
+ * The saved ROM animations in one `rom-animations` folder that no longer belong
+ * to any scene — the files to retire.
+ *
+ * A ROM animation is named after its SOURCE SCENE's stem (`<stem>_ROM.duf`),
+ * so renaming a scene doesn't rename its ROM animation: the next run simply
+ * writes a new one beside the old, and the old lingers forever. Daz saves two
+ * thumbnails alongside each (`<name>.duf.png`, `<name>.tip.png`), so an orphan
+ * is three files, not one.
+ *
+ * `fileNames` is the folder's listing, `expectedStems` the stems of the scenes
+ * that actually live beside it (usually one; two scenes CAN share a folder).
+ * Only files this studio writes are ever named — anything not matching
+ * `<stem>_ROM.<ext>` is left alone, because the folder is the user's to keep
+ * things in. Case-insensitive: Windows.
+ */
+export function orphanedRomAnimations(
+  fileNames: ReadonlyArray<string>,
+  expectedStems: ReadonlyArray<string>,
+): Array<string> {
+  const keep = new Set(expectedStems.map((stem) => stem.toLowerCase()))
+  return fileNames.filter((name) => {
+    // The base is everything before the FIRST dot: "Kira_ROM.duf.png" → "Kira_ROM".
+    const dot = name.indexOf('.')
+    const base = dot > 0 ? name.slice(0, dot) : name
+    if (!/_rom$/i.test(base)) return false
+    return !keep.has(base.slice(0, -'_ROM'.length).toLowerCase())
+  })
+}
+
 export function romAnimationPath(scenePath: string): string {
   const norm = scenePath.replace(/\\/g, '/')
   const slash = norm.lastIndexOf('/')

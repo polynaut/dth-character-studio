@@ -1324,6 +1324,16 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       mtime is read before and after and must differ; a file that wasn't
  *       there before is proof by itself, and if neither timestamp can be read
  *       existence is accepted rather than crying wolf.
+ *       Also fixes the v48 rename MIGRATION, which shipped a no-op: a bulk
+ *       rename had set `LEGACY_ROM_ANIMATIONS_FOLDER` to the NEW name, so the
+ *       host renamed `rom-animations` → `rom-animations` and every already-saved
+ *       ROM animation stayed stranded in the hidden `.ROM_Animations` while Daz
+ *       began filling the new folder beside it. And ROM animations are HOUSEKEPT
+ *       now: renaming a scene used to leave its old `<stem>_ROM.duf` (plus Daz's
+ *       two thumbnails) behind forever, since the name follows the source
+ *       scene's stem — `orphanedRomAnimations` retires them on the next
+ *       generation, matching only the studio's own naming and only beside scenes
+ *       the character still links.
  */
 export const RUNTIME_VERSION = 50
 
