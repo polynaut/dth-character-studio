@@ -1,5 +1,29 @@
 # @dth/web
 
+## 0.57.0
+
+### Minor Changes
+
+- [#623](https://github.com/polynaut/dth-character-studio/pull/623) [`79b7361`](https://github.com/polynaut/dth-character-studio/commit/79b73613c24df207bf4a51231a7f5d5007dccf4e) Thanks [@polynaut](https://github.com/polynaut)! - feat: DTH Export asks what the run should do first — three modes:
+
+  - **ROM + Export** (the default): build a fresh ROM, save the ROM animation scene, export everything (skeletal mesh + hair). Unchanged behaviour.
+  - **ROM only**: build the ROM and save the `.ROM_Animations` scene, skipping the export. Needs no export directory.
+  - **Export only**: export the saved ROM animations as they stand, hair included, without rebuilding — for a ROM you edited by hand in Daz. It pre-selects the scenes whose ROM animation is newer than their last delivered export, and skips scenes that have no ROM animation yet.
+
+  Export-only rows open the saved ROM animation instead of the source scene, so every generated script now resolves such a file back to the scene it was built from (the wrong-scene guard included) — running any generated script on a ROM animation by hand works now instead of being refused. Only the full ROM + Export run marks scenes as exported. Runtime v46; Refresh assets regenerates the scripts and adds the new hidden `.Bulk_Export_Only.dsa`.
+
+- [#627](https://github.com/polynaut/dth-character-studio/pull/627) [`bcea190`](https://github.com/polynaut/dth-character-studio/commit/bcea190ee37ce66ddd887be72fff6f19dc800c2d) Thanks [@polynaut](https://github.com/polynaut)! - feat: the groundwork for exporting a Houdini project from the studio — the job-file handoff and the Houdini-side runner.
+
+  `houdini-runtime/456.py` is the half that runs inside Houdini: it does nothing at all unless the studio launched the session with a job, then finds every DazToHue export node whose network imported one of the selected scenes and triggers them in turn. It matches networks to scenes by the `.dth` path the studio itself wrote, so renaming a network doesn't break it, it answers the HDA's "Continue anyway?" check itself and keeps the text for the report rather than letting it vanish, and it never saves the scene or leaves a parameter changed behind it.
+
+  Not yet wired to the DTH Export dialog — the launch, the result polling and the "Export too" toggle come next.
+
+### Patch Changes
+
+- Updated dependencies [[`79b7361`](https://github.com/polynaut/dth-character-studio/commit/79b73613c24df207bf4a51231a7f5d5007dccf4e), [`07d1d8d`](https://github.com/polynaut/dth-character-studio/commit/07d1d8d8c4aa1a863ceebe4ec566dda9338aecc9)]:
+  - @dth/rom@0.57.0
+  - @dth/ui@0.57.0
+
 ## 0.56.1
 
 ### Patch Changes
