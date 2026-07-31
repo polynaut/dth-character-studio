@@ -224,10 +224,30 @@ older runtimes as stale.
   export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
   as `<stem>_ROM.duf` into `<sceneDir>/.ROM_Animations/`, so the built ROM
   animation reopens without a rebuild. Bounded: fixed name, overwritten per
-  run. FOOTGUN: the save-as REPOINTS `Scene.getFilename()` — every scene-keyed
-  lookup (subfolder/groom/CSV snippets) reads the `dthOpenSceneFile` capture
-  (`openSceneFileSnippet`, emitted once per carrier) instead of the live
-  filename; a new scene-keyed snippet must do the same.
+  run. `romAnimationPath` (dsa.ts) is THE rule, shared by generation and the
+  host. FOOTGUN: the save-as REPOINTS `Scene.getFilename()` — every scene-keyed
+  lookup (subfolder/groom/CSV snippets, and the wrong-scene guard since v46)
+  reads the `dthOpenSceneFile` capture (`openSceneFileSnippet`, emitted once
+  per carrier) instead of the live filename; a new scene-keyed snippet must do
+  the same.
+- **DTH Export runs in one of three MODES** (the dialog's first step; the
+  `ExportMode` union in `execute-jobs.ts` owns the mapping):
+  `rom-export` → `.Bulk_ROM_Export.dsa` on the source scene (fresh ROM, saved
+  ROM animation, full export — the default, and the ONLY mode that writes
+  handoff stamps: a stamp claims "this definition has been exported");
+  `rom-only` → `.Build_ROM_Animation.dsa` on the source scene (no export, so no
+  export dir needed); `export-only` → `.Bulk_Export_Only.dsa` on the scene's
+  **saved ROM animation** (exporter + hair over the ROM as it stands, no
+  rebuild — for a ROM hand-edited in Daz). Export-only pre-checks the scenes
+  whose ROM animation is newer than their delivered `<exportName>_pose_asset.csv`
+  (`fetchExecuteScenes`'s `romUnexported`), i.e. unexported as it now stands.
+- **A saved ROM animation stands in for its source scene** (runtime v46): since
+  export-only job rows OPEN `.ROM_Animations/<stem>_ROM.duf`, every generated
+  script embeds `romAnimationSourceMap` (rom path → source scene) and resolves
+  `dthOpenSceneFile` through it right after the capture. So the guard and every
+  scene-keyed lookup behave as if the source scene were open — which it
+  effectively is. Running ANY generated script on a ROM animation by hand works
+  the same way now (it used to abort as a foreign scene).
 - **Export-folder housekeeping**: every generation records the layout's
   export-relative folders in `.dth_export_folders.json` (character folder) and
   deletes RECORDED folders that fell out of the layout — a renamed/cleared

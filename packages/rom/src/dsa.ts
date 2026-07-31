@@ -11,6 +11,7 @@ import {
   sceneGuardSnippet,
   sceneCsvLookupSnippet,
   sceneExportSubfolderSnippet,
+  romAnimationSourceSnippet,
 } from './dz-snippets'
 
 /** The hidden per-character BULK script the DTH Character Studio Runner
@@ -25,6 +26,51 @@ export const BULK_ROM_EXPORT_SCRIPT = '.Bulk_ROM_Export.dsa'
  *  the mirror image of {@link BULK_ROM_EXPORT_SCRIPT}, which forces the
  *  export ON. Dot-prefixed so Daz's Content Library never shows it. */
 export const BUILD_ROM_ANIMATION_SCRIPT = '.Build_ROM_Animation.dsa'
+/** The hidden per-character EXPORT-ONLY script (DTH Export's "Export only"
+ *  mode): runs the exporter + hair pass on the ROM already on the timeline —
+ *  no rebuild. Its job rows open the SAVED ROM animation
+ *  ({@link romAnimationPath}) rather than the source scene, which the embedded
+ *  {@link romAnimationSourceMap} maps back so every scene-keyed lookup still
+ *  resolves. Dot-prefixed so Daz's Content Library never shows it. */
+export const BULK_EXPORT_ONLY_SCRIPT = '.Bulk_Export_Only.dsa'
+
+/**
+ * Where a scene's saved ROM animation lives: `<sceneDir>/.ROM_Animations/
+ * <stem>_ROM.duf` — the copy every ROM-building script writes after a clean
+ * build (runtime v40). THE one rule: generation embeds it (so an export-only
+ * run can map the open ROM animation back to its source scene) and the host
+ * stats it (the scene card's open menu, the export handoff).
+ */
+export function romAnimationPath(scenePath: string): string {
+  const norm = scenePath.replace(/\\/g, '/')
+  const slash = norm.lastIndexOf('/')
+  const dir = slash >= 0 ? norm.slice(0, slash) : '.'
+  const file = norm.slice(slash + 1)
+  const dot = file.lastIndexOf('.')
+  const stem = dot > 0 ? file.slice(0, dot) : file
+  return `${dir}/.ROM_Animations/${stem}_ROM.duf`
+}
+
+/**
+ * Normalized ROM-animation path → the linked scene it was built from, for every
+ * linked scene. Embedded in each generated script so a run on a SAVED ROM
+ * animation (DTH Export's "Export only" mode opens those, not the source
+ * scenes) resolves its scene-keyed lookups — the wrong-scene guard, the
+ * per-scene config delta, the hair list, the export subfolder, the CSV pick —
+ * as the source scene, which is what the ROM animation is: that scene with the
+ * ROM baked onto its timeline.
+ */
+export function romAnimationSourceMap(
+  character: Pick<Character, 'scenePath' | 'extraScenes'>,
+): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const scene of [character.scenePath, ...character.extraScenes]) {
+    const clean = scene.trim().replace(/\\/g, '/')
+    if (clean === '') continue
+    map[romAnimationPath(clean).toLowerCase()] = clean
+  }
+  return map
+}
 import { flattenRom, jcmIsBaseRom, presetSelections } from './frames'
 import {
   activeSceneOverrides,
@@ -931,7 +977,7 @@ ${sceneSelectBlock}
 // The wrong-scene guard: refuse to build when the OPEN scene isn't one of this
 // character's linked scenes (see dthSceneLinkError below the config).
 ${sceneGuardSnippet(character)}
-${openSceneFileSnippet()}
+${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 // Write a minimal run log so even a catastrophic failure reaches the studio.
 function dthWriteFailureLog(sError) {
     try {
@@ -1094,7 +1140,7 @@ export function toExportScriptDsa(
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
 ${sceneGuardSnippet(character)}
-${openSceneFileSnippet()}
+${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
     MessageBox.critical(dthSceneLinkErr, "DTH Character Studio", "&OK");
@@ -1112,6 +1158,35 @@ ${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character)
     target: 'daz',
     icon: 'export',
   }
+}
+
+/**
+ * The hidden EXPORT-ONLY variant ({@link BULK_EXPORT_ONLY_SCRIPT}) the Runner
+ * executes for DTH Export's "Export only" mode: the same standalone export
+ * ({@link toExportScriptDsa}'s builder, so the two can never drift) with the
+ * hair pass FORCED on — it exports skeleton/mesh and every hair asset from the
+ * ROM already on the timeline, rebuilding nothing.
+ *
+ * Its job rows open the SAVED ROM animation instead of the source scene (that
+ * is where the ROM lives); the embedded {@link romAnimationSourceMap} maps the
+ * open file back, so the guard and every scene-keyed lookup behave as if the
+ * source scene were open. Only meaningful with an export dir — generateAll
+ * emits it exactly then, next to the bulk ROM script.
+ */
+export function toBulkExportOnlyScriptDsa(
+  character: Character,
+  frames?: PresetFrames,
+  charFolderAbs?: string,
+  scenesRootAbs?: string,
+): GeneratedFile {
+  const built = toExportScriptDsa(
+    { ...character, exportHairAssets: true },
+    frames,
+    charFolderAbs,
+    scenesRootAbs,
+  )
+  // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
+  return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
 }
 
 /**
@@ -1156,7 +1231,7 @@ export function toGroomExportScriptDsa(
 // the figure selected; the ROM is NOT needed.
 
 ${sceneGuardSnippet(character)}
-${openSceneFileSnippet()}
+${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 var dthAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
@@ -1237,6 +1312,7 @@ export function toScanProductsScriptDsa(
 // products are written as a CSV the studio reads back on the character page.
 
 ${sceneGuardSnippet(character)}
+${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
 include(dir_self.filePath("../../.DthProducts.dsa"));
 
@@ -1335,6 +1411,9 @@ export function generateAll(
             sceneFrames,
             scenesRootAbs,
           ),
+          // …and its export-only twin (DTH Export's "Export only" mode): the
+          // exporter + hair pass over an already-built ROM, no rebuild.
+          toBulkExportOnlyScriptDsa(character, frames, charFolderAbs, scenesRootAbs),
         ]
       : []),
     // The hidden ROM-only script ("Open and Generate ROM Animation"): builds

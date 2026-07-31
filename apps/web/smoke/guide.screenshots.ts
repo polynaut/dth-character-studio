@@ -348,7 +348,12 @@ test('dth-export-dialog', async ({ page }) => {
   await openCharacter(page, { dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio6' })
   await page.getByRole('button', { name: 'DTH Export' }).click()
   const dialog = page.getByRole('dialog')
-  // The affected-detection settles: the never-exported scene reads "changed".
+  // Step 1 — what the run does. Both steps are guide shots.
+  await dialog.getByText('ROM + Export').waitFor()
+  await shoot(page, join(OUT, 'dth-export-modes.png'), dialog)
+  await dialog.getByRole('button', { name: /ROM \+ Export/ }).click()
+  // Step 2: the affected-detection settles — the never-exported scene reads
+  // "changed", which is what the full run pre-checks.
   await dialog.getByText('Changed since the last export').waitFor()
   await shoot(page, join(OUT, 'dth-export-dialog.png'), dialog)
 })

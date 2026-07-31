@@ -660,6 +660,7 @@ describe('generateAll', () => {
       expect(icons(makeCharacter({ exportPath: 'D:/exports' }))).toEqual([
         ['ROM_ElectraG9_G9.dsa', 'rom-export'],
         ['.Bulk_ROM_Export.dsa', undefined],
+        ['.Bulk_Export_Only.dsa', undefined],
         ['.Build_ROM_Animation.dsa', undefined],
       ])
     })
@@ -673,6 +674,7 @@ describe('generateAll', () => {
         ['ROM_ElectraG9_G9.dsa', 'rom'],
         ['Export_ElectraG9_G9.dsa', 'export'],
         ['.Bulk_ROM_Export.dsa', undefined],
+        ['.Bulk_Export_Only.dsa', undefined],
         ['.Build_ROM_Animation.dsa', undefined],
       ])
     })
@@ -693,6 +695,7 @@ describe('generateAll', () => {
       expect(icons(character)).toEqual([
         ['ROM_ElectraG9_G9.dsa', 'rom-export'],
         ['.Bulk_ROM_Export.dsa', undefined],
+        ['.Bulk_Export_Only.dsa', undefined],
         ['.Build_ROM_Animation.dsa', undefined],
         ['Export_Hair_ElectraG9_G9.dsa', 'export-hair'],
       ])
@@ -1753,6 +1756,7 @@ describe('exporter integration', () => {
     expect(files.map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Bulk_Export_Only.dsa',
       '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
@@ -1791,6 +1795,42 @@ describe('exporter integration', () => {
     ])
   })
 
+  it('the hidden .Bulk_Export_Only.dsa exports everything WITHOUT rebuilding the ROM', () => {
+    // Hair off — the toggle a manual run honors; the export-only bulk script
+    // forces it on, exactly like its ROM+export twin.
+    const character = withReferencePose({
+      name: 'Electra',
+      exportPath: 'X:\\exports\\electra',
+      exportHairAssets: false,
+      scenePath: 'X:\\proj\\Electra\\daz3d\\Electra.duf',
+      sceneOverrides: [
+        { scenePath: 'X:\\proj\\Electra\\daz3d\\Electra.duf', rom: {}, hair: [{ nodeLabel: 'Ponytail' }] },
+      ],
+    })
+    const only = generateAll(character, {}, FRAMES, 'D:\\lib\\Electra').find(
+      (f) => f.fileName === '.Bulk_Export_Only.dsa',
+    )
+    expect(only).toBeDefined()
+    expect(only?.icon).toBeUndefined() // hidden: no Content Library tile
+    expect(only?.content).toContain('doExport')
+    expect(only?.content).toContain('Export hair assets too')
+    // The whole point: no ROM build, and so no ROM-scene save either.
+    expect(only?.content).not.toContain('ApplyDTHCharacter(')
+    expect(only?.content).not.toContain('_ROM.duf"')
+    // Its rows open the SAVED ROM animation, so the script must resolve that
+    // file back to the source scene before any scene-keyed lookup — including
+    // the wrong-scene guard, which would otherwise call it foreign and refuse.
+    expect(only?.content).toContain('var dthRomSourceScenes = {')
+    expect(only?.content).toContain(
+      '"x:/proj/electra/daz3d/.rom_animations/electra_rom.duf": "X:/proj/Electra/daz3d/Electra.duf"',
+    )
+    expect(only?.content).toContain('dthOpenSceneFile = dthRomSourceHit;')
+    // No export dir → no export-only script (nothing to export into).
+    expect(
+      generateAll(withReferencePose({ name: 'Electra' }), {}, FRAMES).map((f) => f.fileName),
+    ).not.toContain('.Bulk_Export_Only.dsa')
+  })
+
   it('split (exportWithRomScript off): the ROM script builds only, Export_ script for manual export', () => {
     const character = withReferencePose({
       name: 'Electra',
@@ -1818,6 +1858,7 @@ describe('exporter integration', () => {
       'ROM_Electra_G9.dsa',
       'Export_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Bulk_Export_Only.dsa',
       '.Build_ROM_Animation.dsa',
       'Electra_pose_asset.csv',
     ])
@@ -1848,8 +1889,10 @@ describe('exporter integration', () => {
       toCharacterScriptDsa(withReferencePose({ name: 'Kira' }), {}, FRAMES).content,
     ).toContain('"/.ROM_Animations"')
     expect(toBulkRomExportScriptDsa(character, {}, FRAMES).content).toContain('"/.ROM_Animations"')
-    // The ROM-less carrier does not — Export_ never rebuilds, never saves.
-    expect(toExportScriptDsa(character, FRAMES).content).not.toContain('.ROM_Animations')
+    // The ROM-less carrier never SAVES one — Export_ rebuilds nothing. (It does
+    // name the .ROM_Animations paths: every script embeds the map that resolves
+    // an open ROM animation back to its source scene.)
+    expect(toExportScriptDsa(character, FRAMES).content).not.toContain('_ROM.duf"')
   })
 
   it('no export dir → no export block and no bulk-run detection', () => {
@@ -1888,7 +1931,9 @@ describe('groom items (hair kept out of the export)', () => {
     const content = toCharacterScriptDsa(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').content
     // The whole map is baked in (normalized keys); the OPEN scene resolves at run time.
     expect(content).toContain('"x:/scenes/karen.duf":["dForce Black Tie Cap"]')
-    expect(content).toContain('String(Scene.getFilename()).split(')
+    // Keyed on the CAPTURE, never the live filename (the ROM-scene save
+    // repoints it, and an open ROM animation resolves back to its source there).
+    expect(content).toContain('dthOpenSceneFile.split(')
     // No entry for the open scene → export as-is (a scene without groom is valid).
     expect(content).toContain('No hair list for the open scene - exporting as-is.')
     // HIDE → export → show. The DTH Exporter Plugin unparents any hidden child
@@ -1938,6 +1983,7 @@ describe('groom items (hair kept out of the export)', () => {
     expect(generateAll(groomChar(), {}, FRAMES, 'D:\\lib\\Electra').map((f) => f.fileName)).toEqual([
       'ROM_Electra_G9.dsa',
       '.Bulk_ROM_Export.dsa',
+      '.Bulk_Export_Only.dsa',
       '.Build_ROM_Animation.dsa',
       'Export_Hair_Electra_G9.dsa',
       'Electra_pose_asset.csv',
