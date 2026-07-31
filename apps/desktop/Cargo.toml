@@ -95,6 +95,8 @@ windows-sys = { version = "0.61", features = [
   # Focusing another app's window after "Open in …" (see foreground.rs).
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Threading",
+  # Reading the process token to detect an elevated session (elevation.rs).
+  "Win32_Security",
   # Writing a directory junction's reparse point (see junction.rs).
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
