@@ -636,6 +636,12 @@ async function seedCharacterFolders(
       const houSub = normalizeRelFolder(manifest.houdiniSubdir)
       if (houSub) await mkdir(join(folderAbs, houSub), { recursive: true })
     }
+    // The FINAL export folder, beside the Daz and Houdini ones: where the files
+    // Houdini generates for Unreal land. The end of the pipeline — not to be
+    // confused with `dth-exports` inside the Daz folder, which is the
+    // Daz→Houdini intermediate.
+    const exportSub = normalizeRelFolder(manifest.exportSubdir)
+    if (exportSub) await mkdir(join(folderAbs, exportSub), { recursive: true })
     const exportRoot = characterExportRoot(folderAbs, normalizeRelFolder(manifest.dazSubdir))
     if (!exportRoot) return character
     await mkdir(exportRoot, { recursive: true })

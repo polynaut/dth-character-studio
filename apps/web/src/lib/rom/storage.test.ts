@@ -485,6 +485,27 @@ describe('createCharacterAt seeds the export root + the Houdini folder', () => {
     expect(dirs.has('/games/Nova/Kira (2)/scenes/daz/dth-exports')).toBe(true)
   })
 
+  it('creates the FINAL export folder beside the Daz and Houdini ones', async () => {
+    const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: true })
+
+    await storage.createCharacterAt(project, fresh('Kira'), 'Kira')
+
+    // Three peers in the character folder: Daz scenes, the Houdini project,
+    // and where Houdini's Unreal-bound output lands.
+    expect(dirs.has('/games/Nova/Kira/daz3d/dth-exports')).toBe(true)
+    expect(dirs.has('/games/Nova/Kira/houdini')).toBe(true)
+    expect(dirs.has('/games/Nova/Kira/export')).toBe(true)
+  })
+
+  it('follows a renamed final-export subfolder', async () => {
+    const project = seedProject({ exportSubdir: 'unreal/incoming' })
+
+    await storage.createCharacterAt(project, fresh('Kira'), 'Kira')
+
+    expect(dirs.has('/games/Nova/Kira/unreal/incoming')).toBe(true)
+    expect(dirs.has('/games/Nova/Kira/export')).toBe(false)
+  })
+
   it('creates the export root even when the Houdini seed is switched off', async () => {
     const project = seedProject({ houdiniSubdir: 'houdini', createHoudiniSubdir: false })
 

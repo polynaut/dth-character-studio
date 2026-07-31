@@ -37,6 +37,13 @@ export interface DcspManifest {
   houdiniSubdir: string
   /** Whether to seed the empty Houdini folder when a character is created. */
   createHoudiniSubdir: boolean
+  /**
+   * The character's FINAL export folder, seeded empty into each new character
+   * beside the Daz and Houdini ones — where the files Houdini generates for
+   * Unreal land. The END of the pipeline, and not to be confused with
+   * `dth-exports`, which is the Daz→Houdini intermediate INSIDE the Daz folder.
+   */
+  exportSubdir: string
   /** Whether the project shows the reusable Daz-scene "assets" feature (off = characters only). */
   assetsEnabled: boolean
   /** Whether the project generates a per-character `Scan_Products_<Name>.dsa` that
@@ -59,6 +66,7 @@ export const PROJECT_BEHAVIOR_DEFAULTS = {
   dazSubdir: 'daz3d',
   houdiniSubdir: 'houdini',
   createHoudiniSubdir: true,
+  exportSubdir: 'export',
   assetsEnabled: false,
   dazProductsEnabled: false,
   charactersSubdir: '',
@@ -149,6 +157,7 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
       // absolute / `..` / illegal falls back to the default).
       dazSubdir: safeRelSubdir(raw.dazSubdir, defaults.dazSubdir),
       houdiniSubdir: safeRelSubdir(raw.houdiniSubdir, defaults.houdiniSubdir),
+      exportSubdir: safeRelSubdir(raw.exportSubdir, defaults.exportSubdir),
       createHoudiniSubdir:
         typeof raw.createHoudiniSubdir === 'boolean'
           ? raw.createHoudiniSubdir

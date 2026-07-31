@@ -168,6 +168,17 @@ older runtimes as stale.
   its subfolder — matched by scene KEY, not by the folder name "primary". The
   hair pass keeps its own `<slug>_Hair_<item>` names (unique per item
   already).
+- **THREE folders are seeded into every new character** (`seedCharacterFolders`),
+  each named by a per-project manifest field: `dazSubdir` (`daz3d` — the Daz
+  scenes, and the `dth-exports` root inside it), `houdiniSubdir` (`houdini`,
+  gated by `createHoudiniSubdir` — the `.hiplc` files + the shared
+  `houdini-project`), and `exportSubdir` (`export`) — the character's FINAL
+  export folder, where what Houdini generates for Unreal lands. Generation
+  re-creates that last one too, so characters predating the setting get theirs.
+  DON'T confuse the two "export" folders: `<char>/<daz>/dth-exports` is the
+  Daz→Houdini INTERMEDIATE (derived, fixed, studio-written); `<char>/export` is
+  the END of the pipeline (user-owned — the studio only creates it, and the
+  Houdini job's fallback `exportDirectory` is its natural consumer).
 - The **export directory is DERIVED** (schema v29) — not user data, no picker:
   always `<character folder>/<project dazSubdir>/dth-exports`
   (`characterExportRoot`, `lib/scene-subfolder.ts`). Created at character
