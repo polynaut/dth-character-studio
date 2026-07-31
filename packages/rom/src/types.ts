@@ -1334,8 +1334,16 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       scene's stem — `orphanedRomAnimations` retires them on the next
  *       generation, matching only the studio's own naming and only beside scenes
  *       the character still links.
+ *  51 — runtime-file change (generated scripts untouched): a new visible
+ *       `Fix_Graft_Shell_Surfaces.dsa` + its `DthShellSurfaces.dsa` module.
+ *       Fitting a nipple/navel geograft adds ITS surfaces, switched ON, to the
+ *       Golden Palace / Dicktator geoshells already on the figure, so the shell
+ *       renders over the new graft; the script switches those foreign rows off
+ *       on GP/DK shells only. Bumped so Refresh assets installs the two new
+ *       files into an existing scripts root (the install skips wholesale when
+ *       the marker already matches this RUNTIME_VERSION).
  */
-export const RUNTIME_VERSION = 50
+export const RUNTIME_VERSION = 51
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

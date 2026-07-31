@@ -159,6 +159,29 @@ current code before relying on details, but assume the *lesson* still holds.
   first cut of the index builder, and shows up as "no geoshells under the figure").
   The Smart preset also rigs slightly more bones (`l_shin`/`r_shin`/`spine2`), so it
   yields a richer bone index too.
+- **A geograft cannot be detected through the DS6 script API — read the GEOSHELL's
+  surface labels instead.** Measured 2026-07-31 (DS 6.0, Genesis 9 + Golden Palace +
+  STX nipples/navel, probe dump of all 576 nodes): `DzFigure.isGraftingActive()` and
+  `DzFacetMesh.getGraft()` are **not exposed to DAZ Script** at all, and a geograft is
+  otherwise indistinguishable from any other fitted `DzFigure` — `Genesis9Tear`,
+  `Genesis9Eyes` and `Genesis9Mouth` report the same `getFollowTarget()` as the grafts
+  do. What IS legible: a geoshell node is class **`DzGeometryShellNode`** (its geometry
+  is `DzShellDummyFacetGeometry`), and it carries one `DzBoolProperty` per surface at
+  path **`/Shell/Visibility/Surfaces`**, named `material_group_<label>_vis`, where
+  `<label>` is `<graftNodeName>_<materialName>` for a graft-contributed surface
+  (`stx_gen_9_nipples_feminine_Body`) and the bare `<materialName>` for the figure's
+  own (`Body`, `Head`, `Legs`…). So the shell's own property list names every graft on
+  the figure — that's how `DthShellSurfaces.dsa` identifies them. Note the shell's
+  `/Shell` > `Shell Node` property points at the shelled FIGURE (`Genesis9`), never at
+  the graft the shell belongs to, so "whose shell is this" needs the product-family
+  match (with a name-prefix fallback) that module does.
+- **Fitting a geograft turns its surfaces ON in every geoshell already on the figure**
+  (same measurement). Add STX nipples/navel to a figure that already has the Golden
+  Palace shells and the shell renders over the new graft — the fix is to switch those
+  rows off on the GP/DK shells, which is what the bundled `Fix_Graft_Shell_Surfaces`
+  script does. Only genital-graft shells are in scope: a tattoo or skin-overlay shell
+  legitimately WANTS the graft surfaces on, so a blanket sweep over every
+  `DzGeometryShellNode` would break those.
 - **`DzContentMgr.findFile(rel, DzContentMgr.AllDirsAndCloud)` is the supported way
   to resolve a content-relative path** (confirmed against Daz's own shipped scripts
   under `data/resources/Lesson Strips`, which use exactly that two-arg form). Content

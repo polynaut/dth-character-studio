@@ -1,0 +1,52 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - fix a Golden Palace / Dicktator geoshell that renders
+// over your other geografts.
+//
+// Fitting a nipple or navel graft (STX and friends) adds ITS surfaces to every
+// geoshell already on the figure, switched ON - so the GP/DK shell covers the
+// new graft and you get its material where the graft should be. Open the scene
+// and run this: it switches those foreign-graft surfaces off on the GP/DK
+// shells, and leaves everything else exactly as it is.
+//
+// Nothing to select. Safe to re-run - it only writes rows that are still on.
+// Other geoshells (skin overlays, tattoos, nail shells) are left alone: those
+// legitimately want the graft surfaces visible.
+
+var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
+include(dir_self.filePath(".DthShellSurfaces.dsa"));
+
+(function(){
+	var oReport = DthFixGraftShellSurfaces({});
+
+	if (oReport.matched == 0) {
+		MessageBox.information(
+			"No Golden Palace / Dicktator geoshell in this scene - nothing to do.",
+			"Fix graft shell surfaces", "&OK");
+		return;
+	}
+
+	var sMsg;
+	if (oReport.changed.length == 0) {
+		sMsg = "Nothing to change - every foreign-graft surface was already off on "
+			+ oReport.matched + " shell(s).";
+	} else {
+		var aLines = [];
+		for (var i = 0; i < oReport.changed.length; i++) {
+			aLines.push("  " + oReport.changed[i].shell + "  -  " + oReport.changed[i].surface);
+		}
+		sMsg = oReport.changed.length + " surface switch(es) turned off:\n\n" + aLines.join("\n");
+	}
+	// A skip is the "I could not tell which graft this shell belongs to" case -
+	// surfacing it is the point, since that shell still needs the manual fix.
+	if (oReport.skipped.length > 0) {
+		sMsg += "\n\n" + oReport.skipped.length + " shell(s) SKIPPED - fix those by hand:";
+		for (var s = 0; s < oReport.skipped.length; s++) {
+			sMsg += "\n  " + oReport.skipped[s].shell + ": " + oReport.skipped[s].reason;
+		}
+	}
+	if (oReport.failed.length > 0) {
+		sMsg += "\n\n" + oReport.failed.length + " switch(es) would not take - see the Daz log.";
+	}
+	MessageBox.information(sMsg, "Fix graft shell surfaces", "&OK");
+})();
