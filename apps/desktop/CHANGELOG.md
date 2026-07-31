@@ -1,5 +1,15 @@
 # @dth/desktop
 
+## 0.58.0
+
+### Minor Changes
+
+- [#635](https://github.com/polynaut/dth-character-studio/pull/635) [`fff047c`](https://github.com/polynaut/dth-character-studio/commit/fff047ca3645a27de2aee1573338c3c5953af7d1) Thanks [@polynaut](https://github.com/polynaut)! - feat: an elevated window says so in its title bar
+
+  Running as administrator now shows `Administrator: ` at the front of the window title, the same convention Windows itself uses for an elevated terminal — a prefix rather than a suffix, so it survives the truncation in the taskbar and Alt-Tab.
+
+  It's easy to lose track of which session you're in, and an elevated one behaves differently in ways nothing else reveals: mapped network drives are per-session, so an elevated relaunch can't see your drive letters, and anything it creates ends up owned by the elevated account. Every window is marked — the launcher, each project window, and a window that reverts to the launcher after its project is deleted.
+
 ## 0.57.0
 
 ### Minor Changes
