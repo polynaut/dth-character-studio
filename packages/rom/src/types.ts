@@ -1315,8 +1315,17 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       DzError-where-0-is-success (DS6, the v45 fix), and void in DS4, which
  *       logged a successful save as "Could not save" while Daz's own log said
  *       "Saved Scene". Chasing conventions per version is a losing game.
+ *  50 — generated-script fix: the ROM-scene save is verified by the file's
+ *       TIMESTAMP MOVING, not merely by the file existing. v49 swapped an
+ *       unreliable return value for `DzFileInfo.exists()`, which is a false
+ *       POSITIVE here: this file is overwritten every run, so from the second
+ *       run on it already exists and a failed save reported success while the
+ *       stale previous ROM sat on disk waiting to be exported as fresh. Now the
+ *       mtime is read before and after and must differ; a file that wasn't
+ *       there before is proof by itself, and if neither timestamp can be read
+ *       existence is accepted rather than crying wolf.
  */
-export const RUNTIME_VERSION = 49
+export const RUNTIME_VERSION = 50
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

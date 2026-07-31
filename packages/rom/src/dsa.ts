@@ -1140,17 +1140,43 @@ if (dthSceneLinkErr) {
                 // about it: the content manager has answered a plain bool, a
                 // DzError where 0 IS success (DS6 — runtime v45 chased that
                 // one), and void in DS4, which logged a perfectly good save as
-                // a failure while Daz's own log said "Saved Scene". The file on
-                // disk is the only version-proof answer, so ask it.
+                // a failure while Daz's own log said "Saved Scene".
+                //
+                // Existence alone is NOT the answer either: this file is
+                // overwritten every run, so after the first one it is already
+                // there and a FAILED save would report success while the stale
+                // previous ROM sits on disk waiting to be exported as fresh.
+                // The timestamp has to MOVE. A file that wasn't there before is
+                // proof by itself; when neither timestamp can be read (an older
+                // build without DzFileInfo.lastModified) existence is all we
+                // have, so accept it rather than cry wolf.
+                var dthRomInfoBefore = new DzFileInfo(dthRomSavePath);
+                var dthRomExisted = dthRomInfoBefore.exists();
+                var dthRomMsBefore = -1;
+                if (dthRomExisted) {
+                    try { dthRomMsBefore = dthRomInfoBefore.lastModified().getTime(); } catch (dthMsErr) {}
+                }
                 if (typeof App.getContentMgr().saveScene == "function") {
                     App.getContentMgr().saveScene(dthRomSavePath);
                 } else if (typeof Scene.saveScene == "function") {
                     Scene.saveScene(dthRomSavePath);
                 }
-                if (new DzFileInfo(dthRomSavePath).exists()) {
+                var dthRomInfoAfter = new DzFileInfo(dthRomSavePath);
+                var dthRomSaved = false;
+                if (dthRomInfoAfter.exists()) {
+                    if (!dthRomExisted) {
+                        dthRomSaved = true;
+                    } else {
+                        var dthRomMsAfter = -1;
+                        try { dthRomMsAfter = dthRomInfoAfter.lastModified().getTime(); } catch (dthMsErr2) {}
+                        dthRomSaved =
+                            (dthRomMsBefore < 0 || dthRomMsAfter < 0) || dthRomMsAfter != dthRomMsBefore;
+                    }
+                }
+                if (dthRomSaved) {
                     print("ROM scene saved: " + dthRomSavePath);
                 } else {
-                    print("Could not save the ROM scene to " + dthRomSavePath);
+                    print("Could not save the ROM scene to " + dthRomSavePath + " — the file on disk is unchanged, so it still holds the PREVIOUS run's ROM.");
                 }
             } catch (dthSaveErr) {
                 print("ROM-scene save failed: " + dthSaveErr);
