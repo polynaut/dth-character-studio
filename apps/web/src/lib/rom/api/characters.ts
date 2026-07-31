@@ -6,10 +6,13 @@ import { withBusyCursor } from '../../busy-cursor.ts'
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
-import { PRIMARY_SCENE_SUBFOLDER, deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
+import {
+  PRIMARY_SCENE_SUBFOLDER,
+  characterExportRoot,
+  deriveScenesRootRel,
+} from '#/lib/scene-subfolder.ts'
 import {
   characterSchema,
-  defaultHoudiniProjectFolder,
   defaultSections,
   genderSchema,
   genesisVersionSchema,
@@ -186,11 +189,6 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
     createdAt: now,
     updatedAt: now,
     sections,
-    // NEW characters seed the Houdini project folder (<Project>_<Character> —
-    // exports nest under it as <folder>/dth-export/<scene-sub>/, Set-Project
-    // ready). Existing characters keep '' via the schema default: their export
-    // layout must not move under them (schema v27).
-    houdiniProjectFolder: defaultHoudiniProjectFolder(project.name, input.name),
     ...prefillExtras,
   }
   // The picked scene's tip thumbnail becomes the avatar, and we record the scene
@@ -442,6 +440,19 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   if (keepDaz && project.dazSubdir) keepFolders.push(project.dazSubdir)
   if (keepHoudini && project.houdiniSubdir) keepFolders.push(project.houdiniSubdir)
   await storage.deleteCharacter(lib, id, { keepFolders, location: location ?? undefined })
+  // "Keep Daz files" spares the whole Daz subfolder — which since schema v29
+  // also contains the EXPORT root. Those are derived artifacts (regenerable
+  // from the scenes, and gigabytes of them), so keeping the scenes must not
+  // silently keep every .abc/.dth too: drop the export root explicitly.
+  // Best-effort — an orphaned export folder is never worth failing a delete.
+  if (keepDaz && location?.relFolder) {
+    try {
+      const exportRoot = characterExportRoot(location.folderAbs, project.dazSubdir)
+      if (exportRoot && (await exists(exportRoot))) await remove(exportRoot, { recursive: true })
+    } catch {
+      // leave the exports behind rather than failing the delete
+    }
+  }
   // Remove the character's generated Daz script subfolder (derived artifact,
   // orphaned once the character is gone). Best-effort.
   if (character && settings.dazLibraryFolder) {

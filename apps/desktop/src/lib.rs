@@ -13,6 +13,7 @@ mod github;
 mod houdini;
 mod housekeeping;
 mod install;
+mod junction;
 mod poses;
 mod report;
 mod shellopen;
@@ -133,6 +134,7 @@ pub fn run() {
             daz::launch_daz_studio,
             foreground::focus_app_window,
             houdini::create_houdini_project,
+            junction::create_junction,
             shellopen::shell_open_file,
             install::install_daz_merge,
             install::install_houdini_presets,

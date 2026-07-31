@@ -10,6 +10,64 @@
 /** The primary scene's fixed subfolder below the scenes root. */
 export const PRIMARY_SCENE_SUBFOLDER = 'primary'
 
+/**
+ * The character's fixed EXPORT root, below its Daz subfolder:
+ * `<character folder>/<project dazSubdir>/dth-exports/`. Not user-choosable
+ * (schema v29) — the DTH Exporter's output is Daz-side output, so it lives
+ * beside the scenes that produce it, and `Character.exportPath` is derived
+ * from this rather than stored (resolved in `parseCharacter`).
+ */
+export const EXPORTS_FOLDER = 'dth-exports'
+
+/**
+ * The character's ONE Houdini project folder, below its Houdini subfolder:
+ * `<character folder>/<project houdiniSubdir>/houdini-project/`. Fixed name,
+ * created once by the first "Generate project" and REUSED by every later one —
+ * all of a character's `.hiplc` files Set-Project to the same folder, so
+ * `$JOB` means one thing for the character.
+ *
+ * It holds no exports. A {@link EXPORTS_FOLDER}-named JUNCTION inside it points
+ * at the real export root, purely so Houdini's file picker — which opens at
+ * `$JOB` — shows `dth-exports/` right there instead of making the user climb
+ * two levels into the Daz subfolder. Nothing depends on it: delete it and only
+ * that shortcut is lost (which is also the escape hatch if a tool that scans
+ * the project folder, Perforce included, dislikes reparse points).
+ */
+export const HOUDINI_PROJECT_FOLDER = 'houdini-project'
+
+/** `<charFolder>/<subdir>/<leaf>` with forward slashes and no empty segments —
+ *  the shared spelling behind the two resolvers below (a project may configure
+ *  no subdir at all, in which case the leaf sits directly in the folder). */
+function underSubdir(charFolderAbs: string, subdir: string | undefined, leaf: string): string {
+  const folder = charFolderAbs.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (!folder) return ''
+  const sub = (subdir ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').trim()
+  return [folder, sub, leaf].filter(Boolean).join('/')
+}
+
+/**
+ * A character's export root — the DERIVED value of `Character.exportPath`
+ * (schema v29). Callers must only pass the folder of a character that OWNS one:
+ * a loose root-level definition would resolve to the library's own
+ * `<dazSubdir>/dth-exports` and collide with every other loose character, so
+ * those keep whatever export path they already had.
+ */
+export function characterExportRoot(charFolderAbs: string, dazSubdir?: string): string {
+  return underSubdir(charFolderAbs, dazSubdir, EXPORTS_FOLDER)
+}
+
+/** A character's Houdini folder — where its generated `.hiplc` files live,
+ *  beside the shared project folder below. */
+export function characterHoudiniDir(charFolderAbs: string, houdiniSubdir?: string): string {
+  return underSubdir(charFolderAbs, houdiniSubdir, '')
+}
+
+/** A character's one Houdini project folder ($JOB) — see
+ *  {@link HOUDINI_PROJECT_FOLDER}. */
+export function characterHoudiniProjectDir(charFolderAbs: string, houdiniSubdir?: string): string {
+  return underSubdir(charFolderAbs, houdiniSubdir, HOUDINI_PROJECT_FOLDER)
+}
+
 /** Tokens that carry no scene identity — generation markers and the DTH preset
  *  block names ("G9", "Genesis 8.1", "gen", "golden palace", "dicktator", …).
  *  Compared per word, case-insensitively, after the character name is removed. */

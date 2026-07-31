@@ -104,12 +104,11 @@ detailed in [Build the ROM in Daz](./05-rom-in-daz.md#direct-export-optional-rec
   <sub><em>The Daz scripts generated box: the install location and the two export switches.</em></sub>
 </p>
 
-The **Export directory** section drives [direct export](./05-rom-in-daz.md#direct-export-optional-recommended):
-a new character starts with one — its seeded **houdini subfolder** — and
-**Change…** repoints it (an export directory can only be repointed, never
-removed). The **Houdini project folder** field beneath it layers the export
-for Houdini — see
-[the Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder).
+The **Export directory** section shows where [direct export](./05-rom-in-daz.md#direct-export-optional-recommended)
+lands. It's fixed and read-only: `dth-exports` inside the character's Daz
+folder, created with the character. A Houdini project reaches those files
+through a shortcut rather than containing them — see
+[where the Houdini project fits](./05-rom-in-daz.md#where-the-houdini-project-fits).
 
 <details>
 <summary><strong>Advanced options — preserve morphs &amp; node transforms</strong></summary>
@@ -296,11 +295,11 @@ type.
 &nbsp;
 
 > [!NOTE]
-> **Bone scale only acts when an [Export directory](./05-rom-in-daz.md) is set** —
-> that's when the studio runs the exporter. With no export directory the studio
-> generates the ROM only, so a ticked Bone scale is simply a no-op — you export
-> the reference skeletons yourself. Set an export directory later and it becomes
-> live, no re-ticking needed.
+> **Bone scale only acts when the export actually runs** — that's when the
+> studio drives the exporter. Turn *Run the export with the ROM script* off (and
+> don't run the split `Export_…` script) and the studio generates the ROM only,
+> so a ticked Bone scale is simply a no-op — you export the reference skeletons
+> yourself. Turn the export back on and it becomes live, no re-ticking needed.
 
 Only **GEN** and **FBM** poses can be reference frames — the two categories
 DazToHue supports reference skeletons in. DTH's own

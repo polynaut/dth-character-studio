@@ -4,10 +4,8 @@ import {
   buildArtDirectionData,
   buildFbmData,
   facPresetSupport,
-  defaultHoudiniProjectFolder,
   generateAll,
   GENERATION_TEMPLATE_CSV,
-  houdiniProjectResolution,
   poseAssetCsvValidated,
   presetFramesSignature,
   referenceFrames,
@@ -1603,75 +1601,21 @@ describe('exporter integration', () => {
     expect(content).toContain('completeBaseName()')
   })
 
-  it('nests the export under <project>/dth-export when houdiniProjectFolder is set (schema v27)', () => {
+  it('the export dir is FLAT — no Houdini-project layer anywhere (schema v29)', () => {
     const character = withReferencePose({
       name: 'Ita',
-      exportPath: 'X:\\exports\\ita',
-      houdiniProjectFolder: 'MyProj_Ita',
-    })
-    const content = toCharacterScriptDsa(character, {}, FRAMES).content
-    // No per-scene overrides → an empty map, everything resolves to the base…
-    expect(content).toContain('var dthExportProjByScene = {};')
-    expect(content).toContain(': "MyProj_Ita";')
-    // …and the project layer prefixes the dir BEFORE the scene subfolder append.
-    expect(content).toContain(
-      'if (dthExportProj != "") dthExportDir = dthExportDir + "/" + dthExportProj + "/dth-export";',
-    )
-    expect(content.indexOf('"/dth-export"')).toBeLessThan(
-      content.indexOf('dthExportDir + "/" + dthExportSub'),
-    )
-    // The doExport name suffix stays the SCENE subfolder — no project in it.
-    expect(content).toContain('var dthExportName = "Ita";')
-  })
-
-  it('per-scene houdiniProjectFolder overrides resolve through the map — "" = flat export', () => {
-    const character = withReferencePose({
-      name: 'Ita',
-      exportPath: 'X:\\exports\\ita',
-      houdiniProjectFolder: 'MyProj_Ita',
+      exportPath: 'X:\\p\\Ita\\daz3d\\dth-exports',
       scenePath: 'X:\\p\\daz3d\\primary\\Ita.duf',
-      extraScenes: ['X:\\p\\daz3d\\Beach\\Beach.duf', 'X:\\p\\daz3d\\Solo\\Solo.duf'],
-      sceneOverrides: [
-        // Overridden to '' — this scene exports straight into the export dir.
-        { scenePath: 'X:\\p\\daz3d\\Beach\\Beach.duf', rom: {}, hair: [], houdiniProjectFolder: '' },
-        // Overridden to its own project folder.
-        { scenePath: 'X:\\p\\daz3d\\Solo\\Solo.duf', rom: {}, hair: [], houdiniProjectFolder: 'SoloProj' },
-      ],
+      extraScenes: ['X:\\p\\daz3d\\Beach\\Beach.duf'],
     })
     const content = toCharacterScriptDsa(character, {}, FRAMES).content
-    expect(content).toContain('"x:/p/daz3d/beach/beach.duf":""')
-    expect(content).toContain('"x:/p/daz3d/solo/solo.duf":"SoloProj"')
-    // hasOwnProperty, not truthiness: the '' override must WIN over the base.
-    expect(content).toContain(
-      'var dthExportProj = dthExportProjByScene.hasOwnProperty(dthExportSceneKey) ? dthExportProjByScene[dthExportSceneKey] : "MyProj_Ita";',
-    )
-  })
-
-  it('no houdiniProjectFolder anywhere → the export block is unchanged (pre-v27 layout)', () => {
-    const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
-    expect(toCharacterScriptDsa(character, {}, FRAMES).content).not.toContain('dthExportProj')
-  })
-
-  it('defaultHoudiniProjectFolder: <Project>_<Character>, folder-illegal chars collapse to spaces', () => {
-    expect(defaultHoudiniProjectFolder('My Project', 'Ita')).toBe('My Project_Ita')
-    expect(defaultHoudiniProjectFolder('A/B: C', 'D*E')).toBe('A B C_D E')
-    // A missing half doesn't leave a dangling underscore.
-    expect(defaultHoudiniProjectFolder('', 'Ita')).toBe('Ita')
-  })
-
-  it('houdiniProjectResolution: presence-based, trimmed, keyed by normalized scene path', () => {
-    const character = makeCharacter({
-      houdiniProjectFolder: '  MyProj_Ita  ',
-      sceneOverrides: [
-        { scenePath: 'X:\\p\\daz3d\\Beach\\Beach.duf', rom: {}, hair: [], houdiniProjectFolder: '' },
-        // No houdiniProjectFolder key → shares the base, NOT in the map.
-        { scenePath: 'X:\\p\\daz3d\\Armor\\Armor.duf', rom: {}, hair: [] },
-      ],
-    })
-    expect(houdiniProjectResolution(character)).toEqual({
-      base: 'MyProj_Ita',
-      byScene: { 'x:/p/daz3d/beach/beach.duf': '' },
-    })
+    // The scene subfolder is appended to the export dir DIRECTLY: the v27
+    // <project>/dth-export nesting (and its whole run-time resolution) is gone.
+    expect(content).toContain('dthExportDir = dthExportDir + "/" + dthExportSub')
+    expect(content).not.toContain('dthExportProj')
+    expect(content).not.toContain('/dth-export"')
+    // The doExport name suffix is still the SCENE subfolder.
+    expect(content).toContain('var dthExportName = "Ita";')
   })
 
   it('sceneExportSubfolders: root-dwelling and out-of-root scenes fall back to their stem', () => {
@@ -1995,14 +1939,11 @@ describe('groom items (hair kept out of the export)', () => {
     ])
   })
 
-  it('the standalone hair export follows the Houdini project layer too', () => {
-    // Grooms must land BESIDE the main export — same <project>/dth-export/<sub>/.
-    const script = toGroomExportScriptDsa(groomChar({ houdiniProjectFolder: 'MyProj_Electra' }))
-    expect(script.content).toContain(
-      'if (dthExportProj != "") dthExportDir = dthExportDir + "/" + dthExportProj + "/dth-export";',
-    )
-    // Without a project folder the script is unchanged.
-    expect(toGroomExportScriptDsa(groomChar()).content).not.toContain('dthExportProj')
+  it('the standalone hair export resolves the same flat scene subfolder', () => {
+    // Grooms must land BESIDE the main export — same <exportPath>/<sub>/.
+    const script = toGroomExportScriptDsa(groomChar())
+    expect(script.content).toContain('dthExportDir = dthExportDir + "/" + dthExportSub')
+    expect(script.content).not.toContain('dthExportProj')
   })
 
   it('the groom script exports each hair item on its own via the DOCUMENTED 3-arg export', () => {

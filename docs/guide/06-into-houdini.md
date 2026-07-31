@@ -23,20 +23,22 @@ In your DazToHue network, point the **PoseAsset** import at the character's
 `_pose_asset.csv` and the geometry import at the exported `.abc`/`.dth`.
 
 > [!TIP]
-> With a **[Houdini project folder](./05-rom-in-daz.md#direct-export-optional-recommended)**
-> set on the character, use Houdini's **File → Set Project** on
-> `<export dir>/<project folder>` — then every import is project-relative:
-> `$JOB/dth-export/primary/<Name>.dth`, and the `.hip` stays portable.
+> Use Houdini's **File → Set Project** on the character's
+> **[`houdini-project` folder](./05-rom-in-daz.md#where-the-houdini-project-fits)**
+> — then every import is project-relative:
+> `$JOB/dth-exports/primary/<Name>.dth`, and the `.hip` stays portable. The
+> exports themselves live on the Daz side; `dth-exports` inside the project is
+> a shortcut to them.
 
 ## Generate the Houdini project automatically
 
-With an export directory and a [Houdini project folder](./05-rom-in-daz.md#the-houdini-project-folder)
-set, the character page's **Houdini projects → Generate project** creates the
-whole project for you: a new scene named after the character (editable in the
-dialog, which refuses a name that already exists), saved in the houdini folder
-**next to** the project folder it Set-Projects into (which starts with its
-`dth-export/` inside), with **Set Project already baked in** and the
-**DazToHue network ready** — open it and import.
+The character page's **Houdini projects → Generate project** creates the whole
+project for you: a new scene named after the character (editable in the dialog,
+which refuses a name that already exists), saved in the houdini folder **next
+to** the `houdini-project` folder it Set-Projects into, with **Set Project
+already baked in** and the **DazToHue network ready** — open it and import.
+The project folder is shared: generate a second or third project and they all
+open with the same `$JOB`.
 
 <p align="center">
   <img width="900" alt="the Generate Houdini project dialog" src="screenshots/houdini-generate-dialog.png" />
@@ -47,14 +49,15 @@ dialog, which refuses a name that already exists), saved in the houdini folder
 ```
 houdini/
 ├─ PlaygroundAssets_Ita.hiplc   ← the generated scene
-└─ PlaygroundAssets_Ita/        ← $JOB (Set Project)
-   └─ dth-export/
+└─ houdini-project/             ← $JOB (Set Project), shared by every project
+   └─ dth-exports  ──►  ../../daz3d/dth-exports
 ```
 
 Removing a **generated** project asks about its files: with **Keep houdini
-files** on it is only unlinked; turned off, the scene file *and* the project
-folder (including everything exported into it) are deleted. Hand-linked
-projects are always unlink-only.
+files** on it is only unlinked; turned off, its scene file is deleted too. The
+shared `houdini-project` folder always stays — the character's other projects
+open with it, and it holds no exports. Hand-linked projects are always
+unlink-only.
 
 One one-time Settings entry powers it: the **Houdini installation folder**
 (Houdini's own install directory — its `bin\hython.exe` builds the scene

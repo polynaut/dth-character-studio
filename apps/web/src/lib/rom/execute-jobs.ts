@@ -2,7 +2,6 @@ import {
   BUILD_ROM_ANIMATION_SCRIPT,
   BULK_EXPORT_ONLY_SCRIPT,
   BULK_ROM_EXPORT_SCRIPT,
-  houdiniProjectResolution,
   romAnimationPath,
   sceneExportSubfolders,
 } from '@dth/rom'
@@ -191,29 +190,29 @@ export function jobSceneForMode(mode: ExportMode, scenePath: string): string {
 }
 
 /**
- * Scene key → the export-dir-RELATIVE FOLDER that scene exports into:
- * `<scene's export subfolder>` — prefixed with
- * `<houdini project folder>/dth-export/` when one resolves for the scene
- * (schema v27) — from the SAME subfolder map + project resolution the
- * generated export block embeds (subfolder falls back to the scene-file stem
- * exactly like the runtime; the project override map uses hasOwn because ''
- * is a real override meaning "flat"). '' = that scene exports into the export
- * dir itself. The one folder rule the export watch AND the housekeeping share.
+ * Scene key → the export-dir-RELATIVE FOLDER that scene exports into: just
+ * `<scene's export subfolder>`, from the SAME subfolder map the generated
+ * export block embeds (falling back to the scene-file stem exactly like the
+ * runtime). '' = that scene exports into the export dir itself. The one folder
+ * rule the export watch AND the housekeeping share.
+ *
+ * Flat since schema v29 — the v27 `<houdini project folder>/dth-export/`
+ * prefix is gone with the export directory's whole dependency on Houdini. The
+ * `{folder, sub}` shape stays because callers need the bare subfolder too
+ * (it names the export files — {@link sceneExportName}).
  */
 export function sceneExportFolderRel(
   character: Character,
   scenesRootAbs?: string,
 ): Record<string, { folder: string; sub: string }> {
   const subfolders = sceneExportSubfolders(character, scenesRootAbs)
-  const project = houdiniProjectResolution(character)
   const map: Record<string, { folder: string; sub: string }> = {}
   for (const scene of [character.scenePath, ...character.extraScenes]) {
     const key = normalizeSceneKey(scene)
     if (!key) continue
     const stem = (key.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
     const sub = subfolders[key] ?? stem
-    const proj = Object.hasOwn(project.byScene, key) ? project.byScene[key] : project.base
-    map[key] = { folder: proj ? `${proj}/dth-export${sub ? `/${sub}` : ''}` : sub, sub }
+    map[key] = { folder: sub, sub }
   }
   return map
 }

@@ -941,30 +941,54 @@ describe('characterSchema - v26 exportSceneSubfolders removed', () => {
   })
 })
 
-// v27 added `houdiniProjectFolder` (character + per-scene override) — additive
-// with a '' default / optional, so there is no migrate step. The '' default IS
-// the compatibility story: an existing character reads as "no project folder"
-// and keeps exporting flat into `<exportPath>/<scene-sub>/`; only the
-// NEW-character creation flow seeds `<Project>_<Character>`.
-describe('characterSchema — v27 houdiniProjectFolder (additive)', () => {
+// v29 removed `houdiniProjectFolder` (character + per-scene override) with the
+// whole v27 export nesting. Both are zod-stripped; the STEP exists only to prune
+// scene records the removal empties, so a project-folder-only override doesn't
+// linger as a dead stub (schema v24's rule).
+describe('characterSchema — v29 houdiniProjectFolder removal', () => {
   const base = { id: 'c1', name: 'Electra', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 
-  it('fills houdiniProjectFolder with "" for a v26-shaped definition (nothing moves)', () => {
-    expect(characterSchema.parse({ ...base, schemaVersion: 26 }).houdiniProjectFolder).toBe('')
-  })
-
-  it('round-trips a stored value and the per-scene override (including "" = flat)', () => {
+  it('strips the character-level field a v28 definition still carries', () => {
     const parsed = characterSchema.parse({
       ...base,
+      schemaVersion: 28,
       houdiniProjectFolder: 'MyProj_Electra',
+    })
+    expect('houdiniProjectFolder' in parsed).toBe(false)
+  })
+
+  it('prunes a record whose ONLY content was the project-folder override', () => {
+    const parsed = characterSchema.parse(
+      migrateCharacterData({
+        ...base,
+        schemaVersion: 28,
+        sceneOverrides: [
+          // Nothing left once the field goes — must not survive as a stub.
+          { scenePath: 'X:/p/daz3d/Beach/Beach.duf', rom: {}, hair: [], houdiniProjectFolder: '' },
+          // Carries hair (rides by presence) — kept, minus the dead field.
+          {
+            scenePath: 'X:/p/daz3d/Armor/Armor.duf',
+            rom: {},
+            hair: [{ nodeLabel: 'Nova Ponytail Hair' }],
+            houdiniProjectFolder: 'SoloProj',
+          },
+        ],
+      }),
+    )
+    expect(parsed.sceneOverrides.map((o) => o.scenePath)).toEqual(['X:/p/daz3d/Armor/Armor.duf'])
+    expect(parsed.sceneOverrides[0].hair).toEqual([{ nodeLabel: 'Nova Ponytail Hair' }])
+    expect('houdiniProjectFolder' in parsed.sceneOverrides[0]).toBe(false)
+  })
+
+  it('is idempotent — a second pass finds no field and prunes nothing new', () => {
+    const once = migrateCharacterData({
+      ...base,
+      schemaVersion: 28,
       sceneOverrides: [
-        { scenePath: 'X:/p/daz3d/Beach/Beach.duf', houdiniProjectFolder: '' },
-        { scenePath: 'X:/p/daz3d/Armor/Armor.duf' },
+        { scenePath: 'X:/p/daz3d/Armor/Armor.duf', rom: {}, hair: [{ nodeLabel: 'Hair' }] },
       ],
     })
-    expect(parsed.houdiniProjectFolder).toBe('MyProj_Electra')
-    expect(parsed.sceneOverrides[0].houdiniProjectFolder).toBe('') // armed: flat export
-    expect(parsed.sceneOverrides[1].houdiniProjectFolder).toBeUndefined() // shares the base
+    expect(migrateCharacterData(once)).toEqual(once)
   })
 })
 

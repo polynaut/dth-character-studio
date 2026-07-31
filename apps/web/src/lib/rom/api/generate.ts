@@ -1,4 +1,4 @@
-import { exists, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -471,6 +471,19 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       scriptsDir = charDir
     } catch (error) {
       scriptsError = error instanceof Error ? error.message : String(error)
+    }
+  }
+  // The export root exists from character creation on — but a character created
+  // before schema v29 only gets its derived path on the next save, so make sure
+  // the folder is actually there before scripts that export into it run.
+  // Best-effort: the exporter would create it too; this just keeps a freshly
+  // migrated character's folder browsable straight away.
+  const exportRoot = versioned.exportPath.trim()
+  if (exportRoot) {
+    try {
+      await mkdir(exportRoot, { recursive: true })
+    } catch {
+      // a failing mkdir here must never fail the generation
     }
   }
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)

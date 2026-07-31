@@ -107,19 +107,15 @@ if (dthRomSourceHit) {
  * every scene, but its files keep the bare base name ("Kira", never
  * "Kira_Primary") — the primary IS the character.
  *
- * With `project` (the character's Houdini project folder + the per-scene
- * override map — schema v27) the export dir first nests under
- * `<project>/dth-export` before the scene subfolder, so a Houdini project can
- * "Set Project" to `<exportPath>/<project>` and import everything JOB-relative
- * (`$JOB/dth-export/<scene>/…`). Resolution: the open scene's override when
- * one exists (hasOwnProperty — '' is a REAL value meaning "this scene exports
- * flat, no project folder"), else the base. Nothing is emitted when the base
- * is empty and no scene overrides — the pre-v27 layout stays byte-identical.
+ * The export dir itself is FLAT (schema v29): every scene lands directly in
+ * `<exportPath>/<subfolder>/`. Between v27 and v29 a `houdiniProjectFolder`
+ * could nest it under `<project>/dth-export` first — that coupling is gone,
+ * because the export root no longer lives inside the Houdini project at all;
+ * Houdini reaches it through a `dth-exports` junction instead.
  */
 export function sceneExportSubfolderSnippet(
   map: Record<string, string>,
   exportName?: { base: string; primarySceneKey: string },
-  project?: { base: string; byScene: Record<string, string> },
 ): string {
   const nameLines =
     exportName === undefined
@@ -134,21 +130,13 @@ if (dthExportSub != "" && dthExportSceneKey != ${dazJson(exportName.primaryScene
     dthExportName = dthExportName + "_" + dthExportSuffix.join("_");
 }
 `
-  const projectActive =
-    project !== undefined && (project.base !== '' || Object.keys(project.byScene).length > 0)
-  const projectLines = !projectActive
-    ? ''
-    : `var dthExportProjByScene = ${dazJson(project.byScene)};
-var dthExportProj = dthExportProjByScene.hasOwnProperty(dthExportSceneKey) ? dthExportProjByScene[dthExportSceneKey] : ${dazJson(project.base)};
-if (dthExportProj != "") dthExportDir = dthExportDir + "/" + dthExportProj + "/dth-export";
-`
   return `var dthExportSubByScene = ${dazJson(map)};
 var dthExportSceneKey = dthOpenSceneFile.split("\\\\").join("/").toLowerCase();
 var dthExportSub = dthExportSubByScene[dthExportSceneKey] || "";
 if (dthExportSub == "" && dthExportSceneKey != "") {
     dthExportSub = new DzFileInfo(dthOpenSceneFile).completeBaseName();
 }
-${nameLines}${projectLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
+${nameLines}if (dthExportSub != "") dthExportDir = dthExportDir + "/" + dthExportSub;
 `
 }
 

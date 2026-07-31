@@ -27,7 +27,20 @@ import {
 } from '#/lib/rom/api.ts'
 import { pickHipPath } from '#/lib/desktop.ts'
 import { displayPath, normalizePath, parentDir } from '#/lib/path.ts'
-import { defaultHoudiniProjectFolder } from '@dth/rom'
+import { characterHoudiniDir } from '#/lib/scene-subfolder.ts'
+
+/** Folder/file-name-safe `<Project>_<Character>` — the Generate dialog's
+ *  prefilled scene name (Windows-illegal characters collapse to one space,
+ *  the same rule the api layer's cleanFileName applies to what's typed). */
+function defaultProjectName(projectName: string, characterName: string): string {
+  const clean = (s: string) =>
+    s
+      .trim()
+      .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  return [clean(projectName), clean(characterName)].filter(Boolean).join('_')
+}
 
 import type { CharacterLocation } from '#/lib/rom/api.ts'
 import type { PersistCharacterPatch } from '#/lib/use-character-draft.ts'
@@ -131,8 +144,9 @@ export function HoudiniProjectsField({
 
   const projects = character.houdiniProjects
   const hasProjects = projects.length > 0
-  const canGenerate =
-    character.exportPath.trim() !== '' && character.houdiniProjectFolder.trim() !== ''
+  // Only the export root is needed now — the project folder is a fixed name the
+  // generate creates (or reuses) by itself.
+  const canGenerate = character.exportPath.trim() !== ''
 
   // A linked `.hip` deleted/moved on disk must not keep masquerading as a
   // healthy card — probe each link and re-probe on window focus (tabbing back
@@ -214,13 +228,14 @@ export function HoudiniProjectsField({
     if (picked) await addProjects([picked])
   }
 
-  // A GENERATED project lives directly in the character's export dir (the
-  // houdini folder) — those are studio-managed like a copied Daz scene, so
-  // the remove dialog may also delete their files.
+  // A GENERATED project lives directly in the character's HOUDINI folder —
+  // those are studio-managed like a copied Daz scene, so the remove dialog may
+  // also delete their scene file.
+  const houdiniDir = characterHoudiniDir(location?.folderAbs ?? '', houdiniSubdir)
   const managedProject = (hip: string) => {
-    const exportDir = normalizePath(character.exportPath.trim()).toLowerCase()
-    if (!exportDir) return false
-    return normalizePath(parentDir(hip)).toLowerCase() === exportDir
+    const dir = normalizePath(houdiniDir).toLowerCase()
+    if (!dir) return false
+    return normalizePath(parentDir(hip)).toLowerCase() === dir
   }
 
   function askRemove(hip: string) {
@@ -339,6 +354,7 @@ export function HoudiniProjectsField({
           projectId={projectId}
           character={character}
           projectName={projectName}
+          houdiniDir={houdiniDir}
           onClose={() => setGenerateOpen(false)}
           onGenerated={async (scenePath, networkAdded, visibleTypes) => {
             await addProjects(
@@ -405,12 +421,15 @@ function GenerateProjectDialog({
   projectId,
   character,
   projectName,
+  houdiniDir,
   onClose,
   onGenerated,
 }: {
   projectId: string
   character: Character
   projectName: string
+  /** The character's Houdini folder — where the `.hiplc` lands. */
+  houdiniDir: string
   onClose: () => void
   /** Links the generated `.hiplc` (the caller owns the persist + toast). */
   onGenerated: (
@@ -419,17 +438,17 @@ function GenerateProjectDialog({
     visibleTypes: Array<string>,
   ) => Promise<void>
 }) {
-  const [name, setName] = useState(defaultHoudiniProjectFolder(projectName, character.name))
+  const [name, setName] = useState(defaultProjectName(projectName, character.name))
   const [busy, setBusy] = useState(false)
-  // The export dir shown relative (".\houdini") — the full path is on the
-  // section's chip already; the dialog only needs the WHERE in one word.
-  const exportDirName = character.exportPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
+  // The houdini folder shown relative (".\houdini") — the dialog only needs the
+  // WHERE in one word.
+  const houdiniDirName = houdiniDir.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
 
   // Live name-collision check: the api layer hard-refuses an existing target
   // (generatedHoudiniScenePath is the SAME computation), but the dialog should
   // say so upfront instead of letting Generate run into the error. Linked
   // projects answer synchronously; the disk probe debounces behind typing.
-  const target = generatedHoudiniScenePath(character.exportPath, name)
+  const target = generatedHoudiniScenePath(houdiniDir, name)
   const linkedTaken =
     target !== '' &&
     character.houdiniProjects.some((p) => normalizePath(p).toLowerCase() === target.toLowerCase())
@@ -494,7 +513,8 @@ function GenerateProjectDialog({
     >
       <p className="text-xs text-muted-foreground">
         Creates <code>{(name.trim() || '<name>') + '.hiplc'}</code> into{' '}
-        <code>{`.\\${exportDirName}`}</code> next to the project folder.
+        <code>{`.\\${houdiniDirName}`}</code>, next to the shared{' '}
+        <code>houdini-project</code> folder it opens with.
       </p>
       <div>
         <Label htmlFor="generate-houdini-name" className="mb-1">

@@ -158,9 +158,12 @@ export const P = {
   scene2: 'D:/DTH Projects/Demo/Kira/daz3d/KiraSummertide_G9_GP.duf',
   /** A linked Houdini project (inside the char folder → the card chip reads %CHAR%\houdini). */
   houdini: 'D:/DTH Projects/Demo/Kira/houdini/Kira.hip',
-  /** The demo character's export directory — the seeded houdini folder every
-   *  new character starts with (an export path can't be cleared since v0.52). */
+  /** The demo character's Houdini folder — where its `.hiplc` files live,
+   *  beside the shared `houdini-project` folder. */
   houdiniDir: 'D:/DTH Projects/Demo/Kira/houdini',
+  /** The demo character's export directory: FIXED at `<char>/<daz>/dth-exports`
+   *  since schema v29 — derived, never picked (the panel is read-only). */
+  exportDir: 'D:/DTH Projects/Demo/Kira/daz3d/dth-exports',
 }
 
 /** The hair item the demo character lists on its primary scene (Hair-items
@@ -266,16 +269,11 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           // ROM/panel overrides on its own).
           houdiniProjects: [P.houdini],
           // The exact export setup a NEW character is created with (matching
-          // api/characters.ts + storage's seedHoudiniFolder): exportPath points
-          // at the seeded houdini subfolder, the project folder is the
-          // `<Project>_<Character>` default (a literal — dsa.ts's
-          // defaultHoudiniProjectFolder can't load under Node's ?raw-less
-          // loader; the generate-dialog shot asserts the app-computed prefill
-          // matches, so a drifted default fails loudly there). The Export
-          // directory panel renders populated, the export switches are live,
-          // and Generate project / DTH Export are available.
-          exportPath: P.houdiniDir,
-          houdiniProjectFolder: 'Demo_Kira',
+          // storage's seedCharacterFolders): the FIXED export root beside the
+          // Daz scenes. The Export directory panel renders populated (read-only
+          // since schema v29), the export switches are live, and Generate
+          // project / DTH Export are available.
+          exportPath: P.exportDir,
           sceneOverrides: [
             { scenePath: P.scene, hair: [{ nodeLabel: HAIR_ITEM }] },
             // The outfit scene carries its own style — hair lists are per scene.

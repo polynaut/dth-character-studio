@@ -168,16 +168,20 @@ older runtimes as stale.
   its subfolder — matched by scene KEY, not by the folder name "primary". The
   hair pass keeps its own `<slug>_Hair_<item>` names (unique per item
   already).
-- The **Houdini project folder** (schema v27, `houdiniProjectFolder`) nests the
-  whole export under `<exportPath>/<folder>/dth-export/<scene-subfolder>/` so
-  Houdini Set-Project's `<exportPath>/<folder>` and imports via
-  `$JOB/dth-export/…`. Resolved at RUN time (`houdiniProjectResolution` in
-  dsa.ts): per-scene override map (presence-based like hair — '' is a real
-  value, "this scene exports flat"; hasOwnProperty, never truthiness) →
-  base → '' = the flat pre-v27 layout, emitted byte-identically. NEW
-  characters seed `<Project>_<Character>` (`defaultHoudiniProjectFolder`, the
-  create flow); existing ones stay '' — their layout must not move. The export
-  watch (`expectedSceneCsvRel`) mirrors the same resolution.
+- The **export directory is DERIVED** (schema v29) — not user data, no picker:
+  always `<character folder>/<project dazSubdir>/dth-exports`
+  (`characterExportRoot`, `lib/scene-subfolder.ts`). Created at character
+  creation (`seedCharacterFolders`) and re-resolved on EVERY save, which is how
+  pre-v29 characters migrate off their hand-picked path; it needs host context
+  so it resolves in the web layer, never in the pure core (migration Case C).
+  `exportPath: ''` survives only as "not resolved yet" (a loose root-level
+  definition, or a definition read outside the desktop app). Exports are FLAT
+  under it: `<exportPath>/<scene-subfolder>/`.
+- Schema v27's **Houdini project folder** is GONE (v29), and with it the
+  `<folder>/dth-export/` nesting, `houdiniProjectResolution`, the per-scene
+  override and the run-time `dthExportProj` block. The export directory owes
+  nothing to Houdini now — the dependency runs the other way, through a
+  junction (below).
 - **Generate Houdini project**: `generateHoudiniProject` (api/houdini.ts) →
   Rust `create_houdini_project` (houdini.rs) runs
   `<houdiniInstallFolder>/bin/hython.exe -c` to start a FRESH scene, build
@@ -192,19 +196,32 @@ older runtimes as stale.
   folder (`lib/houdini-version.ts` pairs install `Houdini X.Y.z` ↔ docs
   `houdiniX.Y`; no match = hard error + live Settings warning) — inherited
   env resolved the prefs elsewhere and no otls loaded (measured). It bakes
-  `$JOB = <exportPath>/<houdiniProjectFolder>` (hou.putenv — the
+  `$JOB = <character>/<houdiniSubdir>/houdini-project` (hou.putenv — the
   programmatic Set Project, saved with the hip) and saves `<name>.hiplc` in
-  the houdini folder NEXT TO the project folder (which is seeded with its
-  dth-export/): `houdini/<name>.hiplc` + `houdini/<folder>/dth-export/`.
-  Generated projects (hip directly in the export dir) are studio-managed:
-  the remove dialog's "Keep houdini files" toggle (default on = unlink only)
-  can delete the scene file + the whole project folder
-  (`removeGeneratedHoudiniProject`, path-guarded); hand-linked projects stay
-  unlink-only. Returns whether the network was created (HDA not visible
-  to hython → empty scene, UI says "add it from the shelf"); the UI
-  (houdini-projects-field "Generate project" dialog, name prefilled
+  the houdini folder NEXT TO it: `houdini/<name>.hiplc` +
+  `houdini/houdini-project/`. That project folder is ONE per character with a
+  FIXED name (schema v29, `HOUDINI_PROJECT_FOLDER`): the first generate
+  creates it, every later one reuses it, so all of a character's projects
+  share a `$JOB`. Consequently `removeGeneratedHoudiniProject` deletes only
+  the `.hiplc` — deleting the shared folder would break the other projects.
+  Generated projects (hip directly in the houdini folder) are studio-managed;
+  hand-linked ones stay unlink-only. Returns whether the network was created
+  (HDA not visible to hython → empty scene, UI says "add it from the shelf");
+  the UI (houdini-projects-field "Generate project" dialog, name prefilled
   `<Project>_<Character>`) links the result as a Houdini card. Fails loud
   when the scene name already exists or a prerequisite is missing.
+- **The `dth-exports` junction** — the ONE link between the two sides, and a
+  pure convenience. `linkExportsIntoProject` (api/houdini.ts) → Rust
+  `create_junction` (junction.rs) puts an NTFS directory junction named
+  `dth-exports` inside the project folder, pointing at the character's export
+  root, so Houdini's file picker (which opens at `$JOB`) lists the exports
+  instead of making the user climb two levels into the Daz subfolder.
+  NOTHING resolves through it: the studio and the generated scripts use real
+  absolute paths, so every failure — non-NTFS/UNC target (a junction can't
+  target UNC), a real folder in the way, a version-control client that deleted
+  it — costs the shortcut only. Idempotent + self-repairing: a correct link
+  reports `"exists"`, a stale one is repointed, a real directory is REFUSED.
+  Junctions need no elevation (symlinks would — that's why it's a junction).
 - **`$DAZ3D_LIB` houdini.env wiring**: with a Daz library + Houdini docs
   folder(s) configured, `DAZ3D_LIB = "<library>"` is upserted into each
   folder's `houdini.env` (`storage/houdini-env.ts` — pure `upsertHoudiniEnvVar`

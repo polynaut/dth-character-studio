@@ -202,35 +202,17 @@ describe('export-folder housekeeping (the record + the delete set)', () => {
     ])
   })
 
-  it('expectedSceneExportFolders: project layout nests under <proj>/dth-export, deduped', () => {
-    const c = layoutChar({
-      houdiniProjectFolder: 'MyProj_Electra',
-      sceneOverrides: [
-        {
-          scenePath: 'X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf',
-          houdiniProjectFolder: '',
-        },
-      ],
-    } as Partial<Character>)
-    expect(expectedSceneExportFolders(c, 'X:/proj/Electra/daz3d')).toEqual([
-      'MyProj_Electra/dth-export/primary',
-      'armor',
-    ])
-  })
-
   it('staleExportFolders: the layout change delete set — recorded minus expected', () => {
     const recorded = {
       version: 1 as const,
       exportDir: 'X:/exports/electra',
       folders: ['primary', 'armor'],
     }
-    // Moved into a project folder: the old flat scene folders are stale.
-    expect(
-      staleExportFolders(recorded, 'X:\\exports\\electra\\', [
-        'MyProj_Electra/dth-export/primary',
-        'MyProj_Electra/dth-export/armor',
-      ]),
-    ).toEqual(['primary', 'armor'])
+    // A renamed scene subfolder leaves the old export folders stale.
+    expect(staleExportFolders(recorded, 'X:\\exports\\electra\\', ['suit', 'gown'])).toEqual([
+      'primary',
+      'armor',
+    ])
     // Same layout → nothing to delete (case-insensitive match).
     expect(staleExportFolders(recorded, 'X:/exports/electra', ['Primary', 'ARMOR'])).toEqual([])
   })

@@ -556,16 +556,7 @@ function CharacterPage() {
 
       <div className={onProductsTab || activeTab === 'notes' ? 'hidden' : undefined}>
       <SceneLock locked={!sceneLinked}>
-      <ExportSettingsSection
-        character={character}
-        saving={draft.saving}
-        persistPatch={draft.persistPatch}
-        location={location}
-        houdiniSubdir={project?.houdiniSubdir}
-        overrideEligible={sceneSel.overrideEligible}
-        sceneOverride={sceneSel.sceneOverride}
-        effectiveScene={sceneSel.effectiveScene}
-      />
+      <ExportSettingsSection character={character} />
 
       <RomEditorSection
         character={character}
