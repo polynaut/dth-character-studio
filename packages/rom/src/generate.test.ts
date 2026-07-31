@@ -1808,6 +1808,26 @@ describe('exporter integration', () => {
     ])
   })
 
+  it('verifies the ROM save by STATTING the file, never by the return value (v49)', () => {
+    const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    // Every Daz build disagrees about saveScene's return: bool, DzError (0 =
+    // success), and void in DS4 — which logged a good save as a failure while
+    // Daz's own log said "Saved Scene". The file on disk is the only answer.
+    expect(content).toContain('if (new DzFileInfo(dthRomSavePath).exists())')
+    expect(content).not.toContain('dthRomSaveRc')
+  })
+
+  it('a missing exporter action is LOUD, not just a log line (v49)', () => {
+    const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
+    const content = toCharacterScriptDsa(character, {}, FRAMES).content
+    // It used to only print(), so the ROM finished "successfully" and the user
+    // was told nothing about the export never running.
+    expect(content).toContain('MessageBox.critical("The ROM was built, but the export did NOT run.')
+    // …and it names the real cause: the plugin build must match THIS Daz.
+    expect(content).toContain('Daz Studio 4 and 6 use different exporter plugins')
+  })
+
   it('saves the ROM scene into rom-animations before any export (runtime v40/v48)', () => {
     const character = withReferencePose({ name: 'Kira', exportPath: 'X:\\exports\\kira' })
     const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Kira').content

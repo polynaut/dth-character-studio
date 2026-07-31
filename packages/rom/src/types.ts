@@ -1285,8 +1285,21 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       wrote. Refresh assets regenerates the scripts AND renames an existing
  *       `.ROM_Animations` folder beside each linked scene, so already-saved
  *       ROM animations follow rather than being orphaned.
+ *  49 — generated-script fixes, both found on a live Daz 4.24 run:
+ *       (a) A MISSING EXPORTER IS NOW LOUD. `findAction("DazToHueExporterAction")`
+ *       returning null only `print()`ed, so the ROM finished "successfully" and
+ *       the user was told nothing while the export silently never ran — the
+ *       failure existed only in Daz's log. It raises a dialog now, naming the
+ *       real cause: the plugin must be the build matching THAT Daz (DS4 ships
+ *       `dth_exporter.dll`, DS6 `dsp_dth_exporter.dll`). The standalone hair
+ *       script was already loud; this matches it.
+ *       (b) The ROM-scene save is verified by STATTING THE FILE, never by the
+ *       return value. Every Daz build disagrees about that value — plain bool,
+ *       DzError-where-0-is-success (DS6, the v45 fix), and void in DS4, which
+ *       logged a successful save as "Could not save" while Daz's own log said
+ *       "Saved Scene". Chasing conventions per version is a losing game.
  */
-export const RUNTIME_VERSION = 48
+export const RUNTIME_VERSION = 49
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

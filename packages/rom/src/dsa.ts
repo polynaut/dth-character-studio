@@ -452,7 +452,14 @@ ${hairPassBlock}    }
 if (dthExportAction) {
     var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
 ${sceneSubfolderBlock}${exportBody}} else {
-    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
+    // LOUD, not a log line. This used to print and return, so the ROM finished
+    // "successfully" and the user was told nothing at all about the export
+    // never running — the failure only existed in Daz's log. The plugin being
+    // installed is not enough either: it must be the build matching THIS Daz
+    // (DS4 and DS6 ship different exporter DLLs), which is exactly the case
+    // that produced a silent skip.
+    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin for this Daz version.");
+    MessageBox.critical("The ROM was built, but the export did NOT run.\\n\\nDaz Studio " + App.version + " has no DazToHue Exporter action registered.\\n\\nInstall the DTH Exporter Plugin build that matches THIS Daz version (Daz Studio 4 and 6 use different exporter plugins), restart Daz, and run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.", "DTH Character Studio", "&OK");
 }
 `
 }
@@ -1041,17 +1048,18 @@ if (dthSceneLinkErr) {
                 // DS4 saves through the content manager; DS6 dropped that
                 // method and moved save-as onto Scene (probe-measured
                 // 2026-07-30 — DzContentMgr.saveScene is a TypeError there).
-                // Two return conventions: the content manager answers a plain
-                // bool, DzScene::saveScene a DzError where 0 IS success (SDK
-                // header, both variants) — a truthiness test on that logged
-                // every successful DS6 save as a failure.
-                var dthRomSaveRc = null;
+                // DO NOT interpret the return value. Every Daz build disagrees
+                // about it: the content manager has answered a plain bool, a
+                // DzError where 0 IS success (DS6 — runtime v45 chased that
+                // one), and void in DS4, which logged a perfectly good save as
+                // a failure while Daz's own log said "Saved Scene". The file on
+                // disk is the only version-proof answer, so ask it.
                 if (typeof App.getContentMgr().saveScene == "function") {
-                    dthRomSaveRc = App.getContentMgr().saveScene(dthRomSavePath);
+                    App.getContentMgr().saveScene(dthRomSavePath);
                 } else if (typeof Scene.saveScene == "function") {
-                    dthRomSaveRc = Scene.saveScene(dthRomSavePath);
+                    Scene.saveScene(dthRomSavePath);
                 }
-                if (dthRomSaveRc === true || dthRomSaveRc === 0) {
+                if (new DzFileInfo(dthRomSavePath).exists()) {
                     print("ROM scene saved: " + dthRomSavePath);
                 } else {
                     print("Could not save the ROM scene to " + dthRomSavePath);
