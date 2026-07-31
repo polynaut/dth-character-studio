@@ -1809,14 +1809,23 @@ describe('exporter integration', () => {
     ])
   })
 
-  it('verifies the ROM save by STATTING the file, never by the return value (v49)', () => {
+  it('verifies the ROM save by the file TIMESTAMP moving, not the return value (v49/v50)', () => {
     const character = withReferencePose({ name: 'Ita', exportPath: 'X:\\exports\\ita' })
     const content = toCharacterScriptDsa(character, {}, FRAMES).content
     // Every Daz build disagrees about saveScene's return: bool, DzError (0 =
-    // success), and void in DS4 — which logged a good save as a failure while
-    // Daz's own log said "Saved Scene". The file on disk is the only answer.
-    expect(content).toContain('if (new DzFileInfo(dthRomSavePath).exists())')
+    // success), and void in DS4 — which logged a good save as a failure.
     expect(content).not.toContain('dthRomSaveRc')
+    // But existence alone is a false POSITIVE: this file is overwritten every
+    // run, so from the second run on a FAILED save would report success while
+    // the stale previous ROM waits on disk to be exported as fresh.
+    expect(content).toContain('dthRomMsBefore')
+    expect(content).toContain('dthRomMsAfter != dthRomMsBefore')
+    // A file that wasn't there before needs no timestamp…
+    expect(content).toContain('if (!dthRomExisted) {')
+    // …and an unreadable timestamp falls back to existence rather than crying wolf.
+    expect(content).toContain('dthRomMsBefore < 0 || dthRomMsAfter < 0')
+    // The failure message says what is actually on disk now.
+    expect(content).toContain("it still holds the PREVIOUS run's ROM")
   })
 
   it('a skipped export is LOUD, and tells the two causes apart (v49)', () => {
