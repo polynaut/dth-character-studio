@@ -76,8 +76,17 @@ a plain browser with native features as no-ops):
   (artifact generation + `resolvePresetFrames` + staleness sweep), `execute.ts`
   (the DTH Exporter job-file handoff + Daz launch — pure parts in
   `lib/rom/execute-jobs.ts`, contract in `docs/exporter-plugin-job-file.md`),
+  `houdini.ts` (Generate project via hython + the `dth-exports` junction),
   `install.ts`, `maintenance.ts`, `avatars.ts`, `attachments.ts`, `notes.ts`,
   `products.ts`, `native-types.ts` (the FFI zod schemas).
+- **Two job-file handoffs, deliberately the same shape** — the studio writes a
+  JSON job, the other side works through it and writes results back, the studio
+  polls. Daz's is `execute.ts` + `execute-jobs.ts` (the Runner plugin). Houdini's
+  is `lib/rom/houdini-jobs.ts` + `lib/rom/houdini-runtime/456.py`, which Houdini
+  runs after a scene loads when the studio's folder is on `HOUDINI_SCRIPT_PATH`
+  and `DTH_HOUDINI_JOB` points at a job. **The Houdini half is inert as of
+  v0.57.0** — the script and contract shipped, but nothing launches or polls
+  them yet (see `.ai/domain.md` § the Houdini export handoff).
 - `lib/rom/storage/` — filesystem persistence (plugin-fs): `settings.ts`
   (**`studioSettingsSchema`** — THE app-global settings definition),
   `projects.ts` (**`DcspManifest`** + recents), `characters.ts` (scan/CRUD +
@@ -112,7 +121,10 @@ dedup + guarded cleanup), `poses.rs` (`.duf` frame counting/wearables + base-fig
 `housekeeping.rs`, `daz.rs` (process probe/script bridge), `drives.rs` (network
 drive remap), `foreground.rs`, `github.rs` (server-side GitHub API — webview CSP
 blocks it), `archive.rs` (zip-bomb bounds), `content.rs`, `fsutil.rs`
-(recursive-delete rails), `report.rs`, `contract_tests.rs`.
+(recursive-delete rails + `move_tree`, the one mover shared by dedup's
+quarantine and the export-root migration), `junction.rs` (NTFS directory
+junctions — std has none), `exports.rs` (moving a character's exported files to
+the fixed export root), `report.rs`, `contract_tests.rs`.
 
 A project window's **native title is `"<.dcsp stem> — DTH Character Studio"`** —
 derived from the `.dcsp` *filename*, set at creation. Renaming a project
@@ -120,7 +132,7 @@ derived from the `.dcsp` *filename*, set at creation. Renaming a project
 (`storage.renameManifestFile`) and calls `sync_renamed_project_window` to
 live-re-title + re-pin every open window on the old file (no close/reopen).
 
-**FFI surface: 29 commands** registered in `generate_handler!` — installs
+**FFI surface: 33 commands** registered in `generate_handler!` — installs
 (`install_dth_release/plugin/daz_assets/daz_merge/houdini_presets/unreal_dth`),
 scans (`list_daz_assets`, `scan_duf_files`, `pose_asset_frames`,
 `scene_wearables`), dedup/uninstall, windows
@@ -132,7 +144,10 @@ Rust-side `open_home_window_impl`, no command), Daz bridge
 `launch_daz_studio` starts a scene-less Daz for the Execute job-file handoff,
 see `docs/exporter-plugin-job-file.md`), drives
 (`unc_for_path`/`ensure_network_drives`), `housekeeping_sweep`,
-`app_release_tags`, `unreal_dth_present`. Nearly all are
+`app_release_tags`, `unreal_dth_present`, `probe_locked_files`, and the Houdini
+side (`create_houdini_project`, `create_junction` — the `dth-exports` shortcut,
+best-effort and never load-bearing — plus `move_exports` for the v29 migration).
+Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
 by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).
 

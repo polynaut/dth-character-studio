@@ -108,6 +108,12 @@ The persisted `Character` shape is versioned (`CHARACTER_SCHEMA_VERSION` in
   `apps/web/src/lib/rom/api/native-contract.test.ts`.
 - **A new structured return = a zod schema + a `contracts/` fixture + a test case
   on both sides.**
+- A **primitive** return (a `String`, a `Vec<String>`) needs no fixture — parse it
+  with a plain `z.string()` / `z.enum([...])` / `z.array(z.string())` at the call
+  site and it is still not a bare cast. `create_houdini_project` (a `"a|b"`
+  report), `create_junction` (`"created"`/`"exists"`) and `move_exports` (one
+  line per failure, empty = all moved) are the examples. Reach for a struct when
+  the caller needs fields, not when it needs an answer.
 - Pattern: **resolve paths in TS, do heavy file work in Rust.** Native access
   stays in the `lib/` layer (`apps/web/src/lib/**`), `isTauri()`-guarded so the
   SPA still runs in a plain browser. UI opens external links via
