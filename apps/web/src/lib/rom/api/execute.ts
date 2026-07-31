@@ -588,7 +588,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   }
   // The exporting runs exist to deliver exports — without an export directory
   // they would build and export nothing. The UI disables the button; backstop
-  // here. A ROM-only run writes its `.ROM_Animations` scene beside the source
+  // here. A ROM-only run writes its `rom-animations` scene beside the source
   // scene, so it needs no export dir at all.
   if (mode !== 'rom-only' && !character.exportPath.trim()) {
     throw new Error('DTH Export needs an export directory — set one in the Export directory panel.')
@@ -740,7 +740,7 @@ const generateRomInput = charScopeInput.extend({
  * Hand a ROM-ANIMATION build for ONE scene to the Runner: a one-row
  * bulk-export batch pointing at the hidden ROM-only script
  * ({@link BUILD_ROM_ANIMATION_SCRIPT}, runtime v43) — it builds the ROM and
- * saves the reopenable `.ROM_Animations/<stem>_ROM.duf`, exporting nothing.
+ * saves the reopenable `rom-animations/<stem>_ROM.duf`, exporting nothing.
  * The scene card polls for that file (its path is returned) and opens it when
  * it appears. Same handoff mechanics as {@link executeCharacterJobs} — stale
  * `running_` cleanup, Daz launched when closed — but NO handoff stamps: this
@@ -807,7 +807,7 @@ export interface RomAnimationStatus {
   scenePath: string
   /** Where the saved ROM animation lives (whether or not it exists). */
   romPath: string
-  /** A `.ROM_Animations/<stem>_ROM.duf` exists for this scene. */
+  /** A `rom-animations/<stem>_ROM.duf` exists for this scene. */
   exists: boolean
   /**
    * …and was built from the CURRENT inputs: its mtime is at/after both the

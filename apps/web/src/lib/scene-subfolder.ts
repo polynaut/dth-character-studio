@@ -35,6 +35,33 @@ export const EXPORTS_FOLDER = 'dth-exports'
  */
 export const HOUDINI_PROJECT_FOLDER = 'houdini-project'
 
+/**
+ * Names a scene subfolder may NOT take, because the studio already owns a
+ * folder of that name directly under the character's scenes root — a scene
+ * moved there would fight the studio for the same directory.
+ *
+ * Only {@link EXPORTS_FOLDER} qualifies today: `<char>/<dazSubdir>/dth-exports`
+ * sits at exactly the level scene subfolders do. `rom-animations` does NOT
+ * belong here — it lives one level deeper, INSIDE each scene's own subfolder,
+ * so it can never collide with a sibling.
+ */
+export const RESERVED_SCENE_SUBFOLDERS: ReadonlyArray<string> = [EXPORTS_FOLDER]
+
+/**
+ * Why `subfolder` can't be used as a scene subfolder, or '' when it's fine.
+ * Judged on the FIRST segment — the one landing directly under the scenes root,
+ * which is the only level the studio's own folders occupy. Case-insensitive
+ * (Windows), so `DTH-Exports` is refused too.
+ */
+export function sceneSubfolderConflict(subfolder: string): string {
+  const first = subfolder.split(/[\\/]+/).filter(Boolean)[0] ?? ''
+  const clash = RESERVED_SCENE_SUBFOLDERS.find(
+    (reserved) => reserved.toLowerCase() === first.toLowerCase(),
+  )
+  if (!clash) return ''
+  return `"${clash}" is where this character's exports go — pick another folder name.`
+}
+
 /** `<charFolder>/<subdir>/<leaf>` with forward slashes and no empty segments —
  *  the shared spelling behind the two resolvers below (a project may configure
  *  no subdir at all, in which case the leaf sits directly in the folder). */

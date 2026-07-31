@@ -48,7 +48,7 @@ export function hideTreeSnippet(fnName: string, hiddenVar: string): string {
  * ROM-scene save (dsa.ts `romSceneSaveBlock`): a Daz save-as REPOINTS
  * `Scene.getFilename()` to the saved copy, and the export block's lookups
  * (subfolder map, groom list, CSV pick) run AFTER that save — reading live
- * would key them on `.ROM_Animations/<stem>_ROM.duf` and miss every map.
+ * would key them on `rom-animations/<stem>_ROM.duf` and miss every map.
  * Every carrier that embeds a scene-keyed snippet MUST emit this first.
  */
 export function openSceneFileSnippet(): string {
@@ -67,14 +67,14 @@ var dthOpenSceneFile = String(Scene.getFilename());
  * the ROM baked onto its timeline.
  *
  * DTH Export's "Export only" mode is what opens those files (its job rows point
- * at `.ROM_Animations/<stem>_ROM.duf`), but every generated script carries this
+ * at `rom-animations/<stem>_ROM.duf`), but every generated script carries this
  * — running any of them on a ROM animation by hand behaves the same way, where
  * it used to abort as a foreign scene. Map from {@link romAnimationSourceMap};
  * emit right after {@link openSceneFileSnippet}, before any lookup or the
  * guard CALL. Base indent 0.
  */
 export function romAnimationSourceSnippet(romSourceMap: Record<string, string>): string {
-  return `// A saved ROM animation (.ROM_Animations/<stem>_ROM.duf) stands in for the scene
+  return `// A saved ROM animation (rom-animations/<stem>_ROM.duf) stands in for the scene
 // it was built from — resolve it back, so every scene-keyed lookup below matches.
 var dthRomSourceScenes = ${dazJson(romSourceMap, 2)};
 var dthRomSourceHit = dthRomSourceScenes[String(dthOpenSceneFile).split("\\\\").join("/").toLowerCase()];

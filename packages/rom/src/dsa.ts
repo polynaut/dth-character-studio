@@ -22,7 +22,7 @@ import {
 export const BULK_ROM_EXPORT_SCRIPT = '.Bulk_ROM_Export.dsa'
 /** The hidden per-character ROM-ONLY script ("Open and Generate ROM
  *  Animation" on a scene card): builds the ROM and saves the reopenable
- *  `.ROM_Animations/<stem>_ROM.duf` copy (runtime v42), but never exports —
+ *  `rom-animations/<stem>_ROM.duf` copy (runtime v42), but never exports —
  *  the mirror image of {@link BULK_ROM_EXPORT_SCRIPT}, which forces the
  *  export ON. Dot-prefixed so Daz's Content Library never shows it. */
 export const BUILD_ROM_ANIMATION_SCRIPT = '.Build_ROM_Animation.dsa'
@@ -35,11 +35,29 @@ export const BUILD_ROM_ANIMATION_SCRIPT = '.Build_ROM_Animation.dsa'
 export const BULK_EXPORT_ONLY_SCRIPT = '.Bulk_Export_Only.dsa'
 
 /**
- * Where a scene's saved ROM animation lives: `<sceneDir>/.ROM_Animations/
- * <stem>_ROM.duf` — the copy every ROM-building script writes after a clean
- * build (runtime v40). THE one rule: generation embeds it (so an export-only
- * run can map the open ROM animation back to its source scene) and the host
- * stats it (the scene card's open menu, the export handoff).
+ * The folder a scene's saved ROM animations live in, beside the scene file.
+ * ONE spelling for both sides — {@link romAnimationPath} builds the host's path
+ * from it and the generated `.dsa` embeds it — because a drift between the two
+ * means the studio stats a file Daz never wrote.
+ *
+ * Renamed from the hidden `rom-animations` in runtime v48: a folder the user
+ * is meant to open scenes from should be visible, and the name now matches the
+ * lowercase-hyphenated convention of the other studio folders (`dth-exports`,
+ * `houdini-project`).
+ */
+export const ROM_ANIMATIONS_FOLDER = 'rom-animations'
+
+/** The pre-v48 name of the folder above. Kept ONLY so the host can rename an
+ *  existing one on the next generation — nothing writes it any more. */
+export const LEGACY_ROM_ANIMATIONS_FOLDER = 'rom-animations'
+
+/**
+ * Where a scene's saved ROM animation lives:
+ * `<sceneDir>/rom-animations/<stem>_ROM.duf` — the copy every ROM-building
+ * script writes after a clean build (runtime v40). THE one rule: generation
+ * embeds it (so an export-only run can map the open ROM animation back to its
+ * source scene) and the host stats it (the scene card's open menu, the export
+ * handoff).
  */
 export function romAnimationPath(scenePath: string): string {
   const norm = scenePath.replace(/\\/g, '/')
@@ -48,7 +66,7 @@ export function romAnimationPath(scenePath: string): string {
   const file = norm.slice(slash + 1)
   const dot = file.lastIndexOf('.')
   const stem = dot > 0 ? file.slice(0, dot) : file
-  return `${dir}/.ROM_Animations/${stem}_ROM.duf`
+  return `${dir}/${ROM_ANIMATIONS_FOLDER}/${stem}_ROM.duf`
 }
 
 /**
@@ -813,7 +831,7 @@ export function toBulkRomExportScriptDsa(
  * The hidden ROM-ONLY variant ({@link BUILD_ROM_ANIMATION_SCRIPT}) the Runner
  * executes for a scene card's "Open and Generate ROM Animation": the same
  * one-script build with the export forced OFF — it builds the ROM and (runtime
- * v42) saves the reopenable `.ROM_Animations/<stem>_ROM.duf`, nothing else.
+ * v42) saves the reopenable `rom-animations/<stem>_ROM.duf`, nothing else.
  * One builder ({@link toCharacterScriptDsa}'s), so it can never drift from the
  * visible ROM script; needs no export directory (the save doesn't either).
  */
@@ -1007,7 +1025,7 @@ if (dthSceneLinkErr) {
         // export). No-op unless the character opted in.
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
         // Keep the built ROM reopenable: save the scene as <stem>_ROM.duf into
-        // the hidden .ROM_Animations subfolder BESIDE the source scene, BEFORE
+        // the ${ROM_ANIMATIONS_FOLDER} subfolder BESIDE the source scene, BEFORE
         // any export — the user can open the generated ROM animation any time
         // later without the (slow) rebuild. Save-as repoints the open scene's
         // filename, which is why every scene-keyed lookup below reads the
@@ -1016,7 +1034,7 @@ if (dthSceneLinkErr) {
         if (dthRomOk === true && dthOpenSceneFile != "") {
             try {
                 var dthRomSceneInfo = new DzFileInfo(dthOpenSceneFile);
-                var dthRomSaveDir = dthRomSceneInfo.path() + "/.ROM_Animations";
+                var dthRomSaveDir = dthRomSceneInfo.path() + "/${ROM_ANIMATIONS_FOLDER}";
                 var dthRomSaveDirObj = new DzDir(dthRomSaveDir);
                 if (!dthRomSaveDirObj.exists()) dthRomSaveDirObj.mkpath(dthRomSaveDir);
                 var dthRomSavePath = dthRomSaveDir + "/" + dthRomSceneInfo.completeBaseName() + "_ROM.duf";
@@ -1369,7 +1387,7 @@ export function generateAll(
         ]
       : []),
     // The hidden ROM-only script ("Open and Generate ROM Animation"): builds
-    // the ROM + saves the .ROM_Animations copy, never exports — so it exists
+    // the ROM + saves the rom-animations copy, never exports — so it exists
     // for every character (the save needs no export dir).
     toBuildRomAnimationScriptDsa(
       character,
