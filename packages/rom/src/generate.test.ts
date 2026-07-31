@@ -1827,11 +1827,11 @@ describe('exporter integration', () => {
     // Daz 4 registers the exporter under another name, so a class-only lookup
     // reported "not installed" for a plugin that was right there.
     expect(content).toContain('dthCandidateName == "DazToHue_Action"')
-    // Presence is NOT capability: the DS4 build exposes no doExport at all, so
-    // that — not the lookup — decides whether the export can run.
+    // Presence is NOT capability: a pre-2.0 Exporter build registers its action
+    // but exposes no doExport, so THAT decides whether the export can run.
     expect(content).toContain('typeof dthExportAction.doExport == "function"')
     // Three states, three messages: exportable, present-but-unscriptable, absent.
-    expect(content).toContain('no scripted export')
+    expect(content).toContain('Exporter Plugin 2.0 or newer')
     expect(content).toContain('No DazToHue Exporter is registered')
   })
 

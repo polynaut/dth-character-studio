@@ -1293,11 +1293,12 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       `DazToHueExporterAction`, DS4 registers class `ExporterAction` /
  *       name `DazToHue_Action`, so the lookup reported "not installed" for a
  *       plugin that was right there. It now falls back to the name — but
- *       PRESENCE IS NOT CAPABILITY: the DS4 action exposes only inherited
- *       DzAction members, 28 of them, none named doExport (measured), so its
- *       export simply cannot be scripted. The gate is therefore
- *       `typeof doExport == "function"`, with three distinct messages:
- *       exportable, present-but-unscriptable (use DS6), and absent.
+ *       PRESENCE IS NOT CAPABILITY: scripted export arrived in Exporter Plugin
+ *       2.0, and a pre-2.0 build registers its action normally while exposing
+ *       only inherited DzAction members (measured on 1.0.0.1: 28 methods, no
+ *       doExport). The gate is therefore `typeof doExport == "function"`, with
+ *       three distinct messages: exportable, present-but-too-old (needs 2.0+),
+ *       and absent.
  *       (b) The ROM-scene save is verified by STATTING THE FILE, never by the
  *       return value. Every Daz build disagrees about that value — plain bool,
  *       DzError-where-0-is-success (DS6, the v45 fix), and void in DS4, which
