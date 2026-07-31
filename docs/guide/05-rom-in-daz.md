@@ -49,11 +49,11 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
   <sub><em>The export directory section on the character page.</em></sub>
 </p>
 
-1. On the character page, check the **Export directory**. A new character
-   already has one: its own **Houdini subfolder** (the empty folder the
-   studio seeds for the character's Houdini project). Change it with
-   **Change…** if you export somewhere else — an export directory can only be
-   repointed, never removed (the export pipeline builds on it).
+1. Nothing to set up: every character has an **Export directory**, fixed at
+   `dth-exports` inside its Daz folder (created with the character). It sits
+   beside the scenes that produce it and is shown read-only on the character
+   page. To skip exporting, turn off **Run the export with the ROM script**
+   (below) rather than looking for a way to clear the path.
 2. Run the script in Daz as above — after building the ROM it now runs the
    exporter automatically and writes everything the pipeline needs into your
    export folder: **`<Name>.abc`**, **`<Name>.dth`** (extra scenes:
@@ -81,33 +81,61 @@ exception: it exports into its subfolder like every scene, but its files keep
 the plain name (`Kira.abc`, never `Kira_Primary.abc`) — the primary is the
 character.
 
-### The Houdini project folder
+### Where the Houdini project fits
 
-The **Houdini project folder** field (in the **Export directory** panel;
-new characters start with `<Project>_<Character>`, and the field needs an
-export directory) puts a Houdini-project layer above those scene subfolders:
-everything exports into
+The exports deliberately live **outside** the Houdini project — a Houdini
+project folder is something you back up, sync or put in version control, and
+`.abc`/`.dth` files are large and fully regenerable. So the studio keeps them
+on the Daz side and gives Houdini a **shortcut** instead:
 
 ```
-<export dir>/<project folder>/dth-export/<scene subfolder>/
+<character>/
+  daz3d/
+    Kira.duf
+    dth-exports/          ← the real files
+      primary/  Kira.abc  Kira.dth  Kira_pose_asset.csv
+      summertide/
+  houdini/
+    Kira.hiplc
+    houdini-project/      ← $JOB (File → Set Project)
+      dth-exports  ──►  ../../daz3d/dth-exports
 ```
 
-Point a Houdini project at `<export dir>/<project folder>` with **File → Set
-Project** and every import becomes project-relative —
-`$JOB/dth-export/primary/Kira.dth` ([Into Houdini](./06-into-houdini.md)).
+That last entry is a **junction**: a folder-shaped shortcut Windows resolves
+transparently. Houdini's file picker opens at `$JOB`, so `dth-exports/` is
+right there — one click instead of climbing two levels into the Daz folder —
+and imports read `$JOB/dth-exports/primary/Kira.dth`
+([Into Houdini](./06-into-houdini.md)).
 
-- **Empty the field** and no project folder is created — each scene's subfolder
-  exports directly into the export directory (how it always worked; existing
-  characters keep this until they set a folder).
-- With a **non-primary Daz scene selected** the field overrides **per scene**
-  (the green override mark, like the identity dials): a scene can export into
-  its own project folder — or, overridden to empty, directly into the export
-  directory.
-- **Old folders clean themselves up**: the studio remembers which export
-  folders the current layout uses, and when the layout changes (a renamed or
-  cleared project folder, a moved scene subfolder) the previous run's folders
-  are removed from the export directory on the next save. Clearing the whole
-  export directory never deletes anything.
+**Generate project** creates it, along with the `houdini-project` folder
+itself. That folder is shared: the first generated project creates it, every
+later one reuses it, so all of a character's projects open with the same
+`$JOB`.
+
+&nbsp;
+
+> [!NOTE]
+> The junction is a convenience, not plumbing — the export pipeline itself
+> never goes through it. If a tool that scans your project folder dislikes it
+> (Perforce and some backup clients follow or delete reparse points), you can
+> add `dth-exports` to `P4IGNORE`/`.gitignore`, or simply delete the link and
+> browse to the Daz folder yourself. Nothing breaks either way, and the next
+> **Generate project** puts it back.
+
+&nbsp;
+
+**Old folders clean themselves up**: the studio remembers which export folders
+the current layout uses, and when a scene's subfolder is renamed or moved, the
+previous run's folders are removed from the export directory on the next save.
+
+&nbsp;
+
+> [!NOTE]
+> **Upgrading from an older version?** Characters that had a hand-picked export
+> directory move to the new one automatically the next time they're saved — and
+> their already-exported files come along, so nothing is left behind (**Tools →
+> Refresh assets** migrates every character in one go). Only the folders the
+> studio wrote are moved; anything else you kept in that directory stays put.
 
 Two switches (in the **Daz scripts generated** box on the character page)
 tune this:
@@ -139,7 +167,7 @@ do first:
 - **ROM + Export** — the full run: a fresh ROM, the saved ROM animation scene,
   and the export of everything (skeletal mesh and hair).
 - **ROM only** — build the ROM and save the `.ROM_Animations` scene (above),
-  skipping the export. Needs no export directory.
+  skipping the export entirely.
 - **Export only** — export the saved ROM animations as they stand, hair
   included, without rebuilding them. This is the one for a ROM you tweaked by
   hand in Daz: it pre-selects exactly the scenes whose ROM animation is newer
@@ -181,9 +209,9 @@ it first.
 &nbsp;
 
 > [!NOTE]
-> No export directory set? The ROM is still built in Daz — export manually with the
-> DTH Exporter as described in the DazToHue docs; the PoseAsset CSV is waiting in
-> the character's folder.
+> Prefer exporting by hand? Turn off *Run the export with the ROM script* — the
+> ROM is still built in Daz, and you export with the DTH Exporter as described
+> in the DazToHue docs; the PoseAsset CSV is waiting in the character's folder.
 
 &nbsp;
 

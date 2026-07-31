@@ -9,6 +9,7 @@ import {
   jobSceneForMode,
   jobScriptForMode,
   expectedSceneExportFolders,
+  migratedExportFolder,
   jobFileJson,
   normalizeSceneKey,
   openSceneJobFileJson,
@@ -202,20 +203,16 @@ describe('export-folder housekeeping (the record + the delete set)', () => {
     ])
   })
 
-  it('expectedSceneExportFolders: project layout nests under <proj>/dth-export, deduped', () => {
-    const c = layoutChar({
-      houdiniProjectFolder: 'MyProj_Electra',
-      sceneOverrides: [
-        {
-          scenePath: 'X:\\proj\\Electra\\daz3d\\armor\\Electra_Armor.duf',
-          houdiniProjectFolder: '',
-        },
-      ],
-    } as Partial<Character>)
-    expect(expectedSceneExportFolders(c, 'X:/proj/Electra/daz3d')).toEqual([
-      'MyProj_Electra/dth-export/primary',
-      'armor',
-    ])
+  it('migratedExportFolder: the v27 <project>/dth-export/ nesting is stripped, nesting kept', () => {
+    // The v27 layout → the scene subfolder it always ended in.
+    expect(migratedExportFolder('MyProj_Electra/dth-export/primary')).toBe('primary')
+    // A NESTED scene subfolder survives whole — it names the export files.
+    expect(migratedExportFolder('MyProj_Electra/dth-export/outfits/armor')).toBe('outfits/armor')
+    // Already flat (pre-v27 / no project folder): unchanged.
+    expect(migratedExportFolder('primary')).toBe('primary')
+    expect(migratedExportFolder('outfits/armor')).toBe('outfits/armor')
+    // A scene subfolder that merely CONTAINS the word is not a prefix match.
+    expect(migratedExportFolder('dth-export-backup')).toBe('dth-export-backup')
   })
 
   it('staleExportFolders: the layout change delete set — recorded minus expected', () => {
@@ -224,13 +221,11 @@ describe('export-folder housekeeping (the record + the delete set)', () => {
       exportDir: 'X:/exports/electra',
       folders: ['primary', 'armor'],
     }
-    // Moved into a project folder: the old flat scene folders are stale.
-    expect(
-      staleExportFolders(recorded, 'X:\\exports\\electra\\', [
-        'MyProj_Electra/dth-export/primary',
-        'MyProj_Electra/dth-export/armor',
-      ]),
-    ).toEqual(['primary', 'armor'])
+    // A renamed scene subfolder leaves the old export folders stale.
+    expect(staleExportFolders(recorded, 'X:\\exports\\electra\\', ['suit', 'gown'])).toEqual([
+      'primary',
+      'armor',
+    ])
     // Same layout → nothing to delete (case-insensitive match).
     expect(staleExportFolders(recorded, 'X:/exports/electra', ['Primary', 'ARMOR'])).toEqual([])
   })

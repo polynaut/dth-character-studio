@@ -314,7 +314,6 @@ function buildExportBlock(
         base: exporterFigureName(character),
         primarySceneKey: character.scenePath.trim().replace(/\\/g, '/').toLowerCase(),
       },
-      houdiniProjectResolution(character),
     ),
   )
   // The CSV to deliver: the base name, or — when some linked scene overrides the
@@ -459,39 +458,6 @@ function groomSceneMap(character: Character): Record<string, Array<string>> {
 }
 
 /**
- * The per-scene EXPORT subfolder each linked scene's export nests under:
- * normalized scene path → the scene's own subfolder path below the character's
- * scenes ROOT (every scene has its own subfolder now — the primary's is
- * "primary", extras get a name seeded from the sanitized scene name at add
- * time; nested subfolders mirror as nested export folders). The HOST resolves
- * `scenesRootAbs` (charFolder + project dazSubdir rules — the pure core can't
- * know it) and threads it through {@link generateAll}.
- *
- * Fallback = the scene's file STEM (the pre-v37 per-scene-name nesting) for a
- * scene the root can't place: linked in place outside the root, still sitting
- * DIRECTLY in the root (legacy layout — the Refresh sweep moves those into
- * subfolders), no root threaded at all, or two scenes sharing one subfolder
- * (their exports must never overwrite each other). Same key normalization as
- * {@link groomSceneMap}.
- */
-/**
- * The seed value for a NEW character's `houdiniProjectFolder`:
- * `<Project>_<Character>` with folder-illegal characters collapsed to spaces
- * (Windows filename rules — same class exporterFigureName strips). Existing
- * characters are NEVER seeded — their schema default '' keeps the flat export
- * layout (schema v27).
- */
-export function defaultHoudiniProjectFolder(projectName: string, characterName: string): string {
-  const clean = (s: string) =>
-    s
-      .trim()
-      .replace(/[\r\n<>:"/\\|?*]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  return [clean(projectName), clean(characterName)].filter(Boolean).join('_')
-}
-
-/**
  * The run-time export base name (`dthExportName`) for ONE scene, given its
  * resolved export subfolder — the studio-side MIRROR of the snippet's rule
  * ({@link sceneExportSubfolderSnippet}): base {@link exporterFigureName},
@@ -520,33 +486,21 @@ export function sceneExportName(
 }
 
 /**
- * The Houdini-project layer of the export path (schema v27), as the run-time
- * resolution input for {@link sceneExportSubfolderSnippet}: the character's
- * base `houdiniProjectFolder` + a map of normalized scene path → that scene's
- * override — where '' is a REAL entry ("this scene exports flat"), so only
- * scenes with an armed override appear. When the resolved value is non-empty,
- * the scene exports under `<exportPath>/<value>/dth-export/<scene-subfolder>/`
- * instead of `<exportPath>/<scene-subfolder>/`. Like hair, the override rides
- * this map BY PRESENCE — it never arms the record (`activeSceneOverrides`);
- * an unlinked record's entry is unreachable at run time (the scene guard
- * refuses unlinked scenes). Public: the studio's export watch mirrors the
- * same resolution for its expected-CSV paths.
+ * The per-scene EXPORT subfolder each linked scene's export nests under:
+ * normalized scene path → the scene's own subfolder path below the character's
+ * scenes ROOT (every scene has its own subfolder now — the primary's is
+ * "primary", extras get a name seeded from the sanitized scene name at add
+ * time; nested subfolders mirror as nested export folders). The HOST resolves
+ * `scenesRootAbs` (charFolder + project dazSubdir rules — the pure core can't
+ * know it) and threads it through {@link generateAll}.
+ *
+ * Fallback = the scene's file STEM (the pre-v37 per-scene-name nesting) for a
+ * scene the root can't place: linked in place outside the root, still sitting
+ * DIRECTLY in the root (legacy layout — the Refresh sweep moves those into
+ * subfolders), no root threaded at all, or two scenes sharing one subfolder
+ * (their exports must never overwrite each other). Same key normalization as
+ * {@link groomSceneMap}.
  */
-export function houdiniProjectResolution(
-  character: Pick<Character, 'houdiniProjectFolder' | 'sceneOverrides'>,
-): {
-  base: string
-  byScene: Record<string, string>
-} {
-  const byScene: Record<string, string> = {}
-  for (const override of character.sceneOverrides) {
-    if (override.houdiniProjectFolder === undefined) continue
-    const key = override.scenePath.trim().replace(/\\/g, '/').toLowerCase()
-    if (key !== '') byScene[key] = override.houdiniProjectFolder.trim()
-  }
-  return { base: character.houdiniProjectFolder.trim(), byScene }
-}
-
 export function sceneExportSubfolders(
   character: Character,
   scenesRootAbs?: string,
@@ -1212,13 +1166,11 @@ export function toGroomExportScriptDsa(
   const exportDir = character.exportPath.trim().replace(/\\/g, '/')
   const groomMap = groomSceneMap(character)
   // The same snippet body the ROM/Export export block uses (dz-snippets), at
-  // this script's base indent 0. The Houdini-project layer rides along (no
-  // exportName — hair keeps its own <slug>_Hair_<item> names) so grooms land
-  // beside the main export inside <project>/dth-export/<scene-sub>/.
+  // this script's base indent 0 (no exportName — hair keeps its own
+  // <slug>_Hair_<item> names), so grooms land beside the main export in
+  // <exportPath>/<scene-sub>/.
   const sceneSubfolderBlock = sceneExportSubfolderSnippet(
     sceneExportSubfolders(character, scenesRootAbs),
-    undefined,
-    houdiniProjectResolution(character),
   )
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 

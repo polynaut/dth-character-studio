@@ -275,6 +275,37 @@ export const characterMigrations: Record<
     data.sceneOverrides = overrides
     return data
   },
+  // v29 — the per-scene `houdiniProjectFolder` override is gone with the whole
+  // v27 export nesting (exports are a fixed, Houdini-independent root now). zod
+  // strips the key by itself; what it CANNOT do is notice that dropping it
+  // leaves a record carrying nothing — and a record that means exactly what NO
+  // record means is the dead stub schema v24 exists to keep out of the JSON.
+  // So prune here, on the raw object (mirrors `sceneRecordEmpty`, which can only
+  // run post-zod), but ONLY for records that actually carried the field:
+  // an already-empty record is left alone, because the v20/v21/v24 steps emit
+  // those on purpose. Idempotent: a second pass finds no field to remove.
+  29: (data) => {
+    if (!Array.isArray(data.sceneOverrides)) return data
+    data.sceneOverrides = data.sceneOverrides.filter((override: any) => {
+      // Only records THIS removal touches are candidates. An empty record that
+      // was already empty is not ours to judge — earlier migrations
+      // deliberately produce those, and the editor's writers prune on write.
+      if (!override || typeof override !== 'object') return true
+      if (!('houdiniProjectFolder' in override)) return true
+      delete override.houdiniProjectFolder
+      const romEmpty =
+        !override.rom || typeof override.rom !== 'object' || Object.keys(override.rom).length === 0
+      return !(
+        romEmpty &&
+        (!Array.isArray(override.hair) || override.hair.length === 0) &&
+        override.identity === undefined &&
+        override.preserve === undefined &&
+        override.jcm === undefined &&
+        override.frameZero === undefined
+      )
+    })
+    return data
+  },
   // ── TEMPLATES — copy one, set N = the new CHARACTER_SCHEMA_VERSION ──────────
   //
   // Case A — rename / restructure an existing field:

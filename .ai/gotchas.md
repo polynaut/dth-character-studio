@@ -262,6 +262,23 @@ current code before relying on details, but assume the *lesson* still holds.
   operation's root: `is_dir()` FOLLOWS links, so a mover must check
   `symlink_metadata` first and move the reparse point itself (cross-volume:
   refuse) — or it deep-copies the target's gigabytes and deletes the link.
+- **Creating a directory link on Windows: junction, not symlink.** A junction
+  (`IO_REPARSE_TAG_MOUNT_POINT`) needs NO elevation; a directory SYMLINK needs
+  `SeCreateSymbolicLinkPrivilege` (admin) or Developer Mode plus
+  `SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE`, so `std::os::windows::fs::
+  symlink_dir` simply fails for an unelevated studio. std has no junction API at
+  all — `junction.rs` writes the reparse point itself via
+  `FSCTL_SET_REPARSE_POINT` (substitute name wants the NT `\??\` prefix; the
+  declared name lengths EXCLUDE their NUL terminators). The price: a junction
+  can only target a LOCAL absolute path — never UNC or a mapped network drive.
+- **`fs::remove_dir_all` on a folder CONTAINING a junction removes the link, not
+  the target's files** (measured on this repo's Windows, Rust std). That is what
+  makes the `dth-exports` junction safe to place inside a Houdini project folder
+  the user may delete. Do NOT assume the same of other tools: PowerShell's
+  `Remove-Item -Recurse` has historically recursed through reparse points, and
+  `p4 clean` / `reconcile -d` may treat the junction as an untracked extra. The
+  studio's answer is not to trust any of them — the junction carries no data and
+  is recreated on the next Generate project.
 - **Dedup's containment rails must cover source ↔ source, not just
   quarantine ↔ source** — the same folder listed twice (case variant) makes
   every asset an exact dup of ITSELF, and a source nested in another source is

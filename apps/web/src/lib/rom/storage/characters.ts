@@ -10,6 +10,7 @@ import {
 import type { Character } from '@dth/rom'
 
 import { canonicalImage } from '../image'
+import { characterExportRoot } from '#/lib/scene-subfolder.ts'
 import {
   characterFolderName,
   definitionFileName,
@@ -503,9 +504,25 @@ export async function saveCharacter(
 
   // Repoint scenes / Houdini projects that lived inside the renamed folder to its
   // new location; a scene linked in place outside the folder is left untouched.
-  const finalStamped = folderMove
+  const repointed = folderMove
     ? repointCharacterPaths(stamped, folderMove.from, folderMove.to)
     : stamped
+
+  // A loose root-level definition's "folder" IS the library → relFolder ''.
+  const relFolder = relativeInside(lib, finalFolderAbs) ?? ''
+  // The export root is DERIVED, not user data (schema v29): re-resolve it on
+  // every save so it follows a folder rename and so pre-v29 characters (which
+  // carry a hand-picked path) migrate the first time they're written — the
+  // Case C pattern, the same way Refresh assets persists other host-resolved
+  // values. Only for a character that owns a folder: see characterExportRoot.
+  const dazSubdir = relFolder
+    ? await readManifest(project.path)
+        .then((m) => m.dazSubdir)
+        .catch(() => undefined)
+    : undefined
+  const finalStamped = relFolder
+    ? { ...repointed, exportPath: characterExportRoot(finalFolderAbs, dazSubdir) }
+    : repointed
 
   await writeTextFileAtomic(definitionAbs, JSON.stringify(finalStamped, null, 2) + '\n')
   return {
@@ -513,8 +530,7 @@ export async function saveCharacter(
     location: {
       definitionAbs,
       folderAbs: finalFolderAbs,
-      // A loose root-level definition's "folder" IS the library → relFolder ''.
-      relFolder: relativeInside(lib, finalFolderAbs) ?? '',
+      relFolder,
       libraryFolder: lib,
     },
   }
@@ -577,7 +593,7 @@ export async function createCharacterAt(
     }
   }
 
-  const seeded = await seedHoudiniFolder(project, stamped, folderAbs, charRelFolder)
+  const seeded = await seedCharacterFolders(project, stamped, folderAbs, charRelFolder)
   await writeTextFileAtomic(definitionAbs, JSON.stringify(seeded, null, 2) + '\n')
   return {
     character: seeded,
@@ -586,28 +602,28 @@ export async function createCharacterAt(
 }
 
 /**
- * Seed the empty Houdini folder (named from the project manifest) inside a new
- * character's folder, and start the character's **export directory** pointed at
- * it — returning the character to write.
+ * Seed a new character's folders — its fixed EXPORT root (pointing `exportPath`
+ * at it) and, when the project asks for one, the empty Houdini folder — and
+ * return the character to write.
  *
- * The folder exists to nudge the user into creating the character's Houdini
- * project there, and that is also where its exports belong, so pre-filling
- * `exportPath` saves every new character a trip through the folder picker. It's
- * the same folder that picker would have opened in (`defaultExportDir` in
- * `export-settings-section.tsx`) — keep the two in step.
+ * The export root is `<folder>/<dazSubdir>/dth-exports` (schema v29,
+ * {@link characterExportRoot}): fixed, not chosen, and created for every
+ * foldered character regardless of the Houdini settings — the exporter's output
+ * is Daz-side output. The Houdini folder is still seeded to nudge the user into
+ * putting their `.hiplc` there, but it no longer holds exports; a
+ * `houdini-project` folder appears inside it on the first "Generate project",
+ * with a `dth-exports` junction back to the export root.
  *
  * Best-effort and only for characters that own a folder: never scatter a seed
- * folder into the project root, and never let a hostile manifest value fail a
- * create that already resolved its destination. A create that skips the seed
- * (`createHoudiniSubdir` off, or no subdir configured) leaves `exportPath` empty
- * — pointing it at a folder that was deliberately not created would be worse
- * than leaving the user to choose.
+ * folder into the project root (a loose definition's "folder" is the whole
+ * library, where every character would collide), and never let a hostile
+ * manifest value fail a create that already resolved its destination.
  *
- * The two settings are read from the `.dcsp` here rather than taken from the
+ * The settings are read from the `.dcsp` here rather than taken from the
  * caller's project record: the manifest is this layer's own source of truth, so
- * the seeded folder and the export path can't disagree with what's on disk.
+ * the seeded folders and the export path can't disagree with what's on disk.
  */
-async function seedHoudiniFolder(
+async function seedCharacterFolders(
   project: Project,
   character: Character,
   folderAbs: string,
@@ -616,16 +632,17 @@ async function seedHoudiniFolder(
   if (!relFolder) return character
   try {
     const manifest = await readManifest(project.path)
-    if (!manifest.createHoudiniSubdir) return character
-    const houSub = normalizeRelFolder(manifest.houdiniSubdir)
-    if (!houSub) return character
-    const houAbs = join(folderAbs, houSub)
-    await mkdir(houAbs, { recursive: true })
-    // A prefilled/imported definition that already carries an export path keeps it.
-    if (character.exportPath.trim()) return character
-    return { ...character, exportPath: houAbs }
+    if (manifest.createHoudiniSubdir) {
+      const houSub = normalizeRelFolder(manifest.houdiniSubdir)
+      if (houSub) await mkdir(join(folderAbs, houSub), { recursive: true })
+    }
+    const exportRoot = characterExportRoot(folderAbs, normalizeRelFolder(manifest.dazSubdir))
+    if (!exportRoot) return character
+    await mkdir(exportRoot, { recursive: true })
+    return { ...character, exportPath: exportRoot }
   } catch {
-    // No seed folder → no export path either; the character itself is fine.
+    // The character itself is fine without the seed — saveCharacter re-derives
+    // exportPath on every write, and generation creates the folder it needs.
     return character
   }
 }
