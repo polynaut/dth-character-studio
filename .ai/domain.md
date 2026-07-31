@@ -177,6 +177,14 @@ older runtimes as stale.
   `exportPath: ''` survives only as "not resolved yet" (a loose root-level
   definition, or a definition read outside the desktop app). Exports are FLAT
   under it: `<exportPath>/<scene-subfolder>/`.
+  Because that root sits at exactly the level SCENE SUBFOLDERS occupy,
+  `dth-exports` is a RESERVED subfolder name — `sceneSubfolderConflict`
+  (`lib/scene-subfolder.ts`) refuses it at every place a subfolder is chosen
+  (add-with-copy, replace-with-copy, the card's move/rename chip), judged on the
+  first segment and case-insensitively. `rom-animations` is deliberately NOT
+  reserved: it lives one level deeper, inside each scene's own subfolder, so it
+  can never collide with a sibling. Any NEW subfolder-naming path must call the
+  same check.
 - The v29 migration MOVES the already-exported files (`migrateExportRoot`,
   api/characters.ts → Rust `move_exports`, exports.rs). Its trigger needs no
   version flag: it fires while the stored path still differs from the derived
@@ -290,10 +298,18 @@ older runtimes as stale.
   run-time name rule; the export watch builds its expected paths from it.
 - **ROM-scene auto-save** (runtime v40): after a CLEAN ROM build — before any
   export — every ROM-building script (ROM_, .Bulk_ROM_Export) saves the scene
-  as `<stem>_ROM.duf` into `<sceneDir>/.ROM_Animations/`, so the built ROM
+  as `<stem>_ROM.duf` into `<sceneDir>/rom-animations/`, so the built ROM
   animation reopens without a rebuild. Bounded: fixed name, overwritten per
   run. `romAnimationPath` (dsa.ts) is THE rule, shared by generation and the
-  host. FOOTGUN: the save-as REPOINTS `Scene.getFilename()` — every scene-keyed
+  host, and both read `ROM_ANIMATIONS_FOLDER` — the folder name is ONE constant
+  now, because a drift between the emitted `.dsa` and the host's path means the
+  studio stats a file Daz never wrote. Renamed from the hidden
+  `.ROM_Animations` in **runtime v48** (it holds scenes the user OPENS, so
+  hiding it was wrong; the name now matches `dth-exports` / `houdini-project`).
+  `migrateRomAnimationFolders` (api/generate.ts) renames an existing one beside
+  each linked scene on the next generation — idempotent, and it refuses to
+  merge when BOTH folders exist. `LEGACY_ROM_ANIMATIONS_FOLDER` exists only for
+  that rename; nothing writes it. FOOTGUN: the save-as REPOINTS `Scene.getFilename()` — every scene-keyed
   lookup (subfolder/groom/CSV snippets, and the wrong-scene guard since v46)
   reads the `dthOpenSceneFile` capture (`openSceneFileSnippet`, emitted once
   per carrier) instead of the live filename; a new scene-keyed snippet must do
@@ -310,7 +326,7 @@ older runtimes as stale.
   whose ROM animation is newer than their delivered `<exportName>_pose_asset.csv`
   (`fetchExecuteScenes`'s `romUnexported`), i.e. unexported as it now stands.
 - **A saved ROM animation stands in for its source scene** (runtime v46): since
-  export-only job rows OPEN `.ROM_Animations/<stem>_ROM.duf`, every generated
+  export-only job rows OPEN `rom-animations/<stem>_ROM.duf`, every generated
   script embeds `romAnimationSourceMap` (rom path → source scene) and resolves
   `dthOpenSceneFile` through it right after the capture. So the guard and every
   scene-keyed lookup behave as if the source scene were open — which it

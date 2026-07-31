@@ -145,7 +145,7 @@ export function openSceneJobFileJson(scenePath: string): string {
 
 /**
  * Where a scene's saved ROM animation lives:
- * `<scene dir>/.ROM_Animations/<stem>_ROM.duf`. Re-exported from @dth/rom,
+ * `<scene dir>/rom-animations/<stem>_ROM.duf`. Re-exported from @dth/rom,
  * which owns the rule — generation embeds the same paths so an export-only run
  * can map an open ROM animation back to its source scene.
  */
@@ -157,7 +157,7 @@ export { romAnimationPath }
  * - `rom-export` — build a fresh ROM, save the ROM animation, export
  *   everything (skeletal mesh + hair). The default, and the only mode that
  *   stamps the scenes as exported (see {@link ExecuteStamp}).
- * - `rom-only` — build the ROM and save the `.ROM_Animations` scene, skip the
+ * - `rom-only` — build the ROM and save the `rom-animations` scene, skip the
  *   export. Needs no export directory.
  * - `export-only` — export the SAVED ROM animation as it stands (hair
  *   included), rebuilding nothing: the mode for a ROM that was hand-edited in

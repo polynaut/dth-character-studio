@@ -1766,7 +1766,7 @@ describe('exporter integration', () => {
     // the wrong-scene guard, which would otherwise call it foreign and refuse.
     expect(only?.content).toContain('var dthRomSourceScenes = {')
     expect(only?.content).toContain(
-      '"x:/proj/electra/daz3d/.rom_animations/electra_rom.duf": "X:/proj/Electra/daz3d/Electra.duf"',
+      '"x:/proj/electra/daz3d/rom-animations/electra_rom.duf": "X:/proj/Electra/daz3d/Electra.duf"',
     )
     expect(only?.content).toContain('dthOpenSceneFile = dthRomSourceHit;')
     // No export dir → no export-only script (nothing to export into).
@@ -1808,16 +1808,16 @@ describe('exporter integration', () => {
     ])
   })
 
-  it('saves the ROM scene into .ROM_Animations before any export (runtime v40)', () => {
+  it('saves the ROM scene into rom-animations before any export (runtime v40/v48)', () => {
     const character = withReferencePose({ name: 'Kira', exportPath: 'X:\\exports\\kira' })
     const content = toCharacterScriptDsa(character, {}, FRAMES, 'D:\\lib\\Kira').content
     // The scene file is captured ONCE at script start — the save-as repoints
     // Scene.getFilename(), so the export lookups must never read it live.
     expect(content).toContain('var dthOpenSceneFile = String(Scene.getFilename());')
     expect(content).not.toMatch(/dthExportSceneKey = String\(Scene\.getFilename\(\)\)/)
-    // The save: <sceneDir>/.ROM_Animations/<stem>_ROM.duf, clean builds only.
+    // The save: <sceneDir>/rom-animations/<stem>_ROM.duf, clean builds only.
     expect(content).toContain('if (dthRomOk === true && dthOpenSceneFile != "") {')
-    expect(content).toContain('"/.ROM_Animations"')
+    expect(content).toContain('"/rom-animations"')
     expect(content).toContain('completeBaseName() + "_ROM.duf"')
     // …feature-detected — DS4's content-manager call when present, else DS6's
     // Scene.saveScene (DzContentMgr.saveScene does not exist in DS6; measured
@@ -1831,10 +1831,10 @@ describe('exporter integration', () => {
     // and the hidden bulk script alike.
     expect(
       toCharacterScriptDsa(withReferencePose({ name: 'Kira' }), {}, FRAMES).content,
-    ).toContain('"/.ROM_Animations"')
-    expect(toBulkRomExportScriptDsa(character, {}, FRAMES).content).toContain('"/.ROM_Animations"')
+    ).toContain('"/rom-animations"')
+    expect(toBulkRomExportScriptDsa(character, {}, FRAMES).content).toContain('"/rom-animations"')
     // The ROM-less carrier never SAVES one — Export_ rebuilds nothing. (It does
-    // name the .ROM_Animations paths: every script embeds the map that resolves
+    // name the rom-animations paths: every script embeds the map that resolves
     // an open ROM animation back to its source scene.)
     expect(toExportScriptDsa(character, FRAMES).content).not.toContain('_ROM.duf"')
   })

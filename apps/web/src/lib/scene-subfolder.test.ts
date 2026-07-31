@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { deriveScenesRootRel, suggestSceneSubfolder } from './scene-subfolder'
+import {
+  deriveScenesRootRel,
+  sceneSubfolderConflict,
+  suggestSceneSubfolder,
+} from './scene-subfolder'
 
 describe('suggestSceneSubfolder', () => {
   it('drops the character name and generation markers, keeps the identity', () => {
@@ -46,5 +50,33 @@ describe('deriveScenesRootRel', () => {
   it('falls back to the primary dir itself (legacy custom root)', () => {
     expect(deriveScenesRootRel('scenes', 'daz3d')).toBe('scenes')
     expect(deriveScenesRootRel('', 'daz3d')).toBe('')
+  })
+})
+
+describe('sceneSubfolderConflict — names the studio already owns', () => {
+  it('refuses the export folder, whatever its casing', () => {
+    // <char>/<dazSubdir>/dth-exports sits at exactly the level scene
+    // subfolders do, so a scene moved there would fight the export root.
+    expect(sceneSubfolderConflict('dth-exports')).toContain('exports')
+    expect(sceneSubfolderConflict('DTH-Exports')).toContain('exports')
+  })
+
+  it('allows an ordinary name', () => {
+    expect(sceneSubfolderConflict('summertide')).toBe('')
+    expect(sceneSubfolderConflict('primary')).toBe('')
+    // Only a WHOLE segment is reserved — a longer name merely containing it is fine.
+    expect(sceneSubfolderConflict('dth-exports-old')).toBe('')
+  })
+
+  it('judges the FIRST segment — the one landing under the scenes root', () => {
+    expect(sceneSubfolderConflict('dth-exports/beach')).toContain('exports')
+    // Nested deeper, it collides with nothing the studio writes.
+    expect(sceneSubfolderConflict('outfits/dth-exports')).toBe('')
+  })
+
+  it('ignores leading separators and empty input', () => {
+    expect(sceneSubfolderConflict('/dth-exports')).toContain('exports')
+    expect(sceneSubfolderConflict('\\dth-exports')).toContain('exports')
+    expect(sceneSubfolderConflict('')).toBe('')
   })
 })

@@ -63,10 +63,16 @@ Instead of exporting by hand, let the script drive the **DTH Exporter Plugin**
    each one).
 
 After a clean ROM build — right before any export — the script also **saves
-the ROM'd scene** as `<scene>_ROM.duf` into a hidden `.ROM_Animations/`
-subfolder next to the scene file. Open it any time later to get the fully
-built ROM animation back without the (slow) rebuild; each run overwrites the
-previous copy.
+the ROM'd scene** as `<scene>_ROM.duf` into a `rom-animations/` subfolder next
+to the scene file. Open it any time later to get the fully built ROM animation
+back without the (slow) rebuild; each run overwrites the previous copy.
+
+&nbsp;
+
+> [!NOTE]
+> This folder used to be hidden and called `.ROM_Animations`. It holds scenes
+> you're meant to open, so it's a normal visible folder now — any existing one
+> is renamed for you the next time the character is saved.
 
 Every scene exports into its **own subfolder** of the export directory, named
 after the subfolder the scene lives in inside the character folder (the
@@ -166,7 +172,7 @@ do first:
 
 - **ROM + Export** — the full run: a fresh ROM, the saved ROM animation scene,
   and the export of everything (skeletal mesh and hair).
-- **ROM only** — build the ROM and save the `.ROM_Animations` scene (above),
+- **ROM only** — build the ROM and save the `rom-animations` scene (above),
   skipping the export entirely.
 - **Export only** — export the saved ROM animations as they stand, hair
   included, without rebuilding them. This is the one for a ROM you tweaked by

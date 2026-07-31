@@ -44,6 +44,7 @@ import { pickDufPath, pickFolder } from '#/lib/desktop.ts'
 import {
   PRIMARY_SCENE_SUBFOLDER,
   deriveScenesRootRel,
+  sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
 import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
@@ -159,7 +160,7 @@ function SceneCard({
 /**
  * The tiny two-entry menu under a scene card's Open button: "Open Original"
  * (the scene itself) and the ROM-animation entry — "Open ROM Animation" when
- * the saved `.ROM_Animations/<stem>_ROM.duf` exists and is current, "Open and
+ * the saved `rom-animations/<stem>_ROM.duf` exists and is current, "Open and
  * Generate ROM Animation" when it is missing, STALE (the scene is affected
  * since its last handoff), or Ctrl is held (force a rebuild — the save
  * overwrites). Closes on outside click / Escape.
@@ -363,7 +364,7 @@ export function DazSceneField({
   // ── Open-in-Daz dropdown: Original vs ROM animation ─────────────────────
   // The card's open button shows a two-entry menu (Alt+click keeps the direct
   // Explorer reveal). The second entry opens the scene's saved
-  // `.ROM_Animations/<stem>_ROM.duf` when it exists AND was built from the
+  // `rom-animations/<stem>_ROM.duf` when it exists AND was built from the
   // current inputs (`fetchRomAnimations` — file mtimes, no stamps, so a focus
   // re-read always tells the truth); Ctrl forces a rebuild. Otherwise it reads
   // "Open and Generate ROM Animation": a one-row Runner batch on the hidden
@@ -608,6 +609,11 @@ export function DazSceneField({
       toast.error('Enter a subfolder — every scene lives in its own subfolder now.')
       return
     }
+    const reserved = sceneSubfolderConflict(addSubfolder)
+    if (copyInto && reserved) {
+      toast.error(reserved)
+      return
+    }
     const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
     const oldPrimary = character.scenePath
     // Same up-front duplicate refusal as applyAdd — including the old primary
@@ -689,6 +695,11 @@ export function DazSceneField({
     // See applyReplace — a copied-in scene can't land directly in the root.
     if (copyInto && cleanSub(addSubfolder) === '') {
       toast.error('Enter a subfolder — every scene lives in its own subfolder now.')
+      return
+    }
+    const reservedAdd = sceneSubfolderConflict(addSubfolder)
+    if (copyInto && reservedAdd) {
+      toast.error(reservedAdd)
       return
     }
     const destSubfolder = [baseDazRel, cleanSub(addSubfolder)].filter(Boolean).join('/')
@@ -1020,6 +1031,10 @@ export function DazSceneField({
               'Every scene lives in its own subfolder now — it can no longer sit directly in the scenes root.',
             )
           }
+          // Only when moving WITHIN the scenes root does a name collide with the
+          // studio's own folders; an absolute move out of the root can't.
+          const reserved = underRoot ? sceneSubfolderConflict(next) : ''
+          if (reserved) throw new Error(reserved)
           await moveLinkedScene(
             scene,
             underRoot ? [sceneDirRel, cleanSub(next)].filter(Boolean).join('/') : next,

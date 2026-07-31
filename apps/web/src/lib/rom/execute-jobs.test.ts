@@ -183,7 +183,7 @@ describe('job rows per export mode — which hidden script, on which scene file'
     expect(jobSceneForMode('rom-export', scene)).toBe(scene)
     expect(jobSceneForMode('rom-only', scene)).toBe(scene)
     expect(jobSceneForMode('export-only', scene)).toBe(
-      'X:/proj/Electra/daz3d/primary/.ROM_Animations/Electra_ROM.duf',
+      'X:/proj/Electra/daz3d/primary/rom-animations/Electra_ROM.duf',
     )
   })
 })

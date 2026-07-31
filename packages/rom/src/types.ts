@@ -1275,8 +1275,18 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       path itself is now derived (`<char>/<dazSubdir>/dth-exports`), and
  *       Houdini reaches it through a junction rather than by containing it.
  *       Refresh assets to regenerate scripts still carrying the old nesting.
+ *  48 — generated-script change: the saved-ROM folder is `rom-animations`,
+ *       renamed from the hidden `.ROM_Animations`. It holds scenes the user is
+ *       meant to OPEN, so hiding it was wrong, and the name now matches the
+ *       lowercase-hyphenated convention the other studio folders use
+ *       (`dth-exports`, `houdini-project`). One spelling for both sides now —
+ *       `ROM_ANIMATIONS_FOLDER` in dsa.ts, which `romAnimationPath` and the
+ *       emitted `.dsa` both read, so the host can't stat a path Daz never
+ *       wrote. Refresh assets regenerates the scripts AND renames an existing
+ *       `.ROM_Animations` folder beside each linked scene, so already-saved
+ *       ROM animations follow rather than being orphaned.
  */
-export const RUNTIME_VERSION = 47
+export const RUNTIME_VERSION = 48
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

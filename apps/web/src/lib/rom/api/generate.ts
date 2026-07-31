@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readTextFile, remove, stat } from '@tauri-apps/plugin-fs'
+import { exists, mkdir, readDir, readTextFile, remove, rename, stat } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
@@ -26,6 +26,8 @@ import {
   generateAll,
   genRomIncludes,
   jcmIsBaseRom,
+  LEGACY_ROM_ANIMATIONS_FOLDER,
+  ROM_ANIMATIONS_FOLDER,
   mergeSceneOverride,
   poseAssetFileName,
   resolveRomPaths,
@@ -486,8 +488,45 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
       // a failing mkdir here must never fail the generation
     }
   }
+  await migrateRomAnimationFolders(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)
   return { outDir, files, scriptsDir, scriptsError }
+}
+
+/**
+ * Rename the pre-v48 hidden `.ROM_Animations` folder beside each linked scene
+ * to `rom-animations`, so ROM animations already saved by an older build stay
+ * findable instead of being silently orphaned by the rename.
+ *
+ * Runs on every generation, which is also when the scripts that write the new
+ * name are (re)generated — the two must not disagree, or the studio would stat
+ * `rom-animations/` while Daz kept filling `.ROM_Animations/`.
+ *
+ * Idempotent and conservative: nothing to do once renamed, and if BOTH folders
+ * exist the old one is left alone rather than merged — two sets of saved ROM
+ * scenes are the user's to reconcile, not ours. Best-effort throughout; a
+ * locked folder must never fail the generation that triggered it.
+ */
+async function migrateRomAnimationFolders(character: Character): Promise<void> {
+  if (!isTauri()) return
+  const seen = new Set<string>()
+  for (const scene of [character.scenePath, ...character.extraScenes]) {
+    const norm = scene.trim().replace(/\\/g, '/')
+    const slash = norm.lastIndexOf('/')
+    if (slash < 0) continue
+    const dir = norm.slice(0, slash)
+    if (!dir || seen.has(dir.toLowerCase())) continue
+    seen.add(dir.toLowerCase())
+    try {
+      const from = `${dir}/${LEGACY_ROM_ANIMATIONS_FOLDER}`
+      const to = `${dir}/${ROM_ANIMATIONS_FOLDER}`
+      if (!(await exists(from))) continue
+      if (await exists(to)) continue
+      await rename(from, to)
+    } catch {
+      // a locked / in-use folder just keeps the old name until the next run
+    }
+  }
 }
 
 /**

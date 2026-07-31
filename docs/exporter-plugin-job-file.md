@@ -181,7 +181,7 @@ after the last row:
   frames into the open scene; those changes are working state for the exporter
   and are always thrown away by the plugin — opening the next row's scene with
   a no-save replace IS the discard between rows. (The generated script itself
-  saves its own `_ROM.duf` copy into `.ROM_Animations/` beside the scene —
+  saves its own `_ROM.duf` copy into `rom-animations/` beside the scene —
   that's the script's business, not the plugin's.)
 - **…but it never silently discards the USER'S scene either (Runner v1.1.2+):**
   the batch's FIRST scene load — and every `open-scene` job — replaces
