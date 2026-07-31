@@ -1285,8 +1285,38 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       wrote. Refresh assets regenerates the scripts AND renames an existing
  *       `.ROM_Animations` folder beside each linked scene, so already-saved
  *       ROM animations follow rather than being orphaned.
+ *  49 — generated-script fixes, both found on a live Daz 4.24 run:
+ *       (a) A SKIPPED EXPORT IS NOW LOUD, and distinguishes its two causes.
+ *       It only `print()`ed, so the ROM finished "successfully" while the
+ *       export silently never ran — the failure existed only in Daz's log.
+ *       `findAction` matches on CLASS name: DS6 registers
+ *       `DazToHueExporterAction`, DS4 registers class `ExporterAction` /
+ *       name `DazToHue_Action`, so the lookup reported "not installed" for a
+ *       plugin that was right there. It now falls back to the name — but
+ *       PRESENCE IS NOT CAPABILITY: being callable from Daz script is a DAZ
+ *       STUDIO 6 plugin feature (exporter 1.8.1), and the DS4 build registers
+ *       its action while exposing only inherited DzAction members. Measured on
+ *       a DS4 install reporting 2.0.1 in its own dialog: 28 methods, no
+ *       doExport, and a sweep of all 912 actions + the global scope found no
+ *       doExport* anywhere. The gate is therefore
+ *       `typeof doExport == "function"`, with three distinct messages:
+ *       exportable, present-but-unscriptable (run from DS6 / export by hand),
+ *       and absent. Every alert goes through one emitted `dthExportAlert`,
+ *       which ALWAYS records the problem in the studio's run log and raises a
+ *       dialog only in a hand-run carrier — a modal inside the Runner's hidden
+ *       scripts blocks the batch on a click nobody is there to make, so the run
+ *       log is those carriers' only channel. It appends to the existing log
+ *       rather than overwriting, so a successful ROM keeps its ok flag, frame
+ *       count and failed morphs; with no log at all (an export-only run) it
+ *       writes one with ok:false. Self-contained because the split `Export_`
+ *       carriers do not include the runtime.
+ *       (b) The ROM-scene save is verified by STATTING THE FILE, never by the
+ *       return value. Every Daz build disagrees about that value — plain bool,
+ *       DzError-where-0-is-success (DS6, the v45 fix), and void in DS4, which
+ *       logged a successful save as "Could not save" while Daz's own log said
+ *       "Saved Scene". Chasing conventions per version is a losing game.
  */
-export const RUNTIME_VERSION = 48
+export const RUNTIME_VERSION = 49
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

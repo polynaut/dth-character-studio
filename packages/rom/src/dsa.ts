@@ -314,6 +314,13 @@ function buildExportBlock(
   /** The character's scenes-root folder (host-resolved) — see
    *  {@link sceneExportSubfolders}. Omitted ⇒ stem-per-scene fallback. */
   scenesRootAbs?: string,
+  /**
+   * This block is going into a script the RUNNER executes unattended (the
+   * hidden bulk carriers). A modal dialog there does not warn anybody — it
+   * blocks the batch on a click nobody is present to make, and every remaining
+   * scene waits behind it. Unattended alerts therefore print only.
+   */
+  unattended = false,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
@@ -430,8 +437,7 @@ ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
     }
     if (dthGroomMissing != "") {
         // A typo must not silently ship a hair-polluted export - fail loud, fix, re-run.
-        print("Hair item not found: " + dthGroomMissing + " - export skipped.");
-        MessageBox.critical("The hair item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Hair list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.", "DTH Character Studio", "&OK");
+        dthExportAlert("The hair item \\"" + dthGroomMissing + "\\" was not found in the scene.\\n\\nCheck the Hair list in DTH Character Studio - the label must match Daz's Scene pane exactly - then run the export again.");
     } else {
         for (var dthGd = 0; dthGd < dthGroomNodes.length; dthGd++) dthGroomHideTree(dthGroomNodes[dthGd]);
         print("Hair nodes hidden for the export: " + dthGroomHidden.length);
@@ -448,11 +454,100 @@ ${hideTreeSnippet('dthGroomHideTree', 'dthGroomHidden')}
 ${hairPassBlock}    }
     }
 `
-  return `var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
-if (dthExportAction) {
+  // Resolving the exporter takes TWO lookups, and the difference between them
+  // is the difference between two very different failures.
+  //
+  // Daz Studio 6's plugin registers class `DazToHueExporterAction`, which
+  // findAction (a CLASS-name lookup) finds. Daz Studio 4's plugin registers
+  // class `ExporterAction`, name `DazToHue_Action` — so findAction misses it and
+  // the script used to conclude "not installed" for a plugin sitting right
+  // there. Worse, it then said nothing at all (measured on a live DS4 run: one
+  // DEBUG line in Daz's log, and a ROM that reported success).
+  //
+  // Finding it is not enough to export, though. Being callable from Daz script
+  // is a DAZ STUDIO 6 plugin feature (announced with exporter 1.8.1); the Daz
+  // Studio 4 build registers its action normally and exposes only inherited
+  // DzAction members. Measured on a DS4 install reporting 2.0.1 in its own
+  // dialog: the action carries 28 methods, none named doExport, and a sweep of
+  // ALL 912 registered actions plus the global script scope found no doExport*
+  // anywhere — `trigger()` just opens the dialog for manual use.
+  // So the gate is the CAPABILITY (`typeof doExport == "function"`), never the
+  // action's presence, and the three states get three answers.
+  // ONE alert channel for the whole export block, with two outputs.
+  //
+  // The RUN LOG always. A dialog reaches whoever is sitting there; the studio's
+  // report reaches them whenever they come back, and it is the ONLY channel the
+  // Runner's unattended carriers have — without it a bulk run on a Daz that
+  // cannot export completes every scene, exports nothing, and says nothing.
+  // Written here rather than through the runtime's logRunError because the
+  // split Export_ carriers don't include the runtime at all.
+  //
+  // The DIALOG only when a human ran it. A modal inside a Runner carrier warns
+  // nobody and blocks the batch on a click that never comes.
+  const runLogPath = charFolderAbs
+    ? `${charFolderAbs.replace(/\\/g, '/')}/${ROM_RUN_LOG_FILE}`
+    : ''
+  const alertHelper = `var dthExportLogPath = ${dazJson(runLogPath)};
+// Append a problem to the studio's run log, preserving whatever the ROM run
+// already recorded there (its ok flag, frame count and failed morphs).
+var dthExportLogProblem = function (dthLogMsg) {
+    if (dthExportLogPath == "") return;
+    try {
+        var dthLogRec = null;
+        var dthLogIn = new DzFile(dthExportLogPath);
+        if (dthLogIn.exists() && dthLogIn.open(dthLogIn.ReadOnly)) {
+            var dthLogTxt = String(dthLogIn.read());
+            dthLogIn.close();
+            try { dthLogRec = JSON.parse(dthLogTxt); } catch (dthLogParseErr) { dthLogRec = null; }
+        }
+        if (!dthLogRec || typeof dthLogRec != "object") {
+            // No ROM ran this time — an export-only carrier. Nothing succeeded,
+            // so the run itself is the failure.
+            dthLogRec = { logVersion: 1, character: ${dazJson(character.name)}, ok: false, errors: [], failedMorphs: [] };
+        }
+        if (!dthLogRec.errors) dthLogRec.errors = [];
+        dthLogRec.errors.push(String(dthLogMsg));
+        dthLogRec.finishedAt = new Date().toString();
+        dthLogRec.finishedAtMs = new Date().getTime();
+        var dthLogOut = new DzFile(dthExportLogPath);
+        if (dthLogOut.open(dthLogOut.WriteOnly | dthLogOut.Truncate)) {
+            dthLogOut.write(JSON.stringify(dthLogRec, null, 2));
+            dthLogOut.close();
+        }
+    } catch (dthLogErr) {
+        print("Could not record the export problem in the run log: " + dthLogErr);
+    }
+};
+var dthExportAlert = function (dthAlertMsg) {
+    print(dthAlertMsg);
+    dthExportLogProblem(dthAlertMsg);${
+      unattended
+        ? ''
+        : `
+    MessageBox.critical(dthAlertMsg, "DTH Character Studio", "&OK");`
+    }
+};
+`
+  return `${alertHelper}var dthExportAction = MainWindow.getActionMgr().findAction("DazToHueExporterAction");
+if (!dthExportAction) {
+    // Daz Studio 4 names it differently — find it so "installed but not
+    // scriptable" can be told apart from "not installed".
+    var dthActionMgr = MainWindow.getActionMgr();
+    var dthActionCount = dthActionMgr.getNumActions();
+    for (var dthAi = 0; dthAi < dthActionCount; dthAi++) {
+        var dthCandidate = dthActionMgr.getAction(dthAi);
+        if (!dthCandidate) continue;
+        var dthCandidateName = "";
+        try { dthCandidateName = String(dthCandidate.name); } catch (dthNameErr) {}
+        if (dthCandidateName == "DazToHue_Action") { dthExportAction = dthCandidate; break; }
+    }
+}
+if (dthExportAction && typeof dthExportAction.doExport == "function") {
     var dthExportDir = ${dazJson(exportDir.replace(/\\/g, '/'))};
-${sceneSubfolderBlock}${exportBody}} else {
-    print("DazToHue Exporter Action not found — install the DTH Exporter Plugin v1.8.1+.");
+${sceneSubfolderBlock}${exportBody}} else if (dthExportAction) {
+    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nThe DazToHue Exporter is installed here, but this build exposes no scripted export, so the studio cannot drive it. Being callable from Daz script is a feature of the Daz Studio 6 exporter plugin (1.8.1+).\\n\\nRun the ROM script from Daz Studio 6, or export by hand from the DazToHue Exporter dialog.\\n\\nThe ROM on the timeline is fine — only the export was skipped.");
+} else {
+    dthExportAlert("The ROM was built, but the export did NOT run.\\n\\nNo DazToHue Exporter is registered in Daz Studio " + App.version + ".\\n\\nInstall the DTH Exporter Plugin for this Daz version and restart Daz, then run the script again.\\n\\nThe ROM on the timeline is fine — only the export was skipped.");
 }
 `
 }
@@ -916,7 +1011,7 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs)
+${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1041,17 +1136,18 @@ if (dthSceneLinkErr) {
                 // DS4 saves through the content manager; DS6 dropped that
                 // method and moved save-as onto Scene (probe-measured
                 // 2026-07-30 — DzContentMgr.saveScene is a TypeError there).
-                // Two return conventions: the content manager answers a plain
-                // bool, DzScene::saveScene a DzError where 0 IS success (SDK
-                // header, both variants) — a truthiness test on that logged
-                // every successful DS6 save as a failure.
-                var dthRomSaveRc = null;
+                // DO NOT interpret the return value. Every Daz build disagrees
+                // about it: the content manager has answered a plain bool, a
+                // DzError where 0 IS success (DS6 — runtime v45 chased that
+                // one), and void in DS4, which logged a perfectly good save as
+                // a failure while Daz's own log said "Saved Scene". The file on
+                // disk is the only version-proof answer, so ask it.
                 if (typeof App.getContentMgr().saveScene == "function") {
-                    dthRomSaveRc = App.getContentMgr().saveScene(dthRomSavePath);
+                    App.getContentMgr().saveScene(dthRomSavePath);
                 } else if (typeof Scene.saveScene == "function") {
-                    dthRomSaveRc = Scene.saveScene(dthRomSavePath);
+                    Scene.saveScene(dthRomSavePath);
                 }
-                if (dthRomSaveRc === true || dthRomSaveRc === 0) {
+                if (new DzFileInfo(dthRomSavePath).exists()) {
                     print("ROM scene saved: " + dthRomSavePath);
                 } else {
                     print("Could not save the ROM scene to " + dthRomSavePath);
@@ -1102,6 +1198,9 @@ export function toExportScriptDsa(
   charFolderAbs?: string,
   /** See {@link sceneExportSubfolders}. */
   scenesRootAbs?: string,
+  /** Emitted for the Runner's unattended export-only carrier — suppresses the
+   *  modal alerts, which would block a batch (see {@link buildExportBlock}). */
+  unattended = false,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1119,7 +1218,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs)
+${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1156,6 +1255,8 @@ export function toBulkExportOnlyScriptDsa(
     frames,
     charFolderAbs,
     scenesRootAbs,
+    // The Runner executes this one — no modals.
+    true,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
