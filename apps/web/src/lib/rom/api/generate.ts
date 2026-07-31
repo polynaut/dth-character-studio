@@ -10,6 +10,7 @@ import {
 } from '../execute-jobs.ts'
 
 import { normalizePathLower } from '#/lib/path.ts'
+import { normalizeRelFolder } from '../library'
 import {
   PRIMARY_SCENE_SUBFOLDER,
   deriveScenesRootRel,
@@ -487,6 +488,16 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     } catch {
       // a failing mkdir here must never fail the generation
     }
+  }
+  // The character's FINAL export folder (Houdini → Unreal), seeded at creation
+  // beside the Daz and Houdini ones — created here too so characters that
+  // predate the setting, or whose project renamed it, get theirs as well.
+  // Best-effort for the same reason as above.
+  try {
+    const finalExport = normalizeRelFolder(project.exportSubdir)
+    if (finalExport) await mkdir(joinPath(outDir, finalExport), { recursive: true })
+  } catch {
+    // an absent export folder is a nuisance, never a reason to fail a generate
   }
   await migrateRomAnimationFolders(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)

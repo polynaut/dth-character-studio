@@ -73,6 +73,7 @@ type SettingsTab = 'general' | 'appdata' | 'project'
 interface ProjectSettings {
   dazSubdir: string
   houdiniSubdir: string
+  exportSubdir: string
   createHoudiniSubdir: boolean
   assetsEnabled: boolean
   dazProductsEnabled: boolean
@@ -85,6 +86,7 @@ function projectSettingsFrom(project: Partial<ProjectSettings> | null | undefine
   return {
     dazSubdir: project?.dazSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.dazSubdir,
     houdiniSubdir: project?.houdiniSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.houdiniSubdir,
+    exportSubdir: project?.exportSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.exportSubdir,
     createHoudiniSubdir:
       project?.createHoudiniSubdir ?? PROJECT_BEHAVIOR_DEFAULTS.createHoudiniSubdir,
     assetsEnabled: project?.assetsEnabled ?? PROJECT_BEHAVIOR_DEFAULTS.assetsEnabled,
@@ -105,6 +107,7 @@ function normalizeProjectSettings(s: ProjectSettings): ProjectSettings {
     ...s,
     dazSubdir: s.dazSubdir.trim() || 'daz3d',
     houdiniSubdir: s.houdiniSubdir.trim() || 'houdini',
+    exportSubdir: s.exportSubdir.trim() || 'export',
     charactersSubdir: s.charactersSubdir.trim(),
   }
 }
@@ -279,6 +282,7 @@ function SettingsPage() {
           projectId: project.path,
           dazSubdir: normalized.dazSubdir,
           houdiniSubdir: normalized.houdiniSubdir,
+          exportSubdir: normalized.exportSubdir,
           createHoudiniSubdir: normalized.createHoudiniSubdir,
           assetsEnabled: normalized.assetsEnabled,
           dazProductsEnabled: normalized.dazProductsEnabled,
@@ -1256,6 +1260,16 @@ function SettingsPage() {
                   placeholder="houdini"
                   disabled={!projectSettings.createHoudiniSubdir}
                   onChange={(e) => patchProject({ houdiniSubdir: e.target.value })}
+                />
+              </Field>
+              {/* The END of the pipeline — what Houdini generates for Unreal.
+                  Not the Daz→Houdini intermediate, which is the fixed
+                  `dth-exports` inside the Daz subfolder. */}
+              <Field label="Final export subfolder">
+                <Input
+                  value={projectSettings.exportSubdir}
+                  placeholder="export"
+                  onChange={(e) => patchProject({ exportSubdir: e.target.value })}
                 />
               </Field>
               <label className="flex items-center justify-between gap-3 text-sm">

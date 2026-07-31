@@ -211,6 +211,7 @@ const projectSettingsInput = z.object({
   projectId: z.string().min(1),
   dazSubdir: z.string().default(storage.PROJECT_BEHAVIOR_DEFAULTS.dazSubdir),
   houdiniSubdir: z.string().default(storage.PROJECT_BEHAVIOR_DEFAULTS.houdiniSubdir),
+  exportSubdir: z.string().default(storage.PROJECT_BEHAVIOR_DEFAULTS.exportSubdir),
   createHoudiniSubdir: z.boolean().default(storage.PROJECT_BEHAVIOR_DEFAULTS.createHoudiniSubdir),
   assetsEnabled: z.boolean().default(storage.PROJECT_BEHAVIOR_DEFAULTS.assetsEnabled),
   dazProductsEnabled: z.boolean().default(storage.PROJECT_BEHAVIOR_DEFAULTS.dazProductsEnabled),
@@ -221,6 +222,7 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     projectId,
     dazSubdir,
     houdiniSubdir,
+    exportSubdir,
     createHoudiniSubdir,
     assetsEnabled,
     dazProductsEnabled,
@@ -235,6 +237,7 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
   const nextCharactersSubdir = normalizeRelFolder(charactersSubdir)
   const nextDazSubdir = normalizeRelFolder(dazSubdir)
   const nextHoudiniSubdir = normalizeRelFolder(houdiniSubdir)
+  const nextExportSubdir = normalizeRelFolder(exportSubdir)
   // The characters subfolder defines where character folders live, so a change must
   // move the existing folders to the new location (links inside them are repointed).
   // Done before writing the manifest, so the manifest can be written to match
@@ -282,6 +285,7 @@ export async function saveProjectSettings({ data }: { data: unknown }): Promise<
     ...manifest,
     dazSubdir: nextDazSubdir,
     houdiniSubdir: nextHoudiniSubdir,
+    exportSubdir: nextExportSubdir,
     createHoudiniSubdir,
     assetsEnabled,
     dazProductsEnabled,

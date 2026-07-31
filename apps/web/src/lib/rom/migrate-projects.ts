@@ -8,6 +8,7 @@ import {
   getSettings,
   listCharacters,
   metaImagesDir,
+  PROJECT_BEHAVIOR_DEFAULTS,
   rememberRecent,
   saveSettings,
   writeManifest,
@@ -119,6 +120,9 @@ export async function migrateProjects(): Promise<void> {
         assetsEnabled: false,
         dazProductsEnabled: false,
         charactersSubdir: '',
+        // A pre-`.dcsp` project never had a final-export folder; new characters
+        // in it get one from here on, existing ones on their next generation.
+        exportSubdir: PROJECT_BEHAVIOR_DEFAULTS.exportSubdir,
         unrealProjects: [],
       }
       await writeManifest(dir, manifest)

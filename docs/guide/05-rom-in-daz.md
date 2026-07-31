@@ -105,7 +105,15 @@ on the Daz side and gives Houdini a **shortcut** instead:
     Kira.hiplc
     houdini-project/      ← $JOB (File → Set Project)
       dth-exports  ──►  ../../daz3d/dth-exports
+  export/                 ← the FINAL files, for Unreal
 ```
+
+Those three folders are created with every new character. The last one,
+**`export/`**, is the end of the pipeline — what Houdini generates for Unreal
+goes there, and it's yours to organise. Don't confuse it with `dth-exports`
+inside the Daz folder, which holds the Daz→Houdini intermediate the DTH
+Exporter writes. All three names can be changed per project in
+**Settings → Project**.
 
 That last entry is a **junction**: a folder-shaped shortcut Windows resolves
 transparently. Houdini's file picker opens at `$JOB`, so `dth-exports/` is

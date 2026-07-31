@@ -32,6 +32,7 @@ export const joinPath = join
 export interface ProjectInfo extends storage.Project {
   dazSubdir: string
   houdiniSubdir: string
+  exportSubdir: string
   createHoudiniSubdir: boolean
   assetsEnabled: boolean
   dazProductsEnabled: boolean
@@ -50,6 +51,7 @@ export async function resolveProject(projectDir: string): Promise<ProjectInfo> {
     path: dir,
     dazSubdir: m.dazSubdir,
     houdiniSubdir: m.houdiniSubdir,
+    exportSubdir: m.exportSubdir,
     createHoudiniSubdir: m.createHoudiniSubdir,
     assetsEnabled: m.assetsEnabled,
     dazProductsEnabled: m.dazProductsEnabled,
