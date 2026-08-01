@@ -66,7 +66,7 @@ async function loadCharacter(
  * outside the character folder: the subfolder then falls back to the scene
  * stem, exactly like the runtime.
  */
-function characterScenesRoot(
+export function characterScenesRoot(
   character: Character,
   location: CharacterLocation,
   dazSubdir: string,
@@ -243,6 +243,13 @@ interface ActiveExportRun {
   /** Linked Houdini project (`.hip`) to open once the batch finishes — the
    *  dialog's "Open Houdini project after export" pick ('' = none). */
   openHoudiniProject: string
+  /** The dialog's "Export too" toggle: run that project's DazToHue exports
+   *  after opening it, instead of just opening it (see api/houdini.ts). */
+  houdiniExport: boolean
+  /** The scenes this batch ran, in job order — the Houdini run exports only
+   *  the networks importing THESE scenes, so the list has to survive the batch
+   *  to be available when it finishes. */
+  scenes: Array<string>
 }
 let activeRun: ActiveExportRun | null = null
 
@@ -271,6 +278,10 @@ export type ExportRunProgress =
       errors: Array<string>
       /** The run's after-export Houdini project ('' = none picked). */
       openHoudiniProject: string
+      /** Whether that project should also RUN its exports ("Export too"). */
+      houdiniExport: boolean
+      /** The scenes the batch ran — the Houdini job's scope. */
+      scenes: Array<string>
     }
   /** The run died (Daz gone mid-run / file vanished) — watch ended. */
   | { state: 'dead'; characterId: string; total: number }
@@ -349,6 +360,8 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
           failed,
           errors: parsed.jobs.filter((j) => j.error).map((j) => `${j.scenePath}: ${j.error ?? ''}`),
           openHoudiniProject: run.openHoudiniProject,
+          houdiniExport: run.houdiniExport,
+          scenes: run.scenes,
         }
       }
       // Below 100 with Daz gone = the run died (crash / user quit) — it will
@@ -522,6 +535,10 @@ const executeInput = charScopeInput.extend({
   /** Linked Houdini project to open once the batch FINISHES (the dialog's
    *  optional pick); omitted/empty = open nothing. */
   openHoudiniProject: z.string().optional(),
+  /** "Export too": after opening that project, run its DazToHue exports for the
+   *  networks importing these scenes. Ignored without a project pick — there is
+   *  nothing to run then. Off by default: it drives the user's own Houdini. */
+  houdiniExport: z.boolean().default(false),
 })
 
 export interface ExecuteJobsSummary {
@@ -574,7 +591,14 @@ async function currentStamp(character: Character, scenePath: string): Promise<Ex
  * a scene file that can't be read.
  */
 export async function executeCharacterJobs({ data }: { data: unknown }): Promise<ExecuteJobsSummary> {
-  const { projectId, id, scenes: chosen, mode, openHoudiniProject } = executeInput.parse(data)
+  const {
+    projectId,
+    id,
+    scenes: chosen,
+    mode,
+    openHoudiniProject,
+    houdiniExport,
+  } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
   const settings = await storage.getSettings()
@@ -663,7 +687,15 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
 
   // Arm the watch: the run's identity only — all live state (progress,
   // per-job statuses) is Runner-owned inside the renamed job file.
-  activeRun = { characterId: character.id, total: jobs.length, openHoudiniProject: openHoudini ?? '' }
+  activeRun = {
+    characterId: character.id,
+    total: jobs.length,
+    openHoudiniProject: openHoudini ?? '',
+    // Without a project there is nothing to run the exports in, so the toggle
+    // cannot mean anything on its own.
+    houdiniExport: houdiniExport && !!openHoudini,
+    scenes,
+  }
 
   // Stamp the handoff (merge — untouched scenes keep their stamps), but ONLY
   // for the full run: a stamp claims "this definition, as it stands, has been

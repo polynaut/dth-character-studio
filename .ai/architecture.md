@@ -154,7 +154,8 @@ see `docs/exporter-plugin-job-file.md`), drives
 (`unc_for_path`/`ensure_network_drives`), `housekeeping_sweep`,
 `app_release_tags`, `unreal_dth_present`, `probe_locked_files`, and the Houdini
 side (`create_houdini_project`, `create_junction` — the `dth-exports` shortcut,
-best-effort and never load-bearing — plus `move_exports` for the v29 migration).
+best-effort and never load-bearing — `launch_houdini_job`/`houdini_running` for
+the "Export too" handoff, plus `move_exports` for the v29 migration).
 Nearly all are
 `#[tauri::command(async)]`; structured returns are camelCase serde structs pinned
 by the `contracts/` fixtures (see `.ai/conventions.md` § FFI ritual).

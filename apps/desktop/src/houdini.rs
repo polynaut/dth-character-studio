@@ -1,5 +1,90 @@
 use serde::Deserialize;
 
+/// Open a Houdini project in the GUI and let it run the studio's export job.
+///
+/// The handoff is entirely through the environment of THIS process: Houdini
+/// runs a `456.py` found on `HOUDINI_SCRIPT_PATH` once a scene has loaded, and
+/// that script does nothing at all unless `DTH_HOUDINI_JOB` names a job file.
+/// Both are set here and nowhere else, so an ordinary Houdini the user starts
+/// themselves is untouched.
+///
+/// GUI rather than headless hython, deliberately: the user wants to watch the
+/// exports happen, and the DazToHue HDA's pre-flight dialog exists only in a
+/// UI session (456.py answers it and records what it said).
+///
+/// Fire-and-forget — `spawn`, never `wait`. The export takes minutes and the
+/// studio's window must stay live to poll the result file; the process outlives
+/// the command and Houdini stays open afterwards for the user to work in.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchHoudiniJobRequest {
+    /// Absolute path of `houdini.exe` (from the Houdini install folder).
+    pub houdini_path: String,
+    /// The `.hip`/`.hiplc` project to open.
+    pub scene_path: String,
+    /// The job file 456.py reads (`DTH_HOUDINI_JOB`).
+    pub job_path: String,
+    /// The value for `HOUDINI_SCRIPT_PATH` — the studio's script folder plus
+    /// `&`, composed in TS (`houdiniScriptPathValue`) so the `&` that preserves
+    /// Houdini's own default path is covered by a unit test.
+    pub script_path: String,
+    /// The Houdini user-prefs folder, as HOUDINI_USER_PREF_DIR. Same reason as
+    /// `create_houdini_project`: inherited env can resolve the prefs elsewhere,
+    /// and then the user's otls — the DazToHue HDA itself — never load, so the
+    /// export nodes this job drives would not exist. Empty = inherit.
+    pub houdini_pref_dir: String,
+}
+
+/// Whether a Houdini GUI is up — the liveness half of the export poll, exactly
+/// like `daz_studio_running` is for the Daz batch. A result file stuck at
+/// "running" with no Houdini left means the user closed the window (or it
+/// crashed) and the poll must stop instead of spinning forever.
+///
+/// Matches `houdini.exe` and `houdinifx.exe`/`houdinicore.exe` — the licence
+/// tier decides the binary name, and the studio must not care which one the
+/// user runs.
+#[tauri::command(async)]
+pub fn houdini_running() -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("tasklist")
+            .args(["/FI", "IMAGENAME eq houdini*", "/NH", "/FO", "CSV"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map(|o| {
+                let out = String::from_utf8_lossy(&o.stdout).to_ascii_lowercase();
+                ["houdini.exe", "houdinifx.exe", "houdinicore.exe"]
+                    .iter()
+                    .any(|name| out.contains(name))
+            })
+            .unwrap_or(false)
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+#[tauri::command(async)]
+pub fn launch_houdini_job(request: LaunchHoudiniJobRequest) -> Result<(), String> {
+    let mut command = std::process::Command::new(&request.houdini_path);
+    command.arg(&request.scene_path);
+    command.env("DTH_HOUDINI_JOB", &request.job_path);
+    command.env("HOUDINI_SCRIPT_PATH", &request.script_path);
+    if !request.houdini_pref_dir.is_empty() {
+        command.env(
+            "HOUDINI_USER_PREF_DIR",
+            request.houdini_pref_dir.replace('\\', "/").trim_end_matches('/'),
+        );
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not start Houdini: {e}"))
+}
+
 /// Create a ready-made Houdini project for a character: `hython` starts a
 /// fresh scene, bakes `$JOB` to the project folder (`hou.putenv` — the
 /// programmatic File → Set Project, saved with the hip), builds the DazToHue

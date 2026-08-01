@@ -128,13 +128,17 @@ export type {
   RomAnimationStatus,
 } from './api/execute'
 
-// --- houdini: Generate project (hython, DazToHue network from the HDA) -------
+// --- houdini: Generate project (hython, DazToHue network from the HDA), and
+// --- "Export too" (job file → Houdini GUI → polled result) ------------------
 export {
+  dismissHoudiniRun,
+  fetchHoudiniRunProgress,
   generatedHoudiniScenePath,
   generateHoudiniProject,
   removeGeneratedHoudiniProject,
+  startHoudiniExport,
 } from './api/houdini'
-export type { GeneratedHoudiniProject } from './api/houdini'
+export type { GeneratedHoudiniProject, HoudiniExportStarted } from './api/houdini'
 
 // --- generate: artifact generation + refresh sweep + version detection ------
 export {
