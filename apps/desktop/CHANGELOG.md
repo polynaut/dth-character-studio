@@ -1,5 +1,32 @@
 # @dth/desktop
 
+## 0.59.0
+
+### Minor Changes
+
+- [#637](https://github.com/polynaut/dth-character-studio/pull/637) [`2dc246b`](https://github.com/polynaut/dth-character-studio/commit/2dc246b341663d8c2c745a5bc11df1f770a2da69) Thanks [@polynaut](https://github.com/polynaut)! - **"Export too" — the Daz batch now carries on into Houdini.** Pick a linked
+  Houdini project under _Open Houdini project after export_ in the DTH Export
+  dialog and a new **Export too** switch appears beside it. Leave it on and the
+  project doesn't just open when the batch finishes — it runs its own **DazToHue
+  exports** for the scenes you ticked, which was the last step you still had to do
+  by hand, per network, every time.
+
+  The button keeps reporting: **Houdini opening…** while the scene loads, then
+  **Houdini 1/3** as nodes finish, then the outcome (_"2 exported, 1 skipped"_).
+  Houdini stays open with the project ready to work in.
+
+  It is off by default — it drives your Houdini, so you opt in — and it is
+  deliberately careful with the project: only the networks importing the selected
+  scenes run (one holding other characters' networks is untouched), an
+  `export_directory` you configured is never overwritten (only a blank one is
+  filled from the run), and the `.hip` is never saved. If the DazToHue pre-flight
+  check raises problems, its _"Continue anyway?"_ prompt is answered for you and
+  the message is **kept**, so it reaches the report instead of vanishing behind an
+  unattended dialog.
+
+  Needs the Houdini installation folder and a matching Houdini documents folder in
+  Settings — the same pair _Generate project_ already requires.
+
 ## 0.58.0
 
 ### Minor Changes
