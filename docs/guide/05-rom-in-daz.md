@@ -210,6 +210,40 @@ The dialog refuses to start while the Runner plugin is missing or older than
 the one bundled with the app — the notice links straight to Settings to update
 it first.
 
+### Carry on into Houdini — "Export too"
+
+Pick a linked Houdini project under **Open Houdini project after export** and
+the studio opens it once the batch finishes. Picking one also reveals an
+**Export too** switch: leave it on and the project doesn't just open, it
+**runs its own DazToHue exports** for the scenes you just ticked — the last
+manual step of the round trip, gone.
+
+It is off by default, on purpose: it drives your Houdini, so you opt in.
+
+What happens when you leave it on:
+
+1. Daz finishes the batch and the studio reports it, as always.
+2. Houdini opens the project — visibly, so you can watch it work. The button
+   reads **Houdini opening…** while the scene loads (a big project takes a
+   while; nothing is wrong), then **Houdini 1/3** as nodes finish.
+3. Only the networks importing **the scenes you ticked** export. A project
+   holding networks for other scenes — or other characters — is left alone.
+4. The studio reports the outcome: *"Houdini export finished — 2 exported,
+   1 skipped."* Houdini stays open with the project ready to work in.
+
+Two things it deliberately won't do:
+
+- **Overwrite an export directory you configured.** A node with one set exports
+  where you told it to; only a blank one is filled in from the run.
+- **Save the project.** Nothing about your `.hip` changes on disk — any
+  parameter it touches is put back afterwards.
+
+If the DazToHue pre-flight check reports problems, the studio answers its
+*"Continue anyway?"* prompt for you and **keeps the message**, so those
+problems reach the report instead of vanishing behind an unattended dialog.
+Closing Houdini mid-run ends the watch with a notice — the exports that already
+finished are on disk.
+
 &nbsp;
 
 > [!NOTE]

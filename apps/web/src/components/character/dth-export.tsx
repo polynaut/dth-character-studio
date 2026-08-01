@@ -13,6 +13,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
   useRefetchOnFocus,
 } from '@dth/ui'
 import dthLogo from '#/assets/dth-logo.webp'
@@ -22,18 +23,22 @@ import {
   abortExporterJobs,
   dazStudioRunning,
   dismissExportRun,
+  dismissHoudiniRun,
   executeCharacterJobs,
   exporterJobsPending,
   fetchExecuteScenes,
   fetchExportRunProgress,
   fetchExportRunnerGate,
+  fetchHoudiniRunProgress,
   launchDazForPendingJobs,
   openScene,
+  startHoudiniExport,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
+import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
 import type { ExportMode } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
@@ -97,6 +102,9 @@ export function DthExportAction({
     null,
   )
   const [aborting, setAborting] = useState(false)
+  // The Houdini half of an "Export too" run, once the Daz batch has finished
+  // and handed over. Its own watch: Houdini works long after Daz is done.
+  const [houdini, setHoudini] = useState<HoudiniRunState | null>(null)
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
   // never claimed) — the modal below waits out the exit and relaunches.
   const [dazClosing, setDazClosing] = useState(false)
@@ -128,12 +136,36 @@ export function DthExportAction({
       // The dialog's after-export pick: open the Houdini project the fresh
       // exports belong to — unless EVERY scene failed (nothing new to look at).
       if (run.openHoudiniProject && run.failed < run.total) {
-        toast.info('Opening the Houdini project…')
-        void openScene({ data: { scenePath: run.openHoudiniProject } }).catch((err: unknown) => {
-          toast.error(
-            `Couldn't open the Houdini project: ${err instanceof Error ? err.message : String(err)}`,
-          )
-        })
+        if (run.houdiniExport) {
+          // "Export too": the project opens with the job in its environment and
+          // exports itself. Only the scenes this batch ran are in scope.
+          toast.info('Opening the Houdini project to export…')
+          void startHoudiniExport({
+            data: {
+              projectId,
+              id: character.id,
+              hipPath: run.openHoudiniProject,
+              scenes: run.scenes,
+            },
+          })
+            .then((started) => {
+              setHoudini({ state: 'starting' })
+              const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
+              toast.success(`Houdini is opening — ${count} handed over.`)
+            })
+            .catch((err: unknown) => {
+              toast.error(
+                `Couldn't start the Houdini export: ${err instanceof Error ? err.message : String(err)}`,
+              )
+            })
+        } else {
+          toast.info('Opening the Houdini project…')
+          void openScene({ data: { scenePath: run.openHoudiniProject } }).catch((err: unknown) => {
+            toast.error(
+              `Couldn't open the Houdini project: ${err instanceof Error ? err.message : String(err)}`,
+            )
+          })
+        }
       }
       return
     }
@@ -146,6 +178,35 @@ export function DthExportAction({
     // Runner-owned run shows the progress state.
     setProgress(run.state === 'running' ? run : null)
   }
+
+  /** The Houdini half's own poll — armed only after an "Export too" handoff.
+   *  Separate from the Daz watch because it outlives it: the batch is finished
+   *  and reported by the time Houdini starts opening the project. */
+  async function refreshHoudini() {
+    const run = await fetchHoudiniRunProgress()
+    if (!run || run.characterId !== character.id) {
+      setHoudini(null)
+      return
+    }
+    if (run.state === 'finished') {
+      setHoudini(null)
+      const summary = run.summary || 'nothing to export'
+      if (run.failed > 0 || run.error) {
+        toast.warning(`Houdini export finished — ${summary}.`, {
+          description: run.error || undefined,
+        })
+      } else {
+        toast.success(`Houdini export finished — ${summary}.`)
+      }
+      return
+    }
+    if (run.state === 'dead') {
+      setHoudini(null)
+      toast.error('The Houdini export did not finish — Houdini is no longer running.')
+      return
+    }
+    setHoudini(run)
+  }
   useRefetchOnFocus(
     () => {
       void refreshStatus()
@@ -153,11 +214,14 @@ export function DthExportAction({
     [],
     { immediate: true },
   )
-  const watching = pending === true || progress !== null
+  const watching = pending === true || progress !== null || houdini !== null
   useEffect(() => {
     if (!watching) return
     const id = window.setInterval(() => {
       void refreshStatus()
+      // Cheap while nothing is armed: fetchHoudiniRunProgress returns null
+      // immediately without touching the filesystem.
+      void refreshHoudini()
     }, 2500)
     return () => window.clearInterval(id)
     // Re-arm on `watching` alone (ONE interval): refreshStatus only captures
@@ -215,6 +279,33 @@ export function DthExportAction({
         {/* Processed count, not the percent — the % only moved in row-sized
             jumps anyway (the Runner's progress is rows ÷ total). */}
         <Loader2 className="animate-spin" /> Exporting {progress.processed}/{progress.total}
+      </Button>
+    )
+  }
+
+  if (houdini) {
+    // The Daz batch is done and reported; Houdini is opening the project (or
+    // already working through it). Same deal as above — clicking stops the
+    // WATCH, never the export, which keeps running in the user's Houdini.
+    const label =
+      houdini.state === 'running' && houdini.total > 0
+        ? `Houdini ${houdini.done}/${houdini.total}`
+        : 'Houdini opening…'
+    return (
+      <Button
+        variant="outline"
+        className="px-3"
+        onClick={() => {
+          dismissHoudiniRun()
+          setHoudini(null)
+        }}
+        title={
+          houdini.state === 'running'
+            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching.`
+            : 'Houdini is opening the project; the export starts once the scene has loaded. Click to stop watching.'
+        }
+      >
+        <Loader2 className="animate-spin" /> {label}
       </Button>
     )
   }
@@ -545,6 +636,7 @@ function DthExportDialog({
   // The optional after-export pick ('' = open nothing) — one of the
   // character's linked Houdini projects, opened when the batch FINISHES.
   const [openHoudini, setOpenHoudini] = useState('')
+  const [houdiniExport, setHoudiniExport] = useState(false)
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
 
@@ -663,6 +755,7 @@ function DthExportDialog({
           scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath),
           mode: mode ?? 'rom-export',
           openHoudiniProject: openHoudini || undefined,
+          houdiniExport: openHoudini !== '' && houdiniExport,
         },
       })
       onExported()
@@ -753,6 +846,25 @@ function DthExportDialog({
               ))}
             </SelectContent>
           </Select>
+          {/* Only offered once a project is picked — the toggle has nothing to
+              run in otherwise. Off by default: it drives the user's own Houdini,
+              which is not something to opt them into silently. */}
+          {openHoudini !== '' && (
+            <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm">
+              <Switch
+                checked={houdiniExport}
+                onCheckedChange={setHoudiniExport}
+                className="mt-0.5"
+                aria-label="Export too"
+              />
+              <span>
+                Export too
+                <span className="block text-xs text-muted-foreground">
+                  Run the project&apos;s DazToHue exports for the selected scenes once it opens.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
       )}
       {runner?.blocked && <RunnerGateNotice gate={runner} />}

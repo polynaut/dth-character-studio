@@ -27,6 +27,26 @@ export const HOUDINI_RESULT_FILE = '.dth_houdini_result.json'
 /** The env var 456.py reads the job path from ('' = do nothing at all). */
 export const HOUDINI_JOB_ENV = 'DTH_HOUDINI_JOB'
 
+/** App-data folder the bundled `456.py` is written into before a launch. It is
+ *  NOT installed once and forgotten: the file is rewritten every run, so a
+ *  deleted or half-written copy repairs itself and an app update always wins. */
+export const HOUDINI_SCRIPTS_FOLDER = 'houdini-scripts'
+
+/**
+ * What to set `HOUDINI_SCRIPT_PATH` to so Houdini runs OUR `456.py` after a
+ * scene loads — `<our folder>;&`.
+ *
+ * The `&` is load-bearing and easy to miss: in a Houdini path variable it
+ * stands for the path Houdini would have used by itself. Setting the variable
+ * to our folder ALONE replaces the default, which would silently disable the
+ * user's own startup scripts (and Houdini's) for the whole session. Windows
+ * separates entries with `;`.
+ */
+export function houdiniScriptPathValue(scriptsDir: string): string {
+  const dir = scriptsDir.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  return dir ? `${dir};&` : '&'
+}
+
 export interface HoudiniJobScene {
   /**
    * Absolute path of the `.dth` this scene exported — the MATCH KEY. A
@@ -148,6 +168,45 @@ export function buildHoudiniJob(
     scenes,
     exportDirectory: (options.exportDirectory ?? '').replace(/\\/g, '/'),
     resultPath: options.resultPath.replace(/\\/g, '/'),
+  }
+}
+
+/**
+ * The live state of a Houdini run, derived from what the result file says (or
+ * doesn't yet). Pure, so the polling rule is testable without a Houdini:
+ *
+ *  - no file yet → `starting` (Houdini is loading; it writes the file as soon
+ *    as 456.py runs, which is AFTER the scene finishes opening — on a big
+ *    project that is a while, and it is not an error)
+ *  - `running` → progress, `done` of `total`
+ *  - `done`/`failed` → `finished`, with the summary the toast shows
+ *
+ * `houdiniRunning` is the liveness check: a run whose Houdini has EXITED
+ * without ever finishing is dead (the user closed the window, or Houdini
+ * crashed), and must stop the poll rather than spin forever.
+ */
+export type HoudiniRunState =
+  | { state: 'starting' }
+  | { state: 'running'; done: number; total: number }
+  | { state: 'finished'; ok: number; skipped: number; failed: number; summary: string; error: string }
+  | { state: 'dead' }
+
+export function houdiniRunStateFrom(
+  result: HoudiniResult | null,
+  houdiniRunning: boolean,
+): HoudiniRunState {
+  if (!result) return houdiniRunning ? { state: 'starting' } : { state: 'dead' }
+  if (result.state === 'running') {
+    if (!houdiniRunning) return { state: 'dead' }
+    return { state: 'running', done: result.done, total: result.total }
+  }
+  const counts = { ok: 0, skipped: 0, failed: 0 }
+  for (const node of result.nodes) counts[node.status] += 1
+  return {
+    state: 'finished',
+    ...counts,
+    summary: houdiniResultSummary(result),
+    error: result.state === 'failed' ? result.error || 'the run failed in Houdini' : result.error,
   }
 }
 

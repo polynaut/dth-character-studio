@@ -5,6 +5,8 @@ import { characterSchema } from '@dth/rom'
 import {
   buildHoudiniJob,
   houdiniResultSummary,
+  houdiniRunStateFrom,
+  houdiniScriptPathValue,
   parseHoudiniResult,
   sceneDthPath,
 } from './houdini-jobs.ts'
@@ -132,5 +134,102 @@ describe('houdiniResultSummary', () => {
       '1 exported, 1 skipped, 1 failed',
     )
     expect(houdiniResultSummary(make([]))).toBe('')
+  })
+})
+
+describe('HOUDINI_SCRIPT_PATH composition', () => {
+  it('keeps Houdini’s own default path with a trailing &', () => {
+    // Without the `&` the variable REPLACES Houdini's default script path, and
+    // the user's own startup scripts silently stop running for the session.
+    expect(houdiniScriptPathValue('C:/Users/x/AppData/Local/dth/houdini-scripts')).toBe(
+      'C:/Users/x/AppData/Local/dth/houdini-scripts;&',
+    )
+  })
+
+  it('normalises separators and a trailing slash', () => {
+    expect(houdiniScriptPathValue('C:\\Users\\x\\dth\\houdini-scripts\\')).toBe(
+      'C:/Users/x/dth/houdini-scripts;&',
+    )
+  })
+
+  it('degrades to the default path alone rather than emitting an empty entry', () => {
+    expect(houdiniScriptPathValue('')).toBe('&')
+    expect(houdiniScriptPathValue('   ')).toBe('&')
+  })
+})
+
+describe('houdiniRunStateFrom', () => {
+  const result = (over: Record<string, unknown>) =>
+    parseHoudiniResult(JSON.stringify({ state: 'running', total: 3, done: 1, ...over }))!
+
+  it('waits while Houdini is still opening the project (no result file yet)', () => {
+    // 456.py only runs AFTER the scene finishes loading — on a big project that
+    // is a long silence, and it is not a failure.
+    expect(houdiniRunStateFrom(null, true)).toEqual({ state: 'starting' })
+  })
+
+  it('calls it dead when there is no Houdini left to write the file', () => {
+    expect(houdiniRunStateFrom(null, false)).toEqual({ state: 'dead' })
+  })
+
+  it('reports node progress while the run works', () => {
+    expect(houdiniRunStateFrom(result({}), true)).toEqual({ state: 'running', done: 1, total: 3 })
+  })
+
+  it('calls a half-finished run dead once Houdini exits — the poll must not spin', () => {
+    // The user closed the window (or it crashed) mid-batch: the result file
+    // stays at "running" forever, so liveness is the only way out.
+    expect(houdiniRunStateFrom(result({}), false)).toEqual({ state: 'dead' })
+  })
+
+  it('summarises a finished run', () => {
+    const done = parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        total: 3,
+        done: 3,
+        nodes: [
+          { node: '/obj/a', status: 'ok' },
+          { node: '/obj/b', status: 'ok' },
+          { node: '/obj/c', status: 'skipped' },
+        ],
+      }),
+    )!
+    expect(houdiniRunStateFrom(done, true)).toEqual({
+      state: 'finished',
+      ok: 2,
+      skipped: 1,
+      failed: 0,
+      summary: '2 exported, 1 skipped',
+      error: '',
+    })
+  })
+
+  it('finishes (not dies) when Houdini has already been closed after a done run', () => {
+    // The export ended, the user quit Houdini, and only then does the poll come
+    // round: the outcome is still a real outcome and must be reported.
+    const done = parseHoudiniResult(
+      JSON.stringify({ state: 'done', nodes: [{ node: '/obj/a', status: 'ok' }] }),
+    )!
+    expect(houdiniRunStateFrom(done, false).state).toBe('finished')
+  })
+
+  it('carries the run-level error of a failed run', () => {
+    const failed = parseHoudiniResult(
+      JSON.stringify({ state: 'failed', error: 'Traceback (most recent call last)…', nodes: [] }),
+    )!
+    expect(houdiniRunStateFrom(failed, true)).toMatchObject({
+      state: 'finished',
+      summary: '',
+      error: 'Traceback (most recent call last)…',
+    })
+  })
+
+  it('never reports a failed run without something to show', () => {
+    const failed = parseHoudiniResult(JSON.stringify({ state: 'failed', nodes: [] }))!
+    expect(houdiniRunStateFrom(failed, true)).toMatchObject({
+      state: 'finished',
+      error: 'the run failed in Houdini',
+    })
   })
 })

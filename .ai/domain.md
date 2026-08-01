@@ -267,12 +267,25 @@ older runtimes as stale.
   it — costs the shortcut only. Idempotent + self-repairing: a correct link
   reports `"exists"`, a stale one is repointed, a real directory is REFUSED.
   Junctions need no elevation (symlinks would — that's why it's a junction).
-- **The Houdini export handoff (v0.57.0 — SHIPPED BUT INERT).** Goal: after a
-  Daz bulk export, run the DazToHue export nodes in a Houdini project for the
-  scenes the user ticked ("Export too", a toggle beside the dialog's Houdini
-  project select). Built so far: `lib/rom/houdini-jobs.ts` (job/result contract)
-  and `lib/rom/houdini-runtime/456.py` (Houdini's half). NOT built: the launch,
-  the result polling, the toggle — nothing calls any of it yet.
+- **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
+  export, the DazToHue export nodes in a Houdini project run for the scenes the
+  user ticked. The toggle sits beside the dialog's Houdini project select,
+  appears only once a project is picked, and is off by default (it drives the
+  user's own Houdini). Pieces: `lib/rom/houdini-jobs.ts` (job/result contract,
+  `houdiniScriptPathValue`, `houdiniRunStateFrom`),
+  `lib/rom/houdini-runtime/456.py` (Houdini's half),
+  `api/houdini.ts` (`startHoudiniExport`/`fetchHoudiniRunProgress`) and Rust
+  `launch_houdini_job`/`houdini_running` (houdini.rs).
+  `456.py` is written into `<appLocalData>/houdini-scripts/` **before every
+  run** — not installed once — so it is self-repairing and always matches the
+  app version; `HOUDINI_SCRIPT_PATH` is set to `<that folder>;&`, and the `&`
+  is load-bearing (it stands for the path Houdini would have used, so omitting
+  it silently disables the user's own startup scripts for the session).
+  The run's own watch outlives the Daz batch: the batch finishes and reports,
+  THEN Houdini opens (`starting` — 456.py runs only after the scene has loaded,
+  which is a long silence on a big project), works (`running done/total`) and
+  finishes. Liveness comes from `houdini_running`, without which a result file
+  stuck at "running" after the user closed Houdini would poll forever.
   Chosen shape is **visible GUI + a startup script reading a job file**, not
   headless hython and not `hrpyc` remote control, so it mirrors the Daz Runner
   handoff. Houdini runs a `456.py` found on `HOUDINI_SCRIPT_PATH` after a scene

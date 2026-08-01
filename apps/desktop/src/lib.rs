@@ -147,6 +147,8 @@ pub fn run() {
             daz::launch_daz_studio,
             foreground::focus_app_window,
             houdini::create_houdini_project,
+            houdini::launch_houdini_job,
+            houdini::houdini_running,
             junction::create_junction,
             exports::move_exports,
             shellopen::shell_open_file,
