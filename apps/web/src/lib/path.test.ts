@@ -1,6 +1,28 @@
 import { describe, expect, it } from 'vitest'
 
-import { extrasWithoutPrimary, middleTruncatePath } from './path.ts'
+import { browseStart, extrasWithoutPrimary, middleTruncatePath } from './path.ts'
+
+describe('browseStart — where a Browse dialog opens', () => {
+  it('uses the path the field already holds', () => {
+    expect(browseStart('D:\\DazToHue\\Releases')).toBe('D:/DazToHue/Releases')
+  })
+
+  it('falls through blanks to the closest thing the caller offered', () => {
+    // The whole point: an unset field is not a reason to dump the user at
+    // whatever folder the OS remembers.
+    expect(browseStart('', '   ', 'D:/Projects')).toBe('D:/Projects')
+    expect(browseStart(undefined, 'D:/Projects')).toBe('D:/Projects')
+  })
+
+  it('prefers the set value over every fallback', () => {
+    expect(browseStart('D:/Set', 'D:/Fallback')).toBe('D:/Set')
+  })
+
+  it('is undefined when nothing sensible is known — the OS decides', () => {
+    expect(browseStart('', undefined, '  ')).toBeUndefined()
+    expect(browseStart()).toBeUndefined()
+  })
+})
 
 describe('middleTruncatePath', () => {
   it('keeps short paths untouched', () => {

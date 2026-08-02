@@ -4,6 +4,7 @@ import { ChevronRight, FolderOpen, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { pickCsvPath, pickDufPath } from '#/lib/desktop.ts'
+import { browseStart, parentDir } from '#/lib/path.ts'
 import { importPosesFromCsv } from '#/lib/rom/api.ts'
 
 import { Button, cn, InfoPopup, Input, Modal, OverrideMark, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@dth/ui'
@@ -160,6 +161,10 @@ export const RomSections = memo(function RomSections({
   onChange,
 }: RomSectionsProps) {
   const [open, setOpen] = useState<Partial<Record<RomSection, boolean>>>({})
+  // Folder of the last morph CSV picked in this editor — a second import is
+  // nearly always a sibling of the first, and a CSV path is not stored anywhere
+  // (it is consumed on import), so the session is the only memory there is.
+  const lastCsvDir = useRef('')
   // The section whose scan-CSV picker is open (null = no import in progress).
   const [pickerSection, setPickerSection] = useState<RomSection | null>(null)
   // A picked CSV awaiting its frame-range dialog (null = no import in progress).
@@ -543,8 +548,11 @@ export const RomSections = memo(function RomSections({
   }
 
   async function browseCsv(section: RomSection) {
-    const filePath = await pickCsvPath('Select a DAZ morph CSV')
+    // A second import for the same character almost always comes from the same
+    // export folder as the last one.
+    const filePath = await pickCsvPath('Select a DAZ morph CSV', browseStart(lastCsvDir.current))
     if (!filePath) return
+    lastCsvDir.current = parentDir(filePath)
     await loadCsv(section, filePath)
   }
 
@@ -969,7 +977,13 @@ export const RomSections = memo(function RomSections({
                         size="sm"
                         className="shrink-0"
                         onClick={async () => {
-                          const picked = await pickDufPath('Select a custom JCM pose preset (.duf)')
+                          // Re-browsing opens at the preset already chosen (the
+                          // file preselected), else in the DTH release the rest
+                          // of the presets come from.
+                          const picked = await pickDufPath(
+                            'Select a custom JCM pose preset (.duf)',
+                            browseStart(mergedConfig.customAssetPath),
+                          )
                           if (picked) patchSectionForScene(section, { customAssetPath: picked })
                         }}
                       >

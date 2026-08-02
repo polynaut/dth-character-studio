@@ -47,7 +47,7 @@ import {
   sceneSubfolderConflict,
   suggestSceneSubfolder,
 } from '#/lib/scene-subfolder.ts'
-import { displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
+import { browseStart, displayPath, extrasWithoutPrimary, normalizePath, parentDir } from '#/lib/path.ts'
 import { seedSceneHair } from '#/lib/groom-detect.ts'
 import { genesisFromFigureNode } from '@dth/rom'
 
@@ -584,14 +584,20 @@ export function DazSceneField({
       })
   }
 
+  /** Where the scene pickers open: the folder the primary scene lives in (an
+   *  outfit variant is nearly always saved beside it), else the character
+   *  folder. Not the primary FILE — preselecting the scene you are replacing or
+   *  adding a sibling to is noise. */
+  const scenePickFrom = browseStart(primaryDir, charFolder)
+
   async function onAddPick() {
-    const picked = await pickDufPath('Select another Daz scene (.duf)')
+    const picked = await pickDufPath('Select another Daz scene (.duf)', scenePickFrom)
     if (!picked) return
     startAdd(picked)
   }
 
   async function onReplacePick() {
-    const picked = await pickDufPath('Select the NEW primary Daz scene (.duf)')
+    const picked = await pickDufPath('Select the NEW primary Daz scene (.duf)', scenePickFrom)
     if (!picked) return
     startAdd(picked, true)
   }
@@ -758,7 +764,9 @@ export function DazSceneField({
   }
 
   async function onPick() {
-    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    // Relinking a MISSING primary: its old folder is still the best guess (the
+    // file usually moved within the character), then the character folder.
+    const picked = await pickDufPath('Select the Daz character scene (.duf)', scenePickFrom)
     if (!picked) return
     if (!insideProject(picked)) {
       setSubfolder(`${defaultSubdir}/${PRIMARY_SCENE_SUBFOLDER}`)
