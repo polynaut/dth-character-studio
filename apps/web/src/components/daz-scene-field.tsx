@@ -659,6 +659,15 @@ export function DazSceneField({
             )
           }
         }
+        // …and pre-selects its own hair, the one shared rule (`seedSceneHair`),
+        // exactly like creation, the first primary link and an added scene. A
+        // REPLACEMENT is a different scene with different hair: without this the
+        // new primary arrived with an empty hair list, and hair the studio is
+        // meant to keep out rode straight into the FBX. The old primary's record
+        // is left alone — it is inert once its scene is gone
+        // (`activeSceneOverrides`), and a curated list is never clobbered.
+        const seeded = seedSceneHair(finalScene, scan, character.sceneOverrides)
+        if (seeded) patch.sceneOverrides = seeded
         return patch
       },
       {
