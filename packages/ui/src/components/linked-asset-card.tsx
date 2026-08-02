@@ -38,6 +38,7 @@ export function LinkedAssetCard({
   removeTitle = 'Remove',
   onReplace,
   replaceTitle = 'Replace',
+  replaceDisabled = false,
   selected,
   onSelect,
   onRename,
@@ -75,6 +76,11 @@ export function LinkedAssetCard({
    *  — the primary Daz scene's swap flow uses it instead of a remove. */
   onReplace?: () => void
   replaceTitle?: string
+  /** Show the replace button but refuse it. Deliberately NOT "hide it": a
+   *  control that vanishes reads as a missing feature, while a disabled one
+   *  whose `replaceTitle` explains the condition tells the user what to do
+   *  about it. */
+  replaceDisabled?: boolean
   /** Selectable mode: highlights when `selected`; a card click SELECTS instead
    *  of opening — only the corner icon opens. Both optional (default = the
    *  classic whole-card-opens behavior). */
@@ -198,17 +204,23 @@ export function LinkedAssetCard({
           button re-enables pointer events. */}
       <div className="pointer-events-none absolute right-2 bottom-2 flex items-center gap-0.5">
         {onReplace && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            // Same adornment recipe as the remove button below.
-            className="group/repl pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
-            title={replaceTitle}
-            aria-label={replaceTitle}
-            onClick={onReplace}
-          >
-            <FolderOpen className="size-3.5 text-muted-foreground transition-colors group-hover/repl:text-foreground" />
-          </Button>
+          // The span carries the tooltip: a DISABLED button emits no hover
+          // events, so a title on it alone would never appear — and the whole
+          // point of disabling this one is that the reason must be readable.
+          <span className="pointer-events-auto inline-flex" title={replaceTitle}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              // Same adornment recipe as the remove button below.
+              className="group/repl pointer-events-auto border border-transparent opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:border-white/20 hover:bg-[#333] hover:shadow-sm dark:hover:bg-[#333]"
+              title={replaceTitle}
+              aria-label={replaceTitle}
+              disabled={replaceDisabled}
+              onClick={onReplace}
+            >
+              <FolderOpen className="size-3.5 text-muted-foreground transition-colors group-hover/repl:text-foreground" />
+            </Button>
+          </span>
         )}
         {onRemove && (
           <Button

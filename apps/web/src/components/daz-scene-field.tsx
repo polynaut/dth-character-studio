@@ -66,6 +66,8 @@ function SceneCard({
   onRename,
   onRemove,
   onReplace,
+  replaceDisabled,
+  replaceReason,
   primary,
   selected,
   onSelect,
@@ -82,6 +84,11 @@ function SceneCard({
   /** When set, a hover folder button browses for a REPLACEMENT scene — the
    *  primary card's swap flow (the primary can't be unlinked, only replaced). */
   onReplace?: () => void
+  /** Show the replace button but refuse it, with `replaceReason` as the
+   *  tooltip — see the extra-scenes gate in DazSceneField. */
+  replaceDisabled?: boolean
+  /** Tooltip for the replace button; the REASON when it is disabled. */
+  replaceReason?: string
   /** The character's original creation scene — gets a "primary" badge and is not
    *  unlinkable (the caller omits onRemove and passes onReplace instead). */
   primary?: boolean
@@ -133,7 +140,7 @@ function SceneCard({
             {primary && (
               <PrimaryBadge
                 dense
-                title="The character's primary scene — it can't be unlinked; the folder button replaces it with another scene"
+                title="The character's primary scene — it can't be unlinked; the folder button replaces it with another scene, while it is the only one linked"
               />
             )}
           </span>
@@ -150,7 +157,8 @@ function SceneCard({
       onRemove={onRemove}
       removeTitle="Unlink from character"
       onReplace={onReplace}
-      replaceTitle="Replace with another Daz scene…"
+      replaceDisabled={replaceDisabled}
+      replaceTitle={replaceReason ?? 'Replace with another Daz scene…'}
       selected={selected}
       onSelect={onSelect}
     />
@@ -590,7 +598,32 @@ export function DazSceneField({
     startAdd(picked)
   }
 
+  /**
+   * Replacing the primary is only offered while it is the character's ONLY
+   * scene.
+   *
+   * Every extra scene was validated against the CURRENT primary when it was
+   * added — same Genesis, one figure, empty timeline, and above all the same
+   * GP/DK geograft, because every scene has to produce the primary's skeleton.
+   * Swapping the primary out from under them re-decides exactly that reference:
+   * a replacement without Golden Palace turns a whole set of validated extras
+   * into silently mismatched ones, and nothing would re-check them. There is no
+   * good automatic answer (re-validating and unlinking the failures behind the
+   * user's back is worse), so the user unlinks first and re-adds against the new
+   * primary, which runs the real validation for each one.
+   */
+  const replaceBlocked = character.extraScenes.length > 0
+  const replaceReason = replaceBlocked
+    ? `Unlink the other ${character.extraScenes.length === 1 ? 'scene' : 'scenes'} first — they were validated against this primary's GP/DK geograft, and a different primary would leave them mismatched`
+    : undefined
+
   async function onReplacePick() {
+    // Backstop for the disabled button (a stale render, a keyboard path): the
+    // rule lives here too, not only in the control that offers it.
+    if (replaceBlocked) {
+      toast.error(replaceReason ?? 'Unlink the character’s other scenes first.')
+      return
+    }
     const picked = await pickDufPath('Select the NEW primary Daz scene (.duf)')
     if (!picked) return
     startAdd(picked, true)
@@ -602,6 +635,12 @@ export function DazSceneField({
    *  relinkScene so the avatar follows, and the OLD primary's files go when the
    *  user kept "Delete the old scene file" on (in-folder copies only). */
   async function applyReplace(scene: string, copyInto: boolean) {
+    // The last gate before anything is written — the dialog can outlive the
+    // state that opened it (a scene added in another window, a focus refetch).
+    if (character.extraScenes.length > 0) {
+      toast.error(replaceReason ?? 'Unlink the character’s other scenes first.')
+      return
+    }
     const sceneName = scene.split(/[\\/]/).pop() ?? scene
     // Every copied-in scene needs its OWN subfolder below the scenes root (the
     // dialog disables Copy on empty — this is the backstop).
@@ -1222,6 +1261,8 @@ export function DazSceneField({
                         : undefined
                     }
                     onReplace={busy ? undefined : () => void onReplacePick()}
+                    replaceDisabled={replaceBlocked}
+                    replaceReason={replaceReason}
                     primary
                     selected={selectedScene !== undefined ? selectedScene === character.scenePath : undefined}
                     onSelect={onSelectScene ? () => onSelectScene(character.scenePath) : undefined}
