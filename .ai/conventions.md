@@ -3,6 +3,41 @@
 The non-obvious "how we do things here". CLAUDE.md has the short version; this is
 the reference.
 
+## Working rules (every task, before anything else)
+
+This project has ONE maintainer, working on it in his spare time. Every round
+trip he spends re-stating something he already said is the expensive resource
+here — not tokens, not CI minutes. These three rules exist because each was
+paid for.
+
+- **Open with the parsed todo list.** On any non-trivial prompt, the FIRST thing
+  in the reply is the short list of what was parsed out of it — before the work
+  starts. He then corrects a wrong reading in one glance instead of discovering
+  the gap after the fact. **Close by ticking that list**, naming anything not
+  done and why. A multi-part prompt is a checklist: re-read it before the
+  closing summary and account for every clause, asides and parentheticals
+  included. Never make him list what was dropped — offer to audit the session.
+  *Earned by:* "i slowly get the feeling that you always skip like 25% of my
+  prompts.. it's already the third thing i need to fix today where i'm 200% sure
+  i told you already". The shape is always the same — the code works, and the
+  edges fall off: the toggle that drives the feature, the icon, the docs, the
+  files it writes and never deletes.
+- **A feature is not done at the happy path.** Finish the whole loop — the files
+  it writes AND their cleanup, the folders it fills, the icon it needs, the docs
+  that describe it. When scope is genuinely ambiguous, take the WIDER reading
+  and say so: under-delivering costs him a round trip, over-delivering costs him
+  a glance.
+- **Never watch CI.** Don't run `gh pr checks --watch`, don't poll a workflow,
+  don't block on a run. He watches CI himself, deliberately, because it is his
+  cue to go do something else. "write pr" means: open the PR, set the
+  description, report the URL — seconds, not minutes.
+- **Every `gh`/`git` command must be shaped so it cannot need a second attempt.**
+  A retry is not free: it is another minute of his attention. The recurring
+  killer is PowerShell quoting — a `"` inside a here-string breaks native
+  argument splitting, and a bash `<<'EOF'` heredoc is a parse error. So **any
+  multi-line or quote-bearing text goes to a file first**, then
+  `gh pr create --body-file <path>` / `git commit -F <path>`. Never inline it.
+
 ## Repo mechanics
 
 - **pnpm workspace monorepo**, `packageManager: pnpm@9.1.4`, **Node ≥ 24**.
