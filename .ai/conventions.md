@@ -7,8 +7,15 @@ the reference.
 
 This project has ONE maintainer, working on it in his spare time. Every round
 trip he spends re-stating something he already said is the expensive resource
-here — not tokens, not CI minutes. These three rules exist because each was
-paid for.
+here — not tokens, not CI minutes. These rules exist because each was paid for.
+
+**The definition of done, in his words: every point of the prompt is solved.**
+"The code works" is a precondition, never a completion criterion — a task is not
+done because the thing you built runs. Treat the prompt as a ticket and each
+point in it as an acceptance criterion: closing it with half the ACs met is the
+failure, and a working build does not excuse it. If a point cannot be met, it is
+named in the reply as outstanding — that is the only honest alternative to
+doing it.
 
 - **Open with the parsed todo list.** On any non-trivial prompt, the FIRST thing
   in the reply is the short list of what was parsed out of it — before the work
