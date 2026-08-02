@@ -46,6 +46,17 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
     )
   })
 
+  it('resolves a RAW stored scene path, not only a normalized key', () => {
+    // The regression that made "Export too" fail on every real run: the folder
+    // map is keyed lowercase, but the export dialog passes the character's
+    // stored paths verbatim — and every Windows path has a capital in it, so
+    // the lookup missed, the job came out with zero scenes, and the run died on
+    // "none of these scenes has an export path".
+    expect(sceneDthPath(kira(), 'X:\\p\\Kira\\daz3d\\primary\\Kira.duf', ROOT)).toBe(
+      'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth',
+    )
+  })
+
   it('is empty without an export directory — nothing could have been imported', () => {
     expect(sceneDthPath(kira({ exportPath: '' }), PRIMARY, ROOT)).toBe('')
   })
@@ -70,6 +81,18 @@ describe('buildHoudiniJob', () => {
     // node parms hold.
     expect(job.resultPath).toBe('X:/p/Kira/.dth_houdini_result.json')
     expect(job.exportDirectory).toBe('X:/unreal/Kira')
+  })
+
+  it('accepts the raw stored paths the export dialog actually passes', () => {
+    const job = buildHoudiniJob(
+      kira(),
+      ['X:\\p\\Kira\\daz3d\\primary\\Kira.duf', 'X:\\p\\Kira\\daz3d\\summertide\\KiraSummertide.duf'],
+      { resultPath: 'r.json', scenesRootAbs: ROOT },
+    )
+    expect(job.scenes).toEqual([
+      { dth: 'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth', label: 'Kira' },
+      { dth: 'X:/p/Kira/daz3d/dth-exports/summertide/Kira_Summertide.dth', label: 'KiraSummertide' },
+    ])
   })
 
   it('drops scenes with no resolvable .dth instead of sending unmatchable rows', () => {

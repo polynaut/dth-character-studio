@@ -43,6 +43,11 @@ export interface TauriMockSeed {
   /** The base figure node a scene reports (`scene_wearables`) — the create
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
+  /** What `houdini_running` answers — the "Export too" liveness probe. Default
+   *  false. A spec flips `__tauriMock.houdiniRunning` mid-run: a launched
+   *  Houdini is UP while 456.py works, and a run whose Houdini exited before
+   *  writing a result is what the studio must call dead. */
+  houdiniRunning?: boolean
 }
 
 /** What the spec reads back via `page.evaluate` from `window.__tauriMock`. */
@@ -50,6 +55,8 @@ export interface TauriMockState {
   files: Map<string, string>
   calls: Array<{ cmd: string; args: unknown }>
   unhandled: Array<string>
+  /** Mutable: the answer `houdini_running` gives from now on. */
+  houdiniRunning: boolean
 }
 
 export function installTauriMock(seed: TauriMockSeed): void {
@@ -57,6 +64,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
   const extraDirs = new Set<string>()
   const calls: Array<{ cmd: string; args: unknown }> = []
   const unhandled: Array<string> = []
+  // The single object both the command switch and the spec hold — mutating
+  // `state.houdiniRunning` from a spec is how a run goes live and then exits.
+  const state: TauriMockState = {
+    files,
+    calls,
+    unhandled,
+    houdiniRunning: seed.houdiniRunning ?? false,
+  }
   let nextId = 1
 
   const norm = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '')
@@ -295,6 +310,19 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return []
       case 'daz_studio_running':
         return false
+      case 'launch_daz_studio':
+        // Nothing to start. The batch is claimed by the Runner INSIDE Daz,
+        // which this fake does not impersonate — a spec plays that part by
+        // renaming the job file to `running_…` and driving its progress, which
+        // is exactly the contract the plugin follows.
+        return ''
+      case 'launch_houdini_job':
+        // Same deal for Houdini: the launch is recorded in `calls` (the spec
+        // asserts the job path, the `;&` script path and the version-matched
+        // prefs dir), and the spec then plays 456.py by writing the result file.
+        return null
+      case 'houdini_running':
+        return state.houdiniRunning
       case 'unreal_dth_present':
         // The linked Unreal project in the docs fixture has no DTH content yet
         // (the footer card's install button is live, not dimmed).
@@ -327,6 +355,8 @@ export function installTauriMock(seed: TauriMockSeed): void {
   }
   // event.js unlisten() bypasses invoke and calls this global directly.
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
-  // The spec's window into this fake (page.evaluate).
-  w.__tauriMock = { files, calls, unhandled } satisfies TauriMockState
+  // The spec's window into this fake (page.evaluate). `state` is the same
+  // object the command switch reads, so a spec flipping `houdiniRunning`
+  // changes what the next `houdini_running` poll answers.
+  w.__tauriMock = state
 }

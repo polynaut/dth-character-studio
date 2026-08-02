@@ -125,12 +125,20 @@ export function sceneDthPath(
 ): string {
   const root = character.exportPath.trim().replace(/\\/g, '/').replace(/\/+$/, '')
   if (!root) return ''
+  // NORMALIZE what we were handed. `sceneExportFolderRel`/`sceneExportSubfolders`
+  // key by `normalizeSceneKey` (lowercased, forward slashes) — and the caller is
+  // the export dialog, which passes the character's stored paths verbatim. Any
+  // Windows path has a capital letter in it, so looking up the raw string missed
+  // EVERY scene: the job came out empty and "Export too" died on "none of these
+  // scenes has an export path" every single time. Accept either spelling here
+  // rather than making every caller remember.
+  const key = sceneKey.trim().replace(/\\/g, '/').toLowerCase()
   const folders = sceneExportFolderRel(character, scenesRootAbs)
-  const entry = folders[sceneKey]
+  const entry = folders[key]
   if (!entry) return ''
   const subfolders = sceneExportSubfolders(character, scenesRootAbs)
-  const stem = (sceneKey.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
-  const name = sceneExportName(character, sceneKey, subfolders[sceneKey] ?? stem)
+  const stem = (key.split('/').pop() ?? '').replace(/\.[^.]+$/, '')
+  const name = sceneExportName(character, key, subfolders[key] ?? stem)
   return [root, entry.folder, `${name}.dth`].filter(Boolean).join('/')
 }
 
@@ -160,7 +168,9 @@ export function buildHoudiniJob(
     const lower = dth.toLowerCase()
     if (seen.has(lower)) continue
     seen.add(lower)
-    const source = original.get(key) ?? key
+    // Same normalization as sceneDthPath — a caller may hand us either
+    // spelling, and the label map is keyed lowercase.
+    const source = original.get(key.trim().replace(/\\/g, '/').toLowerCase()) ?? key
     scenes.push({ dth, label: (source.split('/').pop() ?? '').replace(/\.[^.]+$/, '') || key })
   }
   return {
