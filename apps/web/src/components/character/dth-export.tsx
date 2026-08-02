@@ -191,12 +191,18 @@ export function DthExportAction({
     if (run.state === 'finished') {
       setHoudini(null)
       const summary = run.summary || 'nothing to export'
+      // The HDA's pre-flight check asks "Continue anyway?" and 456.py answers
+      // Yes — so this toast is the only place its complaints are ever seen,
+      // and the result file holding them is deleted as this run ends.
+      const detail = [run.error, ...run.problems].filter(Boolean).join('\n')
       if (run.failed > 0 || run.error) {
         toast.warning(`Houdini export finished — ${summary}.`, {
-          description: run.error || undefined,
+          description: detail || undefined,
         })
       } else {
-        toast.success(`Houdini export finished — ${summary}.`)
+        toast.success(`Houdini export finished — ${summary}.`, {
+          description: detail || undefined,
+        })
       }
       return
     }

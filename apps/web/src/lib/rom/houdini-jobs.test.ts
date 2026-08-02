@@ -5,6 +5,7 @@ import { characterSchema } from '@dth/rom'
 import {
   buildHoudiniJob,
   houdiniResultSummary,
+  houdiniRunFilesToClear,
   houdiniRunStateFrom,
   houdiniScriptPathValue,
   parseHoudiniResult,
@@ -202,6 +203,36 @@ describe('houdiniRunStateFrom', () => {
       failed: 0,
       summary: '2 exported, 1 skipped',
       error: '',
+      problems: [],
+    })
+  })
+
+  it('carries the auto-answered HDA problems out, labelled by scene', () => {
+    // 456.py answers the HDA's "Continue anyway?" with Yes, so the run state is
+    // the ONLY place those warnings can still be seen — the result file that
+    // held them is deleted the moment the run is reported.
+    const done = parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        nodes: [
+          {
+            node: '/obj/DazToHue1/export',
+            scene: 'Kira',
+            status: 'ok',
+            problems: ['No pose asset CSV found', 'Bone scale reference missing'],
+          },
+          // No scene label (a network the job matched by path only) — the node
+          // path stands in, never an unlabelled bare problem string.
+          { node: '/obj/DazToHue2/export', status: 'ok', problems: ['Missing groom'] },
+        ],
+      }),
+    )!
+    expect(houdiniRunStateFrom(done, true)).toMatchObject({
+      problems: [
+        'Kira: No pose asset CSV found',
+        'Kira: Bone scale reference missing',
+        '/obj/DazToHue2/export: Missing groom',
+      ],
     })
   })
 
@@ -231,5 +262,37 @@ describe('houdiniRunStateFrom', () => {
       state: 'finished',
       error: 'the run failed in Houdini',
     })
+  })
+})
+
+describe('houdiniRunFilesToClear — the handoff cleans up after itself', () => {
+  const paths = { jobPath: 'X:/p/Kira/.dth_houdini_job.json', resultPath: 'X:/p/Kira/.dth_houdini_result.json' }
+
+  it('clears nothing while the run is still going', () => {
+    expect(houdiniRunFilesToClear({ state: 'starting', hasResult: false, ...paths })).toEqual([])
+    expect(houdiniRunFilesToClear({ state: 'running', hasResult: true, ...paths })).toEqual([])
+  })
+
+  it('clears both files once the run has finished', () => {
+    // The leftovers this fixes: neither file was ever deleted, so every
+    // character that had run an export kept a job + result pair for good.
+    expect(houdiniRunFilesToClear({ state: 'finished', hasResult: true, ...paths })).toEqual([
+      paths.resultPath,
+      paths.jobPath,
+    ])
+  })
+
+  it('clears both when a started run died half-way', () => {
+    expect(houdiniRunFilesToClear({ state: 'dead', hasResult: true, ...paths })).toEqual([
+      paths.resultPath,
+      paths.jobPath,
+    ])
+  })
+
+  it('keeps the job of a run that never wrote a result', () => {
+    // "dead" without a result can be a Houdini that just hasn't shown up in the
+    // process list yet — deleting the job it is about to read would break it.
+    // The next run overwrites it anyway, so leaving it costs nothing.
+    expect(houdiniRunFilesToClear({ state: 'dead', hasResult: false, ...paths })).toEqual([])
   })
 })

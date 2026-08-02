@@ -188,7 +188,19 @@ export function buildHoudiniJob(
 export type HoudiniRunState =
   | { state: 'starting' }
   | { state: 'running'; done: number; total: number }
-  | { state: 'finished'; ok: number; skipped: number; failed: number; summary: string; error: string }
+  | {
+      state: 'finished'
+      ok: number
+      skipped: number
+      failed: number
+      summary: string
+      error: string
+      /** What the HDA's pre-flight check complained about, per node
+       *  ("<scene>: <problem>"). The studio answered its "Continue anyway?"
+       *  with Yes, so this is the ONLY place those warnings ever surface — and
+       *  the result file they came from is deleted right after this snapshot. */
+      problems: Array<string>
+    }
   | { state: 'dead' }
 
 export function houdiniRunStateFrom(
@@ -207,7 +219,35 @@ export function houdiniRunStateFrom(
     ...counts,
     summary: houdiniResultSummary(result),
     error: result.state === 'failed' ? result.error || 'the run failed in Houdini' : result.error,
+    problems: result.nodes.flatMap((node) =>
+      node.problems.map((problem) => `${node.scene || node.node}: ${problem}`),
+    ),
   }
+}
+
+/**
+ * Which of the run's two files the studio should delete now that the poll has
+ * reached `state`. The handoff owns its litter: both files live in the
+ * character folder, and leaving them there after a finished run was pure
+ * leftovers — the next run only ever overwrote the job and cleared the result.
+ *
+ * The one subtlety is the JOB file, and it is why this is a rule rather than an
+ * unconditional delete: it may only go once 456.py has written a result, which
+ * is the proof it READ the job. A `dead` verdict with no result at all can be a
+ * Houdini that merely hasn't registered with the liveness probe yet — deleting
+ * the job under it would break the run it is about to pick up. So an
+ * unconsumed job is left for the next run to overwrite.
+ */
+export function houdiniRunFilesToClear(options: {
+  state: HoudiniRunState['state']
+  /** Whether 456.py has written a parseable result file for this run. */
+  hasResult: boolean
+  jobPath: string
+  resultPath: string
+}): Array<string> {
+  if (options.state !== 'finished' && options.state !== 'dead') return []
+  if (!options.hasResult) return []
+  return [options.resultPath, options.jobPath].filter(Boolean)
 }
 
 /** A finished run's one-line summary for the toast, e.g.
