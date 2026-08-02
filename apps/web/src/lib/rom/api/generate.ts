@@ -341,6 +341,11 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
+    // Bone-scale reference-skeleton paths: $HIP-relative (the default) or
+    // absolute. The core decides per character whether an anchor exists at all
+    // — a Houdini project inside the character folder, i.e. a generated one —
+    // and falls back to absolute when it doesn't.
+    settings.houdiniPathStyle !== 'absolute',
   )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just

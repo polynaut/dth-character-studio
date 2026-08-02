@@ -130,6 +130,9 @@ describe('settings (settings.json)', () => {
     dthExporterFolder: '',
     currentDthExporterVersion: '',
     dazInstallFolder: '',
+    // Fresh install writes Houdini paths $HIP-relative — the setting only ever
+    // turns that OFF.
+    houdiniPathStyle: 'hip',
     houdiniDocsFolder: '',
     extraHoudiniDocsFolders: [],
     houdiniInstallFolder: '',
@@ -175,6 +178,7 @@ describe('settings (settings.json)', () => {
       dthExporterFolder: 'X:/dth/exporter',
       currentDthExporterVersion: '1.0.0.1',
       dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
+      houdiniPathStyle: 'absolute',
       houdiniDocsFolder: 'D:/Documents/houdini20.5',
       extraHoudiniDocsFolders: ['D:/Documents/houdini19.5'],
       houdiniInstallFolder: 'C:/Program Files/Side Effects Software/Houdini 22.0.368',

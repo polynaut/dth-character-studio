@@ -354,9 +354,28 @@ function buildExportBlock(
    * scene waits behind it. Unattended alerts therefore print only.
    */
   unattended = false,
+  /**
+   * Write bone-scale reference-skeleton paths **`$HIP`-relative** instead of
+   * absolute (Settings → "Houdini path style", default on). Everything else it
+   * needs is derivable here: the export ROOT is `character.exportPath`, and the
+   * anchor is a linked Houdini project living INSIDE the character folder — a
+   * generated one. Without such a project there is no `$HIP` to be relative to,
+   * so this silently falls back to absolute for that character.
+   */
+  hipRelativeRefs = false,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
+  // `$HIP` is the folder the `.hip` sits in, and Generate project puts a
+  // `dth-exports` junction there pointing at the export root — so swapping the
+  // absolute root prefix for `$HIP/dth-exports` yields a path Houdini resolves
+  // no matter where the character tree moves. Guarded at run time too: an
+  // export dir that isn't under the root keeps the absolute path.
+  const fwd = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const hipAnchored =
+    hipRelativeRefs &&
+    Boolean(charFolderAbs) &&
+    character.houdiniProjects.some((hip) => fwd(hip).startsWith(`${fwd(charFolderAbs ?? '')}/`))
   const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
@@ -382,14 +401,27 @@ function buildExportBlock(
     Object.keys(sceneCsvMap).length === 0
       ? `    var dthCsvName = ${dazJson(poseAssetFileName(character))};`
       : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
+  // Bone-scale reference paths are written either absolute (dthExportDir as
+  // resolved at run time) or anchored at $HIP — the folder the generated .hip
+  // sits in, where a `dth-exports` junction points at the export root. The swap
+  // is a prefix exchange on the export ROOT, so whatever scene subfolder this
+  // run resolved rides along untouched; an export dir that somehow isn't under
+  // the root keeps the absolute path rather than producing a wrong one.
+  const refDirBlock = hipAnchored
+    ? `    var dthRefRootAbs = ${dazJson(exportDir.replace(/\\/g, '/'))};
+    var dthRefDir = dthExportDir;
+    if (dthExportDir.indexOf(dthRefRootAbs) === 0) {
+        dthRefDir = "$HIP/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);
+    }`
+    : `    var dthRefDir = dthExportDir;`
   const csvCopyBlock = charFolderAbs
     ? `    // Copy the generated PoseAsset CSV next to the exporter output, resolving
     // the {{DTH_EXPORT_DIR}} + {{DTH_EXPORT_NAME}} tokens in any bone-scale
-    // reference-FBX path to the real (run-time) export dir and figure name —
-    // Houdini's PoseAsset wants absolute paths, and the dir and name (scene
-    // subfolder included) are only known now. Source is left intact
+    // reference-FBX path to the export dir and figure name — the dir and name
+    // (scene subfolder included) are only known now. Source is left intact
     // so the next scene's export can reuse it.
 ${csvNameBlock}
+${refDirBlock}
     var dthCsvSrcDir = new DzDir(${dazJson(charFolderAbs.replace(/\\/g, '/'))});
     if (dthCsvSrcDir.exists(dthCsvName)) {
         var dthCsvDstDir = new DzDir(dthExportDir);
@@ -404,7 +436,7 @@ ${csvNameBlock}
         if (dthCsvSrc.open(dthCsvSrc.ReadOnly)) {
             var dthCsvText = String(dthCsvSrc.read());
             dthCsvSrc.close();
-            dthCsvText = dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir);
+            dthCsvText = dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthRefDir);
             dthCsvText = dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName);
             var dthCsvOut = new DzFile(dthCsvDst);
             if (dthCsvOut.open(dthCsvOut.WriteOnly | dthCsvOut.Truncate)) {
@@ -910,6 +942,9 @@ export function toCharacterScriptDsa(
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
+  /** Write bone-scale reference paths `$HIP`-relative — see
+   *  {@link buildExportBlock}. */
+  hipRelativeRefs = false,
 ): GeneratedFile {
   return buildRomScriptDsa(
     character,
@@ -920,6 +955,7 @@ export function toCharacterScriptDsa(
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
+    hipRelativeRefs,
   )
 }
 
@@ -942,6 +978,9 @@ export function toBulkRomExportScriptDsa(
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
+  /** Write bone-scale reference paths `$HIP`-relative — see
+   *  {@link buildExportBlock}. */
+  hipRelativeRefs = false,
 ): GeneratedFile {
   return buildRomScriptDsa(
     { ...character, exportWithRomScript: true, exportHairAssets: true },
@@ -952,6 +991,7 @@ export function toBulkRomExportScriptDsa(
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
+    hipRelativeRefs,
   )
 }
 
@@ -1012,6 +1052,9 @@ function buildRomScriptDsa(
   /** The character's scenes-root folder (host-resolved) — sizes each scene's
    *  export subfolder; see {@link sceneExportSubfolders}. */
   scenesRootAbs?: string,
+  /** Write bone-scale reference paths `$HIP`-relative — see
+   *  {@link buildExportBlock}. */
+  hipRelativeRefs = false,
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, charFolderAbs)
 
@@ -1044,7 +1087,7 @@ function buildRomScriptDsa(
   const exportBlock =
     exportDir && character.exportWithRomScript !== false
       ? `            // Export to the DTH pipeline via the Exporter Plugin (v1.8.1+).
-${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk)
+${buildExportBlock(character, frames, charFolderAbs, sceneCsvMap, scenesRootAbs, bulk, hipRelativeRefs)
   .split('\n')
   .map((line) => (line ? `            ${line}` : line))
   .join('\n')}`
@@ -1260,6 +1303,9 @@ export function toExportScriptDsa(
   /** Emitted for the Runner's unattended export-only carrier — suppresses the
    *  modal alerts, which would block a batch (see {@link buildExportBlock}). */
   unattended = false,
+  /** Write bone-scale reference paths `$HIP`-relative — see
+   *  {@link buildExportBlock}. */
+  hipRelativeRefs = false,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1277,7 +1323,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended)
+${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRelativeRefs)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1308,6 +1354,9 @@ export function toBulkExportOnlyScriptDsa(
   frames?: PresetFrames,
   charFolderAbs?: string,
   scenesRootAbs?: string,
+  /** Write bone-scale reference paths `$HIP`-relative — see
+   *  {@link buildExportBlock}. */
+  hipRelativeRefs = false,
 ): GeneratedFile {
   const built = toExportScriptDsa(
     { ...character, exportHairAssets: true },
@@ -1316,6 +1365,7 @@ export function toBulkExportOnlyScriptDsa(
     scenesRootAbs,
     // The Runner executes this one — no modals.
     true,
+    hipRelativeRefs,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
@@ -1493,6 +1543,9 @@ export function generateAll(
    *  subfolder below this root; see {@link sceneExportSubfolders}. Omitted ⇒
    *  every scene falls back to stem-named export subfolders. */
   scenesRootAbs?: string,
+  /** Write bone-scale reference paths `$HIP`-relative instead of absolute
+   *  (Settings → Houdini path style). See {@link buildExportBlock}. */
+  hipRelativeRefs = false,
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -1526,8 +1579,11 @@ export function generateAll(
       sceneRomPaths,
       sceneFrames,
       scenesRootAbs,
+      hipRelativeRefs,
     ),
-    ...(split ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs)] : []),
+    ...(split
+      ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs, false, hipRelativeRefs)]
+      : []),
     // The hidden bulk script the Runner executes on DTH Export runs — always
     // ROM + always full export, so it only exists WITH an export dir.
     ...(character.exportPath.trim() !== ''
@@ -1540,10 +1596,17 @@ export function generateAll(
             sceneRomPaths,
             sceneFrames,
             scenesRootAbs,
+            hipRelativeRefs,
           ),
           // …and its export-only twin (DTH Export's "Export only" mode): the
           // exporter + hair pass over an already-built ROM, no rebuild.
-          toBulkExportOnlyScriptDsa(character, frames, charFolderAbs, scenesRootAbs),
+          toBulkExportOnlyScriptDsa(
+            character,
+            frames,
+            charFolderAbs,
+            scenesRootAbs,
+            hipRelativeRefs,
+          ),
         ]
       : []),
     // The hidden ROM-only script ("Open and Generate ROM Animation"): builds

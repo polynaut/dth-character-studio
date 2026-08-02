@@ -82,6 +82,21 @@ export const studioSettingsSchema = z.object({
    */
   houdiniInstallFolder: str,
   /**
+   * How Houdini-facing paths the studio writes are anchored — right now the
+   * bone-scale **reference-skeleton FBX** paths in the PoseAsset CSV.
+   *
+   * `hip` (the default) writes them relative to **`$HIP`**, the folder holding
+   * the `.hip` — so the project keeps resolving after the whole character tree
+   * is moved, renamed, or opened from another machine. `absolute` writes the
+   * real path, which is what the studio always did.
+   *
+   * `hip` needs an anchor: with NO Houdini project linked there is no `$HIP` to
+   * be relative to, and a project on another volume has no relative path at
+   * all — both fall back to absolute for that character, silently and per
+   * character (see `houdiniRefDirPrefix` in `lib/rom/api/generate.ts`).
+   */
+  houdiniPathStyle: z.enum(['hip', 'absolute']).catch('hip').default('hip'),
+  /**
    * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
    * by the Daz Products scan to resolve scene assets to installed products
    * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs

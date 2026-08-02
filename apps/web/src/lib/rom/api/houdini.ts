@@ -107,6 +107,11 @@ export interface GeneratedHoudiniProject {
    *  false just means the file-picker shortcut is missing (see
    *  `linkExportsIntoProject`), never that the project is broken. */
   exportsLink: boolean
+  /** Whether the `dth-exports` junction BESIDE the `.hip` is in place — the one
+   *  `$HIP/dth-exports/...` reference-skeleton paths resolve through. False
+   *  means those paths won't resolve until a regenerate repairs it (the
+   *  exports themselves are unaffected). */
+  hipExportsLink: boolean
   /** Whether the DazToHue network was created from the installed HDA (false =
    *  hython couldn't see the HDA — the scene saved empty, `$JOB` still baked;
    *  the user adds the network from the DazToHue shelf). */
@@ -142,8 +147,18 @@ export async function generateHoudiniProject({
   // Layout: the scene FILE lives in the character's houdini folder, NEXT TO the
   // one shared project folder every one of its scenes Set-Projects into:
   //   houdini/<name>.hiplc              ← the scene (one per generate)
+  //   houdini/dth-exports               → junction to the export root — THE
+  //                                       anchor $HIP-relative paths resolve
+  //                                       through (see houdiniRefDirPrefix)
   //   houdini/houdini-project/          ← $JOB, shared — created once
   //   houdini/houdini-project/dth-exports  → junction to the export root
+  //
+  // TWO junctions to the same target, with different jobs: the one in the
+  // project folder is the file-picker shortcut ($JOB), the one beside the .hip
+  // is what `$HIP/dth-exports/...` in a generated CSV resolves through. The
+  // second is NOT best-effort in the same sense — a reference-skeleton path
+  // depends on it — but its absence only costs those paths, and the studio
+  // falls back to absolute when no generated project exists at all.
   const charFolder = location?.folderAbs ?? ''
   if (!charFolder) throw new Error(`Character ${id} not found`)
   const houdiniDir = characterHoudiniDir(charFolder, project.houdiniSubdir)
@@ -160,6 +175,10 @@ export async function generateHoudiniProject({
   // reuses it, so all of a character's projects share one $JOB.
   await mkdir(projectDir, { recursive: true })
   const exportsLink = await linkExportsIntoProject(projectDir, character.exportPath)
+  // The $HIP-side twin: `$HIP` is the folder the .hip sits in, so a CSV path
+  // written as `$HIP/dth-exports/...` resolves through THIS one. Same
+  // best-effort call, same repair-on-regenerate story.
+  const hipExportsLink = await linkExportsIntoProject(houdiniDir, character.exportPath)
 
   // The matching Houdini documents folder doubles as HOUDINI_USER_PREF_DIR
   // for hython — without it, hython inherits the studio's environment and can
@@ -194,6 +213,7 @@ export async function generateHoudiniProject({
     scenePath,
     projectDir,
     exportsLink,
+    hipExportsLink,
     networkAdded: created !== 'none',
     visibleTypes: visible === 'none' ? [] : visible.split(',').filter(Boolean),
   }

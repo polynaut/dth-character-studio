@@ -1663,9 +1663,60 @@ describe('exporter integration', () => {
     expect(content).toContain('var dthCsvName = "Electra_pose_asset.csv";')
     expect(content).toContain('var dthCsvSrcDir = new DzDir("D:/lib/Electra");')
     // A read-replace-write (not a move): the source survives for the next scene's
-    // export, and the {{DTH_EXPORT_DIR}} token resolves to the real run-time dir.
-    expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir)')
+    // export, and the {{DTH_EXPORT_DIR}} token resolves through dthRefDir —
+    // which is the run-time export dir unless $HIP-relative refs are on.
+    expect(content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthRefDir)')
+    expect(content).toContain('var dthRefDir = dthExportDir;')
+    expect(content).not.toContain('$HIP/dth-exports')
     expect(content).not.toContain('.move(')
+    // …and the $HIP-relative variant swaps the absolute export ROOT for the
+    // junction Generate project puts beside the .hip, keeping whatever scene
+    // subfolder the run resolved.
+    const hipContent = toCharacterScriptDsa(
+      {
+        ...character,
+        exportPath: 'X:/exports/electra',
+        houdiniProjects: ['D:/lib/Electra/houdini/Electra.hiplc'],
+      },
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      {},
+      {},
+      undefined,
+      true,
+    ).content
+    expect(hipContent).toContain('var dthRefRootAbs = "X:/exports/electra";')
+    expect(hipContent).toContain(
+      'dthRefDir = "$HIP/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);',
+    )
+    // No Houdini project inside the character folder = no $HIP to anchor to, so
+    // it stays absolute even with the setting on.
+    const noProject = toCharacterScriptDsa(
+      { ...character, houdiniProjects: [] },
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      {},
+      {},
+      undefined,
+      true,
+    ).content
+    expect(noProject).toContain('var dthRefDir = dthExportDir;')
+    expect(noProject).not.toContain('$HIP/dth-exports')
+    // A project linked OUTSIDE the character folder isn't a generated one —
+    // its folder is not where the studio put a dth-exports junction.
+    const foreignProject = toCharacterScriptDsa(
+      { ...character, houdiniProjects: ['E:/elsewhere/Electra.hip'] },
+      {},
+      FRAMES,
+      'D:\\lib\\Electra',
+      {},
+      {},
+      undefined,
+      true,
+    ).content
+    expect(foreignProject).not.toContain('$HIP/dth-exports')
     // Delivered under the export set's own scene-suffixed base name, into the
     // resolved export dir (scene subfolder included).
     expect(content).toContain('var dthCsvDstName = dthExportName + "_pose_asset.csv";')
@@ -1797,7 +1848,7 @@ describe('exporter integration', () => {
     expect(exportScript.fileName).toBe('Export_Electra_G9.dsa')
     expect(exportScript.content).not.toContain('ApplyDTHCharacter(') // no ROM rebuild
     expect(exportScript.content).toContain('doExport')
-    expect(exportScript.content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthExportDir)')
+    expect(exportScript.content).toContain('dthCsvText.split("{{DTH_EXPORT_DIR}}").join(dthRefDir)')
     // The standalone script resolves the scene-suffixed name the same way.
     expect(exportScript.content).toContain('var dthExportName = "Electra";')
     expect(exportScript.content).toContain('dthCsvText.split("{{DTH_EXPORT_NAME}}").join(dthExportName)')
