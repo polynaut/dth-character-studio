@@ -45,6 +45,24 @@ doing it.
   multi-line or quote-bearing text goes to a file first**, then
   `gh pr create --body-file <path>` / `git commit -F <path>`. Never inline it.
 
+**These are enforced where they can be, not trusted.** The rules that have never
+been broken in this repo are the machine-checked ones (the changeset gate, lint,
+the byte-identical rom output) — compliance simply isn't left to judgement. Two
+hooks in `.claude/settings.json` move these the same way:
+
+- `.claude/hooks/inject-working-rules.mjs` (**SessionStart**) prints THIS section
+  into context at the start of every session. `.ai/*` is read-on-demand and "on
+  demand" means the agent decides — which is the exact failure. It reads the
+  section straight out of this file, so editing the doc is still the only place
+  to change the rule.
+- `.claude/hooks/check-branch-upstream.mjs` (**PostToolUse**) fails a
+  `git push`/`switch -c`/`checkout -b` on a branch with no upstream and hands the
+  fix back to the agent, in the same turn. Documented as non-negotiable, skipped
+  twice in one day — so it is a check now, not a reminder.
+
+What a hook CANNOT check is whether every point of a prompt was answered; that
+stays judgement, and the opening todo list is the closest thing to a proof of it.
+
 ## Repo mechanics
 
 - **pnpm workspace monorepo**, `packageManager: pnpm@9.1.4`, **Node ≥ 24**.
