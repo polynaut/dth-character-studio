@@ -16,5 +16,6 @@ usual.
 
 Houdini also opens **fully before the batch starts** now — for "Export too"
 runs as well. The exports used to grind inside Houdini's startup, holding the
-window back until the last node finished; the batch now waits for the UI, so
-you watch it work instead of staring at nothing.
+window back until the last node finished; the batch now waits for the UI plus
+a few seconds for the viewport to finish its first cook, so you watch the
+export against a rendered character instead of staring at nothing.

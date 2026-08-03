@@ -304,6 +304,13 @@ def main():
             pass
 
 
+# Once the UI is up, the batch waits this much longer before starting:
+# `do_export` hogs the main thread from its first call, and the freshly opened
+# viewport needs a moment to finish its first cook — textures included — or
+# the user watches the whole export against a clay-white figure.
+STARTUP_BREATHER_MS = 5000
+
+
 def launch():
     """Run the batch AFTER Houdini has finished opening, not during.
 
@@ -311,20 +318,36 @@ def launch():
     — inline work here holds the whole window back (the batch ran to the last
     node against a blank screen on the first live run). `hdefereval
     .executeDeferred` is Houdini's own "run this once the UI is up and idle"
-    idiom, so the window opens first and the exports run in a visible session;
-    the studio's result-file watch covers progress either way ("Houdini
-    opening…" simply lasts until the deferred batch writes its first state).
-    Without the module (hython / no UI event loop) there is no window to wait
-    for — run inline, exactly as before. A session with no job keeps the
-    do-nothing-immediately promise: nothing is scheduled at all."""
+    idiom, so the window opens first; a Qt single-shot then adds
+    STARTUP_BREATHER_MS on top (a sleep would freeze the very event loop this
+    defers around) before the exports run in a visible, painted session. The
+    studio's result-file watch covers progress either way ("Houdini opening…"
+    simply lasts until the batch writes its first state). Without hdefereval
+    (hython / no UI event loop) there is no window to wait for — run inline,
+    exactly as before. A session with no job keeps the do-nothing-immediately
+    promise: nothing is scheduled at all."""
     if not os.environ.get(JOB_ENV, ""):
         return
     try:
         import hdefereval
-
-        hdefereval.executeDeferred(main)
     except Exception:
         main()
+        return
+
+    def breathe():
+        # Houdini 20.5+ ships PySide6, older builds PySide2 — try both; with
+        # neither (unlikely in a GUI session) the deferral alone has to do.
+        try:
+            from PySide6.QtCore import QTimer
+        except Exception:
+            try:
+                from PySide2.QtCore import QTimer
+            except Exception:
+                main()
+                return
+        QTimer.singleShot(STARTUP_BREATHER_MS, main)
+
+    hdefereval.executeDeferred(breathe)
 
 
 launch()

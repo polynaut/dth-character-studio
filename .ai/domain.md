@@ -369,9 +369,10 @@ older runtimes as stale.
   window paints, and inline work there holds the window back — the whole batch
   ran against a blank screen and Houdini "opened" only after the last node.
   The batch is therefore DEFERRED to the first event-loop idle
-  (`hdefereval.executeDeferred`, 456.py's `launch()`): Houdini opens fully
-  first, then exports visibly. Sessions without the module (hython) run
-  inline — no window to wait for.
+  (`hdefereval.executeDeferred`, 456.py's `launch()`) plus a Qt single-shot
+  breather (`STARTUP_BREATHER_MS`) so the viewport finishes its first cook —
+  textures included — before `do_export` hogs the main thread. Sessions
+  without the module (hython) run inline — no window to wait for.
   Chosen shape is **visible GUI + a startup script reading a job file**, not
   headless hython and not `hrpyc` remote control, so it mirrors the Daz Runner
   handoff. Houdini runs a `456.py` found on `HOUDINI_SCRIPT_PATH` after a scene
