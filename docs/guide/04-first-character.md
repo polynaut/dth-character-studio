@@ -426,7 +426,7 @@ no more mismatched node/morph pairs.
 > The easier route for a whole project is **Tools → Scan & index → Scan
 > project**: it runs this base build *and* a per-scene scan for every character
 > in one unattended pass. See
-> [Scanning a whole project](./tools.md#tab-2--scan--index).
+> [Scanning a whole project](./tools.md#tab-2--scan-amp-index).
 
   <p align="center">
     <img width="508" alt="Parameter name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />

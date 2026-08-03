@@ -37,6 +37,16 @@ JS; keep them dependency-free.
   point at an id that exists in the built target page; a renamed
   heading/accordion (or a changed slug rule) fails the build instead of
   shipping a silently dead deep link.
+  - **An `&` in a heading slugifies to `-amp-`, not `-`.** `slugify` runs on the
+    RENDERED inline HTML, where markdown-it has already escaped `&` to `&amp;`;
+    stripping the non-alphanumerics then leaves the literal word `amp`. So
+    `## Tab 2 — Scan & index` is `#tab-2--scan-amp-index` (and the em dash, being
+    stripped between two spaces, is why the doubled `--` is there at all). The
+    existing `advanced.html#multiple-daz-scenes--outfits-amp-hair-variants` is
+    the same shape. Guessing the "obvious" slug for a heading with an `&` fails
+    the build — **run `pnpm build:guide` before pushing a doc link**; it is the
+    only gate that catches it, and it is NOT part of the `/verify` gate
+    (typecheck / lint / test / smoke / cargo all pass with a dead link).
 
 ## Deploy & previews
 
