@@ -573,8 +573,8 @@
   text-align: right;
 }
 
-/* The topbar action cluster (search pill, divider, GitHub icon, Download) and
-   the search modal are SHARED with the landing page — styled in styles.css. */
+/* The topbar action cluster (search pill, divider, Download) and the search
+   modal are SHARED with the landing page — styled in styles.css. */
 
 /* ------------------------------------------------------------- Mobile */
 
