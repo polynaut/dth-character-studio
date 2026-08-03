@@ -42,7 +42,7 @@ import {
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { PRIMARY_SCENE_SUBFOLDER } from '#/lib/scene-subfolder.ts'
-import { browseStart, displayPath, normalizePathLower } from '#/lib/path.ts'
+import { browseStart, displayPath, normalizePathLower, stripTrailingSeparators } from '#/lib/path.ts'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
@@ -153,7 +153,7 @@ function ProjectCharactersPage() {
 
   /** Filename without extension, e.g. "X:\…\Kira.duf" → "Kira". */
   function sceneBaseName(p: string): string {
-    return (p.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? '').replace(/\.duf$/i, '')
+    return (stripTrailingSeparators(p).split(/[\\/]/).pop() ?? '').replace(/\.duf$/i, '')
   }
 
   // The character's folder (and its JSON filename) are created from the name, so

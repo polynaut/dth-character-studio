@@ -451,7 +451,15 @@ async function migrateExportRoot(
     if (!oldRoot) return
     const location = await locateCharacter(lib, character.id)
     if (!location?.relFolder) return
-    const newRoot = characterExportRoot(location.folderAbs, project.dazSubdir)
+    // The SAME derivation the save below writes (scenesRootRelOf — the
+    // character's own scenes root, project dazSubdir only as fallback). The
+    // plain-dazSubdir spelling that used to sit here re-fired the trigger on
+    // every save of a character with a RENAMED scenes folder — and moved its
+    // exports into a resurrected `daz3d/dth-exports` each time.
+    const newRoot = characterExportRoot(
+      location.folderAbs,
+      storage.scenesRootRelOf(character.scenePath, location.folderAbs, project.dazSubdir ?? ''),
+    )
     if (!newRoot || normalizePathLower(newRoot) === normalizePathLower(oldRoot)) return
 
     const recordPath = joinPath(location.folderAbs, EXPORT_FOLDERS_FILE)
@@ -516,7 +524,13 @@ export async function deleteCharacter({ data }: { data: unknown }): Promise<void
   // Best-effort — an orphaned export folder is never worth failing a delete.
   if (keepDaz && location?.relFolder) {
     try {
-      const exportRoot = characterExportRoot(location.folderAbs, project.dazSubdir)
+      // Derived by the same rule the save uses (scenesRootRelOf) — a renamed
+      // scenes folder moved the export root with it, and aiming this purge at
+      // the project-default `daz3d/dth-exports` would silently keep gigabytes.
+      const exportRoot = characterExportRoot(
+        location.folderAbs,
+        storage.scenesRootRelOf(character?.scenePath ?? '', location.folderAbs, project.dazSubdir ?? ''),
+      )
       if (exportRoot && (await exists(exportRoot))) await remove(exportRoot, { recursive: true })
     } catch {
       // leave the exports behind rather than failing the delete

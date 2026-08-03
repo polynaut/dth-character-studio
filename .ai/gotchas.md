@@ -613,3 +613,33 @@ current code before relying on details, but assume the *lesson* still holds.
   — a gitignored, build-time-staged resource dir needs a build.rs seed (see
   the dth-runner placeholder in apps/desktop/build.rs) or plain
   `cargo check`/`clippy` breaks on fresh clones and CI.
+- **`/\/+$/` (and `/[\/]+$/`, `/[. ]+$/`) is a HIGH-severity CodeQL alert** —
+  `js/polynomial-redos`. A `+` immediately before `$` makes the engine retry
+  every split of the repetition against the anchor, so a string of many
+  separators costs quadratic time; these run on stored project/character paths
+  and user-typed names, which is what makes it an alert rather than a curiosity.
+  It blocked a PR (#645) after being introduced, fixed, and then **reintroduced**
+  — the regex form is simply what everyone reaches for. There is now ONE home
+  for the linear versions: **`apps/web/src/lib/path-trim.ts`**
+  (`stripTrailingSeparators` / `trimSeparators` / `stripTrailingDotsAndSpaces`)
+  plus `stripTrailingSlashes` in `packages/rom/src/dsa.ts` for the pure core.
+  `path-trim.ts` is deliberately a LEAF (imports nothing) because `lib/path.ts`
+  imports the storage layer — homing the trims there is an `import/no-cycle`
+  error the moment `storage/fs.ts` needs one. Note CodeQL gates only NEW alerts
+  on a PR, so the old occurrences sat unflagged for a long time; the local gate
+  (`lint`/`typecheck`/`test`/`smoke`) does not run CodeQL, so an alert like this
+  first shows up on the PR.
+- **An NTFS junction stores an ABSOLUTE target — anything that moves the
+  target leaves the junction pointing at the old path**, silently (Windows
+  happily keeps a dangling reparse point, and re-creating the old folder makes
+  writes land in a resurrected tree instead of erroring). The `dth-exports`
+  junctions therefore get refreshed on EVERY generation through the one funnel
+  (`refreshExportJunctions` in api/houdini.ts, called from
+  `generateCharacterFiles`), not just when Generate project runs — a
+  character/folder rename, a scenes-folder rename, a `charactersSubdir` move
+  and the v29 export-root migration all change the export root the junctions
+  target. Corollary for DERIVED path fields: being re-derived on save does not
+  exempt a field from `repointCharacterPaths` — `moveCharactersRoot` rewrites
+  each moved definition directly (no `saveCharacter`, no re-derive), and
+  `exportPath` staying stale until "some later save" was enough for a
+  same-batch regenerate to aim junctions at the old location (#647).

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { CircleCheck, Download, Plus } from 'lucide-react'
 
-import { Button, Field, InfoPopup, Input, Label, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
+import { Button, Field, InfoPopup, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@dth/ui'
 import { FormHeader } from '#/components/form-header.tsx'
 import {
   detectDimManifestsFolder,
@@ -485,6 +485,7 @@ function SettingsPage() {
     settings.dazInstallFolder !== initial.dazInstallFolder ||
     settings.houdiniDocsFolder !== initial.houdiniDocsFolder ||
     settings.houdiniInstallFolder !== initial.houdiniInstallFolder ||
+    settings.houdiniPathStyle !== initial.houdiniPathStyle ||
     JSON.stringify(settings.extraHoudiniDocsFolders) !==
       JSON.stringify(initial.extraHoudiniDocsFolders)
   // Leaving with unsaved settings asks first — covers BOTH the machine settings
@@ -961,6 +962,40 @@ function SettingsPage() {
                     : 'No Houdini version found in this path — point it at a versioned install (e.g. "…\\Houdini 22.0.368").'}
                 </p>
               )}
+            {/* How the studio anchors the Houdini-facing paths it WRITES — today
+                the bone-scale reference-skeleton FBXs in the PoseAsset CSV. */}
+            <div>
+              <Label className="mb-1 flex w-fit items-center gap-1">
+                Houdini path style
+                <InfoPopup label="Houdini path style — more information">
+                  Bone-scale <strong>reference-skeleton</strong> paths in the PoseAsset CSV are
+                  written relative to <code>$HIP</code> — the folder holding the generated{' '}
+                  <code>.hip</code>, where the studio keeps a <code>dth-exports</code> shortcut
+                  to the export folder (created by <strong>Generate project</strong>, repaired on
+                  every save). The project then keeps resolving after the character tree is
+                  moved, renamed, or opened on another machine. Characters with <em>no</em>{' '}
+                  Houdini project inside their folder — or whose shortcut can&apos;t be created —
+                  have nothing to anchor to and get absolute paths regardless.
+                </InfoPopup>
+              </Label>
+              <Select
+                value={settings.houdiniPathStyle}
+                onValueChange={(value) =>
+                  setSettings((s) => ({
+                    ...s,
+                    houdiniPathStyle: value === 'absolute' ? 'absolute' : 'hip',
+                  }))
+                }
+              >
+                <SelectTrigger className="w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hip">Relative to $HIP (recommended)</SelectItem>
+                  <SelectItem value="absolute">Absolute paths</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </section>
 
           <section className="space-y-4 rounded-lg border bg-card p-5">

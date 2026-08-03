@@ -88,7 +88,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
   }
   let nextId = 1
 
-  const norm = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '')
+  // Trailing slashes trimmed with string ops, not `/\/+$/` — the repo-wide rule
+  // (CodeQL js/polynomial-redos). Inlined rather than imported: this function is
+  // serialized into the page by addInitScript and must stay self-contained.
+  const norm = (p: string) => {
+    let s = p.replaceAll('\\', '/')
+    while (s.endsWith('/')) s = s.slice(0, -1)
+    return s
+  }
   // Commands whose `args.path` is listed here PAUSE (before dispatch) until the
   // spec calls releaseHeld() — which drains the queue AND clears the set, so
   // later calls to the same path run normally.
@@ -296,6 +303,20 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return readBytes(norm(args.path))
       case 'probe_locked_files':
         return seed.lockedFiles ?? []
+      case 'create_junction': {
+        // The `dth-exports` shortcuts (one beside each linked .hip, one in the
+        // project folder). The real command repoints a stale link and reports
+        // "exists" for a correct one; here the link is just a directory that
+        // appears — enough for `exists`/`readDir` to behave, and a spec can
+        // assert the call's link/target. Every generate probes AND refreshes
+        // them (the $HIP emit decision doubles as the junction upkeep), so the
+        // mock has to know this command or `unhandled` fills up on ordinary
+        // saves.
+        const link = norm(args.request.linkPath)
+        const had = extraDirs.has(link)
+        extraDirs.add(link)
+        return had ? 'exists' : 'created'
+      }
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
       case 'scan_duf_files': {

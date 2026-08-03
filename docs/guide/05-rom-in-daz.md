@@ -124,7 +124,34 @@ and imports read `$JOB/dth-exports/primary/Kira.dth`
 **Generate project** creates it, along with the `houdini-project` folder
 itself. That folder is shared: the first generated project creates it, every
 later one reuses it, so all of a character's projects open with the same
-`$JOB`.
+`$JOB`. A **second** `dth-exports` shortcut lives next to the `.hip` itself,
+so `$HIP/dth-exports/…` resolves — that's what the reference-skeleton paths
+below use. The studio checks and repairs that one **every time it generates**,
+so a deleted or stale shortcut heals on the next save.
+
+### Reference-skeleton paths — `$HIP` by default
+
+Every **Bone scale** frame gets a reference-skeleton FBX, and the PoseAsset CSV
+has to point Houdini at it. Those paths are written relative to **`$HIP`** (the
+folder holding the `.hip`):
+
+```
+$HIP/dth-exports/primary/Kira_frame_432.fbx
+```
+
+so the project keeps resolving after you move, rename or copy the character
+tree — including onto another machine. Switch it to absolute paths in
+**Settings → Houdini path style** if you'd rather have the real path baked in.
+
+&nbsp;
+
+> [!NOTE]
+> A character with **no Houdini project inside its folder** has no `$HIP` to be
+> relative to, so its reference paths are always absolute — regardless of the
+> setting. The same fallback protects a character whose shortcut can't be
+> created at all (an export folder on a network drive, say): the studio only
+> writes `$HIP` paths it has verified the shortcut for. Generate a project (or
+> hand-link one inside the character folder) and save again to switch it over.
 
 &nbsp;
 
