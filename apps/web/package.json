@@ -42,7 +42,7 @@
     "@tauri-apps/plugin-process": "^2.3.0",
     "@tauri-apps/plugin-shell": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.9.0",
-    "lucide-react": "^1.27.0",
+    "lucide-react": "^1.28.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
@@ -52,7 +52,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/typography": "^0.5.20",
     "@tanstack/devtools-vite": "^0.8.3",
     "@tanstack/router-cli": "^1.167.21",
@@ -60,14 +60,14 @@
     "@testing-library/react": "^16.3.0",
     "@types/node": "^25.9.5",
     "@types/pngjs": "^6.0.5",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^6.0.4",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "jsdom": "^29.1.1",
     "pngjs": "^7.0.0",
     "sharp": "^0.35.3",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5",
+    "vite": "^8.2.0",
     "vitest": "^4.1.10"
   }
 }
