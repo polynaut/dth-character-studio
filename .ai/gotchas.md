@@ -79,6 +79,25 @@ current code before relying on details, but assume the *lesson* still holds.
 - **Command-line forwarding to a running Daz instance stops working once a scene
   is loaded** — full "open in running instance" automation isn't possible from
   scripts alone; that's why the studio ships an Open_Scene script instead.
+- **A CLOSING Daz can still claim the export job file on a final poll tick**
+  (measured 2026-08-03 via the DTH Export flow): quit Daz, hand a batch off
+  right after — the lingering process's Runner poll can still fire, rename
+  `dth_exporter_jobs.json` to `running_…` (the rename IS the claim) after the
+  studio's ~10s pickup wait already gave up, then exit without running a row.
+  Nothing ever polls for the `running_` name, so that batch is orphaned
+  forever unless the studio takes it back. Hence the studio-side RECLAIM
+  (`launchDazForPendingJobs` → one atomic `rename` back to pending, gated by
+  `isReclaimableBatch`: bulk-export + progress 0 + every row pending, and only
+  once the process is GONE) — owned by exactly ONE code path. The export
+  watch (`fetchExportRunProgress`) only DETECTS the state and reports
+  'pending' for it, never deletes/reports 'dead': its 2.5s tick otherwise
+  races the wait-modal's 1s tick and deletes the very batch being rescued —
+  and a 'dead' report disarms the run, silently dropping the finish toast and
+  the "Export too" continuation. Two corollaries: "the pending file
+  disappeared" NEVER means "claimed and not my problem"; and the wait-for-close
+  modal may only stand down once the claimed batch shows real work
+  (`exporterJobsWorking`) — a live Daz stuck on a modal Save prompt claims
+  late and looks identical to the closing claim until its first row mark.
 - **Fast runtime test loop:** copying an updated `.DthUtils.dsa`/`.DthWorkflow.dsa`
   over the installed one in `<Daz library>/Scripts/DTH-Character-Studio/` and
   re-running the character's ROM script is enough — no app rebuild needed. (Only

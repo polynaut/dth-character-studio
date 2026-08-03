@@ -26,6 +26,7 @@ import {
   dismissHoudiniRun,
   executeCharacterJobs,
   exporterJobsPending,
+  exporterJobsWorking,
   fetchExecuteScenes,
   fetchExportRunProgress,
   fetchExportRunnerGate,
@@ -369,16 +370,20 @@ export function DthExportAction({
  * process lingers after close, its Runner never claims the batch, and a fresh
  * launch would die against the dying single instance). This modal watches the
  * process and, the moment it is really gone, starts Daz itself — the pending
- * job file is then picked up on launch. Closing the modal only stops the
- * watch: the batch stays queued (the header button still aborts it), and it
- * vanishes on its own when the batch gets claimed after all or is aborted.
+ * job file is then picked up on launch. It also stands down (no relaunch) when
+ * a LIVE Daz claims late and actually starts working the batch — that run
+ * belongs to the export watch. Closing the modal only stops the watch: the
+ * batch stays queued (the header button still aborts it), and it vanishes on
+ * its own when the batch gets claimed after all or is aborted.
  */
 function WaitForDazCloseModal({
   onDone,
   onCancel,
 }: {
   /** The wait resolved: `started` = Daz was launched (or runs again) for the
-   *  pending batch; false = the handoff disappeared (aborted / claimed late). */
+   *  pending batch; false = nothing to launch — the handoff disappeared
+   *  (aborted) or a live Daz claimed late and is working it (the export
+   *  watch's run now). */
   onDone: (started: boolean) => void
   onCancel: () => void
 }) {
@@ -398,7 +403,21 @@ function WaitForDazCloseModal({
         // closed, nothing launched, and the batch sat orphaned in a `running_`
         // file the Runner never polls for. That is now reclaimed instead.
         const running = await dazStudioRunning()
-        if (!active || settled || running) return
+        if (!active || settled) return
+        if (running) {
+          // A LIVE Daz can also claim late — stuck on a modal Save prompt past
+          // the pickup window, or restarted by the user. Once the claimed
+          // batch shows real work it is the export watch's run, and "waiting
+          // for Daz to close" would only invite killing it mid-batch — stand
+          // down. Mere "pending gone while Daz runs" is NOT enough to settle:
+          // that is exactly the closing-Daz claim this modal exists to rescue.
+          if (await exporterJobsWorking()) {
+            if (!active || settled) return
+            settled = true
+            onDone(false)
+          }
+          return
+        }
         settled = true
         onDone(await launchDazForPendingJobs())
       })()

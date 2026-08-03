@@ -190,12 +190,15 @@ export function jobScriptForMode(mode: ExportMode): string {
  *
  * Deliberately narrow, which is the whole point of the helper: reclaiming a
  * PARTIALLY worked batch would re-run scenes that already finished — minutes of
- * ROM build and a re-export each. So the batch must be untouched: progress 0 AND
- * every row still `pending`. Anything else belongs to the export watch's "dead
- * run" report, not here. A torn or foreign read (null) is never reclaimable.
+ * ROM build and a re-export each. So the batch must be an untouched
+ * `bulk-export`: that type, progress 0 AND every row still `pending`. Anything
+ * else belongs to the export watch's "dead run" report, not here — including an
+ * orphaned `open-scene` handoff, which is not an export to requeue (renamed
+ * back to pending it would yank a scene open out of nowhere on the next Daz
+ * start). A torn or foreign read (null) is never reclaimable.
  */
 export function isReclaimableBatch(parsed: ExporterJobFile | null): boolean {
-  if (!parsed || parsed.progress !== 0) return false
+  if (!parsed || parsed.type !== 'bulk-export' || parsed.progress !== 0) return false
   return parsed.jobs.every((job) => job.status === 'pending')
 }
 

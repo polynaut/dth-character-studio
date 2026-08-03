@@ -219,6 +219,17 @@ describe('isReclaimableBatch — a batch a CLOSING Daz claimed but never ran', (
   it('refuses a torn or foreign read outright', () => {
     expect(isReclaimableBatch(null)).toBe(false)
   })
+
+  it('refuses a non-export TYPE — an orphaned open-scene handoff is no batch to requeue', () => {
+    // parseJobFileJson happily returns an open-scene file; requeueing it as
+    // pending would make the next Daz start yank a scene open out of nowhere.
+    const openScene = batch({
+      type: 'open-scene',
+      jobs: [{ scenePath: 'X:\\a.duf', status: 'pending' }],
+    })
+    expect(openScene?.type).toBe('open-scene') // the parse itself is fine
+    expect(isReclaimableBatch(openScene)).toBe(false)
+  })
 })
 
 describe('job rows per export mode — which hidden script, on which scene file', () => {

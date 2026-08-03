@@ -106,7 +106,9 @@ content directory** for that relative path and process the first file it finds.
   never observed. The studio may also **abort** a pending handoff by deleting
   the file before the plugin's next poll — the poll then simply finds nothing.
 
-**Lifecycle:** poll → **rename** → run/update → studio deletes.
+**Lifecycle:** poll → **rename** → run/update → studio deletes — plus one
+backward arrow, the studio-side **reclaim** (below): an untouched claimed file
+whose Daz died goes back to pending.
 
 1. On finding the file, the plugin **renames it in place** to
    `running_dth_exporter_jobs.json` (the `running_` prefix). The rename is the
@@ -125,6 +127,25 @@ content directory** for that relative path and process the first file it finds.
    carry any failures) and is DONE with the file — it never deletes it. The
    **studio** polls the renamed file, deletes it once progress reaches 100,
    and reports the outcome to the user.
+
+**Reclaim (studio-side, the one backward arrow).** The rename is the claim —
+but a Daz that is SHUTTING DOWN can still poll on its way out: it claims the
+file on a final tick and exits before running a single row. Nothing ever polls
+for the `running_` name, so that file would be orphaned forever. The studio
+therefore renames such a file BACK to `dth_exporter_jobs.json` — one atomic
+rename, no rewrite — and starts Daz for it. Preconditions, all required:
+
+- the Daz Studio **process is gone**. A live Daz owns its running file — even
+  one that claimed late and hasn't marked a row yet (a modal Save prompt can
+  stall the pickup for a long time).
+- the batch is **untouched**: `type: "bulk-export"`, `progress: 0`, every row
+  still `pending`. A partially worked batch is never reclaimed — re-running it
+  would redo scenes that already finished — and stays a dead run the studio
+  cleans up and reports (see the progress watch below). An orphaned
+  `open-scene` file is not an export batch and is never requeued either.
+
+The plugin needs no code for any of this: after the reclaim the pending file
+is back, byte-identical, and the next poll picks it up like any fresh handoff.
 
 If the file can't be parsed, leave it in place and log — but then **skip it on
 subsequent polls** (remember its mtime/size) so a foreign file doesn't spam
@@ -256,7 +277,12 @@ never CLAIMS the batch (no rename within ~10s) is most likely **shutting
 down** (the process lingers after close, and a fresh launch would die against
 the dying single instance) — the studio then shows a waiting dialog and, the
 moment the process is really gone, starts Daz itself; the still-pending file
-is picked up on launch.
+is picked up on launch — and if the dying Daz managed to claim the file on a
+final poll tick, the **reclaim** (see the lifecycle above) takes it back
+first. While waiting, the dialog also watches the claimed file: a batch that
+starts showing real work means Daz was alive after all (a modal Save prompt
+can stall the pickup past the wait window) — the dialog stands down and the
+progress watch owns the run.
 
 While the un-renamed job file exists the button shows **Abort**: it deletes
 the file and rolls the aborted scenes' handoff stamps back. Once the plugin
@@ -267,7 +293,11 @@ shows the plugin-owned `progress` ("Exporting 40%"). When it reads
 `progress: 100` it **deletes the file** and reports the outcome (per-row
 `failed` statuses + errors included). A `running_` file below 100 whose Daz
 Studio is no longer running is a dead run: the studio cleans it up and
-reports the failure. A stale `running_` file nobody watched is removed by the
+reports the failure — **unless the batch is still untouched** (progress 0,
+every row pending): that is the claimed-but-never-run state the **reclaim**
+(see the lifecycle above) hands back to a fresh Daz, so the watch reports it
+as still pending and touches nothing — the reclaim is the single owner of
+that rename. A stale `running_` file nobody watched is removed by the
 next handoff (both sides also clear it defensively).
 
 ## `type: "open-scene"` — hand a scene to a RUNNING Daz (contract v3)
