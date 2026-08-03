@@ -140,30 +140,58 @@ $HIP/dth-exports/primary/Kira_frame_432.fbx
 ```
 
 so the project keeps resolving after you move, rename or copy the character
-tree — including onto another machine. Switch it to absolute paths in
-**Settings → Houdini path style** if you'd rather have the real path baked in.
+tree — including onto another machine. Both this and whether the junctions are
+created at all are **per-project settings**: the first **Generate project** in
+a project asks right in the dialog, and **Settings → Project** changes them
+anytime later.
 
-&nbsp;
+A character with **no Houdini project inside its folder** has no `$HIP` to be
+relative to, so its reference paths are always absolute — regardless of the
+setting. The same fallback protects a character whose shortcut can't be created
+at all (an export folder on a network drive, say): the studio only writes
+`$HIP` paths it has verified the shortcut for. Generate a project (or hand-link
+one inside the character folder) and save again to switch it over.
 
-> [!NOTE]
-> A character with **no Houdini project inside its folder** has no `$HIP` to be
-> relative to, so its reference paths are always absolute — regardless of the
-> setting. The same fallback protects a character whose shortcut can't be
-> created at all (an export folder on a network drive, say): the studio only
-> writes `$HIP` paths it has verified the shortcut for. Generate a project (or
-> hand-link one inside the character folder) and save again to switch it over.
+### The dth-exports junction & source control
 
-&nbsp;
+The junction is a convenience, not plumbing — the export pipeline itself never
+goes through it, and imports work with the real path just as well. But tools
+that scan your project folder can trip over reparse points: **Perforce** and
+some backup clients follow them (pulling the whole export tree into the depot
+view) or delete them. You have three outs, from lightest to heaviest:
 
-> [!NOTE]
-> The junction is a convenience, not plumbing — the export pipeline itself
-> never goes through it. If a tool that scans your project folder dislikes it
-> (Perforce and some backup clients follow or delete reparse points), you can
-> add `dth-exports` to `P4IGNORE`/`.gitignore`, or simply delete the link and
-> browse to the Daz folder yourself. Nothing breaks either way, and the next
-> **Generate project** puts it back.
+**1. Ignore it.** Keep the convenience, hide it from the tool.
 
-&nbsp;
+For **Git**, add to the project's `.gitignore`:
+
+```gitignore
+# DTH Character Studio: junctions into the export folder (recreated on save)
+dth-exports/
+```
+
+For **Perforce**, add to the file your `P4IGNORE` variable points at
+(e.g. `.p4ignore` in the workspace root — `p4 set P4IGNORE=.p4ignore` once, if
+it isn't set):
+
+```text
+# DTH Character Studio: junctions into the export folder (recreated on save)
+dth-exports/
+```
+
+> [!WARNING]
+> Perforce ignores only apply to files being **added** — a junction already
+> added to the depot stays tracked. Ignore it before the first `p4 add`, or
+> remove it from the depot once.
+
+**2. Switch junctions off for the project.** **Settings → Project → Create
+dth-exports shortcuts** (also offered in the first Generate-project dialog).
+No junctions are created or repaired from then on; existing ones can be
+deleted freely. `$HIP` paths resolve *through* the junction, so this forces
+absolute reference paths — the trade-off is a project tree that's fully
+source-control-inert.
+
+**3. Delete the link ad hoc.** With junctions ON, a deleted link simply comes
+back on the next save — fine for a one-off scan, wrong as a permanent fix.
 
 **Old folders clean themselves up**: the studio remembers which export folders
 the current layout uses, and when a scene's subfolder is renamed or moved, the

@@ -340,10 +340,14 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   // network/non-NTFS export root, a real folder in the way — falls back to
   // absolute paths for this character rather than shipping refs that cannot
   // resolve, and never fails the save (the probe swallows its own errors).
-  const junctionsOk = await refreshExportJunctions(versioned, outDir, project.houdiniSubdir).catch(
-    () => false,
-  )
-  const hipRelativeRefs = settings.houdiniPathStyle !== 'absolute' && junctionsOk
+  // Both knobs are PER PROJECT now (the `.dcsp`, decided in the first
+  // Generate-project dialog, editable in Settings → Project). With junctions
+  // off, none are created OR repaired — and `$HIP` paths are impossible (they
+  // resolve THROUGH the junction), so absolute is forced whatever the style.
+  const junctionsOk = project.createExportJunctions
+    ? await refreshExportJunctions(versioned, outDir, project.houdiniSubdir).catch(() => false)
+    : false
+  const hipRelativeRefs = project.houdiniPathStyle !== 'absolute' && junctionsOk
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both

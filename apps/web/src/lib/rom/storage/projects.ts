@@ -49,6 +49,17 @@ export interface DcspManifest {
   /** Whether the project generates a per-character `Scan_Products_<Name>.dsa` that
    *  analyses the open Daz scene for used products (off by default). */
   dazProductsEnabled: boolean
+  /**
+   * How the generated PoseAsset CSV writes reference-skeleton paths: `'hip'` =
+   * `$HIP`-relative through the `dth-exports` junction (portable across moves/
+   * machines), `'absolute'` = the real path baked in. Decided in the FIRST
+   * Generate-project dialog of the project; editable in Settings → Project.
+   */
+  houdiniPathStyle: 'hip' | 'absolute'
+  /** Whether the studio creates/maintains the `dth-exports` junctions at all.
+   *  Off for source-control setups that dislike reparse points (Perforce, some
+   *  backup clients) — `$HIP` paths are then impossible, so absolute is forced. */
+  createExportJunctions: boolean
   /** Relative folder the character folders live in, under the project root. '' = the
    *  project root itself (e.g. 'assets/characters' → <project>/assets/characters/<char>). */
   charactersSubdir: string
@@ -70,6 +81,8 @@ export const PROJECT_BEHAVIOR_DEFAULTS = {
   assetsEnabled: false,
   dazProductsEnabled: false,
   charactersSubdir: '',
+  houdiniPathStyle: 'hip' as 'hip' | 'absolute',
+  createExportJunctions: true,
 } as const
 
 function manifestDefaults(dir: string): DcspManifest {
@@ -169,6 +182,11 @@ export async function readManifest(dir: string): Promise<DcspManifest> {
           ? raw.dazProductsEnabled
           : defaults.dazProductsEnabled,
       charactersSubdir: safeRelSubdir(raw.charactersSubdir, ''),
+      houdiniPathStyle: raw.houdiniPathStyle === 'absolute' ? 'absolute' : 'hip',
+      createExportJunctions:
+        typeof raw.createExportJunctions === 'boolean'
+          ? raw.createExportJunctions
+          : defaults.createExportJunctions,
       unrealProjects: Array.isArray(raw.unrealProjects)
         ? raw.unrealProjects.filter((p: unknown): p is string => typeof p === 'string' && p !== '')
         : [],
