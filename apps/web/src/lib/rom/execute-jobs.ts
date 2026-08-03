@@ -262,6 +262,30 @@ export function houdiniModeForSelection(current: HoudiniRunMode, selected: numbe
 }
 
 /**
+ * THE "ROM only drives no Houdini export" rule, applied to the project
+ * checkboxes: a ROM-only run writes no fresh `.dth`, so an export continuation
+ * would re-consume the PREVIOUS exports while the report reads as "the new ROM
+ * reached Houdini" — the misleading-success this studio exists to avoid. Under
+ * `rom-only` the Houdini list can only OPEN a project, and open is
+ * single-project ({@link houdiniModeForSelection}) — so its checkbox behaves
+ * like a radio: picking another project REPLACES the pick instead of growing a
+ * multi-selection no mode could legally run. Every other Daz mode toggles.
+ * Unchecking works the same everywhere.
+ */
+export function hipSelectionAfterToggle(
+  mode: RunChoice,
+  prev: ReadonlySet<string>,
+  hip: string,
+): Set<string> {
+  if (prev.has(hip)) {
+    const next = new Set(prev)
+    next.delete(hip)
+    return next
+  }
+  return mode === 'rom-only' ? new Set([hip]) : new Set([...prev, hip])
+}
+
+/**
  * The hidden generated script a mode's job rows run — each selects the open
  * scene's overrides itself, so one script serves every scene:
  * {@link BULK_ROM_EXPORT_SCRIPT} (ROM + full export),

@@ -14,8 +14,9 @@ of the run). The Houdini modes are **Open only** (exactly one project),
 **Export selected scenes** (the default) and **Export all**; several selected
 projects export one after another, and the projects come pre-selected
 whenever scenes do — a plain Start does the whole round trip, Daz through
-Houdini. The "Export too" switch and the mode cards are gone; their jobs
-moved into the lists.
+Houdini. ROM only is the exception: it builds no fresh export, so nothing
+pre-selects there and a hand-picked project can only be opened. The "Export
+too" switch and the mode cards are gone; their jobs moved into the lists.
 
 Houdini also opens **fully before the batch starts** now — for "Export too"
 runs as well. The exports used to grind inside Houdini's startup, holding the

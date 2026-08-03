@@ -322,6 +322,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
       }
       case 'open_project_window': // opens a separate OS window on the desktop —
         return null //              recorded (see `calls`), nothing to do here
+      case 'shell_open_file': // Explorer-style double-click (openScene's `.hip`/
+        return null //          `.uproject` path) — recorded; the spec asserts the path
+      case 'focus_app_window': // best-effort foregrounding after that open —
+        return null //           there is no window here to pull forward
       case 'scan_duf_files': {
         const folder = norm(args.folder)
         const prefix = `${folder}/`

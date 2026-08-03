@@ -20,6 +20,7 @@ import {
   preCheckedScenes,
   scanConfigJson,
   formatElapsed,
+  hipSelectionAfterToggle,
   houdiniModeForSelection,
   scenesMissingExport,
   scenesMissingRomAnimation,
@@ -436,6 +437,24 @@ describe('houdiniModeForSelection — Open only is a single-project affair', () 
     expect(houdiniModeForSelection('open', 0)).toBe('open')
     expect(houdiniModeForSelection('export-selected', 3)).toBe('export-selected')
     expect(houdiniModeForSelection('export-all', 2)).toBe('export-all')
+  })
+})
+
+describe('hipSelectionAfterToggle — ROM only can only OPEN one project', () => {
+  const A = 'X:/p/Kira/houdini/Kira.hip'
+  const B = 'X:/p/Kira/houdini/KiraSummertide.hip'
+
+  it('replaces the pick under rom-only (radio), toggles everywhere else', () => {
+    // A rom-only run writes no fresh export, so only single-project "Open
+    // only" is legal — a second pick must not grow a selection no mode runs.
+    expect(hipSelectionAfterToggle('rom-only', new Set([A]), B)).toEqual(new Set([B]))
+    expect(hipSelectionAfterToggle('rom-export', new Set([A]), B)).toEqual(new Set([A, B]))
+    expect(hipSelectionAfterToggle('houdini-only', new Set([A]), B)).toEqual(new Set([A, B]))
+  })
+
+  it('unchecks normally in every mode', () => {
+    expect(hipSelectionAfterToggle('rom-only', new Set([A]), A)).toEqual(new Set())
+    expect(hipSelectionAfterToggle('export-only', new Set([A, B]), B)).toEqual(new Set([A]))
   })
 })
 

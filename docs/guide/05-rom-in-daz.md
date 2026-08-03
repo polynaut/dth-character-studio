@@ -264,6 +264,11 @@ trip; untick them and the run ends with Daz. Their own **Mode**:
 Several selected projects run **one after another**: each opens, exports,
 reports — then the next starts.
 
+**ROM only** is the exception: it builds no fresh export, so there is nothing
+for a Houdini export to pick up — the projects don't pre-select there, and a
+project you tick by hand can only be **opened** (the export modes are
+disabled, and one project at a time).
+
 Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#install-the-dth-character-studio-runner-plugin)
 works through it unattended — every scene gets its full ROM build, export and

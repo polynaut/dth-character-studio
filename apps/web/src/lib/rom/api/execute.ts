@@ -757,6 +757,16 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     return match
   })
 
+  // ROM only writes no fresh export — an export continuation would re-consume
+  // the PREVIOUS `.dth`s while the report reads as the new ROM's round trip.
+  // The dialog only offers "Open only" there (hipSelectionAfterToggle); this
+  // is the loud backstop against any other caller.
+  if (mode === 'rom-only' && hips.length > 0 && houdiniMode !== 'open') {
+    throw new Error(
+      'ROM only writes no export for Houdini to run on — use "Open only", or deselect the Houdini projects.',
+    )
+  }
+
   // The generated scripts must exist on disk — the export runs what generation
   // wrote, so an unsaved/never-generated character has nothing to hand off.
   const scriptsDir = storage.studioCharScriptsDir(

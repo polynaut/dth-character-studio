@@ -466,7 +466,15 @@ older runtimes as stale.
   dth-export.tsx, remaining projects on a ref): the Houdini job/result files
   are per-character singletons, so two live runs would clobber each other —
   project n+1 starts only when n's watch reports finished (a dead Houdini
-  drops the queue).
+  drops the queue; clicking the progress button stops the WATCH and with it
+  the studio-driven queue, which the button's tooltip says out loud).
+  EXCEPT under `rom-only`: that run writes no fresh `.dth`, so an export
+  continuation would re-consume the PREVIOUS exports while the report reads
+  as "the new ROM reached Houdini". ROM only therefore never auto-selects
+  projects and only `open` is legal — `hipSelectionAfterToggle`
+  (execute-jobs.ts) makes the project checkbox a radio there, the dialog
+  disables both export modes, and `executeCharacterJobs` throws on any other
+  combination as the loud backstop.
 - **A saved ROM animation stands in for its source scene** (runtime v46): since
   export-only job rows OPEN `rom-animations/<stem>_ROM.duf`, every generated
   script embeds `romAnimationSourceMap` (rom path → source scene) and resolves

@@ -187,3 +187,63 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
 
   expect(await unhandledCommands(page)).toEqual([])
 })
+
+test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({
+  page,
+}) => {
+  // A ROM-only run writes no fresh `.dth`, so an export continuation would
+  // re-consume the PREVIOUS exports while the report reads as "the new ROM
+  // reached Houdini". The dialog therefore never auto-selects projects under
+  // ROM only, offers Open only as the one live Houdini mode — and the batch
+  // ends with the project OPENING, not exporting: no Houdini job, no launch.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
+  // ROM only runs the visible ROM-animation build script, not the bulk export.
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Build_ROM_Animation.dsa`] = '// rom-build fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The default mode (ROM + Export) auto-selects the linked project…
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await expect(page.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).toBeChecked()
+
+  // …and switching to ROM only takes the armed continuation away again.
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /ROM only/ }).click()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).not.toBeChecked()
+
+  // Re-picking a project by hand is allowed — but only to OPEN it: the mode
+  // lands on Open only and both export modes are dead.
+  await page.getByRole('checkbox', { name: /Run in Kira/ }).check()
+  await expect(page.locator('#houdini-mode')).toHaveText(/Open only/)
+  await page.locator('#houdini-mode').click()
+  await expect(page.getByRole('option', { name: /Export selected scenes/ })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  await expect(page.getByRole('option', { name: /Export all/ })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  await page.getByRole('option', { name: /Open only/ }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
+
+  // The Daz batch is the ROM build…
+  await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
+  expect(await fileContent(page, PENDING_JOB)).toContain('.Build_ROM_Animation.dsa')
+  await runnerFinishesBatch(page)
+
+  // …and its finish IS the report (opening is not a watched leg): the project
+  // opens like an Explorer double-click, and no Houdini job ever exists.
+  await expect(page.getByText(/DTH Export finished — 1 scene exported/)).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText(/Opening the Houdini project/)).toBeVisible()
+  await expect.poll(() => callsNamed(page, 'shell_open_file')).toEqual([{ path: P.houdini }])
+  expect(await callsNamed(page, 'launch_houdini_job')).toEqual([])
+  expect(await fileKeys(page)).not.toContain(HOUDINI_JOB)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})

@@ -40,6 +40,7 @@ import {
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
   formatElapsed,
+  hipSelectionAfterToggle,
   houdiniModeForSelection,
   normalizeSceneKey,
   preCheckedScenes,
@@ -490,7 +491,12 @@ export function DthExportAction({
   if (houdini) {
     // The Daz batch is done and reported; Houdini is opening the project (or
     // already working through it). Same deal as above — clicking stops the
-    // WATCH, never the export, which keeps running in the user's Houdini.
+    // WATCH, never the export, which keeps running in the user's Houdini. But
+    // the STUDIO drives the project queue, so with projects still waiting
+    // their turn, stopping the watch also stops the orchestration — the
+    // tooltip must say so. (Reading the ref in render is sound here: every
+    // queue mutation is bracketed by a setHoudini, which re-renders.)
+    const queuedNote = houdiniQueueRef.current ? ' — the queued projects will not start' : ''
     const label =
       houdini.state === 'running' && houdini.total > 0
         ? `Houdini ${houdini.done}/${houdini.total}`
@@ -505,8 +511,8 @@ export function DthExportAction({
         }}
         title={
           houdini.state === 'running'
-            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching.`
-            : 'Houdini is opening the project; the export starts once the scene has loaded. Click to stop watching.'
+            ? `Houdini is exporting — ${houdini.done} of ${houdini.total} node${houdini.total === 1 ? '' : 's'} done. Click to stop watching${queuedNote}.`
+            : `Houdini is opening the project; the export starts once the scene has loaded. Click to stop watching${queuedNote}.`
         }
       >
         <Loader2 className="animate-spin" />
@@ -1052,7 +1058,9 @@ function DthExportDialog({
         // projects" is approximated as ALL linked ones — 456.py only exports
         // the networks importing the selected scenes, so an uninvolved project
         // simply no-ops. Only seeds an untouched selection: a user pick wins.
-        if (pre.size > 0 && character.houdiniProjects.length > 0) {
+        // Never under rom-only: that run writes no export, so there is no
+        // continuation to arm (see hipSelectionAfterToggle for the full why).
+        if (pre.size > 0 && modeRef.current !== 'rom-only' && character.houdiniProjects.length > 0) {
           setCheckedHips((prev) =>
             prev.size > 0
               ? prev
@@ -1109,15 +1117,22 @@ function DthExportDialog({
     modeRef.current = next
     setMode(next)
     if (status) setChecked(preCheckedScenes(next, status))
+    // ROM only writes no fresh export, so a Houdini continuation has nothing
+    // of THIS run's to consume — whatever the list had armed (auto-selection
+    // included) doesn't carry over, and the one thing it can still do is OPEN
+    // a project the user re-picks deliberately.
+    if (next === 'rom-only') {
+      setCheckedHips(new Set())
+      setHoudiniMode('open')
+    }
   }
 
   /** The Houdini list's toggle. "Open only" is a single-project affair —
    *  picking a second project flips the mode to the default export run
    *  ({@link houdiniModeForSelection}) instead of refusing the pick. */
   function toggleHip(hip: string) {
-    const next = new Set(checkedHips)
-    if (next.has(hip)) next.delete(hip)
-    else next.add(hip)
+    // Under rom-only the toggle is a radio — the pure rule owns why.
+    const next = hipSelectionAfterToggle(mode, checkedHips, hip)
     setCheckedHips(next)
     setHoudiniMode((m) => houdiniModeForSelection(m, next.size))
   }
@@ -1325,7 +1340,12 @@ function DthExportDialog({
                     value={option.mode}
                     // "Open only" is a single-project affair — see
                     // houdiniModeForSelection for the auto-flip on a 2nd pick.
-                    disabled={option.mode === 'open' && checkedHips.size !== 1}
+                    // The EXPORT modes are dead under ROM only: that run
+                    // writes no fresh export, so they could only re-consume
+                    // the previous ones (hipSelectionAfterToggle has the why).
+                    disabled={
+                      option.mode === 'open' ? checkedHips.size !== 1 : mode === 'rom-only'
+                    }
                   >
                     <span className="block">
                       {option.title}
