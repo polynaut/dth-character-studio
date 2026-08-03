@@ -45,6 +45,33 @@ doing it.
   multi-line or quote-bearing text goes to a file first**, then
   `gh pr create --body-file <path>` / `git commit -F <path>`. Never inline it.
 
+**These are enforced where they can be, not trusted.** The rules that have never
+been broken in this repo are the machine-checked ones (the changeset gate, lint,
+the byte-identical rom output) — compliance simply isn't left to judgement. Two
+hooks in `.claude/settings.json` move these the same way:
+
+- `.claude/hooks/inject-working-rules.mjs` (**SessionStart**) prints THIS section
+  into context at the start of every session. `.ai/*` is read-on-demand and "on
+  demand" means the agent decides — which is the exact failure. It reads the
+  section straight out of this file, so editing the doc is still the only place
+  to change the rule.
+- `.claude/hooks/check-branch-upstream.mjs` (**PostToolUse**) fails a
+  `git push` from a branch with no upstream and hands the fix back to the agent,
+  in the same turn; creating a branch (`switch -c`, `checkout -b`, …) only drops
+  a reminder, because a branch that isn't on the remote yet CANNOT track — push
+  first, then set tracking (the full rule lives in Repo mechanics below).
+  Documented as non-negotiable, skipped twice in one day — so it is a check now,
+  not a reminder.
+
+Both hook commands in `.claude/settings.json` are repo-root-relative
+(`node .claude/hooks/…`) — start sessions at the repo root (a worktree's root
+counts; it has its own checkout of `.claude/`), or the hooks fail MODULE_NOT_FOUND.
+
+What a hook CANNOT check is whether every point of a prompt was answered; that
+stays judgement, and the opening todo list is the closest thing to a proof of it.
+
+## Stacked PRs
+
 **Stacked PRs need an explicit link, not just a base branch.** When a PR depends
 on another (its base is that PR's branch), targeting the parent branch is
 NECESSARY BUT NOT SUFFICIENT — GitHub tracks a stack object, and without it the
@@ -69,24 +96,6 @@ GH_REPO=polynaut/dth-character-studio \
 - Public preview at time of writing (2026-08), docs:
   <https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests>.
 
-**These are enforced where they can be, not trusted.** The rules that have never
-been broken in this repo are the machine-checked ones (the changeset gate, lint,
-the byte-identical rom output) — compliance simply isn't left to judgement. Two
-hooks in `.claude/settings.json` move these the same way:
-
-- `.claude/hooks/inject-working-rules.mjs` (**SessionStart**) prints THIS section
-  into context at the start of every session. `.ai/*` is read-on-demand and "on
-  demand" means the agent decides — which is the exact failure. It reads the
-  section straight out of this file, so editing the doc is still the only place
-  to change the rule.
-- `.claude/hooks/check-branch-upstream.mjs` (**PostToolUse**) fails a
-  `git push`/`switch -c`/`checkout -b` on a branch with no upstream and hands the
-  fix back to the agent, in the same turn. Documented as non-negotiable, skipped
-  twice in one day — so it is a check now, not a reminder.
-
-What a hook CANNOT check is whether every point of a prompt was answered; that
-stays judgement, and the opening todo list is the closest thing to a proof of it.
-
 ## Repo mechanics
 
 - **pnpm workspace monorepo**, `packageManager: pnpm@9.1.4`, **Node ≥ 24**.
@@ -108,7 +117,9 @@ stays judgement, and the opening todo list is the closest thing to a proof of it
   / `.merge`) — `origin` stays SSH; **never** reconfigure the remote to HTTPS. An agent
   that pushes ad-hoc via a token must ALSO do this, and re-fetch the branch into
   `refs/remotes/origin/<branch>` after each push so the maintainer's ahead/behind stays
-  accurate.
+  accurate. Machine-checked by `.claude/hooks/check-branch-upstream.mjs` (see Working
+  rules) — this bullet is the rule's single full statement; CLAUDE.md and Working
+  rules only point here.
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.

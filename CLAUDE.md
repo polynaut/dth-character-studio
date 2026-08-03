@@ -161,11 +161,10 @@ Two scopes now:
   (NSIS installer + signed updater `latest.json`). The Tauri version is read from
   `apps/desktop/package.json`. See `docs/devops.md`.
 - **`main` is PR-only** — branch off `main` (`feature/…`, `fix/…`); no direct pushes.
-- **Every branch you create gets UPSTREAM TRACKING** — non-negotiable, including after an
-  ad-hoc token push: re-fetch into `refs/remotes/origin/<branch>`, then
-  `git branch --set-upstream-to=origin/<branch> <branch>`, or a bare `git pull` fails for the
-  maintainer. Branch config only — `origin` stays SSH, never reconfigure the remote.
-  Enforced by `.claude/hooks/check-branch-upstream.mjs`; full rule in `.ai/conventions.md`.
+- **Every branch you create gets UPSTREAM TRACKING before the session ends** — non-negotiable;
+  enforced by `.claude/hooks/check-branch-upstream.mjs` (a `git push` from an untracked branch
+  fails the turn). Branch config only — `origin` stays SSH, never reconfigure the remote.
+  Exact commands + the ad-hoc-token-push variant: `.ai/conventions.md` → Repo mechanics.
 - **Cargo.lock pins** `alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4` (newer breaks brotli 8 via
   Tauri's asset compression). Don't `cargo update` them back; re-pin if reverted (see `docs/devops.md`).
 - **Don't rewrite users' downloaded Daz assets.** The dedup/install features may only *move* redundant
