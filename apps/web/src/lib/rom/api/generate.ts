@@ -297,6 +297,25 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
         dazLibraryFolder: settings.dazLibraryFolder,
       }
     : undefined
+  // Every ROM/export run also SCANS the scene it just verified, so the morph
+  // index (and, with Daz Products on, the product results) stay current off the
+  // app's core flow alone — no separate Tools pass to remember. Both scans are
+  // best-effort inside the run: they must never fail an export that worked.
+  const indexSync = {
+    morphIndexDir: await storage.dataDir(),
+    // The SAME config the standalone Scan_Products script gets, plus the
+    // identity it needs, so the two paths cannot drift apart.
+    ...(scanProducts
+      ? {
+          products: {
+            ...scanProducts,
+            characterId: character.id,
+            characterName: character.name,
+            genesis: character.genesis,
+          },
+        }
+      : {}),
+  }
   // Per-scene rom paths + preset-block frames. A scene that overrides mode / preset
   // asset / custom JCM path resolves DIFFERENT `.duf` assets and block lengths than the
   // base — which the pure core can't recompute (the catalog lookup + native `.duf`
@@ -359,6 +378,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sceneFrames,
     scenesRootAbs,
     hipRelativeRefs,
+    indexSync,
   )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just

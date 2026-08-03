@@ -1033,8 +1033,16 @@ function DthScanSceneMorphs(config){
 	var bBulk = config["bulk"] === true;
 	var sOutDir = config["outDir"];
 
-	var sScenePath = "";
-	try { sScenePath = String(Scene.getFilename()); } catch(e){ /* unsaved */ }
+	// `scenePath` overrides the OPEN file. Two callers need that: a ROM/export
+	// run has already saved the scene as <stem>_ROM.duf (save-as repoints
+	// Scene.getFilename()), and an "Export only" run opened that ROM animation
+	// to begin with — both must file their finds under the SOURCE scene, which
+	// is what the editor selects and therefore the only key the autocomplete
+	// can ever match.
+	var sScenePath = config["scenePath"] ? String(config["scenePath"]) : "";
+	if(!sScenePath){
+		try { sScenePath = String(Scene.getFilename()); } catch(e){ /* unsaved */ }
+	}
 	if(!sScenePath){
 		var sUnsaved = "This scene has not been saved yet, so its morphs cannot be " +
 			"filed under a scene name. Save the scene and run this again.";
@@ -1082,6 +1090,33 @@ function DthScanSceneMorphs(config){
 		return;
 	}
 	MessageBox.information(sMsg, "DTH Character Studio", "&OK");
+}
+
+/**
+ * The scan as a SIDE EFFECT of a ROM/export run — how the morph index stays in
+ * sync through the app's core flow alone, with no separate Tools pass.
+ *
+ * Silent and NEVER-THROWING by construction. This runs inside a run whose job
+ * is to build a ROM and ship an export; the index is a bonus, so a scan that
+ * fails (unsaved scene, no Genesis figure, an unwritable app-data folder) must
+ * cost the user nothing — no dialog in a possibly minimized Daz, and above all
+ * no exception, which the Runner would mark as a FAILED export row for work
+ * that actually succeeded. Everything lands in the Daz log instead.
+ *
+ * Returns whether the scan wrote an index, for the log line only.
+ */
+function DthScanSceneMorphsQuiet(sOutDir, sScenePath){
+	if(!sOutDir) return false;
+	try {
+		// `bulk` keeps every dialog out; the throws it turns on are caught here.
+		DthScanSceneMorphs({ outDir: sOutDir, scenePath: sScenePath, bulk: true });
+		return true;
+	} catch(e){
+		// The expected cases are ordinary, not faults: a scene with no Genesis
+		// figure, or one that was never saved. Log and carry on.
+		print("DTH: scene morph scan skipped -", e);
+		return false;
+	}
 }
 
 /**********************************************************************

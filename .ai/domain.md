@@ -69,6 +69,22 @@ offsets byte-identically — if a generation change moves them, the change is wr
   scenes no longer both suggest their "Expand All". Full rules (including why
   the two files must stay separate and why the base row runs first) in
   `.ai/gotchas.md` § the morph autocomplete reads TWO files.
+- **Every ROM/export run SCANS its scene** (runtime v55) — how the index stays
+  current through the app's CORE flow, with no Tools pass to remember. The
+  generated scripts call `DthScanSceneMorphsQuiet` (and `DthScanProductsQuiet`
+  when the PROJECT has Daz Products on) right after the wrong-scene guard and
+  BEFORE the ROM build: the scene is pristine there, which is the truest picture
+  of what it wears. Emitted by `indexSyncSnippet` from the `IndexSyncOptions`
+  the web layer supplies (`api/generate.ts`), so a pure/web build emits nothing.
+  Two rules hold this together:
+  - **Never throws.** The run's job is the ROM + the export; a scan problem
+    (unsaved scene, no Genesis figure, unwritable app-data) must not fail a
+    Runner row for work that succeeded. Both `*Quiet` wrappers swallow and log.
+  - **Files under the SOURCE scene**, via the `scenePath` override both scans
+    now take: a ROM run's save-as repoints `Scene.getFilename()` to the
+    `<stem>_ROM.duf`, and an "Export only" run opened that ROM animation to
+    begin with. `dthOpenSceneFile` is the resolved source and is what gets
+    passed — anything else files finds under a scene the editor never selects.
 - **Tools → Scan project** is the one-click bulk pass: a selection of base
   morphs / character morphs / products, turned into ONE `bulk-export` batch —
   the base row first, then one row per linked scene of every character, with a
