@@ -161,6 +161,10 @@ Two scopes now:
   (NSIS installer + signed updater `latest.json`). The Tauri version is read from
   `apps/desktop/package.json`. See `docs/devops.md`.
 - **`main` is PR-only** — branch off `main` (`feature/…`, `fix/…`); no direct pushes.
+- **Every branch you create gets UPSTREAM TRACKING before the session ends** — non-negotiable;
+  enforced by `.claude/hooks/check-branch-upstream.mjs` (a `git push` from an untracked branch
+  fails the turn). Branch config only — `origin` stays SSH, never reconfigure the remote.
+  Exact commands + the ad-hoc-token-push variant: `.ai/conventions.md` → Repo mechanics.
 - **Cargo.lock pins** `alloc-stdlib = 0.2.2` + `alloc-no-stdlib = 2.0.4` (newer breaks brotli 8 via
   Tauri's asset compression). Don't `cargo update` them back; re-pin if reverted (see `docs/devops.md`).
 - **Don't rewrite users' downloaded Daz assets.** The dedup/install features may only *move* redundant
@@ -168,6 +172,11 @@ Two scopes now:
 
 ## Communication
 
+- **Open a non-trivial response with the todo list parsed from the prompt**, before
+  starting the work, and close by ticking it off — naming anything not done. A
+  multi-part prompt is a checklist; account for every clause. Full rule + the two
+  that go with it (never watch CI; shape every `gh`/`git` call so it can't need a
+  second attempt) in **`.ai/conventions.md` → "Working rules"**. Read it first.
 - Always close a response with a `TL;DR:` line (1-3 sentences). Detail and long
   answers are fine — the TL;DR exists so the reader can skim first and read the
   rest only if needed. It goes last, after everything else, and states the
