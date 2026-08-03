@@ -1,0 +1,27 @@
+// DAZ Studio version 4.0.0+ filetype DAZ Script
+
+// DTH Character Studio - the RUNNER'S variant of Build_Genesis_Index.dsa:
+// the same morph + bone index build, with every dialog removed. The studio's
+// Tools -> Build Genesis Index hands THIS file to the Runner plugin, which runs
+// it in a new empty scene while Daz may well be minimized - a modal dialog
+// there is an invisible dead stop for the whole batch. Questions resolve to
+// their build-the-stock-figures default, the summary goes to the Daz log, and
+// failures throw so the Runner marks the job row failed and the studio's
+// panel toasts the reason.
+//
+// Installed hidden (dot-prefixed) at the scripts root: double-clicking scripts
+// in the Content Library is the interactive path, and that is what the visible
+// Build_Genesis_Index.dsa - dialogs and all - remains for.
+//
+// The output path is baked in by the studio when it installs this script.
+
+var sSelfDir = new DzFileInfo(getScriptFileName()).path();
+var dir_self = new DzDir(sSelfDir);
+include(dir_self.filePath(".DthUtils.dsa"));
+include(dir_self.filePath(".DthScanMorphs.dsa"));
+
+DthBuildGenesisIndex({
+	outDir: "__DTH_APPDATA_DIR__",
+	scriptDir: String(sSelfDir),
+	bulk: true
+});

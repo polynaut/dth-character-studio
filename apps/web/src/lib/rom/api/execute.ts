@@ -955,12 +955,14 @@ export const GENESIS_INDEX_RUN = '#genesis-index'
 
 /**
  * Hand a **Build Genesis Index** run to the Runner: a one-row bulk-export batch
- * on the visible root-level `Build_Genesis_Index.dsa`, with an **empty
- * `scenePath`** — the contract's "run this script in a NEW EMPTY scene the
- * plugin creates" (docs/exporter-plugin-job-file.md), which is exactly right
- * here: the script builds every generation's stock figures itself and needs no
- * scene, and an empty one is what keeps whatever the user had open out of the
- * scan.
+ * on the hidden root-level `.Build_Genesis_Index_Bulk.dsa` — the dialog-free
+ * twin of the visible script (a Runner batch runs inside a possibly minimized
+ * Daz, where a modal is an invisible dead stop; the visible script keeps its
+ * dialogs for Content Library double-clicks) — with an **empty `scenePath`**:
+ * the contract's "run this script in a NEW EMPTY scene the plugin creates"
+ * (docs/exporter-plugin-job-file.md), which is exactly right here: the script
+ * builds every generation's stock figures itself and needs no scene, and an
+ * empty one is what keeps whatever the user had open out of the scan.
  *
  * Same handoff mechanics as every other batch — one global job file, refuse
  * while another is live, clear a finished-but-unswept `running_`, start Daz when
@@ -978,10 +980,12 @@ export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
   if (!settings.dazLibraryFolder) {
     throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the script live there.')
   }
-  const scriptPath = joinPath(
-    storage.studioScriptsDir(settings.dazLibraryFolder),
-    storage.GENESIS_INDEX_SCRIPT,
-  )
+  const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
+  // Self-heal before checking: an app updated since the last save has the new
+  // runtime bundled but not yet installed — the marker makes this a no-op
+  // whenever the install is already current.
+  await storage.copyRuntimeFiles(scriptsRoot).catch(() => {})
+  const scriptPath = joinPath(scriptsRoot, storage.GENESIS_INDEX_BULK_SCRIPT)
   if (!(await exists(scriptPath))) {
     throw new Error(
       `The index script is not installed:\n${scriptPath}\nRun Tools → Refresh assets to install it, then try again.`,
