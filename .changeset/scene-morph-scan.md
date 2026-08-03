@@ -18,9 +18,13 @@ scene does (marked with a *this scene* badge). Morphs the base figure carries
 are always offered, and re-scanning a scene replaces what it contributed, so
 clothing you took off stops being suggested.
 
-**Scan project** is the one-click way to run it: tick *base morphs*, *character
-morphs* and/or *products*, press Start, and wait. The studio hands Daz Studio a
-single unattended batch — the base index first, then every linked scene of
-every character in the project — opening each scene once however many scans it
-is due for. The standalone **Build Genesis Index** button stays for a base-only
-rebuild.
+**Tools → Scan & index → Scan project** is the one-click way to run it: tick
+*base morphs*, *character morphs* and/or *products*, press Start, and wait. The
+studio hands Daz Studio a single unattended batch — the base index first, then
+every linked scene of every character in the project — opening each scene once
+however many scans it is due for.
+
+This replaces the separate **Build Genesis Index** panel, which is now the
+*base morphs* tick. Reached from the Home window with no project open, the two
+scene passes are disabled and the base rebuild runs on its own, exactly as that
+button did.

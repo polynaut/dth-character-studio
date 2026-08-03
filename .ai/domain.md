@@ -480,8 +480,8 @@ older runtimes as stale.
   toasts it; everyone else only displays). Character editors adopt
   `characterId: ''` — "someone's batch is live: show busy, never toast". A run
   that belongs to NO character carries a **sentinel** characterId —
-  `GENESIS_INDEX_RUN` (`'#genesis-index'`, Tools → Build Genesis Index) and
-  `PROJECT_SCAN_RUN` (`'#project-scan'`, Tools → Scan project) — and is
+  `PROJECT_SCAN_RUN` (`'#project-scan'`, Tools → Scan project; it absorbed the
+  retired `'#genesis-index'` run when the two panels merged) — and is
   consumed ONLY by the caller passing that sentinel as its `watcher`; every
   mismatched watcher/run pairing (an editor's mount/focus refresh during an
   index build, the Tools panel polling during a character export) is served
@@ -491,15 +491,18 @@ older runtimes as stale.
   new sentinel constant + exactly one owning panel that passes it, with no
   further casing in `fetchExportRunProgress`. Handoff writers never clobber a LIVE batch
   either: all four (executeCharacterJobs, generateRomAnimation,
-  openSceneInRunningDaz, buildGenesisIndex) refuse while a sub-100 `running_`
+  openSceneInRunningDaz, startProjectScan) refuse while a sub-100 `running_`
   file exists and Daz is up, and sweep only a finished (100) one —
   executeCharacterJobs additionally recovers a DEAD one (sub-100, Daz gone),
-  same as the watch. buildGenesisIndex reuses the ~10s claim-wait when Daz was
+  same as the watch. startProjectScan reuses the ~10s claim-wait when Daz was
   already "running": an unclaimed handoff (Daz shutting down, or no Runner
   polling) is taken back — file deleted, watch dropped, error reported — never
   left pending forever; while a handoff waits un-renamed the Tools panel
-  offers Abort (`abortGenesisIndexRun` — no stamps to roll back), and the
-  panel gates on `fetchExportRunnerGate` exactly like the export dialog.
+  offers Abort (`abortProjectScanRun` — no stamps to roll back), and the
+  panel gates on `fetchExportRunnerGate` exactly like the export dialog. It
+  also writes its sidecar BEFORE the job file: the Runner can claim the batch
+  the moment the job file appears, and a row that beat its own config would
+  fail for nothing.
 - **Runner gate**: the export dialog blocks Start while the installed Runner
   DLL is missing or OLDER than the bundled one (`runnerGate` in
   storage/releases.ts, `fetchExportRunnerGate`), deep-linking to Settings →

@@ -965,124 +965,12 @@ export async function generateRomAnimation({
 }
 
 /**
- * The Genesis-index run's `characterId` on the shared export watch — a sentinel,
- * because this batch belongs to no character. Only the caller passing it as its
- * `watcher` to {@link fetchExportRunProgress} (the Tools panel) may consume the
- * run's outcome; character editors are served the display-only `''` adoption
+ * The project-scan run's `characterId` on the shared export watch — a
+ * **sentinel**, because the batch spans every character of a project (or none
+ * at all, on a base-only run) and so belongs to no single one. Consumed only by
+ * the caller passing it as its `watcher` to {@link fetchExportRunProgress} (the
+ * Tools panel); character editors are served the display-only `''` adoption
  * instead, so no editor's mount/focus refresh can eat (or clobber) the run.
- */
-export const GENESIS_INDEX_RUN = '#genesis-index'
-
-/**
- * Hand a **Build Genesis Index** run to the Runner: a one-row bulk-export batch
- * on the hidden root-level `.Build_Genesis_Index_Bulk.dsa` — the dialog-free
- * twin of the visible script (a Runner batch runs inside a possibly minimized
- * Daz, where a modal is an invisible dead stop; the visible script keeps its
- * dialogs for Content Library double-clicks) — with an **empty `scenePath`**:
- * the contract's "run this script in a NEW EMPTY scene the plugin creates"
- * (docs/exporter-plugin-job-file.md), which is exactly right here: the script
- * builds every generation's stock figures itself and needs no scene, and an
- * empty one is what keeps whatever the user had open out of the scan.
- *
- * Same handoff mechanics as every other batch — one global job file, refuse
- * while another is live, clear a finished-but-unswept `running_`, start Daz when
- * it's closed. The watch is armed so the panel can show progress and report the
- * outcome once. When Daz was already "running", the same ~10s claim-wait as
- * {@link executeCharacterJobs} guards against handing the batch to nobody: a
- * running process whose Runner never renames the file is most likely SHUTTING
- * DOWN (or running without the Runner plugin) — the handoff is taken back
- * (file deleted, watch dropped) and reported as an error rather than left as a
- * forever-pending spinner.
- */
-export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
-  if (!isTauri()) throw new Error('Building the Genesis index needs the desktop app.')
-  const settings = await storage.getSettings()
-  if (!settings.dazLibraryFolder) {
-    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the script live there.')
-  }
-  const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
-  // Self-heal before checking: an app updated since the last save has the new
-  // runtime bundled but not yet installed — the marker makes this a no-op
-  // whenever the install is already current.
-  await storage.copyRuntimeFiles(scriptsRoot).catch(() => {})
-  const scriptPath = joinPath(scriptsRoot, storage.GENESIS_INDEX_BULK_SCRIPT)
-  if (!(await exists(scriptPath))) {
-    throw new Error(
-      `The index script is not installed:\n${scriptPath}\nRun Tools → Refresh assets to install it, then try again.`,
-    )
-  }
-  const paths = await exporterJobFilePaths()
-  if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
-  if (await exists(paths.pending)) {
-    throw new Error('A batch is already waiting for Daz Studio — let it start (or abort it) first.')
-  }
-  if (await exists(paths.running)) {
-    const finished = await readTextFile(paths.running)
-      .then((text) => parseJobFileJson(text)?.progress === 100)
-      // Unreadable or torn: assume a live batch — refusing is the safe guess.
-      .catch(() => false)
-    if (!finished) {
-      throw new Error('Daz Studio is working through a batch — try again when it finishes.')
-    }
-    await remove(paths.running).catch(() => {})
-  }
-  await storage.writeTextFileAtomic(paths.pending, jobFileJson([{ scenePath: '', scriptPath }]))
-  activeRun = {
-    characterId: GENESIS_INDEX_RUN,
-    total: 1,
-    openHoudiniProject: '',
-    houdiniExport: false,
-    scenes: [],
-  }
-  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
-  if (!dazWasRunning) {
-    // A fresh launch claims the file on startup — no wait (Daz can take long
-    // to come up; the panel's pending state covers it, with Abort as the out).
-    await invoke<string>('launch_daz_studio')
-    return { dazWasRunning }
-  }
-  // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner
-  // poller is already gone) — or running without the Runner. A live Runner
-  // claims (renames) the file within one poll interval; when the claim never
-  // comes, take the handoff back so it can't sit pending forever (or fire
-  // minutes later out of nowhere) and say what to do instead.
-  const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
-    if (!(await exists(paths.pending).catch(() => true))) return { dazWasRunning }
-  }
-  // Take back only OUR handoff: a replacement batch written meanwhile owns
-  // both the pending file and the watch (activeRun) — leave those alone.
-  if (activeRun?.characterId === GENESIS_INDEX_RUN) {
-    activeRun = null
-    await remove(paths.pending).catch(() => {})
-  }
-  throw new Error(
-    'Daz Studio never picked the job up — it is most likely still shutting down (or the Runner plugin is not running). The handoff was taken back; wait for Daz Studio to close fully, then try again.',
-  )
-}
-
-/**
- * Abort a genesis-index handoff still WAITING for Daz Studio (the un-renamed
- * job file): delete the file and drop the watch — the Tools panel's way out of
- * the pending state. No handoff stamps to roll back ({@link abortExporterJobs}
- * does that for character runs) — this batch belongs to no character. A file
- * the Runner already claimed (renamed) is left alone; the watch still ends,
- * the same "stop watching, the run in Daz is unaffected" promise as
- * {@link dismissExportRun}.
- */
-export async function abortGenesisIndexRun(): Promise<void> {
-  if (activeRun?.characterId !== GENESIS_INDEX_RUN) return
-  const paths = await exporterJobFilePaths()
-  if (paths) await remove(paths.pending).catch(() => {})
-  activeRun = null
-}
-
-/**
- * The project-scan run's `characterId` on the shared export watch — a second
- * sentinel, for the same reason as {@link GENESIS_INDEX_RUN}: the batch spans
- * every character of a project and so belongs to none of them. Consumed only by
- * the caller passing it as its `watcher` (the Tools panel).
  */
 export const PROJECT_SCAN_RUN = '#project-scan'
 
@@ -1144,9 +1032,13 @@ export async function fetchProjectScanPlan({ data }: { data: unknown }): Promise
   }
 }
 
-const projectScanInput = projectIdInput.extend({
-  /** Rebuild the BASE morph + bone index from the stock figures first (the
-   *  existing Build Genesis Index run, as row one of this batch). */
+const projectScanInput = z.object({
+  /** The project folder to scan. Empty is legal for a BASE-ONLY run: the stock
+   *  figures belong to no project, so the Tools panel offers that pass from the
+   *  Home window too (where no project is open). */
+  projectId: z.string().default(''),
+  /** Rebuild the BASE morph + bone index from the stock figures first — row one
+   *  of the batch, and the only row a project-less run can produce. */
   base: z.boolean().default(false),
   /** Scan every linked scene for the morphs the base index doesn't carry. */
   morphs: z.boolean().default(false),
@@ -1195,13 +1087,18 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   const { projectId, base, morphs, products } = projectScanInput.parse(data)
   if (!isTauri()) throw new Error('Scanning a project needs the desktop app (Daz Studio is launched natively).')
   if (!base && !morphs && !products) throw new Error('Pick at least one thing to scan.')
+  // The scene passes are per project; the base pass is not. With no project
+  // open (the Home window) only the base pass can run.
+  if ((morphs || products) && !projectId) {
+    throw new Error('Open a project to scan its characters — only the base index can be rebuilt from here.')
+  }
 
   const settings = await storage.getSettings()
   if (!settings.dazLibraryFolder) {
     throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the scripts live there.')
   }
-  const project = await resolveProject(projectId)
-  if (products && project.dazProductsEnabled !== true) {
+  const project = projectId ? await resolveProject(projectId) : null
+  if (products && project?.dazProductsEnabled !== true) {
     throw new Error('Daz Products is switched off for this project — enable it in Settings → Project first.')
   }
 
@@ -1226,7 +1123,8 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   const sceneWork: Array<{ scenePath: string; work: ScanSceneWork }> = []
   const skipped: Array<string> = []
   let charactersWithRows = 0
-  if (morphs || products) {
+  // `project` is non-null here: the guard above refuses a scene pass without one.
+  if ((morphs || products) && project) {
     const sceneScript = joinPath(scriptsRoot, storage.SCAN_SCENE_BULK_SCRIPT)
     if (!(await exists(sceneScript))) {
       throw new Error(

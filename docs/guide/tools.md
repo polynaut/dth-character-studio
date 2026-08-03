@@ -127,6 +127,9 @@ while — that's the point of it being one unattended run. While the batch is
 still waiting for Daz to pick it up you can **Abort** it; once Daz has claimed
 it, the run belongs to Daz.
 
+Reached from the **Home** window (no project open), the two scene passes are
+disabled and **Base morphs** runs on its own — that pass belongs to no project.
+
 > [!NOTE]
 > **Why scene morphs are scoped to their scene.** Two outfits in two different
 > scenes both have an *Expand All* dial. Before, the autocomplete offered both
@@ -135,12 +138,6 @@ it, the run belongs to Daz.
 > marked with a small **this scene** badge. Morphs the base figure carries are
 > always offered. Re-scanning a scene *replaces* what it contributed, so
 > clothing you removed stops being suggested.
-
-### Build Genesis Index
-
-The base index on its own — the same job as the **Base morphs** tick above,
-without needing a project open. Use it after installing new morph packs,
-geografts or figure add-ons when you don't need the per-scene scans re-run.
 
 ---
 

@@ -91,10 +91,18 @@ test('scan project: base row first, then one row per scene, with the sidecar con
   )
   expect(config.scenes[P.scene.toLowerCase()]).toEqual({ morphs: true })
 
-  // The scene worker self-installed with the app-data output path baked in.
+  // NOTHING was seeded at the scripts root: the handoff self-heals via
+  // copyRuntimeFiles first (an app updated since the last save has the new
+  // runtime bundled but not installed), so BOTH scripts must be on disk — with
+  // the studio's app-data folder baked in — before the job points at them.
   const installed = await fileContent(page, SCENE_SCRIPT)
   expect(installed).toContain(P.appData)
   expect(installed).toContain('DthScanSceneMorphs')
+  // The base row's script is the dialog-free bulk twin (`bulk: true`), not the
+  // visible one whose dialogs would dead-stop a minimized Daz.
+  const indexInstalled = await fileContent(page, INDEX_SCRIPT)
+  expect(indexInstalled).toContain('bulk: true')
+  expect(indexInstalled).toContain(P.appData)
 
   // Daz was closed in the fixture, so the handoff starts it.
   expect(await calledCommands(page)).toContain('launch_daz_studio')
@@ -134,6 +142,31 @@ test('scan project: the products tick adds the per-character product config to e
   expect(entry.products?.characterName).toBe('Kira')
   expect(entry.products?.outputDir).toContain('product-scans')
 
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('scan project: from Home the base pass still runs, the scene passes are off', async ({
+  page,
+}) => {
+  // No `activeProjectFile` — the Tools page reached from the Home window. This
+  // panel replaced the standalone Build Genesis Index one, so the base pass has
+  // to stay reachable here or that capability would simply be gone.
+  const seed = buildSeed({ demo: true, dazInstallFolder: DAZ_INSTALL })
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await openScanTab(page)
+
+  await expect(page.getByText(/No project open/)).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: /Character morphs/ })).toBeDisabled()
+  await expect(page.getByRole('checkbox', { name: /Products/ })).toBeDisabled()
+  // Base morphs stays tickable, and Start stays live off it alone.
+  await expect(page.getByRole('checkbox', { name: /Base morphs/ })).toBeEnabled()
+  await startButton(page).click()
+  await expect(page.getByRole('button', { name: /Waiting for Daz Studio/ })).toBeVisible()
+
+  const job = JSON.parse((await fileContent(page, PENDING_JOB))!) as JobFile
+  // Exactly the batch the old standalone panel produced: one empty-scene row.
+  expect(job.jobs).toEqual([{ scenePath: '', scriptPath: INDEX_SCRIPT, status: 'pending' }])
   expect(await unhandledCommands(page)).toEqual([])
 })
 

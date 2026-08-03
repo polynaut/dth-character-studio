@@ -24,7 +24,6 @@ import { DazPresetsSection } from '#/components/tools/daz-presets-section.tsx'
 import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
-import { GenesisIndexSection } from '#/components/tools/genesis-index-section.tsx'
 import { ProjectScanSection } from '#/components/tools/project-scan-section.tsx'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
@@ -407,11 +406,11 @@ function ToolsPage() {
           <ProjectScanSection
             // The route-param convention: a `projectId` IS the project FOLDER
             // PATH (`resolveProject` reads the manifest from it). `project.id`
-            // is the manifest's own id and resolves to nothing.
+            // is the manifest's own id and resolves to nothing. '' from Home,
+            // where the panel offers the base pass only.
             projectId={activeProject?.path ?? ''}
             dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''}
           />
-          <GenesisIndexSection dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''} />
         </TabsContent>
 
         <TabsContent value="refresh" className="space-y-5">

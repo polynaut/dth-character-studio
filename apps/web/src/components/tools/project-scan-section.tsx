@@ -29,6 +29,11 @@ interface ScanSelection {
  * studio hands the Runner ONE batch (base index first, then one row per linked
  * scene of every character) and reports progress here.
  *
+ * Works with NO project open too (the Tools page is reachable from Home): the
+ * base pass belongs to no project, so it stays available while the two
+ * scene-scoped passes disable themselves. That is the whole reason this panel
+ * could replace the standalone Build Genesis Index one.
+ *
  * The run is the same job-file handoff every batch uses and reports through the
  * shared export watch under the {@link PROJECT_SCAN_RUN} sentinel. This panel is
  * the run's OWNER: it polls the watch with that sentinel as its watcher id,
@@ -143,7 +148,17 @@ export function ProjectScanSection({
   async function onStart() {
     setStarting(true)
     try {
-      const summary = await startProjectScan({ data: { projectId, ...selection } })
+      // Send what the panel EFFECTIVELY offers, not the raw ticks: with no
+      // project open the scene passes are unavailable however the state stands
+      // (a tick set before the project closed must not ride along and fail).
+      const summary = await startProjectScan({
+        data: {
+          projectId,
+          base: selection.base,
+          morphs: selection.morphs && !noProject,
+          products: selection.products && !productsOff,
+        },
+      })
       toast.success(
         summary.dazWasRunning
           ? `Handed ${summary.rows} job${summary.rows === 1 ? '' : 's'} to Daz Studio.`
@@ -176,13 +191,19 @@ export function ProjectScanSection({
   }
 
   const busy = phase !== 'idle'
-  const sceneRows = selection.morphs || selection.products ? (plan?.totalScenes ?? 0) : 0
+  // With no project open the scene passes cannot run at all, so they never
+  // count towards the batch however the ticks stand.
+  const noProject = !projectId
+  const wantsScenes = !noProject && (selection.morphs || selection.products)
+  const sceneRows = wantsScenes ? (plan?.totalScenes ?? 0) : 0
   const rowCount = (selection.base ? 1 : 0) + sceneRows
-  const nothingPicked = !selection.base && !selection.morphs && !selection.products
+  const nothingPicked = !selection.base && !wantsScenes
   // A scene pass with no scenes to run it on would hand Daz an empty batch.
-  const noScenes = (selection.morphs || selection.products) && (plan?.totalScenes ?? 0) === 0
-  const blocked = !dazLibraryConfigured || !projectId
-  const productsOff = plan !== null && !plan.productsEnabled
+  const noScenes = wantsScenes && (plan?.totalScenes ?? 0) === 0
+  const blocked = !dazLibraryConfigured
+  const productsOff = noProject || (plan !== null && !plan.productsEnabled)
+  const scenes = plan?.totalScenes ?? 0
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-5">
@@ -203,55 +224,56 @@ export function ProjectScanSection({
         </p>
       </div>
 
-      {!projectId ? (
+      <div className="space-y-2">
+        <ScanOption
+          label="Base morphs"
+          checked={selection.base}
+          disabled={busy}
+          onChange={(base) => setSelection((s) => ({ ...s, base }))}
+          hint="Builds each generation's stock figures and indexes their morphs and bones — the autocompletes' foundation. 1 job."
+        />
+        <ScanOption
+          label="Character morphs"
+          checked={selection.morphs && !noProject}
+          disabled={busy || noProject}
+          onChange={(morphs) => setSelection((s) => ({ ...s, morphs }))}
+          hint={
+            noProject
+              ? 'Needs a project open — this scans the linked scenes of its characters.'
+              : plan
+                ? `Scans each linked scene for the dials the base index doesn't have — clothing, hair, third-party grafts — and files them under that scene. ${plural(scenes, 'job')}.`
+                : 'Scans each linked scene for the dials the base index doesn’t have.'
+          }
+        />
+        <ScanOption
+          label="Products"
+          checked={selection.products && !productsOff}
+          disabled={busy || productsOff}
+          onChange={(products) => setSelection((s) => ({ ...s, products }))}
+          hint={
+            noProject
+              ? 'Needs a project open — the product scan is per character.'
+              : plan !== null && !plan.productsEnabled
+                ? 'Daz Products is switched off for this project — enable it in Settings → Project.'
+                : plan && !plan.dimConfigured
+                  ? 'No DAZ Install Manager manifests folder is set — the scan would report every asset as unmatched. Set one in Settings.'
+                  : 'Matches each scene’s used assets against your installed Daz products. Shares the scene opens with the morph scan.'
+          }
+        />
+      </div>
+
+      {noProject ? (
         <p className="text-sm text-muted-foreground">
-          Open a project to scan its characters. (The base index below can be rebuilt without
-          one.)
+          No project open — only the base index can be rebuilt from here.
         </p>
       ) : (
-        <>
-          <div className="space-y-2">
-            <ScanOption
-              label="Base morphs"
-              checked={selection.base}
-              disabled={busy}
-              onChange={(base) => setSelection((s) => ({ ...s, base }))}
-              hint="Builds each generation's stock figures and indexes their morphs and bones — the autocompletes' foundation. 1 job."
-            />
-            <ScanOption
-              label="Character morphs"
-              checked={selection.morphs}
-              disabled={busy}
-              onChange={(morphs) => setSelection((s) => ({ ...s, morphs }))}
-              hint={
-                plan
-                  ? `Scans each linked scene for the dials the base index doesn't have — clothing, hair, third-party grafts — and files them under that scene. ${plan.totalScenes} scene(s).`
-                  : 'Scans each linked scene for the dials the base index doesn’t have.'
-              }
-            />
-            <ScanOption
-              label="Products"
-              checked={selection.products}
-              disabled={busy || productsOff}
-              onChange={(products) => setSelection((s) => ({ ...s, products }))}
-              hint={
-                productsOff
-                  ? 'Daz Products is switched off for this project — enable it in Settings → Project.'
-                  : plan && !plan.dimConfigured
-                    ? 'No DAZ Install Manager manifests folder is set — the scan would report every asset as unmatched. Set one in Settings.'
-                    : 'Matches each scene’s used assets against your installed Daz products. Shares the scene opens with the morph scan.'
-              }
-            />
-          </div>
-
-          {plan && plan.characters.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              {plan.characters.length} character{plan.characters.length === 1 ? '' : 's'},{' '}
-              {plan.totalScenes} linked scene{plan.totalScenes === 1 ? '' : 's'}
-              {rowCount > 0 && !busy && ` — ${rowCount} job${rowCount === 1 ? '' : 's'} to run`}.
-            </p>
-          )}
-        </>
+        plan &&
+        plan.characters.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {plural(plan.characters.length, 'character')}, {plural(scenes, 'linked scene')}
+            {rowCount > 0 && !busy && ` — ${plural(rowCount, 'job')} to run`}.
+          </p>
+        )
       )}
 
       <div className="flex items-center gap-2">
