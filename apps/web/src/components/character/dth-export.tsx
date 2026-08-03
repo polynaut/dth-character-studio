@@ -36,7 +36,11 @@ import {
   startHoudiniExport,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
-import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
+import {
+  normalizeSceneKey,
+  preCheckedScenes,
+  scenesMissingRomAnimation,
+} from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
@@ -500,13 +504,18 @@ function SceneRow({
         className={`daz-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${disabled ? ' opacity-50' : ''}`}
         data-selected={checked ? 'true' : undefined}
       >
-        {/* z-10 lifts the real controls above the row's cover button. */}
+        {/* z-10 lifts the real controls above the row's cover button.
+            Disabled only when NOT already checked: a refused row must not be
+            checkable, but one that is ALREADY checked (the status can go stale
+            under the selection — the pre-handoff re-check surfaces it) must
+            still be possible to UNCHECK, or the gate's "unselect it" advice
+            would be advice nobody can follow. */}
         <input
           type="checkbox"
           className="relative z-10 size-4 shrink-0 accent-daz-green"
           aria-label={`Export ${displayName}`}
           checked={checked}
-          disabled={disabled}
+          disabled={disabled && !checked}
           onChange={onToggle}
         />
         <Portrait
@@ -697,17 +706,23 @@ function DthExportDialog({
       romUnexported: false,
     }))
 
-  /** Which scenes a mode pre-checks: the ones whose work is outstanding for
-   *  THAT run — changed inputs for a ROM build, an unexported saved ROM for
-   *  the export-only pass (which can only run where a ROM animation exists). */
-  const preChecked = (scenes: Array<ExecuteSceneStatus>, forMode: ExportMode): Set<string> =>
-    new Set(
-      scenes
-        .filter((s) =>
-          forMode === 'export-only' ? s.romExists && s.romUnexported : s.affected && !s.missing,
-        )
-        .map((s) => s.scenePath),
-    )
+  /**
+   * The "Export only" Start gate: SELECTED scenes with no saved ROM animation
+   * ({@link scenesMissingRomAnimation} — the same rule the pre-handoff re-check
+   * in `onExport` applies). With a landed, CURRENT status the row controls keep
+   * such scenes out of the selection, so this stays empty; it fires when the
+   * status under the selection has gone STALE — the re-check writes its fresh
+   * probe back via `setStatus`, and this then disables Start, shows the notice
+   * naming the scenes, and marks the refused rows. A CHECKED refused row can
+   * still be unchecked (see the checkbox in {@link SceneRow}), so the notice's
+   * "unselect it" advice is real. While the probe is still in flight nothing is
+   * known — the gate stays empty and Start waits as "Checking scenes…" instead
+   * (`checking` below).
+   */
+  const noRomChecked = scenesMissingRomAnimation(mode ?? 'rom-export', status, checked)
+  // The probe (one stat per scene) is sub-second; holding Start for it closes
+  // the window where a row checked mid-flight could start with unknown state.
+  const checking = mode === 'export-only' && status === null
 
   useEffect(() => {
     let active = true
@@ -717,7 +732,7 @@ function DthExportDialog({
         setStatus(scenes)
         // The mode may already be picked (the probe outlives step 1) — seed the
         // checks for whichever run is chosen, defaulting to the full one.
-        setChecked(preChecked(scenes, modeRef.current ?? 'rom-export'))
+        setChecked(preCheckedScenes(modeRef.current ?? 'rom-export', scenes))
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -763,7 +778,7 @@ function DthExportDialog({
   function pickMode(next: ExportMode) {
     modeRef.current = next
     setMode(next)
-    if (status) setChecked(preChecked(status, next))
+    if (status) setChecked(preCheckedScenes(next, status))
   }
 
   // Back to step 1 clears the pick so a re-pick re-seeds the checks.
@@ -775,6 +790,26 @@ function DthExportDialog({
   async function onExport() {
     setBusy(true)
     try {
+      // Belt and braces for "Export only": the dialog's scene status is a
+      // snapshot from when it opened, and the selection can outlive it — a ROM
+      // animation deleted since then (in Daz, by hand) would ride the stale
+      // go-ahead into the handoff. Re-probe at the decision point; a refusal
+      // lands the fresh status in the dialog (the gate's notice + disabled
+      // Start + the rows' real state) instead of a failure after the fact.
+      if (mode === 'export-only') {
+        const fresh = await fetchExecuteScenes({ data: { projectId, id: character.id } })
+        const missing = scenesMissingRomAnimation('export-only', fresh, checked)
+        if (missing.length > 0) {
+          setStatus(fresh)
+          const names = missing.map((s) =>
+            (s.scenePath.split(/[\\/]/).pop() ?? s.scenePath).replace(/\.[^./\\]+$/, ''),
+          )
+          toast.error(
+            `No saved ROM animation for ${names.join(', ')} — run a ROM build first, or unselect ${missing.length === 1 ? 'it' : 'them'}.`,
+          )
+          return
+        }
+      }
       const result = await executeCharacterJobs({
         // Preserve row order — the jobs run top to bottom.
         data: {
@@ -896,6 +931,27 @@ function DthExportDialog({
         </div>
       )}
       {runner?.blocked && <RunnerGateNotice gate={runner} />}
+      {noRomChecked.length > 0 && (
+        <div className="space-y-1 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
+          <p>
+            <strong>Export only</strong> exports the saved ROM animation of each scene, and{' '}
+            {noRomChecked.length === 1 ? 'one selected scene has none' : `${noRomChecked.length} selected scenes have none`}{' '}
+            yet:
+          </p>
+          <ul className="list-inside list-disc text-muted-foreground">
+            {noRomChecked.map((row) => (
+              <li key={normalizeSceneKey(row.scenePath)}>
+                {(row.scenePath.split(/[\\/]/).pop() ?? row.scenePath).replace(/\.[^./\\]+$/, '')}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground">
+            Run <strong>ROM + Export</strong> or <strong>ROM only</strong> for{' '}
+            {noRomChecked.length === 1 ? 'it' : 'them'} first, or unselect{' '}
+            {noRomChecked.length === 1 ? 'it' : 'them'}.
+          </p>
+        </div>
+      )}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={busy} onClick={onClose}>
           Cancel
@@ -904,17 +960,24 @@ function DthExportDialog({
           Back
         </Button>
         <Button
-          disabled={busy || checked.size === 0 || !runner || runner.blocked}
+          disabled={
+            busy || checking || checked.size === 0 || !runner || runner.blocked || noRomChecked.length > 0
+          }
           title={
             runner?.blocked
               ? 'The Runner plugin needs attention in Settings first'
-              : checked.size === 0
-                ? 'Select at least one scene'
-                : undefined
+              : checking
+                ? 'Checking each scene for a saved ROM animation — a moment'
+                : checked.size === 0
+                  ? 'Select at least one scene'
+                  : noRomChecked.length > 0
+                    ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
+                    : undefined
           }
           onClick={() => void onExport()}
         >
-          <Play /> {busy ? 'Starting…' : 'Start'}
+          {checking ? <Loader2 className="animate-spin" /> : <Play />}{' '}
+          {busy ? 'Starting…' : checking ? 'Checking scenes…' : 'Start'}
         </Button>
       </div>
         </>

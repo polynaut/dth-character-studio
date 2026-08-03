@@ -180,6 +180,58 @@ export function jobScriptForMode(mode: ExportMode): string {
 }
 
 /**
+ * THE "Export only" rule: the SELECTED scenes that have no saved ROM animation,
+ * and therefore nothing for an export-only run to export.
+ *
+ * Pure so it is testable without a browser, and shared by BOTH places the
+ * dialog applies it: the Start gate (non-empty ⇒ Start is disabled and the
+ * scenes are named) and the pre-handoff re-check in `onExport`, which re-probes
+ * the scenes at the decision point — the dialog's status is a snapshot from
+ * when it opened, and a ROM animation deleted since then would otherwise ride
+ * the stale go-ahead into Daz.
+ *
+ * Empty for every other mode, and empty while `scenes` is null — nothing is
+ * known before the probe lands, and "unknown" must not read as "missing" (the
+ * dialog's Start separately waits out that window as "Checking scenes…").
+ */
+export function scenesMissingRomAnimation<T extends { scenePath: string; romExists: boolean }>(
+  mode: ExportMode,
+  scenes: ReadonlyArray<T> | null,
+  checked: ReadonlySet<string>,
+): Array<T> {
+  if (mode !== 'export-only' || !scenes) return []
+  return scenes.filter((scene) => checked.has(scene.scenePath) && !scene.romExists)
+}
+
+/**
+ * Which scenes a mode PRE-CHECKS in the DTH Export dialog: the ones whose work
+ * is outstanding for THAT run — changed inputs for the ROM-building modes, an
+ * unexported saved ROM animation for the export-only pass. A scene whose
+ * `.duf` is missing is never pre-checked, whatever the mode: its row cannot
+ * run (the dialog disables it), and a saved ROM animation can well survive a
+ * deleted scene — pre-checking it would arm a selection whose handoff can only
+ * fail.
+ */
+export function preCheckedScenes(
+  mode: ExportMode,
+  scenes: ReadonlyArray<{
+    scenePath: string
+    affected: boolean
+    missing: boolean
+    romExists: boolean
+    romUnexported: boolean
+  }>,
+): Set<string> {
+  return new Set(
+    scenes
+      .filter(
+        (s) => !s.missing && (mode === 'export-only' ? s.romExists && s.romUnexported : s.affected),
+      )
+      .map((s) => s.scenePath),
+  )
+}
+
+/**
  * Whether a `running_` batch can be handed back to a fresh Daz — i.e. it was
  * CLAIMED but never worked.
  *

@@ -43,6 +43,12 @@ export interface TauriMockSeed {
   /** The base figure node a scene reports (`scene_wearables`) — the create
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
+  /** Absolute paths whose fs commands are HELD — the invoke neither resolves
+   *  nor rejects until the spec calls `__tauriMock.releaseHeld()` (which also
+   *  stops holding future calls). Lets a spec freeze an async probe mid-flight
+   *  — e.g. hold the execute-stamps file to keep the DTH Export dialog's scene
+   *  probe from landing. Default: nothing held. */
+  holdPaths?: Array<string>
   /** What `houdini_running` answers — the "Export too" liveness probe. Default
    *  false. A spec driving a LIVE run seeds this true for its whole duration:
    *  the app's 2.5s poll reads "no result + not running" as a dead run and
@@ -57,6 +63,8 @@ export interface TauriMockState {
   files: Map<string, string>
   calls: Array<{ cmd: string; args: unknown }>
   unhandled: Array<string>
+  /** Let every command held on a `holdPaths` path proceed, and stop holding. */
+  releaseHeld: () => void
   /** Mutable: the answer `houdini_running` gives from now on. */
   houdiniRunning: boolean
 }
@@ -73,6 +81,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
     calls,
     unhandled,
     houdiniRunning: seed.houdiniRunning ?? false,
+    releaseHeld: () => {
+      holdPaths.clear()
+      for (const resolve of held.splice(0)) resolve()
+    },
   }
   let nextId = 1
 
@@ -84,6 +96,11 @@ export function installTauriMock(seed: TauriMockSeed): void {
     while (s.endsWith('/')) s = s.slice(0, -1)
     return s
   }
+  // Commands whose `args.path` is listed here PAUSE (before dispatch) until the
+  // spec calls releaseHeld() — which drains the queue AND clears the set, so
+  // later calls to the same path run normally.
+  const holdPaths = new Set((seed.holdPaths ?? []).map(norm))
+  const held: Array<() => void> = []
   const isFile = (p: string) => files.has(p)
   const isDir = (p: string) => {
     if (extraDirs.has(p)) return true
@@ -165,6 +182,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
     const isWrite = cmd === 'plugin:fs|write_text_file' || cmd === 'plugin:fs|write_file'
     // Don't record write payloads (bytes) — just the target path.
     calls.push({ cmd, args: isWrite ? { path: headerPath(options) } : args })
+
+    if (typeof args?.path === 'string' && holdPaths.has(norm(args.path))) {
+      await new Promise<void>((resolve) => held.push(resolve))
+    }
 
     switch (cmd) {
       // --- filesystem (plugin-fs 2.5.x contract) ---------------------------
@@ -380,6 +401,7 @@ export function installTauriMock(seed: TauriMockSeed): void {
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
   // The spec's window into this fake (page.evaluate). `state` is the same
   // object the command switch reads, so a spec flipping `houdiniRunning`
-  // changes what the next `houdini_running` poll answers.
+  // changes what the next `houdini_running` poll answers — and its
+  // `releaseHeld` drains the `holdPaths` queue the invoke wrapper parks on.
   w.__tauriMock = state
 }
