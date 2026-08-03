@@ -963,11 +963,12 @@ function SettingsPage() {
                 <InfoPopup label="Houdini path style — more information">
                   Bone-scale <strong>reference-skeleton</strong> paths in the PoseAsset CSV are
                   written relative to <code>$HIP</code> — the folder holding the generated{' '}
-                  <code>.hip</code>, where <strong>Generate project</strong> puts a{' '}
-                  <code>dth-exports</code> shortcut to the export folder. The project then keeps
-                  resolving after the character tree is moved, renamed, or opened on another
-                  machine. Characters with <em>no</em> generated Houdini project have nothing to
-                  anchor to and always get absolute paths.
+                  <code>.hip</code>, where the studio keeps a <code>dth-exports</code> shortcut
+                  to the export folder (created by <strong>Generate project</strong>, repaired on
+                  every save). The project then keeps resolving after the character tree is
+                  moved, renamed, or opened on another machine. Characters with <em>no</em>{' '}
+                  Houdini project inside their folder — or whose shortcut can&apos;t be created —
+                  have nothing to anchor to and get absolute paths regardless.
                 </InfoPopup>
               </Label>
               <Select

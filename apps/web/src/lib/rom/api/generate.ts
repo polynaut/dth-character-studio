@@ -41,6 +41,7 @@ import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
+import { refreshExportJunctions } from './houdini'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
   basename,
@@ -327,6 +328,18 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     primaryRel === null
       ? undefined
       : joinPath(outDir, deriveScenesRootRel(primaryRel, project.dazSubdir))
+  // Bone-scale reference-skeleton paths: `$HIP`-relative (the default) or
+  // absolute. The HOST decides — refreshExportJunctions probes AND repairs the
+  // `dth-exports` junction beside every linked `.hip` inside the character
+  // folder (the exact anchors `$HIP/dth-exports/...` resolves through), so the
+  // flag is true only when each of those junctions is actually in place. Any
+  // failure — no project inside the folder, a network/non-NTFS export root, a
+  // real folder in the way — falls back to absolute paths for this character
+  // rather than shipping refs that cannot resolve. The probe doubles as the
+  // repair: projects generated before the junction existed gain it here.
+  const hipRelativeRefs =
+    settings.houdiniPathStyle !== 'absolute' &&
+    (await refreshExportJunctions(versioned, outDir))
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
@@ -341,11 +354,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
-    // Bone-scale reference-skeleton paths: $HIP-relative (the default) or
-    // absolute. The core decides per character whether an anchor exists at all
-    // — a Houdini project inside the character folder, i.e. a generated one —
-    // and falls back to absolute when it doesn't.
-    settings.houdiniPathStyle !== 'absolute',
+    hipRelativeRefs,
   )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just

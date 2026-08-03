@@ -1669,9 +1669,12 @@ describe('exporter integration', () => {
     expect(content).toContain('var dthRefDir = dthExportDir;')
     expect(content).not.toContain('$HIP/dth-exports')
     expect(content).not.toContain('.move(')
-    // …and the $HIP-relative variant swaps the absolute export ROOT for the
-    // junction Generate project puts beside the .hip, keeping whatever scene
-    // subfolder the run resolved.
+    // …and with `hipRelativeRefs` on, the emitted script swaps the absolute
+    // export ROOT for the junction the host keeps beside the .hip, keeping
+    // whatever scene subfolder the run resolved. WHETHER the flag is on is the
+    // HOST's call — it probes/ensures the junctions the paths resolve through
+    // (refreshExportJunctions + hipAnchorDirs, tested in @dth/web) — so the
+    // pure core simply obeys it here.
     const hipContent = toCharacterScriptDsa(
       {
         ...character,
@@ -1690,33 +1693,6 @@ describe('exporter integration', () => {
     expect(hipContent).toContain(
       'dthRefDir = "$HIP/dth-exports" + dthExportDir.substr(dthRefRootAbs.length);',
     )
-    // No Houdini project inside the character folder = no $HIP to anchor to, so
-    // it stays absolute even with the setting on.
-    const noProject = toCharacterScriptDsa(
-      { ...character, houdiniProjects: [] },
-      {},
-      FRAMES,
-      'D:\\lib\\Electra',
-      {},
-      {},
-      undefined,
-      true,
-    ).content
-    expect(noProject).toContain('var dthRefDir = dthExportDir;')
-    expect(noProject).not.toContain('$HIP/dth-exports')
-    // A project linked OUTSIDE the character folder isn't a generated one —
-    // its folder is not where the studio put a dth-exports junction.
-    const foreignProject = toCharacterScriptDsa(
-      { ...character, houdiniProjects: ['E:/elsewhere/Electra.hip'] },
-      {},
-      FRAMES,
-      'D:\\lib\\Electra',
-      {},
-      {},
-      undefined,
-      true,
-    ).content
-    expect(foreignProject).not.toContain('$HIP/dth-exports')
     // Delivered under the export set's own scene-suffixed base name, into the
     // resolved export dir (scene subfolder included).
     expect(content).toContain('var dthCsvDstName = dthExportName + "_pose_asset.csv";')

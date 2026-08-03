@@ -90,10 +90,14 @@ export const studioSettingsSchema = z.object({
    * is moved, renamed, or opened from another machine. `absolute` writes the
    * real path, which is what the studio always did.
    *
-   * `hip` needs an anchor: with NO Houdini project linked there is no `$HIP` to
-   * be relative to, and a project on another volume has no relative path at
-   * all — both fall back to absolute for that character, silently and per
-   * character (see `houdiniRefDirPrefix` in `lib/rom/api/generate.ts`).
+   * `hip` needs an anchor: a `dth-exports` junction beside each linked `.hip`
+   * inside the character folder. Generation probes AND repairs those junctions
+   * (`refreshExportJunctions`, `lib/rom/api/houdini.ts`) and silently falls
+   * back to absolute for a character where none can exist — no project inside
+   * its folder, or a junction that can't be created (network/non-NTFS export
+   * root, a real folder in the way). The emitted prefix swap itself lives in
+   * `buildExportBlock` (`@dth/rom` `dsa.ts`), fed the flag through
+   * `generateCharacterFiles` → `generateAll`.
    */
   houdiniPathStyle: z.enum(['hip', 'absolute']).catch('hip').default('hip'),
   /**

@@ -38,12 +38,17 @@ Notes:
   their own (the node has a separate *Global Generation Method*).
 - **PHY groups have no generation method**; instead they carry physics
   parameters (offset distance, radius) and each pose has an XYZ offset.
-- `file` on GEN/FBM poses = the per-pose **reference skeleton FBX** (an
-  absolute path). The studio fills this automatically for a pose flagged **Bone
+- `file` on GEN/FBM poses = the per-pose **reference skeleton FBX**. The studio
+  fills this automatically for a pose flagged **Bone
   scale**: it emits a `{{DTH_EXPORT_DIR}}/Reference Skeletons/{{DTH_EXPORT_NAME}}_frame_<N>.fbx`
-  token path, and the generated Daz script resolves both tokens — the real
-  (run-time) export dir and the scene-suffixed figure name handed to `doExport`
-  — when it copies the CSV next to the exporter output.
+  token path, and the generated Daz script resolves both tokens — the export
+  dir and the scene-suffixed figure name handed to `doExport` — when it copies
+  the CSV next to the exporter output. The resolved dir is an **absolute
+  path**, or — with the app-global *Settings → Houdini path style* on `hip`,
+  the default — **`$HIP/dth-exports/<scene subfolder>`**, resolving through a
+  `dth-exports` junction the studio keeps beside each generated `.hip` in the
+  character folder (created by Generate project, re-checked on every
+  generation; a character whose junction can't exist falls back to absolute).
 - **`MIS` rows must leave `file` empty.** The parser reads the column, but the
   node has no matching parameter for Misc mappings, so a non-empty value makes
   the whole import fail (`AttributeError: 'NoneType' object has no attribute
