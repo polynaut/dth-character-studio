@@ -429,6 +429,17 @@ current code before relying on details, but assume the *lesson* still holds.
 - **`Number('') === 0`, not `NaN`** — a numeric input that commits on blur via
   `Number(draft)` silently commits 0 when the user clears the field; an
   empty/whitespace draft must revert instead (NumberField, test-pinned).
+- **A map keyed by `normalizeSceneKey` must normalize AT THE ACCESSOR — never
+  trust callers to.** `sceneDthPath` looked up `sceneExportFolderRel`'s
+  lowercase-keyed map with the caller's raw scene path; the export dialog passes
+  the character's STORED paths, and every real Windows path has a capital letter
+  in it, so every lookup missed — "Export too" built an empty job and died on
+  "none of these scenes has an export path" on every real run. The pure tests
+  stayed green the whole time because they fed themselves pre-normalized keys,
+  the one spelling no real caller ever uses — which is exactly how it shipped
+  broken (#637, fixed in #641). Apply the fold inside the accessor
+  (`sceneDthPath`/`buildHoudiniJob` do now) and give any normalized-key lookup
+  at least one RAW-spelling test case (`houdini-jobs.test.ts` pins both).
 - **`readManifest` throws on a CORRUPT `.dcsp`** (an existing file that won't
   parse) rather than returning defaults — else the next save writes defaults over
   the real settings, and `fetchProject` can never 404. It also throws a typed
