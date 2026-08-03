@@ -303,7 +303,9 @@ function ToolsPage() {
       >
         <TabsList>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
-          <TabsTrigger value="index">Build Genesis Index</TabsTrigger>
+          {/* The `index` value stays put — `?tab=index` deep links (and the
+              About page's) must keep working across the rename. */}
+          <TabsTrigger value="index">Scan &amp; index</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>
         </TabsList>
 
@@ -403,7 +405,10 @@ function ToolsPage() {
             add-ons — or after changing what your characters' scenes wear.
           </p>
           <ProjectScanSection
-            projectId={activeProject?.id ?? ''}
+            // The route-param convention: a `projectId` IS the project FOLDER
+            // PATH (`resolveProject` reads the manifest from it). `project.id`
+            // is the manifest's own id and resolves to nothing.
+            projectId={activeProject?.path ?? ''}
             dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''}
           />
           <GenesisIndexSection dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''} />

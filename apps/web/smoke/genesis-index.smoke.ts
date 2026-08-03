@@ -34,7 +34,7 @@ const unhandledCommands = (page: Page) =>
  *  re-triggers, bouncing straight back out of Tools. */
 async function openIndexTab(page: Page) {
   await page.getByRole('link', { name: 'Tools' }).click()
-  await page.getByRole('tab', { name: 'Build Genesis Index' }).click()
+  await page.getByRole('tab', { name: 'Scan & index' }).click()
 }
 
 test('build genesis index: installs the runtime and hands the bulk script to the Runner in an empty scene', async ({

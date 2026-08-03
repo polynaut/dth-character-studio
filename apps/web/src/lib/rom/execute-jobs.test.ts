@@ -18,9 +18,11 @@ import {
   parseExportFoldersRecord,
   parseJobFileJson,
   preCheckedScenes,
+  scanConfigJson,
   scenesMissingRomAnimation,
   staleExportFolders,
 } from './execute-jobs'
+import type { ScanConfigFile } from './execute-jobs'
 
 function makeCharacter(over: Partial<Character> = {}): Character {
   return characterSchema.parse({
@@ -471,5 +473,48 @@ describe('parseExecuteStamps', () => {
     expect(
       parseExecuteStamps('{"version":1,"scenes":{"a":{"mtimeMs":"nope"}}}').scenes,
     ).toEqual({})
+  })
+})
+
+/**
+ * The bulk scan's sidecar (Tools → Scan project). The job-file contract carries
+ * no per-row parameters, so this file is how a scene row learns what it is due
+ * for — and the per-scene worker looks itself up in it by the SAME scene key the
+ * studio wrote, which is the one thing that must not drift.
+ */
+describe('scanConfigJson', () => {
+  const products = {
+    characterId: 'c1',
+    characterName: 'Kira',
+    genesis: 'G9',
+    dimManifestPath: 'C:/DAZ 3D/Install Manager/ManifestFiles',
+    outputDir: 'C:/appdata/product-scans/p/c1',
+    dazLibraryFolder: 'D:/DAZ 3D/My DAZ 3D Library',
+  }
+
+  it('keys every scene by normalizeSceneKey — the worker normalizes the same way', () => {
+    const text = scanConfigJson([
+      { scenePath: 'D:\\Chars\\Kira\\Kira.duf', work: { morphs: true } },
+    ])
+    const parsed = JSON.parse(text) as ScanConfigFile
+    expect(Object.keys(parsed.scenes)).toEqual(['d:/chars/kira/kira.duf'])
+    expect(parsed.version).toBe(1)
+  })
+
+  it('carries the product config through verbatim, so bulk and per-character agree', () => {
+    const text = scanConfigJson([{ scenePath: 'D:/S/Kira.duf', work: { morphs: false, products } }])
+    const parsed = JSON.parse(text) as ScanConfigFile
+    expect(parsed.scenes['d:/s/kira.duf'].products).toEqual(products)
+    expect(parsed.scenes['d:/s/kira.duf'].morphs).toBe(false)
+  })
+
+  it('lets one scene carry both scans — one open, both passes', () => {
+    const text = scanConfigJson([{ scenePath: 'D:/S/Kira.duf', work: { morphs: true, products } }])
+    const parsed = JSON.parse(text) as ScanConfigFile
+    expect(parsed.scenes['d:/s/kira.duf']).toEqual({ morphs: true, products })
+  })
+
+  it('ends with a newline like every other handoff file', () => {
+    expect(scanConfigJson([])).toBe('{\n  "version": 1,\n  "scenes": {}\n}\n')
   })
 })
