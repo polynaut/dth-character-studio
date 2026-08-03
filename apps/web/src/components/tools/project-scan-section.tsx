@@ -377,13 +377,16 @@ export function ProjectScanSection({
                         `.tip.png` preview. Picking the right outfit by
                         thumbnail beats reading near-identical stems
                         (Ita_G9_GP vs Ita_G9_GP_Winter). */}
-                    <div className="mt-1.5 ml-6 flex flex-wrap gap-1.5">
+                    {/* One card per ROW, spanning the panel: the scene name is
+                        the thing being read, and content-width cards left it
+                        cramped next to a wall of empty space. */}
+                    <div className="mt-1.5 ml-6 flex flex-col gap-1.5">
                       {character.scenes.map((scene) => {
                         const on = isPicked(scene)
                         return (
                           <label
                             key={scene}
-                            className={`daz-card flex items-center gap-2 rounded-md border py-1 pr-2.5 pl-2 text-sm${
+                            className={`daz-card flex w-full items-center gap-2 rounded-md border py-1 pr-2.5 pl-2 text-sm${
                               busy ? ' opacity-50' : ' cursor-pointer'
                             }`}
                             data-selected={on ? 'true' : undefined}
@@ -396,13 +399,18 @@ export function ProjectScanSection({
                               disabled={busy}
                               onChange={(e) => toggleScene(scene, e.target.checked)}
                             />
+                            {/* Landscape tile with the -50% face lift — the
+                                SceneLabel convention for a scene shown small
+                                (fixed h/w, not an aspect ratio, so the box is
+                                stable whatever the preview's dimensions). */}
                             <Portrait
                               scenePath={scene}
                               name={sceneName(scene)}
-                              className="aspect-[3/4] h-11 shrink-0 rounded-sm"
-                              fallbackClassName="text-sm"
+                              imgClassName="-translate-y-1/2"
+                              className="h-10 w-[64px] shrink-0 rounded"
+                              fallbackClassName="text-[10px]"
                             />
-                            <span className="max-w-56 truncate">{sceneName(scene)}</span>
+                            <span className="min-w-0 flex-1 truncate">{sceneName(scene)}</span>
                           </label>
                         )
                       })}
@@ -413,13 +421,14 @@ export function ProjectScanSection({
                       {character.missing.map((scene) => (
                         <p
                           key={scene}
-                          className="flex items-center gap-2 rounded-md border border-dashed py-1 pr-2.5 pl-2 text-sm text-muted-foreground"
+                          className="flex w-full items-center gap-2 rounded-md border border-dashed py-1 pr-2.5 pl-2 text-sm text-muted-foreground"
                           title={`${scene} — missing on disk`}
                         >
                           <FileWarning className="size-4 shrink-0" />
-                          <span className="max-w-56 truncate line-through">
+                          <span className="min-w-0 flex-1 truncate line-through">
                             {sceneName(scene)}
                           </span>
+                          <span className="shrink-0 text-xs">missing on disk</span>
                         </p>
                       ))}
                     </div>
