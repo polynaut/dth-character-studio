@@ -568,6 +568,7 @@ function CharacterPage() {
         revealPose={revealPose}
         morphIndex={morphIndex}
         boneIndex={boneIndex}
+        dthPosesFolder={settings.dthPosesFolder}
         overrideEligible={sceneSel.overrideEligible}
         scenePath={sceneSel.effectiveScene}
         sceneOverride={sceneSel.sceneOverride}

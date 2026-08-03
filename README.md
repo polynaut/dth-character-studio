@@ -39,13 +39,6 @@ frame-aligned **by construction**, so they cannot drift out of sync.
 
 **[📖 Getting started guide](https://polynaut.github.io/dth-character-studio/guide/)** — from install to your first generated ROM. (Also [readable in the repo](./docs/guide/README.md).)
 
-## Status
-
-| Figure | Status |
-| --- | --- |
-| **Genesis 9 male** (Dicktator) | 🧪 Implemented — end-to-end validation in progress; gates v1.0 |
-| **Genesis 3** | 🧪 Selectable — DazToHue ships a subset of G3 pose assets; not yet validated end-to-end |
-
 DTH Character Studio is **Windows-first** — the installer, updater and code
 signing are all Windows-built — and releases also ship a **macOS** build of the
 app. Note that the Daz-side **DTH Exporter Plugin** is Windows-only, so the

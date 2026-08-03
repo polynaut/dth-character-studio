@@ -110,6 +110,14 @@ describe('seedSceneHair', () => {
     expect(seedSceneHair('X:\\scenes\\Armor.duf', scan(hairy), curated)).toBeNull()
   })
 
+  it('matches an existing record separator/case-insensitively', () => {
+    // The frontend mixes separators freely and Windows paths are
+    // case-insensitive — the same scene stored the other way must still count
+    // as "already has a record" (same normalization as the groom scene map).
+    const existing = seedSceneHair('X:\\scenes\\Armor.duf', scan(hairy), []) ?? []
+    expect(seedSceneHair('x:/Scenes/ARMOR.duf', scan(hairy), existing)).toBeNull()
+  })
+
   it('does nothing for a hairless scene or an unreadable scan', () => {
     expect(seedSceneHair('X:\\a.duf', scan([w('crop-top', 'MM Crop Top')]), [])).toBeNull()
     // Browser mode / missing file: guessing from an empty read would silently

@@ -9,6 +9,7 @@ import {
   jobSceneForMode,
   jobScriptForMode,
   expectedSceneExportFolders,
+  isReclaimableBatch,
   migratedExportFolder,
   jobFileJson,
   normalizeSceneKey,
@@ -168,6 +169,66 @@ describe('open-scene jobs', () => {
     // type as foreign and never renames the file, and the studio must read a
     // future type the same way rather than acting on it.
     expect(parseJobFileJson(JSON.stringify({ version: 1, type: 'teleport', jobs: [] }))).toBeNull()
+  })
+})
+
+describe('isReclaimableBatch — a batch a CLOSING Daz claimed but never ran', () => {
+  const batch = (over: Record<string, unknown>) =>
+    parseJobFileJson(
+      JSON.stringify({
+        version: 1,
+        type: 'bulk-export',
+        progress: 0,
+        jobs: [
+          { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+          { scenePath: 'X:\\b.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+        ],
+        ...over,
+      }),
+    )
+
+  it('reclaims an untouched batch — the whole point of the rescue', () => {
+    // The Runner renames the file to claim it and then Daz exits; nothing polls
+    // for the renamed name, so without this the batch is orphaned forever.
+    expect(isReclaimableBatch(batch({}))).toBe(true)
+  })
+
+  it('refuses one that already ran a row — re-running costs a ROM build each', () => {
+    expect(
+      isReclaimableBatch(
+        batch({
+          jobs: [
+            { scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'done' },
+            { scenePath: 'X:\\b.duf', scriptPath: 'X:\\s.dsa', status: 'pending' },
+          ],
+        }),
+      ),
+    ).toBe(false)
+    // …including the row that was mid-flight when Daz died.
+    expect(
+      isReclaimableBatch(
+        batch({ jobs: [{ scenePath: 'X:\\a.duf', scriptPath: 'X:\\s.dsa', status: 'running' }] }),
+      ),
+    ).toBe(false)
+  })
+
+  it('refuses one with progress on the clock', () => {
+    expect(isReclaimableBatch(batch({ progress: 50 }))).toBe(false)
+  })
+
+  it('refuses a torn or foreign read outright', () => {
+    expect(isReclaimableBatch(null)).toBe(false)
+  })
+
+  it('refuses a non-export TYPE — an orphaned open-scene handoff is no batch to requeue', () => {
+    // parseJobFileJson happily returns an open-scene file; requeueing it as
+    // pending would make the next Daz start yank a scene open out of nowhere.
+    const openScene = batch({
+      type: 'open-scene',
+      jobs: [{ scenePath: 'X:\\a.duf', status: 'pending' }],
+    })
+    expect(openScene?.type).toBe('open-scene') // the parse itself is fine
+    expect(isReclaimableBatch(openScene)).toBe(false)
   })
 })
 

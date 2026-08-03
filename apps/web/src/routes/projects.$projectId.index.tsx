@@ -42,7 +42,7 @@ import {
 import { pickDufPath } from '#/lib/desktop.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { PRIMARY_SCENE_SUBFOLDER } from '#/lib/scene-subfolder.ts'
-import { displayPath, normalizePathLower, stripTrailingSeparators } from '#/lib/path.ts'
+import { browseStart, displayPath, normalizePathLower, stripTrailingSeparators } from '#/lib/path.ts'
 import { PathCode, tallPathChipClass } from '#/components/path-code.tsx'
 import { HeaderNav } from '#/components/header-nav.tsx'
 import { SceneValidationTable } from '#/components/scene-compat.tsx'
@@ -216,7 +216,13 @@ function ProjectCharactersPage() {
   }
 
   async function onPickScene() {
-    const picked = await pickDufPath('Select the Daz character scene (.duf)')
+    // Re-picking opens at the scene already chosen; a first pick starts in the
+    // project folder (`projectId` IS its path), which is where the character —
+    // and usually its scene — is about to live.
+    const picked = await pickDufPath(
+      'Select the Daz character scene (.duf)',
+      browseStart(scenePath, projectId),
+    )
     if (picked) applyScene(picked)
   }
 

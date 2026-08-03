@@ -3,6 +3,99 @@
 The non-obvious "how we do things here". CLAUDE.md has the short version; this is
 the reference.
 
+## Working rules (every task, before anything else)
+
+This project has ONE maintainer, working on it in his spare time. Every round
+trip he spends re-stating something he already said is the expensive resource
+here — not tokens, not CI minutes. These rules exist because each was paid for.
+
+**The definition of done, in his words: every point of the prompt is solved.**
+"The code works" is a precondition, never a completion criterion — a task is not
+done because the thing you built runs. Treat the prompt as a ticket and each
+point in it as an acceptance criterion: closing it with half the ACs met is the
+failure, and a working build does not excuse it. If a point cannot be met, it is
+named in the reply as outstanding — that is the only honest alternative to
+doing it.
+
+- **Open with the parsed todo list.** On any non-trivial prompt, the FIRST thing
+  in the reply is the short list of what was parsed out of it — before the work
+  starts. He then corrects a wrong reading in one glance instead of discovering
+  the gap after the fact. **Close by ticking that list**, naming anything not
+  done and why. A multi-part prompt is a checklist: re-read it before the
+  closing summary and account for every clause, asides and parentheticals
+  included. Never make him list what was dropped — offer to audit the session.
+  *Earned by:* "i slowly get the feeling that you always skip like 25% of my
+  prompts.. it's already the third thing i need to fix today where i'm 200% sure
+  i told you already". The shape is always the same — the code works, and the
+  edges fall off: the toggle that drives the feature, the icon, the docs, the
+  files it writes and never deletes.
+- **A feature is not done at the happy path.** Finish the whole loop — the files
+  it writes AND their cleanup, the folders it fills, the icon it needs, the docs
+  that describe it. When scope is genuinely ambiguous, take the WIDER reading
+  and say so: under-delivering costs him a round trip, over-delivering costs him
+  a glance.
+- **Never watch CI.** Don't run `gh pr checks --watch`, don't poll a workflow,
+  don't block on a run. He watches CI himself, deliberately, because it is his
+  cue to go do something else. "write pr" means: open the PR, set the
+  description, report the URL — seconds, not minutes.
+- **Every `gh`/`git` command must be shaped so it cannot need a second attempt.**
+  A retry is not free: it is another minute of his attention. The recurring
+  killer is PowerShell quoting — a `"` inside a here-string breaks native
+  argument splitting, and a bash `<<'EOF'` heredoc is a parse error. So **any
+  multi-line or quote-bearing text goes to a file first**, then
+  `gh pr create --body-file <path>` / `git commit -F <path>`. Never inline it.
+
+**These are enforced where they can be, not trusted.** The rules that have never
+been broken in this repo are the machine-checked ones (the changeset gate, lint,
+the byte-identical rom output) — compliance simply isn't left to judgement. Two
+hooks in `.claude/settings.json` move these the same way:
+
+- `.claude/hooks/inject-working-rules.mjs` (**SessionStart**) prints THIS section
+  into context at the start of every session. `.ai/*` is read-on-demand and "on
+  demand" means the agent decides — which is the exact failure. It reads the
+  section straight out of this file, so editing the doc is still the only place
+  to change the rule.
+- `.claude/hooks/check-branch-upstream.mjs` (**PostToolUse**) fails a
+  `git push` from a branch with no upstream and hands the fix back to the agent,
+  in the same turn; creating a branch (`switch -c`, `checkout -b`, …) only drops
+  a reminder, because a branch that isn't on the remote yet CANNOT track — push
+  first, then set tracking (the full rule lives in Repo mechanics below).
+  Documented as non-negotiable, skipped twice in one day — so it is a check now,
+  not a reminder.
+
+Both hook commands in `.claude/settings.json` are repo-root-relative
+(`node .claude/hooks/…`) — start sessions at the repo root (a worktree's root
+counts; it has its own checkout of `.claude/`), or the hooks fail MODULE_NOT_FOUND.
+
+What a hook CANNOT check is whether every point of a prompt was answered; that
+stays judgement, and the opening todo list is the closest thing to a proof of it.
+
+## Stacked PRs
+
+**Stacked PRs need an explicit link, not just a base branch.** When a PR depends
+on another (its base is that PR's branch), targeting the parent branch is
+NECESSARY BUT NOT SUFFICIENT — GitHub tracks a stack object, and without it the
+PR page shows no "Able to merge as a stack" panel and no **Merge stack** button.
+Create it from the existing PRs:
+
+```sh
+gh extension install github/gh-stack        # once
+GH_REPO=polynaut/dth-character-studio \
+  gh stack link <bottom-pr> <top-pr>        # bottom = the one targeting main
+```
+
+- **`GH_REPO=` is required in this repo.** The remote is the `github-poly` SSH
+  alias (1Password agent), which `gh` cannot map to a GitHub host — it fails with
+  "none of the git remotes configured for this repository point to a known GitHub
+  host". Set the env var; do NOT add an HTTPS remote (see `.ai/release.md` and
+  the SSH rule in Repo mechanics).
+- Order is **bottom-up**: the PR whose base is `main` comes first.
+- **Don't run `gh stack checkout`** while work is in flight — it sets up local
+  tracking and moves branches around. The server-side stack needs none of it;
+  `gh stack view` simply won't show the stack without it, which is fine.
+- Public preview at time of writing (2026-08), docs:
+  <https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests>.
+
 ## Repo mechanics
 
 - **pnpm workspace monorepo**, `packageManager: pnpm@9.1.4`, **Node ≥ 24**.
@@ -24,7 +117,9 @@ the reference.
   / `.merge`) — `origin` stays SSH; **never** reconfigure the remote to HTTPS. An agent
   that pushes ad-hoc via a token must ALSO do this, and re-fetch the branch into
   `refs/remotes/origin/<branch>` after each push so the maintainer's ahead/behind stays
-  accurate.
+  accurate. Machine-checked by `.claude/hooks/check-branch-upstream.mjs` (see Working
+  rules) — this bullet is the rule's single full statement; CLAUDE.md and Working
+  rules only point here.
 - **Lint gate is oxlint** (type-aware): `pnpm lint` from the **repo root**.
   Notable: `typescript/no-floating-promises` is an **error**, `import/no-cycle`
   is an error; promise rules are relaxed in tests. Config: `.oxlintrc.json`.

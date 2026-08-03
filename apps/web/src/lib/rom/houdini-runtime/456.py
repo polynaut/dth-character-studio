@@ -44,8 +44,23 @@ EXPORT_TYPES = ("daztohueexport", "daztohuegroomexport")
 
 
 def normalize(path):
-    """Compare paths the way the studio does: slashes forward, case-folded."""
-    return (path or "").replace("\\", "/").strip().lower()
+    """Compare paths the way the studio does: slashes forward, case-folded —
+    on the PHYSICAL path. The studio plants a `dth-exports` junction inside
+    the Houdini project folder precisely so users pick `.dth` files through
+    it, and a node whose import was picked that way stores the junction
+    spelling (`<houdini-project>/dth-exports/...`), which never string-matches
+    the job's canonical export path. `os.path.realpath` resolves the junction
+    on both sides. Measured on Windows: it also folds a mapped drive letter
+    to its UNC target — safe, both sides of every compare get the same
+    treatment — and it never raises on a path that does not exist."""
+    cleaned = (path or "").strip()
+    if not cleaned:
+        return ""
+    try:
+        cleaned = os.path.realpath(cleaned)
+    except (OSError, ValueError):
+        pass
+    return cleaned.replace("\\", "/").lower()
 
 
 def with_trailing_slash(path):
