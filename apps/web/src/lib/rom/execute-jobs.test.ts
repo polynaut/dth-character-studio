@@ -20,6 +20,7 @@ import {
   preCheckedScenes,
   scanConfigJson,
   formatElapsed,
+  houdiniModeForSelection,
   scenesMissingExport,
   scenesMissingRomAnimation,
   staleExportFolders,
@@ -423,6 +424,18 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
       row(B, { affected: true, exportExists: false }),
     ]
     expect(preCheckedScenes('houdini-only', rows)).toEqual(new Set([A]))
+  })
+})
+
+describe('houdiniModeForSelection — Open only is a single-project affair', () => {
+  it('flips open → export-selected when a second project joins', () => {
+    expect(houdiniModeForSelection('open', 2)).toBe('export-selected')
+  })
+  it('keeps every other combination', () => {
+    expect(houdiniModeForSelection('open', 1)).toBe('open')
+    expect(houdiniModeForSelection('open', 0)).toBe('open')
+    expect(houdiniModeForSelection('export-selected', 3)).toBe('export-selected')
+    expect(houdiniModeForSelection('export-all', 2)).toBe('export-all')
   })
 })
 

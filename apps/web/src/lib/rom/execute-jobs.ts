@@ -225,16 +225,41 @@ export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only'] as const
 export type ExportMode = (typeof EXPORT_MODES)[number]
 
 /**
- * Everything the dialog's first step can pick: the three Daz-side
- * {@link ExportMode}s plus `houdini-only`, which never reaches
- * `executeCharacterJobs` at all — no Daz run, no Runner. It takes each selected
- * scene's LAST-DELIVERED Daz export (the `.dth` at `sceneDthPath`) as it stands
- * and hands the scenes straight to `startHoudiniExport` (api/houdini.ts) — the
- * same Houdini leg an "Export too" run continues into after its Daz batch.
- * Kept out of {@link EXPORT_MODES} on purpose: that enum is the Daz job-file
- * wire contract, and `houdini-only` writes no Daz job.
+ * Everything the dialog's Daz **Mode** dropdown can pick: the three Daz-side
+ * {@link ExportMode}s plus `houdini-only` ("Skip Daz — use last exports"),
+ * which never reaches `executeCharacterJobs` at all — no Daz run, no Runner.
+ * It takes each selected scene's LAST-DELIVERED Daz export (the `.dth` at
+ * `sceneDthPath`) as it stands and hands the scenes straight to
+ * `startHoudiniExport` (api/houdini.ts) — the same Houdini leg every other
+ * mode continues into after its Daz batch. Kept out of {@link EXPORT_MODES}
+ * on purpose: that enum is the Daz job-file wire contract, and `houdini-only`
+ * writes no Daz job.
  */
 export type RunChoice = ExportMode | 'houdini-only'
+
+/**
+ * The Houdini list's **Mode** dropdown — what the selected Houdini projects do
+ * once their turn comes (after the Daz batch, or immediately in skip mode):
+ *
+ * - `open` — just open the (single) project, run nothing. Only offered while
+ *   EXACTLY one project is selected ({@link houdiniModeForSelection}): several
+ *   Houdini instances opened "just to look at" is never what anyone meant.
+ * - `export-selected` — run the projects' DazToHue exports for the CHECKED Daz
+ *   scenes. The default the moment a project joins the run.
+ * - `export-all` — run them for EVERY linked scene, whatever is checked.
+ */
+export const HOUDINI_RUN_MODES = ['open', 'export-selected', 'export-all'] as const
+export type HoudiniRunMode = (typeof HOUDINI_RUN_MODES)[number]
+
+/**
+ * THE "Open only needs exactly one project" rule: picking a second project
+ * under `open` flips the mode to `export-selected` (the default run) rather
+ * than refusing the pick — the user asked for more projects, not a dead end.
+ * Every other combination keeps the current mode.
+ */
+export function houdiniModeForSelection(current: HoudiniRunMode, selected: number): HoudiniRunMode {
+  return current === 'open' && selected > 1 ? 'export-selected' : current
+}
 
 /**
  * The hidden generated script a mode's job rows run — each selects the open

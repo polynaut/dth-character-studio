@@ -40,7 +40,9 @@ async function openExportOnly(page: Page) {
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
   await page.getByRole('button', { name: 'DTH Export' }).click()
-  await page.getByRole('button', { name: /Export only/ }).click()
+  // One page now — what the run does is the Daz Mode dropdown.
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Export only/ }).click()
 }
 
 test('start waits out the scene probe — a row checked mid-flight cannot slip through', async ({

@@ -12,10 +12,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
   useRefetchOnFocus,
 } from '@dth/ui'
 import dthLogo from '#/assets/dth-logo.webp'
+import houdiniLogo from '#/assets/houdini-logo.svg'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
@@ -38,6 +38,7 @@ import {
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
   formatElapsed,
+  houdiniModeForSelection,
   normalizeSceneKey,
   preCheckedScenes,
   scenesMissingExport,
@@ -46,7 +47,7 @@ import {
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
-import type { RunChoice } from '#/lib/rom/execute-jobs.ts'
+import type { HoudiniRunMode, RunChoice } from '#/lib/rom/execute-jobs.ts'
 import type { Character } from '@dth/rom'
 
 /**
@@ -146,6 +147,36 @@ export function DthExportAction({
   // A handoff written against a SHUTTING-DOWN Daz (running process, batch
   // never claimed) — the modal below waits out the exit and relaunches.
   const [dazClosing, setDazClosing] = useState(false)
+  // The Houdini projects still WAITING their turn (+ the scene scope they run
+  // on). Sequential by design: the Houdini job/result files are per-character
+  // singletons, so two live runs would clobber each other — project n+1 starts
+  // only when n's watch reports. A ref, not state: the poll interval's closure
+  // is armed once (see the `watching` effect) and state would go stale in it.
+  const houdiniQueueRef = useRef<{ projects: Array<string>; scenes: Array<string> } | null>(null)
+
+  /** Start the next Houdini export run and park the rest in the queue. */
+  async function startHoudiniQueue(projects: Array<string>, scenes: Array<string>) {
+    const [first, ...rest] = projects
+    if (!first) return
+    houdiniQueueRef.current = rest.length > 0 ? { projects: rest, scenes } : null
+    const stem = (first.split(/[\\/]/).pop() ?? first).replace(/\.[^./\\]+$/, '')
+    try {
+      const started = await startHoudiniExport({
+        data: { projectId, id: character.id, hipPath: first, scenes },
+      })
+      setHoudini({ state: 'starting', startedAtMs: Date.now() })
+      const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
+      toast.success(`Houdini is opening ${stem} — ${count} handed over.`)
+    } catch (err) {
+      // A project that cannot start must not strand the ones behind it.
+      const remaining = houdiniQueueRef.current
+      houdiniQueueRef.current = null
+      toast.error(
+        `Couldn't start the Houdini export in ${stem}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      if (remaining) void startHoudiniQueue(remaining.projects, remaining.scenes)
+    }
+  }
 
   // The one status refresh: is a job file still waiting (→ Abort), and how far
   // is the in-memory export watch (→ Exporting n/m)? Runs on mount + window
@@ -181,38 +212,28 @@ export function DthExportAction({
           duration: Infinity,
         })
       }
-      // The dialog's after-export pick: open the Houdini project the fresh
-      // exports belong to — unless EVERY scene failed (nothing new to look at).
-      if (run.openHoudiniProject && run.failed < run.total) {
-        if (run.houdiniExport) {
-          // "Export too": the project opens with the job in its environment and
-          // exports itself. Only the scenes this batch ran are in scope.
-          toast.info('Opening the Houdini project to export…')
-          void startHoudiniExport({
-            data: {
-              projectId,
-              id: character.id,
-              hipPath: run.openHoudiniProject,
-              scenes: run.scenes,
-            },
-          })
-            .then((started) => {
-              setHoudini({ state: 'starting', startedAtMs: Date.now() })
-              const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
-              toast.success(`Houdini is opening — ${count} handed over.`)
-            })
-            .catch((err: unknown) => {
-              toast.error(
-                `Couldn't start the Houdini export: ${err instanceof Error ? err.message : String(err)}`,
-              )
-            })
-        } else {
+      // The dialog's Houdini continuation: the selected projects get their
+      // turn with the fresh exports — unless EVERY scene failed (nothing new
+      // to look at).
+      if (run.houdiniProjects.length > 0 && run.failed < run.total) {
+        if (run.houdiniMode === 'open') {
+          // Open only (single-project by the dialog's own rule) — no exports.
           toast.info('Opening the Houdini project…')
-          void openScene({ data: { scenePath: run.openHoudiniProject } }).catch((err: unknown) => {
+          void openScene({ data: { scenePath: run.houdiniProjects[0] } }).catch((err: unknown) => {
             toast.error(
               `Couldn't open the Houdini project: ${err instanceof Error ? err.message : String(err)}`,
             )
           })
+        } else {
+          // The export continuation, one project after another. Scope: the
+          // scenes this batch ran, or every linked scene on "Export all".
+          toast.info('Opening the Houdini project to export…')
+          void startHoudiniQueue(
+            run.houdiniProjects,
+            run.houdiniMode === 'export-all'
+              ? [character.scenePath, ...character.extraScenes].filter(Boolean)
+              : run.scenes,
+          )
         }
       }
       return
@@ -263,10 +284,21 @@ export function DthExportAction({
           description: detail || undefined,
         })
       }
+      // More projects waiting their turn — the next one starts now that the
+      // job/result files are free again. (Its finish REUSES the sticky toast
+      // slot above: the latest project's report is the one that stays.)
+      const queued = houdiniQueueRef.current
+      if (queued) {
+        houdiniQueueRef.current = null
+        void startHoudiniQueue(queued.projects, queued.scenes)
+      }
       return
     }
     if (run.state === 'dead') {
       setHoudini(null)
+      // Houdini itself is gone — starting the next project would open a fresh
+      // Houdini nobody asked for. Drop the rest of the queue with the report.
+      houdiniQueueRef.current = null
       toast.error('The Houdini export did not finish — Houdini is no longer running.', {
         id: HOUDINI_TOAST_ID,
         duration: Infinity,
@@ -425,11 +457,11 @@ export function DthExportAction({
             // Arm the progress view right away (0/n until Daz delivers).
             void refreshStatus()
           }}
-          // A "Houdini only" run skipped Daz — arm the Houdini watch directly,
-          // the same state the "Export too" continuation arms after its batch.
-          onHoudiniStarted={() => {
+          // A skip-Daz run hands its selection straight to the Houdini queue —
+          // the same machinery the after-batch continuation drives.
+          onHoudiniQueue={(projects, scenes) => {
             dismissFinishToasts()
-            setHoudini({ state: 'starting', startedAtMs: Date.now() })
+            void startHoudiniQueue(projects, scenes)
           }}
           onDazClosing={() => setDazClosing(true)}
         />
@@ -667,63 +699,94 @@ function SceneRow({
   )
 }
 
-/** What each run does, in the user's words — the dialog's first step. Order is
- *  the offer order; `rom-export` leads because it is the default full run. */
-const MODE_CHOICES: ReadonlyArray<{ mode: RunChoice; title: string; blurb: string }> = [
+/** The Daz **Mode** dropdown, in the user's words. Order is the offer order;
+ *  `rom-export` leads because it is the default full run. */
+const DAZ_MODE_OPTIONS: ReadonlyArray<{ mode: RunChoice; title: string; blurb: string }> = [
   {
     mode: 'rom-export',
     title: 'ROM + Export',
-    blurb:
-      'Build a fresh ROM, save the ROM animation scene, then export everything — skeletal mesh and hair.',
+    blurb: 'Build a fresh ROM, save the ROM animation scene, then export everything.',
   },
   {
     mode: 'rom-only',
     title: 'ROM only',
-    blurb:
-      'Build the ROM and save the ROM animation scene, skipping the export. Needs no export directory.',
+    blurb: 'Build the ROM and save the ROM animation scene, skipping the export.',
   },
   {
     mode: 'export-only',
     title: 'Export only',
-    blurb:
-      'Export the saved ROM animations as they stand — hair included — without rebuilding. For ROMs you edited by hand in Daz.',
+    blurb: 'Export the saved ROM animations as they stand, without rebuilding.',
   },
   {
     mode: 'houdini-only',
-    title: 'Houdini only',
-    blurb:
-      'Skip Daz entirely: open a linked Houdini project and run its DazToHue exports off each scene’s last Daz export.',
+    title: 'Skip Daz — use last exports',
+    blurb: 'Run nothing in Daz; the Houdini projects work off each scene’s last export.',
   },
 ]
 
-/** Step 1: what the run should do. Picking a card advances to the scenes. */
-function ModeStep({
-  onPick,
-  houdiniReady,
+/** The Houdini **Mode** dropdown — what the selected projects do when their
+ *  turn comes (see {@link HoudiniRunMode} for the single-project rule). */
+const HOUDINI_MODE_OPTIONS: ReadonlyArray<{ mode: HoudiniRunMode; title: string; blurb: string }> = [
+  {
+    mode: 'open',
+    title: 'Open only',
+    blurb: 'Just open the project — needs exactly one selected.',
+  },
+  {
+    mode: 'export-selected',
+    title: 'Export selected scenes',
+    blurb: 'Run the DazToHue exports for the checked Daz scenes.',
+  },
+  {
+    mode: 'export-all',
+    title: 'Export all',
+    blurb: 'Run the DazToHue exports for every linked Daz scene.',
+  },
+]
+
+/** One selectable Houdini project — the scene rows' sibling card: checkbox,
+ *  the Houdini mark as its tile, the project stem over the dimmed path, and
+ *  the houdini-orange accent bar the linked-project cards wear elsewhere. */
+function HipRow({
+  hip,
+  checked,
+  onToggle,
 }: {
-  onPick: (mode: RunChoice) => void
-  /** The character has a linked Houdini project — without one the Houdini-only
-   *  card has nothing to run in and disables itself. */
-  houdiniReady: boolean
+  hip: string
+  checked: boolean
+  onToggle: () => void
 }) {
+  const stem = (hip.split(/[\\/]/).pop() ?? hip).replace(/\.[^./\\]+$/, '')
   return (
-    <div className="space-y-2">
-      {MODE_CHOICES.map((choice) => {
-        const blocked = choice.mode === 'houdini-only' && !houdiniReady
-        return (
-          <button
-            key={choice.mode}
-            type="button"
-            disabled={blocked}
-            title={blocked ? 'Generate or link a Houdini project for this character first' : undefined}
-            onClick={() => onPick(choice.mode)}
-            className={`daz-card block w-full rounded-lg border p-3 text-left transition-colors${blocked ? ' opacity-50' : ' hover:border-daz-green/60'}`}
-          >
-            <span className="block text-base font-medium">{choice.title}</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">{choice.blurb}</span>
-          </button>
-        )
-      })}
+    <div className="group/card relative w-full">
+      <div
+        className="daz-card relative flex items-center gap-3 rounded-lg border p-3 pl-4"
+        data-selected={checked ? 'true' : undefined}
+      >
+        <input
+          type="checkbox"
+          className="relative z-10 size-4 shrink-0 accent-houdini-orange"
+          aria-label={`Run in ${stem}`}
+          checked={checked}
+          onChange={onToggle}
+        />
+        <span className="flex aspect-[3/4] h-[56px] shrink-0 items-center justify-center rounded-md bg-[#262626]">
+          <img src={houdiniLogo} alt="" aria-hidden className="size-8 object-contain" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-base font-medium">{stem}</span>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{hip.replace(/\\/g, '/')}</p>
+        </div>
+      </div>
+      {/* Row-wide toggle as a transparent cover, like the scene rows. */}
+      <button
+        type="button"
+        aria-hidden
+        tabIndex={-1}
+        onClick={onToggle}
+        className="absolute inset-0 rounded-lg"
+      />
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-houdini-orange" />
     </div>
   )
 }
@@ -733,7 +796,7 @@ function DthExportDialog({
   character,
   onClose,
   onExported,
-  onHoudiniStarted,
+  onHoudiniQueue,
   onDazClosing,
 }: {
   projectId: string
@@ -741,9 +804,9 @@ function DthExportDialog({
   onClose: () => void
   /** A handoff was written — the header button flips to Abort. */
   onExported: () => void
-  /** A "Houdini only" run was handed straight to Houdini (no Daz batch) — the
-   *  caller arms the header's Houdini watch. */
-  onHoudiniStarted: () => void
+  /** A skip-Daz run handed its selection straight to Houdini (no Daz batch) —
+   *  the caller starts the sequential project queue on these scenes. */
+  onHoudiniQueue: (projects: Array<string>, scenes: Array<string>) => void
   /** The handoff went to a Daz that is still shutting down — the caller shows
    *  the wait-and-relaunch modal (see WaitForDazCloseModal). */
   onDazClosing: () => void
@@ -753,15 +816,15 @@ function DthExportDialog({
   const [status, setStatus] = useState<Array<ExecuteSceneStatus> | null>(null)
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
-  // Step 1 picks WHAT the run does; null = still on that step. The ref lets the
-  // scene probe (kicked off at mount, in parallel with step 1) seed the right
-  // pre-selection whenever it lands — before or after the pick.
-  const [mode, setMode] = useState<RunChoice | null>(null)
-  const modeRef = useRef<RunChoice | null>(null)
-  // The optional after-export pick ('' = open nothing) — one of the
-  // character's linked Houdini projects, opened when the batch FINISHES.
-  const [openHoudini, setOpenHoudini] = useState('')
-  const [houdiniExport, setHoudiniExport] = useState(false)
+  // The Daz Mode dropdown. The ref mirrors it for the scene probe (kicked off
+  // at mount), which seeds the pre-selection whenever it lands.
+  const [mode, setMode] = useState<RunChoice>('rom-export')
+  const modeRef = useRef<RunChoice>('rom-export')
+  // The Houdini list's selection + its Mode dropdown. `export-selected` is the
+  // default the moment a project joins the run; `open` is single-project only
+  // (houdiniModeForSelection flips it back when a second project is picked).
+  const [checkedHips, setCheckedHips] = useState<ReadonlySet<string>>(new Set())
+  const [houdiniMode, setHoudiniMode] = useState<HoudiniRunMode>('export-selected')
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
 
@@ -808,10 +871,11 @@ function DthExportDialog({
    * known — the gate stays empty and Start waits as "Checking scenes…" instead
    * (`checking` below).
    */
-  const noRomChecked = scenesMissingRomAnimation(mode ?? 'rom-export', status, checked)
-  /** The "Houdini only" Start gate, {@link noRomChecked}'s sibling: selected
-   *  scenes whose last Daz export is not on disk — nothing to rely on. */
-  const noExportChecked = scenesMissingExport(mode ?? 'rom-export', status, checked)
+  const noRomChecked = scenesMissingRomAnimation(mode, status, checked)
+  /** The skip-Daz Start gate, {@link noRomChecked}'s sibling: selected scenes
+   *  whose last Daz export is not on disk — nothing to rely on. Moot under
+   *  "Export all" (the checked scenes don't scope that run). */
+  const noExportChecked = houdiniMode === 'export-all' ? [] : scenesMissingExport(mode, status, checked)
   // The probe (one stat per scene) is sub-second; holding Start for it closes
   // the window where a row checked mid-flight could start with unknown state.
   // Both artifact-gated modes wait it out the same way.
@@ -823,9 +887,18 @@ function DthExportDialog({
       .then((scenes) => {
         if (!active) return
         setStatus(scenes)
-        // The mode may already be picked (the probe outlives step 1) — seed the
-        // checks for whichever run is chosen, defaulting to the full one.
-        setChecked(preCheckedScenes(modeRef.current ?? 'rom-export', scenes))
+        // Seed the checks for whichever mode is current when the probe lands.
+        const pre = preCheckedScenes(modeRef.current, scenes)
+        setChecked(pre)
+        // Scenes with outstanding work → their Houdini projects join the run
+        // too, so a plain Start does the WHOLE round trip. The studio has no
+        // scene↔project map (that lives inside the `.hip`), so "the involved
+        // projects" is approximated as ALL linked ones — 456.py only exports
+        // the networks importing the selected scenes, so an uninvolved project
+        // simply no-ops. Only seeds an untouched selection: a user pick wins.
+        if (pre.size > 0 && character.houdiniProjects.length > 0) {
+          setCheckedHips((prev) => (prev.size > 0 ? prev : new Set(character.houdiniProjects)))
+        }
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -870,60 +943,60 @@ function DthExportDialog({
 
   /** Step 1 → step 2: the pick decides which scenes start checked (each mode
    *  has its own "outstanding work" rule), so re-picking re-seeds them. */
+  /** The Daz Mode dropdown: each mode has its own "outstanding work" rule, so
+   *  changing it re-seeds which scenes start checked. */
   function pickMode(next: RunChoice) {
     modeRef.current = next
     setMode(next)
-    // Houdini only NEEDS a project — seed the pick with the first linked one so
-    // the required select never starts empty (step 1 already refuses the mode
-    // with none linked).
-    if (next === 'houdini-only' && openHoudini === '') {
-      setOpenHoudini(character.houdiniProjects[0] ?? '')
-    }
     if (status) setChecked(preCheckedScenes(next, status))
   }
 
-  // Back to step 1 clears the pick so a re-pick re-seeds the checks.
-  function backToModes() {
-    modeRef.current = null
-    setMode(null)
+  /** The Houdini list's toggle. "Open only" is a single-project affair —
+   *  picking a second project flips the mode to the default export run
+   *  ({@link houdiniModeForSelection}) instead of refusing the pick. */
+  function toggleHip(hip: string) {
+    const next = new Set(checkedHips)
+    if (next.has(hip)) next.delete(hip)
+    else next.add(hip)
+    setCheckedHips(next)
+    setHoudiniMode((m) => houdiniModeForSelection(m, next.size))
   }
 
   async function onExport() {
     setBusy(true)
     try {
-      // "Houdini only" never touches Daz: hand the selected scenes' last
-      // exports straight to Houdini — the same call the "Export too"
-      // continuation makes after its Daz batch, minus the batch.
+      const chosenScenes = rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath)
+      const chosenHips = character.houdiniProjects.filter((hip) => checkedHips.has(hip))
+      // Skip Daz: the Houdini selection IS the run — the same machinery the
+      // after-batch continuation drives, minus the batch.
       if (mode === 'houdini-only') {
+        if (houdiniMode === 'open') {
+          toast.info('Opening the Houdini project…')
+          await openScene({ data: { scenePath: chosenHips[0] } })
+          onClose()
+          return
+        }
         // Belt and braces, the export-only re-probe's sibling: the dialog's
         // status is a snapshot, and an export folder can be cleared while it
         // sits open — a vanished `.dth` must land back in the dialog, not in
-        // a Houdini session with nothing to import.
-        const fresh = await fetchExecuteScenes({ data: { projectId, id: character.id } })
-        const missing = scenesMissingExport('houdini-only', fresh, checked)
-        if (missing.length > 0) {
-          setStatus(fresh)
-          const names = missing.map((s) =>
-            (s.scenePath.split(/[\\/]/).pop() ?? s.scenePath).replace(/\.[^./\\]+$/, ''),
-          )
-          toast.error(
-            `No Daz export on disk for ${names.join(', ')} — run ROM + Export first, or unselect ${missing.length === 1 ? 'it' : 'them'}.`,
-          )
-          return
+        // a Houdini session with nothing to import. ("Export all" scopes by
+        // every linked scene instead, and the Houdini side skips gracefully.)
+        if (houdiniMode === 'export-selected') {
+          const fresh = await fetchExecuteScenes({ data: { projectId, id: character.id } })
+          const missing = scenesMissingExport('houdini-only', fresh, checked)
+          if (missing.length > 0) {
+            setStatus(fresh)
+            const names = missing.map((s) =>
+              (s.scenePath.split(/[\\/]/).pop() ?? s.scenePath).replace(/\.[^./\\]+$/, ''),
+            )
+            toast.error(
+              `No Daz export on disk for ${names.join(', ')} — run ROM + Export first, or unselect ${missing.length === 1 ? 'it' : 'them'}.`,
+            )
+            return
+          }
         }
-        const started = await startHoudiniExport({
-          data: {
-            projectId,
-            id: character.id,
-            hipPath: openHoudini,
-            // Row order, like the Daz handoff — the job lists scenes top to bottom.
-            scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath),
-          },
-        })
-        onHoudiniStarted()
+        onHoudiniQueue(chosenHips, houdiniMode === 'export-all' ? linked : chosenScenes)
         onClose()
-        const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
-        toast.success(`Houdini is opening — ${count} handed over.`)
         return
       }
       // Belt and braces for "Export only": the dialog's scene status is a
@@ -951,10 +1024,10 @@ function DthExportDialog({
         data: {
           projectId,
           id: character.id,
-          scenes: rows.filter((r) => checked.has(r.scenePath)).map((r) => r.scenePath),
-          mode: mode ?? 'rom-export',
-          openHoudiniProject: openHoudini || undefined,
-          houdiniExport: openHoudini !== '' && houdiniExport,
+          scenes: chosenScenes,
+          mode,
+          houdiniProjects: chosenHips,
+          houdiniMode,
         },
       })
       onExported()
@@ -985,117 +1058,119 @@ function DthExportDialog({
       onClose={onClose}
       title={
         <span className="flex items-center gap-1.5">
-          {mode ? `DTH Export — ${MODE_CHOICES.find((c) => c.mode === mode)?.title}` : 'DTH Export'}
+          DTH Export
           <InfoPopup label="DTH Export — more information">
-            Choose what the run does, then the Daz scenes it runs on. Scenes with outstanding
-            work are pre-selected; the wand picks a single scene, a double-click selects all.
+            Pick the Daz scenes and what their run does, then the Houdini projects that carry
+            on with the results. Scenes with outstanding work come pre-selected — and so do
+            the Houdini projects when they have. The wand picks a single scene, a
+            double-click selects all.
           </InfoPopup>
         </span>
       }
       dismissible={!busy}
     >
-      {mode === null ? (
-        <ModeStep onPick={pickMode} houdiniReady={character.houdiniProjects.length > 0} />
-      ) : (
-        <>
       <p className="text-xs text-muted-foreground">
         {mode === 'houdini-only'
-          ? 'Skips Daz entirely — opens the Houdini project and runs its DazToHue exports off each selected scene’s last Daz export.'
+          ? 'Skips Daz entirely — the selected Houdini projects run their DazToHue exports off each scene’s last Daz export.'
           : mode === 'export-only'
             ? 'Exports each selected scene’s saved ROM animation as it stands — no rebuild, so this is the quick one.'
             : 'Heads up: this takes a long time — Daz Studio plays through the full ROM for every selected scene.'}
       </p>
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <SceneRow
-            key={normalizeSceneKey(row.scenePath)}
-            status={row}
-            mode={mode}
-            checked={checked.has(row.scenePath)}
-            loading={status === null}
-            onToggle={() => toggle(row.scenePath)}
-            onSolo={() => setChecked(new Set([row.scenePath]))}
-            onSelectAll={() =>
-              setChecked(
-                new Set(
-                  rows
-                    .filter((r) =>
-                      mode === 'houdini-only'
-                        ? r.exportExists
-                        : !r.missing && (mode !== 'export-only' || r.romExists),
-                    )
-                    .map((r) => r.scenePath),
-                ),
-              )
-            }
-          />
-        ))}
+      <div>
+        <Label className="mb-1.5">Daz scenes</Label>
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <SceneRow
+              key={normalizeSceneKey(row.scenePath)}
+              status={row}
+              mode={mode}
+              checked={checked.has(row.scenePath)}
+              loading={status === null}
+              onToggle={() => toggle(row.scenePath)}
+              onSolo={() => setChecked(new Set([row.scenePath]))}
+              onSelectAll={() =>
+                setChecked(
+                  new Set(
+                    rows
+                      .filter((r) =>
+                        mode === 'houdini-only'
+                          ? r.exportExists
+                          : !r.missing && (mode !== 'export-only' || r.romExists),
+                      )
+                      .map((r) => r.scenePath),
+                  ),
+                )
+              }
+            />
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Label className="shrink-0" htmlFor="daz-mode">
+            Mode
+          </Label>
+          <Select value={mode} onValueChange={(value) => pickMode(value as RunChoice)}>
+            <SelectTrigger id="daz-mode" className="w-80">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DAZ_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.mode} value={option.mode}>
+                  <span className="block">
+                    {option.title}
+                    <span className="block text-xs text-muted-foreground">{option.blurb}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      {mode === 'houdini-only' && (
+      {character.houdiniProjects.length > 0 && (
         <div>
-          {/* REQUIRED here, unlike the after-export pick below: this run IS the
-              Houdini export, so "no project" is not a choice — pickMode seeds
-              the first linked one. */}
-          <Label className="mb-1">Export in Houdini project</Label>
-          <Select value={openHoudini} onValueChange={setOpenHoudini}>
-            <SelectTrigger className="w-72">
-              <SelectValue placeholder="Pick a Houdini project" />
-            </SelectTrigger>
-            <SelectContent>
-              {character.houdiniProjects.map((hip) => (
-                <SelectItem key={hip} value={hip}>
-                  {(hip.split(/[\\/]/).pop() ?? hip).replace(/\.[^./\\]+$/, '')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Opens this project and runs its DazToHue export nodes for the selected scenes.
-          </p>
-        </div>
-      )}
-      {mode !== 'houdini-only' && mode !== 'rom-only' && character.houdiniProjects.length > 0 && (
-        <div>
-          <Label className="mb-1">Open Houdini project after export</Label>
-          <Select
-            value={openHoudini || 'none'}
-            onValueChange={(value) => setOpenHoudini(value === 'none' ? '' : value)}
-          >
-            <SelectTrigger className="w-72">
-              {/* Radix Select forbids a ""-valued item — 'none' is the sentinel. */}
-              <SelectValue placeholder="Don't open" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Don&apos;t open</SelectItem>
-              {character.houdiniProjects.map((hip) => (
-                <SelectItem key={hip} value={hip}>
-                  {(hip.split(/[\\/]/).pop() ?? hip).replace(/\.[^./\\]+$/, '')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {/* Only offered once a project is picked — the toggle has nothing to
-              run in otherwise. Off by default: it drives the user's own Houdini,
-              which is not something to opt them into silently. */}
-          {openHoudini !== '' && (
-            <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm">
-              <Switch
-                checked={houdiniExport}
-                onCheckedChange={setHoudiniExport}
-                className="mt-0.5"
-                aria-label="Export too"
+          <Label className="mb-1.5">Houdini projects</Label>
+          <div className="space-y-2">
+            {character.houdiniProjects.map((hip) => (
+              <HipRow
+                key={hip}
+                hip={hip}
+                checked={checkedHips.has(hip)}
+                onToggle={() => toggleHip(hip)}
               />
-              <span>
-                Export too
-                <span className="block text-xs text-muted-foreground">
-                  Run the project&apos;s DazToHue exports for the selected scenes once it opens.
-                </span>
-              </span>
-            </label>
-          )}
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <Label className="shrink-0" htmlFor="houdini-mode">
+              Mode
+            </Label>
+            <Select
+              value={houdiniMode}
+              onValueChange={(value) => setHoudiniMode(value as HoudiniRunMode)}
+              disabled={checkedHips.size === 0}
+            >
+              <SelectTrigger id="houdini-mode" className="w-80">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOUDINI_MODE_OPTIONS.map((option) => (
+                  <SelectItem
+                    key={option.mode}
+                    value={option.mode}
+                    // "Open only" is a single-project affair — see
+                    // houdiniModeForSelection for the auto-flip on a 2nd pick.
+                    disabled={option.mode === 'open' && checkedHips.size !== 1}
+                  >
+                    <span className="block">
+                      {option.title}
+                      <span className="block text-xs text-muted-foreground">{option.blurb}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
-      {/* The Runner gate is the DAZ plugin's — a Houdini-only run never goes
+      {/* The Runner gate is the DAZ plugin's — a skip-Daz run never goes
           through it, so it must not block one. */}
       {mode !== 'houdini-only' && runner?.blocked && <RunnerGateNotice gate={runner} />}
       {noRomChecked.length > 0 && (
@@ -1122,7 +1197,7 @@ function DthExportDialog({
       {noExportChecked.length > 0 && (
         <div className="space-y-1 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
           <p>
-            <strong>Houdini only</strong> relies on each scene&apos;s last Daz export, and{' '}
+            <strong>Skip Daz</strong> relies on each scene&apos;s last Daz export, and{' '}
             {noExportChecked.length === 1 ? 'one selected scene has none' : `${noExportChecked.length} selected scenes have none`}{' '}
             on disk:
           </p>
@@ -1143,17 +1218,15 @@ function DthExportDialog({
         <Button variant="ghost" disabled={busy} onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="ghost" disabled={busy} onClick={backToModes}>
-          Back
-        </Button>
         <Button
           disabled={
             busy ||
             checking ||
-            checked.size === 0 ||
             (mode === 'houdini-only'
-              ? openHoudini === '' || noExportChecked.length > 0
-              : !runner || runner.blocked || noRomChecked.length > 0)
+              ? checkedHips.size === 0 ||
+                (houdiniMode === 'export-selected' && checked.size === 0) ||
+                noExportChecked.length > 0
+              : checked.size === 0 || !runner || runner.blocked || noRomChecked.length > 0)
           }
           title={
             mode !== 'houdini-only' && runner?.blocked
@@ -1162,15 +1235,19 @@ function DthExportDialog({
                 ? mode === 'houdini-only'
                   ? 'Checking each scene for a Daz export on disk — a moment'
                   : 'Checking each scene for a saved ROM animation — a moment'
-                : checked.size === 0
-                  ? 'Select at least one scene'
-                  : mode === 'houdini-only' && openHoudini === ''
-                    ? 'Pick the Houdini project to export in'
-                    : noExportChecked.length > 0
-                      ? 'Every selected scene needs a Daz export on disk for a Houdini-only run — see above'
-                      : noRomChecked.length > 0
-                        ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
+                : mode === 'houdini-only'
+                  ? checkedHips.size === 0
+                    ? 'Select at least one Houdini project'
+                    : houdiniMode === 'export-selected' && checked.size === 0
+                      ? 'Select at least one Daz scene'
+                      : noExportChecked.length > 0
+                        ? 'Every selected scene needs a Daz export on disk to skip Daz — see above'
                         : undefined
+                  : checked.size === 0
+                    ? 'Select at least one Daz scene'
+                    : noRomChecked.length > 0
+                      ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
+                      : undefined
           }
           onClick={() => void onExport()}
         >
@@ -1178,8 +1255,6 @@ function DthExportDialog({
           {busy ? 'Starting…' : checking ? 'Checking scenes…' : 'Start'}
         </Button>
       </div>
-        </>
-      )}
     </Modal>
   )
 }

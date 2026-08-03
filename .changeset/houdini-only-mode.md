@@ -5,14 +5,17 @@
 '@dth/ui': minor
 ---
 
-The DTH Export dialog gains a fourth run: **Houdini only**. It skips Daz
-entirely — the studio opens a linked Houdini project and runs its DazToHue
-exports off each selected scene's last Daz export as it stands on disk, the
-standalone version of the "Export too" leg. For when the Daz side hasn't
-changed and only Houdini needs a fresh pass: no ROM rebuild, no Runner, no
-waiting on Daz. Scenes that never delivered an export are named and kept out
-of the run, and the header button tracks the Houdini session's progress as
-usual.
+The DTH Export dialog is **one page** now — and it drives Houdini on its own.
+**Daz scenes** and **Houdini projects** are two card lists with checkboxes,
+each with its own **Mode**. The Daz modes are the familiar three plus **Skip
+Daz — use last exports**: nothing runs in Daz, the selected projects work off
+each scene's last delivered export (scenes without one are named and kept out
+of the run). The Houdini modes are **Open only** (exactly one project),
+**Export selected scenes** (the default) and **Export all**; several selected
+projects export one after another, and the projects come pre-selected
+whenever scenes do — a plain Start does the whole round trip, Daz through
+Houdini. The "Export too" switch and the mode cards are gone; their jobs
+moved into the lists.
 
 Houdini also opens **fully before the batch starts** now — for "Export too"
 runs as well. The exports used to grind inside Houdini's startup, holding the

@@ -7,6 +7,7 @@ import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   EXPORT_MODES,
+  HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
   SCAN_CONFIG_FILE,
   executeSceneSignature,
@@ -41,6 +42,7 @@ import type {
   ExecuteStamp,
   ExecuteStamps,
   ExporterJob,
+  HoudiniRunMode,
   ScanProductsConfig,
   ScanSceneWork,
 } from '../execute-jobs'
@@ -286,12 +288,12 @@ interface ActiveExportRun {
    *  In-memory like the rest of the watch: a reloaded window (display-only
    *  adoption) doesn't know it, and simply shows no time. */
   startedAtMs: number
-  /** Linked Houdini project (`.hip`) to open once the batch finishes — the
-   *  dialog's "Open Houdini project after export" pick ('' = none). */
-  openHoudiniProject: string
-  /** The dialog's "Export too" toggle: run that project's DazToHue exports
-   *  after opening it, instead of just opening it (see api/houdini.ts). */
-  houdiniExport: boolean
+  /** The dialog's SELECTED Houdini projects (`.hip`), in list order — what the
+   *  finish continuation works through once the batch is done ([] = none). */
+  houdiniProjects: Array<string>
+  /** What those projects do when their turn comes — the Houdini list's Mode
+   *  dropdown (see {@link HoudiniRunMode}; api/houdini.ts runs the exports). */
+  houdiniMode: HoudiniRunMode
   /** The scenes this batch ran, in job order — the Houdini run exports only
    *  the networks importing THESE scenes, so the list has to survive the batch
    *  to be available when it finishes. */
@@ -328,10 +330,11 @@ export type ExportRunProgress =
       total: number
       failed: number
       errors: Array<string>
-      /** The run's after-export Houdini project ('' = none picked). */
-      openHoudiniProject: string
-      /** Whether that project should also RUN its exports ("Export too"). */
-      houdiniExport: boolean
+      /** The run's after-export Houdini projects ([] = none picked). */
+      houdiniProjects: Array<string>
+      /** What those projects do — open, or run their exports (and for which
+       *  scene scope). See {@link HoudiniRunMode}. */
+      houdiniMode: HoudiniRunMode
       /** The scenes the batch ran — the Houdini job's scope. */
       scenes: Array<string>
       /** Handoff → finish, for the toast's "in 12m 34s". */
@@ -448,8 +451,8 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
             // An empty scenePath (the contract's "new empty scene" row, e.g.
             // the genesis-index build) would prefix the line with a bare ": ".
             .map((j) => (j.scenePath ? `${j.scenePath}: ${j.error ?? ''}` : (j.error ?? ''))),
-          openHoudiniProject: run.openHoudiniProject,
-          houdiniExport: run.houdiniExport,
+          houdiniProjects: run.houdiniProjects,
+          houdiniMode: run.houdiniMode,
           scenes: run.scenes,
         }
       }
@@ -645,13 +648,15 @@ const executeInput = charScopeInput.extend({
   /** What the run does — the dialog's first step. Defaults to the full
    *  ROM + export run (see {@link ExportMode}). */
   mode: z.enum(EXPORT_MODES).default('rom-export'),
-  /** Linked Houdini project to open once the batch FINISHES (the dialog's
-   *  optional pick); omitted/empty = open nothing. */
-  openHoudiniProject: z.string().optional(),
-  /** "Export too": after opening that project, run its DazToHue exports for the
-   *  networks importing these scenes. Ignored without a project pick — there is
-   *  nothing to run then. Off by default: it drives the user's own Houdini. */
-  houdiniExport: z.boolean().default(false),
+  /** The Houdini projects selected for the after-batch continuation, in list
+   *  order; [] = none. Each must be one of the character's linked projects. */
+  houdiniProjects: z.array(z.string().min(1)).default([]),
+  /** What the selected projects do once the batch finishes — the Houdini
+   *  list's Mode dropdown ({@link HoudiniRunMode}). Meaningless without a
+   *  project. It drives the user's own Houdini, so nothing runs unless the
+   *  dialog selected a project explicitly (or via its involved-projects
+   *  auto-selection). */
+  houdiniMode: z.enum(HOUDINI_RUN_MODES).default('export-selected'),
 })
 
 export interface ExecuteJobsSummary {
@@ -709,8 +714,8 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     id,
     scenes: chosen,
     mode,
-    openHoudiniProject,
-    houdiniExport,
+    houdiniProjects,
+    houdiniMode,
   } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
@@ -740,18 +745,17 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     return match
   })
 
-  // The after-export Houdini project must be one of the character's LINKED
+  // The after-export Houdini projects must be among the character's LINKED
   // projects (the dialog only offers those; backstop against a stale pick).
-  const openHoudini = openHoudiniProject?.trim()
-    ? character.houdiniProjects.find(
-        (p) => normalizeSceneKey(p) === normalizeSceneKey(openHoudiniProject),
-      )
-    : undefined
-  if (openHoudiniProject?.trim() && !openHoudini) {
-    throw new Error(
-      `The Houdini project is not linked to this character anymore:\n${openHoudiniProject}`,
+  const hips = houdiniProjects.map((hip) => {
+    const match = character.houdiniProjects.find(
+      (p) => normalizeSceneKey(p) === normalizeSceneKey(hip),
     )
-  }
+    if (!match) {
+      throw new Error(`The Houdini project is not linked to this character anymore:\n${hip}`)
+    }
+    return match
+  })
 
   // The generated scripts must exist on disk — the export runs what generation
   // wrote, so an unsaved/never-generated character has nothing to hand off.
@@ -818,10 +822,8 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     characterId: character.id,
     total: jobs.length,
     startedAtMs: Date.now(),
-    openHoudiniProject: openHoudini ?? '',
-    // Without a project there is nothing to run the exports in, so the toggle
-    // cannot mean anything on its own.
-    houdiniExport: houdiniExport && !!openHoudini,
+    houdiniProjects: hips,
+    houdiniMode,
     scenes,
   }
 
@@ -1242,8 +1244,8 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
     characterId: PROJECT_SCAN_RUN,
     total: jobs.length,
     startedAtMs: Date.now(),
-    openHoudiniProject: '',
-    houdiniExport: false,
+    houdiniProjects: [],
+    houdiniMode: 'export-selected',
     scenes: sceneWork.map((s) => s.scenePath),
   }
 

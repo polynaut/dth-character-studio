@@ -119,14 +119,13 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
 
-  // Step 1: what the run does. Step 2: the scenes + the after-export pick.
+  // ONE page now: the affected scene comes pre-checked, which auto-selects the
+  // linked Houdini project — and the Houdini Mode defaults to "Export selected
+  // scenes", so a plain Start does the whole round trip. (The old flow's mode
+  // card + project dropdown + "Export too" switch are all gone.)
   await page.getByRole('button', { name: 'DTH Export' }).click()
-  await page.getByRole('button', { name: /ROM \+ Export/ }).click()
-  await page.getByRole('combobox').filter({ hasText: /Kira|Don't open/ }).click()
-  await page.getByRole('option', { name: 'Kira' }).click()
-  // The toggle only exists once a project is picked — it has nothing to run in
-  // otherwise, which is exactly what shipped broken in #627.
-  await page.getByRole('switch', { name: 'Export too' }).click()
+  await expect(page.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).toBeChecked()
   await page.getByRole('button', { name: 'Start' }).click()
 
   // The Daz batch is handed off…

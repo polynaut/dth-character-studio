@@ -445,14 +445,28 @@ older runtimes as stale.
   rebuild — for a ROM hand-edited in Daz). Export-only pre-checks the scenes
   whose ROM animation is newer than their delivered `<exportName>_pose_asset.csv`
   (`fetchExecuteScenes`'s `romUnexported`), i.e. unexported as it now stands.
-  The dialog's FOURTH card, `houdini-only` (`RunChoice` union, same file), is
-  deliberately NOT an `ExportMode`: it writes no Daz job at all — it calls
-  `startHoudiniExport` directly with the selected scenes, the standalone
-  version of the "Export too" leg. Its per-scene gate is `exportExists` (the
-  delivered `.dth` at `sceneDthPath` is on disk); the `.duf` is NOT consulted
-  (Houdini reads the export, not the scene, so a missing `.duf` doesn't
-  disable the row there), and the Runner gate doesn't apply (no Daz plugin in
-  the path).
+  The Daz Mode dropdown's FOURTH option, `houdini-only` ("Skip Daz — use last
+  exports"; `RunChoice` union, same file), is deliberately NOT an
+  `ExportMode`: it writes no Daz job at all — the Houdini selection runs
+  directly, the standalone version of the after-batch continuation. Its
+  per-scene gate is `exportExists` (the delivered `.dth` at `sceneDthPath` is
+  on disk); the `.duf` is NOT consulted (Houdini reads the export, not the
+  scene, so a missing `.duf` doesn't disable the row there), and the Runner
+  gate doesn't apply (no Daz plugin in the path).
+- **The DTH Export dialog is ONE page**: two card lists — "Daz scenes" and
+  "Houdini projects" (multi-select) — each with its own **Mode** dropdown.
+  Houdini modes (`HoudiniRunMode`, execute-jobs.ts): `open` (single-project
+  only — `houdiniModeForSelection` flips to `export-selected` when a second
+  project is picked), `export-selected` (the default; scoped by the checked
+  scenes) and `export-all` (every linked scene). Projects come AUTO-SELECTED
+  whenever the probe pre-checks scenes — approximated as ALL linked projects,
+  because no studio-side scene↔hip map exists (it lives inside the `.hip`;
+  456.py only exports matching networks, so uninvolved projects no-op).
+  Multiple selected projects run SEQUENTIALLY (`startHoudiniQueue` in
+  dth-export.tsx, remaining projects on a ref): the Houdini job/result files
+  are per-character singletons, so two live runs would clobber each other —
+  project n+1 starts only when n's watch reports finished (a dead Houdini
+  drops the queue).
 - **A saved ROM animation stands in for its source scene** (runtime v46): since
   export-only job rows OPEN `rom-animations/<stem>_ROM.duf`, every generated
   script embeds `romAnimationSourceMap` (rom path → source scene) and resolves

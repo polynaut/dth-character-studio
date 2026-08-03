@@ -91,17 +91,20 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   await page.getByText(/custom ROM frames/).waitFor()
 
   await page.getByRole('button', { name: 'DTH Export' }).click()
-  await page.getByRole('button', { name: /Houdini only/ }).click()
+  // Skip Daz is the Daz Mode dropdown's fourth option now.
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
 
   // The scene with a delivered export comes PRE-checked, wearing its hint; the
-  // required project select was seeded with the character's linked project.
+  // linked Houdini project was auto-selected (its default mode is the export).
   await expect(page.getByText(/last Daz export as it stands/)).toBeVisible()
   await expect(page.getByRole('checkbox', { name: /Export Kira/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).toBeChecked()
   await page.getByRole('button', { name: 'Start' }).click()
 
   // Straight to Houdini: the job file lands with the scene's `.dth`, Houdini is
   // launched at the linked project — and NO Daz job file was ever written.
-  await expect(page.getByText(/Houdini is opening — 1 scene handed over/)).toBeVisible()
+  await expect(page.getByText(/Houdini is opening Kira — 1 scene handed over/)).toBeVisible()
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     scenes: Array<{ dth: string; label: string }>
@@ -132,7 +135,8 @@ test('houdini only: a scene with no export on disk is disabled and blocks Start'
   await page.getByText(/custom ROM frames/).waitFor()
 
   await page.getByRole('button', { name: 'DTH Export' }).click()
-  await page.getByRole('button', { name: /Houdini only/ }).click()
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /Skip Daz/ }).click()
 
   // Nothing delivered → the row says so, stays unchecked and un-checkable, and
   // Start has nothing it could run.
