@@ -1342,8 +1342,14 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       on GP/DK shells only. Bumped so Refresh assets installs the two new
  *       files into an existing scripts root (the install skips wholesale when
  *       the marker already matches this RUNTIME_VERSION).
+ * v52 — `.Build_Genesis_Index_Bulk.dsa`, the Runner's dialog-free twin of the
+ *       visible index builder (DthScanMorphs.dsa learns `bulk`): the Tools
+ *       handoff runs inside a possibly minimized Daz, where the visible
+ *       script's confirm/summary dialogs invisibly blocked the whole batch.
+ *       Bulk resolves questions to their stock-figures default, logs instead
+ *       of toasting modally, and throws on failure so the row fails loudly.
  */
-export const RUNTIME_VERSION = 51
+export const RUNTIME_VERSION = 52
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

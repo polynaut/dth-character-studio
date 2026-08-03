@@ -828,9 +828,17 @@ function dthFigureBuildLabel(oSpec){
 }
 
 /**********************************************************************
- * The whole job. config: { outDir, scriptDir }
+ * The whole job. config: { outDir, scriptDir, bulk }
+ *
+ * bulk: true = running unattended under the Runner plugin (the studio's
+ * Tools -> Build Genesis Index handoff). Daz is often minimized there, so a
+ * modal dialog is an invisible dead stop for the whole batch: every dialog on
+ * this path is replaced - questions resolve to their build-the-stock-figures
+ * default, the summary goes to the log, and "nothing to build" throws so the
+ * Runner marks the row failed and the studio toasts the reason.
  */
 function DthBuildGenesisIndex(config){
+	var bBulk = config["bulk"] === true;
 	var aPlan = dthGenesisBuildPlan();
 	var oByGen = {};
 	var oReport = null;
@@ -840,9 +848,11 @@ function DthBuildGenesisIndex(config){
 	// Scanning the OPEN scene is the escape hatch for everything the stock
 	// figures don't carry (third-party geografts, add-ons, fitted clothing), so
 	// offer it whenever the scene already holds figures - and never clear a
-	// scene the user hasn't agreed to lose.
+	// scene the user hasn't agreed to lose. Never asked in bulk: the Runner
+	// hands this script a NEW EMPTY scene (the job row's empty scenePath), so
+	// there is nothing to offer - and nobody watching to answer.
 	var bScanOpenScene = false;
-	if(dthSceneFigureRoots().length > 0){
+	if(!bBulk && dthSceneFigureRoots().length > 0){
 		bScanOpenScene = MessageBox.question(
 			"The open scene already has figures in it.\n\n" +
 			"Scan THOSE figures (keeps everything they wear - third-party " +
@@ -861,10 +871,17 @@ function DthBuildGenesisIndex(config){
 		oReport = dthResolvePlan(aPlan, aRoots);
 
 		// Nothing installed that this can build: say so and leave the scene alone.
+		// In bulk, throw instead - the Runner marks the row failed with the
+		// message, which is how the studio's finish toast learns the reason.
 		if(!oReport.buildable.length){
+			var sNothing = "No Genesis 3, 8, 8.1 or 9 figure could be found in your " +
+				"Daz content, so there is nothing to build.";
+			if(bBulk){
+				print("DTH Build Genesis Index:", sNothing);
+				throw new Error(sNothing);
+			}
 			MessageBox.information(
-				"No Genesis 3, 8, 8.1 or 9 figure could be found in your Daz " +
-				"content, so there is nothing to build.\n\nThe open scene was left " +
+				sNothing + "\n\nThe open scene was left " +
 				"untouched. Install a Genesis figure, or load the figures you want " +
 				"indexed into the scene and run this again to scan those.",
 				"DTH Character Studio", "&OK");
@@ -888,7 +905,11 @@ function DthBuildGenesisIndex(config){
 			"between each - and leaves it empty when it is done - so save your " +
 			"work first. This takes a few minutes.";
 
-		if(MessageBox.question(sPlanMsg, "DTH Character Studio",
+		// The bulk scene is the Runner's own empty one - nothing to lose, nobody
+		// in front of the window: log the plan and go.
+		if(bBulk){
+			print("DTH Build Genesis Index:\n" + sPlanMsg);
+		} else if(MessageBox.question(sPlanMsg, "DTH Character Studio",
 			"&Build the index", "&Cancel") != 0) return;
 
 		// One step per generation, plus the final clear-down below.
@@ -965,5 +986,15 @@ function DthBuildGenesisIndex(config){
 	if(aFailed.length)
 		sMsg += "\n\nCould not write the index for: " + aFailed.join(", ") +
 			"\n(" + config["outDir"] + ")";
+	// Bulk: the studio's panel reports the outcome; a modal here would hold the
+	// row below done forever inside a Daz nobody is looking at. An index that
+	// could not be WRITTEN still fails the row - that outcome must not toast
+	// as success.
+	if(bBulk){
+		print("DTH Build Genesis Index:\n" + sMsg);
+		if(aFailed.length) throw new Error(
+			"Could not write the index for: " + aFailed.join(", ") + " (" + config["outDir"] + ")");
+		return;
+	}
 	MessageBox.information(sMsg, "DTH Character Studio", "&OK");
 }

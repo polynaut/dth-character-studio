@@ -17,6 +17,7 @@ import dthScanMorphsRuntime from '../runtime/DthScanMorphs.dsa?raw'
 import dthScanFramesRuntime from '../runtime/DthScanFrames.dsa?raw'
 import dthShellSurfacesRuntime from '../runtime/DthShellSurfaces.dsa?raw'
 import buildGenesisIndexScript from '../runtime/Build_Genesis_Index.dsa?raw'
+import buildGenesisIndexBulkScript from '../runtime/Build_Genesis_Index_Bulk.dsa?raw'
 import scanFramesScript from '../runtime/Scan_Frames.dsa?raw'
 import fixGraftShellSurfacesScript from '../runtime/Fix_Graft_Shell_Surfaces.dsa?raw'
 // Content Library artwork for the visible scripts (Daz's own convention:
@@ -79,6 +80,13 @@ const RUNTIME_FILES: Record<string, string> = {
  *  places is a rename waiting to break the handoff silently. */
 export const GENESIS_INDEX_SCRIPT = 'Build_Genesis_Index.dsa'
 
+/** The Runner's dialog-free twin of {@link GENESIS_INDEX_SCRIPT} — what
+ *  Tools → Build Genesis Index actually hands over (`api/execute.ts`). Hidden
+ *  (dot-prefixed) at the same root: a Runner batch runs inside a possibly
+ *  minimized Daz, where the visible script's dialogs are an invisible dead
+ *  stop; double-clicking in the Content Library stays the interactive path. */
+export const GENESIS_INDEX_BULK_SCRIPT = '.Build_Genesis_Index_Bulk.dsa'
+
 const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   [GENESIS_INDEX_SCRIPT]: buildGenesisIndexScript,
   'Scan_Frames.dsa': scanFramesScript,
@@ -86,6 +94,13 @@ const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
   // on a Golden Palace / Dicktator geoshell (see DthShellSurfaces.dsa). Bakes in
   // no path — it reads and writes the open scene only.
   'Fix_Graft_Shell_Surfaces.dsa': fixGraftShellSurfacesScript,
+}
+
+/** Root-level scripts installed like the visible ones (as-is + app-data path
+ *  baked in) but under a HIDDEN name — automation entry points, not Content
+ *  Library tiles, so they get no artwork and no un-prefixed copy. */
+const HIDDEN_ROOT_SCRIPTS: Record<string, string> = {
+  [GENESIS_INDEX_BULK_SCRIPT]: buildGenesisIndexBulkScript,
 }
 
 /**
@@ -202,7 +217,7 @@ export async function copyRuntimeFiles(
   // includes of the dot-prefixed runtime resolve right here), with the studio's
   // app-data folder baked into their output paths so the scans land where the
   // studio reads them (DzFile wants '/').
-  for (const [name, raw] of Object.entries(VISIBLE_SCAN_SCRIPTS)) {
+  for (const [name, raw] of Object.entries({ ...VISIBLE_SCAN_SCRIPTS, ...HIDDEN_ROOT_SCRIPTS })) {
     await writeTextFile(join(destDir, name), raw.split('__DTH_APPDATA_DIR__').join(appData))
   }
   // …and their Content Library artwork beside them, so the scripts show up as

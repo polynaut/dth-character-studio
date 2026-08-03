@@ -16,7 +16,8 @@ import type { RunnerGate } from '#/lib/rom/api.ts'
 
 /**
  * Tools → **Build Genesis Index**: one button that hands the visible
- * `Build_Genesis_Index.dsa` to the Runner plugin, so Daz builds and scans every
+ * `.Build_Genesis_Index_Bulk.dsa` (the visible index builder's dialog-free
+ * twin) to the Runner plugin, so Daz builds and scans every
  * generation's stock figures unattended instead of the user opening the Content
  * Library and double-clicking it.
  *
