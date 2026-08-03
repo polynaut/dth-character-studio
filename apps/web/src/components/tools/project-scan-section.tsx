@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Ban, ChevronDown, ChevronRight, Loader2, ScanSearch } from 'lucide-react'
+import { Ban, ChevronDown, ChevronRight, FileWarning, Loader2, ScanSearch } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Label, useRefetchOnFocus } from '@dth/ui'
+import { Portrait } from '#/components/portrait.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   PROJECT_SCAN_RUN,
@@ -355,46 +356,70 @@ export function ProjectScanSection({
           {picking && (
             <div className="max-h-72 space-y-3 overflow-y-auto border-t px-3 py-2">
               {plan.characters.map((character) => {
-                const allOn =
-                  character.scenes.length > 0 && character.scenes.every((s) => isPicked(s))
+                const picked = character.scenes.filter((s) => isPicked(s)).length
+                const allOn = character.scenes.length > 0 && picked === character.scenes.length
                 return (
                   <div key={character.id}>
                     <label className="flex items-center gap-2 text-sm font-medium">
-                      <input
-                        type="checkbox"
-                        className="size-4 shrink-0 accent-daz-green"
+                      <TriStateCheckbox
                         checked={allOn}
+                        // SOME of this character's scenes picked: a plain
+                        // unchecked box would claim the character is out of the
+                        // run entirely, which is the opposite of true.
+                        indeterminate={picked > 0 && !allOn}
                         disabled={busy || character.scenes.length === 0}
-                        onChange={(e) => toggleCharacter(character.scenes, e.target.checked)}
+                        onChange={(next) => toggleCharacter(character.scenes, next)}
                       />
                       {character.name}
                     </label>
-                    <div className="mt-1 ml-6 space-y-1">
-                      {character.scenes.map((scene) => (
-                        <label key={scene} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            className="size-4 shrink-0 accent-daz-green"
-                            checked={isPicked(scene)}
-                            disabled={busy}
-                            onChange={(e) => toggleScene(scene, e.target.checked)}
-                          />
-                          <span className="truncate" title={scene}>
-                            {sceneName(scene)}
-                          </span>
-                        </label>
-                      ))}
+                    {/* Tiny scene cards — the same Daz-green card language the
+                        export dialog's scene rows use, with the scene's own
+                        `.tip.png` preview. Picking the right outfit by
+                        thumbnail beats reading near-identical stems
+                        (Ita_G9_GP vs Ita_G9_GP_Winter). */}
+                    <div className="mt-1.5 ml-6 flex flex-wrap gap-1.5">
+                      {character.scenes.map((scene) => {
+                        const on = isPicked(scene)
+                        return (
+                          <label
+                            key={scene}
+                            className={`daz-card flex items-center gap-2 rounded-md border py-1 pr-2.5 pl-2 text-sm${
+                              busy ? ' opacity-50' : ' cursor-pointer'
+                            }`}
+                            data-selected={on ? 'true' : undefined}
+                            title={scene}
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-4 shrink-0 accent-daz-green"
+                              checked={on}
+                              disabled={busy}
+                              onChange={(e) => toggleScene(scene, e.target.checked)}
+                            />
+                            <Portrait
+                              scenePath={scene}
+                              name={sceneName(scene)}
+                              className="aspect-[3/4] h-11 shrink-0 rounded-sm"
+                              fallbackClassName="text-sm"
+                            />
+                            <span className="max-w-56 truncate">{sceneName(scene)}</span>
+                          </label>
+                        )
+                      })}
                       {/* Named, never selectable: a missing `.duf` can only
                           produce a failed row, and silence would read as the
-                          scene never having been linked. */}
+                          scene never having been linked. No preview to show —
+                          the file it would come from is the missing one. */}
                       {character.missing.map((scene) => (
                         <p
                           key={scene}
-                          className="flex items-center gap-2 text-sm text-muted-foreground line-through"
-                          title={scene}
+                          className="flex items-center gap-2 rounded-md border border-dashed py-1 pr-2.5 pl-2 text-sm text-muted-foreground"
+                          title={`${scene} — missing on disk`}
                         >
-                          <span className="size-4 shrink-0" />
-                          <span className="truncate">{sceneName(scene)}</span>
+                          <FileWarning className="size-4 shrink-0" />
+                          <span className="max-w-56 truncate line-through">
+                            {sceneName(scene)}
+                          </span>
                         </p>
                       ))}
                     </div>
@@ -472,6 +497,39 @@ export function ProjectScanSection({
       )}
       {runner?.blocked && <RunnerGateNotice gate={runner} subject="The project scan runs" />}
     </section>
+  )
+}
+
+/**
+ * A checkbox that can also sit HALF on — the state a character is in when some
+ * of its scenes are picked and some aren't. `indeterminate` is DOM-only (there
+ * is no React prop and no attribute for it), so it goes on via a ref callback
+ * on every render rather than through JSX.
+ */
+function TriStateCheckbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+}: {
+  checked: boolean
+  indeterminate: boolean
+  disabled: boolean
+  onChange: (next: boolean) => void
+}) {
+  return (
+    <input
+      type="checkbox"
+      className="size-4 shrink-0 accent-daz-green"
+      checked={checked}
+      // Half-on reads as "not all of it yet", so clicking takes the whole
+      // character IN — the same direction an unchecked box goes.
+      ref={(node) => {
+        if (node) node.indeterminate = indeterminate
+      }}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.checked)}
+    />
   )
 }
 
