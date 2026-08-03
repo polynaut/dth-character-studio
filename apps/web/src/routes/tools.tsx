@@ -23,6 +23,7 @@ import { DazPresetsSection } from '#/components/tools/daz-presets-section.tsx'
 import { DedupSection } from '#/components/tools/dedup-section.tsx'
 import { HoudiniPresetsSection } from '#/components/tools/houdini-presets-section.tsx'
 import { RefreshAssetsTab } from '#/components/tools/refresh-assets-tab.tsx'
+import { GenesisIndexSection } from '#/components/tools/genesis-index-section.tsx'
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { toast } from 'sonner'
@@ -287,14 +288,18 @@ function ToolsPage() {
           /tools — an uncontrolled Tabs ignored the URL change (same route match,
           no remount). onValueChange keeps the URL in sync when the user clicks. */}
       <Tabs
-        value={tab === 'refresh' ? 'refresh' : 'install'}
+        value={tab === 'refresh' || tab === 'index' ? tab : 'install'}
         onValueChange={(value) =>
-          void router.navigate({ to: '/tools', search: value === 'refresh' ? { tab: 'refresh' } : {} })
+          void router.navigate({
+            to: '/tools',
+            search: value === 'install' ? {} : { tab: value },
+          })
         }
         className="max-w-3xl"
       >
         <TabsList>
           <TabsTrigger value="install">Daz Studio &amp; Houdini</TabsTrigger>
+          <TabsTrigger value="index">Build Genesis Index</TabsTrigger>
           <TabsTrigger value="refresh">Refresh assets</TabsTrigger>
         </TabsList>
 
@@ -385,6 +390,14 @@ function ToolsPage() {
             onDryRun={() => void runUninstall(true)}
             onDelete={() => void runUninstall(false)}
           />
+        </TabsContent>
+
+        <TabsContent value="index" className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            The morph and bone index behind the editor's autocompletes. Rebuild it after
+            installing new morph packs, geografts or figure add-ons.
+          </p>
+          <GenesisIndexSection dazLibraryConfigured={settings.dazLibraryFolder.trim() !== ''} />
         </TabsContent>
 
         <TabsContent value="refresh" className="space-y-5">

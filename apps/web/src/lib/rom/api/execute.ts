@@ -825,6 +825,71 @@ export async function generateRomAnimation({
   return { romPath: romAnimationPath(scene), dazWasRunning, startedAt }
 }
 
+/**
+ * The Genesis-index run's `characterId` on the shared export watch — a sentinel,
+ * because this batch belongs to no character. Editors ignore it (they only adopt
+ * `''`, the "some other window is running something" display state), so no
+ * character page claims its outcome; the Tools panel filters on exactly this.
+ */
+export const GENESIS_INDEX_RUN = '#genesis-index'
+
+/**
+ * Hand a **Build Genesis Index** run to the Runner: a one-row bulk-export batch
+ * on the visible root-level `Build_Genesis_Index.dsa`, with an **empty
+ * `scenePath`** — the contract's "run this script in a NEW EMPTY scene the
+ * plugin creates" (docs/exporter-plugin-job-file.md), which is exactly right
+ * here: the script builds every generation's stock figures itself and needs no
+ * scene, and an empty one is what keeps whatever the user had open out of the
+ * scan.
+ *
+ * Same handoff mechanics as every other batch — one global job file, refuse
+ * while another is live, clear a finished-but-unswept `running_`, start Daz when
+ * it's closed. The watch is armed so the panel can show progress and report the
+ * outcome once.
+ */
+export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
+  if (!isTauri()) throw new Error('Building the Genesis index needs the desktop app.')
+  const settings = await storage.getSettings()
+  if (!settings.dazLibraryFolder) {
+    throw new Error('Set “My DAZ 3D Library” in Settings first — the job file and the script live there.')
+  }
+  const scriptPath = joinPath(
+    storage.studioScriptsDir(settings.dazLibraryFolder),
+    storage.GENESIS_INDEX_SCRIPT,
+  )
+  if (!(await exists(scriptPath))) {
+    throw new Error(
+      `The index script is not installed:\n${scriptPath}\nRun Tools → Refresh assets to install it, then try again.`,
+    )
+  }
+  const paths = await exporterJobFilePaths()
+  if (!paths) throw new Error('Set “My DAZ 3D Library” in Settings first.')
+  if (await exists(paths.pending)) {
+    throw new Error('A batch is already waiting for Daz Studio — let it start (or abort it) first.')
+  }
+  if (await exists(paths.running)) {
+    const finished = await readTextFile(paths.running)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      // Unreadable or torn: assume a live batch — refusing is the safe guess.
+      .catch(() => false)
+    if (!finished) {
+      throw new Error('Daz Studio is working through a batch — try again when it finishes.')
+    }
+    await remove(paths.running).catch(() => {})
+  }
+  await storage.writeTextFileAtomic(paths.pending, jobFileJson([{ scenePath: '', scriptPath }]))
+  activeRun = {
+    characterId: GENESIS_INDEX_RUN,
+    total: 1,
+    openHoudiniProject: '',
+    houdiniExport: false,
+    scenes: [],
+  }
+  const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
+  if (!dazWasRunning) await invoke<string>('launch_daz_studio')
+  return { dazWasRunning }
+}
+
 /** A file's mtime in ms, or 0 when it doesn't exist / can't be stat'ed. */
 async function mtimeOf(path: string): Promise<number> {
   try {

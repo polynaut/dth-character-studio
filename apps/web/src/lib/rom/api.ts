@@ -109,7 +109,9 @@ export type { ProductScanFile } from './api/products'
 
 // --- execute: DTH Exporter job-file handoff + Daz launch ---------------------
 export {
+  GENESIS_INDEX_RUN,
   abortExporterJobs,
+  buildGenesisIndex,
   dismissExportRun,
   executeCharacterJobs,
   exporterJobsPending,

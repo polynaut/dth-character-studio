@@ -295,6 +295,12 @@ export function installTauriMock(seed: TauriMockSeed): void {
         return []
       case 'daz_studio_running':
         return false
+      case 'launch_daz_studio':
+        // Nothing to start. The batch is claimed by the Runner INSIDE Daz,
+        // which this fake does not impersonate — a spec drives the pickup by
+        // renaming the job file to `running_…` and driving its progress, which
+        // is exactly the contract the plugin follows.
+        return ''
       case 'unreal_dth_present':
         // The linked Unreal project in the docs fixture has no DTH content yet
         // (the footer card's install button is live, not dimmed).
