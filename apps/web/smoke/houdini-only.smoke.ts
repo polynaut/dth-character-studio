@@ -114,12 +114,11 @@ test('houdini only: hands the scenes straight to Houdini — no Daz job at all',
   expect(launch.request.scenePath).toBe(P.houdini)
   expect(await fileKeys(page)).not.toContain(PENDING_JOB)
 
-  // 456.py reports, the studio toasts and clears its files — the header watch
-  // was armed directly by the dialog, without any Daz batch in front.
+  // 456.py reports, and the end-of-everything summary fires (no Daz line — no
+  // Daz leg ran) — the header watch was armed directly by the dialog.
   await houdiniReportsDone(page)
-  await expect(page.getByText(/Houdini export finished — 1 exported/)).toBeVisible({
-    timeout: 15_000,
-  })
+  await expect(page.getByText(/DTH Export finished/)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
 

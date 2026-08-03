@@ -14,6 +14,7 @@ import {
   SelectValue,
   useRefetchOnFocus,
 } from '@dth/ui'
+import dazLogo from '#/assets/daz-logo.png'
 import dthLogo from '#/assets/dth-logo.webp'
 import houdiniLogo from '#/assets/houdini-logo.svg'
 import { Portrait } from '#/components/portrait.tsx'
@@ -31,6 +32,7 @@ import {
   fetchExportRunProgress,
   fetchExportRunnerGate,
   fetchHoudiniRunProgress,
+  fileExists,
   launchDazForPendingJobs,
   openScene,
   startHoudiniExport,
@@ -153,28 +155,86 @@ export function DthExportAction({
   // only when n's watch reports. A ref, not state: the poll interval's closure
   // is armed once (see the `watching` effect) and state would go stale in it.
   const houdiniQueueRef = useRef<{ projects: Array<string>; scenes: Array<string> } | null>(null)
+  /**
+   * The WHOLE run's outcome, accumulated across the Daz batch and every queued
+   * Houdini project. The finish toast fires ONCE, at the very end, off this —
+   * a per-leg toast mid-run read as "done" while Houdini was still working.
+   * Refs like the queue: the poll interval's closure is armed once.
+   */
+  const runReportRef = useRef<{
+    daz?: { total: number; failed: number; errors: Array<string>; elapsedMs?: number }
+    houdini: Array<{ line: string; failed: boolean; elapsedMs?: number }>
+  } | null>(null)
+  /** The project the LIVE Houdini run belongs to — attribution for its line. */
+  const currentHipRef = useRef('')
+
+  /** The one end-of-everything toast: a line for the Daz leg, one per Houdini
+   *  project, the failures inline, and the total time across all legs. */
+  function emitFinalReport() {
+    const report = runReportRef.current
+    runReportRef.current = null
+    if (!report) return
+    const lines: Array<string> = []
+    let anyFailed = false
+    let totalMs = 0
+    let totalKnown = true
+    if (report.daz) {
+      const d = report.daz
+      anyFailed ||= d.failed > 0
+      const scenes = `${d.total - d.failed}/${d.total} scene${d.total === 1 ? '' : 's'}`
+      lines.push(
+        `Daz: ${scenes} exported${d.elapsedMs !== undefined ? ` in ${formatElapsed(d.elapsedMs)}` : ''}`,
+      )
+      lines.push(...d.errors)
+      if (d.elapsedMs === undefined) totalKnown = false
+      else totalMs += d.elapsedMs
+    }
+    for (const leg of report.houdini) {
+      anyFailed ||= leg.failed
+      lines.push(leg.line)
+      if (leg.elapsedMs === undefined) totalKnown = false
+      else totalMs += leg.elapsedMs
+    }
+    const title = `DTH Export finished${totalKnown && totalMs > 0 ? ` in ${formatElapsed(totalMs)}` : ''}.`
+    const options = {
+      id: EXPORT_TOAST_ID,
+      duration: Infinity,
+      description: lines.join('\n') || undefined,
+    }
+    if (anyFailed) toast.warning(title, options)
+    else toast.success(title, options)
+  }
 
   /** Start the next Houdini export run and park the rest in the queue. */
   async function startHoudiniQueue(projects: Array<string>, scenes: Array<string>) {
     const [first, ...rest] = projects
     if (!first) return
+    if (runReportRef.current === null) runReportRef.current = { houdini: [] }
     houdiniQueueRef.current = rest.length > 0 ? { projects: rest, scenes } : null
     const stem = (first.split(/[\\/]/).pop() ?? first).replace(/\.[^./\\]+$/, '')
+    currentHipRef.current = stem
     try {
       const started = await startHoudiniExport({
         data: { projectId, id: character.id, hipPath: first, scenes },
       })
       setHoudini({ state: 'starting', startedAtMs: Date.now() })
       const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
-      toast.success(`Houdini is opening ${stem} — ${count} handed over.`)
+      // Transient hand-over feedback — the sticky report waits for the END.
+      toast.info(`Houdini is opening ${stem} — ${count} handed over.`)
     } catch (err) {
-      // A project that cannot start must not strand the ones behind it.
+      // A project that cannot start must not strand the ones behind it — its
+      // failure joins the report and the queue moves on.
+      runReportRef.current?.houdini.push({
+        line: `${stem}: could not start — ${err instanceof Error ? err.message : String(err)}`,
+        failed: true,
+      })
       const remaining = houdiniQueueRef.current
       houdiniQueueRef.current = null
-      toast.error(
-        `Couldn't start the Houdini export in ${stem}: ${err instanceof Error ? err.message : String(err)}`,
-      )
-      if (remaining) void startHoudiniQueue(remaining.projects, remaining.scenes)
+      if (remaining) {
+        void startHoudiniQueue(remaining.projects, remaining.scenes)
+      } else {
+        emitFinalReport()
+      }
     }
   }
 
@@ -194,10 +254,35 @@ export function DthExportAction({
       return
     }
     if (run.state === 'finished') {
-      // The studio deleted the finished job file — report the outcome. Sticky
-      // (see dismissFinishToasts), with the run's total time when this window
-      // saw the handoff go out.
+      // The studio deleted the finished job file — the batch is done. Whether
+      // that IS the end decides who reports: with a Houdini export
+      // continuation ahead, the outcome is only STASHED (a "finished" toast
+      // while Houdini still works read as "all done" — measured on the first
+      // live run) and the one sticky report fires after the last project.
       setProgress(null)
+      const continuing =
+        run.houdiniProjects.length > 0 && run.failed < run.total && run.houdiniMode !== 'open'
+      if (continuing) {
+        runReportRef.current = {
+          daz: {
+            total: run.total,
+            failed: run.failed,
+            errors: run.errors,
+            elapsedMs: run.elapsedMs,
+          },
+          houdini: [],
+        }
+        // Transient — the report waits for the end of the whole process.
+        toast.info('Opening the Houdini project to export…')
+        void startHoudiniQueue(
+          run.houdiniProjects,
+          run.houdiniMode === 'export-all'
+            ? [character.scenePath, ...character.extraScenes].filter(Boolean)
+            : run.scenes,
+        )
+        return
+      }
+      // No export continuation — the batch IS the whole process: report now.
       const scenes = `${run.total} scene${run.total === 1 ? '' : 's'}`
       const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
       if (run.failed > 0) {
@@ -212,29 +297,15 @@ export function DthExportAction({
           duration: Infinity,
         })
       }
-      // The dialog's Houdini continuation: the selected projects get their
-      // turn with the fresh exports — unless EVERY scene failed (nothing new
-      // to look at).
-      if (run.houdiniProjects.length > 0 && run.failed < run.total) {
-        if (run.houdiniMode === 'open') {
-          // Open only (single-project by the dialog's own rule) — no exports.
-          toast.info('Opening the Houdini project…')
-          void openScene({ data: { scenePath: run.houdiniProjects[0] } }).catch((err: unknown) => {
-            toast.error(
-              `Couldn't open the Houdini project: ${err instanceof Error ? err.message : String(err)}`,
-            )
-          })
-        } else {
-          // The export continuation, one project after another. Scope: the
-          // scenes this batch ran, or every linked scene on "Export all".
-          toast.info('Opening the Houdini project to export…')
-          void startHoudiniQueue(
-            run.houdiniProjects,
-            run.houdiniMode === 'export-all'
-              ? [character.scenePath, ...character.extraScenes].filter(Boolean)
-              : run.scenes,
+      // Open only (single-project by the dialog's own rule): opening is not a
+      // watched leg — the report above stands, the project just opens.
+      if (run.houdiniProjects.length > 0 && run.failed < run.total && run.houdiniMode === 'open') {
+        toast.info('Opening the Houdini project…')
+        void openScene({ data: { scenePath: run.houdiniProjects[0] } }).catch((err: unknown) => {
+          toast.error(
+            `Couldn't open the Houdini project: ${err instanceof Error ? err.message : String(err)}`,
           )
-        }
+        })
       }
       return
     }
@@ -267,41 +338,64 @@ export function DthExportAction({
       const summary = run.summary || 'nothing to export'
       const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
       // The HDA's pre-flight check asks "Continue anyway?" and 456.py answers
-      // Yes — so this toast is the only place its complaints are ever seen,
-      // and the result file holding them is deleted as this run ends. Sticky,
-      // like the Daz report (see dismissFinishToasts).
-      const detail = [run.error, ...run.problems].filter(Boolean).join('\n')
-      if (run.failed > 0 || run.error) {
-        toast.warning(`Houdini export finished — ${summary}${took}.`, {
-          id: HOUDINI_TOAST_ID,
-          duration: Infinity,
-          description: detail || undefined,
-        })
-      } else {
-        toast.success(`Houdini export finished — ${summary}${took}.`, {
-          id: HOUDINI_TOAST_ID,
-          duration: Infinity,
-          description: detail || undefined,
+      // Yes — so the run report is the only place its complaints are ever
+      // seen, and the result file holding them is deleted as this run ends.
+      const detail = [run.error, ...run.problems].filter(Boolean).join(' · ')
+      const report = runReportRef.current
+      if (report) {
+        report.houdini.push({
+          line: `${currentHipRef.current || 'Houdini'}: ${summary}${took}${detail ? ` — ${detail}` : ''}`,
+          failed: run.failed > 0 || Boolean(run.error),
+          elapsedMs: run.elapsedMs,
         })
       }
       // More projects waiting their turn — the next one starts now that the
-      // job/result files are free again. (Its finish REUSES the sticky toast
-      // slot above: the latest project's report is the one that stays.)
+      // job/result files are free again; the report keeps accumulating.
       const queued = houdiniQueueRef.current
       if (queued) {
         houdiniQueueRef.current = null
         void startHoudiniQueue(queued.projects, queued.scenes)
+        return
+      }
+      // The LAST leg of the whole process — now the one report fires.
+      if (report) {
+        emitFinalReport()
+      } else {
+        // No accumulated run (a watch armed outside the queue) — report this
+        // leg alone, the pre-report behavior.
+        const options = {
+          id: HOUDINI_TOAST_ID,
+          duration: Infinity,
+          description: detail || undefined,
+        }
+        if (run.failed > 0 || run.error) {
+          toast.warning(`Houdini export finished — ${summary}${took}.`, options)
+        } else {
+          toast.success(`Houdini export finished — ${summary}${took}.`, options)
+        }
       }
       return
     }
     if (run.state === 'dead') {
       setHoudini(null)
       // Houdini itself is gone — starting the next project would open a fresh
-      // Houdini nobody asked for. Drop the rest of the queue with the report.
+      // Houdini nobody asked for. Drop the rest of the queue; what already
+      // finished rides the error as context, so it isn't lost with the run.
       houdiniQueueRef.current = null
+      const report = runReportRef.current
+      runReportRef.current = null
+      const done = report
+        ? [
+            ...(report.daz
+              ? [`Daz: ${report.daz.total - report.daz.failed}/${report.daz.total} exported`]
+              : []),
+            ...report.houdini.map((leg) => leg.line),
+          ].join('\n')
+        : ''
       toast.error('The Houdini export did not finish — Houdini is no longer running.', {
         id: HOUDINI_TOAST_ID,
         duration: Infinity,
+        description: done || undefined,
       })
       return
     }
@@ -381,8 +475,13 @@ export function DthExportAction({
       >
         {/* Processed count, not the percent — the % only moved in row-sized
             jumps anyway (the Runner's progress is rows ÷ total). The live
-            clock rides along whenever this window saw the handoff go out. */}
-        <Loader2 className="animate-spin" /> Exporting {progress.processed}/{progress.total}
+            clock rides along whenever this window saw the handoff go out. The
+            DAZ mark names which app is doing the work — the run happens
+            outside the studio, and this button is where the user looks to
+            know who is busy (the Houdini leg below wears its own mark). */}
+        <Loader2 className="animate-spin" />
+        <img src={dazLogo} alt="Daz Studio" className="size-5 shrink-0 object-contain" />
+        Exporting {progress.processed}/{progress.total}
         <ElapsedSince since={progress.startedAtMs} />
       </Button>
     )
@@ -410,7 +509,9 @@ export function DthExportAction({
             : 'Houdini is opening the project; the export starts once the scene has loaded. Click to stop watching.'
         }
       >
-        <Loader2 className="animate-spin" /> {label}
+        <Loader2 className="animate-spin" />
+        <img src={houdiniLogo} alt="Houdini" className="size-5 shrink-0 object-contain" />
+        {label}
         <ElapsedSince
           since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
         />
@@ -453,6 +554,7 @@ export function DthExportAction({
           onExported={() => {
             // A new run supersedes the previous outcome (see dismissFinishToasts).
             dismissFinishToasts()
+            runReportRef.current = null
             setPending(true)
             // Arm the progress view right away (0/n until Daz delivers).
             void refreshStatus()
@@ -461,6 +563,7 @@ export function DthExportAction({
           // the same machinery the after-batch continuation drives.
           onHoudiniQueue={(projects, scenes) => {
             dismissFinishToasts()
+            runReportRef.current = null
             void startHoudiniQueue(projects, scenes)
           }}
           onDazClosing={() => setDazClosing(true)}
@@ -745,22 +848,34 @@ const HOUDINI_MODE_OPTIONS: ReadonlyArray<{ mode: HoudiniRunMode; title: string;
 ]
 
 /** One selectable Houdini project — the scene rows' sibling card: checkbox,
- *  the Houdini mark as its tile, the project stem over the dimmed path, and
- *  the houdini-orange accent bar the linked-project cards wear elsewhere. */
+ *  the Houdini mark as its tile, the project stem over its hint, and the
+ *  houdini-orange accent bar the linked-project cards wear elsewhere. The hint
+ *  is a status line like the scene rows': normally the project's short
+ *  location (the tail of the path — the stem already carries the name), and a
+ *  loud "missing on disk" when the `.hip` is gone — a run started on one of
+ *  those could only fail after the fact. */
 function HipRow({
   hip,
   checked,
+  missing,
   onToggle,
 }: {
   hip: string
   checked: boolean
+  /** The `.hip` can't be found on disk — the row is refused (an already-checked
+   *  one can still be UNchecked, like the scene rows' stale-status rule). */
+  missing: boolean
   onToggle: () => void
 }) {
   const stem = (hip.split(/[\\/]/).pop() ?? hip).replace(/\.[^./\\]+$/, '')
+  // The tail of the path — enough to tell twins apart without the wall of
+  // drive/project prefix the full path wastes the line on.
+  const parts = hip.replace(/\\/g, '/').split('/').filter(Boolean)
+  const shortPath = parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : hip.replace(/\\/g, '/')
   return (
     <div className="group/card relative w-full">
       <div
-        className="daz-card relative flex items-center gap-3 rounded-lg border p-3 pl-4"
+        className={`daz-card relative flex items-center gap-3 rounded-lg border p-3 pl-4${missing ? ' opacity-50' : ''}`}
         data-selected={checked ? 'true' : undefined}
       >
         <input
@@ -768,6 +883,7 @@ function HipRow({
           className="relative z-10 size-4 shrink-0 accent-houdini-orange"
           aria-label={`Run in ${stem}`}
           checked={checked}
+          disabled={missing && !checked}
           onChange={onToggle}
         />
         <span className="flex aspect-[3/4] h-[56px] shrink-0 items-center justify-center rounded-md bg-[#262626]">
@@ -775,17 +891,24 @@ function HipRow({
         </span>
         <div className="min-w-0 flex-1">
           <span className="block truncate text-base font-medium">{stem}</span>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{hip.replace(/\\/g, '/')}</p>
+          <p
+            className={`mt-0.5 truncate text-xs ${missing ? 'text-destructive' : 'text-muted-foreground'}`}
+            title={hip.replace(/\\/g, '/')}
+          >
+            {missing ? 'Project file missing on disk — relink it in the editor' : shortPath}
+          </p>
         </div>
       </div>
       {/* Row-wide toggle as a transparent cover, like the scene rows. */}
-      <button
-        type="button"
-        aria-hidden
-        tabIndex={-1}
-        onClick={onToggle}
-        className="absolute inset-0 rounded-lg"
-      />
+      {!missing && (
+        <button
+          type="button"
+          aria-hidden
+          tabIndex={-1}
+          onClick={onToggle}
+          className="absolute inset-0 rounded-lg"
+        />
+      )}
       <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-houdini-orange" />
     </div>
   )
@@ -825,8 +948,41 @@ function DthExportDialog({
   // (houdiniModeForSelection flips it back when a second project is picked).
   const [checkedHips, setCheckedHips] = useState<ReadonlySet<string>>(new Set())
   const [houdiniMode, setHoudiniMode] = useState<HoudiniRunMode>('export-selected')
+  // Projects whose `.hip` is gone from disk — their rows are refused up front
+  // (startHoudiniExport would throw, but only after the run was armed). The
+  // ref twins the state for the scene probe's auto-selection, which may run
+  // before OR after this probe lands.
+  const [hipMissing, setHipMissing] = useState<ReadonlySet<string>>(new Set())
+  const hipMissingRef = useRef<ReadonlySet<string>>(new Set())
   // null = still checking (Start stays off for the moment the probe takes).
   const [runner, setRunner] = useState<RunnerGate | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void Promise.all(
+      character.houdiniProjects.map(async (hip) => ({
+        hip,
+        // A throwing probe must not mark a real project missing — only a
+        // definite "not there" refuses the row.
+        exists: await fileExists({ data: { path: hip } }).catch(() => true),
+      })),
+    ).then((probed) => {
+      if (!active) return
+      const missing = new Set(probed.filter((p) => !p.exists).map((p) => p.hip))
+      hipMissingRef.current = missing
+      setHipMissing(missing)
+      // Strip missing projects out of whatever is already selected (the
+      // auto-selection may have landed first and taken everything).
+      if (missing.size > 0) {
+        setCheckedHips((prev) => new Set([...prev].filter((hip) => !missing.has(hip))))
+      }
+    })
+    return () => {
+      active = false
+    }
+    // Mount-only, like the scene probe — the list can't change while modal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -897,7 +1053,11 @@ function DthExportDialog({
         // the networks importing the selected scenes, so an uninvolved project
         // simply no-ops. Only seeds an untouched selection: a user pick wins.
         if (pre.size > 0 && character.houdiniProjects.length > 0) {
-          setCheckedHips((prev) => (prev.size > 0 ? prev : new Set(character.houdiniProjects)))
+          setCheckedHips((prev) =>
+            prev.size > 0
+              ? prev
+              : new Set(character.houdiniProjects.filter((hip) => !hipMissingRef.current.has(hip))),
+          )
         }
       })
       .catch((error: unknown) => {
@@ -1110,7 +1270,9 @@ function DthExportDialog({
           </Label>
           <Select value={mode} onValueChange={(value) => pickMode(value as RunChoice)}>
             <SelectTrigger id="daz-mode" className="w-80">
-              <SelectValue />
+              {/* Explicit children: SelectValue would otherwise mirror the whole
+                  two-line item (title + blurb) into the closed trigger. */}
+              <SelectValue>{DAZ_MODE_OPTIONS.find((o) => o.mode === mode)?.title}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {DAZ_MODE_OPTIONS.map((option) => (
@@ -1134,6 +1296,7 @@ function DthExportDialog({
                 key={hip}
                 hip={hip}
                 checked={checkedHips.has(hip)}
+                missing={hipMissing.has(hip)}
                 onToggle={() => toggleHip(hip)}
               />
             ))}
@@ -1145,10 +1308,15 @@ function DthExportDialog({
             <Select
               value={houdiniMode}
               onValueChange={(value) => setHoudiniMode(value as HoudiniRunMode)}
-              disabled={checkedHips.size === 0}
+              // Inert without a selected project — and without a checked Daz
+              // scene, when the whole run has nothing to start from.
+              disabled={checkedHips.size === 0 || checked.size === 0}
             >
               <SelectTrigger id="houdini-mode" className="w-80">
-                <SelectValue />
+                {/* Title only — see the Daz trigger above. */}
+                <SelectValue>
+                  {HOUDINI_MODE_OPTIONS.find((o) => o.mode === houdiniMode)?.title}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {HOUDINI_MODE_OPTIONS.map((option) => (
@@ -1222,11 +1390,11 @@ function DthExportDialog({
           disabled={
             busy ||
             checking ||
+            // No scenes = nothing to start from, whatever the modes say.
+            checked.size === 0 ||
             (mode === 'houdini-only'
-              ? checkedHips.size === 0 ||
-                (houdiniMode === 'export-selected' && checked.size === 0) ||
-                noExportChecked.length > 0
-              : checked.size === 0 || !runner || runner.blocked || noRomChecked.length > 0)
+              ? checkedHips.size === 0 || noExportChecked.length > 0
+              : !runner || runner.blocked || noRomChecked.length > 0)
           }
           title={
             mode !== 'houdini-only' && runner?.blocked
@@ -1235,16 +1403,14 @@ function DthExportDialog({
                 ? mode === 'houdini-only'
                   ? 'Checking each scene for a Daz export on disk — a moment'
                   : 'Checking each scene for a saved ROM animation — a moment'
-                : mode === 'houdini-only'
-                  ? checkedHips.size === 0
-                    ? 'Select at least one Houdini project'
-                    : houdiniMode === 'export-selected' && checked.size === 0
-                      ? 'Select at least one Daz scene'
+                : checked.size === 0
+                  ? 'Select at least one Daz scene'
+                  : mode === 'houdini-only'
+                    ? checkedHips.size === 0
+                      ? 'Select at least one Houdini project'
                       : noExportChecked.length > 0
                         ? 'Every selected scene needs a Daz export on disk to skip Daz — see above'
                         : undefined
-                  : checked.size === 0
-                    ? 'Select at least one Daz scene'
                     : noRomChecked.length > 0
                       ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
                       : undefined

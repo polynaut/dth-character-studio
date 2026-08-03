@@ -24,7 +24,9 @@ a few seconds for the viewport to finish its first cook, so you watch the
 export against a rendered character instead of staring at nothing.
 
 And the run reporting keeps up with runs that outlast your attention span:
-the progress buttons carry a **live clock** ("Exporting 1/3 · 4m 12s"), the
-finish reports state the **total time**, and they stay on screen until you
-close them — or until a new run supersedes them or you leave the page —
-instead of vanishing on a timer while you're away in Daz or Houdini.
+the progress buttons carry a **live clock** and the app's mark for whichever
+side is working ("Exporting 1/3 · 4m 12s" with the Daz logo, the Houdini one
+for its leg), and the finish report is **one summary at the very end** of the
+whole process — the Daz leg, every Houdini project's result and the total
+time — sticky on screen until you close it (or a new run supersedes it, or
+you leave the page) instead of vanishing on a timer while you're away.

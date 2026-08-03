@@ -130,13 +130,15 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
 
   // The Daz batch is handed off…
   await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
-  // …and picked up + finished by the Runner.
+  // …and picked up + finished by the Runner. NO finish toast yet — the batch
+  // outcome is stashed for the one end-of-everything report, and only the
+  // transient hand-over info shows while Houdini takes over.
   await runnerFinishesBatch(page)
-  await expect(page.getByText(/DTH Export finished/)).toBeVisible()
-
-  // Which hands over to Houdini: the job file lands in the character folder,
-  // 456.py is staged in app-data, and Houdini is launched pointed at both.
   await expect(page.getByText(/Opening the Houdini project to export/)).toBeVisible()
+  await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+
+  // The hand-over: the job file lands in the character folder, 456.py is
+  // staged in app-data, and Houdini is launched pointed at both.
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     version: number
@@ -167,14 +169,15 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     `${launch.request.scriptPath.replace(/;&$/, '')}/456.py`,
   )
 
-  // 456.py works through it and reports.
+  // 456.py works through it and reports — and NOW the one summary toast fires,
+  // covering the whole process: the Daz leg and the Houdini leg, per line.
   await houdiniReportsDone(page)
-  await expect(page.getByText(/Houdini export finished — 1 exported/)).toBeVisible({
-    timeout: 15_000,
-  })
-  // The HDA's pre-flight complaint reaches the user. 456.py answers its
-  // "Continue anyway?" with Yes, so this toast is its ONLY surface — and the
-  // file holding it is deleted immediately below.
+  await expect(page.getByText(/DTH Export finished/)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/Daz: 1\/1 scene exported/)).toBeVisible()
+  await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
+  // The HDA's pre-flight complaint reaches the user inside that report. 456.py
+  // answers its "Continue anyway?" with Yes, so this is its ONLY surface — and
+  // the file holding it is deleted immediately below.
   await expect(page.getByText(/No bone scale reference found/)).toBeVisible()
 
   // THE POINT: the handoff cleans up after itself. Both files used to be left
