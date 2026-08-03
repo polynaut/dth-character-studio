@@ -893,11 +893,22 @@ function dthBaseIndexKeys(sOutDir, sGenesis){
  * figure roots the build path walks: a scene scan is looking for what is WORN
  * and what is parented in, and a prop or a hair item that sits outside the
  * figure hierarchy carries dials just the same.
+ *
+ * Cameras and lights are skipped whole. They are scene furniture, not something
+ * a ROM ever dials — but their float properties (focal length, intensity,
+ * falloff) are NOT under any of DTH_RX_SKIP_GROUP's rig/plumbing groups, so
+ * without this they would sail through pass 2, miss the base index (the stock
+ * figures carry none of them) and land in the scene index as suggestions.
  */
 function dthScanWholeSceneInto(oAcc){
 	var aRoots = dthSceneRootNodes();
 	for(var i = 0; i < aRoots.length; i++){
-		dthScanFigureInto(aRoots[i], oAcc);
+		var oRoot = aRoots[i];
+		if(oRoot.inherits("DzCamera") || oRoot.inherits("DzLight")){
+			print("Skipping (camera/light):", oRoot.getLabel());
+			continue;
+		}
+		dthScanFigureInto(oRoot, oAcc);
 	}
 }
 
