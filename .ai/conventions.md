@@ -50,11 +50,11 @@ been broken in this repo are the machine-checked ones (the changeset gate, lint,
 the byte-identical rom output) — compliance simply isn't left to judgement. Two
 hooks in `.claude/settings.json` move these the same way:
 
-- `.claude/hooks/inject-working-rules.mjs` (**SessionStart**) prints THIS section
-  into context at the start of every session. `.ai/*` is read-on-demand and "on
-  demand" means the agent decides — which is the exact failure. It reads the
-  section straight out of this file, so editing the doc is still the only place
-  to change the rule.
+- `.claude/hooks/inject-agent-context.mjs` (**SessionStart**) prints
+  `.ai/philosophy.md` and THIS section into context at the start of every
+  session. `.ai/*` is read-on-demand and "on demand" means the agent decides —
+  which is the exact failure. It reads both straight out of their own files, so
+  editing the docs is still the only place to change a rule.
 - `.claude/hooks/check-branch-upstream.mjs` (**PostToolUse**) fails a
   `git push` from a branch with no upstream and hands the fix back to the agent,
   in the same turn; creating a branch (`switch -c`, `checkout -b`, …) only drops

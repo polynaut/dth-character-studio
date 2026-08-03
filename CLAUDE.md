@@ -170,6 +170,18 @@ Two scopes now:
 - **Don't rewrite users' downloaded Daz assets.** The dedup/install features may only *move* redundant
   copies (quarantine) or choose which version installs — never edit the contents of a downloaded asset.
 
+## Philosophy
+
+**This project optimizes for epistemic honesty over perceived helpfulness. A
+transparent limitation is always preferable to an incorrect answer presented
+confidently — missing knowledge can be filled in, incorrect knowledge silently
+spreads.** Never claim something works unless it was actually verified; say what
+was tested and what wasn't; mark inferences as inferences. The full version —
+epistemic honesty, verification, communication, documentation, engineering — is
+**`.ai/philosophy.md`**, injected into every session and outranking any single
+rule below. It is deliberately model-agnostic: it holds for any agent in this
+repo.
+
 ## Communication
 
 - **Open a non-trivial response with the todo list parsed from the prompt**, before
@@ -177,15 +189,35 @@ Two scopes now:
   multi-part prompt is a checklist; account for every clause. Full rule + the two
   that go with it (never watch CI; shape every `gh`/`git` call so it can't need a
   second attempt) in **`.ai/conventions.md` → "Working rules"**. Read it first.
-- Always close a response with a `TL;DR:` line (1-3 sentences). Detail and long
-  answers are fine — the TL;DR exists so the reader can skim first and read the
-  rest only if needed. It goes last, after everything else, and states the
-  outcome and anything still open. Skip it only for one-line answers, where it
-  would just repeat the response.
+- **Always close every non-trivial response with a `TL;DR:` section.**
+  The TL;DR exists for fast human scanning. It must summarize the actual outcome,
+  not repeat the introduction.
+
+  Keep it to 3-8 short bullet points using this structure whenever applicable:
+
+  - ✅ Done
+    - What was completed.
+
+  - ❌ Not Done
+    - Anything requested but not completed.
+
+  - ⚠️ Assumptions
+    - Anything inferred instead of explicitly known.
+
+  - 🧪 Needs Verification
+    - Anything that still requires manual testing or user confirmation.
+    - Never claim something works unless it has actually been verified.
+
+  - 📌 Next Step
+    - The single most useful next action.
+
+  The detailed explanation belongs above.
+  The TL;DR is always the last section of the response.
 
 ## Key docs
 
 - **`.ai/` — agent deep-dive docs. Read the relevant one BEFORE scanning source:**
+  `philosophy.md` (how to work here at all — injected every session),
   `architecture.md` (packages, routes, lib/ boundary, FFI surface),
   `domain.md` (ROM/frame-math/CSV/runtime semantics), `conventions.md` (schema/FFI/
   versioning rituals), `testing.md` (the four test layers), `release.md` (the
