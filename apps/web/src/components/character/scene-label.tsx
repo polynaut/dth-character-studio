@@ -1,6 +1,6 @@
 import { Tag, cn } from '@dth/ui'
 
-import { Portrait } from '#/components/portrait.tsx'
+import { SceneTile } from '#/components/portrait.tsx'
 
 import type { ReactNode } from 'react'
 
@@ -79,27 +79,15 @@ export function SceneLabel({
       {accentBar && (
         <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-daz-green" />
       )}
-      {/* Fixed h/w (not aspect-ratio) so the tile is a stable box; landscape
-          face-zoom matches the list-view framing. Greyscaled for the primary.
-          The lift MUST be a quoted `cn(...)` fraction util, not a leading
-          `-translate-y-[…]` in a template literal — Tailwind doesn't scan a
-          leading arbitrary token, so the rule wouldn't generate (see PR #468). */}
+      {/* The landscape scene tile — box and face lift are paired inside
+          SceneTile (this pill's two sizes ARE that component's two sizes).
+          Greyscaled for the primary. */}
       {showAvatar && (
-        <Portrait
+        <SceneTile
           scenePath={scenePath}
           name={fallbackName ?? name}
-          imgClassName={cn(
-            // The taller `lg` (footer) tile frames a touch high, so nudge the render
-            // 4px lower than the -50% face-lift.
-            size === 'lg' ? 'translate-y-[calc(-50%_+_4px)]' : '-translate-y-1/2',
-            muted && 'grayscale',
-          )}
-          className={cn(
-            size === 'lg' ? 'h-10 w-[64px]' : 'h-8 w-[56px]',
-            'shrink-0 rounded',
-            muted && 'scene-label-tile',
-          )}
-          fallbackClassName="text-[8px]"
+          size={size === 'lg' ? 'md' : 'sm'}
+          muted={muted}
         />
       )}
       {subline ? (

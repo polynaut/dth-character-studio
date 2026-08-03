@@ -3,7 +3,7 @@ import { Ban, ChevronDown, ChevronRight, FileWarning, Loader2, ScanSearch } from
 import { toast } from 'sonner'
 
 import { Button, InfoPopup, Label, useRefetchOnFocus } from '@dth/ui'
-import { Portrait } from '#/components/portrait.tsx'
+import { SceneTile } from '#/components/portrait.tsx'
 import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   PROJECT_SCAN_RUN,
@@ -399,17 +399,7 @@ export function ProjectScanSection({
                               disabled={busy}
                               onChange={(e) => toggleScene(scene, e.target.checked)}
                             />
-                            {/* Landscape tile with the -50% face lift — the
-                                SceneLabel convention for a scene shown small
-                                (fixed h/w, not an aspect ratio, so the box is
-                                stable whatever the preview's dimensions). */}
-                            <Portrait
-                              scenePath={scene}
-                              name={sceneName(scene)}
-                              imgClassName="-translate-y-1/2"
-                              className="h-10 w-[64px] shrink-0 rounded"
-                              fallbackClassName="text-[10px]"
-                            />
+                            <SceneTile scenePath={scene} name={sceneName(scene)} size="md" />
                             <span className="min-w-0 flex-1 truncate">{sceneName(scene)}</span>
                           </label>
                         )
