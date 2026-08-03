@@ -19,3 +19,9 @@ runs as well. The exports used to grind inside Houdini's startup, holding the
 window back until the last node finished; the batch now waits for the UI plus
 a few seconds for the viewport to finish its first cook, so you watch the
 export against a rendered character instead of staring at nothing.
+
+And the run reporting keeps up with runs that outlast your attention span:
+the progress buttons carry a **live clock** ("Exporting 1/3 · 4m 12s"), the
+finish reports state the **total time**, and they stay on screen until you
+close them — or until a new run supersedes them or you leave the page —
+instead of vanishing on a timer while you're away in Daz or Houdini.

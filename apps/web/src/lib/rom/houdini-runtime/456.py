@@ -308,7 +308,7 @@ def main():
 # `do_export` hogs the main thread from its first call, and the freshly opened
 # viewport needs a moment to finish its first cook — textures included — or
 # the user watches the whole export against a clay-white figure.
-STARTUP_BREATHER_MS = 5000
+STARTUP_BREATHER_MS = 10000
 
 
 def launch():

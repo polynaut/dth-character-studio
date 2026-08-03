@@ -19,6 +19,7 @@ import {
   parseJobFileJson,
   preCheckedScenes,
   scanConfigJson,
+  formatElapsed,
   scenesMissingExport,
   scenesMissingRomAnimation,
   staleExportFolders,
@@ -422,6 +423,18 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
       row(B, { affected: true, exportExists: false }),
     ]
     expect(preCheckedScenes('houdini-only', rows)).toEqual(new Set([A]))
+  })
+})
+
+describe('formatElapsed — the run clock/total, three widths', () => {
+  it('seconds, minutes and hours each keep their shape', () => {
+    expect(formatElapsed(0)).toBe('0s')
+    expect(formatElapsed(999)).toBe('0s')
+    expect(formatElapsed(37_000)).toBe('37s')
+    expect(formatElapsed(4 * 60_000 + 12_000)).toBe('4m 12s')
+    // Zero-padded tail so the ticking clock doesn't jitter in width.
+    expect(formatElapsed(60_000 + 5_000)).toBe('1m 05s')
+    expect(formatElapsed(60 * 60_000 + 3 * 60_000)).toBe('1h 03m')
   })
 })
 

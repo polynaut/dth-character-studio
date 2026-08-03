@@ -37,6 +37,7 @@ import {
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
 import {
+  formatElapsed,
   normalizeSceneKey,
   preCheckedScenes,
   scenesMissingExport,
@@ -87,6 +88,37 @@ function DthLogo() {
   return <img src={dthLogo} alt="" aria-hidden className="size-6 shrink-0 object-contain" />
 }
 
+const EXPORT_TOAST_ID = 'dth-export-finished'
+const HOUDINI_TOAST_ID = 'dth-houdini-finished'
+
+/**
+ * The finish reports are STICKY toasts (`duration: Infinity`): a batch runs for
+ * many minutes while the user is away in Daz or Houdini, and a toast on a
+ * 4-second timer is gone long before they come back. They leave on exactly
+ * three things — the toast's own close button (the global Toaster renders
+ * one), a NEW run starting from the dialog (the outcome is superseded), and
+ * the editor unmounting (navigated away; the report belongs to the page whose
+ * run it was).
+ */
+function dismissFinishToasts() {
+  toast.dismiss(EXPORT_TOAST_ID)
+  toast.dismiss(HOUDINI_TOAST_ID)
+}
+
+/** A live clock riding a progress button (`· 4m 12s`) — self-ticking each
+ *  second, so the watch's 2.5s poll doesn't own the cadence. Renders nothing
+ *  when the start is unknown (another window's run, adopted for display). */
+function ElapsedSince({ since }: { since?: number }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (since === undefined) return
+    const id = window.setInterval(() => tick((n) => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [since])
+  if (since === undefined) return null
+  return <> · {formatElapsed(Date.now() - since)}</>
+}
+
 export function DthExportAction({
   projectId,
   character,
@@ -131,15 +163,23 @@ export function DthExportAction({
       return
     }
     if (run.state === 'finished') {
-      // The studio deleted the finished job file — report the outcome.
+      // The studio deleted the finished job file — report the outcome. Sticky
+      // (see dismissFinishToasts), with the run's total time when this window
+      // saw the handoff go out.
       setProgress(null)
       const scenes = `${run.total} scene${run.total === 1 ? '' : 's'}`
+      const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
       if (run.failed > 0) {
-        toast.warning(`DTH Export finished — ${run.failed} of ${scenes} failed.`, {
+        toast.warning(`DTH Export finished — ${run.failed} of ${scenes} failed${took}.`, {
+          id: EXPORT_TOAST_ID,
+          duration: Infinity,
           description: run.errors.length ? run.errors.join('\n') : undefined,
         })
       } else {
-        toast.success(`DTH Export finished — ${scenes} exported.`)
+        toast.success(`DTH Export finished — ${scenes} exported${took}.`, {
+          id: EXPORT_TOAST_ID,
+          duration: Infinity,
+        })
       }
       // The dialog's after-export pick: open the Houdini project the fresh
       // exports belong to — unless EVERY scene failed (nothing new to look at).
@@ -157,7 +197,7 @@ export function DthExportAction({
             },
           })
             .then((started) => {
-              setHoudini({ state: 'starting' })
+              setHoudini({ state: 'starting', startedAtMs: Date.now() })
               const count = `${started.scenes} scene${started.scenes === 1 ? '' : 's'}`
               toast.success(`Houdini is opening — ${count} handed over.`)
             })
@@ -179,7 +219,12 @@ export function DthExportAction({
     }
     if (run.state === 'dead') {
       setProgress(null)
-      toast.error('DTH Export did not finish — Daz Studio is no longer running (or the job file disappeared).')
+      // As sticky as the finish: a run dying while the user is away must not
+      // evaporate before they return.
+      toast.error(
+        'DTH Export did not finish — Daz Studio is no longer running (or the job file disappeared).',
+        { id: EXPORT_TOAST_ID, duration: Infinity },
+      )
       return
     }
     // 'pending' renders through the Abort button (isPending); only a live
@@ -199,16 +244,22 @@ export function DthExportAction({
     if (run.state === 'finished') {
       setHoudini(null)
       const summary = run.summary || 'nothing to export'
+      const took = run.elapsedMs !== undefined ? ` in ${formatElapsed(run.elapsedMs)}` : ''
       // The HDA's pre-flight check asks "Continue anyway?" and 456.py answers
       // Yes — so this toast is the only place its complaints are ever seen,
-      // and the result file holding them is deleted as this run ends.
+      // and the result file holding them is deleted as this run ends. Sticky,
+      // like the Daz report (see dismissFinishToasts).
       const detail = [run.error, ...run.problems].filter(Boolean).join('\n')
       if (run.failed > 0 || run.error) {
-        toast.warning(`Houdini export finished — ${summary}.`, {
+        toast.warning(`Houdini export finished — ${summary}${took}.`, {
+          id: HOUDINI_TOAST_ID,
+          duration: Infinity,
           description: detail || undefined,
         })
       } else {
-        toast.success(`Houdini export finished — ${summary}.`, {
+        toast.success(`Houdini export finished — ${summary}${took}.`, {
+          id: HOUDINI_TOAST_ID,
+          duration: Infinity,
           description: detail || undefined,
         })
       }
@@ -216,7 +267,10 @@ export function DthExportAction({
     }
     if (run.state === 'dead') {
       setHoudini(null)
-      toast.error('The Houdini export did not finish — Houdini is no longer running.')
+      toast.error('The Houdini export did not finish — Houdini is no longer running.', {
+        id: HOUDINI_TOAST_ID,
+        duration: Infinity,
+      })
       return
     }
     setHoudini(run)
@@ -249,6 +303,9 @@ export function DthExportAction({
     if (!running) return
     return holdBusyCursor()
   }, [running])
+  // Navigating away removes the sticky finish reports — they belong to the
+  // page whose run they describe (mount-only; the cleanup IS the point).
+  useEffect(() => dismissFinishToasts, [])
 
   async function onAbort() {
     setAborting(true)
@@ -291,8 +348,10 @@ export function DthExportAction({
         title={`Daz Studio is working the batch — ${progress.processed} of ${progress.total} scene${progress.total === 1 ? '' : 's'} processed${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}. Click to stop watching.`}
       >
         {/* Processed count, not the percent — the % only moved in row-sized
-            jumps anyway (the Runner's progress is rows ÷ total). */}
+            jumps anyway (the Runner's progress is rows ÷ total). The live
+            clock rides along whenever this window saw the handoff go out. */}
         <Loader2 className="animate-spin" /> Exporting {progress.processed}/{progress.total}
+        <ElapsedSince since={progress.startedAtMs} />
       </Button>
     )
   }
@@ -320,6 +379,9 @@ export function DthExportAction({
         }
       >
         <Loader2 className="animate-spin" /> {label}
+        <ElapsedSince
+          since={houdini.state === 'starting' || houdini.state === 'running' ? houdini.startedAtMs : undefined}
+        />
       </Button>
     )
   }
@@ -357,13 +419,18 @@ export function DthExportAction({
           character={character}
           onClose={() => setOpen(false)}
           onExported={() => {
+            // A new run supersedes the previous outcome (see dismissFinishToasts).
+            dismissFinishToasts()
             setPending(true)
             // Arm the progress view right away (0/n until Daz delivers).
             void refreshStatus()
           }}
           // A "Houdini only" run skipped Daz — arm the Houdini watch directly,
           // the same state the "Export too" continuation arms after its batch.
-          onHoudiniStarted={() => setHoudini({ state: 'starting' })}
+          onHoudiniStarted={() => {
+            dismissFinishToasts()
+            setHoudini({ state: 'starting', startedAtMs: Date.now() })
+          }}
           onDazClosing={() => setDazClosing(true)}
         />
       )}

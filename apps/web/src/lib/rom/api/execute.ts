@@ -281,6 +281,11 @@ export async function openSceneInRunningDaz({
 interface ActiveExportRun {
   characterId: string
   total: number
+  /** When THIS window wrote the handoff (`Date.now()`) — what the progress
+   *  button's elapsed clock and the finish toast's total time count from.
+   *  In-memory like the rest of the watch: a reloaded window (display-only
+   *  adoption) doesn't know it, and simply shows no time. */
+  startedAtMs: number
   /** Linked Houdini project (`.hip`) to open once the batch finishes — the
    *  dialog's "Open Houdini project after export" pick ('' = none). */
   openHoudiniProject: string
@@ -312,6 +317,9 @@ export type ExportRunProgress =
       processed: number
       done: number
       failed: number
+      /** When the handoff was written — absent on a display-only adoption
+       *  (another window's run; this one never saw the start). */
+      startedAtMs?: number
     }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
@@ -326,6 +334,8 @@ export type ExportRunProgress =
       houdiniExport: boolean
       /** The scenes the batch ran — the Houdini job's scope. */
       scenes: Array<string>
+      /** Handoff → finish, for the toast's "in 12m 34s". */
+      elapsedMs?: number
     }
   /** The run died (Daz gone mid-run / file vanished) — watch ended. */
   | { state: 'dead'; characterId: string; total: number }
@@ -414,6 +424,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           processed: 0,
           done: 0,
           failed: 0,
+          startedAtMs: run.startedAtMs,
         }
       }
       const done = parsed.jobs.filter((j) => j.status === 'done').length
@@ -430,6 +441,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           state: 'finished',
           characterId: run.characterId,
           total: parsed.jobs.length || run.total,
+          elapsedMs: Date.now() - run.startedAtMs,
           failed,
           errors: parsed.jobs
             .filter((j) => j.error)
@@ -474,6 +486,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         processed: parsed.jobsDone ?? done + failed,
         done,
         failed,
+        startedAtMs: run.startedAtMs,
       }
     }
   } catch {
@@ -804,6 +817,7 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   activeRun = {
     characterId: character.id,
     total: jobs.length,
+    startedAtMs: Date.now(),
     openHoudiniProject: openHoudini ?? '',
     // Without a project there is nothing to run the exports in, so the toggle
     // cannot mean anything on its own.
@@ -1227,6 +1241,7 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   activeRun = {
     characterId: PROJECT_SCAN_RUN,
     total: jobs.length,
+    startedAtMs: Date.now(),
     openHoudiniProject: '',
     houdiniExport: false,
     scenes: sceneWork.map((s) => s.scenePath),

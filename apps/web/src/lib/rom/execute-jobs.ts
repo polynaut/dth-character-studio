@@ -327,6 +327,22 @@ export function preCheckedScenes(
 }
 
 /**
+ * A run duration for humans — the export button's live clock and the finish
+ * toast's total: `"37s"`, `"4m 12s"`, `"1h 03m"`. Sub-second runs still read
+ * `"0s"` rather than vanishing. Pure so the three widths are pinned by tests.
+ */
+export function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const seconds = totalSeconds % 60
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  if (totalMinutes === 0) return `${seconds}s`
+  const minutes = totalMinutes % 60
+  const hours = Math.floor(totalMinutes / 60)
+  if (hours === 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
+/**
  * Whether a `running_` batch can be handed back to a fresh Daz — i.e. it was
  * CLAIMED but never worked.
  *
