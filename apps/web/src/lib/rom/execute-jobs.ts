@@ -180,6 +180,29 @@ export function jobScriptForMode(mode: ExportMode): string {
 }
 
 /**
+ * THE "Export only" gate: the SELECTED scenes that have no saved ROM animation,
+ * and therefore nothing for an export-only run to export.
+ *
+ * Pure so the rule is testable without a browser — the dialog disables Start on
+ * a non-empty result and names them. The dialog's row controls already refuse
+ * such scenes, but the selection outlives the controls (rows are checkable
+ * while the affected-probe is in flight, and a FAILED probe leaves a synthetic
+ * all-`romExists: false` list behind), and past that point the only thing left
+ * to catch it is `executeCharacterJobs` throwing after the dialog has closed.
+ *
+ * Empty for every other mode, and empty while `scenes` is null — nothing is
+ * known before the probe lands, and "unknown" must not read as "missing".
+ */
+export function scenesMissingRomAnimation<T extends { scenePath: string; romExists: boolean }>(
+  mode: ExportMode,
+  scenes: ReadonlyArray<T> | null,
+  checked: ReadonlySet<string>,
+): Array<T> {
+  if (mode !== 'export-only' || !scenes) return []
+  return scenes.filter((scene) => checked.has(scene.scenePath) && !scene.romExists)
+}
+
+/**
  * The scene file a mode's job row OPENS for `scenePath`: the saved ROM
  * animation for `export-only` (that is where the built ROM lives — the
  * generated script maps it back to this scene for every scene-keyed lookup),

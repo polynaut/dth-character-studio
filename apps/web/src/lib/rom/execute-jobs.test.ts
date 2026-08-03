@@ -16,6 +16,7 @@ import {
   parseExecuteStamps,
   parseExportFoldersRecord,
   parseJobFileJson,
+  scenesMissingRomAnimation,
   staleExportFolders,
 } from './execute-jobs'
 
@@ -262,6 +263,37 @@ describe('export-folder housekeeping (the record + the delete set)', () => {
         '{"version":1,"exportDir":"X:/e","folders":["a",42,null,"b/c"]}',
       ),
     ).toEqual({ version: 1, exportDir: 'X:/e', folders: ['a', 'b/c'] })
+  })
+})
+
+describe('scenesMissingRomAnimation — the "Export only" gate', () => {
+  const scene = (scenePath: string, romExists: boolean) => ({ scenePath, romExists })
+  const A = 'X:/p/Kira/daz3d/primary/Kira.duf'
+  const B = 'X:/p/Kira/daz3d/summertide/KiraSummertide.duf'
+
+  it('names the SELECTED scenes that have no saved ROM animation', () => {
+    const rows = [scene(A, true), scene(B, false)]
+    expect(
+      scenesMissingRomAnimation('export-only', rows, new Set([A, B])).map((s) => s.scenePath),
+    ).toEqual([B])
+  })
+
+  it('ignores scenes that are not selected', () => {
+    // The unselected no-ROM scene is not this run's problem.
+    const rows = [scene(A, true), scene(B, false)]
+    expect(scenesMissingRomAnimation('export-only', rows, new Set([A]))).toEqual([])
+  })
+
+  it('is empty for the modes that BUILD the ROM', () => {
+    const rows = [scene(A, false), scene(B, false)]
+    expect(scenesMissingRomAnimation('rom-export', rows, new Set([A, B]))).toEqual([])
+    expect(scenesMissingRomAnimation('rom-only', rows, new Set([A, B]))).toEqual([])
+  })
+
+  it('is empty while the probe has not landed — unknown is not missing', () => {
+    // The dialog renders rows before detection finishes; blocking Start on a
+    // list nobody has measured yet would refuse a perfectly good run.
+    expect(scenesMissingRomAnimation('export-only', null, new Set([A, B]))).toEqual([])
   })
 })
 

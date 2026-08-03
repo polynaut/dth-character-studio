@@ -35,7 +35,7 @@ import {
   startHoudiniExport,
 } from '#/lib/rom/api.ts'
 import { holdBusyCursor } from '#/lib/busy-cursor.ts'
-import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
+import { normalizeSceneKey, scenesMissingRomAnimation } from '#/lib/rom/execute-jobs.ts'
 
 import type { ExecuteSceneStatus, ExportRunProgress, RunnerGate } from '#/lib/rom/api.ts'
 import type { HoudiniRunState } from '#/lib/rom/houdini-jobs.ts'
@@ -669,6 +669,23 @@ function DthExportDialog({
       romUnexported: false,
     }))
 
+  /**
+   * SELECTED scenes with no saved ROM animation, in "Export only" — the gate on
+   * Start.
+   *
+   * The row controls already refuse them (disabled checkbox, disabled solo
+   * wand, select-all filters them out), but the rule belongs at the decision
+   * point too: the selection outlives the controls (the rows are checkable
+   * while the affected-probe is still running, and a FAILED probe leaves a
+   * synthetic all-`romExists: false` list without re-seeding). Without this the
+   * run reaches `executeCharacterJobs`, which throws "No saved ROM animation for
+   * this scene yet" after the dialog has already closed.
+   *
+   * Only meaningful once `status` has landed — before that nothing is known and
+   * an empty list is the honest answer, not a block.
+   */
+  const noRomChecked = scenesMissingRomAnimation(mode ?? 'rom-export', status, checked)
+
   /** Which scenes a mode pre-checks: the ones whose work is outstanding for
    *  THAT run — changed inputs for a ROM build, an unexported saved ROM for
    *  the export-only pass (which can only run where a ROM animation exists). */
@@ -868,6 +885,27 @@ function DthExportDialog({
         </div>
       )}
       {runner?.blocked && <RunnerGateNotice gate={runner} />}
+      {noRomChecked.length > 0 && (
+        <div className="space-y-1 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
+          <p>
+            <strong>Export only</strong> exports the saved ROM animation of each scene, and{' '}
+            {noRomChecked.length === 1 ? 'one selected scene has none' : `${noRomChecked.length} selected scenes have none`}{' '}
+            yet:
+          </p>
+          <ul className="list-inside list-disc text-muted-foreground">
+            {noRomChecked.map((row) => (
+              <li key={normalizeSceneKey(row.scenePath)}>
+                {(row.scenePath.split(/[\\/]/).pop() ?? row.scenePath).replace(/\.[^./\\]+$/, '')}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground">
+            Run <strong>ROM + Export</strong> or <strong>ROM only</strong> for{' '}
+            {noRomChecked.length === 1 ? 'it' : 'them'} first, or unselect{' '}
+            {noRomChecked.length === 1 ? 'it' : 'them'}.
+          </p>
+        </div>
+      )}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={busy} onClick={onClose}>
           Cancel
@@ -876,13 +914,15 @@ function DthExportDialog({
           Back
         </Button>
         <Button
-          disabled={busy || checked.size === 0 || !runner || runner.blocked}
+          disabled={busy || checked.size === 0 || !runner || runner.blocked || noRomChecked.length > 0}
           title={
             runner?.blocked
               ? 'The Runner plugin needs attention in Settings first'
               : checked.size === 0
                 ? 'Select at least one scene'
-                : undefined
+                : noRomChecked.length > 0
+                  ? 'Every selected scene needs a saved ROM animation for an export-only run — see above'
+                  : undefined
           }
           onClick={() => void onExport()}
         >
