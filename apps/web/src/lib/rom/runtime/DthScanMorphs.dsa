@@ -579,6 +579,14 @@ function dthScanFigureInto(oFigure, oAcc){
 	oAcc.figures.push(String(oFigure.getLabel()));
 	for(var n = 0; n < aNodes.length; n++){
 		var oNode = aNodes[n];
+		// Cameras and lights parented into the hierarchy (a light rig on a
+		// figure, a camera on a prop): scene furniture, skipped for the same
+		// reason dthScanWholeSceneInto drops camera/light ROOTS - their float
+		// dials (focal length, intensity, falloff) sit outside every
+		// DTH_RX_SKIP_GROUP group and would land in the index as morph
+		// suggestions. Only the node itself is dropped; its children are
+		// separate entries of this flat walk.
+		if(oNode.inherits("DzCamera") || oNode.inherits("DzLight")) continue;
 		// Instance suffixes (GoldenPalace_G9_9694) vary per scene - strip the
 		// trailing _<digits> so the stored node id matches the ROM convention
 		// (GoldenPalace_G9, Genesis9, ...). It also collapses the second figure
@@ -894,11 +902,14 @@ function dthBaseIndexKeys(sOutDir, sGenesis){
  * and what is parented in, and a prop or a hair item that sits outside the
  * figure hierarchy carries dials just the same.
  *
- * Cameras and lights are skipped whole. They are scene furniture, not something
- * a ROM ever dials — but their float properties (focal length, intensity,
+ * Cameras and lights are skipped. They are scene furniture, not something a
+ * ROM ever dials — but their float properties (focal length, intensity,
  * falloff) are NOT under any of DTH_RX_SKIP_GROUP's rig/plumbing groups, so
  * without this they would sail through pass 2, miss the base index (the stock
  * figures carry none of them) and land in the scene index as suggestions.
+ * Roots are dropped here, subtree and all; one parented INSIDE a figure or
+ * prop hierarchy is dropped by the per-node guard in dthScanFigureInto, which
+ * still scans its children (the descendant walk is flat).
  */
 function dthScanWholeSceneInto(oAcc){
 	var aRoots = dthSceneRootNodes();

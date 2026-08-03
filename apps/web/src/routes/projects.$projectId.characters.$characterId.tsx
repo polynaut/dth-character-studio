@@ -266,7 +266,7 @@ function CharacterPage() {
   /** A failed morph clicked in the report: switch to the scene that produced it
    *  FIRST (revealing a frame in another scene's grid would scroll to a pose
    *  that isn't the one that failed), then send the reveal signal. An untagged
-   *  run (unsaved scene / pre-v53 log) names no scene, so it reveals in place. */
+   *  run (unsaved scene / pre-v54 log) names no scene, so it reveals in place. */
   const revealFailure = useCallback(
     (frame: number, scene: string) => {
       if (scene) sceneSel.selectScene(scene)

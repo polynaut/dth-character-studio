@@ -1369,8 +1369,13 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       not fail an export row that succeeded. DthScanSceneMorphs and
  *       DthScanProducts take a `scenePath` override so a run whose open file is
  *       a saved ROM animation still files under the SOURCE scene.
+ * v56 — the morph scans skip cameras and lights ANYWHERE in the hierarchy, not
+ *       only at the scene root: one parented into a figure or prop (a light
+ *       rig, a camera mount) walked straight past the root-level guard, and
+ *       its float dials (focal length, intensity, falloff) landed in the
+ *       scene index as morph suggestions. The node's children still scan.
  */
-export const RUNTIME_VERSION = 55
+export const RUNTIME_VERSION = 56
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

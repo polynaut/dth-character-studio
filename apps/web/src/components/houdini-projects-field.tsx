@@ -22,6 +22,7 @@ import {
   fileExists,
   generatedHoudiniScenePath,
   fetchProject,
+  fetchSettings,
   generateHoudiniProject,
   houdiniIntroDue,
   markHoudiniIntroSeen,
@@ -464,12 +465,20 @@ function GenerateProjectDialog({
       if (!active) return
       setIntroDue(due)
       if (!due) return
-      // Seed the choices from what the project already has.
-      void fetchProject({ data: { projectId } }).then((p) => {
-        if (!active || !p) return
-        setMakeJunctions(p.createExportJunctions)
-        setHipPaths(p.houdiniPathStyle !== 'absolute')
-      })
+      // Seed the choices from what the project already has — plus the LEGACY
+      // app-global path style (one Settings knob before v0.61): a user who had
+      // deliberately switched it to `absolute` (the escape hatch when `$HIP`
+      // expansion misbehaves in Houdini) must not find the intro pre-ticked
+      // back to `$HIP` by the fresh per-project default.
+      void Promise.all([fetchProject({ data: { projectId } }), fetchSettings()]).then(
+        ([p, settings]) => {
+          if (!active || !p) return
+          setMakeJunctions(p.createExportJunctions)
+          setHipPaths(
+            p.houdiniPathStyle !== 'absolute' && settings.houdiniPathStyle !== 'absolute',
+          )
+        },
+      )
     })
     return () => {
       active = false

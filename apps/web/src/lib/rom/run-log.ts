@@ -6,7 +6,7 @@ import { normalizeSceneKey } from './execute-jobs.ts'
  * is to `api/execute.ts`. The reading/writing/ingesting lives in
  * `api/characters.ts` (`fetchRomRunLog`).
  *
- * The shape is per SCENE (log v2, runtime v53). A DTH Export batch works one row
+ * The shape is per SCENE (log v2, runtime v54). A DTH Export batch works one row
  * per scene and every row's script writes the same per-character log file, so a
  * single flat log could only ever hold the LAST scene that ran — the scenes that
  * failed before it were destroyed silently, which is the bug this shape fixes.
