@@ -1,5 +1,13 @@
 # @dth/desktop
 
+## 0.62.1
+
+### Patch Changes
+
+- [#671](https://github.com/polynaut/dth-character-studio/pull/671) [`6aaff15`](https://github.com/polynaut/dth-character-studio/commit/6aaff15dcf28b4649d8a41c5c440f79914c054cc) Thanks [@polynaut](https://github.com/polynaut)! - The DTH Export dialog's Houdini project cards now wear the same orange look
+  as the linked-project card on the character page — orange tint and border
+  instead of the Daz rows' green, with a matching orange ring when checked.
+
 ## 0.62.0
 
 ### Minor Changes
