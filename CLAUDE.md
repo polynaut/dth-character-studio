@@ -190,29 +190,24 @@ repo.
   that go with it (never watch CI; shape every `gh`/`git` call so it can't need a
   second attempt) in **`.ai/conventions.md` → "Working rules"**. Read it first.
 - **Always close every non-trivial response with a `TL;DR:` section.**
-  The TL;DR exists for fast human scanning. It must summarize the actual outcome,
-  not repeat the introduction.
+  The TL;DR exists for fast human scanning. It is a navigation aid, not a second
+  summary. It must summarize the outcome, not repeat the explanation.
 
-  Keep it to 3-8 short bullet points using this structure whenever applicable:
+  Keep it to **3–8 short bullet points** (prefer one line each). Include only
+  sections that actually apply.
 
-  - ✅ Done
-    - What was completed.
+  | Section | Content |
+  | ------- | ------- |
+  | ✅ Done | What was completed. |
+  | ❌ Not Done | Requested work that was not completed. |
+  | ⚠️ Assumptions | Anything inferred instead of explicitly known. |
+  | 🧪 Needs Verification | Anything requiring manual testing or user confirmation. Never claim success until verified. |
+  | 📌 Next Step | The single most useful next action for the user. |
 
-  - ❌ Not Done
-    - Anything requested but not completed.
+  Never use sub-bullets in the TL;DR. If additional explanation is needed, it
+  belongs in the main response above.
 
-  - ⚠️ Assumptions
-    - Anything inferred instead of explicitly known.
-
-  - 🧪 Needs Verification
-    - Anything that still requires manual testing or user confirmation.
-    - Never claim something works unless it has actually been verified.
-
-  - 📌 Next Step
-    - The single most useful next action.
-
-  The detailed explanation belongs above.
-  The TL;DR is always the last section of the response.
+  The TL;DR is always the final section of the response.
 
 ## Key docs
 
