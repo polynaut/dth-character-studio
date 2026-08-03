@@ -222,6 +222,12 @@ export interface SeedOptions {
   /** Seed a per-scene product-scan CSV into the demo character's scan folder so
    *  the Products tab renders a populated "Matched products" table. */
   productScan?: boolean
+  /** Link the Houdini project + the derived export root on the MINIMAL smoke
+   *  character too (the demo character always carries both). The
+   *  junction-refresh assertions need a `$HIP` anchor — a linked `.hip` inside
+   *  the character folder — without pulling in the whole demo character, whose
+   *  extra content would unpin the generation assertions. */
+  houdiniProject?: boolean
   /** No recent projects — the Home screen's first-run state (create-project shot). */
   emptyRecents?: boolean
   /** Omit the character definition, so the project overview shows its empty
@@ -284,6 +290,7 @@ export function buildSeed(opts: SeedOptions = {}): TauriMockSeed {
           ...(opts.extraScene ? { extraScenes: [P.scene2] } : {}),
         }
       : {}),
+    ...(opts.houdiniProject ? { houdiniProjects: [P.houdini], exportPath: P.exportDir } : {}),
   })
 
   const files: Record<string, string> = {

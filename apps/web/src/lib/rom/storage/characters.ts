@@ -11,23 +11,6 @@ import type { Character } from '@dth/rom'
 
 import { canonicalImage } from '../image'
 import { characterExportRoot, deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
-
-/**
- * The character's scenes ROOT relative to its folder, from where the primary
- * scene actually sits — the anchor for the derived export root. Falls back to
- * the project's `dazSubdir` when there is no primary inside the folder to read
- * one from (a scene-less character, or one linked in place elsewhere).
- */
-function scenesRootRelOf(scenePath: string, folderAbs: string, dazSubdir: string): string {
-  const prim = normalizeRelPathLower(scenePath)
-  const folder = normalizeRelPathLower(folderAbs)
-  if (!prim || !folder || !prim.startsWith(`${folder}/`)) return dazSubdir
-  const relDir = dirname(scenePath.replace(/\\/g, '/')).slice(folderAbs.replace(/\\/g, '/').length + 1)
-  return deriveScenesRootRel(relDir, dazSubdir) || dazSubdir
-}
-
-const normalizeRelPathLower = (p: string) =>
-  stripTrailingSeparators(p.replace(/\\/g, '/')).toLowerCase()
 import {
   characterFolderName,
   definitionFileName,
@@ -58,6 +41,27 @@ import type { Project } from './projects'
 // CRUD around them (save/create/move/delete + the paths Generate writes into).
 
 /**
+ * The character's scenes ROOT relative to its folder, from where the primary
+ * scene actually sits — the anchor for the derived export root. Falls back to
+ * the project's `dazSubdir` when there is no primary inside the folder to read
+ * one from (a scene-less character, one linked in place elsewhere, or a
+ * legacy primary sitting directly in the folder root).
+ *
+ * THE one rule for "where does this character's export root live" — exported
+ * because every consumer of the derived root must agree with the save that
+ * derives it (`saveCharacter` below, the v29 `migrateExportRoot` trigger, the
+ * delete flow's keep-Daz export purge). A consumer left on the plain
+ * `project.dazSubdir` spelling breaks the moment a scenes folder is renamed:
+ * it re-derives the OLD `daz3d/dth-exports` while the save writes the new one.
+ */
+export function scenesRootRelOf(scenePath: string, folderAbs: string, dazSubdir: string): string {
+  if (!scenePath.trim() || !folderAbs.trim()) return dazSubdir
+  const relDir = relativeInside(folderAbs, dirname(scenePath))
+  if (relDir === null) return dazSubdir
+  return deriveScenesRootRel(relDir, dazSubdir) || dazSubdir
+}
+
+/**
  * THE single repoint site: rewrite every in-folder path field of a character
  * from `fromFolder` to `toFolder`. A folder move/rename carries the character's
  * files with it, so any stored path that lived INSIDE the folder must follow; a
@@ -83,6 +87,13 @@ export function repointCharacterPaths(
     extraScenes: character.extraScenes.map(repoint),
     houdiniProjects: character.houdiniProjects.map(repoint),
     imageScene: repoint(character.imageScene),
+    // The DERIVED export root (schema v29) lives inside the folder too
+    // (<folder>/<scenes root>/dth-exports). saveCharacter re-derives it anyway,
+    // but a move that doesn't immediately re-save — moveCharactersRoot — left
+    // the stored path naming the OLD location, so anything reading it before
+    // the next save (a dazProductsEnabled regenerate in the same batch, the
+    // junction refresh) aimed at a resurrected old folder.
+    exportPath: repoint(character.exportPath),
     // ONE per-scene keyed structure since schema v24 — hair rides the record,
     // so repointing the record's scenePath carries it (no second map to sync).
     sceneOverrides: character.sceneOverrides.map((o) => ({ ...o, scenePath: repoint(o.scenePath) })),

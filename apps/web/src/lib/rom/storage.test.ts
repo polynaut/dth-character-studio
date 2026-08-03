@@ -644,6 +644,59 @@ describe('repointCharacterPaths', () => {
     expect(moved.sections.JCM.customAssetPath).toBe('/games/Nova/Kira2/daz3d/Custom Base.duf')
     expect(moved.sections.PHY.customAssetPath).toBe('X:/shared/roms/Physics.duf')
   })
+
+  it('the DERIVED export root travels with the folder too', () => {
+    // Regression: exportPath was the one in-folder path the repoint site
+    // omitted. saveCharacter re-derives it on the next save, but a move that
+    // does NOT immediately re-save this character — moveCharactersRoot — left
+    // the stored path naming the OLD location, so a same-batch regenerate (a
+    // dazProductsEnabled toggle) and the junction refresh both aimed at a
+    // resurrected old folder until some later save fixed it.
+    const c = characterSchema.parse({
+      id: newId(),
+      name: 'Kira',
+      genesis: 'G9',
+      gender: 'female',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      scenePath: '/games/Nova/kira/daz3d/primary/kira.duf',
+      exportPath: '/games/Nova/kira/daz3d/dth-exports',
+    })
+
+    const moved = storage.repointCharacterPaths(c, '/games/Nova/kira', '/games/Alt/chars/Kira')
+
+    expect(moved.exportPath).toBe('/games/Alt/chars/Kira/daz3d/dth-exports')
+    // A pre-v29 hand-picked root OUTSIDE the folder is not the folder's to move.
+    const foreign = storage.repointCharacterPaths(
+      { ...c, exportPath: 'X:/renders/kira' },
+      '/games/Nova/kira',
+      '/games/Alt/chars/Kira',
+    )
+    expect(foreign.exportPath).toBe('X:/renders/kira')
+  })
+})
+
+describe('scenesRootRelOf — THE derived-export-root rule', () => {
+  it('reads the root from the primary scene, project dazSubdir only as fallback', () => {
+    // A RENAMED scenes folder: the primary sits under `scenes/`, so the export
+    // root derives there. Every consumer of the derived root (saveCharacter,
+    // migrateExportRoot's trigger, the delete flow's keep-Daz purge) shares
+    // this rule — one left on the plain dazSubdir spelling re-derives the old
+    // `daz3d/dth-exports` and, for the migration trigger, MOVES exports into a
+    // resurrected daz3d tree on every save.
+    expect(
+      storage.scenesRootRelOf('/games/Nova/Kira/scenes/primary/Kira.duf', '/games/Nova/Kira', 'daz3d'),
+    ).toBe('scenes')
+    // The default layout derives the default.
+    expect(
+      storage.scenesRootRelOf('/games/Nova/Kira/daz3d/primary/Kira.duf', '/games/Nova/Kira', 'daz3d'),
+    ).toBe('daz3d')
+    // Fallbacks: no primary, one linked outside the folder, or a legacy
+    // primary directly in the folder root.
+    expect(storage.scenesRootRelOf('', '/games/Nova/Kira', 'daz3d')).toBe('daz3d')
+    expect(storage.scenesRootRelOf('X:/elsewhere/Kira.duf', '/games/Nova/Kira', 'daz3d')).toBe('daz3d')
+    expect(storage.scenesRootRelOf('/games/Nova/Kira/Kira.duf', '/games/Nova/Kira', 'daz3d')).toBe('daz3d')
+  })
 })
 
 describe('saveCharacter returns the post-save location', () => {

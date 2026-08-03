@@ -54,7 +54,12 @@ test('project window: character editor measures, edits and saves both artifacts'
 }) => {
   // This "window" was opened with the project's .dcsp — main.tsx reads it via
   // active_project_file and navigates into the project route on its own.
-  await page.addInitScript(installTauriMock, buildSeed({ activeProjectFile: P.dcsp }))
+  // `houdiniProject` links the .hip + export root so the save exercises the
+  // junction refresh (asserted below).
+  await page.addInitScript(
+    installTauriMock,
+    buildSeed({ activeProjectFile: P.dcsp, houdiniProject: true }),
+  )
   await page.goto('/')
 
   // Project page: the character library lists the fixture character.
@@ -117,6 +122,15 @@ test('project window: character editor measures, edits and saves both artifacts'
   // The definition's provenance was re-stamped by the save.
   const definition = await fileContent(page, `${P.charFolder}/Kira.json`)
   expect(JSON.parse(definition!).generatedDthVersion).toBe('2.4.3')
+  // The save's generation funnel refreshed the `dth-exports` junction beside
+  // the linked .hip — the one `$HIP/dth-exports/...` reference-skeleton paths
+  // resolve through — pointing at the CURRENT export root. This pins the
+  // refresh-on-every-generation contract (refreshExportJunctions): the emit
+  // decision and the junction can't drift, and an export-root move is chased
+  // on the next save.
+  expect(await commandCalls(page, 'create_junction')).toContainEqual({
+    request: { linkPath: `${P.houdiniDir}/dth-exports`, targetPath: P.exportDir },
+  })
 
   // The completeness guard: every native call the flow made was one this mock
   // (and therefore the map it encodes) knows about.
@@ -126,7 +140,10 @@ test('project window: character editor measures, edits and saves both artifacts'
 test('project window: inline rename moves the folder and regenerates the script', async ({
   page,
 }) => {
-  await page.addInitScript(installTauriMock, buildSeed({ activeProjectFile: P.dcsp }))
+  await page.addInitScript(
+    installTauriMock,
+    buildSeed({ activeProjectFile: P.dcsp, houdiniProject: true }),
+  )
   await page.goto('/')
   await page.getByRole('link', { name: /Kira/ }).click()
   await expect(page.getByText('G9 · DQS · 0 custom ROM frames')).toBeVisible()
@@ -147,6 +164,16 @@ test('project window: inline rename moves the folder and regenerates the script'
   expect(written).toContain(`${novaFolder}/Nova.json`)
   expect(written).toContain(`${P.dazLib}/Scripts/DTH-Character-Studio/Demo/Nova/ROM_Nova_G9.dsa`)
   expect(JSON.parse((await fileContent(page, `${novaFolder}/Nova.json`))!).name).toBe('Nova')
+  // The junctions chased the rename: the regenerate's refresh aimed the
+  // .hip-side link at the NEW folder's (re-derived) export root — the exact
+  // failure #647 fixes (a junction stores an absolute target, so without the
+  // refresh it would still point into the old "Kira" tree).
+  expect(await commandCalls(page, 'create_junction')).toContainEqual({
+    request: {
+      linkPath: `${novaFolder}/houdini/dth-exports`,
+      targetPath: `${novaFolder}/daz3d/dth-exports`,
+    },
+  })
 
   expect(await unhandledCommands(page)).toEqual([])
 })

@@ -588,3 +588,17 @@ current code before relying on details, but assume the *lesson* still holds.
   on a PR, so the old occurrences sat unflagged for a long time; the local gate
   (`lint`/`typecheck`/`test`/`smoke`) does not run CodeQL, so an alert like this
   first shows up on the PR.
+- **An NTFS junction stores an ABSOLUTE target — anything that moves the
+  target leaves the junction pointing at the old path**, silently (Windows
+  happily keeps a dangling reparse point, and re-creating the old folder makes
+  writes land in a resurrected tree instead of erroring). The `dth-exports`
+  junctions therefore get refreshed on EVERY generation through the one funnel
+  (`refreshExportJunctions` in api/houdini.ts, called from
+  `generateCharacterFiles`), not just when Generate project runs — a
+  character/folder rename, a scenes-folder rename, a `charactersSubdir` move
+  and the v29 export-root migration all change the export root the junctions
+  target. Corollary for DERIVED path fields: being re-derived on save does not
+  exempt a field from `repointCharacterPaths` — `moveCharactersRoot` rewrites
+  each moved definition directly (no `saveCharacter`, no re-derive), and
+  `exportPath` staying stale until "some later save" was enough for a
+  same-batch regenerate to aim junctions at the old location (#647).
