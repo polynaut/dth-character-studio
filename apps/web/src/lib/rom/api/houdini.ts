@@ -19,6 +19,7 @@ import {
   parseHoudiniResult,
 } from '../houdini-jobs'
 import type { HoudiniResult, HoudiniRunState } from '../houdini-jobs'
+import type { Character } from '@dth/rom'
 // Houdini's half of the handoff, bundled as source and written into app-data
 // before each launch (see startHoudiniExport).
 import houdiniRunnerScript from '../houdini-runtime/456.py?raw'
@@ -95,6 +96,41 @@ async function linkExportsIntoProject(projectDir: string, exportPath: string): P
   } catch {
     return false
   }
+}
+
+/**
+ * Re-point a character's `dth-exports` junctions at its CURRENT export root.
+ *
+ * The junctions store an absolute target, so anything that changes the export
+ * root leaves them aiming at the old one — a character rename or folder move, a
+ * scenes-folder rename (the export root lives inside it), a `charactersSubdir`
+ * move, the v29 export-root migration. Rather than teach each of those about
+ * Houdini, this runs from the ONE funnel every generation path already goes
+ * through (`generateCharacterFiles`), where the current root is already known.
+ *
+ * Idempotent and self-healing: `create_junction` repoints a stale link and
+ * reports `"exists"` for a correct one, so the common case costs two cheap
+ * native calls. Skipped entirely for a character with no generated Houdini
+ * project — there is nothing to keep current, and no folder of ours to put one
+ * in. Best-effort throughout: a failure costs the shortcut (and, since #645,
+ * `$HIP`-relative reference paths until the next regenerate), never the export.
+ */
+export async function refreshExportJunctions(
+  character: Character,
+  charFolderAbs: string,
+  houdiniSubdir?: string,
+): Promise<void> {
+  if (!isTauri()) return
+  const target = character.exportPath.trim()
+  if (!target || !charFolderAbs) return
+  const houdiniDir = characterHoudiniDir(charFolderAbs, houdiniSubdir)
+  const norm = (p: string) => p.trim().replace(/\\/g, '/').toLowerCase()
+  const dirKey = norm(houdiniDir)
+  // A GENERATED project — one living in the character's own Houdini folder. A
+  // hand-linked project elsewhere is the user's, and we put no junction there.
+  if (!character.houdiniProjects.some((hip) => norm(hip).startsWith(`${dirKey}/`))) return
+  await linkExportsIntoProject(houdiniDir, target)
+  await linkExportsIntoProject(characterHoudiniProjectDir(charFolderAbs, houdiniSubdir), target)
 }
 
 export interface GeneratedHoudiniProject {

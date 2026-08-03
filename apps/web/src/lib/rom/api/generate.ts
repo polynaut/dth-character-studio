@@ -41,6 +41,7 @@ import { relativeInside } from '../storage/fs'
 import { copyDazScene } from './attachments'
 import { clearImageSrcCache, rebuildAvatarMaster, upscaleStoredAvatar } from './avatars'
 import { poseAssetFramesSchema, sceneWearablesSchema } from './native-types'
+import { refreshExportJunctions } from './houdini'
 import { CHARACTER_SCHEMA_VERSION, poseAssetCsvEra, RUNTIME_VERSION } from '@dth/rom'
 import {
   basename,
@@ -508,6 +509,16 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   await migrateRomAnimationFolders(versioned)
   await housekeepRomAnimations(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)
+  // The `dth-exports` junctions store an ABSOLUTE target, so every path that can
+  // change the export root — a character rename or folder move, a scenes-folder
+  // rename, a charactersSubdir move, the v29 migration — would otherwise leave
+  // them aimed at the old one. They all pass through here, so one refresh
+  // covers the lot instead of each flow having to remember Houdini exists.
+  try {
+    await refreshExportJunctions(versioned, outDir, project.houdiniSubdir)
+  } catch {
+    // best-effort: a shortcut nobody can create is not a reason to fail a save
+  }
   return { outDir, files, scriptsDir, scriptsError }
 }
 

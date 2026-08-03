@@ -10,7 +10,24 @@ import {
 import type { Character } from '@dth/rom'
 
 import { canonicalImage } from '../image'
-import { characterExportRoot } from '#/lib/scene-subfolder.ts'
+import { characterExportRoot, deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
+
+/**
+ * The character's scenes ROOT relative to its folder, from where the primary
+ * scene actually sits — the anchor for the derived export root. Falls back to
+ * the project's `dazSubdir` when there is no primary inside the folder to read
+ * one from (a scene-less character, or one linked in place elsewhere).
+ */
+function scenesRootRelOf(scenePath: string, folderAbs: string, dazSubdir: string): string {
+  const prim = normalizeRelPathLower(scenePath)
+  const folder = normalizeRelPathLower(folderAbs)
+  if (!prim || !folder || !prim.startsWith(`${folder}/`)) return dazSubdir
+  const relDir = dirname(scenePath.replace(/\\/g, '/')).slice(folderAbs.replace(/\\/g, '/').length + 1)
+  return deriveScenesRootRel(relDir, dazSubdir) || dazSubdir
+}
+
+const normalizeRelPathLower = (p: string) =>
+  stripTrailingSeparators(p.replace(/\\/g, '/')).toLowerCase()
 import {
   characterFolderName,
   definitionFileName,
@@ -521,8 +538,23 @@ export async function saveCharacter(
         .then((m) => m.dazSubdir)
         .catch(() => undefined)
     : undefined
+  // Anchored on the character's OWN scenes root, not the project default: the
+  // export folder lives inside the Daz folder, so renaming that folder has to
+  // carry it. Deriving from `dazSubdir` alone meant a scenes-folder rename
+  // (daz3d → daz) physically moved `dth-exports` with the folder and then this
+  // save pointed `exportPath` straight back at the vanished `daz3d/dth-exports`
+  // — the rename half-undoing itself on its own save. `deriveScenesRootRel` is
+  // the one shared rule the scene cards and generation already use; the project
+  // default remains the fallback when there is no primary inside the folder to
+  // read a root from.
   const finalStamped = relFolder
-    ? { ...repointed, exportPath: characterExportRoot(finalFolderAbs, dazSubdir) }
+    ? {
+        ...repointed,
+        exportPath: characterExportRoot(
+          finalFolderAbs,
+          scenesRootRelOf(repointed.scenePath, finalFolderAbs, dazSubdir ?? ''),
+        ),
+      }
     : repointed
 
   await writeTextFileAtomic(definitionAbs, JSON.stringify(finalStamped, null, 2) + '\n')
