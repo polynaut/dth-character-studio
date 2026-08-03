@@ -1,5 +1,7 @@
 import { sceneOverrideSchema } from '@dth/rom'
 
+import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
+
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 import type { SceneOverride } from '@dth/rom'
 
@@ -81,7 +83,11 @@ export function seedSceneHair(
   existing: ReadonlyArray<SceneOverride>,
 ): Array<SceneOverride> | null {
   if (scan.error !== '') return null
-  if (existing.some((o) => o.scenePath === scenePath)) return null
+  // Same key normalization as `groomSceneMap`/`normalizeSceneKey` — every other
+  // scene-path compare is separator/case-insensitive, so an existing record
+  // stored with the other slashes (or case) must still count as "exists".
+  const key = normalizeSceneKey(scenePath)
+  if (existing.some((o) => normalizeSceneKey(o.scenePath) === key)) return null
   const hair = detectedHairLabels(scan.items)
   if (hair.length === 0) return null
   return [
