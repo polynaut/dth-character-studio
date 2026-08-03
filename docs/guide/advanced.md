@@ -36,8 +36,9 @@ Every extra scene was checked against the primary when it was added — above al
 for the **same GP/DK geograft**, since every scene has to produce the primary's
 skeleton. A new primary re-decides that reference, so one without Golden Palace
 would leave a set of already-validated scenes quietly mismatched. Unlink the
-others first, replace, then add them back: each one is validated properly
-against the new primary on the way in.
+others first — leave **Delete file on disk** unticked (it starts off), so the
+files stay where they are — replace, then add each scene back: it is validated
+properly against the new primary on the way in.
 
 <p align="center">
   <img width="900" alt="Daz scene cards — primary plus an outfit scene (selected), with the per-scene hair items beside them" src="screenshots/character-daz-scenes.png" />

@@ -79,7 +79,10 @@ export function LinkedAssetCard({
   /** Show the replace button but refuse it. Deliberately NOT "hide it": a
    *  control that vanishes reads as a missing feature, while a disabled one
    *  whose `replaceTitle` explains the condition tells the user what to do
-   *  about it. */
+   *  about it. Native `disabled` (the kit has no focusable-disabled pattern),
+   *  so the button leaves the tab order — the reason still reaches assistive
+   *  tech through the aria-label, and the wrapping span carries the pointer
+   *  tooltip. */
   replaceDisabled?: boolean
   /** Selectable mode: highlights when `selected`; a card click SELECTS instead
    *  of opening — only the corner icon opens. Both optional (default = the

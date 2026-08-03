@@ -613,8 +613,13 @@ export function DazSceneField({
    * primary, which runs the real validation for each one.
    */
   const replaceBlocked = character.extraScenes.length > 0
+  // Two full variants, not spliced plurals — "they were/it was" has to agree
+  // too. "Keeping its file" = leave the Remove dialog's "Delete file on disk"
+  // toggle off (its default), so the scene can be re-added afterwards.
   const replaceReason = replaceBlocked
-    ? `Unlink the other ${character.extraScenes.length === 1 ? 'scene' : 'scenes'} first — they were validated against this primary's GP/DK geograft, and a different primary would leave them mismatched`
+    ? character.extraScenes.length === 1
+      ? "Unlink the other scene first, keeping its file so it can be re-added — it was validated against this primary's GP/DK geograft, and a different primary would leave it mismatched"
+      : "Unlink the other scenes first, keeping their files so they can be re-added — they were validated against this primary's GP/DK geograft, and a different primary would leave them mismatched"
     : undefined
 
   async function onReplacePick() {
@@ -897,11 +902,17 @@ export function DazSceneField({
     }
   }
 
-  // Open the unlink confirm. Default "delete file" on for a scene inside the
-  // character folder (a copy), off for one linked in place outside it.
+  // Open the unlink confirm. "Delete file on disk" always starts OFF — deleting
+  // is opt-in per removal (the confirm button flips Unlink → Delete when it's
+  // on). It used to pre-tick for an in-folder scene, but an in-folder scene can
+  // be the ONLY copy (Add scene's "delete the original" MOVES it in), the
+  // delete is permanent (no recycle bin), and unlink-then-re-add is the
+  // documented route around the replace-primary gate — a pre-ticked delete
+  // destroys exactly the file the user means to keep. A linked-in-place scene
+  // additionally locks the toggle off entirely (deleteFileDisabled below).
   function askRemove(scene: string) {
     setError('')
-    setRemoveDeleteFile(insideCharFolder(scene))
+    setRemoveDeleteFile(false)
     setPendingRemove(scene)
   }
 
