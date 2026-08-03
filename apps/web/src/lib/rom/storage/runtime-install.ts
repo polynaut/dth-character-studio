@@ -73,8 +73,14 @@ const RUNTIME_FILES: Record<string, string> = {
  * `Scan_Morphs_<Genesis>` wrappers, which are swept below); Scan_Frames exports
  * the open scene's keyed frames as a CSV for "Import from CSV".
  */
+/** The visible index builder's file name — installed at the scripts-folder ROOT
+ *  (it belongs to no character). Named here because Tools → Build Genesis Index
+ *  hands this exact file to the Runner (`api/execute.ts`), and a literal in two
+ *  places is a rename waiting to break the handoff silently. */
+export const GENESIS_INDEX_SCRIPT = 'Build_Genesis_Index.dsa'
+
 const VISIBLE_SCAN_SCRIPTS: Record<string, string> = {
-  'Build_Genesis_Index.dsa': buildGenesisIndexScript,
+  [GENESIS_INDEX_SCRIPT]: buildGenesisIndexScript,
   'Scan_Frames.dsa': scanFramesScript,
   // Scene hygiene rather than a scan: switches off the foreign-geograft surfaces
   // on a Golden Palace / Dicktator geoshell (see DthShellSurfaces.dsa). Bakes in

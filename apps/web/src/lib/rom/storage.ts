@@ -123,6 +123,7 @@ export { scanPoseAssets } from './storage/pose-assets'
 
 // --- DTH runtime install (bundled .dsa → the Daz library Scripts root) --------
 export {
+  GENESIS_INDEX_SCRIPT,
   copyRuntimeFiles,
   readScriptRuntimeVersion,
   studioCharScriptsDir,

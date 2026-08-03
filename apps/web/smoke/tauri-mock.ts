@@ -63,6 +63,9 @@ export interface TauriMockState {
   files: Map<string, string>
   calls: Array<{ cmd: string; args: unknown }>
   unhandled: Array<string>
+  /** What `daz_studio_running` reports — false until a spec flips it (the way
+   *  a spec keeps a claimed batch's Daz "alive" while driving its progress). */
+  dazRunning?: boolean
   /** Let every command held on a `holdPaths` path proceed, and stop holding. */
   releaseHeld: () => void
   /** Mutable: the answer `houdini_running` gives from now on. */
@@ -353,7 +356,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'ensure_network_drives':
         return []
       case 'daz_studio_running':
-        return false
+        // False until a spec flips `__tauriMock.dazRunning` — how a spec keeps
+        // the fake Daz "alive" while it drives a claimed batch's progress
+        // (the studio treats a sub-100 running file with Daz gone as a DEAD run).
+        return (window as any).__tauriMock?.dazRunning === true
       case 'launch_daz_studio':
         // Nothing to start. The batch is claimed by the Runner INSIDE Daz,
         // which this fake does not impersonate — a spec plays that part by

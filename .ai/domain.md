@@ -433,6 +433,31 @@ older runtimes as stale.
   the outcome (failed rows + errors); a running file whose Daz exited below
   100 is a dead run (cleaned + reported). No export-folder watching anymore —
   the old delivered-CSV mtime watch is gone.
+- **The shared export watch is single-consumer** (api/execute.ts): the
+  in-memory `activeRun` scopes the ONE global job file to the feature that
+  armed it, and `fetchExportRunProgress(watcher?)` is DESTRUCTIVE on a
+  finished/dead run — it deletes the file, drops the watch and returns the one
+  outcome snapshot, so exactly one caller may consume an outcome (the owner
+  toasts it; everyone else only displays). Character editors adopt
+  `characterId: ''` — "someone's batch is live: show busy, never toast". A run
+  that belongs to NO character carries a **sentinel** characterId —
+  `GENESIS_INDEX_RUN` (`'#genesis-index'`, Tools → Build Genesis Index) — and
+  is consumed ONLY by the caller passing that sentinel as its `watcher`; every
+  mismatched watcher/run pairing (an editor's mount/focus refresh during an
+  index build, the Tools panel polling during a character export) is served
+  the display-only `''` adoption instead, so no stray refresh can eat another
+  feature's outcome. A new no-character batch = a new sentinel + exactly one
+  owning panel that passes it. Handoff writers never clobber a LIVE batch
+  either: all four (executeCharacterJobs, generateRomAnimation,
+  openSceneInRunningDaz, buildGenesisIndex) refuse while a sub-100 `running_`
+  file exists and Daz is up, and sweep only a finished (100) one —
+  executeCharacterJobs additionally recovers a DEAD one (sub-100, Daz gone),
+  same as the watch. buildGenesisIndex reuses the ~10s claim-wait when Daz was
+  already "running": an unclaimed handoff (Daz shutting down, or no Runner
+  polling) is taken back — file deleted, watch dropped, error reported — never
+  left pending forever; while a handoff waits un-renamed the Tools panel
+  offers Abort (`abortGenesisIndexRun` — no stamps to roll back), and the
+  panel gates on `fetchExportRunnerGate` exactly like the export dialog.
 - **Runner gate**: the export dialog blocks Start while the installed Runner
   DLL is missing or OLDER than the bundled one (`runnerGate` in
   storage/releases.ts, `fetchExportRunnerGate`), deep-linking to Settings →

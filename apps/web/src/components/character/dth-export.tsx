@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import { Ban, Loader2, Play, Wand } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -19,6 +18,7 @@ import {
 import dthLogo from '#/assets/dth-logo.webp'
 import { Portrait } from '#/components/portrait.tsx'
 import { PrimaryBadge } from '#/components/primary-badge.tsx'
+import { RunnerGateNotice } from '#/components/runner-gate-notice.tsx'
 import {
   abortExporterJobs,
   dazStudioRunning,
@@ -120,9 +120,11 @@ export function DthExportAction({
   async function refreshStatus() {
     const [isPending, run] = await Promise.all([exporterJobsPending(), fetchExportRunProgress()])
     setPending(isPending)
-    // '' = a batch adopted for display only (a scene-card ROM generate, or a
-    // run this window didn't start): the Runner is busy either way, so every
-    // editor's button shows the live progress — outcomes stay owner-only.
+    // '' = a batch adopted for display only (a scene-card ROM generate, a run
+    // this window didn't start, or a sentinel run like the Tools genesis-index
+    // build — fetchExportRunProgress maps those to '' for editor callers and
+    // never lets them consume the outcome): the Runner is busy either way, so
+    // every editor's button shows the live progress — outcomes stay owner-only.
     if (!run || (run.characterId !== '' && run.characterId !== character.id)) {
       setProgress(null)
       return
@@ -613,33 +615,6 @@ function ModeStep({ onPick }: { onPick: (mode: ExportMode) => void }) {
           <span className="mt-0.5 block text-xs text-muted-foreground">{choice.blurb}</span>
         </button>
       ))}
-    </div>
-  )
-}
-
-/** The dialog's Runner-plugin notice: the export runs through the Runner in
- *  Daz Studio, so a missing or outdated install blocks Start — this box says
- *  why and deep-links to Settings → General (where the Runner section lives). */
-function RunnerGateNotice({ gate }: { gate: Extract<RunnerGate, { blocked: true }> }) {
-  return (
-    <div className="space-y-1 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
-      <p>
-        {gate.reason === 'no-install-folder'
-          ? 'Exports run through the Runner plugin in Daz Studio, but no Daz Studio install folder is configured yet.'
-          : gate.reason === 'not-installed'
-            ? 'Exports run through the Runner plugin, which is not installed in this Daz Studio yet.'
-            : `A Runner plugin update is pending — Daz Studio has ${gate.installedVersion || 'an unknown version'} installed, this app bundles ${gate.bundledVersion || 'a newer one'}.`}
-      </p>
-      <p>
-        <Link
-          to="/settings"
-          search={{ tab: 'general' }}
-          className="font-medium text-primary underline underline-offset-2"
-        >
-          {gate.reason === 'update-pending' ? 'Update it in Settings' : 'Set it up in Settings'}
-        </Link>{' '}
-        first, then come back to export.
-      </p>
     </div>
   )
 }
