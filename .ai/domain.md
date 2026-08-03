@@ -433,6 +433,25 @@ older runtimes as stale.
   the outcome (failed rows + errors); a running file whose Daz exited below
   100 is a dead run (cleaned + reported). No export-folder watching anymore —
   the old delivered-CSV mtime watch is gone.
+- **Every script handed to the Runner must run UNATTENDED — no modals, ever.**
+  The Runner executes job rows inside a Daz that is often minimized, so any
+  `MessageBox` is an invisible dead stop: the row never completes, the batch
+  sits below 100 and the studio's watch spins forever. Learned on
+  Build_Genesis_Index (#653), where even the final SUMMARY box would have held
+  a successful build below done. The pattern: the visible Content-Library
+  script keeps its dialogs (that path is interactive on purpose); the handoff
+  gets a hidden dot-prefixed **bulk twin** (`.Build_Genesis_Index_Bulk.dsa`,
+  runtime v52 — installed by `HIDDEN_ROOT_SCRIPTS` in
+  storage/runtime-install.ts) whose runtime entry point takes a `bulk` flag:
+  questions resolve to their safe default (the Runner's row runs in a fresh
+  empty scene per the contract — nothing to lose, nobody to answer), summaries
+  `print()` to the Daz log (the studio panel owns the outcome toast), and
+  failures **`throw`** so the Runner marks the row `failed` + `error` and the
+  studio toasts the reason — a bulk failure must never end as a silent success.
+  Any NEW handoff (bulk morph/product scans, future Tools jobs) follows this
+  law, and the handoff self-heals the install first
+  (`copyRuntimeFiles(scriptsRoot)` — marker-skipped when current) so the
+  button works right after an app update.
 - **The shared export watch is single-consumer** (api/execute.ts): the
   in-memory `activeRun` scopes the ONE global job file to the feature that
   armed it, and `fetchExportRunProgress(watcher?)` is DESTRUCTIVE on a
