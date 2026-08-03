@@ -358,6 +358,9 @@ interface ActiveHoudiniRun {
   /** Scenes that went into the job — the count shown until 456.py reports its
    *  own node total (one scene may hold several export nodes, or none). */
   scenes: number
+  /** When the handoff was armed (`Date.now()`) — the elapsed clock's zero and
+   *  the finish toast's total. In-memory, like the Daz watch's twin. */
+  startedAtMs: number
 }
 let activeHoudiniRun: ActiveHoudiniRun | null = null
 
@@ -477,6 +480,7 @@ export async function startHoudiniExport({
     jobPath: jobFile,
     resultPath,
     scenes: job.scenes.length,
+    startedAtMs: Date.now(),
   }
   return { jobFile, scenes: job.scenes.length }
 }
@@ -519,6 +523,19 @@ export async function fetchHoudiniRunProgress(): Promise<
         // cleanup clears the result, and rewrites the job, either way
       }
     }
+  }
+  // The timing rides the in-memory watch, not the result file: the elapsed
+  // clock for starting/running, the total for the finish toast.
+  if (state.state === 'finished') {
+    return {
+      ...state,
+      elapsedMs: Date.now() - run.startedAtMs,
+      characterId: run.characterId,
+      scenes: run.scenes,
+    }
+  }
+  if (state.state === 'starting' || state.state === 'running') {
+    return { ...state, startedAtMs: run.startedAtMs, characterId: run.characterId, scenes: run.scenes }
   }
   return { ...state, characterId: run.characterId, scenes: run.scenes }
 }

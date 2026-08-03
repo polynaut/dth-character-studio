@@ -7,6 +7,7 @@ import {
   EXECUTE_STAMPS_FILE,
   EXPORTER_JOB_FILE,
   EXPORT_MODES,
+  HOUDINI_RUN_MODES,
   RUNNING_JOB_FILE,
   SCAN_CONFIG_FILE,
   executeSceneSignature,
@@ -23,6 +24,7 @@ import {
   sceneExportFolderRel,
 } from '../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
+import { sceneDthPath } from '../houdini-jobs'
 import { normalizePathLower } from '#/lib/path.ts'
 import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import { relativeInside } from '../storage/fs'
@@ -40,6 +42,7 @@ import type {
   ExecuteStamp,
   ExecuteStamps,
   ExporterJob,
+  HoudiniRunMode,
   ScanProductsConfig,
   ScanSceneWork,
 } from '../execute-jobs'
@@ -280,12 +283,17 @@ export async function openSceneInRunningDaz({
 interface ActiveExportRun {
   characterId: string
   total: number
-  /** Linked Houdini project (`.hip`) to open once the batch finishes — the
-   *  dialog's "Open Houdini project after export" pick ('' = none). */
-  openHoudiniProject: string
-  /** The dialog's "Export too" toggle: run that project's DazToHue exports
-   *  after opening it, instead of just opening it (see api/houdini.ts). */
-  houdiniExport: boolean
+  /** When THIS window wrote the handoff (`Date.now()`) — what the progress
+   *  button's elapsed clock and the finish toast's total time count from.
+   *  In-memory like the rest of the watch: a reloaded window (display-only
+   *  adoption) doesn't know it, and simply shows no time. */
+  startedAtMs: number
+  /** The dialog's SELECTED Houdini projects (`.hip`), in list order — what the
+   *  finish continuation works through once the batch is done ([] = none). */
+  houdiniProjects: Array<string>
+  /** What those projects do when their turn comes — the Houdini list's Mode
+   *  dropdown (see {@link HoudiniRunMode}; api/houdini.ts runs the exports). */
+  houdiniMode: HoudiniRunMode
   /** The scenes this batch ran, in job order — the Houdini run exports only
    *  the networks importing THESE scenes, so the list has to survive the batch
    *  to be available when it finishes. */
@@ -311,6 +319,9 @@ export type ExportRunProgress =
       processed: number
       done: number
       failed: number
+      /** When the handoff was written — absent on a display-only adoption
+       *  (another window's run; this one never saw the start). */
+      startedAtMs?: number
     }
   /** progress hit 100 — the studio has DELETED the file; final snapshot. */
   | {
@@ -319,12 +330,15 @@ export type ExportRunProgress =
       total: number
       failed: number
       errors: Array<string>
-      /** The run's after-export Houdini project ('' = none picked). */
-      openHoudiniProject: string
-      /** Whether that project should also RUN its exports ("Export too"). */
-      houdiniExport: boolean
+      /** The run's after-export Houdini projects ([] = none picked). */
+      houdiniProjects: Array<string>
+      /** What those projects do — open, or run their exports (and for which
+       *  scene scope). See {@link HoudiniRunMode}. */
+      houdiniMode: HoudiniRunMode
       /** The scenes the batch ran — the Houdini job's scope. */
       scenes: Array<string>
+      /** Handoff → finish, for the toast's "in 12m 34s". */
+      elapsedMs?: number
     }
   /** The run died (Daz gone mid-run / file vanished) — watch ended. */
   | { state: 'dead'; characterId: string; total: number }
@@ -413,6 +427,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           processed: 0,
           done: 0,
           failed: 0,
+          startedAtMs: run.startedAtMs,
         }
       }
       const done = parsed.jobs.filter((j) => j.status === 'done').length
@@ -429,14 +444,15 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
           state: 'finished',
           characterId: run.characterId,
           total: parsed.jobs.length || run.total,
+          elapsedMs: Date.now() - run.startedAtMs,
           failed,
           errors: parsed.jobs
             .filter((j) => j.error)
             // An empty scenePath (the contract's "new empty scene" row, e.g.
             // the genesis-index build) would prefix the line with a bare ": ".
             .map((j) => (j.scenePath ? `${j.scenePath}: ${j.error ?? ''}` : (j.error ?? ''))),
-          openHoudiniProject: run.openHoudiniProject,
-          houdiniExport: run.houdiniExport,
+          houdiniProjects: run.houdiniProjects,
+          houdiniMode: run.houdiniMode,
           scenes: run.scenes,
         }
       }
@@ -473,6 +489,7 @@ export async function fetchExportRunProgress(watcher?: string): Promise<ExportRu
         processed: parsed.jobsDone ?? done + failed,
         done,
         failed,
+        startedAtMs: run.startedAtMs,
       }
     }
   } catch {
@@ -550,6 +567,10 @@ export interface ExecuteSceneStatus {
    * as it now stands. False without a ROM animation.
    */
   romUnexported: boolean
+  /** The scene's last Daz export is on disk (the `.dth` at {@link sceneDthPath}
+   *  — the file a Houdini network imports). What "Houdini only" runs on; rows
+   *  without one are disabled in that mode (nothing to rely on). */
+  exportExists: boolean
 }
 
 /**
@@ -583,6 +604,10 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
         // Never exported (no delivered CSV, mtime 0) counts as unexported.
         romUnexported = romMtime > (await mtimeOf(delivered))
       }
+      // The `.dth` a Houdini network imports — "Houdini only" runs off this
+      // delivered file alone, so its on-disk presence is that mode's gate.
+      const dth = sceneDthPath(character, key, scenesRootAbs)
+      const exportExists = dth !== '' && (await mtimeOf(dth)) > 0
       let info: Awaited<ReturnType<typeof stat>>
       try {
         info = await stat(scenePath)
@@ -594,6 +619,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
           missing: true,
           romExists: romMtime > 0,
           romUnexported,
+          exportExists,
         }
       }
       const prev = stored.scenes[key]
@@ -609,6 +635,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
         missing: false,
         romExists: romMtime > 0,
         romUnexported,
+        exportExists,
       }
     }),
   )
@@ -621,13 +648,15 @@ const executeInput = charScopeInput.extend({
   /** What the run does — the dialog's first step. Defaults to the full
    *  ROM + export run (see {@link ExportMode}). */
   mode: z.enum(EXPORT_MODES).default('rom-export'),
-  /** Linked Houdini project to open once the batch FINISHES (the dialog's
-   *  optional pick); omitted/empty = open nothing. */
-  openHoudiniProject: z.string().optional(),
-  /** "Export too": after opening that project, run its DazToHue exports for the
-   *  networks importing these scenes. Ignored without a project pick — there is
-   *  nothing to run then. Off by default: it drives the user's own Houdini. */
-  houdiniExport: z.boolean().default(false),
+  /** The Houdini projects selected for the after-batch continuation, in list
+   *  order; [] = none. Each must be one of the character's linked projects. */
+  houdiniProjects: z.array(z.string().min(1)).default([]),
+  /** What the selected projects do once the batch finishes — the Houdini
+   *  list's Mode dropdown ({@link HoudiniRunMode}). Meaningless without a
+   *  project. It drives the user's own Houdini, so nothing runs unless the
+   *  dialog selected a project explicitly (or via its involved-projects
+   *  auto-selection). */
+  houdiniMode: z.enum(HOUDINI_RUN_MODES).default('export-selected'),
 })
 
 export interface ExecuteJobsSummary {
@@ -685,8 +714,8 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     id,
     scenes: chosen,
     mode,
-    openHoudiniProject,
-    houdiniExport,
+    houdiniProjects,
+    houdiniMode,
   } = executeInput.parse(data)
   if (!isTauri()) throw new Error('DTH Export needs the desktop app (Daz Studio is launched natively).')
 
@@ -716,16 +745,25 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
     return match
   })
 
-  // The after-export Houdini project must be one of the character's LINKED
+  // The after-export Houdini projects must be among the character's LINKED
   // projects (the dialog only offers those; backstop against a stale pick).
-  const openHoudini = openHoudiniProject?.trim()
-    ? character.houdiniProjects.find(
-        (p) => normalizeSceneKey(p) === normalizeSceneKey(openHoudiniProject),
-      )
-    : undefined
-  if (openHoudiniProject?.trim() && !openHoudini) {
+  const hips = houdiniProjects.map((hip) => {
+    const match = character.houdiniProjects.find(
+      (p) => normalizeSceneKey(p) === normalizeSceneKey(hip),
+    )
+    if (!match) {
+      throw new Error(`The Houdini project is not linked to this character anymore:\n${hip}`)
+    }
+    return match
+  })
+
+  // ROM only writes no fresh export — an export continuation would re-consume
+  // the PREVIOUS `.dth`s while the report reads as the new ROM's round trip.
+  // The dialog only offers "Open only" there (hipSelectionAfterToggle); this
+  // is the loud backstop against any other caller.
+  if (mode === 'rom-only' && hips.length > 0 && houdiniMode !== 'open') {
     throw new Error(
-      `The Houdini project is not linked to this character anymore:\n${openHoudiniProject}`,
+      'ROM only writes no export for Houdini to run on — use "Open only", or deselect the Houdini projects.',
     )
   }
 
@@ -793,10 +831,9 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   activeRun = {
     characterId: character.id,
     total: jobs.length,
-    openHoudiniProject: openHoudini ?? '',
-    // Without a project there is nothing to run the exports in, so the toggle
-    // cannot mean anything on its own.
-    houdiniExport: houdiniExport && !!openHoudini,
+    startedAtMs: Date.now(),
+    houdiniProjects: hips,
+    houdiniMode,
     scenes,
   }
 
@@ -1216,8 +1253,9 @@ export async function startProjectScan({ data }: { data: unknown }): Promise<Pro
   activeRun = {
     characterId: PROJECT_SCAN_RUN,
     total: jobs.length,
-    openHoudiniProject: '',
-    houdiniExport: false,
+    startedAtMs: Date.now(),
+    houdiniProjects: [],
+    houdiniMode: 'export-selected',
     scenes: sceneWork.map((s) => s.scenePath),
   }
 

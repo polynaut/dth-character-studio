@@ -19,6 +19,10 @@ import {
   parseJobFileJson,
   preCheckedScenes,
   scanConfigJson,
+  formatElapsed,
+  hipSelectionAfterToggle,
+  houdiniModeForSelection,
+  scenesMissingExport,
   scenesMissingRomAnimation,
   staleExportFolders,
 } from './execute-jobs'
@@ -372,6 +376,7 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
       missing: boolean
       romExists: boolean
       romUnexported: boolean
+      exportExists: boolean
     }> = {},
   ) => ({
     scenePath,
@@ -379,6 +384,7 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
     missing: false,
     romExists: false,
     romUnexported: false,
+    exportExists: false,
     ...over,
   })
 
@@ -408,6 +414,81 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
     ]
     expect(preCheckedScenes('export-only', rows)).toEqual(new Set())
     expect(preCheckedScenes('rom-export', rows)).toEqual(new Set())
+  })
+
+  it('houdini-only pre-checks every scene whose export is on disk — .duf presence is irrelevant', () => {
+    // Houdini reads the DELIVERED export, not the scene: a missing .duf takes
+    // nothing away from this run, while a scene without a delivered .dth has
+    // nothing to rely on however healthy its .duf is.
+    const rows = [
+      row(A, { exportExists: true, missing: true }),
+      row(B, { affected: true, exportExists: false }),
+    ]
+    expect(preCheckedScenes('houdini-only', rows)).toEqual(new Set([A]))
+  })
+})
+
+describe('houdiniModeForSelection — Open only is a single-project affair', () => {
+  it('flips open → export-selected when a second project joins', () => {
+    expect(houdiniModeForSelection('open', 2)).toBe('export-selected')
+  })
+  it('keeps every other combination', () => {
+    expect(houdiniModeForSelection('open', 1)).toBe('open')
+    expect(houdiniModeForSelection('open', 0)).toBe('open')
+    expect(houdiniModeForSelection('export-selected', 3)).toBe('export-selected')
+    expect(houdiniModeForSelection('export-all', 2)).toBe('export-all')
+  })
+})
+
+describe('hipSelectionAfterToggle — ROM only can only OPEN one project', () => {
+  const A = 'X:/p/Kira/houdini/Kira.hip'
+  const B = 'X:/p/Kira/houdini/KiraSummertide.hip'
+
+  it('replaces the pick under rom-only (radio), toggles everywhere else', () => {
+    // A rom-only run writes no fresh export, so only single-project "Open
+    // only" is legal — a second pick must not grow a selection no mode runs.
+    expect(hipSelectionAfterToggle('rom-only', new Set([A]), B)).toEqual(new Set([B]))
+    expect(hipSelectionAfterToggle('rom-export', new Set([A]), B)).toEqual(new Set([A, B]))
+    expect(hipSelectionAfterToggle('houdini-only', new Set([A]), B)).toEqual(new Set([A, B]))
+  })
+
+  it('unchecks normally in every mode', () => {
+    expect(hipSelectionAfterToggle('rom-only', new Set([A]), A)).toEqual(new Set())
+    expect(hipSelectionAfterToggle('export-only', new Set([A, B]), B)).toEqual(new Set([A]))
+  })
+})
+
+describe('formatElapsed — the run clock/total, three widths', () => {
+  it('seconds, minutes and hours each keep their shape', () => {
+    expect(formatElapsed(0)).toBe('0s')
+    expect(formatElapsed(999)).toBe('0s')
+    expect(formatElapsed(37_000)).toBe('37s')
+    expect(formatElapsed(4 * 60_000 + 12_000)).toBe('4m 12s')
+    // Zero-padded tail so the ticking clock doesn't jitter in width.
+    expect(formatElapsed(60_000 + 5_000)).toBe('1m 05s')
+    expect(formatElapsed(60 * 60_000 + 3 * 60_000)).toBe('1h 03m')
+  })
+})
+
+describe('scenesMissingExport — the "Houdini only" gate', () => {
+  const A = 'X:/p/Kira/daz3d/primary/Kira.duf'
+  const B = 'X:/p/Kira/daz3d/summertide/KiraSummertide.duf'
+  const scene = (scenePath: string, exportExists: boolean) => ({ scenePath, exportExists })
+
+  it('names the SELECTED scenes whose last export is not on disk', () => {
+    const rows = [scene(A, true), scene(B, false)]
+    expect(
+      scenesMissingExport('houdini-only', rows, new Set([A, B])).map((s) => s.scenePath),
+    ).toEqual([B])
+  })
+
+  it('ignores unselected scenes, other modes, and an unlanded probe', () => {
+    const rows = [scene(A, true), scene(B, false)]
+    expect(scenesMissingExport('houdini-only', rows, new Set([A]))).toEqual([])
+    expect(scenesMissingExport('rom-export', rows, new Set([A, B]))).toEqual([])
+    expect(scenesMissingExport('export-only', rows, new Set([A, B]))).toEqual([])
+    // Unknown is not missing — the dialog holds Start as "Checking scenes…".
+    expect(scenesMissingExport('houdini-only', null, new Set([A, B]))).toEqual([])
   })
 })
 

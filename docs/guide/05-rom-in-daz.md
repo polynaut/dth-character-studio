@@ -224,14 +224,17 @@ tune this:
 ## Batch export — DTH Export
 
 Running the script yourself (above) is one way — the **DTH Export** button in
-the character header does the whole thing for you. It asks what the run should
-do first:
+the character header does the whole thing for you, Houdini included:
 
 <p align="center">
-  <img width="900" alt="the DTH Export dialog — choose what the run does" src="screenshots/dth-export-modes.png" />
+  <img width="900" alt="the DTH Export dialog — Daz scenes and Houdini projects, each with their Mode" src="screenshots/dth-export-dialog.png" />
   <br>
-  <sub><em>Step one: ROM + Export, ROM only, or Export only.</em></sub>
+  <sub><em>Pick the Daz scenes and their run, then the Houdini projects that carry on with the results.</em></sub>
 </p>
+
+**Daz scenes** lists every linked scene; the ones with outstanding work come
+pre-checked (the wand picks a single scene, a double-click selects all). The
+**Mode** below the list decides what their run does:
 
 - **ROM + Export** — the full run: a fresh ROM, the saved ROM animation scene,
   and the export of everything (skeletal mesh and hair).
@@ -241,41 +244,53 @@ do first:
   included, without rebuilding them. This is the one for a ROM you tweaked by
   hand in Daz: it pre-selects exactly the scenes whose ROM animation is newer
   than their last export, and skips scenes that have no ROM animation yet.
+- **Skip Daz — use last exports** — nothing runs in Daz at all: the Houdini
+  projects below work off each selected scene's **last Daz export** as it
+  stands on disk. For when the Daz side hasn't changed and only Houdini needs
+  a fresh pass. Scenes that never delivered an export are kept out of the run
+  (there is nothing to rely on).
 
-Then pick the scenes:
+**Houdini projects** lists the character's linked projects the same way — the
+ones that carry on with the results once the Daz side is done. They come
+pre-selected whenever scenes are, so a plain **Start** does the whole round
+trip; untick them and the run ends with Daz. Their own **Mode**:
 
-<p align="center">
-  <img width="900" alt="the DTH Export dialog — pick the scenes to export" src="screenshots/dth-export-dialog.png" />
-  <br>
-  <sub><em>Step two: pick the scenes, Start hands the batch to Daz Studio.</em></sub>
-</p>
+- **Open only** — just open the project, run nothing (needs exactly one
+  project selected — picking a second flips to the export run).
+- **Export selected scenes** — the default: run the projects' DazToHue
+  exports for the checked Daz scenes.
+- **Export all** — run them for every linked scene, whatever is checked.
 
-Pick the linked scenes to export (scenes that changed since their last export
-come pre-checked) and press **Start**: the batch is handed to Daz Studio,
-where the bundled
+Several selected projects run **one after another**: each opens, exports,
+reports — then the next starts.
+
+**ROM only** is the exception: it builds no fresh export, so there is nothing
+for a Houdini export to pick up — the projects don't pre-select there, and a
+project you tick by hand can only be **opened** (the export modes are
+disabled, and one project at a time).
+
+Press **Start**: the batch is handed to Daz Studio, where the bundled
 [**Runner plugin**](./02-setup.md#install-the-dth-character-studio-runner-plugin)
 works through it unattended — every scene gets its full ROM build, export and
 delivered CSV, exactly as if you had run the scripts by hand. A closed Daz is
 started; a running one picks the batch up by itself. While the batch is still
 waiting the button reads **Abort**; once Daz starts working it shows live
-progress, and the studio reports the outcome — including any per-scene
-failures — when the batch finishes.
+progress with the elapsed time, and the studio reports the outcome — including
+any per-scene failures and the total time — when the batch finishes. The
+finish report stays on screen until you close it (or start a new run).
 
 The dialog refuses to start while the Runner plugin is missing or older than
 the one bundled with the app — the notice links straight to Settings to update
-it first.
+it first. (A skip-Daz run doesn't need the Runner at all.)
 
-### Carry on into Houdini — "Export too"
+### Carry on into Houdini
 
-Pick a linked Houdini project under **Open Houdini project after export** and
-the studio opens it once the batch finishes. Picking one also reveals an
-**Export too** switch: leave it on and the project doesn't just open, it
-**runs its own DazToHue exports** for the scenes you just ticked — the last
-manual step of the round trip, gone.
+With Houdini projects selected in an exporting mode, the round trip's last
+manual step is gone — each project **runs its own DazToHue exports** for the
+scenes in scope, right after the Daz batch delivers (or immediately, with
+**Skip Daz**).
 
-It is off by default, on purpose: it drives your Houdini, so you opt in.
-
-What happens when you leave it on:
+What happens:
 
 1. Daz finishes the batch and the studio reports it, as always.
 2. Houdini opens the project — visibly, so you can watch it work. The button

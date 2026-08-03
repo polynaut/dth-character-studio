@@ -197,8 +197,11 @@ export function buildHoudiniJob(
  * crashed), and must stop the poll rather than spin forever.
  */
 export type HoudiniRunState =
-  | { state: 'starting' }
-  | { state: 'running'; done: number; total: number }
+  /** The timing fields are merged in by `fetchHoudiniRunProgress` (the arm
+   *  time lives on the in-memory watch, not in the result file) — the pure
+   *  {@link houdiniRunStateFrom} never sets them. */
+  | { state: 'starting'; startedAtMs?: number }
+  | { state: 'running'; done: number; total: number; startedAtMs?: number }
   | {
       state: 'finished'
       ok: number
@@ -211,6 +214,8 @@ export type HoudiniRunState =
        *  with Yes, so this is the ONLY place those warnings ever surface — and
        *  the result file they came from is deleted right after this snapshot. */
       problems: Array<string>
+      /** Handoff → finish, for the toast's "in 12m 34s". */
+      elapsedMs?: number
     }
   | { state: 'dead' }
 

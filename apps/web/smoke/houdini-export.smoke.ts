@@ -119,25 +119,26 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   await page.getByRole('link', { name: /Kira/ }).click()
   await page.getByText(/custom ROM frames/).waitFor()
 
-  // Step 1: what the run does. Step 2: the scenes + the after-export pick.
+  // ONE page now: the affected scene comes pre-checked, which auto-selects the
+  // linked Houdini project — and the Houdini Mode defaults to "Export selected
+  // scenes", so a plain Start does the whole round trip. (The old flow's mode
+  // card + project dropdown + "Export too" switch are all gone.)
   await page.getByRole('button', { name: 'DTH Export' }).click()
-  await page.getByRole('button', { name: /ROM \+ Export/ }).click()
-  await page.getByRole('combobox').filter({ hasText: /Kira|Don't open/ }).click()
-  await page.getByRole('option', { name: 'Kira' }).click()
-  // The toggle only exists once a project is picked — it has nothing to run in
-  // otherwise, which is exactly what shipped broken in #627.
-  await page.getByRole('switch', { name: 'Export too' }).click()
+  await expect(page.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).toBeChecked()
   await page.getByRole('button', { name: 'Start' }).click()
 
   // The Daz batch is handed off…
   await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
-  // …and picked up + finished by the Runner.
+  // …and picked up + finished by the Runner. NO finish toast yet — the batch
+  // outcome is stashed for the one end-of-everything report, and only the
+  // transient hand-over info shows while Houdini takes over.
   await runnerFinishesBatch(page)
-  await expect(page.getByText(/DTH Export finished/)).toBeVisible()
-
-  // Which hands over to Houdini: the job file lands in the character folder,
-  // 456.py is staged in app-data, and Houdini is launched pointed at both.
   await expect(page.getByText(/Opening the Houdini project to export/)).toBeVisible()
+  await expect(page.getByText(/DTH Export finished/)).toHaveCount(0)
+
+  // The hand-over: the job file lands in the character folder, 456.py is
+  // staged in app-data, and Houdini is launched pointed at both.
   await expect.poll(() => fileContent(page, HOUDINI_JOB), { timeout: 15_000 }).not.toBeNull()
   const job = JSON.parse((await fileContent(page, HOUDINI_JOB))!) as {
     version: number
@@ -168,20 +169,81 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
     `${launch.request.scriptPath.replace(/;&$/, '')}/456.py`,
   )
 
-  // 456.py works through it and reports.
+  // 456.py works through it and reports — and NOW the one summary toast fires,
+  // covering the whole process: the Daz leg and the Houdini leg, per line.
   await houdiniReportsDone(page)
-  await expect(page.getByText(/Houdini export finished — 1 exported/)).toBeVisible({
-    timeout: 15_000,
-  })
-  // The HDA's pre-flight complaint reaches the user. 456.py answers its
-  // "Continue anyway?" with Yes, so this toast is its ONLY surface — and the
-  // file holding it is deleted immediately below.
+  await expect(page.getByText(/DTH Export finished/)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/Daz: 1\/1 scene exported/)).toBeVisible()
+  await expect(page.getByText(/Kira: 1 exported/)).toBeVisible()
+  // The HDA's pre-flight complaint reaches the user inside that report. 456.py
+  // answers its "Continue anyway?" with Yes, so this is its ONLY surface — and
+  // the file holding it is deleted immediately below.
   await expect(page.getByText(/No bone scale reference found/)).toBeVisible()
 
   // THE POINT: the handoff cleans up after itself. Both files used to be left
   // in the character folder for good.
   await expect.poll(() => fileKeys(page)).not.toContain(HOUDINI_JOB)
   expect(await fileKeys(page)).not.toContain(HOUDINI_RESULT)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('rom only: the Houdini list can only OPEN — no auto-select, no export continuation', async ({
+  page,
+}) => {
+  // A ROM-only run writes no fresh `.dth`, so an export continuation would
+  // re-consume the PREVIOUS exports while the report reads as "the new ROM
+  // reached Houdini". The dialog therefore never auto-selects projects under
+  // ROM only, offers Open only as the one live Houdini mode — and the batch
+  // ends with the project OPENING, not exporting: no Houdini job, no launch.
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
+  // ROM only runs the visible ROM-animation build script, not the bulk export.
+  seed.files[`${SCRIPTS_ROOT}/Demo/Kira/.Build_ROM_Animation.dsa`] = '// rom-build fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText(/custom ROM frames/).waitFor()
+
+  // The default mode (ROM + Export) auto-selects the linked project…
+  await page.getByRole('button', { name: 'DTH Export' }).click()
+  await expect(page.getByRole('checkbox', { name: /Export KiraDefault/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).toBeChecked()
+
+  // …and switching to ROM only takes the armed continuation away again.
+  await page.locator('#daz-mode').click()
+  await page.getByRole('option', { name: /ROM only/ }).click()
+  await expect(page.getByRole('checkbox', { name: /Run in Kira/ })).not.toBeChecked()
+
+  // Re-picking a project by hand is allowed — but only to OPEN it: the mode
+  // lands on Open only and both export modes are dead.
+  await page.getByRole('checkbox', { name: /Run in Kira/ }).check()
+  await expect(page.locator('#houdini-mode')).toHaveText(/Open only/)
+  await page.locator('#houdini-mode').click()
+  await expect(page.getByRole('option', { name: /Export selected scenes/ })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  await expect(page.getByRole('option', { name: /Export all/ })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  await page.getByRole('option', { name: /Open only/ }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
+
+  // The Daz batch is the ROM build…
+  await expect.poll(() => fileContent(page, PENDING_JOB)).not.toBeNull()
+  expect(await fileContent(page, PENDING_JOB)).toContain('.Build_ROM_Animation.dsa')
+  await runnerFinishesBatch(page)
+
+  // …and its finish IS the report (opening is not a watched leg): the project
+  // opens like an Explorer double-click, and no Houdini job ever exists.
+  await expect(page.getByText(/DTH Export finished — 1 scene exported/)).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText(/Opening the Houdini project/)).toBeVisible()
+  await expect.poll(() => callsNamed(page, 'shell_open_file')).toEqual([{ path: P.houdini }])
+  expect(await callsNamed(page, 'launch_houdini_job')).toEqual([])
+  expect(await fileKeys(page)).not.toContain(HOUDINI_JOB)
 
   expect(await unhandledCommands(page)).toEqual([])
 })

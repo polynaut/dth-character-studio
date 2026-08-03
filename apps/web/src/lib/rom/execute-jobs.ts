@@ -225,6 +225,67 @@ export const EXPORT_MODES = ['rom-export', 'rom-only', 'export-only'] as const
 export type ExportMode = (typeof EXPORT_MODES)[number]
 
 /**
+ * Everything the dialog's Daz **Mode** dropdown can pick: the three Daz-side
+ * {@link ExportMode}s plus `houdini-only` ("Skip Daz — use last exports"),
+ * which never reaches `executeCharacterJobs` at all — no Daz run, no Runner.
+ * It takes each selected scene's LAST-DELIVERED Daz export (the `.dth` at
+ * `sceneDthPath`) as it stands and hands the scenes straight to
+ * `startHoudiniExport` (api/houdini.ts) — the same Houdini leg every other
+ * mode continues into after its Daz batch. Kept out of {@link EXPORT_MODES}
+ * on purpose: that enum is the Daz job-file wire contract, and `houdini-only`
+ * writes no Daz job.
+ */
+export type RunChoice = ExportMode | 'houdini-only'
+
+/**
+ * The Houdini list's **Mode** dropdown — what the selected Houdini projects do
+ * once their turn comes (after the Daz batch, or immediately in skip mode):
+ *
+ * - `open` — just open the (single) project, run nothing. Only offered while
+ *   EXACTLY one project is selected ({@link houdiniModeForSelection}): several
+ *   Houdini instances opened "just to look at" is never what anyone meant.
+ * - `export-selected` — run the projects' DazToHue exports for the CHECKED Daz
+ *   scenes. The default the moment a project joins the run.
+ * - `export-all` — run them for EVERY linked scene, whatever is checked.
+ */
+export const HOUDINI_RUN_MODES = ['open', 'export-selected', 'export-all'] as const
+export type HoudiniRunMode = (typeof HOUDINI_RUN_MODES)[number]
+
+/**
+ * THE "Open only needs exactly one project" rule: picking a second project
+ * under `open` flips the mode to `export-selected` (the default run) rather
+ * than refusing the pick — the user asked for more projects, not a dead end.
+ * Every other combination keeps the current mode.
+ */
+export function houdiniModeForSelection(current: HoudiniRunMode, selected: number): HoudiniRunMode {
+  return current === 'open' && selected > 1 ? 'export-selected' : current
+}
+
+/**
+ * THE "ROM only drives no Houdini export" rule, applied to the project
+ * checkboxes: a ROM-only run writes no fresh `.dth`, so an export continuation
+ * would re-consume the PREVIOUS exports while the report reads as "the new ROM
+ * reached Houdini" — the misleading-success this studio exists to avoid. Under
+ * `rom-only` the Houdini list can only OPEN a project, and open is
+ * single-project ({@link houdiniModeForSelection}) — so its checkbox behaves
+ * like a radio: picking another project REPLACES the pick instead of growing a
+ * multi-selection no mode could legally run. Every other Daz mode toggles.
+ * Unchecking works the same everywhere.
+ */
+export function hipSelectionAfterToggle(
+  mode: RunChoice,
+  prev: ReadonlySet<string>,
+  hip: string,
+): Set<string> {
+  if (prev.has(hip)) {
+    const next = new Set(prev)
+    next.delete(hip)
+    return next
+  }
+  return mode === 'rom-only' ? new Set([hip]) : new Set([...prev, hip])
+}
+
+/**
  * The hidden generated script a mode's job rows run — each selects the open
  * scene's overrides itself, so one script serves every scene:
  * {@link BULK_ROM_EXPORT_SCRIPT} (ROM + full export),
@@ -253,7 +314,7 @@ export function jobScriptForMode(mode: ExportMode): string {
  * dialog's Start separately waits out that window as "Checking scenes…").
  */
 export function scenesMissingRomAnimation<T extends { scenePath: string; romExists: boolean }>(
-  mode: ExportMode,
+  mode: RunChoice,
   scenes: ReadonlyArray<T> | null,
   checked: ReadonlySet<string>,
 ): Array<T> {
@@ -262,24 +323,49 @@ export function scenesMissingRomAnimation<T extends { scenePath: string; romExis
 }
 
 /**
+ * THE "Houdini only" gate, {@link scenesMissingRomAnimation}'s sibling: the
+ * SELECTED scenes whose last Daz export is not on disk (`exportExists` — the
+ * `.dth` the Houdini network imports), so there is nothing to rely on. Same two
+ * call sites and the same null-tolerance: the Start gate, and the pre-handoff
+ * re-probe that catches an export deleted while the dialog sat open.
+ */
+export function scenesMissingExport<T extends { scenePath: string; exportExists: boolean }>(
+  mode: RunChoice,
+  scenes: ReadonlyArray<T> | null,
+  checked: ReadonlySet<string>,
+): Array<T> {
+  if (mode !== 'houdini-only' || !scenes) return []
+  return scenes.filter((scene) => checked.has(scene.scenePath) && !scene.exportExists)
+}
+
+/**
  * Which scenes a mode PRE-CHECKS in the DTH Export dialog: the ones whose work
  * is outstanding for THAT run — changed inputs for the ROM-building modes, an
  * unexported saved ROM animation for the export-only pass. A scene whose
- * `.duf` is missing is never pre-checked, whatever the mode: its row cannot
- * run (the dialog disables it), and a saved ROM animation can well survive a
+ * `.duf` is missing is never pre-checked by a Daz mode: its row cannot run
+ * (the dialog disables it), and a saved ROM animation can well survive a
  * deleted scene — pre-checking it would arm a selection whose handoff can only
  * fail.
+ *
+ * `houdini-only` has no staleness signal (nothing tracks what Houdini last
+ * consumed), so it pre-checks every scene whose export is on disk — including
+ * one whose `.duf` is missing: Houdini reads the delivered export, not the
+ * scene, so a deleted `.duf` takes nothing away from this run.
  */
 export function preCheckedScenes(
-  mode: ExportMode,
+  mode: RunChoice,
   scenes: ReadonlyArray<{
     scenePath: string
     affected: boolean
     missing: boolean
     romExists: boolean
     romUnexported: boolean
+    exportExists: boolean
   }>,
 ): Set<string> {
+  if (mode === 'houdini-only') {
+    return new Set(scenes.filter((s) => s.exportExists).map((s) => s.scenePath))
+  }
   return new Set(
     scenes
       .filter(
@@ -287,6 +373,22 @@ export function preCheckedScenes(
       )
       .map((s) => s.scenePath),
   )
+}
+
+/**
+ * A run duration for humans — the export button's live clock and the finish
+ * toast's total: `"37s"`, `"4m 12s"`, `"1h 03m"`. Sub-second runs still read
+ * `"0s"` rather than vanishing. Pure so the three widths are pinned by tests.
+ */
+export function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const seconds = totalSeconds % 60
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  if (totalMinutes === 0) return `${seconds}s`
+  const minutes = totalMinutes % 60
+  const hours = Math.floor(totalMinutes / 60)
+  if (hours === 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
 /**

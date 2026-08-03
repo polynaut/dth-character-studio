@@ -365,6 +365,14 @@ older runtimes as stale.
   which is a long silence on a big project), works (`running done/total`) and
   finishes. Liveness comes from `houdini_running`, without which a result file
   stuck at "running" after the user closed Houdini would poll forever.
+  MEASURED on the first live run (2026-08-03): 456.py fires BEFORE the main
+  window paints, and inline work there holds the window back — the whole batch
+  ran against a blank screen and Houdini "opened" only after the last node.
+  The batch is therefore DEFERRED to the first event-loop idle
+  (`hdefereval.executeDeferred`, 456.py's `launch()`) plus a Qt single-shot
+  breather (`STARTUP_BREATHER_MS`) so the viewport finishes its first cook —
+  textures included — before `do_export` hogs the main thread. Sessions
+  without the module (hython) run inline — no window to wait for.
   Chosen shape is **visible GUI + a startup script reading a job file**, not
   headless hython and not `hrpyc` remote control, so it mirrors the Daz Runner
   handoff. Houdini runs a `456.py` found on `HOUDINI_SCRIPT_PATH` after a scene
@@ -426,7 +434,7 @@ older runtimes as stale.
   reads the `dthOpenSceneFile` capture (`openSceneFileSnippet`, emitted once
   per carrier) instead of the live filename; a new scene-keyed snippet must do
   the same.
-- **DTH Export runs in one of three MODES** (the dialog's first step; the
+- **DTH Export runs in one of three Daz MODES** (the dialog's first step; the
   `ExportMode` union in `execute-jobs.ts` owns the mapping):
   `rom-export` → `.Bulk_ROM_Export.dsa` on the source scene (fresh ROM, saved
   ROM animation, full export — the default, and the ONLY mode that writes
@@ -437,6 +445,36 @@ older runtimes as stale.
   rebuild — for a ROM hand-edited in Daz). Export-only pre-checks the scenes
   whose ROM animation is newer than their delivered `<exportName>_pose_asset.csv`
   (`fetchExecuteScenes`'s `romUnexported`), i.e. unexported as it now stands.
+  The Daz Mode dropdown's FOURTH option, `houdini-only` ("Skip Daz — use last
+  exports"; `RunChoice` union, same file), is deliberately NOT an
+  `ExportMode`: it writes no Daz job at all — the Houdini selection runs
+  directly, the standalone version of the after-batch continuation. Its
+  per-scene gate is `exportExists` (the delivered `.dth` at `sceneDthPath` is
+  on disk); the `.duf` is NOT consulted (Houdini reads the export, not the
+  scene, so a missing `.duf` doesn't disable the row there), and the Runner
+  gate doesn't apply (no Daz plugin in the path).
+- **The DTH Export dialog is ONE page**: two card lists — "Daz scenes" and
+  "Houdini projects" (multi-select) — each with its own **Mode** dropdown.
+  Houdini modes (`HoudiniRunMode`, execute-jobs.ts): `open` (single-project
+  only — `houdiniModeForSelection` flips to `export-selected` when a second
+  project is picked), `export-selected` (the default; scoped by the checked
+  scenes) and `export-all` (every linked scene). Projects come AUTO-SELECTED
+  whenever the probe pre-checks scenes — approximated as ALL linked projects,
+  because no studio-side scene↔hip map exists (it lives inside the `.hip`;
+  456.py only exports matching networks, so uninvolved projects no-op).
+  Multiple selected projects run SEQUENTIALLY (`startHoudiniQueue` in
+  dth-export.tsx, remaining projects on a ref): the Houdini job/result files
+  are per-character singletons, so two live runs would clobber each other —
+  project n+1 starts only when n's watch reports finished (a dead Houdini
+  drops the queue; clicking the progress button stops the WATCH and with it
+  the studio-driven queue, which the button's tooltip says out loud).
+  EXCEPT under `rom-only`: that run writes no fresh `.dth`, so an export
+  continuation would re-consume the PREVIOUS exports while the report reads
+  as "the new ROM reached Houdini". ROM only therefore never auto-selects
+  projects and only `open` is legal — `hipSelectionAfterToggle`
+  (execute-jobs.ts) makes the project checkbox a radio there, the dialog
+  disables both export modes, and `executeCharacterJobs` throws on any other
+  combination as the loud backstop.
 - **A saved ROM animation stands in for its source scene** (runtime v46): since
   export-only job rows OPEN `rom-animations/<stem>_ROM.duf`, every generated
   script embeds `romAnimationSourceMap` (rom path → source scene) and resolves
