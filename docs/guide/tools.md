@@ -7,9 +7,9 @@ The [one-time setup](./02-setup.md) covered installing the DTH release +
 Exporter; Tools is for the extras beyond that.
 
 <p align="center">
-  <img width="900" alt="Tools page, two tabs" src="screenshots/tools-page.png" />
+  <img width="900" alt="Tools page tabs" src="screenshots/tools-page.png" />
   <br>
-  <sub><em>The Tools page and its two tabs.</em></sub>
+  <sub><em>The Tools page and its tabs.</em></sub>
 </p>
 
 &nbsp;
@@ -97,7 +97,54 @@ into that version's `houdini.env` (`SHARED_PRESETS` + `HOUDINI_PATH`).
 
 ---
 
-## Tab 2 — Refresh assets
+## Tab 2 — Scan & index
+
+The morph and bone index behind the editor's autocompletes, and the per-scene
+scans that extend it.
+
+### Scan project
+
+One pass over everything a project can be scanned for. Tick what you want,
+press **Start scan**, and leave it — the studio hands Daz Studio a single batch
+and works through it unattended, reporting progress on the button.
+
+- **Base morphs** — builds each generation's stock figures and indexes their
+  morphs and bones (exactly what
+  [`Build_Genesis_Index`](./04-first-character.md#the-rom-definition) does). One
+  job. It runs **first**, because the scene scans below filter themselves
+  against it.
+- **Character morphs** — opens every linked Daz scene of every character and
+  indexes the dials the base index *doesn't* have: fitted clothing, hair,
+  third-party geografts and add-ons. Each find is filed under the scene it was
+  found in. One job per scene.
+- **Products** — runs the [Daz Products scan](./product-scanning.md) for the
+  same scenes. Only available when the project has *Daz Products* switched on
+  (**Settings → Project**); it shares the scene opens with the morph scan, so
+  ticking both costs no extra time.
+
+Because each scene has to be opened in Daz, a project with many scenes takes a
+while — that's the point of it being one unattended run. While the batch is
+still waiting for Daz to pick it up you can **Abort** it; once Daz has claimed
+it, the run belongs to Daz.
+
+> [!NOTE]
+> **Why scene morphs are scoped to their scene.** Two outfits in two different
+> scenes both have an *Expand All* dial. Before, the autocomplete offered both
+> and you had to know which was which. Now a scene-scanned morph is only
+> suggested while **that** scene is the one selected in the character editor,
+> marked with a small **this scene** badge. Morphs the base figure carries are
+> always offered. Re-scanning a scene *replaces* what it contributed, so
+> clothing you removed stops being suggested.
+
+### Build Genesis Index
+
+The base index on its own — the same job as the **Base morphs** tick above,
+without needing a project open. Use it after installing new morph packs,
+geografts or figure add-ons when you don't need the per-scene scans re-run.
+
+---
+
+## Tab 3 — Refresh assets
 
 Re-generates the Daz scripts and PoseAsset CSVs so every generated file matches
 the **current** studio/runtime version, migrating definitions saved by an older

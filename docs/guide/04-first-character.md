@@ -413,6 +413,12 @@ characters — searchable by **internal name** *or* **Daz UI label** — and
 picking a suggestion fills in the exact internal name **and** the right node:
 no more mismatched node/morph pairs.
 
+> [!TIP]
+> The easier route for a whole project is **Tools → Scan & index → Scan
+> project**: it runs this base build *and* a per-scene scan for every character
+> in one unattended pass. See
+> [Scanning a whole project](./tools.md#tab-2--scan--index).
+
   <p align="center">
     <img width="508" alt="Parameter name autocomplete suggestions" src="screenshots/detail-morph-autocomplete.png" />
     <br>
