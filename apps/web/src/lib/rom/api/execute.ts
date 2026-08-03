@@ -294,14 +294,33 @@ export type ExportRunProgress =
  * whose Daz has EXITED below 100 is a dead run: deleted + reported 'dead'
  * once. A torn read (the Runner rewrites the file between rows) just reports
  * the last state again — the next poll gets a clean parse.
+ *
+ * The finished/dead handling is DESTRUCTIVE — it deletes the file, drops the
+ * watch and returns the ONE outcome snapshot — so it must reach the caller
+ * that OWNS the run, not whichever poll lands first. `watcher` is the caller's
+ * identity on the watch: sentinel runs ({@link GENESIS_INDEX_RUN}) are only
+ * consumed by the caller passing that sentinel (the Tools panel), and that
+ * caller in turn never consumes a character run. Every mismatched watcher/run
+ * pairing — an editor's mount/focus refresh during an index build, the Tools
+ * panel polling during an export — is served the display-only `''` adoption
+ * instead, exactly like a foreign window's batch. Character editors pass
+ * nothing (their runs predate the parameter and stay first-poll-consumed —
+ * within one window only one editor is mounted at a time).
  */
-export async function fetchExportRunProgress(): Promise<ExportRunProgress | null> {
+export async function fetchExportRunProgress(watcher?: string): Promise<ExportRunProgress | null> {
   const run = activeRun
   const paths = await exporterJobFilePaths()
   if (!paths) return null
-  if (!run) {
+  // Sentinel runs belong to their own panel — see the doc comment above.
+  const foreignToWatcher =
+    run !== null &&
+    (run.characterId === GENESIS_INDEX_RUN
+      ? watcher !== GENESIS_INDEX_RUN
+      : watcher === GENESIS_INDEX_RUN)
+  if (!run || foreignToWatcher) {
     // No in-memory watch — a scene-card ROM-animation generate (which arms
-    // none), another window's run, or a reloaded window. The Runner is ONE
+    // none), another window's run, or a reloaded window — or a live watch
+    // this CALLER must not consume (`foreignToWatcher`). The Runner is ONE
     // global resource, so a live batch should still show on the button:
     // adopt it for DISPLAY only (`characterId: ''` — every editor may show
     // it, none toasts an outcome). A finished/foreign file is left alone —
@@ -358,7 +377,11 @@ export async function fetchExportRunProgress(): Promise<ExportRunProgress | null
           characterId: run.characterId,
           total: parsed.jobs.length || run.total,
           failed,
-          errors: parsed.jobs.filter((j) => j.error).map((j) => `${j.scenePath}: ${j.error ?? ''}`),
+          errors: parsed.jobs
+            .filter((j) => j.error)
+            // An empty scenePath (the contract's "new empty scene" row, e.g.
+            // the genesis-index build) would prefix the line with a bare ": ".
+            .map((j) => (j.scenePath ? `${j.scenePath}: ${j.error ?? ''}` : (j.error ?? ''))),
           openHoudiniProject: run.openHoudiniProject,
           houdiniExport: run.houdiniExport,
           scenes: run.scenes,
@@ -676,12 +699,26 @@ export async function executeCharacterJobs({ data }: { data: unknown }): Promise
   const scriptsRoot = storage.studioScriptsDir(settings.dazLibraryFolder)
   const jobFile = joinPath(scriptsRoot, EXPORTER_JOB_FILE)
   // A leftover `running_` file (a finished batch nobody watched, or a dead
-  // one) would block the Runner's rename — the studio owns its cleanup.
-  try {
-    const staleRunning = joinPath(scriptsRoot, RUNNING_JOB_FILE)
-    if (await exists(staleRunning)) await remove(staleRunning)
-  } catch {
-    // best effort — the Runner also clears a stale running file before renaming
+  // one) would block the Runner's rename — the studio owns its cleanup. But a
+  // LIVE batch — sub-100 with Daz still up (another window's export, or a
+  // Tools genesis-index build) — must never be clobbered: one job file, one
+  // batch at a time, same refusal as every other handoff writer.
+  const staleRunning = joinPath(scriptsRoot, RUNNING_JOB_FILE)
+  if (await exists(staleRunning).catch(() => false)) {
+    const finished = await readTextFile(staleRunning)
+      .then((text) => parseJobFileJson(text)?.progress === 100)
+      // Unreadable or torn: assume a live batch — refusing is the safe guess.
+      .catch(() => false)
+    if (!finished) {
+      const dazRunning = await invoke<boolean>('daz_studio_running').catch(() => true)
+      if (dazRunning) {
+        throw new Error('Daz Studio is working through a batch — try again when it finishes.')
+      }
+      // Daz gone below 100 = a dead run; fall through and clean it up.
+    }
+    await remove(staleRunning).catch(() => {
+      // best effort — the Runner also clears a stale running file before renaming
+    })
   }
   await storage.writeTextFileAtomic(jobFile, jobFileJson(jobs))
 
@@ -827,9 +864,10 @@ export async function generateRomAnimation({
 
 /**
  * The Genesis-index run's `characterId` on the shared export watch — a sentinel,
- * because this batch belongs to no character. Editors ignore it (they only adopt
- * `''`, the "some other window is running something" display state), so no
- * character page claims its outcome; the Tools panel filters on exactly this.
+ * because this batch belongs to no character. Only the caller passing it as its
+ * `watcher` to {@link fetchExportRunProgress} (the Tools panel) may consume the
+ * run's outcome; character editors are served the display-only `''` adoption
+ * instead, so no editor's mount/focus refresh can eat (or clobber) the run.
  */
 export const GENESIS_INDEX_RUN = '#genesis-index'
 
@@ -845,7 +883,12 @@ export const GENESIS_INDEX_RUN = '#genesis-index'
  * Same handoff mechanics as every other batch — one global job file, refuse
  * while another is live, clear a finished-but-unswept `running_`, start Daz when
  * it's closed. The watch is armed so the panel can show progress and report the
- * outcome once.
+ * outcome once. When Daz was already "running", the same ~10s claim-wait as
+ * {@link executeCharacterJobs} guards against handing the batch to nobody: a
+ * running process whose Runner never renames the file is most likely SHUTTING
+ * DOWN (or running without the Runner plugin) — the handoff is taken back
+ * (file deleted, watch dropped) and reported as an error rather than left as a
+ * forever-pending spinner.
  */
 export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
   if (!isTauri()) throw new Error('Building the Genesis index needs the desktop app.')
@@ -886,8 +929,47 @@ export async function buildGenesisIndex(): Promise<{ dazWasRunning: boolean }> {
     scenes: [],
   }
   const dazWasRunning = await invoke<boolean>('daz_studio_running').catch(() => false)
-  if (!dazWasRunning) await invoke<string>('launch_daz_studio')
-  return { dazWasRunning }
+  if (!dazWasRunning) {
+    // A fresh launch claims the file on startup — no wait (Daz can take long
+    // to come up; the panel's pending state covers it, with Abort as the out).
+    await invoke<string>('launch_daz_studio')
+    return { dazWasRunning }
+  }
+  // A "running" Daz may be SHUTTING DOWN (the process lingers, its Runner
+  // poller is already gone) — or running without the Runner. A live Runner
+  // claims (renames) the file within one poll interval; when the claim never
+  // comes, take the handoff back so it can't sit pending forever (or fire
+  // minutes later out of nowhere) and say what to do instead.
+  const deadline = Date.now() + OPEN_SCENE_PICKUP_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, OPEN_SCENE_POLL_MS))
+    if (!(await exists(paths.pending).catch(() => true))) return { dazWasRunning }
+  }
+  // Take back only OUR handoff: a replacement batch written meanwhile owns
+  // both the pending file and the watch (activeRun) — leave those alone.
+  if (activeRun?.characterId === GENESIS_INDEX_RUN) {
+    activeRun = null
+    await remove(paths.pending).catch(() => {})
+  }
+  throw new Error(
+    'Daz Studio never picked the job up — it is most likely still shutting down (or the Runner plugin is not running). The handoff was taken back; wait for Daz Studio to close fully, then try again.',
+  )
+}
+
+/**
+ * Abort a genesis-index handoff still WAITING for Daz Studio (the un-renamed
+ * job file): delete the file and drop the watch — the Tools panel's way out of
+ * the pending state. No handoff stamps to roll back ({@link abortExporterJobs}
+ * does that for character runs) — this batch belongs to no character. A file
+ * the Runner already claimed (renamed) is left alone; the watch still ends,
+ * the same "stop watching, the run in Daz is unaffected" promise as
+ * {@link dismissExportRun}.
+ */
+export async function abortGenesisIndexRun(): Promise<void> {
+  if (activeRun?.characterId !== GENESIS_INDEX_RUN) return
+  const paths = await exporterJobFilePaths()
+  if (paths) await remove(paths.pending).catch(() => {})
+  activeRun = null
 }
 
 /** A file's mtime in ms, or 0 when it doesn't exist / can't be stat'ed. */

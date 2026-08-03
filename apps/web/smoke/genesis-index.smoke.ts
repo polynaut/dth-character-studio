@@ -14,6 +14,11 @@ import type { Page } from '@playwright/test'
 const SCRIPTS_ROOT = `${P.dazLib}/Scripts/DTH-Character-Studio`
 const INDEX_SCRIPT = `${SCRIPTS_ROOT}/Build_Genesis_Index.dsa`
 const PENDING_JOB = `${SCRIPTS_ROOT}/dth_exporter_jobs.json`
+const RUNNING_JOB = `${SCRIPTS_ROOT}/running_dth_exporter_jobs.json`
+/** The section gates on the Runner plugin like the export dialog; a configured
+ *  install folder the mock can't read resolves to an UNREADABLE runner state,
+ *  which deliberately never blocks (see fixtures.ts `dazInstallFolder`). */
+const DAZ_INSTALL = 'C:/Program Files/DAZ 3D/DAZStudio4 64-bit'
 
 const fileContent = (page: Page, path: string) =>
   page.evaluate((p) => ((window as any).__tauriMock.files.get(p) ?? null) as string | null, path)
@@ -33,7 +38,7 @@ async function openIndexTab(page: Page) {
 test('build genesis index: hands the root script to the Runner in an empty scene', async ({
   page,
 }) => {
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
   // The script is installed at the scripts-folder ROOT (it belongs to no
   // character) — the handoff refuses without it.
   seed.files[INDEX_SCRIPT] = '// Build_Genesis_Index fixture'
@@ -48,6 +53,9 @@ test('build genesis index: hands the root script to the Runner in an empty scene
     .getByRole('button', { name: 'Build Genesis Index', exact: true })
     .click()
   await expect(page.getByText(/builds the index in a fresh scene/)).toBeVisible()
+  // The handoff is waiting for the launched Daz — un-renamed, so abortable.
+  await expect(page.getByRole('button', { name: /Waiting for Daz Studio/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Abort' })).toBeVisible()
 
   const job = JSON.parse((await fileContent(page, PENDING_JOB))!) as {
     type: string
@@ -65,7 +73,7 @@ test('build genesis index: hands the root script to the Runner in an empty scene
 })
 
 test('build genesis index: refuses when the script is not installed', async ({ page }) => {
-  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
   await page.addInitScript(installTauriMock, seed)
   await page.goto('/')
   await openIndexTab(page)
@@ -82,6 +90,68 @@ test('build genesis index: refuses when the script is not installed', async ({ p
   // Nothing was handed over, and Daz was left alone.
   expect(await fileContent(page, PENDING_JOB)).toBeNull()
   expect(await calledCommands(page)).not.toContain('launch_daz_studio')
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('build genesis index: reports the finished run with a toast on the Tools panel', async ({
+  page,
+}) => {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
+  seed.files[INDEX_SCRIPT] = '// Build_Genesis_Index fixture'
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await openIndexTab(page)
+
+  await page
+    .getByRole('tabpanel')
+    .getByRole('button', { name: 'Build Genesis Index', exact: true })
+    .click()
+  await expect(page.getByRole('button', { name: /Waiting for Daz Studio/ })).toBeVisible()
+
+  // The Runner's pickup, exactly per the contract (see tauri-mock's
+  // launch_daz_studio note): rename the job file to `running_` — the claim —
+  // and keep the fake Daz "alive" so a sub-100 file doesn't read as a dead run.
+  await page.evaluate(
+    ([pending, running]) => {
+      const mock = (window as any).__tauriMock
+      mock.dazRunning = true
+      const job = JSON.parse(mock.files.get(pending) as string) as {
+        jobs: Array<{ status: string }>
+      }
+      job.jobs[0].status = 'running'
+      mock.files.delete(pending)
+      mock.files.set(running, JSON.stringify(job))
+    },
+    [PENDING_JOB, RUNNING_JOB],
+  )
+  // The claim ends the abortable pending state; the panel's poll flips to the
+  // Runner-owned live state. (The poll runs every 2.5s — give it headroom.)
+  await expect(page.getByRole('button', { name: /Building in Daz Studio/ })).toBeVisible({
+    timeout: 10_000,
+  })
+  await expect(page.getByRole('button', { name: 'Abort' })).toBeHidden()
+
+  // The Runner finishes the row and writes progress 100 — the PANEL (the run's
+  // owner on the shared watch) consumes the file and toasts the outcome.
+  await page.evaluate(
+    ([running]) => {
+      const mock = (window as any).__tauriMock
+      const job = JSON.parse(mock.files.get(running) as string) as {
+        progress: number
+        jobsDone?: number
+        jobs: Array<{ status: string }>
+      }
+      job.jobs[0].status = 'done'
+      job.progress = 100
+      job.jobsDone = 1
+      mock.files.set(running, JSON.stringify(job))
+    },
+    [RUNNING_JOB],
+  )
+  await expect(page.getByText(/Genesis index rebuilt/)).toBeVisible({ timeout: 10_000 })
+  // Destructive consumption is the OWNER's: the finished file is gone.
+  expect(await fileContent(page, RUNNING_JOB)).toBeNull()
 
   expect(await unhandledCommands(page)).toEqual([])
 })

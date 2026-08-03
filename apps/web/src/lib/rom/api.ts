@@ -111,6 +111,7 @@ export type { ProductScanFile } from './api/products'
 export {
   GENESIS_INDEX_RUN,
   abortExporterJobs,
+  abortGenesisIndexRun,
   buildGenesisIndex,
   dismissExportRun,
   executeCharacterJobs,
