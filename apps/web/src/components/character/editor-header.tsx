@@ -165,8 +165,8 @@ export function EditorHeader({
             joined by a "Scroll Up" that jumps back to the page top, a step
             darker so Back stays the primary action. */}
         {/* top-5 matches the avatar's mt-5, so the link tops align; left aligns
-            with the title beside the avatar (208px box + gap-5). */}
-        <div className="backlink-scroll absolute top-5 left-[228px] z-20 flex items-center gap-2">
+            with the title beside the avatar (168px box + gap-5). */}
+        <div className="backlink-scroll absolute top-5 left-[188px] z-20 flex items-center gap-2">
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
@@ -209,32 +209,32 @@ export function EditorHeader({
           title="Edit the character image"
           onClick={() => setImageDialogOpen(true)}
         >
-          {/* The wrapper owns the shrink: only its height animates (277 → 120).
-              At rest it's a 3:4 portrait (208×277); collapsed it's a 26:15
-              landscape (208×120). It clips a fixed-size image via overflow-hidden,
+          {/* The wrapper owns the shrink: only its height animates (224 → 96).
+              At rest it's a 3:4 portrait (168×224); collapsed it's a 7:4
+              landscape (168×96). It clips a fixed-size image via overflow-hidden,
               so the portrait is *cropped* top-down rather than re-fit every frame
               — the image is rasterized once and the box just changes its clip
               rect, which stays smooth even with the heavy form relaying out below
               the sticky header. */}
-          <div className="avatar-scroll-shrink h-[277px] w-[208px] overflow-hidden rounded-lg bg-[#262626]">
+          <div className="avatar-scroll-shrink h-[224px] w-[168px] overflow-hidden rounded-lg bg-[#262626]">
             <Avatar
               image={character.image}
               name={character.name}
-              // A square image LAID OUT at the rest over-scan size (316px = the
-              // wrapper's 204px content box × the old 1.55 rest scale, centred with
-              // the -56px margins) so it fills the wrapper at scale 1 — no GPU
+              // A square image LAID OUT at the rest over-scan size (254px = the
+              // wrapper's 164px content box × the 1.55 rest scale, centred with
+              // the -45px margins) so it fills the wrapper at scale 1 — no GPU
               // up-scaling of a small texture, so the resting portrait stays crisp.
               // The zoom keyframes push in from there (see avatar-scroll-pan/zoom).
               // Fixed px, not %, because a replaced <img>'s percentage width was
               // silently ignored here and % resolves against the bordered content box.
               // `max-w-none` defeats Tailwind preflight's `img { max-width: 100% }`,
-              // which would otherwise cap the 316px width back to the wrapper.
-              className="avatar-scroll-pan h-[316px] w-[316px] max-w-none -ml-[56px] -mt-[56px] object-top"
-              fallbackClassName="text-8xl"
+              // which would otherwise cap the 254px width back to the wrapper.
+              className="avatar-scroll-pan h-[254px] w-[254px] max-w-none -ml-[45px] -mt-[45px] object-top"
+              fallbackClassName="text-7xl"
               // Serve the avatar pre-downscaled (Rust Lanczos3) to the painted
-              // 316px × screen DPR, so it paints 1:1 — anti-aliased, no GPU
+              // 254px × screen DPR, so it paints 1:1 — anti-aliased, no GPU
               // resampling of the 768px master.
-              renderPx={316}
+              renderPx={254}
             />
           </div>
           {/* Hover affordance — the avatar is editable in every state now (a
