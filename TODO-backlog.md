@@ -105,21 +105,6 @@ and how they relate to the per-character generated scripts.
 
 ### Bulk operations & scanning
 
-**C1. Bulk product scanning**
-
-```text
-Add "scan products" as a bulk operation on project level, so all products across the
-project's characters/scenes can be scanned in one action.
-```
-
-**C2. Bulk morph scanning**
-
-```text
-Add bulk morph scanning for an entire project, including base morphs — one single
-one-click operation in the studio with a selection of what to scan: base morphs,
-character morphs, products. The user starts it once and just waits.
-```
-
 **C3. Scan-on-export keeps the morph index in sync**
 
 ```text
@@ -134,18 +119,6 @@ the project — only then are all clothing morphs known). Consequences to implem
 - The scan dynamically selects only the scenes in need (e.g. the primary was already
   scanned earlier -> it is skipped when the two later-added scenes get scanned). The
   bulk job is transported over the DTH Exporter plugin.
-```
-
-**C4. Genesis index: per-scene second mode**
-
-```text
-Extend "build genesis index" with a second mode targeting a specific Daz scene: it
-scans all morphs of all children nodes of that scene, filters the result against the
-existing index (the base scan across the base figures usually ran first), and adds all
-newly found morphs (mostly from clothing) to the index together with a field
-"daz-scene-name" recording which scene they were found in. Then use that field in the
-morph auto-complete to filter for the currently selected Daz scene — e.g. only show the
-"Expand All" morph of the 2 clothing assets that actually exist in that scene.
 ```
 
 **C5. Central-scripts UI: selective scene scanning + product scanning**
