@@ -33,6 +33,7 @@ export function PreserveFields({
   sceneOverride,
   writePreserve,
   morphIndex,
+  scenePath,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -46,6 +47,8 @@ export function PreserveFields({
   }) => void
   /** The scanned morph index — powers the Morph-name autocomplete, same as ROM. */
   morphIndex: Array<MorphIndexEntry>
+  /** The selected Daz scene — scopes the autocomplete's scene-scanned entries. */
+  scenePath?: string
 }) {
   // The active preserve override — armed by PRESENCE for this non-primary scene.
   const ov = overrideEligible ? sceneOverride?.preserve : undefined
@@ -92,7 +95,7 @@ export function PreserveFields({
   const rowClass = 'mb-2 flex items-center gap-2'
 
   return (
-    <MorphIndexProvider morphIndex={morphIndex}>
+    <MorphIndexProvider morphIndex={morphIndex} scenePath={scenePath}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-5">
           <div>

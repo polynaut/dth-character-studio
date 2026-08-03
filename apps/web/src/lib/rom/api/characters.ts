@@ -10,6 +10,7 @@ import { normalizeRelFolder } from '../library'
 import {
   EXPORT_FOLDERS_FILE,
   migratedExportFolder,
+  normalizeSceneKey,
   parseExportFoldersRecord,
 } from '../execute-jobs.ts'
 import {
@@ -886,6 +887,16 @@ export interface MorphIndexEntry {
   label: string
   /** The internal name the ROM script dials (e.g. "body_bs_BodyTone"). */
   name: string
+  /**
+   * SCENE-scoped entries only: the Daz scenes this dial was found in, as
+   * {@link normalizeSceneKey} keys. Set by the scene scan
+   * (`morphs_scenes_<G>.json`) for what a scene adds ON TOP of the stock figures
+   * — fitted clothing, hair, third-party grafts. **Absent on base-index
+   * entries**, and that absence is meaningful: the autocomplete offers a base
+   * morph always, and a scene morph only while one of its scenes is selected
+   * (see {@link import('#/components/rom/morph-index-provider.tsx').MorphIndexProvider}).
+   */
+  scenes?: Array<string>
 }
 
 /**
@@ -899,27 +910,42 @@ export interface MorphIndexEntry {
  */
 export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<MorphIndexEntry>> {
   // Cheap staleness check first: the parsed+deduped index is cached per genesis,
-  // keyed on the file's mtime+size — the deliberate re-fetch on every window
-  // focus then costs one stat() instead of a full re-read+re-parse. A missing
-  // file (or one whose mtime can't be read) is never served from cache.
-  let path: string
+  // keyed on the source files' mtime+size — the deliberate re-fetch on every
+  // window focus then costs two stat()s instead of a full re-read+re-parse. A
+  // missing file (or one whose mtime can't be read) is never served from cache.
+  //
+  // TWO files feed one index: the base scan's `morphs_<G>.json` (the stock
+  // figures) and the scene scan's `morphs_scenes_<G>.json` (what individual
+  // scenes add on top). They stay separate on disk because a base rebuild
+  // rewrites its file wholesale — merging the scene finds in would lose them
+  // every time — and are merged here, so callers see one index.
+  let basePath: string
+  let scenePath: string
   let stamp: string | null = null
   try {
-    path = await storage.dataPath(`morphs_${genesis}.json`)
-    const info = await stat(path)
-    const mtime = info.mtime?.getTime()
-    if (mtime !== undefined) stamp = `${mtime}:${info.size}`
+    basePath = await storage.dataPath(`morphs_${genesis}.json`)
+    scenePath = await storage.dataPath(`morphs_scenes_${genesis}.json`)
   } catch {
-    // no scan for this generation yet — nothing to offer
     morphIndexCache.delete(genesis)
     return []
   }
+  const baseStamp = await fileStamp(basePath)
+  const sceneStamp = await fileStamp(scenePath)
+  // No base scan for this generation yet: a scene index alone would offer the
+  // clothing dials of scenes whose figure was never indexed, which is honest
+  // but useless — and much more likely means the user simply hasn't scanned.
+  if (baseStamp === null) {
+    morphIndexCache.delete(genesis)
+    return []
+  }
+  stamp = `${baseStamp}|${sceneStamp ?? '-'}`
   const cached = morphIndexCache.get(genesis)
-  if (stamp && cached && cached.stamp === stamp) return cached.entries
+  if (cached && cached.stamp === stamp) return cached.entries
+
   const out: Array<MorphIndexEntry> = []
   const seen = new Set<string>()
   try {
-    const raw = await readTextFile(path)
+    const raw = await readTextFile(basePath)
     const parsed = JSON.parse(raw) as { morphs?: Array<Record<string, unknown>> }
     for (const m of parsed.morphs ?? []) {
       if (typeof m.name !== 'string' || !m.name || typeof m.node !== 'string' || !m.node) continue
@@ -938,8 +964,55 @@ export async function fetchMorphIndex(genesis: GenesisVersion): Promise<Array<Mo
     morphIndexCache.delete(genesis)
     return out
   }
-  if (stamp) morphIndexCache.set(genesis, { stamp, entries: out })
+  // The scene extras, appended after the base entries. The scan already filters
+  // itself against the base index, but the dedup still guards the window where
+  // a base rebuild ran after the last scene scan — a scene entry must never
+  // shadow a base one, or a dial the figure genuinely carries would go missing
+  // from the autocomplete whenever its scene isn't selected.
+  if (sceneStamp !== null) {
+    try {
+      const raw = await readTextFile(scenePath)
+      const parsed = JSON.parse(raw) as { morphs?: Array<Record<string, unknown>> }
+      for (const m of parsed.morphs ?? []) {
+        if (typeof m.name !== 'string' || !m.name || typeof m.node !== 'string' || !m.node) continue
+        const key = `${m.node}|${m.name}`
+        if (seen.has(key)) continue
+        const scenes = Array.isArray(m.scenes)
+          ? m.scenes.filter((s): s is string => typeof s === 'string' && s !== '').map(normalizeSceneKey)
+          : []
+        // An entry with no scene left is unreachable by the filter — skip it
+        // rather than parking a suggestion nothing can ever surface.
+        if (scenes.length === 0) continue
+        seen.add(key)
+        out.push({
+          node: m.node,
+          nodeLabel: typeof m.nodeLabel === 'string' && m.nodeLabel ? m.nodeLabel : m.node,
+          label: typeof m.label === 'string' && m.label ? m.label : m.name,
+          name: m.name,
+          scenes,
+        })
+      }
+    } catch {
+      // A broken scene index must not cost the base suggestions — keep what the
+      // base scan gave us and just don't cache this run.
+      morphIndexCache.delete(genesis)
+      return out
+    }
+  }
+  morphIndexCache.set(genesis, { stamp, entries: out })
   return out
+}
+
+/** A file's `mtime:size` stamp, or null when it doesn't exist / can't be
+ *  stat'ed — the cheap revalidation the index caches key on. */
+async function fileStamp(path: string): Promise<string | null> {
+  try {
+    const info = await stat(path)
+    const mtime = info.mtime?.getTime()
+    return mtime === undefined ? null : `${mtime}:${info.size}`
+  } catch {
+    return null
+  }
 }
 
 // --- Bone index (same Build_Genesis_Index.dsa output) -----------------------

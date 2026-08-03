@@ -33,6 +33,7 @@ export function FrameZeroFields({
   sceneOverride,
   writeFrameZero,
   morphIndex,
+  scenePath,
 }: {
   character: Character
   patch: (p: Partial<Character>) => void
@@ -43,6 +44,8 @@ export function FrameZeroFields({
   writeFrameZero: (next: NonNullable<SceneOverride['frameZero']>) => void
   /** The scanned morph index — powers the Morph-name autocomplete, same as ROM. */
   morphIndex: Array<MorphIndexEntry>
+  /** The selected Daz scene — scopes the autocomplete's scene-scanned entries. */
+  scenePath?: string
 }) {
   // The active frame-0 override — armed by PRESENCE for this non-primary scene.
   const ov = overrideEligible ? sceneOverride?.frameZero : undefined
@@ -70,7 +73,7 @@ export function FrameZeroFields({
   const inheritedRow = (isOv: boolean) => overrideEligible && !isOv
 
   return (
-    <MorphIndexProvider morphIndex={morphIndex}>
+    <MorphIndexProvider morphIndex={morphIndex} scenePath={scenePath}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
           <Label

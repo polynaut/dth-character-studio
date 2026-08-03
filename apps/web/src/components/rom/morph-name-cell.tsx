@@ -205,6 +205,15 @@ export function MorphNameCell({
                     {highlightMatch(e.name, q)}
                   </span>
                   <span className="ml-auto flex shrink-0 gap-1">
+                    {/* Scene-scanned dials (clothing, hair, third-party grafts)
+                        are only offered while their scene is selected — say so,
+                        or a suggestion that vanishes on a scene switch reads as
+                        a bug rather than as the filter working. */}
+                    {e.fromScene && (
+                      <span className="rounded bg-primary/20 px-1 py-0.5 text-[10px] text-primary">
+                        this scene
+                      </span>
+                    )}
                     <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
                       {hitInternal ? 'internal match' : 'UI name match'}
                     </span>

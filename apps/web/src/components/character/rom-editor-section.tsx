@@ -129,6 +129,7 @@ export const RomEditorSection = memo(function RomEditorSection({
         revealPose={revealPose}
         morphIndex={morphIndex}
         boneIndex={boneIndex}
+        scenePath={scenePath}
         dthPosesFolder={dthPosesFolder}
         jcmMorphMods={character.jcmMorphMods}
         onJcmMorphModsChange={onJcmMorphModsChange}

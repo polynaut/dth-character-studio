@@ -1348,8 +1348,15 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       script's confirm/summary dialogs invisibly blocked the whole batch.
  *       Bulk resolves questions to their stock-figures default, logs instead
  *       of toasting modally, and throws on failure so the row fails loudly.
+ * v53 — the SCENE morph scan: `DthScanSceneMorphs()` in DthScanMorphs.dsa scans
+ *       an open scene for the dials the base index doesn't carry (fitted
+ *       clothing, hair, third-party grafts) and files them under that scene in
+ *       `morphs_scenes_<G>.json`, and `.Scan_Scene_Bulk.dsa` is the Runner's
+ *       per-scene worker for Tools → Scan project (scene morphs and/or the
+ *       product scan off one open, driven by the `dth_scan_config.json`
+ *       sidecar). DthProducts.dsa learns the same `bulk` contract.
  */
-export const RUNTIME_VERSION = 52
+export const RUNTIME_VERSION = 53
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

@@ -828,6 +828,252 @@ function dthFigureBuildLabel(oSpec){
 }
 
 /**********************************************************************
+ * Scene scan — the SECOND mode.
+ *
+ * The build above indexes what the STOCK figures carry. This one indexes what a
+ * particular saved scene adds on top: fitted clothing, hair, third-party
+ * geografts and add-ons all carry morph dials of their own, and none of them
+ * exist on a bare Genesis figure. It scans every node in the OPEN scene, keeps
+ * only the dials the base index doesn't already have, and files them under the
+ * scene they were found in — so the studio's Morph-name autocomplete can offer
+ * a jacket's "Expand All" only while that jacket's scene is the one selected.
+ *
+ * The two indexes are separate FILES on purpose: a base rebuild rewrites
+ * `morphs_<G>.json` wholesale, and merging scene finds into it would lose them
+ * on every rebuild. The studio reads both and merges at load time, so from the
+ * outside it is still one index.
+ */
+
+/** The per-generation SCENE index (base index's sibling). */
+function dthSceneIndexPath(sOutDir, sGenesis){
+	return String(sOutDir).replace(/\\/g, "/").replace(/\/+$/, "") +
+		"/morphs_scenes_" + sGenesis + ".json";
+}
+
+/** Read + parse a JSON file, or null when it is missing/unreadable/garbage. */
+function dthReadJson(sPath){
+	try {
+		var oFile = new DzFile(sPath);
+		if(!oFile.open(oFile.ReadOnly)) return null;
+		var sText = String(oFile.read());
+		oFile.close();
+		return JSON.parse(sText);
+	} catch(e){ return null; }
+}
+
+/** The scene-path convention shared with the studio (normalizeSceneKey in
+ *  execute-jobs.ts): trimmed, '/'-separators, lowercased. It is what the
+ *  autocomplete matches the selected scene against, so both sides must agree. */
+function dthSceneKey(sPath){
+	return String(sPath).replace(/^\s+|\s+$/g, "").replace(/\\/g, "/").toLowerCase();
+}
+
+/** Every `node|name` key the BASE index already holds for a generation — what a
+ *  scene scan filters itself against, so the scene index only ever carries what
+ *  the stock figures genuinely don't have. */
+function dthBaseIndexKeys(sOutDir, sGenesis){
+	var oKeys = {};
+	var sPath = String(sOutDir).replace(/\\/g, "/").replace(/\/+$/, "") +
+		"/morphs_" + sGenesis + ".json";
+	var oIndex = dthReadJson(sPath);
+	if(!oIndex || !oIndex.morphs){
+		print("No base index at", sPath, "- every scanned morph counts as new.");
+		return oKeys;
+	}
+	for(var i = 0; i < oIndex.morphs.length; i++){
+		var oM = oIndex.morphs[i];
+		if(oM && oM.node && oM.name) oKeys[String(oM.node) + "|" + String(oM.name)] = true;
+	}
+	print("Base index holds", oIndex.morphs.length, "morphs for", sGenesis);
+	return oKeys;
+}
+
+/**
+ * Scan EVERY node in the scene (each root and all its descendants), not just the
+ * figure roots the build path walks: a scene scan is looking for what is WORN
+ * and what is parented in, and a prop or a hair item that sits outside the
+ * figure hierarchy carries dials just the same.
+ */
+function dthScanWholeSceneInto(oAcc){
+	var aRoots = dthSceneRootNodes();
+	for(var i = 0; i < aRoots.length; i++){
+		dthScanFigureInto(aRoots[i], oAcc);
+	}
+}
+
+/**
+ * Which generation a scene's finds belong to: the first figure root whose stock
+ * asset resolves. Clothing has no generation of its own — it is fitted to the
+ * figure, and the studio only ever offers a character its OWN generation's
+ * index, so filing the scene's extras under the figure's generation is what
+ * makes them reachable. '' when the scene holds no Genesis figure at all.
+ */
+function dthSceneGenesis(){
+	var aFigures = dthSceneFigureRoots();
+	for(var i = 0; i < aFigures.length; i++){
+		var sGenesis = dthDetectGenesis(aFigures[i]);
+		if(sGenesis) return sGenesis;
+	}
+	return "";
+}
+
+/**
+ * Merge this scene's new morphs into the stored scene index and write it back.
+ *
+ * A RE-scan of the same scene REPLACES that scene's contribution rather than
+ * adding to it: the scene is first stripped out of every stored entry (an entry
+ * left with no scenes is dropped), then the fresh finds are merged in. Without
+ * that, clothing removed from a scene would haunt its autocomplete forever.
+ * Entries found in several scenes carry all of them.
+ */
+function dthWriteSceneIndex(sOutDir, sGenesis, aNew, sScenePath, sSceneName){
+	var sPath = dthSceneIndexPath(sOutDir, sGenesis);
+	var sKey = dthSceneKey(sScenePath);
+	var oStored = dthReadJson(sPath);
+	var aMorphs = [];
+	var oByKey = {};
+	var i, j;
+
+	// Carry the stored entries over, minus this scene's own past contribution.
+	if(oStored && oStored.morphs){
+		for(i = 0; i < oStored.morphs.length; i++){
+			var oM = oStored.morphs[i];
+			if(!oM || !oM.node || !oM.name) continue;
+			var aScenes = [];
+			var aWas = oM.scenes ? oM.scenes : [];
+			for(j = 0; j < aWas.length; j++){
+				if(dthSceneKey(aWas[j]) != sKey) aScenes.push(String(aWas[j]));
+			}
+			// Only this scene had it, and this scan no longer does — drop it.
+			if(!aScenes.length) continue;
+			var oCarry = {
+				node: String(oM.node),
+				nodeLabel: oM.nodeLabel ? String(oM.nodeLabel) : String(oM.node),
+				label: oM.label ? String(oM.label) : String(oM.name),
+				name: String(oM.name),
+				scenes: aScenes
+			};
+			aMorphs.push(oCarry);
+			oByKey[oCarry.node + "|" + oCarry.name] = oCarry;
+		}
+	}
+
+	// Merge this scan's finds in: a known dial gains the scene, a new one joins.
+	for(i = 0; i < aNew.length; i++){
+		var oFound = aNew[i];
+		var sMKey = oFound.node + "|" + oFound.name;
+		var oExisting = oByKey[sMKey];
+		if(oExisting){
+			oExisting.scenes.push(sScenePath);
+			continue;
+		}
+		var oEntry = {
+			node: oFound.node,
+			nodeLabel: oFound.nodeLabel,
+			label: oFound.label,
+			name: oFound.name,
+			scenes: [sScenePath]
+		};
+		aMorphs.push(oEntry);
+		oByKey[sMKey] = oEntry;
+	}
+
+	// The scene roster, same replace-this-scene rule as the entries above.
+	var aScenesOut = [];
+	if(oStored && oStored.scenes){
+		for(i = 0; i < oStored.scenes.length; i++){
+			var oS = oStored.scenes[i];
+			if(oS && oS.path && dthSceneKey(oS.path) != sKey) aScenesOut.push(oS);
+		}
+	}
+	aScenesOut.push({ path: sScenePath, name: sSceneName, scannedAt: new Date().toString() });
+
+	var oOut = {
+		version: 1,
+		genesis: sGenesis,
+		scannedAt: new Date().toString(),
+		scenes: aScenesOut,
+		morphs: aMorphs
+	};
+	var oFile = new DzFile(sPath);
+	// One ORed mode arg - a second open() argument warns on DS6.
+	if(oFile.open(oFile.WriteOnly | oFile.Truncate)){
+		oFile.write(JSON.stringify(oOut, null, 1));
+		oFile.close();
+		print("Wrote", aMorphs.length, "scene morphs (", aNew.length, "from this scene ) to", sPath);
+		return true;
+	}
+	print("Could not write the scene morph index:", sPath);
+	return false;
+}
+
+/**
+ * Scan the OPEN scene for morphs the base index doesn't have, and file them
+ * under that scene. config: { outDir, bulk }
+ *
+ * Requires a SAVED scene — the whole point is to tag the finds with a scene the
+ * studio can match its selection against, and an unsaved scene has no identity
+ * to tag them with. Requires a base index too: without one every dial the stock
+ * figure carries would be filed as a scene extra, which is exactly the noise
+ * this mode exists to avoid. Both are hard failures (a `throw` under the Runner,
+ * so the row is marked failed and the studio reports why).
+ */
+function DthScanSceneMorphs(config){
+	var bBulk = config["bulk"] === true;
+	var sOutDir = config["outDir"];
+
+	var sScenePath = "";
+	try { sScenePath = String(Scene.getFilename()); } catch(e){ /* unsaved */ }
+	if(!sScenePath){
+		var sUnsaved = "This scene has not been saved yet, so its morphs cannot be " +
+			"filed under a scene name. Save the scene and run this again.";
+		if(bBulk) throw new Error(sUnsaved);
+		MessageBox.information(sUnsaved, "DTH Character Studio", "&OK");
+		return;
+	}
+	var sSceneName = "";
+	try { sSceneName = String(new DzFileInfo(sScenePath).completeBaseName()); } catch(e){ /* keep '' */ }
+
+	var sGenesis = dthSceneGenesis();
+	if(!sGenesis){
+		var sNoFigure = "No Genesis 3, 8, 8.1 or 9 figure could be found in this scene, " +
+			"so there is no generation to file its morphs under.";
+		if(bBulk) throw new Error(sNoFigure);
+		MessageBox.information(sNoFigure, "DTH Character Studio", "&OK");
+		return;
+	}
+	print("Scene scan:", sSceneName, "(" + sScenePath + ") as", sGenesis);
+
+	// Everything in the scene, then everything the base index already knows
+	// filtered back out — what is left is what this scene ADDS.
+	var oAcc = dthNewIndexAcc();
+	dthScanWholeSceneInto(oAcc);
+	var oBase = dthBaseIndexKeys(sOutDir, sGenesis);
+	var aNew = [];
+	for(var i = 0; i < oAcc.morphs.length; i++){
+		var oM = oAcc.morphs[i];
+		if(oBase[oM.node + "|" + oM.name]) continue;
+		aNew.push(oM);
+	}
+	print("Scanned", oAcc.morphs.length, "morphs,", aNew.length, "of them new to the index.");
+
+	var bOk = dthWriteSceneIndex(sOutDir, sGenesis, aNew, sScenePath, sSceneName);
+	var sMsg = bOk
+		? "Scanned “" + sSceneName + "”: " + aNew.length + " morph(s) this scene adds on " +
+			"top of the " + dthGenesisLabel(sGenesis) + " base index.\n\nThe Morph name " +
+			"autocomplete offers them while this scene is selected."
+		: "Could not write the scene morph index (" + sOutDir + ").";
+	if(bBulk){
+		print("DTH Scan Scene Morphs:\n" + sMsg);
+		// A write that failed must fail the ROW — never toast as success.
+		if(!bOk) throw new Error("Could not write the scene morph index: " +
+			dthSceneIndexPath(sOutDir, sGenesis));
+		return;
+	}
+	MessageBox.information(sMsg, "DTH Character Studio", "&OK");
+}
+
+/**********************************************************************
  * The whole job. config: { outDir, scriptDir, bulk }
  *
  * bulk: true = running unattended under the Runner plugin (the studio's
