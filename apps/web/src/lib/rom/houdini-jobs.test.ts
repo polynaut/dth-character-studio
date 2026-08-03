@@ -5,6 +5,7 @@ import { characterSchema } from '@dth/rom'
 import {
   buildHoudiniJob,
   houdiniResultSummary,
+  houdiniRunFilesToClear,
   houdiniRunStateFrom,
   houdiniScriptPathValue,
   parseHoudiniResult,
@@ -45,6 +46,17 @@ describe('sceneDthPath — the match key handed to Houdini', () => {
     )
   })
 
+  it('resolves a RAW stored scene path, not only a normalized key', () => {
+    // The regression that made "Export too" fail on every real run: the folder
+    // map is keyed lowercase, but the export dialog passes the character's
+    // stored paths verbatim — and every Windows path has a capital in it, so
+    // the lookup missed, the job came out with zero scenes, and the run died on
+    // "none of these scenes has an export path".
+    expect(sceneDthPath(kira(), 'X:\\p\\Kira\\daz3d\\primary\\Kira.duf', ROOT)).toBe(
+      'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth',
+    )
+  })
+
   it('is empty without an export directory — nothing could have been imported', () => {
     expect(sceneDthPath(kira({ exportPath: '' }), PRIMARY, ROOT)).toBe('')
   })
@@ -69,6 +81,18 @@ describe('buildHoudiniJob', () => {
     // node parms hold.
     expect(job.resultPath).toBe('X:/p/Kira/.dth_houdini_result.json')
     expect(job.exportDirectory).toBe('X:/unreal/Kira')
+  })
+
+  it('accepts the raw stored paths the export dialog actually passes', () => {
+    const job = buildHoudiniJob(
+      kira(),
+      ['X:\\p\\Kira\\daz3d\\primary\\Kira.duf', 'X:\\p\\Kira\\daz3d\\summertide\\KiraSummertide.duf'],
+      { resultPath: 'r.json', scenesRootAbs: ROOT },
+    )
+    expect(job.scenes).toEqual([
+      { dth: 'X:/p/Kira/daz3d/dth-exports/primary/Kira.dth', label: 'Kira' },
+      { dth: 'X:/p/Kira/daz3d/dth-exports/summertide/Kira_Summertide.dth', label: 'KiraSummertide' },
+    ])
   })
 
   it('drops scenes with no resolvable .dth instead of sending unmatchable rows', () => {
@@ -202,6 +226,36 @@ describe('houdiniRunStateFrom', () => {
       failed: 0,
       summary: '2 exported, 1 skipped',
       error: '',
+      problems: [],
+    })
+  })
+
+  it('carries the auto-answered HDA problems out, labelled by scene', () => {
+    // 456.py answers the HDA's "Continue anyway?" with Yes, so the run state is
+    // the ONLY place those warnings can still be seen — the result file that
+    // held them is deleted the moment the run is reported.
+    const done = parseHoudiniResult(
+      JSON.stringify({
+        state: 'done',
+        nodes: [
+          {
+            node: '/obj/DazToHue1/export',
+            scene: 'Kira',
+            status: 'ok',
+            problems: ['No pose asset CSV found', 'Bone scale reference missing'],
+          },
+          // No scene label (a network the job matched by path only) — the node
+          // path stands in, never an unlabelled bare problem string.
+          { node: '/obj/DazToHue2/export', status: 'ok', problems: ['Missing groom'] },
+        ],
+      }),
+    )!
+    expect(houdiniRunStateFrom(done, true)).toMatchObject({
+      problems: [
+        'Kira: No pose asset CSV found',
+        'Kira: Bone scale reference missing',
+        '/obj/DazToHue2/export: Missing groom',
+      ],
     })
   })
 
@@ -231,5 +285,37 @@ describe('houdiniRunStateFrom', () => {
       state: 'finished',
       error: 'the run failed in Houdini',
     })
+  })
+})
+
+describe('houdiniRunFilesToClear — the handoff cleans up after itself', () => {
+  const paths = { jobPath: 'X:/p/Kira/.dth_houdini_job.json', resultPath: 'X:/p/Kira/.dth_houdini_result.json' }
+
+  it('clears nothing while the run is still going', () => {
+    expect(houdiniRunFilesToClear({ state: 'starting', hasResult: false, ...paths })).toEqual([])
+    expect(houdiniRunFilesToClear({ state: 'running', hasResult: true, ...paths })).toEqual([])
+  })
+
+  it('clears both files once the run has finished', () => {
+    // The leftovers this fixes: neither file was ever deleted, so every
+    // character that had run an export kept a job + result pair for good.
+    expect(houdiniRunFilesToClear({ state: 'finished', hasResult: true, ...paths })).toEqual([
+      paths.resultPath,
+      paths.jobPath,
+    ])
+  })
+
+  it('clears both when a started run died half-way', () => {
+    expect(houdiniRunFilesToClear({ state: 'dead', hasResult: true, ...paths })).toEqual([
+      paths.resultPath,
+      paths.jobPath,
+    ])
+  })
+
+  it('keeps the job of a run that never wrote a result', () => {
+    // "dead" without a result can be a Houdini that just hasn't shown up in the
+    // process list yet — deleting the job it is about to read would break it.
+    // The next run overwrites it anyway, so leaving it costs nothing.
+    expect(houdiniRunFilesToClear({ state: 'dead', hasResult: false, ...paths })).toEqual([])
   })
 })

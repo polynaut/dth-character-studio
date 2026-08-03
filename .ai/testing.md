@@ -55,6 +55,16 @@ The **real SPA in a real browser** against an in-memory fake of the native layer
   `__TAURI_INTERNALS__.invoke`: plugin-fs contract over a `Map`, dialogs,
   events, and the app's own Rust commands. **Unknown commands are recorded AND
   rejected**; specs assert `unhandled == []` — the mock can't silently drift.
+- **A feature that adds Rust commands ships smoke-BLIND until this mock learns
+  them.** The unhandled-command guard only fires inside a flow some spec
+  already drives — commands no spec reaches trip nothing, and a spec for the
+  new flow can't be written until the mock knows them, so nothing fails
+  anywhere. "Export too" (#637) shipped exactly that way: its commands
+  (`launch_houdini_job`, `houdini_running`, `launch_daz_studio`) reached the
+  mock only in #641 with the feature's first end-to-end spec — which
+  immediately found the scene-key lookup bug that had made the feature a no-op
+  on every real path. Teaching the mock the new commands (and writing the spec
+  that drives them) is part of the feature PR, not a later test PR.
 - `apps/web/smoke/fixtures.ts` — `buildSeed(opts)` builds the world (project
   "Demo", character "Kira", DTH release tree). The character goes through the
   **real `characterSchema`**, so schema bumps fail here loudly.

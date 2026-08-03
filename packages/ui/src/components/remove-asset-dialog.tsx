@@ -8,8 +8,8 @@ import { cn } from '../cn.ts'
 /**
  * Confirm unlinking an asset (a Daz scene / Houdini project) from a character.
  * The "Delete file on disk" toggle decides whether the underlying file is also
- * removed — the caller defaults it on for files inside the character folder and
- * off for ones linked in place outside it. For a linked-in-place file (the
+ * removed — callers default it OFF (deleting is permanent and the file may be
+ * the only copy, so it's opt-in per removal). For a linked-in-place file (the
  * user's original), pass `deleteFileDisabled` so delete can't be turned on at
  * all. Built on the Modal primitive (focus trap, Escape/backdrop cancel —
  * ignored while busy, dialog semantics for AT).

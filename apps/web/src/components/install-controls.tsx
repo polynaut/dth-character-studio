@@ -3,7 +3,7 @@ import { ChevronRight, CircleCheck, CircleSlash, CircleX, FolderOpen, X } from '
 
 import { Button, InfoPopup, Input, Label } from '@dth/ui'
 import { pickFolder } from '#/lib/desktop.ts'
-import { displayPath } from '#/lib/path.ts'
+import { browseStart, displayPath } from '#/lib/path.ts'
 
 import type { InstallReport, InstallStep } from '#/lib/rom/api.ts'
 
@@ -15,6 +15,7 @@ export function FolderField({
   help,
   onChange,
   info,
+  browseFrom,
 }: {
   label: string
   value: string
@@ -23,6 +24,11 @@ export function FolderField({
   onChange: (value: string) => void
   /** Optional rich text shown in an "i" info popup next to the label. */
   info?: ReactNode
+  /** Where Browse opens when the field is still EMPTY — the closest folder that
+   *  makes sense for this one (a sibling setting, the Daz library, the project).
+   *  A field that HAS a value always browses from there; this is only the
+   *  fallback, and omitting it just leaves the OS default. */
+  browseFrom?: string
 }) {
   // Prefer the richer `info` text in the popup, falling back to `help`.
   const popup = info ?? help
@@ -47,7 +53,9 @@ export function FolderField({
           variant="outline"
           className="shrink-0"
           onClick={async () => {
-            const picked = await pickFolder(label)
+            // Open where the field already points; only an empty one falls back
+            // to the caller's nearest-sensible folder.
+            const picked = await pickFolder(label, browseStart(value, browseFrom))
             if (picked) onChange(picked)
           }}
         >

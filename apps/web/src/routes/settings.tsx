@@ -26,7 +26,7 @@ import { PROJECT_BEHAVIOR_DEFAULTS, runnerInstalledNewer } from '#/lib/rom/stora
 import { useUnsavedChangesGuard } from '#/lib/use-unsaved-guard.ts'
 import { useSettingsActions } from '#/lib/use-settings-actions.ts'
 import { useConfirm } from '#/lib/use-confirm.tsx'
-import { displayPath } from '#/lib/path.ts'
+import { displayPath, parentDir } from '#/lib/path.ts'
 import { houdiniVersionFromInstall, matchingHoudiniDocsFolder } from '#/lib/houdini-version.ts'
 import { GuideLink } from '#/components/guide-link.tsx'
 import { PathCode } from '#/components/path-code.tsx'
@@ -656,6 +656,9 @@ function SettingsPage() {
               <FolderField
                 label="DTH release(s) folder"
                 value={settings.dthPosesFolder}
+                // Unset: start at the Exporter-plugin folder's parent — the two
+                // DazToHue downloads almost always live under one root.
+                browseFrom={parentDir(settings.dthExporterFolder)}
                 placeholder="D:\DazToHue\Releases"
                 onChange={(value) => setSettings((s) => ({ ...s, dthPosesFolder: value }))}
                 help={
@@ -825,6 +828,10 @@ function SettingsPage() {
                 <FolderField
                   label={`Additional Houdini documents folder ${i + 1}`}
                   value={folder}
+                  // Unset: the folder holding the primary docs folder — every
+                  // other version's sits right beside it (houdini19.5 next to
+                  // houdini22.0), which is as close as this gets.
+                  browseFrom={parentDir(settings.houdiniDocsFolder)}
                   placeholder="C:\Users\you\Documents\houdini19.5"
                   onChange={(value) =>
                     setSettings((s) => ({
@@ -1004,6 +1011,8 @@ function SettingsPage() {
               <FolderField
                 label="DTH Exporter Plugin release(s) folder"
                 value={settings.dthExporterFolder}
+                // …and the mirror of the DTH-releases field above.
+                browseFrom={parentDir(settings.dthPosesFolder)}
                 placeholder="D:\DazToHue\ExporterPlugin"
                 onChange={(value) => setSettings((s) => ({ ...s, dthExporterFolder: value }))}
                 info={

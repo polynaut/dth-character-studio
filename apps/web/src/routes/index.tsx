@@ -9,7 +9,7 @@ import { formatDate } from '#/components/overview-controls.tsx'
 import { createProject, fetchRecents, forgetRecent, isDirectory, openProject } from '#/lib/rom/api.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { onMenu, pickDcspPath, pickFolder } from '#/lib/desktop.ts'
-import { dirOf, displayPath, stripTrailingSeparators } from '#/lib/path.ts'
+import { browseStart, dirOf, displayPath, parentDir, stripTrailingSeparators } from '#/lib/path.ts'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
@@ -70,7 +70,13 @@ function HomePage() {
   useEffect(() => onMenu('menu-new-project', () => openCreatePanel()), [])
 
   async function onChooseFolder() {
-    const picked = await pickFolder('Choose the project folder')
+    // A folder already chosen in this panel wins; otherwise start where the
+    // user keeps projects — the folder CONTAINING the most recent one, since
+    // the new project needs a new folder beside it, not inside it.
+    const picked = await pickFolder(
+      'Choose the project folder',
+      browseStart(path, parentDir(parentDir(recents[0]?.path ?? ''))),
+    )
     if (picked) applyFolder(picked)
   }
 
@@ -95,7 +101,12 @@ function HomePage() {
   }
 
   async function onOpenExisting() {
-    const picked = await pickDcspPath('Open a DTH Character Studio project (.dcsp)')
+    // Open at the most recent project's own `.dcsp`, preselected — the projects
+    // a user opens by hand tend to live near the ones they opened before.
+    const picked = await pickDcspPath(
+      'Open a DTH Character Studio project (.dcsp)',
+      browseStart(recents[0]?.path),
+    )
     if (picked) await onOpen(picked)
   }
 

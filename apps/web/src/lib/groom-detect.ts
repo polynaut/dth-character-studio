@@ -1,5 +1,7 @@
 import { sceneOverrideSchema } from '@dth/rom'
 
+import { normalizeSceneKey } from '#/lib/rom/execute-jobs.ts'
+
 import type { SceneWearable } from '#/lib/rom/api/native-types.ts'
 import type { SceneOverride } from '@dth/rom'
 
@@ -57,12 +59,15 @@ export function detectedHairLabels(items: Array<SceneWearable>): Array<string> {
 }
 
 /**
- * THE single rule for pre-selecting a newly linked scene's hair — used by all
- * three ways a scene reaches a character: creation (api/characters), the
- * first link of a primary, and ADDING an extra scene. It used to be inlined at
- * the first two and simply missing at the third, which is the one where it
- * matters most: an outfit variant is exactly the scene that brings its own
- * hair, and unlisted hair rides into the FBX.
+ * THE single rule for pre-selecting a newly linked scene's hair — used by every
+ * way a scene reaches a character: creation (api/characters), the first link of
+ * a primary, ADDING an extra scene, REPLACING the primary, and RELINKING a
+ * missing primary (which first repoints an existing record to the new path — a
+ * relink is the same scene moved, so a curated list follows the file and only a
+ * record-less scene seeds). It used to be inlined at the first two and missing
+ * everywhere else, where it matters most: an outfit variant (and a replacement
+ * primary) is exactly the scene that brings its own hair, and unlisted hair
+ * rides into the FBX.
  *
  * Returns the scene's new `sceneOverrides` array, or **null** when there is
  * nothing to do — an unreadable scan, no detected hair, or a record that
@@ -78,7 +83,11 @@ export function seedSceneHair(
   existing: ReadonlyArray<SceneOverride>,
 ): Array<SceneOverride> | null {
   if (scan.error !== '') return null
-  if (existing.some((o) => o.scenePath === scenePath)) return null
+  // Same key normalization as `groomSceneMap`/`normalizeSceneKey` — every other
+  // scene-path compare is separator/case-insensitive, so an existing record
+  // stored with the other slashes (or case) must still count as "exists".
+  const key = normalizeSceneKey(scenePath)
+  if (existing.some((o) => normalizeSceneKey(o.scenePath) === key)) return null
   const hair = detectedHairLabels(scan.items)
   if (hair.length === 0) return null
   return [

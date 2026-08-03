@@ -11,7 +11,7 @@ documentation, not archaeology.
 |---|---|
 | [architecture.md](architecture.md) | you need the lay of the land: packages, routes, the lib/ native boundary, the FFI surface, the projects model. |
 | [domain.md](domain.md) | you touch generation, frames, sections, the PoseAsset CSV, the DTH runtime, or anything Daz/Houdini-semantic. |
-| [conventions.md](conventions.md) | you change the character schema, the FFI surface, settings, versioning — the rituals live here. |
+| [conventions.md](conventions.md) | you change the character schema, the FFI surface, settings, versioning — the rituals live here. Opens with the **Working rules** (hook-injected into every session's context) and the stacked-PR setup. |
 | [testing.md](testing.md) | you write or run tests: the four layers, what pins what, the screenshot suite. |
 | [docs-site.md](docs-site.md) | you touch "the docs page": the public Pages site — `site/`, `docs/guide/`, the guide build/deploy, previews, guide search. |
 | [release.md](release.md) | you ship: the release train, the signing gate, publish troubleshooting. |
