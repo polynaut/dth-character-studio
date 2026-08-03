@@ -253,8 +253,9 @@ a:hover {
 }
 
 /* Docs-style layout (à la octane.js): brand + text nav together on the LEFT,
-   one right-aligned action cluster (search pill, divider, GitHub icon, the
-   Download CTA) — shared by the landing page and every guide page. */
+   one right-aligned action cluster (search pill, divider, the Download CTA) —
+   shared by the landing page and every guide page. The GitHub link lives in
+   the footer only, on purpose. */
 .topbar-nav {
   display: flex;
   gap: 40px;
@@ -298,21 +299,6 @@ a:hover {
   width: 1px;
   height: 22px;
   background: color-mix(in oklab, var(--border) 70%, transparent);
-}
-
-.topbar-icon {
-  display: inline-flex;
-  color: var(--muted);
-  transition: color 160ms ease;
-}
-
-.topbar-icon:hover {
-  color: var(--fg-bright);
-}
-
-.topbar-icon .gh-mark {
-  width: 20px;
-  height: 20px;
 }
 
 /* ------------------------------------------------------------- Search */
@@ -496,13 +482,11 @@ a:hover {
   }
 
   /* The text nav is gone — search shrinks to an icon-only round button; the
-     divider + GitHub icon go too (the footer keeps the GH link), leaving
-     brand · search · Download. Tighter padding/gaps so that trio actually
-     fits (the old topbar clipped Download at 400px). */
+     divider goes too, leaving brand · search · Download. Tighter padding/gaps
+     so that trio actually fits (the old topbar clipped Download at 400px). */
   .topbar-search span,
   .topbar-search kbd,
-  .topbar-sep,
-  .topbar-icon {
+  .topbar-sep {
     display: none;
   }
 
