@@ -328,6 +328,22 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     primaryRel === null
       ? undefined
       : joinPath(outDir, deriveScenesRootRel(primaryRel, project.dazSubdir))
+  // The `dth-exports` junctions store an ABSOLUTE target, so every path that
+  // can change the export root — a character rename or folder move, a
+  // scenes-folder rename, a charactersSubdir move, the v29 migration — would
+  // otherwise leave them aimed at the old one. They all funnel through here,
+  // so ONE refresh covers the lot instead of each flow having to remember
+  // Houdini exists — and it doubles as the $HIP emit decision: bone-scale
+  // reference-skeleton paths are written `$HIP`-relative (the Settings
+  // default) only when every junction they would resolve through is verified
+  // in place. Any failure — no linked `.hip` inside the character folder, a
+  // network/non-NTFS export root, a real folder in the way — falls back to
+  // absolute paths for this character rather than shipping refs that cannot
+  // resolve, and never fails the save (the probe swallows its own errors).
+  const junctionsOk = await refreshExportJunctions(versioned, outDir, project.houdiniSubdir).catch(
+    () => false,
+  )
+  const hipRelativeRefs = settings.houdiniPathStyle !== 'absolute' && junctionsOk
   // The ONE character script embeds every linked scene's overrides and selects
   // the open scene at run time; generateAll also mints a per-scene PoseAsset CSV
   // for each ROM-override scene (Houdini has no runtime to select frames). Both
@@ -342,11 +358,7 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
-    // Bone-scale reference-skeleton paths: $HIP-relative (the default) or
-    // absolute. The core decides per character whether an anchor exists at all
-    // — a Houdini project inside the character folder, i.e. a generated one —
-    // and falls back to absolute when it doesn't.
-    settings.houdiniPathStyle !== 'absolute',
+    hipRelativeRefs,
   )
   // Scene-suffixed artifact names of EVERY stored override (active or not) at a
   // given character name — the sweep candidates. Filtered against what was just
@@ -509,16 +521,6 @@ export async function generateCharacterFiles({ data }: { data: unknown }): Promi
   await migrateRomAnimationFolders(versioned)
   await housekeepRomAnimations(versioned)
   await housekeepExportFolders(versioned, outDir, scenesRootAbs)
-  // The `dth-exports` junctions store an ABSOLUTE target, so every path that can
-  // change the export root — a character rename or folder move, a scenes-folder
-  // rename, a charactersSubdir move, the v29 migration — would otherwise leave
-  // them aimed at the old one. They all pass through here, so one refresh
-  // covers the lot instead of each flow having to remember Houdini exists.
-  try {
-    await refreshExportJunctions(versioned, outDir, project.houdiniSubdir)
-  } catch {
-    // best-effort: a shortcut nobody can create is not a reason to fail a save
-  }
   return { outDir, files, scriptsDir, scriptsError }
 }
 

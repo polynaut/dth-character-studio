@@ -266,12 +266,14 @@ export function installTauriMock(seed: TauriMockSeed): void {
       case 'probe_locked_files':
         return seed.lockedFiles ?? []
       case 'create_junction': {
-        // The `dth-exports` shortcuts (one beside the .hip, one in the project
-        // folder). The real command repoints a stale link and reports "exists"
-        // for a correct one; here the link is just a directory that appears —
-        // enough for `exists`/`readDir` to behave, and the spec can assert the
-        // call's target. Every generate refreshes them, so the mock has to know
-        // this command or `unhandled` fills up on ordinary saves.
+        // The `dth-exports` shortcuts (one beside each linked .hip, one in the
+        // project folder). The real command repoints a stale link and reports
+        // "exists" for a correct one; here the link is just a directory that
+        // appears — enough for `exists`/`readDir` to behave, and a spec can
+        // assert the call's link/target. Every generate probes AND refreshes
+        // them (the $HIP emit decision doubles as the junction upkeep), so the
+        // mock has to know this command or `unhandled` fills up on ordinary
+        // saves.
         const link = norm(args.request.linkPath)
         const had = extraDirs.has(link)
         extraDirs.add(link)

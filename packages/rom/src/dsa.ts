@@ -375,27 +375,17 @@ function buildExportBlock(
   unattended = false,
   /**
    * Write bone-scale reference-skeleton paths **`$HIP`-relative** instead of
-   * absolute (Settings → "Houdini path style", default on). Everything else it
-   * needs is derivable here: the export ROOT is `character.exportPath`, and the
-   * anchor is a linked Houdini project living INSIDE the character folder — a
-   * generated one. Without such a project there is no `$HIP` to be relative to,
-   * so this silently falls back to absolute for that character.
+   * absolute (Settings → "Houdini path style"). The HOST decides this flag —
+   * it knows where the linked `.hip`s live and has probed/ensured the
+   * `dth-exports` junctions those paths resolve through
+   * (`refreshExportJunctions`, web `lib/rom/api/houdini.ts`); this pure core
+   * can't see the filesystem, so it obeys. Default false = absolute, the
+   * always-safe form.
    */
   hipRelativeRefs = false,
 ): string {
   const exportDir = character.exportPath.trim()
   if (!exportDir) return ''
-  // `$HIP` is the folder the `.hip` sits in, and Generate project puts a
-  // `dth-exports` junction there pointing at the export root — so swapping the
-  // absolute root prefix for `$HIP/dth-exports` yields a path Houdini resolves
-  // no matter where the character tree moves. Guarded at run time too: an
-  // export dir that isn't under the root keeps the absolute path.
-  // The trim is load-bearing — the compare below appends its own '/'.
-  const fwd = (p: string) => stripTrailingSlashes(p.replace(/\\/g, '/').toLowerCase())
-  const hipAnchored =
-    hipRelativeRefs &&
-    Boolean(charFolderAbs) &&
-    character.houdiniProjects.some((hip) => fwd(hip).startsWith(`${fwd(charFolderAbs ?? '')}/`))
   const refFrames = frames ? referenceFrames(character, frames).join(' ') : ''
   // ONE snippet body shared with the groom export (dz-snippets), re-indented to
   // this block's 4-space base — the two copies used to differ only in indent.
@@ -422,12 +412,13 @@ function buildExportBlock(
       ? `    var dthCsvName = ${dazJson(poseAssetFileName(character))};`
       : indentLines(sceneCsvLookupSnippet(poseAssetFileName(character), sceneCsvMap).trimEnd())
   // Bone-scale reference paths are written either absolute (dthExportDir as
-  // resolved at run time) or anchored at $HIP — the folder the generated .hip
-  // sits in, where a `dth-exports` junction points at the export root. The swap
-  // is a prefix exchange on the export ROOT, so whatever scene subfolder this
-  // run resolved rides along untouched; an export dir that somehow isn't under
-  // the root keeps the absolute path rather than producing a wrong one.
-  const refDirBlock = hipAnchored
+  // resolved at run time) or anchored at $HIP — the folder the `.hip` sits in,
+  // where the host keeps a `dth-exports` junction pointing at the export root.
+  // The swap is a prefix exchange on the export ROOT, so whatever scene
+  // subfolder this run resolved rides along untouched; an export dir that
+  // somehow isn't under the root keeps the absolute path rather than producing
+  // a wrong one.
+  const refDirBlock = hipRelativeRefs
     ? `    var dthRefRootAbs = ${dazJson(exportDir.replace(/\\/g, '/'))};
     var dthRefDir = dthExportDir;
     if (dthExportDir.indexOf(dthRefRootAbs) === 0) {
