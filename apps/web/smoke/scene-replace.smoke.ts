@@ -9,6 +9,11 @@ import type { Page } from '@playwright/test'
 // regular Add-scene dialog (validation, copy-vs-link), but the confirm swaps
 // `scenePath`, re-derives GEN from the new scene, and (toggle, default on for
 // an in-folder old primary) deletes the old scene's files.
+//
+// Also here: the missing-primary RELINK flow (the "Primary scene missing"
+// panel) — a relink targets the SAME scene at a new path, so the hair record
+// REPOINTS to the final path (a curated list follows the file) and a
+// record-less scene seeds its detected hair like every other linking path.
 
 const NEW_SCENE = 'X:/scenes/NewLook_G9.duf'
 /** Where the replacement lands once copied in (every scene gets its own
@@ -78,6 +83,94 @@ test('replace primary: validates, swaps, derives GEN, seeds hair, deletes the ol
   expect(keys).toContain(COPIED_SCENE)
   expect(keys).not.toContain(P.scene)
   expect(keys).not.toContain(`${P.scene}.tip.png`)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+/** Where the missing primary "turns up" for the relink tests — the same scene
+ *  renamed on disk, still inside the character folder (so the pick links in
+ *  place, no copy dialog). */
+const RELINKED_SCENE = `${P.charFolder}/daz3d/KiraRenamed_G9_GP.duf`
+/** The relinked scene's wearables: the curated hair item PLUS a second
+ *  detectable style (so a re-seed would provably differ from the curated
+ *  list) and a GP geograft (so the GEN derivation stays put — no toast). */
+const RELINK_WEARABLES = [
+  { id: 'cht-sevenly-hair', label: 'CHT Sevenly Hair', conformTarget: '#Genesis9' },
+  { id: 'aria-braids-hair', label: NEW_HAIR, conformTarget: '#Genesis9' },
+  { id: 'GoldenPalace_G9', label: 'Golden Palace', conformTarget: '#Genesis9' },
+]
+
+/** Seed the relink state: the primary's `.duf` is GONE (renamed outside the
+ *  app — its folder and tip sidecar remain, so the panel offers the file-level
+ *  Relink, not the folder relink), the renamed file exists, and the picker
+ *  returns it. */
+function buildRelinkSeed() {
+  const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true })
+  delete seed.files[P.scene]
+  seed.files[RELINKED_SCENE] = 'duf-fixture'
+  seed.dialogPath = RELINKED_SCENE
+  seed.sceneFigure = { id: 'Genesis9', label: 'Kira' }
+  seed.sceneWearables = {
+    ...(seed.sceneWearables ?? {}),
+    [RELINKED_SCENE]: RELINK_WEARABLES,
+  }
+  return seed
+}
+
+type PersistedOverrides = {
+  scenePath: string
+  sceneOverrides: Array<{ scenePath: string; hair: Array<{ nodeLabel: string }> }>
+}
+
+test('relink missing primary: the curated hair record FOLLOWS to the new path', async ({
+  page,
+}) => {
+  // The demo character curates ONE hair item on the primary — the relinked
+  // scene detects TWO, so a wrong re-seed is distinguishable from the repoint.
+  const seed = buildRelinkSeed()
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText('Primary scene missing.').waitFor()
+  await page.getByRole('button', { name: 'Relink', exact: true }).click()
+  await expect(page.getByText('Linked Daz scene')).toBeVisible()
+
+  const json = JSON.parse(
+    (await fileContent(page, `${P.charFolder}/Kira.json`))!,
+  ) as PersistedOverrides
+  expect(json.scenePath).toBe(RELINKED_SCENE)
+  // Repointed, NOT re-seeded: the record keeps the curated single item (a seed
+  // would have listed both detected styles) and nothing strands on the dead
+  // old path, where the export's groom map would never match it again.
+  const record = json.sceneOverrides.find((o) => o.scenePath === RELINKED_SCENE)
+  expect(record?.hair.map((h) => h.nodeLabel)).toEqual(['CHT Sevenly Hair'])
+  expect(json.sceneOverrides.some((o) => o.scenePath === P.scene)).toBe(false)
+
+  expect(await unhandledCommands(page)).toEqual([])
+})
+
+test('relink missing primary: a record-less scene seeds its detected hair', async ({
+  page,
+}) => {
+  const seed = buildRelinkSeed()
+  // Strip the curated record — the relinked primary has nothing to repoint, so
+  // the shared seeding rule must kick in (same as every other linking path).
+  const charFile = `${P.charFolder}/Kira.json`
+  const character = JSON.parse(seed.files[charFile]) as { sceneOverrides: Array<unknown> }
+  character.sceneOverrides = []
+  seed.files[charFile] = JSON.stringify(character, null, 2)
+  await page.addInitScript(installTauriMock, seed)
+  await page.goto('/')
+  await page.getByRole('link', { name: /Kira/ }).click()
+  await page.getByText('Primary scene missing.').waitFor()
+  await page.getByRole('button', { name: 'Relink', exact: true }).click()
+  await expect(page.getByText('Linked Daz scene')).toBeVisible()
+
+  const json = JSON.parse((await fileContent(page, charFile))!) as PersistedOverrides
+  expect(json.scenePath).toBe(RELINKED_SCENE)
+  const record = json.sceneOverrides.find((o) => o.scenePath === RELINKED_SCENE)
+  // Alphabetical — the detection sorts hair-ish labels by localeCompare.
+  expect(record?.hair.map((h) => h.nodeLabel)).toEqual([NEW_HAIR, 'CHT Sevenly Hair'])
 
   expect(await unhandledCommands(page)).toEqual([])
 })

@@ -59,11 +59,13 @@ export function detectedHairLabels(items: Array<SceneWearable>): Array<string> {
 /**
  * THE single rule for pre-selecting a newly linked scene's hair — used by every
  * way a scene reaches a character: creation (api/characters), the first link of
- * a primary, ADDING an extra scene, and REPLACING the primary. It used to be
- * inlined at the first two and missing at the other two, which are the ones
- * where it matters most: an outfit variant (and a replacement primary) is
- * exactly the scene that brings its own hair, and unlisted hair rides into the
- * FBX.
+ * a primary, ADDING an extra scene, REPLACING the primary, and RELINKING a
+ * missing primary (which first repoints an existing record to the new path — a
+ * relink is the same scene moved, so a curated list follows the file and only a
+ * record-less scene seeds). It used to be inlined at the first two and missing
+ * everywhere else, where it matters most: an outfit variant (and a replacement
+ * primary) is exactly the scene that brings its own hair, and unlisted hair
+ * rides into the FBX.
  *
  * Returns the scene's new `sceneOverrides` array, or **null** when there is
  * nothing to do — an unreadable scan, no detected hair, or a record that
