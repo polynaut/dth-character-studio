@@ -41,16 +41,88 @@ function runLogProblemCount(){
 	return DTH_RUN_LOG.errors.length + DTH_RUN_LOG.failedMorphs.length;
 }
 
-/** Write the run log JSON to sPath. oSummary carries the run metadata
- *  (character, versions, frame counts, ok) baked in by the caller. */
+/** The scene-path convention shared with the studio (normalizeSceneKey in
+ *  execute-jobs.ts): trimmed, '/'-separators, lowercased. It is what a stored
+ *  run is matched by, so both sides must agree. */
+function dthRunLogSceneKey(sPath){
+	return String(sPath).replace(/^\s+|\s+$/g, "").replace(/\\/g, "/").toLowerCase();
+}
+
+/** The runs already in the log at sPath, as an array. Tolerates a v1 log (ONE
+ *  run as the top-level object) by wrapping it, and anything unreadable by
+ *  starting fresh — a broken log must never cost the run that is finishing. */
+function dthReadRunLogRuns(sPath){
+	try {
+		var oFile = new DzFile(sPath);
+		if(!oFile.open(oFile.ReadOnly)) return [];
+		var sText = String(oFile.read());
+		oFile.close();
+		var oPrev = JSON.parse(sText);
+		if(!oPrev) return [];
+		if(oPrev.runs && oPrev.runs.length !== undefined) return oPrev.runs;
+		// A v1 log: the run IS the top-level object. It predates scene tagging,
+		// so it can only be matched by "has no scene" — the merge below drops it
+		// whenever this run has one, which is right: the same character folder,
+		// one run per scene from now on.
+		if(oPrev.failedMorphs || oPrev.errors) return [oPrev];
+	} catch(e){ /* unreadable/torn — start fresh */ }
+	return [];
+}
+
+/**
+ * Write the run log JSON to sPath. oSummary carries the run metadata
+ * (character, versions, frame counts, ok) baked in by the caller.
+ *
+ * MERGES BY SCENE (log v2). A DTH Export batch runs one row per scene back to
+ * back inside a Daz nobody is watching, and every row writes THIS file — so a
+ * plain truncate meant only the last scene's problems ever reached the studio,
+ * and the two scenes that failed before it were destroyed silently. Each run is
+ * now stored under the scene it ran in; a re-run of the same scene REPLACES its
+ * own entry (stale failures must not linger) and leaves every other scene's
+ * alone. Same read-modify-write shape as the scene morph index.
+ */
 function writeRunLog(sPath, oSummary){
 	if(!sPath) return false;
-	var oLog = oSummary || {};
-	oLog.logVersion = 1;
-	oLog.finishedAt = new Date().toString();
-	oLog.finishedAtMs = new Date().getTime();
-	oLog.errors = DTH_RUN_LOG.errors;
-	oLog.failedMorphs = DTH_RUN_LOG.failedMorphs;
+	var oRun = oSummary || {};
+	oRun.finishedAt = new Date().toString();
+	oRun.finishedAtMs = new Date().getTime();
+	oRun.errors = DTH_RUN_LOG.errors;
+	oRun.failedMorphs = DTH_RUN_LOG.failedMorphs;
+	// Which scene produced this run — without it the studio cannot attribute a
+	// failure to a scene, let alone select it. '' for an unsaved scene.
+	var sScene = "";
+	try { sScene = String(Scene.getFilename()); } catch(e){ /* unsaved */ }
+	oRun.scene = sScene;
+	oRun.sceneName = "";
+	if(sScene){
+		try { oRun.sceneName = String(new DzFileInfo(sScene).completeBaseName()); } catch(e){ /* keep '' */ }
+	}
+
+	var aRuns = dthReadRunLogRuns(sPath);
+	var aKeep = [];
+	var sKey = dthRunLogSceneKey(sScene);
+	for(var i = 0; i < aRuns.length; i++){
+		var oOld = aRuns[i];
+		if(!oOld) continue;
+		// Replace THIS scene's previous entry (and any untagged v1 leftover).
+		if(dthRunLogSceneKey(oOld.scene ? oOld.scene : "") == sKey) continue;
+		aKeep.push(oOld);
+	}
+	aKeep.push(oRun);
+
+	var oLog = {
+		logVersion: 2,
+		// Whole-batch verdict: the studio shows the report unless EVERY scene of
+		// the batch came back clean.
+		ok: true,
+		finishedAt: oRun.finishedAt,
+		finishedAtMs: oRun.finishedAtMs,
+		character: oRun.character ? oRun.character : "",
+		runs: aKeep
+	};
+	for(var r = 0; r < aKeep.length; r++){
+		if(aKeep[r] && aKeep[r].ok !== true) oLog.ok = false;
+	}
 	try {
 		var oFile = new DzFile(sPath);
 		// One ORed mode arg — DzFile.open(mode) takes a single flags int; a second
@@ -58,7 +130,7 @@ function writeRunLog(sPath, oSummary){
 		if(oFile.open(oFile.WriteOnly | oFile.Truncate)){
 			oFile.write(JSON.stringify(oLog, null, 2));
 			oFile.close();
-			print("Run log written to", sPath);
+			print("Run log written to", sPath, "(" + aKeep.length + " scene run(s))");
 			return true;
 		}
 		print("Could not open run log for writing:", sPath);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
@@ -257,8 +257,23 @@ function CharacterPage() {
       window.removeEventListener('resize', onScroll)
     }
   }, [])
-  // The ROM run log + the "reveal failed frame" signal for the editor.
-  const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog)
+  // The ROM run log + the "reveal failed frame" signal for the editor. The
+  // selected scene scopes which failures mark rows red: a batch logs one run
+  // per scene, and a scene override can reorder the ROM, so another scene's
+  // frame numbers would mark the wrong rows.
+  const runLog = useRomRunLog(projectId, initial.id, initialRomRunLog, sceneSel.effectiveScene)
+
+  /** A failed morph clicked in the report: switch to the scene that produced it
+   *  FIRST (revealing a frame in another scene's grid would scroll to a pose
+   *  that isn't the one that failed), then send the reveal signal. An untagged
+   *  run (unsaved scene / pre-v53 log) names no scene, so it reveals in place. */
+  const revealFailure = useCallback(
+    (frame: number, scene: string) => {
+      if (scene) sceneSel.selectScene(scene)
+      runLog.revealFailedFrame(frame)
+    },
+    [sceneSel, runLog],
+  )
 
   // Scene-derived avatars mirror their source scene's preview, which Daz
   // rewrites on every scene save — re-sync on load and whenever the window
@@ -433,7 +448,7 @@ function CharacterPage() {
         <RomRunLogReport
           romRunLog={runLog.romRunLog}
           onDismiss={() => void runLog.dismiss()}
-          onRevealFrame={runLog.revealFailedFrame}
+          onRevealFrame={revealFailure}
         />
       )}
 
