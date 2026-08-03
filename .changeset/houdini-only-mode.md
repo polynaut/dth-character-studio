@@ -13,3 +13,8 @@ changed and only Houdini needs a fresh pass: no ROM rebuild, no Runner, no
 waiting on Daz. Scenes that never delivered an export are named and kept out
 of the run, and the header button tracks the Houdini session's progress as
 usual.
+
+Houdini also opens **fully before the batch starts** now — for "Export too"
+runs as well. The exports used to grind inside Houdini's startup, holding the
+window back until the last node finished; the batch now waits for the UI, so
+you watch it work instead of staring at nothing.

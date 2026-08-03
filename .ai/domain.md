@@ -365,6 +365,13 @@ older runtimes as stale.
   which is a long silence on a big project), works (`running done/total`) and
   finishes. Liveness comes from `houdini_running`, without which a result file
   stuck at "running" after the user closed Houdini would poll forever.
+  MEASURED on the first live run (2026-08-03): 456.py fires BEFORE the main
+  window paints, and inline work there holds the window back — the whole batch
+  ran against a blank screen and Houdini "opened" only after the last node.
+  The batch is therefore DEFERRED to the first event-loop idle
+  (`hdefereval.executeDeferred`, 456.py's `launch()`): Houdini opens fully
+  first, then exports visibly. Sessions without the module (hython) run
+  inline — no window to wait for.
   Chosen shape is **visible GUI + a startup script reading a job file**, not
   headless hython and not `hrpyc` remote control, so it mirrors the Daz Runner
   handoff. Houdini runs a `456.py` found on `HOUDINI_SCRIPT_PATH` after a scene
