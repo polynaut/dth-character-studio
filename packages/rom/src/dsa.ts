@@ -953,6 +953,8 @@ export function toCharacterScriptDsa(
   /** Write bone-scale reference paths `$HIP`-relative — see
    *  {@link buildExportBlock}. */
   hipRelativeRefs = false,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   return buildRomScriptDsa(
     character,
@@ -964,6 +966,7 @@ export function toCharacterScriptDsa(
     sceneFrames,
     scenesRootAbs,
     hipRelativeRefs,
+    indexSync,
   )
 }
 
@@ -989,6 +992,8 @@ export function toBulkRomExportScriptDsa(
   /** Write bone-scale reference paths `$HIP`-relative — see
    *  {@link buildExportBlock}. */
   hipRelativeRefs = false,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   return buildRomScriptDsa(
     { ...character, exportWithRomScript: true, exportHairAssets: true },
@@ -1000,6 +1005,7 @@ export function toBulkRomExportScriptDsa(
     sceneFrames,
     scenesRootAbs,
     hipRelativeRefs,
+    indexSync,
   )
 }
 
@@ -1019,6 +1025,8 @@ export function toBuildRomAnimationScriptDsa(
   sceneRomPaths: Record<string, RomPaths> = {},
   sceneFrames: Record<string, PresetFrames> = {},
   scenesRootAbs?: string,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   const file = buildRomScriptDsa(
     { ...character, exportWithRomScript: false, exportHairAssets: false },
@@ -1029,9 +1037,76 @@ export function toBuildRomAnimationScriptDsa(
     sceneRomPaths,
     sceneFrames,
     scenesRootAbs,
+    false,
+    indexSync,
   )
   // Hidden (dot-prefixed) → no Content Library tile, no icon artwork.
   return { fileName: BUILD_ROM_ANIMATION_SCRIPT, content: file.content, target: 'daz' }
+}
+
+/**
+ * Keeping the studio's scan data in sync off the app's CORE flow: every ROM /
+ * export run scans the scene it has just verified, so the Morph-name
+ * autocomplete (and, with Daz Products on, the product results) stay current
+ * without anyone remembering to run Tools → Scan project.
+ *
+ * Both scans are best-effort and never throw ({@link DthScanSceneMorphsQuiet} /
+ * `DthScanProductsQuiet`): the run's job is the ROM and the export, and a scan
+ * problem must never fail an export row that actually succeeded.
+ */
+export interface IndexSyncOptions {
+  /** The studio's app-data folder — where `morphs_scenes_<G>.json` is written.
+   *  '' disables the morph sync (pure/web contexts have no app-data path). */
+  morphIndexDir: string
+  /** The per-character `DthScanProducts` config, when the PROJECT has Daz
+   *  Products enabled — the same object the standalone `Scan_Products_<Name>.dsa`
+   *  bakes in, so the two paths cannot drift. Omitted = no product scan. */
+  products?: ScanProductsOptions & { characterId: string; characterName: string; genesis: string }
+}
+
+/**
+ * The scan calls emitted into a generated ROM/export script, at base indent 0.
+ *
+ * Placed AFTER the wrong-scene guard (never scan a scene this character doesn't
+ * own) but BEFORE the ROM build, for two reasons: the scene is still pristine —
+ * the truest picture of what it actually wears — and `Scene.getFilename()` has
+ * not yet been repointed by the ROM save-as. Both calls are handed
+ * `dthOpenSceneFile` regardless, which is the SOURCE scene even on an
+ * "Export only" run that opened a saved ROM animation.
+ */
+function indexSyncSnippet(sync?: IndexSyncOptions): string {
+  if (!sync || (!sync.morphIndexDir && !sync.products)) return ''
+  // DzFile/DzDir want '/' on Windows — same normalization the export block and
+  // the standalone scan script apply.
+  const fwd = (path: string) => path.split('\\').join('/')
+  const lines = [
+    "// Keep the studio's scan data current off the app's core flow. Best",
+    '// effort by construction: these never throw, so a scan problem cannot',
+    '// fail a run whose ROM and export actually succeeded.',
+  ]
+  if (sync.morphIndexDir) {
+    lines.push(
+      'if (typeof DthScanSceneMorphsQuiet == "function") {',
+      `    DthScanSceneMorphsQuiet(${dazJson(fwd(sync.morphIndexDir))}, dthOpenSceneFile);`,
+      '}',
+    )
+  }
+  if (sync.products) {
+    const cfg = {
+      ...sync.products,
+      dimManifestPath: fwd(sync.products.dimManifestPath),
+      outputDir: fwd(sync.products.outputDir),
+      dazLibraryFolder: fwd(sync.products.dazLibraryFolder),
+    }
+    lines.push(
+      'if (typeof DthScanProductsQuiet == "function") {',
+      `    var dthProductScanConfig = ${dazJson(cfg, 4)};`,
+      '    dthProductScanConfig.scenePath = dthOpenSceneFile;',
+      '    DthScanProductsQuiet(dthProductScanConfig);',
+      '}',
+    )
+  }
+  return `${lines.join('\n')}\n`
 }
 
 function buildRomScriptDsa(
@@ -1063,6 +1138,8 @@ function buildRomScriptDsa(
   /** Write bone-scale reference paths `$HIP`-relative — see
    *  {@link buildExportBlock}. */
   hipRelativeRefs = false,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   const config = buildCharacterConfig(character, romPaths, frames, charFolderAbs)
 
@@ -1185,7 +1262,9 @@ function dthApplyUE5TearUV() {
 // The include MUST stay at the top level: Daz resolves include() through its
 // legacy-include mechanism, which fails inside try/catch ("URIError: Legacy Include").
 var dir_self = new DzDir(new DzFileInfo(getScriptFileName()).path());
-include(dir_self.filePath("../../.DthWorkflow.dsa"));
+include(dir_self.filePath("../../.DthWorkflow.dsa"));${indexSync?.morphIndexDir ? `
+include(dir_self.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
+include(dir_self.filePath("../../.DthProducts.dsa"));` : ''}
 
 var dthSceneLinkErr = dthSceneLinkError();
 if (dthSceneLinkErr) {
@@ -1199,7 +1278,7 @@ if (dthSceneLinkErr) {
     dthFailureDialog();
 } else {
     try {
-        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
+${indentLines(indentLines(indexSyncSnippet(indexSync)))}        var dthRomOk = ApplyDTHCharacter(dthCharacterConfig);
         // G9: retarget the tear shader's UV set to UE5 after the ROM (before any
         // export). No-op unless the character opted in.
         if (dthCharacterConfig.bApplyUE5TearUV) { dthApplyUE5TearUV(); }
@@ -1314,6 +1393,8 @@ export function toExportScriptDsa(
   /** Write bone-scale reference paths `$HIP`-relative — see
    *  {@link buildExportBlock}. */
   hipRelativeRefs = false,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   const content = `// DAZ Studio version 4.22.0.16 filetype DAZ Script
 
@@ -1323,6 +1404,11 @@ export function toExportScriptDsa(
 // the PoseAsset CSV — it does NOT rebuild the ROM. Run it after the ROM script
 // (ROM_${characterScriptName(character)}.dsa) in the same Daz session.
 
+var dir_self_scan = new DzDir(new DzFileInfo(getScriptFileName()).path());${indexSync?.morphIndexDir ? `
+include(dir_self_scan.filePath("../../.DthUtils.dsa"));
+include(dir_self_scan.filePath("../../.DthScanMorphs.dsa"));` : ''}${indexSync?.products ? `
+include(dir_self_scan.filePath("../../.DthProducts.dsa"));` : ''}
+
 ${sceneGuardSnippet(character)}
 ${openSceneFileSnippet()}${romAnimationSourceSnippet(romAnimationSourceMap(character))}
 ${figureAutoSelectSnippet(character.genesis)}var dthSceneLinkErr = dthSceneLinkError();
@@ -1331,7 +1417,7 @@ if (dthSceneLinkErr) {
 } else if (!dthFig) {
     MessageBox.critical("No ${character.genesis} figure found in the scene - load the character's scene and re-run.", "DTH Character Studio", "&OK");
 } else {
-${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRelativeRefs)
+${indentLines(indexSyncSnippet(indexSync))}${buildExportBlock(character, frames, charFolderAbs, buildSceneCsvMap(character), scenesRootAbs, unattended, hipRelativeRefs)
   .split('\n')
   .map((line) => (line ? `    ${line}` : line))
   .join('\n')}}
@@ -1365,6 +1451,8 @@ export function toBulkExportOnlyScriptDsa(
   /** Write bone-scale reference paths `$HIP`-relative — see
    *  {@link buildExportBlock}. */
   hipRelativeRefs = false,
+  /** Scan-sync settings — see {@link IndexSyncOptions}. */
+  indexSync?: IndexSyncOptions,
 ): GeneratedFile {
   const built = toExportScriptDsa(
     { ...character, exportHairAssets: true },
@@ -1374,6 +1462,7 @@ export function toBulkExportOnlyScriptDsa(
     // The Runner executes this one — no modals.
     true,
     hipRelativeRefs,
+    indexSync,
   )
   // Hidden (dot-prefixed) → the Content Library never shows it: no tile.
   return { fileName: BULK_EXPORT_ONLY_SCRIPT, content: built.content, target: 'daz' }
@@ -1554,6 +1643,9 @@ export function generateAll(
   /** Write bone-scale reference paths `$HIP`-relative instead of absolute
    *  (Settings → Houdini path style). See {@link buildExportBlock}. */
   hipRelativeRefs = false,
+  /** Scan-sync settings for the generated ROM/export scripts — see
+   *  {@link IndexSyncOptions}. Omitted = the scripts scan nothing. */
+  indexSync?: IndexSyncOptions,
 ): Array<GeneratedFile> {
   // With an export dir and exportWithRomScript off, the export is split into a
   // standalone Export_ script alongside the ROM_ script.
@@ -1588,6 +1680,7 @@ export function generateAll(
       sceneFrames,
       scenesRootAbs,
       hipRelativeRefs,
+      indexSync,
     ),
     ...(split
       ? [toExportScriptDsa(character, frames, charFolderAbs, scenesRootAbs, false, hipRelativeRefs)]
@@ -1605,6 +1698,7 @@ export function generateAll(
             sceneFrames,
             scenesRootAbs,
             hipRelativeRefs,
+            indexSync,
           ),
           // …and its export-only twin (DTH Export's "Export only" mode): the
           // exporter + hair pass over an already-built ROM, no rebuild.
@@ -1614,6 +1708,7 @@ export function generateAll(
             charFolderAbs,
             scenesRootAbs,
             hipRelativeRefs,
+            indexSync,
           ),
         ]
       : []),
@@ -1628,6 +1723,7 @@ export function generateAll(
       sceneRomPaths,
       sceneFrames,
       scenesRootAbs,
+      indexSync,
     ),
     ...(groom ? [toGroomExportScriptDsa(character, scenesRootAbs)] : []),
     ...(scanProducts ? [toScanProductsScriptDsa(character, scanProducts)] : []),

@@ -22,6 +22,7 @@
 
 // --- App-data paths + studio version ---------------------------------------
 export {
+  dataDir,
   dataPath,
   houdiniIntroShown,
   markHoudiniIntroShown,

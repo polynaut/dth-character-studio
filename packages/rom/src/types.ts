@@ -1361,8 +1361,16 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       problems ever reached the studio and earlier failures were destroyed
  *       silently. Each run is now tagged with its scene (so the report can
  *       select it) and stored under it; a re-run replaces only its own entry.
+ * v55 — every ROM/export run SCANS the scene it just verified: the generated
+ *       scripts call DthScanSceneMorphsQuiet (and, when the project has Daz
+ *       Products on, DthScanProductsQuiet) right after the wrong-scene guard,
+ *       so the morph index and product results stay current off the app's core
+ *       flow alone. Both are best-effort and never throw — a scan problem must
+ *       not fail an export row that succeeded. DthScanSceneMorphs and
+ *       DthScanProducts take a `scenePath` override so a run whose open file is
+ *       a saved ROM animation still files under the SOURCE scene.
  */
-export const RUNTIME_VERSION = 54
+export const RUNTIME_VERSION = 55
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a

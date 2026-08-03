@@ -1971,8 +1971,16 @@ function DthScanProducts(config) {
 
   // Which scene/outfit is open? Names the output CSV and is recorded in it so the
   // studio can attribute products to the scene (mirrors the export-subfolder logic).
-  var scenePath = "";
-  try { scenePath = String(Scene.getFilename()); } catch (e) {}
+  //
+  // `config.scenePath` overrides the OPEN file, for the same reason the morph
+  // scan takes one: a ROM run's save-as repoints Scene.getFilename() to the
+  // <stem>_ROM.duf, and an "Export only" run opened that ROM animation to begin
+  // with — both must attribute their products to the SOURCE scene, or the
+  // studio files them under an outfit the user never linked.
+  var scenePath = config.scenePath ? String(config.scenePath) : "";
+  if (!scenePath) {
+    try { scenePath = String(Scene.getFilename()); } catch (e) {}
+  }
   var sceneName = "";
   if (scenePath) {
     try { sceneName = String(new DzFileInfo(scenePath).completeBaseName()); } catch (e) {}
@@ -2056,5 +2064,28 @@ function DthScanProducts(config) {
       "DTH Product Scan",
       "&OK"
     );
+  }
+}
+
+/**
+ * The product scan as a SIDE EFFECT of a ROM/export run — how a project with
+ * Daz Products enabled keeps its scan results current through the app's core
+ * flow alone, with no separate Tools pass.
+ *
+ * Silent and NEVER-THROWING, for the same reason as DthScanSceneMorphsQuiet:
+ * this runs inside a run whose job is the ROM and the export. A missing DIM
+ * folder or an unwritable output dir must not put up a dialog in a minimized
+ * Daz, and must never throw — the Runner would mark a perfectly good export row
+ * FAILED. Everything lands in the Daz log instead.
+ */
+function DthScanProductsQuiet(config) {
+  if (!config || !config.outputDir) return false;
+  try {
+    config.bulk = true; // no dialogs; the throws it enables are caught here
+    DthScanProducts(config);
+    return true;
+  } catch (e) {
+    print("DTH: product scan skipped - " + e);
+    return false;
   }
 }
