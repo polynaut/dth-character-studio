@@ -88,6 +88,25 @@ offsets byte-identically — if a generation change moves them, the change is wr
   error dialog; the ROM script also writes the run log — when the OPEN Daz scene
   isn't one of them (or is unsaved). An empty list (legacy/sceneless definition)
   skips the check.
+- **The ROM run log is PER SCENE** (log v2, runtime v54 — `writeRunLog` in
+  DthUtils.dsa, pure studio parts in `lib/rom/run-log.ts`). One
+  `dth_rom_run_log.json` per CHARACTER is written by every row of a DTH Export
+  batch, so the writer MERGES by scene (read → drop this scene's entry → append
+  → write) instead of truncating; before v54 a three-scene batch left only the
+  last scene's problems and destroyed the rest silently. Each run carries
+  `scene` + `sceneName` from `Scene.getFilename()`. Consequences:
+  - The studio's ingest merges per scene too (`mergeRomRunLogs`). It has to:
+    ingesting DELETES the transport file, so a user who alt-tabs back mid-batch
+    splits one batch across two logs — replacing would drop the first half at
+    exactly the moment they looked.
+  - `failedFrames` (the red row markers) is scoped to the SELECTED scene. Not
+    cosmetic: a scene override reorders/inserts/deletes ROM frames, so another
+    scene's frame numbers mark the WRONG rows.
+  - A run with `scene: ''` (unsaved scene, or a pre-v54 log) can't be
+    attributed, so it applies to whatever scene is selected — the old behaviour,
+    kept so a log already on disk at upgrade time still reports.
+  - Clicking a failure in the report SELECTS its scene before revealing the
+    frame (route: `revealFailure`).
 - **Scene overrides fold into the ONE ROM script** (runtime v32): it embeds a
   `dthSceneOverrides` map (normalized open-scene path → the few config fields that
   scene changes — a fresh `extraFrames` for a ROM override, the G9 dials for an

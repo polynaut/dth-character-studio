@@ -5,6 +5,14 @@ import { z } from 'zod'
 import { withBusyCursor } from '../../busy-cursor.ts'
 
 import { ROM_RUN_LOG_FILE } from '@dth/rom'
+import { mergeRomRunLogs, parseRomRunLogText, unreadableRomRunLog } from '../run-log.ts'
+import type { RomRunLog } from '../run-log.ts'
+export type { RomRunFailedMorph, RomRunLog, RomRunSceneRun } from '../run-log.ts'
+
+/** The studio's OWN copy of the last run log (`.last_rom_run.json`, character
+ *  folder). The Daz-written `dth_rom_run_log.json` is a throwaway transport:
+ *  fetchRomRunLog ingests it here and deletes it. */
+const LAST_ROM_RUN_FILE = '.last_rom_run.json'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
 import {
@@ -267,72 +275,6 @@ export async function createCharacter({ data }: { data: unknown }): Promise<Char
 }
 
 /** One morph the ROM run couldn't apply (from the Daz-side run log). */
-export interface RomRunFailedMorph {
-  frame: number
-  node: string
-  prop: string
-  reason: string
-}
-
-/** The run log the generated ROM script writes into the character folder after
- *  every run in Daz (success too). `unreadable` marks an existing-but-corrupt
- *  log — itself surfaced as a problem. */
-export interface RomRunLog {
-  character: string
-  finishedAt: string
-  finishedAtMs: number
-  framesTotal?: number
-  ok: boolean
-  errors: Array<string>
-  failedMorphs: Array<RomRunFailedMorph>
-  unreadable?: boolean
-}
-
-/** The studio's OWN copy of the last run log (`.last_rom_run.json`, character
- *  folder). The Daz-written `dth_rom_run_log.json` is a throwaway transport:
- *  fetchRomRunLog ingests it here and deletes it. */
-const LAST_ROM_RUN_FILE = '.last_rom_run.json'
-
-/** Parse run-log JSON into the normalized shape (throws on unparseable text). */
-function parseRomRunLogText(text: string): RomRunLog {
-  const record = (JSON.parse(text) ?? {}) as Record<string, unknown>
-  return {
-    character: typeof record.character === 'string' ? record.character : '',
-    finishedAt: typeof record.finishedAt === 'string' ? record.finishedAt : '',
-    finishedAtMs: typeof record.finishedAtMs === 'number' ? record.finishedAtMs : 0,
-    framesTotal: typeof record.framesTotal === 'number' ? record.framesTotal : undefined,
-    ok: record.ok === true,
-    errors: Array.isArray(record.errors) ? record.errors.map((e) => String(e)) : [],
-    failedMorphs: Array.isArray(record.failedMorphs)
-      ? record.failedMorphs.map((m) => {
-          const entry = (m ?? {}) as Record<string, unknown>
-          return {
-            frame: typeof entry.frame === 'number' ? entry.frame : -1,
-            node: typeof entry.node === 'string' ? entry.node : '',
-            prop: typeof entry.prop === 'string' ? entry.prop : '',
-            reason: typeof entry.reason === 'string' ? entry.reason : '',
-          }
-        })
-      : [],
-    unreadable: record.unreadable === true || undefined,
-  }
-}
-
-/** An existing-but-corrupt log still surfaces as a problem instead of throwing. */
-function unreadableRomRunLog(): RomRunLog {
-  return {
-    character: '',
-    finishedAt: '',
-    finishedAtMs: Date.now(),
-    ok: false,
-    unreadable: true,
-    errors: [
-      'The ROM run log exists but could not be read — the run may have crashed while writing it. Re-run the ROM script in Daz.',
-    ],
-    failedMorphs: [],
-  }
-}
-
 /**
  * The character's last ROM run log. A freshly Daz-written `dth_rom_run_log.json`
  * is ingested into the studio's own `.last_rom_run.json` and DELETED (throwaway
@@ -370,11 +312,24 @@ export async function fetchRomRunLog({ data }: { data: unknown }): Promise<RomRu
         if (!stable) throw new Error('run log still being written')
         log = unreadableRomRunLog()
       }
+      // MERGE per scene rather than replace. The studio can ingest mid-batch
+      // (the user alt-tabs back while Daz still has scenes to run), which
+      // DELETES the transport file — so the scenes that ran before that ingest
+      // live only in the store, and the next ingest carries the rest. Replacing
+      // would throw the first half of the batch away exactly when the user
+      // looked, which is the worst possible moment.
+      let stored: RomRunLog | null = null
+      try {
+        if (await exists(storePath)) stored = parseRomRunLogText(await readTextFile(storePath))
+      } catch {
+        // unreadable store — the fresh log stands on its own
+      }
+      const merged = stored ? mergeRomRunLogs(stored, log) : log
       // Atomic: a crash mid-write must not leave a torn store copy (which would
       // read back as "unreadable" forever after the transport file is deleted).
-      await storage.writeTextFileAtomic(storePath, JSON.stringify(log, null, 2))
+      await storage.writeTextFileAtomic(storePath, JSON.stringify(merged, null, 2))
       await remove(dazPath)
-      return log
+      return merged
     }
   } catch {
     // ingest failed (e.g. Daz still holds the file) — fall back to the store;

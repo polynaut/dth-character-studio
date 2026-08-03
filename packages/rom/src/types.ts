@@ -1355,8 +1355,14 @@ export const CHARACTER_SCHEMA_VERSION = 29
  *       per-scene worker for Tools → Scan project (scene morphs and/or the
  *       product scan off one open, driven by the `dth_scan_config.json`
  *       sidecar). DthProducts.dsa learns the same `bulk` contract.
+ * v54 — the ROM run log is PER SCENE (log v2). `writeRunLog` merged by scene
+ *       instead of truncating: a DTH Export batch runs one row per scene and
+ *       every row wrote the same per-character log, so only the LAST scene's
+ *       problems ever reached the studio and earlier failures were destroyed
+ *       silently. Each run is now tagged with its scene (so the report can
+ *       select it) and stored under it; a re-run replaces only its own entry.
  */
-export const RUNTIME_VERSION = 53
+export const RUNTIME_VERSION = 54
 
 /**
  * DTH releases at which the generated **PoseAsset CSV** format changed in a
