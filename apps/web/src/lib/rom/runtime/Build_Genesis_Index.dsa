@@ -12,7 +12,11 @@
 // when it finishes - it asks first.
 // When the open scene already has figures it offers to scan those instead:
 // that's how you index morphs the stock figures don't carry (third-party
-// geografts, add-ons, fitted clothing).
+// geografts, add-ons, fitted clothing). A SAVED scene then gets a second
+// choice - file the finds under THAT SCENE (the studio only suggests them while
+// that scene is selected: the mode for outfit and look variants) or merge them
+// into the generation's base index (the mode for a figure or geograft the stock
+// build doesn't cover).
 //
 // The output path is baked in by the studio when it installs this script.
 

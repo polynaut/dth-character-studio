@@ -1109,7 +1109,33 @@ function DthBuildGenesisIndex(config){
 			"&Scan open scene", "&Build stock figures") == 0;
 	}
 
+	// The SECOND mode (runtime v53): file the open scene's extras under that
+	// SCENE instead of merging them into the base index. Only offered for a SAVED
+	// scene - the finds are tagged with the scene path, so an unsaved scene has
+	// no identity to tag them with and only the base merge is possible.
+	//
+	// Two chained 2-button questions rather than one 3-button dialog: two buttons
+	// is the only MessageBox.question arity this runtime has ever used against a
+	// real Daz, and a scan mode is not the place to find out the hard way.
 	if(bScanOpenScene){
+		var sOpenScene = "";
+		try { sOpenScene = String(Scene.getFilename()); } catch(e){ /* unsaved */ }
+		if(sOpenScene){
+			var bPerScene = MessageBox.question(
+				"How should these be indexed?\n\n" +
+				"FOR THIS SCENE - what the scene wears (clothing, hair, add-ons) is " +
+				"filed under it, and the studio only suggests those morphs while " +
+				"this scene is selected. Best for outfit and look variants.\n\n" +
+				"INTO THE BASE INDEX - the finds join the generation's index and are " +
+				"suggested everywhere. Best for a figure or geograft the stock build " +
+				"doesn't cover.",
+				"DTH Character Studio",
+				"&For this scene", "&Into the base index") == 0;
+			if(bPerScene){
+				DthScanSceneMorphs({ outDir: config["outDir"] });
+				return;
+			}
+		}
 		iUnknown = dthScanSceneInto(oByGen);
 	} else {
 		var aRoots = dthContentRoots(config["scriptDir"]);
