@@ -21,6 +21,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # The changesets action PUSHES changeset-release/main with whatever
+          # credentials this checkout persists — the env token below only
+          # reaches its PR create/update API calls. Without an explicit token
+          # here the push went out as github-actions[bot] (default
+          # GITHUB_TOKEN), and a bot-pushed head trips the public-repo
+          # first-time-contributor approval gate: every validation run on the
+          # version PR sat "action_required" until a manual "Approve and run"
+          # (the PR's AUTHOR was the PAT owner all along, which is why the PR
+          # itself looked right). Hand the PAT to the push side too and the
+          # checks fire unattended. Measured 2026-08-03; see .ai/gotchas.md.
+          token: ${{ secrets.CHANGESETS_TOKEN || secrets.GITHUB_TOKEN }}
       # pnpm version comes from package.json "packageManager" (no `version:` here,
       # or action-setup errors on the duplicate).
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9

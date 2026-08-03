@@ -55,7 +55,7 @@ pnpm --filter @dth/desktop tauri signer generate -w ./dth-updater.key
 | `TAURI_SIGNING_PRIVATE_KEY` | contents of the generated private key |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password set during generation |
 | `RELEASE_PAT` | a fine-grained PAT (this repo, Contents: read+write) the **publish** job creates the GitHub Release with. Needed because the default `GITHUB_TOKEN` (github-actions[bot]) gets `403 Resource not accessible by integration` on `POST /releases` here even with `contents: write` — see `.ai/release.md`. Falls back to `GITHUB_TOKEN` if unset (expect the 403). |
-| `CHANGESETS_TOKEN` (optional) | a PAT / GitHub App token (`repo` + `pull-requests:write`) used by the **Version** workflow to author the "version packages" PR. Optional — falls back to `GITHUB_TOKEN`, but with the fallback GitHub does **not** fire PR checks on the bot's version PR (it can't satisfy required checks without a manual close/reopen). Set this and the version PR's checks run on their own. |
+| `CHANGESETS_TOKEN` (optional) | a PAT / GitHub App token (`repo` + `pull-requests:write`) used by the **Version** workflow to author the "version packages" PR — it must reach **both** the changesets action's env (PR create/update) and the `actions/checkout` `token:` (the action **pushes** `changeset-release/main` with the credentials checkout persists). With only the env set, the PR's author is right but every push is github-actions[bot], and each refresh's validation run sits `action_required` until a manual "Approve and run". Optional — falls back to `GITHUB_TOKEN` (expect that babysitting). |
 
 `GITHUB_TOKEN` is provided automatically — no secret needed. Release publishing,
 though, runs under `RELEASE_PAT` (see the table): the bot token 403s on release
