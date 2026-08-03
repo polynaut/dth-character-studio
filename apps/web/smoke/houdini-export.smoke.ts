@@ -62,14 +62,14 @@ async function runnerFinishesBatch(page: Page) {
   )
 }
 
-/** Stand in for 456.py: Houdini is up, and the result file reports one node
- *  exported — carrying a `problems` entry, which the HDA's auto-answered
- *  "Continue anyway?" dialog produced and which nothing else would ever show. */
+/** Stand in for 456.py: the result file reports one node exported — carrying a
+ *  `problems` entry, which the HDA's auto-answered "Continue anyway?" dialog
+ *  produced and which nothing else would ever show. (Houdini itself has been
+ *  "running" since the seed — see `houdiniRunning: true` below.) */
 async function houdiniReportsDone(page: Page) {
   await page.evaluate(
     ([result]) => {
       const mock = (window as any).__tauriMock
-      mock.houdiniRunning = true
       ;(mock.files as Map<string, string>).set(result, JSON.stringify({
         version: 1,
         state: 'done',
@@ -95,6 +95,12 @@ test('export too: hands the batch on to Houdini, then clears its own job files',
   page,
 }) => {
   const seed = buildSeed({ activeProjectFile: P.dcsp, demo: true, dazInstallFolder: DAZ_INSTALL })
+  // Houdini counts as running for the whole spec. The app polls every 2.5s and
+  // reads "no result + not running" as a DEAD run (it kills the watch and the
+  // finished toast never comes) — so the seed's default `false` opened a flake
+  // window between Start and `houdiniReportsDone` whenever the assertions in
+  // between took one poll tick. The dead path is not what this spec tests.
+  seed.houdiniRunning = true
   // The Houdini half needs an install AND a VERSION-MATCHED documents folder —
   // without the pairing, hython/Houdini can load another version's (or no) otls
   // and the DazToHue nodes this job drives would not exist.

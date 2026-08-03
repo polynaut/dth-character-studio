@@ -44,9 +44,11 @@ export interface TauriMockSeed {
    *  dialog's Genesis/gender auto-select source. Default: null (none found). */
   sceneFigure?: { id: string; label: string } | null
   /** What `houdini_running` answers — the "Export too" liveness probe. Default
-   *  false. A spec flips `__tauriMock.houdiniRunning` mid-run: a launched
-   *  Houdini is UP while 456.py works, and a run whose Houdini exited before
-   *  writing a result is what the studio must call dead. */
+   *  false. A spec driving a LIVE run seeds this true for its whole duration:
+   *  the app's 2.5s poll reads "no result + not running" as a dead run and
+   *  kills the watch, so leaving it false until the result write is a flake
+   *  window, not a neutral default. Exercising the dead path is what flipping
+   *  `__tauriMock.houdiniRunning` to false mid-run is for. */
   houdiniRunning?: boolean
 }
 
