@@ -190,7 +190,7 @@ export function ProjectScanSection({
           : `Started Daz Studio — ${summary.rows} job${summary.rows === 1 ? '' : 's'} queued.`,
         {
           description: summary.skipped.length
-            ? `Skipped ${summary.skipped.length} scene(s) missing on disk.`
+            ? `Skipped ${summary.skipped.length} scene${summary.skipped.length === 1 ? '' : 's'} missing on disk.`
             : undefined,
         },
       )

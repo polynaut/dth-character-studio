@@ -82,22 +82,18 @@ export const studioSettingsSchema = z.object({
    */
   houdiniInstallFolder: str,
   /**
-   * How Houdini-facing paths the studio writes are anchored — right now the
-   * bone-scale **reference-skeleton FBX** paths in the PoseAsset CSV.
+   * LEGACY (pre-v0.61): how the bone-scale **reference-skeleton FBX** paths in
+   * the PoseAsset CSV were anchored, back when this was one app-global knob.
+   * The decision is PER PROJECT now — `houdiniPathStyle` in the `.dcsp`
+   * manifest (`DcspManifest`, storage/projects.ts) is what generation reads,
+   * decided in the first Generate-project dialog and edited in Settings →
+   * Project.
    *
-   * `hip` (the default) writes them relative to **`$HIP`**, the folder holding
-   * the `.hip` — so the project keeps resolving after the whole character tree
-   * is moved, renamed, or opened from another machine. `absolute` writes the
-   * real path, which is what the studio always did.
-   *
-   * `hip` needs an anchor: a `dth-exports` junction beside each linked `.hip`
-   * inside the character folder. Generation probes AND repairs those junctions
-   * (`refreshExportJunctions`, `lib/rom/api/houdini.ts`) and silently falls
-   * back to absolute for a character where none can exist — no project inside
-   * its folder, or a junction that can't be created (network/non-NTFS export
-   * root, a real folder in the way). The emitted prefix swap itself lives in
-   * `buildExportBlock` (`@dth/rom` `dsa.ts`), fed the flag through
-   * `generateCharacterFiles` → `generateAll`.
+   * Kept tolerated so old settings.json files still parse, and read in exactly
+   * ONE place: the first-Generate-project intro seeds its `$HIP` default from
+   * it, so a user who had deliberately switched to `absolute` (the escape
+   * hatch when `$HIP` expansion misbehaves in Houdini) isn't silently flipped
+   * back to `$HIP` by the fresh per-project default.
    */
   houdiniPathStyle: z.enum(['hip', 'absolute']).catch('hip').default('hip'),
   /**

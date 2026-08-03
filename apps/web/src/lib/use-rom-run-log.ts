@@ -60,7 +60,7 @@ export function useRomRunLog(
    * scene painted the wrong rows red on whichever scene happened to be open.
    *
    * A run with NO scene (`''` — an unsaved scene, or a log written by a runtime
-   * older than v53) can't be attributed, so it applies to whatever is selected:
+   * older than v54) can't be attributed, so it applies to whatever is selected:
    * that is the pre-scene-tagging behaviour, and dropping it would silently stop
    * marking rows for a log that is already on disk at upgrade time.
    */
