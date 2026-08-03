@@ -45,6 +45,30 @@ doing it.
   multi-line or quote-bearing text goes to a file first**, then
   `gh pr create --body-file <path>` / `git commit -F <path>`. Never inline it.
 
+**Stacked PRs need an explicit link, not just a base branch.** When a PR depends
+on another (its base is that PR's branch), targeting the parent branch is
+NECESSARY BUT NOT SUFFICIENT — GitHub tracks a stack object, and without it the
+PR page shows no "Able to merge as a stack" panel and no **Merge stack** button.
+Create it from the existing PRs:
+
+```sh
+gh extension install github/gh-stack        # once
+GH_REPO=polynaut/dth-character-studio \
+  gh stack link <bottom-pr> <top-pr>        # bottom = the one targeting main
+```
+
+- **`GH_REPO=` is required in this repo.** The remote is the `github-poly` SSH
+  alias (1Password agent), which `gh` cannot map to a GitHub host — it fails with
+  "none of the git remotes configured for this repository point to a known GitHub
+  host". Set the env var; do NOT add an HTTPS remote (see `.ai/release.md` and
+  the SSH rule in Repo mechanics).
+- Order is **bottom-up**: the PR whose base is `main` comes first.
+- **Don't run `gh stack checkout`** while work is in flight — it sets up local
+  tracking and moves branches around. The server-side stack needs none of it;
+  `gh stack view` simply won't show the stack without it, which is fine.
+- Public preview at time of writing (2026-08), docs:
+  <https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests>.
+
 **These are enforced where they can be, not trusted.** The rules that have never
 been broken in this repo are the machine-checked ones (the changeset gate, lint,
 the byte-identical rom output) — compliance simply isn't left to judgement. Two
