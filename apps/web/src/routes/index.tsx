@@ -9,7 +9,7 @@ import { formatDate } from '#/components/overview-controls.tsx'
 import { createProject, fetchRecents, forgetRecent, isDirectory, openProject } from '#/lib/rom/api.ts'
 import { useFileDrop } from '#/lib/file-drop.ts'
 import { onMenu, pickDcspPath, pickFolder } from '#/lib/desktop.ts'
-import { browseStart, dirOf, displayPath, parentDir } from '#/lib/path.ts'
+import { browseStart, dirOf, displayPath, parentDir, stripTrailingSeparators } from '#/lib/path.ts'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/')({
@@ -24,7 +24,7 @@ export const Route = createFileRoute('/')({
 
 /** Suggested project name from a chosen folder (its own name). */
 function folderName(folder: string): string {
-  return folder.replace(/[\\/]+$/g, '').split(/[\\/]/).pop() ?? ''
+  return stripTrailingSeparators(folder).split(/[\\/]/).pop() ?? ''
 }
 
 /**

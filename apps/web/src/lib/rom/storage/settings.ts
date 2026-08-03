@@ -82,6 +82,25 @@ export const studioSettingsSchema = z.object({
    */
   houdiniInstallFolder: str,
   /**
+   * How Houdini-facing paths the studio writes are anchored — right now the
+   * bone-scale **reference-skeleton FBX** paths in the PoseAsset CSV.
+   *
+   * `hip` (the default) writes them relative to **`$HIP`**, the folder holding
+   * the `.hip` — so the project keeps resolving after the whole character tree
+   * is moved, renamed, or opened from another machine. `absolute` writes the
+   * real path, which is what the studio always did.
+   *
+   * `hip` needs an anchor: a `dth-exports` junction beside each linked `.hip`
+   * inside the character folder. Generation probes AND repairs those junctions
+   * (`refreshExportJunctions`, `lib/rom/api/houdini.ts`) and silently falls
+   * back to absolute for a character where none can exist — no project inside
+   * its folder, or a junction that can't be created (network/non-NTFS export
+   * root, a real folder in the way). The emitted prefix swap itself lives in
+   * `buildExportBlock` (`@dth/rom` `dsa.ts`), fed the flag through
+   * `generateCharacterFiles` → `generateAll`.
+   */
+  houdiniPathStyle: z.enum(['hip', 'absolute']).catch('hip').default('hip'),
+  /**
    * The DAZ Install Manager `ManifestFiles` folder (a folder of `.dsx` XML), read
    * by the Daz Products scan to resolve scene assets to installed products
    * (name/SKU/artist/version). Machine-specific; empty = unset (the scan then runs

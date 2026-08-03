@@ -8,7 +8,9 @@ const files = new Map<string, string | Uint8Array>()
 const dirs = new Set<string>()
 
 function norm(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/+$/g, '')
+  let s = p.replace(/\\/g, '/')
+  while (s.endsWith('/')) s = s.slice(0, -1)
+  return s
 }
 function addDir(p: string): void {
   // Add the path and every ancestor, preserving a leading slash for absolute paths.
@@ -130,6 +132,9 @@ describe('settings (settings.json)', () => {
     dthExporterFolder: '',
     currentDthExporterVersion: '',
     dazInstallFolder: '',
+    // Fresh install writes Houdini paths $HIP-relative — the setting only ever
+    // turns that OFF.
+    houdiniPathStyle: 'hip',
     houdiniDocsFolder: '',
     extraHoudiniDocsFolders: [],
     houdiniInstallFolder: '',
@@ -175,6 +180,7 @@ describe('settings (settings.json)', () => {
       dthExporterFolder: 'X:/dth/exporter',
       currentDthExporterVersion: '1.0.0.1',
       dazInstallFolder: 'C:/Program Files/DAZ 3D/DAZStudio4',
+      houdiniPathStyle: 'absolute',
       houdiniDocsFolder: 'D:/Documents/houdini20.5',
       extraHoudiniDocsFolders: ['D:/Documents/houdini19.5'],
       houdiniInstallFolder: 'C:/Program Files/Side Effects Software/Houdini 22.0.368',

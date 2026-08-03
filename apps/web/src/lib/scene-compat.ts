@@ -1,5 +1,7 @@
 import { genesisFromFigureNode } from '@dth/rom'
 
+import { stripTrailingSeparators } from '#/lib/path.ts'
+
 import type { SceneWearables } from '#/lib/rom/api/native-types.ts'
 import type { Character, Gender } from '@dth/rom'
 
@@ -341,7 +343,7 @@ export function sceneNotLinkedRow(
   scenePath: string,
   owners: Array<LinkedSceneOwner> | null,
 ): SceneCheckRow {
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const norm = (p: string) => stripTrailingSeparators(p.replace(/\\/g, '/')).toLowerCase()
   const hit = owners?.find((o) => norm(o.path) === norm(scenePath))
   return {
     key: 'notLinked',

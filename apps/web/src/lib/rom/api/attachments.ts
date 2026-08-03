@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { characterSchema, dazJson, newId } from '@dth/rom'
 import * as storage from '../storage'
 import { normalizeRelFolder } from '../library'
+import { stripTrailingSeparators } from '#/lib/path.ts'
 import { basename, charactersRoot, charsRoot, joinPath, projectPath, resolveProject } from './core'
 import { copyTipImage, sceneBase } from './avatars'
 
@@ -77,8 +78,8 @@ async function copySceneInto(
  *  external source's folders are never touched. Best-effort: any read/remove
  *  hiccup just stops the pruning. */
 async function pruneEmptyDirsUpTo(dir: string, boundary: string): Promise<void> {
-  const bound = boundary.replace(/[\\/]+$/, '').replaceAll('\\', '/').toLowerCase()
-  let current = dir.replace(/[\\/]+$/, '').replaceAll('\\', '/')
+  const bound = stripTrailingSeparators(boundary).replaceAll('\\', '/').toLowerCase()
+  let current = stripTrailingSeparators(dir).replaceAll('\\', '/')
   while (current.toLowerCase() !== bound && current.toLowerCase().startsWith(`${bound}/`)) {
     try {
       if ((await readDir(current)).length > 0) return
