@@ -1,5 +1,99 @@
 # @dth/desktop
 
+## 0.61.0
+
+### Minor Changes
+
+- [#664](https://github.com/polynaut/dth-character-studio/pull/664) [`42abaae`](https://github.com/polynaut/dth-character-studio/commit/42abaaef9a7bde88ff76e2e4c09f810868b572ae) Thanks [@polynaut](https://github.com/polynaut)! - The `dth-exports` junction and `$HIP` paths are explained up front and decided
+  per project. The **first Generate project** in a project now explains, right in
+  the dialog, the two things it is about to set up — the `dth-exports` shortcut
+  (an NTFS junction some source-control setups dislike) and `$HIP`-relative
+  reference-skeleton paths — with a link to the extended guide, and asks how this
+  project wants them.
+
+  Both answers are saved as **project settings** (Settings → Project), editable
+  anytime: _Create dth-exports shortcuts_ and _Houdini path style_. With
+  shortcuts off, none are created or repaired and absolute paths are forced —
+  the tree stays free of reparse points for Perforce and junction-hostile backup
+  tools. The path style moved from the app-wide Settings page to the project,
+  where it always belonged.
+
+  The guide's junction notes grew into a proper chapter with copy-paste ignore
+  rules for Git and Perforce (including the P4 caveat that ignores only apply on
+  add).
+
+- [#660](https://github.com/polynaut/dth-character-studio/pull/660) [`592d769`](https://github.com/polynaut/dth-character-studio/commit/592d7691a10862bd83f63c1ae377fc88bd3d11c0) Thanks [@polynaut](https://github.com/polynaut)! - The morph index now keeps itself up to date. Every ROM/export run scans the
+  scene it just verified, so the **Parameter name** autocomplete knows what a
+  scene wears without anyone remembering to run Tools → Scan project — the index
+  stays current through normal use alone. When the project has **Daz Products**
+  enabled, the same run also refreshes that scene's product scan.
+
+  Both scans happen right after the wrong-scene guard and before the ROM build,
+  where the scene is still exactly as you saved it, and both are best-effort: a
+  scan that can't run (an unsaved scene, no DIM folder) is logged in Daz and
+  never fails an export that otherwise succeeded. Runs whose open file is a saved
+  ROM animation still file their finds under the source scene.
+
+  Tools → Scan project stays for the bulk pass — a fresh project, or after
+  installing new morph packs.
+
+- [#657](https://github.com/polynaut/dth-character-studio/pull/657) [`bf8ee35`](https://github.com/polynaut/dth-character-studio/commit/bf8ee35293168f7e83f172d7641ac2a69679c909) Thanks [@polynaut](https://github.com/polynaut)! - Morph autocomplete now knows what each Daz scene actually wears, and a new
+  Tools → **Scan & index → Scan project** runs the whole lot in one go.
+
+  The morph index gained a second mode: alongside the stock-figure scan, the
+  studio can scan a **specific Daz scene** for the dials that index doesn't carry
+  — fitted clothing, hair, third-party geografts and add-ons — and files each
+  find under the scene it came from. The **Parameter name** autocomplete then
+  scopes those suggestions to the scene you have selected: two outfits in two
+  scenes no longer both offer their "Expand All", only the one actually in that
+  scene does (marked with a _this scene_ badge). Morphs the base figure carries
+  are always offered, and re-scanning a scene replaces what it contributed, so
+  clothing you took off stops being suggested.
+
+  **Tools → Scan & index → Scan project** is the one-click way to run it: tick
+  _base morphs_, _character morphs_ and/or _products_, press Start, and wait. The
+  studio hands Daz Studio a single unattended batch — the base index first, then
+  every linked scene of every character in the project — opening each scene once
+  however many scans it is due for.
+
+  Since each scene is a full Daz open, the scene passes come with a **scene
+  picker**: expand _Scenes to scan_ to run just one outfit (or one character)
+  instead of the whole project, with the job count updating as you pick.
+
+  This replaces the separate **Build Genesis Index** panel, which is now the
+  _base morphs_ tick. Reached from the Home window with no project open, the two
+  scene passes are disabled and the base rebuild runs on its own, exactly as that
+  button did.
+
+### Patch Changes
+
+- [#659](https://github.com/polynaut/dth-character-studio/pull/659) [`f5ce2e4`](https://github.com/polynaut/dth-character-studio/commit/f5ce2e43a96ac7f4cded4fa62822ade13e9bbe31) Thanks [@polynaut](https://github.com/polynaut)! - Fixes DTH Export batches losing every scene's problems but the last one.
+
+  A batch runs one row per Daz scene and each row's script wrote the same
+  per-character run log, truncating it — so after exporting three scenes, the
+  studio only ever showed the problems of whichever scene ran last. Failures in
+  the earlier scenes were destroyed silently, and there was nothing in the log
+  saying which scene a failure came from.
+
+  The log now keeps one entry **per scene**. The problem report groups failures
+  under the scene that produced them, and clicking one **switches to that scene**
+  before jumping to the frame. The red row markers in the ROM sections are scoped
+  to the selected scene too — that was an outright wrong-row bug, since a scene
+  override can reorder, insert and delete ROM frames, so frame 40 in one scene is
+  a different pose than frame 40 in another.
+
+  Logs written by an older runtime still report as before.
+
+- [#665](https://github.com/polynaut/dth-character-studio/pull/665) [`fcf236d`](https://github.com/polynaut/dth-character-studio/commit/fcf236def2c8f8eb74c526afbad82281b33dba3c) Thanks [@polynaut](https://github.com/polynaut)! - Two review follow-ups on the v0.61 features. The scene morph scan now skips
+  cameras and lights **anywhere** in the scene, not only at the root — one
+  parented into a figure or prop (a light rig, a camera mount) slipped past the
+  old guard and offered its focal length and intensity dials as morph
+  suggestions (runtime v56; Tools → Refresh assets or the next export picks it
+  up). And the first-Generate-project intro seeds its **$HIP paths** choice from
+  the old app-wide "Houdini path style" setting: anyone who had deliberately
+  switched it to absolute finds the intro pre-set that way instead of silently
+  flipped back to $HIP.
+
 ## 0.60.0
 
 ## 0.59.0

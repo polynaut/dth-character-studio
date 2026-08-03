@@ -1,5 +1,25 @@
 # @dth/web
 
+## 0.61.0
+
+
+### Patch Changes
+
+- [#653](https://github.com/polynaut/dth-character-studio/pull/653) [`601e67a`](https://github.com/polynaut/dth-character-studio/commit/601e67a6b6ed6f47e30aed1742a9aae8aea583e6) Thanks [@polynaut](https://github.com/polynaut)! - Tools → Build Genesis Index no longer stalls behind invisible dialogs in a
+  minimized Daz Studio. The Runner handoff now runs a hidden, dialog-free twin of
+  the index builder (`.Build_Genesis_Index_Bulk.dsa`, runtime v52): the
+  confirmation is skipped (the Runner's scene is a fresh empty one — there is
+  nothing to lose and nobody in front of the window), the summary goes to the Daz
+  log instead of a modal, and failures ("nothing to build", an unwritable index)
+  fail the job row loudly so the studio's panel toasts the reason. The handoff
+  also self-installs the runtime first, so pressing the button right after an app
+  update just works. Double-clicking the visible `Build_Genesis_Index.dsa` in the
+  Content Library keeps its dialogs — that path is interactive on purpose.
+
+- Updated dependencies [[`601e67a`](https://github.com/polynaut/dth-character-studio/commit/601e67a6b6ed6f47e30aed1742a9aae8aea583e6), [`42abaae`](https://github.com/polynaut/dth-character-studio/commit/42abaaef9a7bde88ff76e2e4c09f810868b572ae), [`f5ce2e4`](https://github.com/polynaut/dth-character-studio/commit/f5ce2e43a96ac7f4cded4fa62822ade13e9bbe31), [`592d769`](https://github.com/polynaut/dth-character-studio/commit/592d7691a10862bd83f63c1ae377fc88bd3d11c0), [`fcf236d`](https://github.com/polynaut/dth-character-studio/commit/fcf236def2c8f8eb74c526afbad82281b33dba3c), [`bf8ee35`](https://github.com/polynaut/dth-character-studio/commit/bf8ee35293168f7e83f172d7641ac2a69679c909)]:
+  - @dth/rom@0.61.0
+  - @dth/ui@0.61.0
+
 ## 0.60.0
 
 ### Minor Changes
