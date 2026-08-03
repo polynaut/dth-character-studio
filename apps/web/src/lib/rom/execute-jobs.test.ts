@@ -19,6 +19,7 @@ import {
   parseJobFileJson,
   preCheckedScenes,
   scanConfigJson,
+  scenesMissingExport,
   scenesMissingRomAnimation,
   staleExportFolders,
 } from './execute-jobs'
@@ -372,6 +373,7 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
       missing: boolean
       romExists: boolean
       romUnexported: boolean
+      exportExists: boolean
     }> = {},
   ) => ({
     scenePath,
@@ -379,6 +381,7 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
     missing: false,
     romExists: false,
     romUnexported: false,
+    exportExists: false,
     ...over,
   })
 
@@ -408,6 +411,39 @@ describe('preCheckedScenes — the dialog pre-selection per mode', () => {
     ]
     expect(preCheckedScenes('export-only', rows)).toEqual(new Set())
     expect(preCheckedScenes('rom-export', rows)).toEqual(new Set())
+  })
+
+  it('houdini-only pre-checks every scene whose export is on disk — .duf presence is irrelevant', () => {
+    // Houdini reads the DELIVERED export, not the scene: a missing .duf takes
+    // nothing away from this run, while a scene without a delivered .dth has
+    // nothing to rely on however healthy its .duf is.
+    const rows = [
+      row(A, { exportExists: true, missing: true }),
+      row(B, { affected: true, exportExists: false }),
+    ]
+    expect(preCheckedScenes('houdini-only', rows)).toEqual(new Set([A]))
+  })
+})
+
+describe('scenesMissingExport — the "Houdini only" gate', () => {
+  const A = 'X:/p/Kira/daz3d/primary/Kira.duf'
+  const B = 'X:/p/Kira/daz3d/summertide/KiraSummertide.duf'
+  const scene = (scenePath: string, exportExists: boolean) => ({ scenePath, exportExists })
+
+  it('names the SELECTED scenes whose last export is not on disk', () => {
+    const rows = [scene(A, true), scene(B, false)]
+    expect(
+      scenesMissingExport('houdini-only', rows, new Set([A, B])).map((s) => s.scenePath),
+    ).toEqual([B])
+  })
+
+  it('ignores unselected scenes, other modes, and an unlanded probe', () => {
+    const rows = [scene(A, true), scene(B, false)]
+    expect(scenesMissingExport('houdini-only', rows, new Set([A]))).toEqual([])
+    expect(scenesMissingExport('rom-export', rows, new Set([A, B]))).toEqual([])
+    expect(scenesMissingExport('export-only', rows, new Set([A, B]))).toEqual([])
+    // Unknown is not missing — the dialog holds Start as "Checking scenes…".
+    expect(scenesMissingExport('houdini-only', null, new Set([A, B]))).toEqual([])
   })
 })
 

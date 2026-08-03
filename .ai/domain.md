@@ -426,7 +426,7 @@ older runtimes as stale.
   reads the `dthOpenSceneFile` capture (`openSceneFileSnippet`, emitted once
   per carrier) instead of the live filename; a new scene-keyed snippet must do
   the same.
-- **DTH Export runs in one of three MODES** (the dialog's first step; the
+- **DTH Export runs in one of three Daz MODES** (the dialog's first step; the
   `ExportMode` union in `execute-jobs.ts` owns the mapping):
   `rom-export` → `.Bulk_ROM_Export.dsa` on the source scene (fresh ROM, saved
   ROM animation, full export — the default, and the ONLY mode that writes
@@ -437,6 +437,14 @@ older runtimes as stale.
   rebuild — for a ROM hand-edited in Daz). Export-only pre-checks the scenes
   whose ROM animation is newer than their delivered `<exportName>_pose_asset.csv`
   (`fetchExecuteScenes`'s `romUnexported`), i.e. unexported as it now stands.
+  The dialog's FOURTH card, `houdini-only` (`RunChoice` union, same file), is
+  deliberately NOT an `ExportMode`: it writes no Daz job at all — it calls
+  `startHoudiniExport` directly with the selected scenes, the standalone
+  version of the "Export too" leg. Its per-scene gate is `exportExists` (the
+  delivered `.dth` at `sceneDthPath` is on disk); the `.duf` is NOT consulted
+  (Houdini reads the export, not the scene, so a missing `.duf` doesn't
+  disable the row there), and the Runner gate doesn't apply (no Daz plugin in
+  the path).
 - **A saved ROM animation stands in for its source scene** (runtime v46): since
   export-only job rows OPEN `rom-animations/<stem>_ROM.duf`, every generated
   script embeds `romAnimationSourceMap` (rom path → source scene) and resolves

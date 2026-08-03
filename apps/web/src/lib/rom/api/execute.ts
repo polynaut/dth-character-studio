@@ -23,6 +23,7 @@ import {
   sceneExportFolderRel,
 } from '../execute-jobs'
 import { BUILD_ROM_ANIMATION_SCRIPT, sceneExportName } from '@dth/rom'
+import { sceneDthPath } from '../houdini-jobs'
 import { normalizePathLower } from '#/lib/path.ts'
 import { deriveScenesRootRel } from '#/lib/scene-subfolder.ts'
 import { relativeInside } from '../storage/fs'
@@ -550,6 +551,10 @@ export interface ExecuteSceneStatus {
    * as it now stands. False without a ROM animation.
    */
   romUnexported: boolean
+  /** The scene's last Daz export is on disk (the `.dth` at {@link sceneDthPath}
+   *  — the file a Houdini network imports). What "Houdini only" runs on; rows
+   *  without one are disabled in that mode (nothing to rely on). */
+  exportExists: boolean
 }
 
 /**
@@ -583,6 +588,10 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
         // Never exported (no delivered CSV, mtime 0) counts as unexported.
         romUnexported = romMtime > (await mtimeOf(delivered))
       }
+      // The `.dth` a Houdini network imports — "Houdini only" runs off this
+      // delivered file alone, so its on-disk presence is that mode's gate.
+      const dth = sceneDthPath(character, key, scenesRootAbs)
+      const exportExists = dth !== '' && (await mtimeOf(dth)) > 0
       let info: Awaited<ReturnType<typeof stat>>
       try {
         info = await stat(scenePath)
@@ -594,6 +603,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
           missing: true,
           romExists: romMtime > 0,
           romUnexported,
+          exportExists,
         }
       }
       const prev = stored.scenes[key]
@@ -609,6 +619,7 @@ export async function fetchExecuteScenes({ data }: { data: unknown }): Promise<A
         missing: false,
         romExists: romMtime > 0,
         romUnexported,
+        exportExists,
       }
     }),
   )

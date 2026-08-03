@@ -230,7 +230,7 @@ do first:
 <p align="center">
   <img width="900" alt="the DTH Export dialog — choose what the run does" src="screenshots/dth-export-modes.png" />
   <br>
-  <sub><em>Step one: ROM + Export, ROM only, or Export only.</em></sub>
+  <sub><em>Step one: ROM + Export, ROM only, Export only — or Houdini only.</em></sub>
 </p>
 
 - **ROM + Export** — the full run: a fresh ROM, the saved ROM animation scene,
@@ -241,6 +241,13 @@ do first:
   included, without rebuilding them. This is the one for a ROM you tweaked by
   hand in Daz: it pre-selects exactly the scenes whose ROM animation is newer
   than their last export, and skips scenes that have no ROM animation yet.
+- **Houdini only** — skip Daz entirely. The studio opens a linked Houdini
+  project and runs its DazToHue exports off each selected scene's **last Daz
+  export** as it stands on disk — the standalone version of the
+  ["Export too"](#carry-on-into-houdini--export-too) leg below, for when the
+  Daz side hasn't changed and only Houdini needs a fresh pass. Scenes that
+  never delivered an export are skipped (there is nothing to rely on), and the
+  card is available once the character has a linked Houdini project.
 
 Then pick the scenes:
 
