@@ -82,6 +82,9 @@ interface RomSectionsProps {
   /** A blocked-save validation error: open its section, scroll the pose row into
    *  view and focus its first empty field. */
   revealPose?: { section: RomSection; poseId: string; nonce: number } | null
+  /** The settings' DTH releases folder — the custom-JCM Browse falls back to
+   *  it when no preset is chosen yet (the rest of the presets come from there). */
+  dthPosesFolder?: string
   /** Bone-rotation morph drives along the JCM ROM (character.jcmMorphMods) —
    *  both must be passed for the JCM section's "Modify JCM frames" grid. */
   jcmMorphMods?: Array<JcmMorphMod>
@@ -154,6 +157,7 @@ export const RomSections = memo(function RomSections({
   revealPose,
   morphIndex,
   boneIndex,
+  dthPosesFolder,
   jcmMorphMods,
   onJcmMorphModsChange,
   override,
@@ -978,11 +982,11 @@ export const RomSections = memo(function RomSections({
                         className="shrink-0"
                         onClick={async () => {
                           // Re-browsing opens at the preset already chosen (the
-                          // file preselected), else in the DTH release the rest
-                          // of the presets come from.
+                          // file preselected), else in the DTH releases folder
+                          // the rest of the presets come from.
                           const picked = await pickDufPath(
                             'Select a custom JCM pose preset (.duf)',
-                            browseStart(mergedConfig.customAssetPath),
+                            browseStart(mergedConfig.customAssetPath, dthPosesFolder),
                           )
                           if (picked) patchSectionForScene(section, { customAssetPath: picked })
                         }}

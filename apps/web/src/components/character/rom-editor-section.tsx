@@ -27,6 +27,7 @@ export const RomEditorSection = memo(function RomEditorSection({
   revealPose,
   morphIndex,
   boneIndex,
+  dthPosesFolder,
   overrideEligible,
   scenePath,
   sceneOverride,
@@ -40,6 +41,9 @@ export const RomEditorSection = memo(function RomEditorSection({
   revealPose: { section: RomSection; poseId: string; nonce: number } | null
   morphIndex: Array<MorphIndexEntry>
   boneIndex: Array<BoneIndexEntry>
+  /** The settings' DTH releases folder — the custom-JCM Browse's empty-field
+   *  fallback (the rest of the presets come from there). */
+  dthPosesFolder: string
   /** True while a non-primary Daz scene is selected — the grid then edits a
    *  per-scene ROM override (arm-on-edit) instead of the base sections. */
   overrideEligible: boolean
@@ -125,6 +129,7 @@ export const RomEditorSection = memo(function RomEditorSection({
         revealPose={revealPose}
         morphIndex={morphIndex}
         boneIndex={boneIndex}
+        dthPosesFolder={dthPosesFolder}
         jcmMorphMods={character.jcmMorphMods}
         onJcmMorphModsChange={onJcmMorphModsChange}
         override={overrideProp}

@@ -61,7 +61,14 @@ export function extrasWithoutPrimary(extraScenes: Array<string>, primary: string
 export function browseStart(...candidates: Array<string | undefined>): string | undefined {
   for (const candidate of candidates) {
     const value = (candidate ?? '').trim()
-    if (value) return normalizePath(value)
+    if (!value) continue
+    // normalizePath collapses separator runs, which would strip a UNC
+    // `\\server\share` prefix down to rootless `/server/share` — the dialog
+    // plugin rebuilds the path via PathBuf components, turning that into a
+    // drive-relative `\server\share` whose SetFolder silently fails. Same
+    // preservation rule as displayPath: keep the leading double separator.
+    const normalized = normalizePath(value)
+    return /^[\\/]{2}/.test(value) ? `/${normalized}` : normalized
   }
   return undefined
 }
@@ -75,7 +82,10 @@ export function browseStart(...candidates: Array<string | undefined>): string | 
  * whenever the result is compared against other normalized paths.
  */
 export function parentDir(path: string): string {
-  return normalizePath(path).replace(/\/[^/]*$/, '')
+  const parent = normalizePath(path).replace(/\/[^/]*$/, '')
+  // A bare drive letter is DRIVE-RELATIVE on Windows (`D:` = "the current
+  // directory on D:", wherever that is) — hand back the actual root instead.
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent
 }
 
 /** Everything but the last path segment ('/'-joined) — e.g. the folder of a

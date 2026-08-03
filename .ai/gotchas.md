@@ -245,6 +245,17 @@ current code before relying on details, but assume the *lesson* still holds.
   the scene copy from a Rust command to plugin-fs `copyFile` and left copy dead until a
   rebuild grants the permission. When you add a plugin-fs verb, add the matching
   permission in the SAME change.
+- **tauri-plugin-dialog 2.7.2 `set_default_path` semantics (measured — the
+  browse-start UX contract rests on them):** an EXISTING file path opens the
+  dialog at its parent with the filename preselected; a NON-existent path is
+  still split into parent + filename, so a stale path opens at the nearest
+  thing to where it pointed instead of being ignored. Forward slashes are fine
+  on Windows — the plugin rebuilds the path via `PathBuf::components().collect()`
+  (their issue #8074 fix). But that same rebuild breaks UNC paths whose
+  separator runs were collapsed: `//NAS/share` fed as `/NAS/share` re-emerges
+  as drive-relative `\NAS\share`, whose SetFolder silently fails — a start-path
+  helper must preserve the leading double separator (`browseStart` in
+  `lib/path.ts` does; `displayPath` follows the same rule).
 - **I/O-heavy commands must be `#[tauri::command(async)]`** or they freeze the
   window during long scans/installs.
 - **NTFS is case-insensitive; byte-exact rel-path keys never converge.** Any
