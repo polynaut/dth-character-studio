@@ -112,17 +112,29 @@ async function linkExportsIntoProject(projectDir: string, exportPath: string): P
 /**
  * Ensure a `dth-exports` junction exists beside every linked `.hip` inside the
  * character folder — the {@link hipAnchorDirs} set, the EXACT places a
- * `$HIP/dth-exports/...` reference-skeleton path can resolve through.
+ * `$HIP/dth-exports/...` reference-skeleton path can resolve through — plus
+ * the file-picker shortcut in the shared `houdini-project/` folder. TWO jobs
+ * from the ONE funnel every generation path already goes through
+ * (`generateCharacterFiles`):
  *
- * This is the host half of the `$HIP` emit decision: `generateCharacterFiles`
- * calls it right before `generateAll` and passes `hipRelativeRefs` into the
- * pure core ONLY when this returns true — every anchor has its junction — so a
- * delivered CSV can never carry a `$HIP` path with nothing behind it. The
- * probe IS the repair (`create_junction` is idempotent: `"exists"` for a
- * correct link, a stale one repointed), so pre-existing projects gain their
- * junction on the next generation, and any failure — a network/non-NTFS export
- * root, a real folder in the way — makes that character fall back to absolute
- * paths instead of silently shipping refs that cannot resolve.
+ * - **The `$HIP` emit decision.** `hipRelativeRefs` reaches the pure core only
+ *   when this returns true — every anchor has its junction — so a delivered
+ *   CSV can never carry a `$HIP` path with nothing behind it. The probe IS the
+ *   repair (`create_junction` is idempotent: `"exists"` for a correct link, a
+ *   stale one repointed), so pre-existing projects gain their junction on the
+ *   next generation, and any failure — a network/non-NTFS export root, a real
+ *   folder in the way — makes that character fall back to absolute paths
+ *   instead of silently shipping refs that cannot resolve.
+ * - **Junction upkeep.** The junctions store an ABSOLUTE target, so anything
+ *   that changes the export root leaves them aiming at the old one — a
+ *   character rename or folder move, a scenes-folder rename (the export root
+ *   lives inside it), a `charactersSubdir` move, the v29 export-root
+ *   migration. Rather than teach each of those about Houdini, the one refresh
+ *   here re-points them all on the next save. The picker link refreshes only
+ *   while its `houdini-project/` folder already exists (Generate project
+ *   creates it; materializing it for a character that never generated a
+ *   project would be noise) and never affects the return value — nothing
+ *   resolves through it.
  *
  * Returns false when there is nothing to anchor (no linked `.hip` inside the
  * character folder, or no export root). In a browser there is no filesystem to
@@ -131,12 +143,20 @@ async function linkExportsIntoProject(projectDir: string, exportPath: string): P
 export async function refreshExportJunctions(
   character: Character,
   charFolderAbs: string,
+  houdiniSubdir?: string,
 ): Promise<boolean> {
   const anchors = hipAnchorDirs(character.houdiniProjects, charFolderAbs)
-  if (anchors.length === 0) return false
   const target = character.exportPath.trim()
-  if (!target) return false
-  if (!isTauri()) return true
+  if (!target || !charFolderAbs) return false
+  if (!isTauri()) return anchors.length > 0
+  // The $JOB picker shortcut rides along — refreshed whenever its folder is
+  // there, independent of the anchors (the folder outlives an unlinked hip;
+  // see removeGeneratedHoudiniProject).
+  const projectDir = characterHoudiniProjectDir(charFolderAbs, houdiniSubdir)
+  if (await exists(projectDir).catch(() => false)) {
+    await linkExportsIntoProject(projectDir, target)
+  }
+  if (anchors.length === 0) return false
   const linked = await Promise.all(anchors.map((dir) => linkExportsIntoProject(dir, target)))
   return linked.every(Boolean)
 }

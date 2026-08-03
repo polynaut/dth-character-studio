@@ -180,14 +180,24 @@ older runtimes as stale.
   the END of the pipeline (user-owned — the studio only creates it, and the
   Houdini job's fallback `exportDirectory` is its natural consumer).
 - The **export directory is DERIVED** (schema v29) — not user data, no picker:
-  always `<character folder>/<project dazSubdir>/dth-exports`
-  (`characterExportRoot`, `lib/scene-subfolder.ts`). Created at character
-  creation (`seedCharacterFolders`) and re-resolved on EVERY save, which is how
-  pre-v29 characters migrate off their hand-picked path; it needs host context
-  so it resolves in the web layer, never in the pure core (migration Case C).
-  `exportPath: ''` survives only as "not resolved yet" (a loose root-level
-  definition, or a definition read outside the desktop app). Exports are FLAT
-  under it: `<exportPath>/<scene-subfolder>/`.
+  `<character folder>/<scenes root>/dth-exports` (`characterExportRoot`,
+  `lib/scene-subfolder.ts`), where the scenes root comes from the character's
+  OWN primary scene via `deriveScenesRootRel` (`scenesRootRelOf` in
+  `storage/characters.ts`) and the project `dazSubdir` is only the FALLBACK
+  (scene-less character, primary linked outside the folder). Deriving from
+  `dazSubdir` alone made a scenes-folder rename (daz3d → daz) half-undo
+  itself: the rename physically moved `dth-exports` with the folder and the
+  very next save pointed `exportPath` straight back at the vanished
+  `daz3d/dth-exports`. Created at character creation (`seedCharacterFolders`)
+  and re-resolved on EVERY save, which is how pre-v29 characters migrate off
+  their hand-picked path; it needs host context so it resolves in the web
+  layer, never in the pure core (migration Case C). Being derived does NOT
+  exempt it from `repointCharacterPaths` — a folder move that doesn't
+  immediately re-save (`moveCharactersRoot`) must carry it, or a same-batch
+  regenerate and the junction refresh aim at the old location until some later
+  save. `exportPath: ''` survives only as "not resolved yet" (a loose
+  root-level definition, or a definition read outside the desktop app).
+  Exports are FLAT under it: `<exportPath>/<scene-subfolder>/`.
   Because that root sits at exactly the level SCENE SUBFOLDERS occupy,
   `dth-exports` is a RESERVED subfolder name — `sceneSubfolderConflict`
   (`lib/scene-subfolder.ts`) refuses it at every place a subfolder is chosen
@@ -199,7 +209,11 @@ older runtimes as stale.
 - The v29 migration MOVES the already-exported files (`migrateExportRoot`,
   api/characters.ts → Rust `move_exports`, exports.rs). Its trigger needs no
   version flag: it fires while the stored path still differs from the derived
-  one, which the save then fixes — idempotent by construction. What moves is
+  one, which the save then fixes — idempotent by construction. "Derived" MUST
+  mean the same `scenesRootRelOf` rule the save uses (see the export-directory
+  bullet above): while this trigger still spelled it `project.dazSubdir`, a
+  character with a renamed scenes folder re-fired it on every save and moved
+  its exports into a resurrected `daz3d/dth-exports` each time. What moves is
   exactly `EXPORT_FOLDERS_FILE`'s recorded folders, NEVER the whole old
   directory (the default old path WAS the Houdini folder, `.hiplc` files
   included), each losing its dead `<project>/dth-export/` prefix via
@@ -255,18 +269,28 @@ older runtimes as stale.
   writes there creates its own output folder on first use via its Create
   Intermediate Directories toggle — the absence of an API is itself the hint
   that Houdini expects exactly that.
-- **The `dth-exports` junction** — the ONE link between the two sides, and a
-  pure convenience. `linkExportsIntoProject` (api/houdini.ts) → Rust
-  `create_junction` (junction.rs) puts an NTFS directory junction named
-  `dth-exports` inside the project folder, pointing at the character's export
-  root, so Houdini's file picker (which opens at `$JOB`) lists the exports
-  instead of making the user climb two levels into the Daz subfolder.
-  NOTHING resolves through it: the studio and the generated scripts use real
-  absolute paths, so every failure — non-NTFS/UNC target (a junction can't
-  target UNC), a real folder in the way, a version-control client that deleted
-  it — costs the shortcut only. Idempotent + self-repairing: a correct link
-  reports `"exists"`, a stale one is repointed, a real directory is REFUSED.
-  Junctions need no elevation (symlinks would — that's why it's a junction).
+- **The `dth-exports` junctions** — the link between the two sides.
+  `linkExportsIntoProject` (api/houdini.ts) → Rust `create_junction`
+  (junction.rs) puts an NTFS directory junction named `dth-exports` pointing
+  at the character's export root, in TWO kinds of places with different jobs:
+  inside the shared `houdini-project/` folder it is a pure file-picker
+  convenience (the picker opens at `$JOB`; nothing resolves through it), while
+  the one BESIDE each linked `.hip` (the `hipAnchorDirs` set) is LOAD-BEARING —
+  `$HIP/dth-exports/...` reference-skeleton paths in the delivered CSV resolve
+  through it, which is why the emit decision (bone-scale row above) requires it
+  verified. Lifecycle: created by Generate project, then **refreshed on EVERY
+  generation** through the one funnel (`refreshExportJunctions` from
+  `generateCharacterFiles`) — NOT only when Generate project runs. That refresh
+  is what chases moves: **a junction stores an ABSOLUTE target** (gotchas.md),
+  so a character/folder rename, a scenes-folder rename, a `charactersSubdir`
+  move or the v29 migration all leave it stale until the next generation
+  re-points it. Failure modes — non-NTFS/UNC target (a junction can't target
+  UNC), a real folder in the way, a version-control client that deleted it —
+  cost the picker shortcut only; for the `$HIP` anchors they additionally flip
+  that character's reference paths back to absolute (never a broken ref).
+  Idempotent + self-repairing: a correct link reports `"exists"`, a stale one
+  is repointed, a real directory is REFUSED. Junctions need no elevation
+  (symlinks would — that's why it's a junction).
 - **The Houdini export handoff — "Export too" (COMPLETE).** After a Daz bulk
   export, the DazToHue export nodes in a Houdini project run for the scenes the
   user ticked. The toggle sits beside the dialog's Houdini project select,

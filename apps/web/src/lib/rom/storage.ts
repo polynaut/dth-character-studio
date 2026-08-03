@@ -58,6 +58,7 @@ export {
   resetDefinitionToCurrentVersion,
   saveCharacter,
   scanCharacterLibrary,
+  scenesRootRelOf,
   setGeneratedDthVersion,
 } from './storage/characters'
 export type {

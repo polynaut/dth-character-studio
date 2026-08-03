@@ -287,9 +287,10 @@ export function installTauriMock(seed: TauriMockSeed): void {
         // project folder). The real command repoints a stale link and reports
         // "exists" for a correct one; here the link is just a directory that
         // appears — enough for `exists`/`readDir` to behave, and a spec can
-        // assert the call's link/target. Every generate probes them (the $HIP
-        // emit decision), so the mock has to know this command or `unhandled`
-        // fills up on ordinary saves.
+        // assert the call's link/target. Every generate probes AND refreshes
+        // them (the $HIP emit decision doubles as the junction upkeep), so the
+        // mock has to know this command or `unhandled` fills up on ordinary
+        // saves.
         const link = norm(args.request.linkPath)
         const had = extraDirs.has(link)
         extraDirs.add(link)
